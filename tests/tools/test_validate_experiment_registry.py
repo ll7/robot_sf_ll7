@@ -709,7 +709,7 @@ def test_apply_derived_issue_label_updates_uses_guarded_gh_boundary(tmp_path: Pa
 
     audit = apply_derived_issue_label_updates(
         report,
-        max_writes=1,
+        max_writes=2,
         audit_log_path=tmp_path / "audit.json",
         gh_runner=fake_gh,
     )
@@ -717,16 +717,21 @@ def test_apply_derived_issue_label_updates_uses_guarded_gh_boundary(tmp_path: Pa
     assert commands == [
         ["api", "rate_limit"],
         [
-            "issue",
-            "edit",
-            "1475",
-            "--add-label",
-            "state:ready",
-            "--remove-label",
-            "state:running",
+            "api",
+            "--method",
+            "POST",
+            "repos/ll7/robot_sf_ll7/issues/1475/labels",
+            "-f",
+            "labels[]=state:ready",
+        ],
+        [
+            "api",
+            "--method",
+            "DELETE",
+            "repos/ll7/robot_sf_ll7/issues/1475/labels/state:running",
         ],
     ]
-    assert audit["applied_count"] == 1
+    assert audit["applied_count"] == 2
     assert json.loads((tmp_path / "audit.json").read_text())["applied"][0]["issue"] == 1475
 
 
@@ -785,7 +790,7 @@ def test_apply_derived_issue_label_updates_fails_closed_without_rate_limit(
     try:
         apply_derived_issue_label_updates(
             report,
-            max_writes=1,
+            max_writes=2,
             audit_log_path=tmp_path / "audit.json",
             gh_runner=fake_gh,
         )
@@ -827,12 +832,12 @@ def test_apply_derived_issue_label_updates_writes_audit_before_write_failure(
     try:
         apply_derived_issue_label_updates(
             report,
-            max_writes=1,
+            max_writes=2,
             audit_log_path=tmp_path / "audit.json",
             gh_runner=fake_gh,
         )
     except RuntimeError as exc:
-        assert "gh issue edit failed for issue #1475" in str(exc)
+        assert "gh label update failed for issue #1475" in str(exc)
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("expected GitHub write failure")
 
@@ -926,7 +931,7 @@ def test_main_apply_labels_requires_explicit_report_snapshot_and_write_cap(
             str(report),
             "--apply-labels",
             "--max-writes",
-            "1",
+            "2",
             "--label-audit-log",
             str(audit),
         ]
@@ -935,14 +940,20 @@ def test_main_apply_labels_requires_explicit_report_snapshot_and_write_cap(
     assert exit_code == 0
     assert report.is_file()
     assert audit.is_file()
+    # The REST path produces two commands: POST to add, DELETE to remove.
+    assert commands[-2] == [
+        "api",
+        "--method",
+        "POST",
+        "repos/ll7/robot_sf_ll7/issues/1475/labels",
+        "-f",
+        "labels[]=state:ready",
+    ]
     assert commands[-1] == [
-        "issue",
-        "edit",
-        "1475",
-        "--add-label",
-        "state:ready",
-        "--remove-label",
-        "state:running",
+        "api",
+        "--method",
+        "DELETE",
+        "repos/ll7/robot_sf_ll7/issues/1475/labels/state:running",
     ]
 
 

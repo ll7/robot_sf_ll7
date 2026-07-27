@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Temporary construction-corridor scenario: zigzag.
+     Models a corridor with zigzag temporary construction barriers that force
+     the robot to follow a winding path. The corridor (y=4..y=16, width 12)
+     has two zigzag barriers: one from the top (x=6..x=10, y=4..y=10) and
+     one from the bottom (x=10..x=14, y=10..y=16), creating a zigzag route.
+     Source: WorkDrive AMMV ODD stress scenarios. -->
+<svg
+   width="20"
+   height="20"
+   viewBox="0 0 20 20"
+   version="1.1"
+   id="svg_construction_corridor_zigzag"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g id="layer1" inkscape:label="Layer 1">
+    <!-- Outer boundary walls -->
+    <rect x="0" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="19.5" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="19.5" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Corridor walls (left section) -->
+    <rect id="corridor_top_left" x="0.5" y="0.5" width="5.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect id="corridor_bottom_left" x="0.5" y="16.0" width="5.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Zigzag barrier 1 (from top, forces robot down) -->
+    <rect id="construction_zigzag_1" x="6.0" y="4.0" width="4.0" height="6.0" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Zigzag barrier 2 (from bottom, forces robot up) -->
+    <rect id="construction_zigzag_2" x="10.0" y="10.0" width="4.0" height="6.0" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Corridor walls (right section) -->
+    <rect id="corridor_top_right" x="14.0" y="0.5" width="5.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect id="corridor_bottom_right" x="14.0" y="16.0" width="5.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Robot spawn and goal zones -->
+    <rect id="robot_spawn_zone_0" x="1.5" y="9.0" width="1.5" height="2.0" style="fill:#ffdf00" inkscape:label="robot_spawn_zone_0" />
+    <rect id="robot_goal_zone_0" x="17.0" y="9.0" width="1.5" height="2.0" style="fill:#ff6c00" inkscape:label="robot_goal_zone_0" />
+
+    <!-- Robot route: zigzag through the barriers -->
+    <path id="robot_route_0_0" d="M 2.25,10.0 6.0,10.0 6.0,13.0 10.0,13.0 10.0,7.0 14.0,7.0 14.0,10.0 17.75,10.0" style="fill:none;stroke:#0310b4;stroke-width:0.2" inkscape:label="robot_route_0_0" />
+  </g>
+</svg>

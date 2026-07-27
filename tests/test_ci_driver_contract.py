@@ -19,10 +19,13 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
+ISSUE_1436_POLICY = ROOT / "docs" / "context" / "issue_1436_reproducibility_flaky_acceptance.md"
+QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
+    "coverage-gate": 10,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
@@ -31,6 +34,8 @@ CI_JOB_TIMEOUTS = {
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "notebooks-smoke": 30,
+    "determinism-gate": 30,
+    "exact-repeat-model-preflight": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(
@@ -105,19 +110,31 @@ def _workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_main_push_workflows_queue_while_pull_request_runs_supersede() -> None:
-    """Keep post-merge validation from being starved while retaining fast PR feedback.
+def test_workflows_cancel_superseded_in_progress_runs_latest_main_wins() -> None:
+    """Lock the latest-main-wins concurrency policy (issue #6399).
 
-    GitHub Actions groups all runs for ``refs/heads/main`` together.  The explicit
-    expression queues those main runs, but still cancels superseded pull-request runs.
+    A bounded merge burst can push several main SHAs in quick succession.  The
+    intermediate runs are superseded by the final aggregate SHA, which contains
+    every earlier commit, so retaining them only adds queue latency without
+    adding coverage.  Setting ``cancel-in-progress`` to ``true`` for every ref
+    makes a new main push cancel any superseded in-progress main run, so the
+    final aggregate SHA is validated without waiting behind stale runs.
+
+    The existing ``${{ github.workflow }}-${{ github.ref }}`` group keeps each
+    ref isolated, so this is safe for pull requests too: a new pull-request push
+    shares a group only with its own ref and still cancels only its own
+    superseded run, never a main run or another PR's run.
     """
 
-    expected = "${{ github.ref != 'refs/heads/main' }}"
+    expected_group = "${{ github.workflow }}-${{ github.ref }}"
     for workflow_file in (CI_WORKFLOW, CODEQL_WORKFLOW):
         workflow = yaml.safe_load(workflow_file.read_text(encoding="utf-8")) or {}
         concurrency = workflow.get("concurrency", {})
         assert isinstance(concurrency, dict)
-        assert concurrency.get("cancel-in-progress") == expected
+        # A boolean ``true`` literal, not the queue-main expression and not a
+        # string: both latest-main-wins and per-PR supersession must hold.
+        assert concurrency.get("group") == expected_group
+        assert concurrency.get("cancel-in-progress") is True
 
 
 def _workflow_files() -> list[Path]:
@@ -258,19 +275,41 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert "needs" not in workflow["jobs"]["fast-feedback"]
 
 
-def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> None:
-    """Block low full-suite coverage without changing pull-request fast feedback."""
+def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
+    """Keep main fast by combining complete coverage from four full-suite shards."""
     workflow = yaml.safe_load(_workflow_text())
     fast_feedback = workflow["jobs"]["fast-feedback"]
-    steps = fast_feedback["steps"]
+    coverage_gate = workflow["jobs"]["coverage-gate"]
+    fast_feedback_steps = fast_feedback["steps"]
+    coverage_steps = coverage_gate["steps"]
+    upload_step = next(
+        step for step in fast_feedback_steps if step.get("name") == "Upload coverage shard"
+    )
     floor_step = next(
-        step for step in steps if step.get("name") == "Enforce absolute coverage floor"
+        step for step in coverage_steps if step.get("name") == "Enforce absolute coverage floor"
     )
     baseline_step = next(
-        step for step in steps if step.get("name") == "Compare coverage with baseline"
+        step for step in coverage_steps if step.get("name") == "Compare coverage with baseline"
+    )
+    combine_step = next(
+        step for step in coverage_steps if step.get("name") == "Combine coverage shards"
     )
 
-    assert floor_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 4
+    assert (
+        "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
+    )
+    assert "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"]
+    assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
+    assert upload_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert upload_step["with"]["include-hidden-files"] is True
+    assert coverage_gate["needs"] == "fast-feedback"
+    assert "github.event_name != 'pull_request'" in coverage_gate["if"]
+    assert "coverage combine output/coverage" in combine_step["run"]
+    assert "coverage json" in combine_step["run"]
+    assert "coverage html" in combine_step["run"]
+    assert "if" not in floor_step
     assert "continue-on-error" not in floor_step
     assert "--minimum-total 85.0" in floor_step["run"]
     assert "--absolute-only" in floor_step["run"]
@@ -278,9 +317,19 @@ def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> No
     assert baseline_step["continue-on-error"] is True
     assert "--threshold 1.0" in baseline_step["run"]
     assert "--fail-on-decrease" not in baseline_step["run"]
-    assert fast_feedback["strategy"]["matrix"]["shard"] == (
-        "${{ github.event_name == 'pull_request' && fromJSON('[1, 2, 3, 4]') || fromJSON('[1]') }}"
-    )
+    assert "coverage-gate" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_parallel_test_driver_supports_full_sharded_coverage() -> None:
+    """Require explicit slow-test and coverage controls for main's sharded pass."""
+    script_text = (ROOT / "scripts" / "dev" / "run_tests_parallel.sh").read_text(encoding="utf-8")
+
+    assert "ROBOT_SF_SHARD_INCLUDE_SLOW" in script_text
+    assert '"$include_slow" != "1"' in script_text
+    assert '[[ "$coverage_enabled" == "1" ]]' in script_text
+    assert '[[ -z "${COVERAGE_FILE:-}" ]]' in script_text
+    assert 'mkdir -p "$(dirname "$COVERAGE_FILE")"' in script_text
+    assert 'cmd+=("--cov=robot_sf" "--cov-report=")' in script_text
 
 
 def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
@@ -303,7 +352,7 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     }
     assert setup_step["with"] == {
         "python-version": "${{ matrix.python }}",
-        "sync-args": "--frozen",
+        "sync-args": "--all-extras --frozen",
     }
     assert any(
         "pytest tests/common tests/contract tests/factories tests/gym_env tests/maps" in step
@@ -592,3 +641,40 @@ def test_ci_driver_lint_passes_when_all_checks_pass(tmp_path: Path) -> None:
         env=env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reproducibility_check_job_contract() -> None:
+    """Verify reproducibility-check trigger, fail-closed, and ci-aggregate exclusion.
+
+    The reproducibility-check job runs on pull_request and workflow_dispatch,
+    has no continue-on-error, and is intentionally excluded from the ci
+    aggregate's needs list so it provides visible diagnostic evidence without
+    blocking PR merges.
+    """
+    workflow = yaml.safe_load(_workflow_text())
+    repro_job = workflow["jobs"]["reproducibility-check"]
+    ci_job = workflow["jobs"]["ci"]
+
+    # Trigger is exclusively pull_request OR workflow_dispatch. Equality is
+    # intentional: containment would allow an undocumented third event.
+    assert repro_job["if"] == (
+        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+    )
+
+    # No continue-on-error on the job or any step
+    assert "continue-on-error" not in repro_job
+    for step in repro_job.get("steps", []):
+        assert "continue-on-error" not in step
+
+    # Excluded from ci aggregate needs
+    assert "reproducibility-check" not in ci_job["needs"]
+
+    policy_text = ISSUE_1436_POLICY.read_text(encoding="utf-8")
+    assert "cannot make that aggregate job fail" in policy_text
+    assert "no GitHub branch-protection required-status-check configuration" in policy_text
+    assert "reproducibility-check` is not presently merge-blocking" in policy_text
+    assert "If branch protection\nis added or changed" in policy_text
+
+    strategy_text = QA_TEST_STRATEGY.read_text(encoding="utf-8")
+    assert "no\nGitHub branch-protection required-status-check configuration" in strategy_text
+    assert "future branch-protection\nchange must explicitly decide" in strategy_text

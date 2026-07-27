@@ -46,9 +46,11 @@ Still NOT implemented:
 - Counterfactual-replay validation (would upgrade the pivot label from "explanatory pivot
   candidate" to "counterfactually validated pivot"); no checkpointed replay is available.
 - Rendering directly through ``trace_scene_figure.render_comparison`` (it lacks the hinge
-  grammar -- common-prefix/post-pivot A/B styling, pivot ring, delta gutter -- and its own
-  color scheme is per-pedestrian, not Okabe-Ito planner-comparison). This module remains a
-  standalone hinge composer while reusing the shared trace loaders and map helpers.
+  grammar -- common-prefix/post-pivot A/B styling, pivot ring, delta gutter). This module
+  remains a standalone hinge composer while reusing the shared trace loaders and map
+  helpers; its role-color constants (robot, focal pedestrian) now match
+  ``trace_scene_figure``'s (``INK``/``ORANGE``) rather than diverging into a separate
+  per-episode palette -- see the constants block below.
 
 Usage::
 
@@ -111,15 +113,24 @@ from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 # ---------------------------------------------------------------------------
-# Color / style spec (Okabe-Ito, redundant with shape+line style; no red/green
-# success-failure semantics; see the adopted design-spec doc referenced above).
+# Color / style spec: corpus-wide role palette (author ruling), NOT a
+# per-episode Okabe-Ito palette. Robot color is fixed regardless of which
+# panel/episode it is in, matching the constants trace_scene_figure.py
+# already uses for the other trace-comparison figures in this corpus; the
+# focal pedestrian is likewise a fixed, single color across panels. Episode
+# identity (A vs B) is instead carried entirely by a redundant channel this
+# module already draws for its own legend: MARKER_A/MARKER_B (filled circle
+# vs open square) plus linestyle (solid vs dashed, see the render call
+# sites). Reusing tsf.INK/tsf.ORANGE directly (rather than re-declaring the
+# hex values here) keeps the two modules' role-color definitions from
+# drifting apart.
 # ---------------------------------------------------------------------------
 
-COLOR_A = "#0072B2"  # Okabe-Ito blue
-COLOR_B = "#D55E00"  # Okabe-Ito vermilion
+COLOR_A = tsf.INK  # robot, both episode panels (was episode-keyed Okabe-Ito blue)
+COLOR_B = tsf.INK  # robot, both episode panels (was episode-keyed Okabe-Ito vermilion)
 COLOR_COMMON_PREFIX = "#777777"
 COLOR_PED_CONTEXT = "#BBBBBB"
-COLOR_PED_FOCAL_OUTLINE = "#222222"
+COLOR_PED_FOCAL_OUTLINE = tsf.ORANGE  # was a fixed near-black outline
 COLOR_COLLISION = "#000000"
 
 MARKER_A = "o"  # filled circle
@@ -133,8 +144,8 @@ _LABEL_BBOX = {"facecolor": "white", "edgecolor": "none", "alpha": 0.72, "pad": 
 
 #: --------------------------------------------------------------------------------------
 #: Per-layout panel styling. "screen" reproduces the original prototype values exactly.
-#: "print" designs at FINAL size: the figure is 6.3 in wide and vendored at \\textwidth
-#: with no LaTeX rescaling, so matplotlib pt == on-page pt. Print constraints (author
+#: "print" designs at FINAL size: the figure is PRINT_FIG_WIDTH_IN wide and vendored at
+#: \\textwidth with no LaTeX rescaling, so matplotlib pt == on-page pt. Print constraints (author
 #: feedback 2026-07-16): minimum rendered font 7 pt; 8 pt for ticks/annotations; 9-10 pt
 #: panel titles; declutter -- drop the per-step "braking" marker+label and the dimmed
 #: context-pedestrian id labels (their roles move to the legend), keep collision marker,
@@ -179,9 +190,10 @@ _PRINT_PANEL_STYLE: dict[str, Any] = {
     "label_radii": (16.0, 26.0, 38.0, 52.0, 68.0),
 }
 
-#: Print figure width in inches: included at \\textwidth (6.3 in) with NO rescaling, so
-#: this is the exact on-page size and every pt above is the exact on-page pt.
-PRINT_FIG_WIDTH_IN: float = 6.3
+#: Print figure width in inches: included at \\textwidth with NO rescaling, so this is the
+#: exact on-page size and every pt above is the exact on-page pt. 5.906 in is the true
+#: \\textwidth measured from the build log (NOT 6.3 in, an earlier stale estimate).
+PRINT_FIG_WIDTH_IN: float = 5.906
 
 #: --------------------------------------------------------------------------------------
 #: D(t) normalized joint-state divergence -- physical scales.
@@ -1521,9 +1533,12 @@ def _draw_contrast_strip(ax: plt.Axes, gutter: dict[str, Any], *, fontsize: floa
         ("steps to termination", f"A {steps_a} / B {steps_b}"),
         ("first braking", brake_val),
     ]
-    n = len(cells)
-    for i, (head, value) in enumerate(cells):
-        x = (i + 0.5) / n
+    # Cell centers: NOT an even quarter-split. At the true (narrower) print width the
+    # even split puts the long "min clearance (focal ped)" / "near-miss steps" headers
+    # (cells 0/1) close enough to collide; cells 2/3's shorter headers have slack, so
+    # centers are nudged left/right to borrow that slack for cells 0/1 (text unchanged).
+    cell_x = (0.11, 0.40, 0.635, 0.87)
+    for (head, value), x in zip(cells, cell_x, strict=True):
         ax.text(x, 0.74, head, fontsize=fontsize, ha="center", va="center", color="#555555")
         ax.text(x, 0.24, value, fontsize=fontsize, ha="center", va="center", color="#111111")
 
@@ -1686,7 +1701,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     - ``layout="screen"`` (default): the original wide-format prototype layout
       (10.3 x ~3.5 in, vertical central gutter, multi-sentence suptitle) -- unchanged.
     - ``layout="print"`` (contrast mode only): designed at FINAL size -- total width
-      exactly ``PRINT_FIG_WIDTH_IN`` (6.3 in, included at \\textwidth with no LaTeX
+      exactly ``PRINT_FIG_WIDTH_IN`` (5.906 in, included at \\textwidth with no LaTeX
       rescaling, so pt here == pt on the page). Two equal-aspect panels side by side,
       the contrast gutter folded into a compact single-row strip below the panels
       (``_draw_contrast_strip``), NO suptitle (the LaTeX caption owns the takeaway --
@@ -1801,7 +1816,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         b_outcome_step=b_outcome_step,
     )
     if print_layout:
-        # 8 pt legend (>= the 7 pt on-page minimum); 3 columns x 2 rows fits 6.3 in.
+        # 8 pt legend (>= the 7 pt on-page minimum); 3 columns x 2 rows fits PRINT_FIG_WIDTH_IN.
         fig.legend(
             handles=legend_elements,
             loc="lower center",
@@ -1837,7 +1852,15 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     # otherwise stamps the wall-clock time into the PDF, the only source of nondeterminism
     # observed in this script -- geometry/text content is already deterministic).
     fig.savefig(out_pdf, metadata={"CreationDate": None})
-    fig.savefig(out_png, dpi=200)
+    # Pin the print PNG to the figure's STANDARD bbox (not a tight crop of the drawn
+    # artists). Without this, savefig honors rcParams["savefig.bbox"], which is None
+    # locally but can resolve to "tight" under other font/layout environments (e.g.
+    # the CI runner), cropping the PNG to the drawn content and shrinking its width
+    # below PRINT_FIG_WIDTH_IN. Pinning the standard bbox makes the rendered width
+    # deterministically round(PRINT_FIG_WIDTH_IN * dpi) == 1181 at 200 dpi regardless
+    # of font/layout env (issue #6088 root cause: the print-design width contract was
+    # previously satisfied only by environmental accident, not by construction).
+    fig.savefig(out_png, dpi=200, bbox_inches=fig.bbox_inches)
 
     # QA gate: reuse the repo's own text/marker-collision linter (item 4 -- report the
     # exact before/after defect count, not just "pass/fail").

@@ -706,6 +706,11 @@ def _target_prerequisite_status(
     *,
     root: Path,
 ) -> dict[str, Any]:
+    """Check local filesystem presence for one target prerequisite and return its status record.
+
+    Returns:
+        A status record dict for the prerequisite with code, issue, path, kind, status, and reason.
+    """
     path = str(prerequisite["path"])
     absolute_path = root / path
     kind = str(prerequisite["kind"])
@@ -721,6 +726,11 @@ def _target_prerequisite_status(
 
 
 def _build_socnavbench_preview_payload(ir: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the SocNavBench-shaped preview payload from IR geometry, environment, and agents.
+
+    Returns:
+        The SocNavBench-shaped preview payload dict built from the IR.
+    """
     geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
     environment = ir.get("environment") if isinstance(ir.get("environment"), Mapping) else {}
     timing = ir.get("timing") if isinstance(ir.get("timing"), Mapping) else {}
@@ -746,6 +756,11 @@ def _build_socnavbench_preview_payload(ir: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _build_hunavsim_preview_payload(ir: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the HuNavSim-shaped preview payload from IR geometry, environment, and agents.
+
+    Returns:
+        The HuNavSim-shaped preview payload dict built from the IR.
+    """
     geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
     environment = ir.get("environment") if isinstance(ir.get("environment"), Mapping) else {}
     return {
@@ -771,6 +786,11 @@ def _build_hunavsim_preview_payload(ir: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _ir_agents(ir: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return the IR agent entries that are mappings, ignoring any non-mapping items.
+
+    Returns:
+        The list of IR agent entries that are mappings, excluding any non-mapping items.
+    """
     agents = ir.get("agents")
     if not isinstance(agents, Sequence) or isinstance(agents, (str, bytes)):
         return []
@@ -778,6 +798,11 @@ def _ir_agents(ir: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def _target_blockers(ir: Mapping[str, Any], *, target: str) -> list[dict[str, str]]:
+    """Collect fail-closed export blockers for a target from IR gaps and staged-asset needs.
+
+    Returns:
+        The list of fail-closed export blocker dicts, each with code, field, and reason.
+    """
     blockers: list[dict[str, str]] = [dict(item) for item in _TARGET_ASSET_BLOCKERS[target]]
     geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
     environment = ir.get("environment") if isinstance(ir.get("environment"), Mapping) else {}
@@ -820,6 +845,11 @@ def _target_blockers(ir: Mapping[str, Any], *, target: str) -> list[dict[str, st
 
 
 def _target_warnings(ir: Mapping[str, Any], *, target: str) -> list[dict[str, str]]:
+    """Collect non-blocking target export warnings, such as missing seeds or ROS semantics.
+
+    Returns:
+        The list of non-blocking export warning dicts, each with code, field, and reason.
+    """
     warnings: list[dict[str, str]] = []
     timing = ir.get("timing") if isinstance(ir.get("timing"), Mapping) else {}
     if not timing.get("seeds"):
@@ -842,6 +872,7 @@ def _target_warnings(ir: Mapping[str, Any], *, target: str) -> list[dict[str, st
 
 
 def _ir_source_id(ir: Mapping[str, Any]) -> str | None:
+    """Return the source scenario id recorded in IR provenance, or ``None`` when absent."""
     provenance = ir.get("provenance")
     if isinstance(provenance, Mapping):
         source_id = provenance.get("source_scenario_id")

@@ -28,7 +28,18 @@ OPTIONAL_ENV_VARS = ("MPLBACKEND", "SDL_VIDEODRIVER", "DISPLAY")
 DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 # Optional dependency groups that unlock larger feature slices of the project.
-OPTIONAL_EXTRAS = ("training", "gpu", "orca", "socnav", "rllib", "analysis")
+OPTIONAL_EXTRAS = (
+    "viz",
+    "maps",
+    "benchmark",
+    "training",
+    "gpu",
+    "orca",
+    "socnav",
+    "rllib",
+    "analysis",
+    "analytics",
+)
 # Map deps are pulled in by osmnx-based OSM map authoring examples.
 MAP_DEP_IMPORTS = ("osmnx", "shapely")
 # Bundled model artifacts the quickstart examples rely on, including the PPO
@@ -278,12 +289,16 @@ def _check_optional_extras() -> DoctorCheck:
     for extra in OPTIONAL_EXTRAS:
         # Each extra is dominated by a flagship import we can probe cheaply.
         probe = {
+            "viz": "pygame",
+            "maps": "geopandas",
+            "benchmark": "pandas",
             "training": "stable_baselines3",
             "gpu": "torch",
             "orca": "rvo2",
             "socnav": "cv2",
             "rllib": "ray",
             "analysis": "seaborn",
+            "analytics": "duckdb",
         }[extra]
         available = importlib_util.find_spec(probe) is not None
         details[extra] = {"available": available, "probe": probe}

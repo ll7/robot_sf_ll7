@@ -8,11 +8,16 @@ path, the grandfathered legacy evidence packets, and that files outside the
 scanned roots are ignored.
 """
 
+# evidence-writer-exempt: this integration test writes temporary fixture files to exercise the
+# absolute-path scanner; it does not generate or commit evidence artifacts.
+
+import hashlib
 import subprocess
 from pathlib import Path
 
 import pytest
 
+import hooks.check_config_abs_paths as abs_path_hook
 from hooks.check_config_abs_paths import (
     LEGACY_EVIDENCE_ALLOWLIST,
     find_abs_path_violations,
@@ -126,6 +131,26 @@ class TestCheckConfigAbsPaths:
         result = find_abs_path_violations([f])
         assert result["status"] == "pass"
         assert "nothing to check" in result["message"].lower()
+
+    def test_pinned_verbatim_evidence_exception_is_digest_guarded(self, tmp_path, monkeypatch):
+        """Only the byte-exact recovered source can retain historical absolute paths."""
+        monkeypatch.chdir(tmp_path)
+        rel = "docs/context/evidence/issue_9999_new_packet/source.json"
+        content = '{"source": "/home/research/original/output"}\n'
+        expected_sha256 = hashlib.sha256(content.encode()).hexdigest()
+        monkeypatch.setattr(
+            abs_path_hook,
+            "PINNED_VERBATIM_EVIDENCE_SHA256",
+            {rel: expected_sha256},
+        )
+        path = Path(_write(tmp_path, rel, content))
+
+        assert find_abs_path_violations([str(path)])["status"] == "pass"
+
+        path.write_text('{"source": "/home/research/altered/output"}\n', encoding="utf-8")
+        result = find_abs_path_violations([str(path)])
+        assert result["status"] == "fail"
+        assert len(result["violations"]) == 1
 
     def test_ignores_docs_outside_evidence(self, tmp_path, monkeypatch):
         """Docs files outside docs/context/evidence/ are not scanned."""

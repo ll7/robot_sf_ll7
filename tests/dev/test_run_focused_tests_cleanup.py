@@ -75,3 +75,40 @@ def test_focused_tests_failure_prints_compact_summary_and_log_path(helper_repo: 
     assert "FAILED tests/dev/test_tiny.py::test_1 - boom" in result.stdout
     assert "test_120" not in result.stdout
     assert "more matching lines omitted" in result.stdout
+
+
+def test_focused_tests_uses_portable_owned_temproot_and_removes_it(helper_repo: Path) -> None:
+    """The wrapper should remove its exact macOS-style temporary root on exit."""
+    capture = helper_repo / "captured-temproot.txt"
+    (helper_repo / "bin" / "uv").write_text(
+        '#!/usr/bin/env bash\nset -euo pipefail\nprintf \'%s\' "$PYTEST_DEBUG_TEMPROOT" > "$CAPTURE_TEMPROOT"\n',
+        encoding="utf-8",
+    )
+    (helper_repo / "bin" / "uv").chmod(0o755)
+    macos_temp = helper_repo / "macos-private-tmp"
+    macos_temp.mkdir()
+    env = {
+        **os.environ,
+        "PATH": f"{helper_repo / 'bin'}{os.pathsep}{os.environ['PATH']}",
+        "TMPDIR": str(macos_temp),
+        "CAPTURE_TEMPROOT": str(capture),
+    }
+    env.pop("PYTEST_DEBUG_TEMPROOT", None)
+
+    result = subprocess.run(
+        ["scripts/dev/run_focused_tests.sh", "tests/dev/test_tiny.py", "-q"],
+        cwd=helper_repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    owned_root = Path(capture.read_text(encoding="utf-8"))
+    assert owned_root.is_relative_to(macos_temp.resolve())
+    assert not owned_root.exists()
+    assert "sha256sum" not in (helper_repo / "scripts/dev/run_focused_tests.sh").read_text(
+        encoding="utf-8"
+    )

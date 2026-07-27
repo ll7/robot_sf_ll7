@@ -488,6 +488,7 @@ class _ExternalMPCAdapter:
         robot_kinematics: str | None,
         planner_name: str,
     ) -> None:
+        """Store the wrapped external MPC planner and its adapter configuration."""
         self._planner = planner
         self._algo_config = algo_config
         self._robot_kinematics = robot_kinematics
@@ -939,6 +940,7 @@ class _GoalFallbackAdapter:
     """Simple goal-policy fallback adapter for guarded wrapper experiments."""
 
     def __init__(self, *, max_speed: float) -> None:
+        """Store the maximum linear speed used by the goal fallback command."""
         self._max_speed = float(max_speed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
@@ -1168,7 +1170,13 @@ def _attach_checkpoint_runtime_stats(
 
     def _planner_stats() -> dict[str, Any]:
         """Return checkpoint state after the latest planner step."""
-        return {"checkpoint_provenance": _checkpoint_runtime_metadata(planner, algo_config)}
+        runtime = {"checkpoint_provenance": _checkpoint_runtime_metadata(planner, algo_config)}
+        foresight_diagnostics = getattr(planner, "foresight_diagnostics", None)
+        if callable(foresight_diagnostics):
+            foresight = foresight_diagnostics()
+            if isinstance(foresight, dict):
+                runtime.update(foresight)
+        return runtime
 
     policy._planner_stats = _planner_stats
 
@@ -2171,7 +2179,9 @@ def _build_common_adapter_policy(  # noqa: C901
     _policy._planner_adapter = adapter
     if planner_bind_env is not None:
         _policy._planner_bind_env = planner_bind_env
-    if hasattr(adapter, "diagnostics"):
+    adapter_diagnostics = getattr(adapter, "diagnostics", None)
+    foresight_diagnostics = getattr(adapter, "foresight_diagnostics", None)
+    if callable(adapter_diagnostics) or callable(foresight_diagnostics):
 
         def _planner_stats() -> dict[str, Any]:
             """Expose generic adapter diagnostics for episode metadata.
@@ -2179,7 +2189,12 @@ def _build_common_adapter_policy(  # noqa: C901
             Returns:
                 dict[str, Any]: Adapter diagnostic payload.
             """
-            return adapter.diagnostics()
+            diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
+            runtime = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+            foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
+            if isinstance(foresight, dict):
+                runtime.update(foresight)
+            return runtime
 
         _policy._planner_stats = _planner_stats
     return _policy, meta
@@ -2579,6 +2594,11 @@ def _run_map_jobs_with_policy_cache(
         robot_command_mode: str | None = None,
         adapter_impact_eval: bool = False,
     ) -> tuple[Any, dict[str, Any]]:
+        """Build a policy once and cache it by algo/config/kinematics for reuse per episode.
+
+        Returns:
+            The cached policy and its metadata tuple.
+        """
         key = (
             str(algo).strip().lower(),
             _config_hash(algo_config),
@@ -2615,6 +2635,11 @@ def _run_map_jobs_with_policy_cache(
         )
 
     def run_cached_map_job(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
+        """Execute one map job through the cached-policy episode runner.
+
+        Returns:
+            The completed episode record.
+        """
         return _execute_map_job(job, run_map_episode=run_cached_map_episode)
 
     try:

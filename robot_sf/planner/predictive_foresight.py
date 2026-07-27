@@ -142,6 +142,14 @@ class PredictiveForesightEncoder:
             allow_fallback=True,
         )
 
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Return the underlying adapter's foresight-model-load provenance (issue #6190)."""
+        return self._adapter.foresight_diagnostics()
+
+    def foresight_degraded(self) -> bool:
+        """Return True when the foresight adapter fell back to constant-velocity."""
+        return self._adapter.foresight_degraded()
+
     def encode(self, observation: dict[str, Any]) -> dict[str, np.ndarray]:
         """Return compact predictor-derived features for a structured observation."""
         state, mask, robot_pos, robot_heading = self._adapter._build_model_input(observation)

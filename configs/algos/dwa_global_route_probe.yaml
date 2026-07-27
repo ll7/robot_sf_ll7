@@ -28,3 +28,7 @@ prediction_scoring_enabled: false
 global_route_probe_enabled: true
 global_route_probe_waypoint_distance: 2.0
 global_route_probe_heading_weight: 0.5
+# Enable the route-waypoint observation payload so the sensor includes
+# route_waypoints in the structured observation when this config is active.
+env_overrides:
+  include_route_waypoints: true

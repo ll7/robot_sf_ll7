@@ -144,6 +144,16 @@ else
   echo "warning: no uv venv or conda env detected; relying on 'uv run' to resolve one" >&2
 fi
 
+# --- ORCA dependency sync: rvo2 must be built before the arm command runs. ---
+# Planners whose ARM_KEY contains "orca" (case-insensitive) require the ORCA extra
+# (see pyproject.toml [project.optional-dependencies] orca). Running uv sync here
+# ensures rvo2 is compiled on the compute node before the benchmark starts.
+if grep -qi "orca" <<< "${ARM_KEY}"; then
+  echo "   ORCA arm detected; running 'uv sync --extra orca'..."
+  uv sync --extra orca
+  echo "   ORCA sync complete"
+fi
+
 # --- Per-arm log (in addition to the #SBATCH --output the submitter set). ---
 LOG_DIR="output/slurm/logs"
 mkdir -p "${LOG_DIR}"

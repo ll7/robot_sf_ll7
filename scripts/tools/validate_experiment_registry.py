@@ -165,7 +165,7 @@ def build_control_plane_report(
     }
 
 
-def apply_derived_issue_label_updates(
+def apply_derived_issue_label_updates(  # noqa: C901
     report: Mapping[str, Any],
     *,
     max_writes: int,
@@ -183,9 +183,18 @@ def apply_derived_issue_label_updates(
 
     runner = gh_runner or _run_gh
     updates = _derived_label_updates_from_report(report)
-    if len(updates) > max_writes:
+
+    # Each update may produce multiple REST API commands (one per add/remove).
+    # Pre-compute all individual commands to count total mutation calls.
+    all_individual_commands: list[tuple[dict[str, Any], list[str]]] = []
+    for update in updates:
+        for cmd in _issue_label_edit_commands(update):
+            all_individual_commands.append((update, cmd))
+
+    if len(all_individual_commands) > max_writes:
         raise RuntimeError(
-            f"refusing to apply {len(updates)} label updates; --max-writes is {max_writes}"
+            f"refusing to apply {len(all_individual_commands)} label API calls; "
+            f"--max-writes is {max_writes}"
         )
     rate_limit = _read_rate_limit(runner)
     remaining = rate_limit.get("remaining")
@@ -201,8 +210,7 @@ def apply_derived_issue_label_updates(
 
     applied: list[dict[str, Any]] = []
     error_to_raise: Exception | None = None
-    for update in updates:
-        command = _issue_label_edit_command(update)
+    for update, command in all_individual_commands:
         try:
             result = runner(command)
             stdout = getattr(result, "stdout", "")
@@ -227,7 +235,7 @@ def apply_derived_issue_label_updates(
         )
         if returncode != 0 and error_to_raise is None:
             error_to_raise = RuntimeError(
-                f"gh issue edit failed for issue #{update['issue']} with {returncode}: "
+                f"gh label update failed for issue #{update['issue']} with {returncode}: "
                 f"{(stderr or stdout).strip()}"
             )
         if error_to_raise is not None:
@@ -434,15 +442,38 @@ def _validate_state_label_list(value: Any, field_name: str) -> list[str]:
     return sorted(labels)
 
 
-def _issue_label_edit_command(update: Mapping[str, Any]) -> list[str]:
-    """Build a `gh issue edit` command for one derived label update."""
+def _issue_label_edit_commands(update: Mapping[str, Any]) -> list[list[str]]:
+    """Build REST API ``gh api`` commands for one derived label update.
 
-    command = ["issue", "edit", str(update["issue"])]
+    Each label add or remove becomes one ``gh api`` call to avoid the deprecated
+    Projects Classic GraphQL path in ``gh issue edit --add-label`` / ``--remove-label``
+    (issue #6266).
+    """
+
+    repo = "ll7/robot_sf_ll7"
+    number = update["issue"]
+    commands: list[list[str]] = []
     for label in update["labels_to_add"]:
-        command.extend(["--add-label", label])
+        commands.append(
+            [
+                "api",
+                "--method",
+                "POST",
+                f"repos/{repo}/issues/{number}/labels",
+                "-f",
+                f"labels[]={label}",
+            ]
+        )
     for label in update["labels_to_remove"]:
-        command.extend(["--remove-label", label])
-    return command
+        commands.append(
+            [
+                "api",
+                "--method",
+                "DELETE",
+                f"repos/{repo}/issues/{number}/labels/{label}",
+            ]
+        )
+    return commands
 
 
 def _run_gh(args: list[str]) -> subprocess.CompletedProcess[str]:

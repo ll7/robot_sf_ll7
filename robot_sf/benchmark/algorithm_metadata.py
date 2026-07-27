@@ -6,6 +6,7 @@ planner-kinematics metadata so benchmark writers emit a consistent contract.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from robot_sf.baselines.interface import ActionContract, ObservationContract, PlannerMetadata
@@ -16,6 +17,20 @@ from robot_sf.benchmark.observation_levels import (
     resolve_observation_level_contract,
 )
 from robot_sf.models.registry import get_registry_entry
+
+# Issue #6190: degraded ``algorithm_metadata.status`` marker for the silent
+# foresight-model-load fallback in ``PredictionPlannerAdapter``. When the
+# predictive model cannot be loaded and ``allow_fallback=True`` the planner
+# silently degrades to constant-velocity prediction; this marker makes that
+# state observable so the exact-repeat campaign can disposition the run as
+# degraded (``_record_is_degraded``) before the determinism assertion fires.
+# It is a *prefix* so diagnostic suffixes (load error class, model id) can be
+# appended while still matching the degraded-status check.
+PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS = "predictive_foresight_model_fallback"
+
+# Canonical ``load_status`` vocabulary for foresight provenance.
+_FORESIGHT_LOAD_FAILED = "failed"
+_FORESIGHT_CONSTANT_VELOCITY_MODE = "constant_velocity"
 
 _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
@@ -74,6 +89,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "dwa": "classical",
     "teb": "classical",
     "nmpc_social": "classical",
+    "topology_parallel_nmpc": "classical",
     "prediction_mpc": "classical",
     "chance_constrained_mpc": "classical",
     "learned_prediction_mpc": "learning",
@@ -138,6 +154,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "dwa": "in_repo_classical_dynamic_window",
     "teb": "corridor_commitment_local_planner",
     "nmpc_social": "nonlinear_model_predictive_local_planner",
+    "topology_parallel_nmpc": "topology_parallel_nmpc_local_planner",
     "prediction_mpc": "prediction_aware_model_predictive_local_planner",
     "chance_constrained_mpc": "gmm_chance_constrained_model_predictive_local_planner",
     "learned_prediction_mpc": "learned_short_horizon_prediction_mpc_local_planner",
@@ -186,6 +203,7 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "stream_gap": _DEFAULT_OBSERVATION_SPEC,
     "gap_prediction": _DEFAULT_OBSERVATION_SPEC,
     "dwa": _DEFAULT_OBSERVATION_SPEC,
+    "topology_parallel_nmpc": _DEFAULT_OBSERVATION_SPEC,
     "risk_dwa": _DEFAULT_OBSERVATION_SPEC,
     "risk_surface_dwa": {
         "default_mode": "socnav_state",
@@ -1115,6 +1133,18 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_policy": "native_nmpc_unicycle_vw",
         "projection_documented": True,
     },
+    "topology_parallel_nmpc": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "TopologyParallelNMPCPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "topology_parallel_nmpc_unicycle_vw",
+        "projection_documented": True,
+        "testing_only_adapter": True,
+        "prototype_only": True,
+    },
     "prediction_mpc": {
         "planner_command_space": "unicycle_vw",
         "supports_native_commands": False,
@@ -1707,6 +1737,66 @@ def _base_kinematics_metadata(
     return metadata
 
 
+def _foresight_block_from_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Return the foresight-prediction provenance block if present."""
+    block = metadata.get("foresight_prediction")
+    return block if isinstance(block, Mapping) else None
+
+
+def _foresight_fallback_active(block: Mapping[str, Any]) -> bool:
+    """Return True when a foresight block records a constant-velocity fallback.
+
+    A fallback is active when the model failed to load (and optionally fell
+    back) or when a prediction step actually used the constant-velocity mode.
+    """
+    fallback_used = block.get("fallback_used")
+    if fallback_used is True:
+        return True
+    load_status = block.get("load_status")
+    effective_mode = block.get("effective_prediction_mode")
+    if load_status == _FORESIGHT_LOAD_FAILED and effective_mode in (
+        None,
+        _FORESIGHT_CONSTANT_VELOCITY_MODE,
+    ):
+        return True
+    return effective_mode == _FORESIGHT_CONSTANT_VELOCITY_MODE and load_status in (
+        "failed",
+        "not_attempted",
+    )
+
+
+def _apply_foresight_provenance(
+    enriched: dict[str, Any],
+    canonical: str,
+) -> None:
+    """Normalize foresight provenance and derive ``evidence_eligible``/``status``.
+
+    Issue #6190: surface the silent foresight-model-load fallback as structured
+    metadata the analyzer can act on, and set a degraded ``status`` so the
+    exact-repeat classifier dispositions the run. A degraded foresight run is
+    evidence-ineligible for scientific profiles; interactive/demo runs may retain
+    a visible fallback, but it remains explicitly marked.
+    """
+    block = _foresight_block_from_metadata(enriched)
+    if block is None:
+        return
+    normalized = dict(block)
+    fallback_active = _foresight_fallback_active(block)
+    load_status = normalized.get("load_status")
+    # ``evidence_eligible``: a foresight run is checker-eligible only when the
+    # learned model actually loaded and ran. Constant-velocity substitution is
+    # a different planner and must not contribute numbers as predictive evidence.
+    normalized["evidence_eligible"] = load_status == "loaded" and not fallback_active
+    enriched["foresight_prediction"] = normalized
+    if fallback_active:
+        current_status = enriched.get("status")
+        # Do not clobber a more specific runtime status (e.g. a planner-step
+        # isolation failure), but surface the foresight fallback when the run
+        # was otherwise reported as healthy (``ok``).
+        if current_status in (None, "ok"):
+            enriched["status"] = PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS
+
+
 def enrich_algorithm_metadata(
     *,
     algo: str,
@@ -1798,6 +1888,11 @@ def enrich_algorithm_metadata(
         enriched.setdefault("stochastic_reference", True)
         enriched.setdefault("distinct_from_goal_baseline", True)
 
+    # Issue #6190: normalize foresight-model-load provenance and derive the
+    # degraded ``status``/``evidence_eligible`` so a silent constant-velocity
+    # fallback is surfaced for the exact-repeat classifier and analyzer.
+    _apply_foresight_provenance(enriched, canonical)
+
     if adapter_impact_requested is not None:
         impact = enriched.get("adapter_impact")
         if not isinstance(impact, dict):
@@ -1827,6 +1922,7 @@ def infer_execution_mode_from_counts(native_steps: int, adapted_steps: int) -> s
 
 
 __all__ = [
+    "PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS",
     "canonical_algorithm_name",
     "enrich_algorithm_metadata",
     "infer_execution_mode_from_counts",

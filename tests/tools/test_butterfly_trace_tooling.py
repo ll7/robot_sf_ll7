@@ -6,6 +6,9 @@ import copy
 import json
 from typing import TYPE_CHECKING, Any
 
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
 from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
@@ -119,3 +122,70 @@ def test_video_helpers_reject_empty_trace(tmp_path: Path) -> None:
         video.trace_series_to_jsonl(trace_series, tmp_path / "playback.jsonl")
     with pytest.raises(ValueError, match="frames must be a non-empty array"):
         video.compute_trace_metrics(trace_series)
+
+
+def test_print_contrast_renderer_uses_final_width_and_role_colors(tmp_path: Path) -> None:
+    """Exercise the renderer delta's print geometry and shared role-color contract."""
+    episode_kwargs = {
+        "payload": {},
+        "metadata": {"summary": {"step_count": 3}},
+        "robot_xy": np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
+        "robot_vel": np.zeros((3, 2)),
+        "time_s": np.array([0.1, 0.2, 0.3]),
+        "ped_ids": [7],
+        "ped_xy": np.array([[[4.0, 0.0]], [[4.0, 0.0]], [[4.0, 0.0]]]),
+        "cmd_v": np.array([0.5, 0.5, 0.5]),
+        "cmd_omega": np.zeros(3),
+        "metrics": {
+            "clearance_m": np.array([4.0, 3.0, 2.0]),
+            "nearest_pedestrian_id": np.array([7.0, 7.0, 7.0]),
+        },
+    }
+    ep_a = hinge.EpisodeTrace("A", tmp_path, **episode_kwargs)
+    ep_b = hinge.EpisodeTrace("B", tmp_path, **episode_kwargs)
+    out_png = tmp_path / "contrast.png"
+
+    hinge.render_hinge_figure(
+        ep_a,
+        ep_b,
+        label_a="A",
+        label_b="B",
+        divergence={},
+        separator={"step": 1},
+        gutter={
+            "mode": "contrast",
+            "min_clearance_focal_m": {"episode_a": 2.0, "episode_b": 2.0},
+            "near_miss_steps": {"episode_a": 0, "episode_b": 0},
+            "steps_to_termination": {"episode_a": 3, "episode_b": 3},
+            "first_braking_time_s": {"episode_a": None, "episode_b": None},
+        },
+        focal_ped_id=7,
+        events_a={},
+        events_b={},
+        closest_a={"distance_m": 2.0, "time_s": 0.3, "robot_xy": [2.0, 0.0], "ped_xy": [4.0, 0.0]},
+        closest_b={"distance_m": 2.0, "time_s": 0.3, "robot_xy": [2.0, 0.0], "ped_xy": [4.0, 0.0]},
+        outcome_a="success",
+        outcome_b="non_completion",
+        b_outcome_step=None,
+        headline="diagnostic contrast",
+        map_definition=None,
+        out_pdf=tmp_path / "contrast.pdf",
+        out_png=out_png,
+        contrast_mode=True,
+        layout="print",
+    )
+
+    image = mpimg.imread(out_png)
+    assert image.shape[1] == round(hinge.PRINT_FIG_WIDTH_IN * 200)
+
+    legend = hinge._build_legend_elements(
+        contrast_mode=True,
+        print_layout=True,
+        outcome_b="non_completion",
+        b_outcome_step=None,
+    )
+    assert legend[0].get_color() == hinge.tsf.INK
+    assert legend[1].get_color() == hinge.tsf.INK
+    assert legend[1].get_linestyle() == "--"
+    assert hinge.COLOR_PED_FOCAL_OUTLINE == hinge.tsf.ORANGE
+    plt.close("all")

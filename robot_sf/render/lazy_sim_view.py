@@ -39,7 +39,13 @@ class LazySimulationView:
         if view is not None:
             return view
 
-        sim_view_module = importlib.import_module("robot_sf.render.sim_view")
+        try:
+            sim_view_module = importlib.import_module("robot_sf.render.sim_view")
+        except ImportError as err:
+            raise ImportError(
+                "Visualization features require optional dependency 'pygame'. "
+                "Install with: pip install robot_sf[viz] (or uv sync --extra viz)"
+            ) from err
         view = sim_view_module.SimulationView(**self._view_kwargs)
         for name, value in self._pending_attrs.items():
             setattr(view, name, value)

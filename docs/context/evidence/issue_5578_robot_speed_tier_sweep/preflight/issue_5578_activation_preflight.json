@@ -1,0 +1,385 @@
+{
+  "activation_gate_summary": {
+    "all_non_nominal_tiers_activated": true,
+    "per_tier": {
+      "cap_2_0_nominal": {
+        "activated": true,
+        "applicability": "nominal_reference_not_a_treated_intervention",
+        "fraction_above_2_0_mps": 0.0,
+        "min_fraction_above_2_0_mps": 0.05,
+        "min_peak_speed_m_s": 2.2,
+        "realized_speed_peak_m_s": 2.0,
+        "tier_id": "cap_2_0_nominal"
+      },
+      "cap_3_0": {
+        "activated": true,
+        "applicability": "treated_intervention",
+        "fraction_above_2_0_mps": 0.88125,
+        "fraction_above_2_0_mps_passes": true,
+        "fraction_above_2_0_mps_threshold": 0.05,
+        "peak_speed_passes": true,
+        "realized_speed_peak_m_s": 3.0,
+        "realized_speed_peak_m_s_threshold": 2.2,
+        "rule": "fraction_above_2_0_mps >= 0.05 OR realized_speed_peak_m_s > 2.2",
+        "tier_id": "cap_3_0"
+      },
+      "cap_4_0": {
+        "activated": true,
+        "applicability": "treated_intervention",
+        "fraction_above_2_0_mps": 0.9083333333333333,
+        "fraction_above_2_0_mps_passes": true,
+        "fraction_above_2_0_mps_threshold": 0.05,
+        "peak_speed_passes": true,
+        "realized_speed_peak_m_s": 4.0,
+        "realized_speed_peak_m_s_threshold": 2.2,
+        "rule": "fraction_above_2_0_mps >= 0.05 OR realized_speed_peak_m_s > 2.2",
+        "tier_id": "cap_4_0"
+      }
+    }
+  },
+  "activation_probe": {
+    "command_source": "goal_seek",
+    "command_source_description": "goal-saturating command toward the robot goal at the tier command cap; the canonical probe for a speed-cap intervention (mechanism check, not planner-behaviour evidence)",
+    "registered_seed_overlap": [],
+    "scenario_id": "classic_merging_medium",
+    "seeds": [
+      211,
+      212,
+      213,
+      214
+    ],
+    "seeds_disjoint_from_registered_111_140": true,
+    "steps_per_seed": 120
+  },
+  "activation_rule": {
+    "min_fraction_above_2_0_mps": 0.05,
+    "min_peak_speed_m_s": 2.2,
+    "rule": "fraction_above_2_0_mps >= 0.05 OR realized_speed_peak_m_s > 2.2"
+  },
+  "amendment_issue": 6100,
+  "claim_boundary": "Disjoint-seed activation preflight only. It proves the robot speed-cap intervention binds to the real runtime and measurably activates across all three tiers; it is explicitly NOT benchmark evidence and must not be used to tune harm thresholds, choose favourable scenarios/planners, or preview the registered primary-outcome verdict.",
+  "command_environment_manifest": {
+    "actuation_envelope": "robot_sf.robot.actuation_envelope.actuation_envelope_from_drive_config",
+    "angular_cap_reader": "scripts/benchmark/run_fidelity_sensitivity_campaign.py::_robot_angular_cap",
+    "env_factory": "robot_sf.gym_env.environment_factory.make_robot_env",
+    "native_action_space": "robot_sf.robot.bicycle_drive.BicycleDriveRobot.action_space",
+    "runtime_converter": "scripts/benchmark/run_fidelity_sensitivity_campaign.py::_env_action",
+    "scenario_loader": "robot_sf.training.scenario_loader.build_robot_config_from_scenario",
+    "speed_cap_reader": "scripts/benchmark/run_fidelity_sensitivity_campaign.py::_robot_speed_cap",
+    "variant_applier": "scripts/benchmark/run_fidelity_sensitivity_campaign.py::apply_variant"
+  },
+  "execution_status": {
+    "all_tiers_native": true,
+    "degraded": false,
+    "fallback": false,
+    "native": true
+  },
+  "git_provenance": {
+    "git_head": "001d14530502d1b1658566fb8bb53b6aaf680a1a",
+    "git_status_short": [
+      "?? docs/context/evidence/issue_5578_robot_speed_tier_sweep/"
+    ],
+    "git_worktree_dirty": true
+  },
+  "issue": 5578,
+  "not_evidence_banner": "NOT BENCHMARK EVIDENCE -- DISJOINT-SEED ACTIVATION CHECK ONLY",
+  "planned_vs_resolved": [
+    {
+      "cap_matches": true,
+      "planned_cap_m_s": 2.0,
+      "planned_max_accel_m_s2": 1.0,
+      "planned_max_decel_m_s2": 2.0,
+      "resolved_actuation_envelope": {
+        "braking_distinct_from_accel": true,
+        "drive_model": "bicycle_drive",
+        "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+        "max_braking_decel_m_s2": 2.0,
+        "max_forward_accel_m_s2": 1.0,
+        "peak_forward_speed_m_s": 2.0,
+        "stopping_distance_envelope_m": 1.0
+      },
+      "resolved_cap_m_s": 2.0,
+      "tier_id": "cap_2_0_nominal"
+    },
+    {
+      "cap_matches": true,
+      "planned_cap_m_s": 3.0,
+      "planned_max_accel_m_s2": 1.5,
+      "planned_max_decel_m_s2": 3.0,
+      "resolved_actuation_envelope": {
+        "braking_distinct_from_accel": true,
+        "drive_model": "bicycle_drive",
+        "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+        "max_braking_decel_m_s2": 3.0,
+        "max_forward_accel_m_s2": 1.5,
+        "peak_forward_speed_m_s": 3.0,
+        "stopping_distance_envelope_m": 1.5
+      },
+      "resolved_cap_m_s": 3.0,
+      "tier_id": "cap_3_0"
+    },
+    {
+      "cap_matches": true,
+      "planned_cap_m_s": 4.0,
+      "planned_max_accel_m_s2": 2.0,
+      "planned_max_decel_m_s2": 4.0,
+      "resolved_actuation_envelope": {
+        "braking_distinct_from_accel": true,
+        "drive_model": "bicycle_drive",
+        "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+        "max_braking_decel_m_s2": 4.0,
+        "max_forward_accel_m_s2": 2.0,
+        "peak_forward_speed_m_s": 4.0,
+        "stopping_distance_envelope_m": 2.0
+      },
+      "resolved_cap_m_s": 4.0,
+      "tier_id": "cap_4_0"
+    }
+  ],
+  "preflight_passed": true,
+  "schema_version": "robot_sf.issue_5578_speed_tier_activation_preflight.v1",
+  "study_id": "issue_5578_robot_speed_tier_sweep_above_2mps_v1",
+  "this_issue": 6101,
+  "tier_results": [
+    {
+      "activation_gate": {
+        "activated": true,
+        "applicability": "nominal_reference_not_a_treated_intervention",
+        "fraction_above_2_0_mps": 0.0,
+        "min_fraction_above_2_0_mps": 0.05,
+        "min_peak_speed_m_s": 2.2,
+        "realized_speed_peak_m_s": 2.0,
+        "tier_id": "cap_2_0_nominal"
+      },
+      "cap_m_s": 2.0,
+      "cap_saturation_fraction": 0.8395833333333333,
+      "commanded_speed_mean_m_s": 1.9999308014779988,
+      "drive_model": "bicycle_drive",
+      "fraction_above_2_0_mps": 0.0,
+      "per_seed": [
+        {
+          "cap_saturation_fraction": 0.8333333333333334,
+          "commanded_speed_mean_m_s": 1.9999777207126332,
+          "fraction_above_2_0_mps": 0.0,
+          "realized_speed_mean_m_s": 1.8416443873793,
+          "realized_speed_peak_m_s": 2.0,
+          "registered_seed": false,
+          "seed": 211,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.8416666666666667,
+          "commanded_speed_mean_m_s": 2.0,
+          "fraction_above_2_0_mps": 0.0,
+          "realized_speed_mean_m_s": 1.8416666666666666,
+          "realized_speed_peak_m_s": 2.0,
+          "registered_seed": false,
+          "seed": 212,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.8416666666666667,
+          "commanded_speed_mean_m_s": 1.9997454851993623,
+          "fraction_above_2_0_mps": 0.0,
+          "realized_speed_mean_m_s": 1.8416666666666666,
+          "realized_speed_peak_m_s": 2.0,
+          "registered_seed": false,
+          "seed": 213,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.8416666666666667,
+          "commanded_speed_mean_m_s": 2.0,
+          "fraction_above_2_0_mps": 0.0,
+          "realized_speed_mean_m_s": 1.8416666666666666,
+          "realized_speed_peak_m_s": 2.0,
+          "registered_seed": false,
+          "seed": 214,
+          "steps": 120
+        }
+      ],
+      "realized_speed_mean_m_s": 1.8416610968448248,
+      "realized_speed_peak_m_s": 2.0,
+      "resolved_actuation_envelope": {
+        "braking_distinct_from_accel": true,
+        "drive_model": "bicycle_drive",
+        "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+        "max_braking_decel_m_s2": 2.0,
+        "max_forward_accel_m_s2": 1.0,
+        "peak_forward_speed_m_s": 2.0,
+        "stopping_distance_envelope_m": 1.0
+      },
+      "resolved_cap_m_s": 2.0,
+      "seeds": [
+        211,
+        212,
+        213,
+        214
+      ],
+      "steps_observed": 480,
+      "tier_id": "cap_2_0_nominal"
+    },
+    {
+      "activation_gate": {
+        "activated": true,
+        "applicability": "treated_intervention",
+        "fraction_above_2_0_mps": 0.88125,
+        "fraction_above_2_0_mps_passes": true,
+        "fraction_above_2_0_mps_threshold": 0.05,
+        "peak_speed_passes": true,
+        "realized_speed_peak_m_s": 3.0,
+        "realized_speed_peak_m_s_threshold": 2.2,
+        "rule": "fraction_above_2_0_mps >= 0.05 OR realized_speed_peak_m_s > 2.2",
+        "tier_id": "cap_3_0"
+      },
+      "cap_m_s": 3.0,
+      "cap_saturation_fraction": 0.58125,
+      "commanded_speed_mean_m_s": 2.9187623939086706,
+      "drive_model": "bicycle_drive",
+      "fraction_above_2_0_mps": 0.88125,
+      "per_seed": [
+        {
+          "cap_saturation_fraction": 0.575,
+          "commanded_speed_mean_m_s": 2.930418103050035,
+          "fraction_above_2_0_mps": 0.8833333333333333,
+          "realized_speed_mean_m_s": 2.6308178298669467,
+          "realized_speed_peak_m_s": 3.0,
+          "registered_seed": false,
+          "seed": 211,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.5916666666666667,
+          "commanded_speed_mean_m_s": 2.9321461374094215,
+          "fraction_above_2_0_mps": 0.8833333333333333,
+          "realized_speed_mean_m_s": 2.639784640222855,
+          "realized_speed_peak_m_s": 3.0,
+          "registered_seed": false,
+          "seed": 212,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.6,
+          "commanded_speed_mean_m_s": 2.8935386813885886,
+          "fraction_above_2_0_mps": 0.8833333333333333,
+          "realized_speed_mean_m_s": 2.6470755591870385,
+          "realized_speed_peak_m_s": 3.0,
+          "registered_seed": false,
+          "seed": 213,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.5583333333333333,
+          "commanded_speed_mean_m_s": 2.9189466537866364,
+          "fraction_above_2_0_mps": 0.875,
+          "realized_speed_mean_m_s": 2.609115773727319,
+          "realized_speed_peak_m_s": 3.0,
+          "registered_seed": false,
+          "seed": 214,
+          "steps": 120
+        }
+      ],
+      "realized_speed_mean_m_s": 2.6316984507510397,
+      "realized_speed_peak_m_s": 3.0,
+      "resolved_actuation_envelope": {
+        "braking_distinct_from_accel": true,
+        "drive_model": "bicycle_drive",
+        "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+        "max_braking_decel_m_s2": 3.0,
+        "max_forward_accel_m_s2": 1.5,
+        "peak_forward_speed_m_s": 3.0,
+        "stopping_distance_envelope_m": 1.5
+      },
+      "resolved_cap_m_s": 3.0,
+      "seeds": [
+        211,
+        212,
+        213,
+        214
+      ],
+      "steps_observed": 480,
+      "tier_id": "cap_3_0"
+    },
+    {
+      "activation_gate": {
+        "activated": true,
+        "applicability": "treated_intervention",
+        "fraction_above_2_0_mps": 0.9083333333333333,
+        "fraction_above_2_0_mps_passes": true,
+        "fraction_above_2_0_mps_threshold": 0.05,
+        "peak_speed_passes": true,
+        "realized_speed_peak_m_s": 4.0,
+        "realized_speed_peak_m_s_threshold": 2.2,
+        "rule": "fraction_above_2_0_mps >= 0.05 OR realized_speed_peak_m_s > 2.2",
+        "tier_id": "cap_4_0"
+      },
+      "cap_m_s": 4.0,
+      "cap_saturation_fraction": 0.3333333333333333,
+      "commanded_speed_mean_m_s": 3.6798204820622034,
+      "drive_model": "bicycle_drive",
+      "fraction_above_2_0_mps": 0.9083333333333333,
+      "per_seed": [
+        {
+          "cap_saturation_fraction": 0.3333333333333333,
+          "commanded_speed_mean_m_s": 3.738251205824481,
+          "fraction_above_2_0_mps": 0.9083333333333333,
+          "realized_speed_mean_m_s": 3.1914511117247506,
+          "realized_speed_peak_m_s": 4.0,
+          "registered_seed": false,
+          "seed": 211,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.3416666666666667,
+          "commanded_speed_mean_m_s": 3.6665921260128003,
+          "fraction_above_2_0_mps": 0.9083333333333333,
+          "realized_speed_mean_m_s": 3.171351065361455,
+          "realized_speed_peak_m_s": 4.0,
+          "registered_seed": false,
+          "seed": 212,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.325,
+          "commanded_speed_mean_m_s": 3.6595629178795823,
+          "fraction_above_2_0_mps": 0.9083333333333333,
+          "realized_speed_mean_m_s": 3.1735253827733145,
+          "realized_speed_peak_m_s": 4.0,
+          "registered_seed": false,
+          "seed": 213,
+          "steps": 120
+        },
+        {
+          "cap_saturation_fraction": 0.3333333333333333,
+          "commanded_speed_mean_m_s": 3.6548756785319494,
+          "fraction_above_2_0_mps": 0.9083333333333333,
+          "realized_speed_mean_m_s": 3.1651106680810246,
+          "realized_speed_peak_m_s": 4.0,
+          "registered_seed": false,
+          "seed": 214,
+          "steps": 120
+        }
+      ],
+      "realized_speed_mean_m_s": 3.175359556985136,
+      "realized_speed_peak_m_s": 4.0,
+      "resolved_actuation_envelope": {
+        "braking_distinct_from_accel": true,
+        "drive_model": "bicycle_drive",
+        "envelope_formula": "v^2 / (2a) at peak forward speed and max braking deceleration",
+        "max_braking_decel_m_s2": 4.0,
+        "max_forward_accel_m_s2": 2.0,
+        "peak_forward_speed_m_s": 4.0,
+        "stopping_distance_envelope_m": 2.0
+      },
+      "resolved_cap_m_s": 4.0,
+      "seeds": [
+        211,
+        212,
+        213,
+        214
+      ],
+      "steps_observed": 480,
+      "tier_id": "cap_4_0"
+    }
+  ]
+}

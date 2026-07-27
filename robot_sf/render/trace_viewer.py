@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import sys
 from dataclasses import dataclass
 from importlib import resources
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -32,11 +34,24 @@ class TraceViewerResult:
     scene_path: Path
 
 
+_MAP_GEOMETRY_ZONE_KEYS = (
+    "robot_spawn_zones",
+    "robot_goal_zones",
+    "ped_spawn_zones",
+    "ped_goal_zones",
+    "ped_crowded_zones",
+)
+_MAP_GEOMETRY_OBSTACLE_KEY = "obstacles"
+_MAP_GEOMETRY_KNOWN_KEYS = {_MAP_GEOMETRY_OBSTACLE_KEY} | set(_MAP_GEOMETRY_ZONE_KEYS)
+_MAP_GEOMETRY_OBSTACLE_KEYS = {"vertices", "lines"}
+
+
 def build_trace_scene(
     trace: SimulationTraceExport,
     *,
     source: str | None = None,
     annotations: list[dict[str, Any]] | None = None,
+    map_geometry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the renderer-neutral scene payload from a simulation trace export.
 
@@ -44,6 +59,10 @@ def build_trace_scene(
         trace: A loaded simulation trace export.
         source: Optional source identifier for the scene payload.
         annotations: Optional list of annotation dicts to embed in the scene.
+        map_geometry: Optional map geometry payload with ``obstacles`` and zone
+            lists.  When supplied the geometry is merged into the auto-computed
+            map; when ``None`` the auto-computed empty-layout map is used.
+            Raises ``ValueError`` for unrecognised keys or malformed entries.
 
     Returns:
         dict[str, Any]: JSON-safe scene payload with auto-computed map bounds,
@@ -53,7 +72,11 @@ def build_trace_scene(
     if not frames:
         raise ValueError("Trace viewer export requires at least one trace frame")
 
-    map_payload = _compute_trace_map(trace)
+    validated_geometry = _validate_map_geometry(map_geometry) if map_geometry is not None else None
+    map_payload = _compute_trace_map(trace, map_geometry=validated_geometry)
+    if validated_geometry is not None:
+        _merge_map_geometry(map_payload, validated_geometry)
+
     trajectory = [
         frame["robot"]["position"]
         for frame in frames
@@ -61,6 +84,21 @@ def build_trace_scene(
     ]
 
     diagnostic_only = True
+
+    limitations = [
+        "Trace viewer for qualitative review of simulation_trace_export.v1 fixtures.",
+    ]
+    if map_geometry is not None:
+        limitations.append(
+            "Map geometry overlaid from supplied metadata; not ground-truth map validation."
+        )
+    else:
+        limitations.append(
+            "Map bounds are auto-computed from trace positions; no SVG map geometry is available."
+        )
+    limitations.append(
+        "This viewer is diagnostic-only; not benchmark evidence.",
+    )
 
     scene: dict[str, Any] = {
         "schema_version": SCENE_SCHEMA_VERSION,
@@ -86,19 +124,19 @@ def build_trace_scene(
         "frames": frames,
         "trajectory": trajectory,
         "reset_points": [],
-        "limitations": [
-            "Trace viewer for qualitative review of simulation_trace_export.v1 fixtures.",
-            "Map bounds are auto-computed from trace positions; no SVG map geometry is available.",
-            "This viewer is diagnostic-only; not benchmark evidence.",
-        ],
+        "limitations": limitations,
     }
     if annotations:
         scene["annotations"] = list(annotations)
     return scene
 
 
-def _compute_trace_map(trace: SimulationTraceExport) -> dict[str, Any]:
-    """Auto-compute map bounds and a minimal empty layout from trace positions.
+def _compute_trace_map(
+    trace: SimulationTraceExport,
+    *,
+    map_geometry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Auto-compute map bounds and a minimal empty layout from scene coordinates.
 
     Returns:
         dict[str, Any]: Map payload with computed bounds and empty obstacle/zone lists.
@@ -115,6 +153,11 @@ def _compute_trace_map(trace: SimulationTraceExport) -> dict[str, Any]:
             if isinstance(ped_pos, (list, tuple)) and len(ped_pos) >= 2:
                 all_x.append(float(ped_pos[0]))
                 all_y.append(float(ped_pos[1]))
+
+    if map_geometry is not None:
+        for x, y in _map_geometry_points(map_geometry):
+            all_x.append(x)
+            all_y.append(y)
 
     if not all_x or not all_y:
         origin_x, origin_y = 0.0, 0.0
@@ -146,6 +189,164 @@ def _compute_trace_map(trace: SimulationTraceExport) -> dict[str, Any]:
         "ped_crowded_zones": [],
         "_padding": max(padding, 1.0) if all_x else 1.0,
     }
+
+
+def _validate_coordinate(value: Any, *, path: str) -> float:
+    """Return one finite renderer-safe coordinate.
+
+    Raises:
+        ValueError: If the value is not a finite real number.
+    """
+    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(float(value)):
+        raise ValueError(f"{path}: expected a finite number")
+    return float(value)
+
+
+def _validate_point(value: Any, *, path: str) -> list[float]:
+    """Return an exact two-coordinate point suitable for the Three.js renderer.
+
+    Raises:
+        ValueError: If the point is not an exact finite ``[x, y]`` pair.
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError(f"{path}: expected [x, y] point pair")
+    return [
+        _validate_coordinate(value[0], path=f"{path}[0]"),
+        _validate_coordinate(value[1], path=f"{path}[1]"),
+    ]
+
+
+def _validate_line(value: Any, *, path: str) -> list[float]:
+    """Return one flat ``[x_start, x_end, y_start, y_end]`` line segment.
+
+    Raises:
+        ValueError: If the segment cannot be consumed by ``makeLine`` in the browser viewer.
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        raise ValueError(f"{path}: expected [x_start, x_end, y_start, y_end] line segment")
+    return [
+        _validate_coordinate(coordinate, path=f"{path}[{index}]")
+        for index, coordinate in enumerate(value)
+    ]
+
+
+def _validate_obstacles(obstacles: list[Any]) -> list[dict[str, list[list[float]]]]:
+    """Validate and normalize obstacle list entries.
+
+    Returns:
+        list[dict[str, list[list[float]]]]: JSON-safe obstacle payloads.
+
+    Raises:
+        ValueError: If any obstacle is malformed.
+    """
+    normalized: list[dict[str, list[list[float]]]] = []
+    for i, obs in enumerate(obstacles):
+        if not isinstance(obs, dict):
+            raise ValueError(f"map_geometry.obstacles[{i}]: expected a dict")
+        unknown_keys = set(obs) - _MAP_GEOMETRY_OBSTACLE_KEYS
+        if unknown_keys:
+            raise ValueError(
+                f"map_geometry.obstacles[{i}]: unrecognised key {sorted(unknown_keys)[0]!r}"
+            )
+        for field in ("vertices", "lines"):
+            if field not in obs:
+                raise ValueError(f"map_geometry.obstacles[{i}]: missing '{field}'")
+            if not isinstance(obs[field], list):
+                raise ValueError(
+                    f"map_geometry.obstacles[{i}].{field}:"
+                    f" expected a list, got {type(obs[field]).__name__}"
+                )
+        normalized.append(
+            {
+                "vertices": [
+                    _validate_point(vertex, path=f"map_geometry.obstacles[{i}].vertices[{j}]")
+                    for j, vertex in enumerate(obs["vertices"])
+                ],
+                "lines": [
+                    _validate_line(line, path=f"map_geometry.obstacles[{i}].lines[{j}]")
+                    for j, line in enumerate(obs["lines"])
+                ],
+            }
+        )
+    return normalized
+
+
+def _validate_zone_list(key: str, zones: list[Any]) -> list[list[list[float]]]:
+    """Validate and normalize zone polygons for the Three.js renderer.
+
+    Returns:
+        list[list[list[float]]]: JSON-safe zone polygons.
+
+    Raises:
+        ValueError: If any zone or point is malformed.
+    """
+    normalized: list[list[list[float]]] = []
+    for i, zone in enumerate(zones):
+        if not isinstance(zone, list):
+            raise ValueError(f"map_geometry.{key}[{i}]: expected a list, got {type(zone).__name__}")
+        if len(zone) < 3:
+            raise ValueError(
+                f"map_geometry.{key}[{i}]: expected a polygon with at least three points"
+            )
+        normalized.append(
+            [
+                _validate_point(point, path=f"map_geometry.{key}[{i}][{j}]")
+                for j, point in enumerate(zone)
+            ]
+        )
+    return normalized
+
+
+def _validate_map_geometry(geometry: Any) -> dict[str, Any]:
+    """Validate and normalize optional geometry before it reaches the renderer.
+
+    Returns:
+        dict[str, Any]: Renderer-safe JSON payload with only supported geometry keys.
+
+    Raises:
+        ValueError: If geometry is not a supported JSON-object payload or contains invalid data.
+    """
+    if not isinstance(geometry, dict):
+        raise ValueError(f"map_geometry: expected an object, got {type(geometry).__name__}")
+
+    normalized: dict[str, Any] = {}
+    for key, value in geometry.items():
+        if key not in _MAP_GEOMETRY_KNOWN_KEYS:
+            raise ValueError(f"map_geometry: unrecognised key '{key}'")
+        if not isinstance(value, list):
+            raise ValueError(f"map_geometry.{key}: expected a list, got {type(value).__name__}")
+        if key == _MAP_GEOMETRY_OBSTACLE_KEY:
+            normalized[key] = _validate_obstacles(value)
+        else:
+            normalized[key] = _validate_zone_list(key, value)
+    return normalized
+
+
+def _merge_map_geometry(map_payload: dict[str, Any], geometry: dict[str, Any]) -> None:
+    """Merge validated optional map geometry into a computed map payload.
+
+    Args:
+        map_payload: Auto-computed map payload (mutated in place).
+        geometry: Renderer-safe, validated geometry dict.
+    """
+    map_payload.update(geometry)
+
+
+def _map_geometry_points(geometry: dict[str, Any]) -> list[tuple[float, float]]:
+    """Collect all validated geometry endpoints for camera-bound calculation.
+
+    Returns:
+        list[tuple[float, float]]: All obstacle and zone vertices in world coordinates.
+    """
+    points: list[tuple[float, float]] = []
+    for obstacle in geometry.get(_MAP_GEOMETRY_OBSTACLE_KEY, []):
+        points.extend((vertex[0], vertex[1]) for vertex in obstacle["vertices"])
+        for x_start, x_end, y_start, y_end in obstacle["lines"]:
+            points.extend(((x_start, y_start), (x_end, y_end)))
+    for key in _MAP_GEOMETRY_ZONE_KEYS:
+        for zone in geometry.get(key, []):
+            points.extend((point[0], point[1]) for point in zone)
+    return points
 
 
 def _trace_frame_to_scene_frame(frame: Any) -> dict[str, Any]:
@@ -212,6 +413,7 @@ def export_trace_viewer(
     *,
     source: str | None = None,
     annotations: list[dict[str, Any]] | None = None,
+    map_geometry: dict[str, Any] | None = None,
 ) -> TraceViewerResult:
     """Export a simulation trace export into static browser viewer files.
 
@@ -220,6 +422,8 @@ def export_trace_viewer(
         output_dir: Directory for the viewer files.
         source: Optional source identifier.
         annotations: Optional annotations to embed.
+        map_geometry: Optional map geometry payload forwarded to
+            :func:`build_trace_scene`.
 
     Returns:
         TraceViewerResult: Paths to the generated viewer directory, HTML file, and scene JSON.
@@ -227,7 +431,12 @@ def export_trace_viewer(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    scene = build_trace_scene(trace, source=source, annotations=annotations)
+    scene = build_trace_scene(
+        trace,
+        source=source,
+        annotations=annotations,
+        map_geometry=map_geometry,
+    )
 
     scene_path = output_path / "scene.json"
     scene_path.write_text(json.dumps(scene, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -264,6 +473,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional path to a trace_annotation_set.v1 JSON fixture",
     )
+    parser.add_argument(
+        "--map-geometry",
+        default=None,
+        help="Optional path to a JSON object with renderer-safe obstacle and zone geometry",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -273,11 +487,13 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.annotations) if args.annotations else None,
             trace_id=trace.trace_id,
         )
+        map_geometry = _load_map_geometry(Path(args.map_geometry) if args.map_geometry else None)
         result = export_trace_viewer(
             trace,
             args.output_dir,
             source=str(trace_path),
             annotations=annotations_payload,
+            map_geometry=map_geometry,
         )
     except (OSError, ValueError) as exc:
         sys.stderr.write(f"{exc}\n")
@@ -323,6 +539,23 @@ def _load_annotation_payload(
         }
         for a in annotation_set.annotations
     ]
+
+
+def _load_map_geometry(path: Path | None) -> dict[str, Any] | None:
+    """Load the optional renderer-safe map geometry JSON object.
+
+    Returns:
+        dict[str, Any] | None: Parsed geometry object, or ``None`` without a path.
+
+    Raises:
+        ValueError: If the file does not contain a JSON object.
+    """
+    if path is None:
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"map geometry file {path} must contain a JSON object")
+    return payload
 
 
 if __name__ == "__main__":

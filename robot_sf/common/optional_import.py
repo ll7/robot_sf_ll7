@@ -79,3 +79,35 @@ def try_import(name: str) -> ModuleType | None:
         return importlib.import_module(name)
     except ImportError:
         return None
+
+
+def require_extra(extra_name: str, module_name: str, feature_name: str | None = None) -> ModuleType:
+    """Import ``module_name`` or raise an ImportError explaining how to install the missing extra.
+
+    Parameters
+    ----------
+    extra_name : str
+        Name of the optional extra, e.g. ``"viz"``, ``"maps"``, ``"training"``, ``"benchmark"``.
+    module_name : str
+        Dotted module name to import, e.g. ``"pygame"``, ``"geopandas"``.
+    feature_name : str | None
+        Optional human-readable feature description.
+
+    Returns
+    -------
+    ModuleType
+        The imported module.
+
+    Raises
+    ------
+    ImportError
+        If module is missing, informing user of the missing extra via a clear error message.
+    """
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as err:
+        feat = feature_name or module_name
+        raise ImportError(
+            f"The '{feat}' feature requires optional dependency '{module_name}'. "
+            f"Install it with: pip install robot_sf[{extra_name}] (or uv sync --extra {extra_name})"
+        ) from err

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #6152 topology-parallel NMPC prototype (#5310 child).** New
+  `robot_sf/planner/topology_parallel_nmpc.py` with
+  `TopologyParallelNMPCPlannerAdapter` that evaluates 2-4 deterministic x-y-t
+  maneuver hypotheses (pass_left, yield_straight, pass_right) under one
+  wall-clock deadline, using identical NMPC solver, objective, constraints,
+  tolerances, horizon, and iteration cap. Selection follows feasible-first,
+  then lowest-objective, with two-tick switching hysteresis. An explicit
+  deterministic initialization seam (`NMPCSolveResult`, `solve_initialization`,
+  `_command_from_solution`) was added to `NMPCSocialPlannerAdapter` without
+  changing the legacy default path. The adapter is testing-only/experimental
+  with opt-in registration (`experimental_topology_parallel_nmpc` limitation).
+  K=1 default mode matches legacy NMPC within pinned tolerance
+  (rtol=1e-6, atol=1e-6). No new objective terms, constraints, dependencies,
+  benchmarks, or defaults.
+
 * **issue #3207 fixed-scope SNQI runtime/report contract.** The fidelity-sensitivity execute/report
   path now emits canonical, provenance-bound SNQI from the runtime rows (via the repository-canonical
   `robot_sf.benchmark.snqi.compute.compute_snqi`, normalized against the run's own nominal-baseline

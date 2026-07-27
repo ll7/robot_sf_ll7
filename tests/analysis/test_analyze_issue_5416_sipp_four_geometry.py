@@ -127,8 +127,15 @@ def _analyze(tmp_path: Path, episodes: Path, manifests: tuple[Path, ...] = ()) -
     )
 
 
-def test_complete_native_bundle_emits_paired_summary_and_rule_inputs(tmp_path: Path) -> None:
-    """A complete native fixture produces paired summary artifacts and a pass decision."""
+def test_complete_native_bundle_emits_paired_summary_and_rule_inputs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A complete synthetic fixture tests aggregation independent of the live geometry gate."""
+    monkeypatch.setattr(
+        analyzer.packet_checker,
+        "validate_packet",
+        lambda *_args, **_kwargs: {"status": "ready", "blocked_rows": []},
+    )
     episodes, manifests = _write_bundle(tmp_path)
 
     report = _analyze(tmp_path, episodes, tuple(manifests))

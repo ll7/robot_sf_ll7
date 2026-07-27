@@ -1,0 +1,82 @@
+schema_version: adversarial-qd-campaign.v1
+description: >
+  Bounded doorway-family MAP-Elites / CMA-ME quality-diversity campaign for issue #5308.
+  Populates the (distance_to_human_min, time_to_collision_min) behavior grid over the
+  classic_doorway map using the production adversarial pipeline
+  (run_map_elites + production_qd_evaluator + CMaMeEmitter). Capability-not-evidence
+  boundary: the emitted archive.json is an archive artifact path, not a camera-ready
+  benchmark finding.
+issue: 5308
+claim_boundary: capability_not_evidence
+family: doorway
+map_id: classic_doorway
+
+# Bounded CPU budget (<=4h wall-clock). Each candidate evaluation runs a real
+# simulator episode; ~1.5-2s/candidate on CPU, so this budget is well inside 4h.
+budget: 240
+seed: 7
+require_certification: false
+policy: goal
+horizon: 60
+dt: 0.1
+workers: 1
+
+# Quality objective: worst-case SNQI (robustness fall-back until #5304's signed
+# temporal robustness objective lands). Lower-is-better internally; the archive
+# admits certified candidates and keeps the higher objective value per cell.
+objective: worst_case_snqi
+
+# Scenario template (benchmark-runner `scenarios` format). The doorway blocker
+# family routes the robot through a doorway while pedestrians cross it.
+scenario_template:
+  scenarios:
+    - name: doorway_blocker
+      map_id: classic_doorway
+      simulation_config:
+        max_episode_steps: 60
+        ped_density: 0.05
+      robot_config: {}
+      metadata:
+        archetype: doorway
+        family: doorway_blocker
+        claim_boundary: capability_not_evidence
+      seeds: [7]
+
+# Continuous search space spanning valid doorway approach geometry. The start/goal
+# windows lie along the classic_doorway robot route (~(26.5,15.4)->(18.7,12.5)) so
+# candidates certify as inside free space rather than inside a static obstacle.
+search_space:
+  start_x: {min: 26.0, max: 27.0}
+  start_y: {min: 15.0, max: 16.0}
+  goal_x: {min: 18.0, max: 19.0}
+  goal_y: {min: 12.0, max: 13.0}
+  spawn_time_s: {min: 0.0, max: 0.0}
+  pedestrian_speed_mps: {min: 1.0, max: 1.4}
+  pedestrian_delay_s: {min: 0.0, max: 0.0}
+  scenario_seed: {min: 1, max: 50}
+  constraints:
+    min_start_goal_distance_m: 5.0
+
+# MAP-Elites behavior grid over (min_pedestrian_distance, time_to_collision).
+# 5x5 = 25 cells; bounds cover the observed descriptor range so distinct failure
+# mechanisms land in distinct cells.
+grid:
+  x_min: 0.0
+  x_max: 5.0
+  y_min: 0.0
+  y_max: 5.0
+  bins: 5
+
+# Emitter mix: warm-started Random + CoordinateRefinement feed the grid, then a
+# diversity-driven CMA-ME emitter targets least-filled cells with per-cell CMA-ES.
+emitters:
+  - warm_start_random
+  - warm_start_coordinate_refinement
+  - cma_me
+
+# Warm-start seeds extracted from the knife-edge flip report (issue #5308 contract).
+# The report lives next to this config; entries with |outcome_margin| <= threshold
+# whose candidate geometry lies inside `search_space` seed the emitters first.
+warm_start:
+  flip_report: issue_5308_knife_edge_flip_report.json
+  margin_threshold: 0.5

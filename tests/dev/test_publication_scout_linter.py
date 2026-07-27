@@ -242,7 +242,8 @@ def test_main_reports_negative_result_guard_as_warning(tmp_path, capsys) -> None
             str(comments_path),
             "--recent-comment-hours",
             "999",
-        ]
+        ],
+        now=_fixed_now(),
     )
     payload = json.loads(capsys.readouterr().out)
 

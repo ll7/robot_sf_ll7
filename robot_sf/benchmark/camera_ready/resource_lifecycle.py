@@ -69,6 +69,11 @@ class _SubprocessArmParams:
     # reproduces (Slurm jobs 13372/13373: every episode failed on unresolvable
     # relative map_file, and arm seeds diverged from the campaign plan).
     scoped_scenarios_path: Path | None = None
+    # Resolved per-arm planner-agnostic safety-wrapper binding (issue #3501 / #4830).
+    # The parent resolves the campaign default vs the per-arm override and hands the
+    # effective mapping here; the worker forwards it verbatim to ``run_batch``.
+    # ``None`` keeps the wrapper off (the runtime default).
+    safety_wrapper: dict[str, Any] | None = None
 
 
 # Path-typed fields on _SubprocessArmParams. dataclasses.asdict() returns these as
@@ -258,6 +263,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
             ),
             workers=params.workers,
             resume=params.resume,
+            safety_wrapper=params.safety_wrapper,
         )
         availability = summarize_benchmark_availability(summary)
         if availability.availability_status == "not_available":

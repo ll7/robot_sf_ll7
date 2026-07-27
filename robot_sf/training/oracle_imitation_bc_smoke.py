@@ -603,6 +603,7 @@ class _BCPolicy(torch.nn.Module):
     """Tiny MLP that maps a flattened observation vector to a continuous action."""
 
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
+        """Construct the three-layer Tanh MLP with the given layer widths."""
         super().__init__()
         self.net = torch.nn.Sequential(
             torch.nn.Linear(input_dim, hidden_dim),
@@ -613,6 +614,11 @@ class _BCPolicy(torch.nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
+        """Map a flattened observation tensor to a continuous action vector.
+
+        Returns:
+            The output action tensor.
+        """
         return self.net(features)
 
 

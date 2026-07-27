@@ -17,8 +17,13 @@ permissions:
   contents: read
 
 concurrency:
+  # Latest-main-wins (issue #6399): cancelling in-progress runs in the
+  # per-ref group lets the final aggregate SHA of a merge burst be validated
+  # without queueing behind superseded intermediate runs. Because the group is
+  # per-ref, a new main push only cancels superseded main runs, and a new pull
+  # request push still only cancels its own superseded run.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -33,19 +38,22 @@ jobs:
   fast-feedback:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # On pull requests, split the suite into parallel shards (pytest-split) for
-    # fast feedback. On main/workflow_dispatch run a single full pass so the
-    # advisory coverage baseline stays accurate without cross-shard combining.
+    # Split every event across four runners. Pull requests retain their fast-only
+    # shards; main/manual/merge-queue events run the complete suite and publish
+    # unique coverage data for the downstream combine gate.
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ github.event_name == 'pull_request' && fromJSON('[1, 2, 3, 4]') || fromJSON('[1]') }}
+        shard: [1, 2, 3, 4]
     env:
-      PYTEST_SHARD_COUNT: ${{ github.event_name == 'pull_request' && '4' || '1' }}
+      PYTEST_SHARD_COUNT: 4
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
+      ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
+      ROBOT_SF_PYTEST_COVERAGE: ${{ github.event_name != 'pull_request' && '1' || '0' }}
+      COVERAGE_FILE: ${{ format('output/coverage/.coverage.{0}', matrix.shard) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The evidence-registry ratchet resolves historical producing commits.
           # A shallow checkout turns reachable provenance into false
@@ -77,12 +85,41 @@ jobs:
       - name: Unit tests
         run: scripts/dev/ci_driver.sh test
 
-      # Pull requests use four disjoint fast-feedback shards, so they do not
-      # produce a complete coverage report. Enforce the absolute floor on the
-      # existing unsharded main/manual full-suite report without adding a
-      # second test pass or changing pull-request feedback latency.
-      - name: Enforce absolute coverage floor
+      - name: Upload coverage shard
         if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: output/coverage/.coverage.${{ matrix.shard }}
+          if-no-files-found: error
+          include-hidden-files: true
+
+  coverage-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: fast-feedback
+    if: ${{ github.event_name != 'pull_request' && needs.fast-feedback.result == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Download coverage shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-shard-*
+          path: output/coverage
+          merge-multiple: true
+
+      - name: Combine coverage shards
+        run: |
+          uv run coverage combine output/coverage
+          uv run coverage json
+          uv run coverage html
+
+      - name: Enforce absolute coverage floor
         run: >-
           uv run python scripts/coverage/compare_coverage.py
           --current output/coverage/coverage.json
@@ -91,7 +128,6 @@ jobs:
           --minimum-total 85.0
 
       - name: Restore coverage baseline
-        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: output/coverage/.coverage-baseline.json
@@ -100,7 +136,6 @@ jobs:
             coverage-baseline-main
 
       - name: Compare coverage with baseline
-        if: ${{ github.event_name != 'pull_request' }}
         continue-on-error: true
         run: |
           if [ -f output/coverage/.coverage-baseline.json ]; then
@@ -129,7 +164,7 @@ jobs:
           key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}
 
       - name: Upload coverage reports
-        if: ${{ github.event_name != 'pull_request' && (failure() || github.ref == 'refs/heads/main') }}
+        if: ${{ failure() || github.ref == 'refs/heads/main' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-reports
@@ -137,6 +172,7 @@ jobs:
             output/coverage/coverage.json
             output/coverage/htmlcov/
             output/coverage/.coverage
+          include-hidden-files: true
 
   compat-matrix:
     runs-on: ${{ matrix.os }}
@@ -148,15 +184,15 @@ jobs:
         python: ["3.11", "3.13"]
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up matrixed core CI environment
+      - name: Set up matrixed compatibility CI environment
         uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ matrix.python }}
-          sync-args: "--frozen"
+          sync-args: "--all-extras --frozen"
 
-      - name: Run core compatibility tests
+      - name: Run compatibility tests with full extras
         run: >-
           uv run pytest tests/common tests/contract tests/factories tests/gym_env tests/maps
           tests/nav tests/ped_npc tests/render tests/scenarios tests/sensor tests/sim tests/unit
@@ -167,15 +203,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           version: "0.11.21"
           enable-cache: true
@@ -189,7 +225,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -248,22 +284,21 @@ jobs:
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
   reproducibility-check:
-    # This diagnostic runs only when manually requested. It is deliberately not
-    # included in the required `ci` aggregate job, so it cannot act as a PR gate.
-    if: github.event_name == 'workflow_dispatch'
-    continue-on-error: true
+    # Run on pull requests so hosted reproducibility evidence is green rather
+    # than skipped; retain manual dispatch for standalone diagnostics.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
 
-      - name: Run optional reproducibility diagnostic
+      - name: Run reproducibility diagnostic
         run: uv run python scripts/benchmark_repro_check.py
 
       - name: Upload reproducibility report
@@ -279,7 +314,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -301,7 +336,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -325,7 +360,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -338,7 +373,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -346,11 +381,126 @@ jobs:
       - name: Notebook smoke tests
         run: scripts/dev/ci_driver.sh notebooks-smoke
 
+  # --- Path-triggered exact-repeat determinism gate (Option B, issue #6191) ---
+  #
+  # Runs the full exact-repeat determinism test suite only when the PR diff
+  # touches paths that can affect determinism.  Most PRs pay zero overhead.
+  # When triggered the check is genuinely blocking (failing it fails CI).
+  #
+  # Determinism-relevant paths — update this list when code moves:
+  #   robot_sf/planner/        – planner implementations
+  #   robot_sf/models/registry.py – model registry
+  #   robot_sf/benchmark/      – benchmark runner / exact-repeat campaign
+  #   configs/baselines/       – baseline configs
+  determinism-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check determinism-relevant path changes
+        id: check-changes
+        shell: bash
+        run: |
+          # Determine the base ref for diffing
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_REF="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            BASE_REF="${{ github.event.merge_group.base_sha }}"
+          else
+            BASE_REF="origin/main"
+          fi
+
+          # Determinism-relevant paths — single source of truth for the
+          # path-triggered gate.  Keep in sync with the comment above.
+          DETERMINISM_PATHS=(
+            "robot_sf/planner/"
+            "robot_sf/models/registry.py"
+            "robot_sf/benchmark/"
+            "configs/baselines/"
+          )
+
+          CHANGED=$(git diff --name-only "$BASE_REF...HEAD" -- "${DETERMINISM_PATHS[@]}")
+          if [[ -n "$CHANGED" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changed determinism-relevant paths:"
+            echo "$CHANGED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No determinism-relevant paths changed"
+          fi
+
+      - name: No determinism-relevant changes
+        if: steps.check-changes.outputs.changed == 'false'
+        run: echo "Skipping exact-repeat determinism check (no changes to determinism-relevant paths)"
+
+      - name: Set up CI Python environment
+        if: steps.check-changes.outputs.changed == 'true'
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run exact-repeat determinism test
+        if: steps.check-changes.outputs.changed == 'true'
+        run: uv run pytest tests/benchmark/test_exact_repeat_executor.py -v
+
+  exact-repeat-model-preflight:
+    # Issue #6189: prove the exact-repeat native-PPO path runs offline. The
+    # required model assets are staged (checksum-verified) in a SETUP step and
+    # cached via actions/cache keyed on their registry-pinned SHA-256, so the
+    # timed test never downloads a model inside its loop. The test itself
+    # monkeypatches the downloader to fail-closed if any in-loop fetch is
+    # attempted.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PPO_ALGO_CONFIG: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Derive model-cache key from registry-pinned digests
+        id: model-cache-key
+        run: |
+          KEY=$(uv run python -c "
+          import hashlib, yaml
+          from robot_sf.models.registry import get_registry_entry
+          from robot_sf.models.preflight import required_model_ids_for_config
+          cfg = yaml.safe_load(open('${PPO_ALGO_CONFIG}'))
+          ids = required_model_ids_for_config(cfg)
+          shas = [str(get_registry_entry(m).get('github_release', {}).get('sha256', '')) for m in ids]
+          print(hashlib.sha256('|'.join(shas).encode()).hexdigest()[:16])
+          ")
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Restore model cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: output/model_cache
+          key: model-cache-exact-repeat-ppo-${{ steps.model-cache-key.outputs.key }}
+
+      - name: Preflight required model assets (before the timed test)
+        run: uv run python scripts/models/preflight_models.py --config "${PPO_ALGO_CONFIG}"
+
+      - name: Run exact-repeat native-PPO determinism offline
+        run: |
+          uv run pytest -m slow -p no:cacheprovider \
+            tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight \
+            -q
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
       - fast-feedback
+      - coverage-gate
       - compat-matrix
       - fast-pysf-compat
       - smoke-artifacts
@@ -358,12 +508,18 @@ jobs:
       - wheel-smoke-install
       - examples-smoke
       - notebooks-smoke
+      - determinism-gate
+      - exact-repeat-model-preflight
     if: always()
     steps:
       - name: Check split job results
         run: |
           if [[ "${{ needs.fast-feedback.result }}" != "success" ]]; then
             echo "fast-feedback finished with ${{ needs.fast-feedback.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ github.event_name }}" != "pull_request" && "${{ needs.coverage-gate.result }}" != "success" ]]; then
+            echo "coverage-gate finished with ${{ needs.coverage-gate.result }}" >&2
             exit 1
           fi
           if [[ "${{ needs.compat-matrix.result }}" != "success" ]]; then
@@ -392,5 +548,13 @@ jobs:
           fi
           if [[ "${{ needs.notebooks-smoke.result }}" != "success" ]]; then
             echo "notebooks-smoke finished with ${{ needs.notebooks-smoke.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.determinism-gate.result }}" != "success" ]]; then
+            echo "determinism-gate finished with ${{ needs.determinism-gate.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.exact-repeat-model-preflight.result }}" != "success" ]]; then
+            echo "exact-repeat-model-preflight finished with ${{ needs.exact-repeat-model-preflight.result }}" >&2
             exit 1
           fi

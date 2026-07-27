@@ -46,6 +46,9 @@ from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.training.scenario_loader import load_scenarios
 
 _PLANNER_GROUPS = {"core", "experimental"}
+# Allowed arm-isolation modes (issue #4826). "in_process" is the legacy default; "subprocess"
+# runs each arm in its own subprocess so GPU/VRAM is fully released between arms.
+_ARM_ISOLATION_MODES = {"in_process", "subprocess"}
 _PAPER_KINEMATICS_BY_PROFILE = {
     "paper-seed-variability-v1": ("differential_drive",),
     "paper-matrix-v1": ("differential_drive",),
@@ -209,6 +212,49 @@ def _parse_tuning_spec(raw: Any, *, planner_key: str) -> TuningSpec | None:
         tuned_at_utc=_tuning_optional_str(raw.get("tuned_at_utc")),
         source=source,
     )
+
+
+def _normalize_arm_isolation(raw: Any) -> str:
+    """Normalize and validate the arm-isolation mode (issue #4826).
+
+    Returns:
+        Lower-cased isolation mode ("in_process" or "subprocess").
+    """
+    mode = str(raw).strip().lower()
+    if mode not in _ARM_ISOLATION_MODES:
+        known = ", ".join(sorted(_ARM_ISOLATION_MODES))
+        raise ValueError(f"Unsupported arm_isolation '{raw}'. Expected one of: {known}")
+    return mode
+
+
+def _parse_safety_wrapper(raw: Any, *, planner_key: str) -> dict[str, Any] | None:
+    """Parse an optional ``safety_wrapper`` block (issue #3501 / #4830).
+
+    The block is a raw mapping consumed downstream by
+    ``robot_sf.benchmark.safety_wrapper_runtime.runtime_config_from_mapping``. Returning ``None`` for
+    an unset block keeps the wrapper off (the runtime default). When a block is provided it is
+    validated against the runtime contract here so a misconfigured arm fails closed at config load
+    time instead of mid-campaign.
+
+    Returns:
+        Parsed safety-wrapper mapping, or ``None`` when no block was declared.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ValueError(
+            f"Planner '{planner_key}' safety_wrapper block must be a mapping when provided"
+        )
+    mapping = dict(raw)
+    # Validate against the runtime contract (arm_key / enabled / predeclared thresholds) so
+    # the factorial off/on pairing fails closed at config load if a threshold drifts. The local
+    # import avoids any module-load ordering dependency on ``safety_wrapper_runtime``.
+    from robot_sf.benchmark.safety_wrapper_runtime import (  # noqa: PLC0415
+        runtime_config_from_mapping,
+    )
+
+    runtime_config_from_mapping(mapping)
+    return mapping
 
 
 def _optional_synthetic_actuation_profile_mapping(
@@ -872,6 +918,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                 planner_group=planner_group,
                 planner_group_explicit=planner_group_explicit,
                 tuning=_parse_tuning_spec(entry.get("tuning"), planner_key=key),
+                safety_wrapper=_parse_safety_wrapper(entry.get("safety_wrapper"), planner_key=key),
             ),
         )
 
@@ -1038,6 +1085,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         preview_scenario_limit=int(payload.get("preview_scenario_limit", 100)),
         kinematics_matrix=kinematics_matrix,
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
+        arm_isolation=_normalize_arm_isolation(payload.get("arm_isolation", "in_process")),
         observation_mode=_normalize_observation_mode(
             payload.get("observation_mode"),
             label="Campaign 'observation_mode'",
@@ -1139,6 +1187,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         ),
         checkpoint_provenance_enforcement=(
             str(payload.get("checkpoint_provenance_enforcement", "off")).strip().lower() or "off"
+        ),
+        safety_wrapper=_parse_safety_wrapper(
+            payload.get("safety_wrapper"), planner_key="<campaign>"
         ),
     )
     _validate_campaign_config(cfg)

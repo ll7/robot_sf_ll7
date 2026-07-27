@@ -178,6 +178,11 @@ def export_pickle_frames(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for frame export.
+
+    Returns:
+        Configured argument parser with frame export CLI options.
+    """
     parser = argparse.ArgumentParser(
         description="Export deterministic PNG frames from Robot SF pickle recordings.",
     )

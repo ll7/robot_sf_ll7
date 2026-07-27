@@ -171,6 +171,11 @@ def _build_reliability_row(
     coverage_target: float,
     coverage_tolerance: float,
 ) -> dict[str, Any]:
+    """Build one reliability/calibration row from a group's aggregate metric rows.
+
+    Returns:
+        The reliability/calibration row dict.
+    """
     (
         scenario_family,
         horizon_s,
@@ -239,6 +244,11 @@ def _empty_report(
     coverage_tolerance: float,
     generated_at_utc: str | None,
 ) -> dict[str, Any]:
+    """Build a fail-closed empty calibration report citing no metric reports.
+
+    Returns:
+        The empty fail-closed calibration report dict.
+    """
     return {
         "schema_version": FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION,
         "report_id": report_id,
@@ -268,6 +278,7 @@ def _empty_report(
 
 
 def _require_forecast_metrics_report(report: dict[str, Any]) -> None:
+    """Validate a ForecastMetrics.v1 report's schema, provenance, and aggregate rows."""
     if not isinstance(report, dict):
         raise ValueError("metric report must be a mapping")
     if report.get("schema_version") != FORECAST_METRICS_SCHEMA_VERSION:
@@ -288,6 +299,7 @@ def _require_forecast_metrics_report(report: dict[str, Any]) -> None:
 
 
 def _require_calibration_report(report: dict[str, Any]) -> None:
+    """Validate a report is a mapping with the calibration-report schema version."""
     if not isinstance(report, dict):
         raise ValueError("report must be a mapping")
     if report.get("schema_version") != FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION:
@@ -295,28 +307,37 @@ def _require_calibration_report(report: dict[str, Any]) -> None:
 
 
 def _scenario_family(report: dict[str, Any]) -> str:
+    """Return a report's scenario_family provenance, defaulting to ``"unknown"``."""
     provenance = report["provenance"]
     value = provenance.get("scenario_family")
     return "unknown" if value is None else str(value)
 
 
 def _required_value(payload: dict[str, Any], key: str) -> Any:
+    """Return a required payload field, raising when missing or ``None``."""
     if key not in payload or payload[key] is None:
         raise ValueError(f"required metric report field is missing: {key}")
     return payload[key]
 
 
 def _metric_name(row: dict[str, Any]) -> str:
+    """Return a row's metric name, stripping a leading ``mean_`` aggregate prefix."""
     metric = str(_required_value(row, "metric"))
     return metric[5:] if metric.startswith("mean_") else metric
 
 
 def _row_actor_class(row: dict[str, Any]) -> str:
+    """Return a row's actor_class or ``"unavailable"`` when absent."""
     value = row.get("actor_class")
     return "unavailable" if value is None else str(value)
 
 
 def _semantic_metadata_present(report: dict[str, Any], row: dict[str, Any]) -> str:
+    """Classify whether semantic metadata is present across row/transfer/provenance sources.
+
+    Returns:
+        The semantic-metadata presence label.
+    """
     for payload in (row, report.get("transfer_dimensions", {}), report.get("provenance", {})):
         if not isinstance(payload, dict):
             continue
@@ -332,6 +353,11 @@ def _semantic_metadata_present(report: dict[str, Any], row: dict[str, Any]) -> s
 
 
 def _metric_rows_by_name(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Group aggregate rows into a mapping keyed by (stripped) metric name.
+
+    Returns:
+        Rows grouped by metric name.
+    """
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         grouped[_metric_name(row)].append(row)
@@ -339,6 +365,7 @@ def _metric_rows_by_name(rows: list[dict[str, Any]]) -> dict[str, list[dict[str,
 
 
 def _available_weighted_mean(rows: list[dict[str, Any]]) -> float | None:
+    """Return the denominator-weighted mean of ok rows, or ``None`` with no denominator."""
     weighted_total = 0.0
     denominator_total = 0
     for row in rows:
@@ -355,6 +382,7 @@ def _available_weighted_mean(rows: list[dict[str, Any]]) -> float | None:
 
 
 def _available_denominator(rows: list[dict[str, Any]]) -> int:
+    """Return the summed denominator across ok rows."""
     return sum(
         int(row.get("denominator", 0))
         for row in rows
@@ -363,6 +391,11 @@ def _available_denominator(rows: list[dict[str, Any]]) -> int:
 
 
 def _calibration_status(*, coverage_gap: float | None, tolerance: float) -> str:
+    """Classify a coverage gap against tolerance into a calibration status.
+
+    Returns:
+        The calibration status string.
+    """
     if coverage_gap is None:
         return "unavailable"
     if coverage_gap < -tolerance:
@@ -373,6 +406,11 @@ def _calibration_status(*, coverage_gap: float | None, tolerance: float) -> str:
 
 
 def _row_recommendation(calibration_status: str) -> str:
+    """Map a calibration status to a continue/wait/revise recommendation.
+
+    Returns:
+        The recommendation string.
+    """
     if calibration_status == "calibrated_within_tolerance":
         return "continue"
     if calibration_status == "unavailable":
@@ -381,6 +419,11 @@ def _row_recommendation(calibration_status: str) -> str:
 
 
 def _failure_taxonomy(*, calibration_status: str, miss_rate: float | None) -> str:
+    """Classify a calibration/miss combination into a failure-taxonomy label.
+
+    Returns:
+        The failure-taxonomy label.
+    """
     if calibration_status == "unavailable":
         return "unavailable_uncertainty_denominator"
     if calibration_status == "over_confident_under_coverage":
@@ -399,6 +442,7 @@ def _risk_scoring_eligibility(
     actor_class: str,
     semantic_metadata_present: str,
 ) -> str:
+    """Return the risk-scoring eligibility verdict for a calibration row."""
     if denominator <= 0:
         return "blocked_no_denominator"
     if actor_class == "unavailable":
@@ -411,6 +455,11 @@ def _risk_scoring_eligibility(
 
 
 def _unavailable_metrics(rows: dict[str, list[dict[str, Any]]]) -> list[str]:
+    """List metric names whose rows have no available weighted value.
+
+    Returns:
+        The metric names with no available value.
+    """
     return [
         metric
         for metric, metric_rows in rows.items()
@@ -419,6 +468,11 @@ def _unavailable_metrics(rows: dict[str, list[dict[str, Any]]]) -> list[str]:
 
 
 def _limitation_rows(reliability_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collect per-row limitation records for rows with unavailable uncertainty metrics.
+
+    Returns:
+        The collected limitation row records.
+    """
     limitations = []
     for row in reliability_rows:
         if row["unavailable_metrics"]:
@@ -439,6 +493,7 @@ def _recommendation(
     reliability_rows: list[dict[str, Any]],
     limitation_rows: list[dict[str, Any]],
 ) -> dict[str, str]:
+    """Return the overall decision/claim_status/reason from reliability and limitation rows."""
     if not reliability_rows:
         return {
             "decision": "wait",

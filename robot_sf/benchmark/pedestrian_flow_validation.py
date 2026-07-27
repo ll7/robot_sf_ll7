@@ -94,6 +94,7 @@ class PedFlowRunConfig:
 def _require_finite_number(
     value: float, field_name: str, *, positive: bool = False, non_negative: bool = False
 ) -> None:
+    """Raise ValueError when a run-control value is boolean, non-finite, or violates sign bounds."""
     if isinstance(value, bool) or not math.isfinite(float(value)):
         raise ValueError(f"{field_name} must be finite")
     if positive and float(value) <= 0.0:
@@ -532,6 +533,11 @@ def _compact_evidence_report(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def _aggregate_flow_metrics(per_run: list[dict[str, Any]]) -> dict[str, Any]:
+    """Collect per-run flow metric families into flat report-level lists.
+
+    Returns:
+        The dictionary of flat report-level flow metric lists aggregated across runs.
+    """
     return {
         "average_speed_vs_density": [
             run["flow_metrics"]["average_speed_vs_density"] for run in per_run
@@ -543,6 +549,7 @@ def _aggregate_flow_metrics(per_run: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _aggregate_trajectory_quality(per_run: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return the first run's trajectory-quality distributions as the report-level summary."""
     if not per_run:
         return {}
     first = per_run[0]["trajectory_quality"]
@@ -562,6 +569,7 @@ def _aggregate_trajectory_quality(per_run: list[dict[str, Any]]) -> dict[str, An
 
 
 def _write_trajectory_quality_csv(report: dict[str, Any], path: Path) -> None:
+    """Flatten per-run trajectory-quality summaries into a CSV evidence file."""
     rows: list[dict[str, Any]] = []
     for run in report["runs"]:
         quality = run["trajectory_quality"]
@@ -604,6 +612,11 @@ def _write_trajectory_quality_csv(report: dict[str, Any], path: Path) -> None:
 
 
 def _build_bidirectional_corridor_spec() -> PedFlowScenarioSpec:
+    """Build the straight corridor fixture with a central both-direction flow gate.
+
+    Returns:
+        The bidirectional corridor scenario spec with a central both-direction gate.
+    """
     map_def = _base_map("bidirectional_corridor", width=12.0, height=4.0)
     return PedFlowScenarioSpec(
         scenario_id="bidirectional_corridor",
@@ -615,6 +628,11 @@ def _build_bidirectional_corridor_spec() -> PedFlowScenarioSpec:
 
 
 def _build_bottleneck_spec() -> PedFlowScenarioSpec:
+    """Build the bottleneck fixture with a 1.1 m neck and a positive-direction gate.
+
+    Returns:
+        The bottleneck scenario spec with a 1.1 m neck and positive-direction gate.
+    """
     obstacles = [
         Obstacle([(5.4, 0.0), (6.6, 0.0), (6.6, 1.45), (5.4, 1.45)]),
         Obstacle([(5.4, 2.55), (6.6, 2.55), (6.6, 4.0), (5.4, 4.0)]),
@@ -630,6 +648,11 @@ def _build_bottleneck_spec() -> PedFlowScenarioSpec:
 
 
 def _build_forked_route_spec() -> PedFlowScenarioSpec:
+    """Build the forked-route fixture with separate upper and lower branch gates.
+
+    Returns:
+        The forked-route scenario spec with separate upper and lower branch gates.
+    """
     map_def = _base_map("forked_route", width=12.0, height=6.0)
     return PedFlowScenarioSpec(
         scenario_id="forked_route",
@@ -650,6 +673,11 @@ def _base_map(
     height: float,
     obstacles: list[Obstacle] | None = None,
 ) -> MapDefinition:
+    """Construct a rectangular diagnostic map with a stub robot route and no pedestrians.
+
+    Returns:
+        The rectangular diagnostic map definition with a stub robot route and no pedestrians.
+    """
     robot_spawn = _rect(0.2, 0.2, 0.8, 0.8)
     robot_goal = _rect(width - 0.8, height - 0.8, width - 0.2, height - 0.2)
     return MapDefinition(
@@ -688,6 +716,11 @@ def _build_single_pedestrians(
     *,
     speed_mps: float,
 ) -> list[SinglePedestrianDefinition]:
+    """Dispatch to the per-scenario builder to create the requested pedestrian definitions.
+
+    Returns:
+        The list of pedestrian definitions created by the per-scenario builder.
+    """
     builders = {
         "bidirectional_corridor": _bidirectional_pedestrian,
         "bottleneck": _bottleneck_pedestrian,
@@ -702,6 +735,11 @@ def _bidirectional_pedestrian(
     count: int,
     speed_mps: float,
 ) -> SinglePedestrianDefinition:
+    """Create one corridor pedestrian alternating travel direction across lateral lanes.
+
+    Returns:
+        The corridor pedestrian definition alternating direction across lateral lanes.
+    """
     lane_count = max(count, 1)
     y = 0.7 + (idx + 0.5) * (2.6 / lane_count)
     if idx % 2 == 0:
@@ -718,6 +756,11 @@ def _bidirectional_pedestrian(
 
 
 def _bottleneck_pedestrian(idx: int, count: int, speed_mps: float) -> SinglePedestrianDefinition:
+    """Create one bottleneck pedestrian routed through the neck toward the far side.
+
+    Returns:
+        The bottleneck pedestrian definition routed through the neck toward the far side.
+    """
     y_offsets = np.linspace(-1.35, 1.35, max(count, 1))
     y = float(2.0 + y_offsets[idx])
     return SinglePedestrianDefinition(
@@ -730,6 +773,11 @@ def _bottleneck_pedestrian(idx: int, count: int, speed_mps: float) -> SinglePede
 
 
 def _forked_route_pedestrian(idx: int, count: int, speed_mps: float) -> SinglePedestrianDefinition:
+    """Create one forked-route pedestrian assigned to the upper or lower branch goal.
+
+    Returns:
+        The forked-route pedestrian definition assigned to the upper or lower branch goal.
+    """
     y = 2.1 + (idx % max(count, 1)) * 0.55
     upper = idx % 2 == 0
     goal = (11.0, 4.8) if upper else (11.0, 1.2)
@@ -747,6 +795,7 @@ def _copy_map_with_single_pedestrians(
     base_map: MapDefinition,
     single_pedestrians: list[SinglePedestrianDefinition],
 ) -> MapDefinition:
+    """Return a copy of the base map with the given single-pedestrian definitions attached."""
     return MapDefinition(
         width=base_map.width,
         height=base_map.height,
@@ -764,6 +813,11 @@ def _copy_map_with_single_pedestrians(
 
 
 def _finite_summary(values: np.ndarray) -> dict[str, float | int | str]:
+    """Summarize the finite entries of an array as count and mean with an ok or empty status.
+
+    Returns:
+        The summary dictionary with count, mean, and an ok or empty status.
+    """
     flat = np.asarray(values, dtype=float).reshape(-1)
     finite = flat[np.isfinite(flat)]
     if finite.size == 0:
@@ -772,14 +826,25 @@ def _finite_summary(values: np.ndarray) -> dict[str, float | int | str]:
 
 
 def _unavailable_metric(metric_id: str, status: str) -> dict[str, float | int | str]:
+    """Return a zero-count metric placeholder carrying an unavailable diagnostic status."""
     return {"metric_id": metric_id, "status": status, "count": 0}
 
 
 def _axis_index(axis: Axis) -> int:
+    """Map an axis label to its coordinate index.
+
+    Returns:
+        The coordinate index for the axis label, 0 for x and 1 otherwise.
+    """
     return 0 if axis == "x" else 1
 
 
 def _rect(x0: float, y0: float, x1: float, y1: float) -> Rect:
+    """Build a three-corner rectangle from opposite corner coordinates.
+
+    Returns:
+        The three-corner rectangle built from the opposite corner coordinates.
+    """
     return ((x0, y1), (x1, y1), (x1, y0))
 
 

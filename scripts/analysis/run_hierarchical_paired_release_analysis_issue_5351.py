@@ -57,6 +57,15 @@ DEFAULT_MANIFEST_PATH = (
 )
 DEFAULT_EVIDENCE_DIR = "docs/context/evidence/issue_5351_hierarchical_paired_release_analysis"
 
+# GitHub release asset downloads flake transiently (5xx, rate-limit, network),
+# and the seeded-determinism test exercises this path inside the fast-feedback
+# unit suite. Mirror scripts/dev/uv_sync_retry.sh: bounded attempts plus
+# exponential backoff so a single transient failure cannot take main CI red,
+# while a genuine failure still fails once the retry budget is exhausted.
+BUNDLE_DOWNLOAD_MAX_ATTEMPTS = 3
+BUNDLE_DOWNLOAD_BACKOFF_BASE = 5.0  # seconds
+BUNDLE_DOWNLOAD_BACKOFF_CAP = 30.0  # seconds
+
 
 class ReleaseAnalysisPipelineError(RobotSfError, ValueError):
     """Raised when release hydration, adaptation, or execution fails closed."""
@@ -196,6 +205,67 @@ def sha256_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _download_release_bundle(target: Path) -> None:
+    """Download the release bundle via ``gh`` with bounded retry + backoff.
+
+    Mirrors the transient-failure retry convention in
+    ``scripts/dev/uv_sync_retry.sh``. ``gh release download`` is retried on any
+    non-zero exit (the documented flakiness mode for GitHub release assets); a
+    missing ``gh`` binary fails immediately and is not retried. The captured
+    ``gh`` stdout/stderr is surfaced in the final error so a genuine failure is
+    diagnosable instead of the opaque ``non-zero exit status 1`` message.
+    """
+    cmd = [
+        "gh",
+        "release",
+        "download",
+        EXPECTED_RELEASE_TAG,
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "-p",
+        "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+        "--dir",
+        str(target.parent),
+    ]
+    max_attempts = BUNDLE_DOWNLOAD_MAX_ATTEMPTS
+    last_detail = ""
+    for attempt in range(1, max_attempts + 1):
+        print(
+            f"Downloading release {EXPECTED_RELEASE_TAG} bundle via gh "
+            f"(attempt {attempt}/{max_attempts})..."
+        )
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except FileNotFoundError as exc:
+            raise ReleaseAnalysisPipelineError(
+                f"gh not found on PATH; cannot download release {EXPECTED_RELEASE_TAG} "
+                f"bundle: {exc}"
+            ) from exc
+        except subprocess.CalledProcessError as exc:
+            last_detail = (
+                f"exit status {exc.returncode}\nstdout:\n{exc.stdout}\nstderr:\n{exc.stderr}"
+            ).rstrip()
+            if attempt >= max_attempts:
+                break
+            delay = min(
+                BUNDLE_DOWNLOAD_BACKOFF_CAP,
+                BUNDLE_DOWNLOAD_BACKOFF_BASE * (2 ** (attempt - 1)),
+            )
+            print(
+                f"gh release download transient failure (attempt "
+                f"{attempt}/{max_attempts}, exit {exc.returncode}); retrying in {delay:.0f}s"
+            )
+            time.sleep(delay)
+            continue
+        if result.stdout:
+            print(result.stdout)
+        return
+    raise ReleaseAnalysisPipelineError(
+        f"Could not download release {EXPECTED_RELEASE_TAG} bundle after "
+        f"{max_attempts} attempts:\n{last_detail}"
+    )
+
+
 def find_or_download_bundle(bundle_path: Path | None, *, repo_root: Path) -> Path:
     """Locate or download release 0.0.3.post1 bundle and verify its digest.
 
@@ -220,26 +290,7 @@ def find_or_download_bundle(bundle_path: Path | None, *, repo_root: Path) -> Pat
         target = Path(
             "/tmp/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz"
         )
-        print(f"Downloading release {EXPECTED_RELEASE_TAG} bundle via gh...")
-        cmd = [
-            "gh",
-            "release",
-            "download",
-            EXPECTED_RELEASE_TAG,
-            "--repo",
-            "ll7/robot_sf_ll7",
-            "-p",
-            "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
-            "--dir",
-            str(target.parent),
-        ]
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            print(res.stdout)
-        except (subprocess.SubprocessError, OSError) as exc:
-            raise ReleaseAnalysisPipelineError(
-                f"Could not download release {EXPECTED_RELEASE_TAG} bundle: {exc}"
-            ) from exc
+        _download_release_bundle(target)
         existing = target
 
     actual_sha256 = sha256_file(existing)

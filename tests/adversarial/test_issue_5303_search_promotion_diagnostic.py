@@ -175,6 +175,71 @@ def test_diagnostic_cli_requires_the_frozen_execution_bindings() -> None:
     ]
 
 
+def test_diagnostic_context_records_frozen_execution_statuses(tmp_path: Path) -> None:
+    """Rows retain verified command bindings when episode records omit status metadata."""
+    scenario = tmp_path / "scenario.yaml"
+    search_space = tmp_path / "space.yaml"
+    scenario.write_text("scenarios: []\n", encoding="utf-8")
+    search_space.write_text("variables: {}\n", encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "scenario_template": str(scenario),
+                    "search_space_path": str(search_space),
+                },
+                "candidates": [{"candidate": {"scenario_seed": 1}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    comparison_row = compare_adversarial_samplers.SamplerComparisonRow(
+        objective="constraints_first_lexicographic_v1",
+        sampler="optuna",
+        budget=64,
+        seed=530301,
+        manifest_path=str(manifest),
+        best_bundle_path=None,
+        best_objective_value=None,
+        best_valid_objective=None,
+        num_candidates=1,
+        num_valid_candidates=1,
+        num_invalid_candidates=0,
+        num_failed_evaluations=0,
+        invalid_candidate_rate=0.0,
+        first_failure_iteration=None,
+        certified_valid_failure_count=0,
+        replayable_valid_failure_count=0,
+        replay_success_rate=None,
+        fallback_candidate_count=0,
+        degraded_candidate_count=0,
+        held_out_family_yield=None,
+        held_out_family_status="not_admitted_diagnostic_only",
+        caveats=(),
+    )
+    context = compare_adversarial_samplers.Issue5303DiagnosticContext(
+        scenario_family="classic_group_crossing_medium",
+        target_planner_config=REPO_ROOT
+        / "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
+        neutral_reference_planner_config=REPO_ROOT
+        / "configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml",
+        execution_mode="adapter",
+        readiness_status="ready",
+        availability_status="available",
+        execution_context_label="diagnostic_adapter_context_a",
+        execution_commit="a" * 40,
+    )
+
+    row = compare_adversarial_samplers.build_issue_5303_search_outcome_rows(
+        rows=[comparison_row], context=context
+    )[0]
+
+    assert row["execution_mode"] == "adapter"
+    assert row["readiness_status"] == "ready"
+    assert row["availability_status"] == "available"
+
+
 def test_diagnostic_runner_checks_preflight_before_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

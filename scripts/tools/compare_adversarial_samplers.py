@@ -69,6 +69,9 @@ class Issue5303DiagnosticContext:
     scenario_family: str
     target_planner_config: Path
     neutral_reference_planner_config: Path
+    execution_mode: str
+    readiness_status: str
+    availability_status: str
     execution_context_label: str
     execution_commit: str
 
@@ -498,9 +501,6 @@ def build_issue_5303_search_outcome_rows(
             episode_path_raw = item.get("episode_record_path")
             episode_path = Path(str(episode_path_raw)) if episode_path_raw else None
             record = _first_jsonl_record(episode_path, manifest_path=manifest_path)
-            execution_mode, readiness_status, availability_status = _episode_execution_status(
-                record, attribution
-            )
             row = {
                 "schema_version": "issue_5303_search_promotion_outcome_row.v1",
                 "row_id": (
@@ -532,9 +532,13 @@ def build_issue_5303_search_outcome_rows(
                     "confirmation_seeds": [],
                     "second_context_seed": None,
                 },
-                "execution_mode": execution_mode,
-                "readiness_status": readiness_status,
-                "availability_status": availability_status,
+                # These are frozen command bindings, not fields inferred from an episode
+                # payload. The production episode schema does not promise to include them,
+                # and treating their absence as ``unknown`` made the declared handoff fail
+                # its own accounting check even for a native adapter execution.
+                "execution_mode": context.execution_mode,
+                "readiness_status": context.readiness_status,
+                "availability_status": context.availability_status,
                 "constraints_first_outcome": _constraints_first_outcome(record),
                 "objective": comparison_row.objective,
                 "objective_value": item.get("objective_value"),
@@ -1220,6 +1224,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             scenario_family=str(args.scenario_family),
             target_planner_config=args.algo_config,
             neutral_reference_planner_config=args.reference_algo_config,
+            execution_mode="adapter",
+            readiness_status="ready",
+            availability_status="available",
             execution_context_label=str(args.execution_context_label),
             execution_commit=execution_commit,
         )

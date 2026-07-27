@@ -297,6 +297,29 @@ def test_validate_unique_extractor_names_rejects_colliding_normalized_names(
         validate_unique_extractor_names([first_name, second_name])
 
 
+def test_load_configuration_rejects_colliding_extractor_artifact_directories(
+    tmp_path: Path,
+) -> None:
+    """Configuration validation rejects profiles that would share an artifact directory."""
+
+    from scripts.multi_extractor_training import load_configuration
+
+    config_path = tmp_path / "colliding-extractors.yaml"
+    config_path.write_text(
+        """\
+extractors:
+  - name: alpha/beta
+    preset: cnn
+  - name: alpha beta
+    preset: transformer
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="collide after normalization/case folding"):
+        load_configuration(config_path)
+
+
 @pytest.mark.parametrize("extractor_name", ["", "   ", "../", "---"])
 def test_make_extractor_directory_name_without_alphanumeric_characters_raises(
     tmp_path: Path, extractor_name: str

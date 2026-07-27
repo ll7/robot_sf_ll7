@@ -55,6 +55,7 @@ def _durable_entry(
         "github_release": {
             "repo": "ll7/robot_sf_ll7",
             "tag": "artifact/legacy-models-2026-07-registry-v1",
+            "version": "v1",
             "asset_name": f"{model_id}.zip",
             "url": (
                 f"https://github.com/ll7/robot_sf_ll7/releases/download/"
@@ -134,6 +135,40 @@ def test_durable_legacy_entries_declare_legacy_non_track_claim_boundary() -> Non
         assert promotion is not None, cp.model_id
         assert promotion.get("claim_boundary") == "legacy_non_track", cp.model_id
         assert promotion.get("non_benchmark_reason"), cp.model_id
+
+
+@pytest.mark.parametrize(
+    ("version", "expected_reason"),
+    [(None, "missing immutable version pin"), ("latest", "must be immutable")],
+)
+def test_durable_legacy_inventory_rejects_unpinned_release_versions(
+    tmp_path: Path, version: str | None, expected_reason: str
+) -> None:
+    """Legacy release entries must pin a non-moving immutable version."""
+    source = tmp_path / "source.zip"
+    source.write_bytes(b"checkpoint")
+    model_id = "legacy_ppo_synthetic_version_pin"
+    entry = _durable_entry(model_id, source, sha256=_sha256(source))
+    release = entry["github_release"]
+    if version is None:
+        release.pop("version")
+    else:
+        release["version"] = version
+    registry_path = tmp_path / "registry.yaml"
+    _write_registry(registry_path, [entry])
+
+    rows = checker.build_inventory(
+        repo_root=tmp_path,
+        registry_path=registry_path,
+        supported_model_ids=(),
+        durable_checkpoints=(
+            checker.DurableLegacyCheckpoint(model_id, ("source.zip",), "single_file"),
+        ),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].status == "unsupported_missing_durable_pointer"
+    assert expected_reason in rows[0].reason
 
 
 def test_durable_legacy_recorded_checksums_match_in_tree_sha256() -> None:

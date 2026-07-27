@@ -181,7 +181,13 @@ def _release_uri(entry: Mapping[str, Any]) -> str:
     return ""
 
 
-def _durable_release_reason(entry: Mapping[str, Any]) -> str:
+_MOVING_RELEASE_VERSION_ALIASES = frozenset({"best", "best-success", "current", "latest"})
+
+
+def _durable_release_reason(
+    entry: Mapping[str, Any], *, require_immutable_version: bool = False
+) -> str:
+    """Return why a registry entry lacks the required durable-release metadata."""
     release = entry.get("github_release")
     if not isinstance(release, Mapping):
         return "missing github_release pointer"
@@ -192,6 +198,14 @@ def _durable_release_reason(entry: Mapping[str, Any]) -> str:
     ]
     if missing:
         return f"github_release missing {', '.join(missing)}"
+    if not _release_uri(entry):
+        return "github_release needs url or repo/tag/asset_name"
+    if require_immutable_version:
+        version = str(release.get("version") or "").strip()
+        if not version:
+            return "github_release missing immutable version pin"
+        if version.casefold() in _MOVING_RELEASE_VERSION_ALIASES:
+            return f"github_release version must be immutable, not {version!r}"
     return ""
 
 
@@ -459,7 +473,7 @@ def build_inventory(
                 )
             )
             continue
-        release_reason = _durable_release_reason(entry)
+        release_reason = _durable_release_reason(entry, require_immutable_version=True)
         durable_uri = _release_uri(entry)
         if release_reason:
             rows.append(

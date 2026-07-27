@@ -105,7 +105,7 @@ def test_rate_limit_jerk_caps_step_toward_proposal() -> None:
 
 
 def test_bound_speed_caps_resulting_speed() -> None:
-    """The residual may not push a pedestrian beyond its max_speed."""
+    """A feasible outward residual is retained and reaches the speed cap."""
     velocity = np.array([[1.0, 0.0]], dtype=float)
     max_speeds = np.array([1.2], dtype=float)
     residual = np.array([[5.0, 0.0]], dtype=float)  # would spike speed far above cap
@@ -113,6 +113,8 @@ def test_bound_speed_caps_resulting_speed() -> None:
     out = bound_speed(residual, velocity, max_speeds, dt, max_speed_delta_mps=5.0)
     resulting = velocity + out * dt
     assert np.linalg.norm(resulting[0]) <= max_speeds[0] + 1e-6
+    assert np.linalg.norm(out[0]) > 0.0
+    np.testing.assert_allclose(resulting[0], [1.2, 0.0])
 
 
 def test_bound_speed_caps_speed_delta_component() -> None:

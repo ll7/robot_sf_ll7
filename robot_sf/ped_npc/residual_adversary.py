@@ -354,13 +354,13 @@ def bound_speed(
     v = velocities_array[over]
     dv = delta_velocity[over]
     cap = speed_caps[over]
-    # Solve |v + s * dv|^2 = cap^2 for the smaller root s in [0, 1].
+    # Solve |v + s * dv|^2 = cap^2 for the largest safe scale in [0, 1].
     a_coeff = np.sum(dv * dv, axis=1)
     b_coeff = 2.0 * np.sum(v * dv, axis=1)
     c_coeff = np.sum(v * v, axis=1) - cap * cap
     safe_a = np.where(a_coeff > EPSILON, a_coeff, 1.0)
     discriminant = np.maximum(b_coeff * b_coeff - 4.0 * safe_a * c_coeff, 0.0)
-    root = (-b_coeff - np.sqrt(discriminant)) / (2.0 * safe_a)
+    root = (-b_coeff + np.sqrt(discriminant)) / (2.0 * safe_a)
     scale_factor = np.clip(root, 0.0, 1.0)
     scaled = residual_array.copy()
     scaled[over] = residual_array[over] * scale_factor[:, None]

@@ -54,6 +54,22 @@ def test_gate_node_classified_as_diagnostic_not_soft() -> None:
     assert "horizon" not in joined
 
 
+def test_gate_node_below_soft_threshold_remains_unclassified() -> None:
+    """A diagnostic registration does not label an in-budget sample."""
+    policy = PerformanceBudgetPolicy()  # soft=20.0, hard=60.0
+    samples = [
+        SlowTestSample(
+            test_identifier=GATE_NODE,
+            duration_seconds=policy.soft_threshold_seconds - 0.1,
+        ),
+    ]
+    records = generate_report(samples, policy)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec.breach_type == "none"
+    assert rec.guidance == []
+
+
 def test_gate_node_at_hard_timeout_remains_a_hard_breach() -> None:
     """The diagnostic exemption never weakens the 60s hard enforcement boundary."""
     policy = PerformanceBudgetPolicy()  # soft=20.0, hard=60.0

@@ -56,6 +56,9 @@ class DummyConstantSensor(Sensor):
         shape = cfg.get("shape")
         if shape is not None:
             arr = np.broadcast_to(arr, shape).astype(dtype, copy=False)
+        # The observation is a declared constant: mark it read-only so a caller
+        # cannot mutate the sensor's stored value through a returned array.
+        arr.setflags(write=False)
         return arr
 
     def reset(self) -> None:  # no state

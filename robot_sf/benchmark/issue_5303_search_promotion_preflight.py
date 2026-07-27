@@ -147,6 +147,7 @@ REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS = frozenset(
     {
         "--scenario-template",
         "--scenario-family",
+        "--contract",
         "--search-space",
         "--policy",
         "--algo-config",
@@ -1228,6 +1229,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         step3.get("expected_artifacts") if isinstance(step3.get("expected_artifacts"), dict) else {}
     )
     required_command_values = {
+        "--contract": DEFAULT_CONTRACT_PATH.as_posix(),
         "--policy": "hybrid_rule_local_planner",
         "--algo-config": EXPECTED_PROVENANCE_PATHS["target_planner_config"],
         "--reference-algo-config": EXPECTED_PROVENANCE_PATHS["neutral_reference_planner_config"],

@@ -104,7 +104,7 @@ input_provenance:
       sha256: a9d06feec11347ac1470401171da1998ed3635026798716be36e1c03616ceefa
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: eb8b6b4ff09b5c51d91f9bf9efe71fb12e271554b74a217c9d0acf103fca7afa
+      sha256: 3a912b51169cdb5b669d8be972a715c773dba25f6016baa41ca5fa91f758d49c
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
       sha256: cb008644ea4303d19e423762eac27451659a34b752da8f087a86c0c181767b5a
@@ -464,6 +464,7 @@ step3_execution:
     confirmation, or a second execution context and therefore cannot promote.
   diagnostic_search_command: >
     uv run python scripts/tools/compare_adversarial_samplers.py
+    --contract configs/adversarial/issue_5303_search_promotion_contract.yaml
     --policy hybrid_rule_local_planner
     --algo-config configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
     --reference-algo-config configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml

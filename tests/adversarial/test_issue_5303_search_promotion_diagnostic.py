@@ -7,13 +7,14 @@ import json
 import shlex
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.issue_5303_search_promotion_analysis import (
     OUTCOME_ROW_SCHEMA_VERSION,
     analyze_issue_5303_search_promotion,
 )
-from scripts.tools.compare_adversarial_samplers import parse_args
+from scripts.tools import compare_adversarial_samplers
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "configs/adversarial/issue_5303_search_promotion_contract.yaml"
@@ -135,7 +136,7 @@ def test_diagnostic_cli_requires_the_frozen_execution_bindings() -> None:
         "python",
         "scripts/tools/compare_adversarial_samplers.py",
     ]
-    args = parse_args(command_parts[4:])
+    args = compare_adversarial_samplers.parse_args(command_parts[4:])
 
     assert args.policy == "hybrid_rule_local_planner"
     assert args.require_certification is True
@@ -147,6 +148,34 @@ def test_diagnostic_cli_requires_the_frozen_execution_bindings() -> None:
         "issue5305_classic_cross_trap_medium_fbbd96687d61",
         "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
     ]
+
+
+def test_diagnostic_runner_checks_preflight_before_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale contract aborts before the diagnostic runner can start a search."""
+    step3_execution = FROZEN_CONTRACT["step3_execution"]
+    assert isinstance(step3_execution, dict)
+    command = step3_execution["diagnostic_search_command"]
+    assert isinstance(command, str)
+    command_parts = shlex.split(command)
+
+    def stale_preflight(*_args: object, **_kwargs: object) -> object:
+        return type("Preflight", (), {"ready": False, "blockers": ("stale input hash",)})()
+
+    monkeypatch.setattr(
+        compare_adversarial_samplers,
+        "preflight_issue_5303_contract",
+        stale_preflight,
+    )
+    monkeypatch.setattr(
+        compare_adversarial_samplers,
+        "run_sampler_comparison",
+        lambda **_kwargs: pytest.fail("search must not start after a failed preflight"),
+    )
+
+    with pytest.raises(RuntimeError, match="preflight failed before diagnostic execution"):
+        compare_adversarial_samplers.main(command_parts[4:])
 
 
 def test_diagnostic_analysis_retains_duplicate_attempt_in_primary_denominator(

@@ -25,6 +25,10 @@ from robot_sf.adversarial.config import (
 )
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
+from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
+    DEFAULT_CONTRACT_PATH,
+    preflight_issue_5303_contract,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -954,6 +958,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--contract",
+        type=Path,
+        default=DEFAULT_CONTRACT_PATH,
+        help=(
+            "Frozen issue #5303 contract checked before diagnostic execution; ignored by "
+            "generic comparison modes."
+        ),
+    )
+    parser.add_argument(
         "--objective",
         action="append",
         dest="objectives",
@@ -1109,10 +1122,26 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return args
 
 
+def _require_issue_5303_preflight_if_requested(
+    args: argparse.Namespace, *, repo_root: Path
+) -> None:
+    """Fail before diagnostic execution when the frozen contract no longer verifies."""
+    if not args.issue_5303_diagnostic_only:
+        return
+    preflight = preflight_issue_5303_contract(
+        args.contract,
+        repo_root=repo_root,
+    )
+    if not preflight.ready:
+        detail = "; ".join(preflight.blockers) or "unknown frozen-contract failure"
+        raise RuntimeError(f"issue #5303 preflight failed before diagnostic execution: {detail}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the sampler comparison CLI."""
     args = parse_args(argv)
     repo_root = args.repo_root.resolve()
+    _require_issue_5303_preflight_if_requested(args, repo_root=repo_root)
     if args.manifest is not None:
         config, objectives, samplers, budgets, seeds = load_package_b_manifest(
             args.manifest,

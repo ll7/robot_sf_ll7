@@ -179,7 +179,8 @@ The authoritative complete adapter-mode command is
 [frozen contract](../../../../configs/adversarial/issue_5303_search_promotion_contract.yaml).
 It binds the target algorithm config, records the neutral reference config for later
 confirmation, pins the held-out `classic_group_crossing_medium` template/search space,
-requires the corrected certifier, and writes all declared files. The paired
+requires the corrected certifier, reruns the side-effect-free preflight before any search
+attempt, and writes all declared files. The paired
 `step3_execution.analysis_command` validates the complete row matrix and writes the
 fixed analysis result. Do not run either command as a substitute for the stopped
 evidence-grade campaign.

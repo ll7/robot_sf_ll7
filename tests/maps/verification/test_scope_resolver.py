@@ -59,6 +59,17 @@ def _make_inventory(tmp_path: Path, *map_ids: str) -> MapInventory:
     return MapInventory(maps_root=tmp_path)
 
 
+def _make_changed_scope_resolver(
+    tmp_path: Path, *map_ids: str
+) -> tuple[MapInventory, ScopeResolver]:
+    """Build a resolver whose inventory lives under a synthetic repository root."""
+    repo_root = tmp_path / "repository"
+    inventory = _make_inventory(repo_root / "maps", *map_ids)
+    resolver = ScopeResolver(inventory)
+    resolver.repo_root = repo_root
+    return inventory, resolver
+
+
 def _ids(maps: list) -> set[str]:
     """Return the set of map ids for a list of :class:`MapRecord` objects."""
     return {m.map_id for m in maps}
@@ -98,11 +109,10 @@ class TestScopeNormalization:
         assert _ids(resolver.resolve("\tCi\n")) == {"beta"}
 
     def test_changed_keyword_normalizes_whitespace_and_case(self, tmp_path, monkeypatch):
-        inv = _make_inventory(tmp_path, "alpha", "beta")
-        resolver = ScopeResolver(inv)
+        _inventory, resolver = _make_changed_scope_resolver(tmp_path, "alpha", "beta")
         monkeypatch.setattr(
             f"{SCOPE_MODULE}.subprocess.run",
-            _fake_git_run(str((tmp_path / "alpha.svg").resolve())),
+            _fake_git_run("maps/alpha.svg"),
         )
         assert _ids(resolver.resolve("  CHANGED ")) == {"alpha"}
 
@@ -198,52 +208,45 @@ class TestGlobScope:
 class TestChangedScope:
     """``changed`` consults git (mocked) and filters to maps-root SVG files."""
 
-    def test_includes_only_changed_svgs_under_maps_root(
-        self, tmp_path, tmp_path_factory, monkeypatch
-    ):
-        inv = _make_inventory(tmp_path, "alpha", "beta")
+    def test_includes_only_changed_svgs_under_maps_root(self, tmp_path, monkeypatch):
+        inv, resolver = _make_changed_scope_resolver(tmp_path, "alpha", "beta")
         # A non-SVG file under the maps root must be ignored.
-        (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+        (inv.maps_root / "notes.txt").write_text("x", encoding="utf-8")
         # An SVG that resolves outside the configured maps root must be ignored.
-        outside = tmp_path_factory.mktemp("outside")
+        outside = resolver.repo_root / "outside"
         _write_svg(outside / "ghost.svg")
         # beta exists in the inventory but is not reported as changed.
         stdout = "\n".join(
             [
-                str((tmp_path / "alpha.svg").resolve()),
-                str((tmp_path / "notes.txt").resolve()),
-                str((outside / "ghost.svg").resolve()),
+                "maps/alpha.svg",
+                "maps/notes.txt",
+                "outside/ghost.svg",
             ]
         )
         monkeypatch.setattr(f"{SCOPE_MODULE}.subprocess.run", _fake_git_run(stdout))
-        resolver = ScopeResolver(inv)
         assert _ids(resolver.resolve("changed")) == {"alpha"}
 
     def test_non_svg_changed_file_yields_empty_list(self, tmp_path, monkeypatch):
-        inv = _make_inventory(tmp_path, "alpha", "beta")
-        (tmp_path / "notes.txt").write_text("x", encoding="utf-8")
+        inv, resolver = _make_changed_scope_resolver(tmp_path, "alpha", "beta")
+        (inv.maps_root / "notes.txt").write_text("x", encoding="utf-8")
         monkeypatch.setattr(
             f"{SCOPE_MODULE}.subprocess.run",
-            _fake_git_run(str((tmp_path / "notes.txt").resolve())),
+            _fake_git_run("maps/notes.txt"),
         )
-        resolver = ScopeResolver(inv)
         # No matches is not an error for the changed scope (unlike glob/specific).
         assert resolver.resolve("changed") == []
 
     def test_empty_git_output_yields_empty_list(self, tmp_path, monkeypatch):
-        inv = _make_inventory(tmp_path, "alpha")
+        _inventory, resolver = _make_changed_scope_resolver(tmp_path, "alpha")
         monkeypatch.setattr(f"{SCOPE_MODULE}.subprocess.run", _fake_git_run(""))
-        resolver = ScopeResolver(inv)
         assert resolver.resolve("changed") == []
 
     def test_git_calledprocess_error_falls_back_to_all(self, tmp_path, monkeypatch):
-        inv = _make_inventory(tmp_path, "alpha", "beta")
+        _inventory, resolver = _make_changed_scope_resolver(tmp_path, "alpha", "beta")
         monkeypatch.setattr(f"{SCOPE_MODULE}.subprocess.run", _raise_called_process_error)
-        resolver = ScopeResolver(inv)
         assert _ids(resolver.resolve("changed")) == {"alpha", "beta"}
 
     def test_git_executable_missing_falls_back_to_all(self, tmp_path, monkeypatch):
-        inv = _make_inventory(tmp_path, "alpha", "beta")
+        _inventory, resolver = _make_changed_scope_resolver(tmp_path, "alpha", "beta")
         monkeypatch.setattr(f"{SCOPE_MODULE}.subprocess.run", _raise_file_not_found)
-        resolver = ScopeResolver(inv)
         assert _ids(resolver.resolve("changed")) == {"alpha", "beta"}

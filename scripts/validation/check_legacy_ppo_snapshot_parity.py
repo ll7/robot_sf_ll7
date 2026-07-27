@@ -242,6 +242,37 @@ def _resolve_model_path_from_repo_root(
         )
 
 
+def _resolve_single_file_release_hydration(
+    model_id: str,
+    *,
+    repo_root: Path,
+    registry_path: Path,
+    cache_dir: Path | None,
+) -> Path:
+    """Resolve one release asset without reusing the worktree's default local cache.
+
+    ``resolve_model_path`` checks an entry's relative ``local_path`` before its
+    explicit ``cache_dir``. When the caller requests an isolated hydration cache,
+    anchor that relative lookup at the isolated cache as well; otherwise a
+    previously hydrated worktree could make the release proof pass without
+    exercising the requested cache.
+    """
+    resolution_root = repo_root if cache_dir is None else cache_dir.resolve()
+    resolution_root.mkdir(parents=True, exist_ok=True)
+    with chdir(resolution_root):
+        resolved = resolve_model_path(
+            model_id,
+            registry_path=registry_path,
+            allow_download=True,
+            cache_dir=cache_dir,
+        )
+    if cache_dir is not None and not resolved.resolve().is_relative_to(cache_dir.resolve()):
+        raise ValueError(
+            f"release hydration resolved outside the requested cache {cache_dir}: {resolved}"
+        )
+    return resolved
+
+
 def _verify_single_file(entry: Mapping[str, Any], *, resolved: Path) -> tuple[str, str]:
     """Byte-match a single-file durable checkpoint against its recorded SHA-256."""
     release = entry.get("github_release")
@@ -502,11 +533,10 @@ def _verify_durable_checkpoint(
                 dict(entry), cache_dir=cache_dir, allow_download=True
             )
         else:
-            resolved = _resolve_model_path_from_repo_root(
+            resolved = _resolve_single_file_release_hydration(
                 checkpoint.model_id,
                 repo_root=repo_root,
                 registry_path=registry_path,
-                allow_download=True,
                 cache_dir=cache_dir,
             )
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
@@ -741,12 +771,13 @@ def main(argv: list[str] | None = None) -> int:
     registry_path = args.registry_path
     if not registry_path.is_absolute():
         registry_path = repo_root / registry_path
+    cache_dir = args.cache_dir.resolve() if args.cache_dir is not None else None
 
     inventory = build_inventory(
         repo_root=repo_root,
         registry_path=registry_path,
         verify_release_hydration=bool(args.verify_release_hydration),
-        cache_dir=args.cache_dir,
+        cache_dir=cache_dir,
     )
     smoke_reports = [
         run_model_step_smoke(

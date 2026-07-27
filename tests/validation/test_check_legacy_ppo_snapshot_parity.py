@@ -11,6 +11,7 @@ import pytest
 import yaml
 from gymnasium import spaces
 
+from robot_sf.models import registry as model_registry
 from robot_sf.models.registry import load_registry
 from scripts.validation import check_legacy_ppo_snapshot_parity as checker
 
@@ -244,6 +245,47 @@ def test_release_hydration_uses_cache_and_verifies_downloaded_single_file(
     assert calls == [
         {"registry_path": registry_path, "allow_download": True, "cache_dir": cache_dir}
     ]
+
+
+def test_release_hydration_does_not_reuse_worktree_local_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An explicit hydration cache must win over an existing worktree local_path."""
+    repo_root = tmp_path / "repo"
+    source = repo_root / "model" / "source.zip"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"published-checkpoint")
+    model_id = "legacy_ppo_synthetic_isolated_hydration"
+    entry = _durable_entry(model_id, source, sha256=_sha256(source))
+    entry["local_path"] = f"output/model_cache/{model_id}/{model_id}.zip"
+    registry_path = repo_root / "model" / "registry.yaml"
+    _write_registry(registry_path, [entry])
+
+    worktree_cached = repo_root / entry["local_path"]
+    worktree_cached.parent.mkdir(parents=True)
+    worktree_cached.write_bytes(source.read_bytes())
+    cache_dir = tmp_path / "isolated-cache"
+    downloads: list[Path] = []
+
+    def fake_stream_download(_url: str, target: Path, *, expected_sha256: str = "") -> None:
+        downloads.append(target)
+        target.write_bytes(source.read_bytes())
+        assert expected_sha256 == _sha256(source)
+
+    monkeypatch.setattr(model_registry, "_stream_download_url", fake_stream_download)
+    status, detail = checker._verify_durable_checkpoint(
+        checker.DurableLegacyCheckpoint(model_id, ("model/source.zip",), "single_file"),
+        entry=entry,
+        repo_root=repo_root,
+        registry_path=registry_path,
+        verify_release_hydration=True,
+        cache_dir=cache_dir,
+    )
+
+    expected_hydrated = cache_dir / model_id / f"{model_id}.zip"
+    assert status == "verified", detail
+    assert downloads == [expected_hydrated]
+    assert expected_hydrated.read_bytes() == source.read_bytes()
 
 
 def test_verify_durable_checkpoint_detects_checksum_mismatch(tmp_path: Path) -> None:

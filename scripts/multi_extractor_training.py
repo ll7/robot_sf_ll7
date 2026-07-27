@@ -265,13 +265,18 @@ def _get_vec_env_config(
 def load_configuration(
     config_path: Path,
 ) -> tuple[RunSettings, list[ExtractorConfigurationProfile]]:
-    """TODO docstring. Document this function.
+    """Load and validate the multi-extractor training configuration.
 
     Args:
-        config_path: TODO docstring.
+        config_path: YAML configuration file containing run settings and extractors.
 
     Returns:
-        TODO docstring.
+        Validated settings and priority-sorted extractor profiles with unique
+        normalized artifact-directory names.
+
+    Raises:
+        FileNotFoundError: If ``config_path`` does not exist.
+        ValueError: If the configuration structure, settings, or extractor names are invalid.
     """
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")

@@ -677,6 +677,28 @@ def test_resolver_mapping_receipt_rejects_output_inside_complete_package(
     assert _tree_digests(package) == package_before
 
 
+def test_resolver_mapping_validation_failure_leaves_no_receipt(
+    synthetic_inputs: SyntheticInputs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Validate the derived receipt before exposing it at the requested path."""
+    from robot_sf.benchmark import candidate_trace_resolution
+    from robot_sf.benchmark.trace_reexport_packaging import build_resolver_mapping_receipt
+
+    package = synthetic_inputs.root / "package"
+    package_trace_reexport(**synthetic_inputs.kwargs(package))
+    receipt_path = synthetic_inputs.root / "resolver_mapping_receipt.json"
+
+    def reject_mapping(*_args: Any, **_kwargs: Any) -> None:
+        raise ValueError("synthetic resolver validation failure")
+
+    monkeypatch.setattr(candidate_trace_resolution, "load_episode_mapping", reject_mapping)
+
+    with pytest.raises(ValueError, match="synthetic resolver validation failure"):
+        build_resolver_mapping_receipt(package, output_path=receipt_path)
+
+    assert not receipt_path.exists()
+
+
 def test_resolver_cli_default_preserves_complete_package(
     synthetic_inputs: SyntheticInputs,
 ) -> None:

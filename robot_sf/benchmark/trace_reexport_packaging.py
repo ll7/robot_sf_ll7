@@ -1259,18 +1259,18 @@ def build_resolver_mapping_receipt(
     )
 
     derived_provenance = dict(resolver_receipt["provenance"])
+    # Validate an isolated canonical receipt before writing the requested destination.
+    # Otherwise a validation failure leaves a caller-visible but unusable receipt behind.
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".json", delete=False) as handle:
+        handle.write(_canonical_bytes(resolver_receipt, newline=True))
+        temp_receipt = Path(handle.name)
+    try:
+        load_episode_mapping(temp_receipt, expected_provenance=derived_provenance)
+    finally:
+        temp_receipt.unlink(missing_ok=True)
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         _write_json(output_path, resolver_receipt)
-        load_episode_mapping(output_path, expected_provenance=derived_provenance)
-    else:
-        with tempfile.NamedTemporaryFile(mode="wb", suffix=".json", delete=False) as handle:
-            handle.write(_canonical_bytes(resolver_receipt, newline=True))
-            temp_receipt = Path(handle.name)
-        try:
-            load_episode_mapping(temp_receipt, expected_provenance=derived_provenance)
-        finally:
-            temp_receipt.unlink(missing_ok=True)
     return resolver_receipt
 
 

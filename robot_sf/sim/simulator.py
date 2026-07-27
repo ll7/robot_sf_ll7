@@ -464,11 +464,11 @@ class Simulator:
         """
         if not self.config.residual_adversary.is_active:
             return ped_forces
-        if self._residual_adversary is None:
-            self._residual_adversary = self._build_residual_adversary()
         forces_array = np.asarray(ped_forces, dtype=float)
         if forces_array.shape[0] == 0:
             return forces_array
+        if self._residual_adversary is None:
+            self._residual_adversary = self._build_residual_adversary()
         adversary = self._residual_adversary
         assert adversary is not None  # built above because the config is active
         positions = np.asarray(self.pysf_state.ped_positions, dtype=float)

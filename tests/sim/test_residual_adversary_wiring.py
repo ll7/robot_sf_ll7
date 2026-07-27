@@ -185,9 +185,7 @@ def test_apply_residual_adversary_short_circuits_empty_crowd() -> None:
     empty_forces = np.zeros((0, 2), dtype=float)
     out = sim._apply_residual_adversary(empty_forces)
     assert out.shape == (0, 2)
-    # Building for an empty crowd still produces a finite-sized adversary handle,
-    # but no residual is applied to the empty force matrix.
-    assert np.all(np.isfinite(out)) if out.size else True
+    assert sim._residual_adversary is None
 
 
 def test_ped_simulator_excludes_controlled_ego_from_adversary_targets() -> None:

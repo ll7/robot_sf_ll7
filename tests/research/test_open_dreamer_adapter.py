@@ -230,6 +230,16 @@ def test_structured_observation_step_rejects_available_empty_rays() -> None:
         )
 
 
+def test_structured_observation_step_rejects_negative_rays() -> None:
+    """Direct construction cannot bypass the adapter's physical ray-range boundary."""
+    with pytest.raises(OpenDreamerAdapterError, match="non-negative ranges"):
+        StructuredObservationStep(
+            drive_state=np.zeros(len(DRIVE_STATE_LAYOUT), dtype=float),
+            rays=np.asarray([-0.01], dtype=float),
+            rays_available=True,
+        )
+
+
 @pytest.mark.parametrize("rays_available", [1, "true", np.bool_(True)])
 def test_structured_observation_step_rejects_non_boolean_ray_availability(
     rays_available: object,

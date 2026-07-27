@@ -243,14 +243,7 @@ class StructuredObservationStep:
             )
         if self.drive_state.dtype.kind != "f" or not np.all(np.isfinite(self.drive_state)):
             raise OpenDreamerAdapterError("drive_state must be finite floats")
-        if self.rays.ndim != 1 or self.rays.dtype.kind != "f":
-            raise OpenDreamerAdapterError("rays must be a 1D float vector")
-        if not np.all(np.isfinite(self.rays)):
-            raise OpenDreamerAdapterError("rays must be finite floats")
-        if not self.rays_available and self.rays.size != 0:
-            raise OpenDreamerAdapterError("rays_available=False requires an empty rays vector")
-        if self.rays_available and self.rays.size == 0:
-            raise OpenDreamerAdapterError("rays_available=True requires at least one ray value")
+        _validate_rays_group(self.rays, self.rays_available)
 
         drive_state = np.array(self.drive_state, copy=True)
         rays = np.array(self.rays, copy=True)
@@ -258,6 +251,20 @@ class StructuredObservationStep:
         rays.setflags(write=False)
         object.__setattr__(self, "drive_state", drive_state)
         object.__setattr__(self, "rays", rays)
+
+
+def _validate_rays_group(rays: np.ndarray, rays_available: bool) -> None:
+    """Validate one structured ray group, including its physical availability contract."""
+    if rays.ndim != 1 or rays.dtype.kind != "f":
+        raise OpenDreamerAdapterError("rays must be a 1D float vector")
+    if not np.all(np.isfinite(rays)):
+        raise OpenDreamerAdapterError("rays must be finite floats")
+    if np.any(rays < 0.0):
+        raise OpenDreamerAdapterError("rays must contain non-negative ranges")
+    if not rays_available and rays.size != 0:
+        raise OpenDreamerAdapterError("rays_available=False requires an empty rays vector")
+    if rays_available and rays.size == 0:
+        raise OpenDreamerAdapterError("rays_available=True requires at least one ray value")
 
 
 @dataclass(frozen=True, slots=True)

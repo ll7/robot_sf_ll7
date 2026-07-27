@@ -187,8 +187,6 @@ def test_robot_sf_receipt_records_executed_scenario_id_from_rollout() -> None:
     honest if the two ever diverge. It must come from the rollout ground truth, not from the
     mapping, and it must never silently reuse the SocNavBench (cross-suite) label.
     """
-    from robot_sf.benchmark.canary_rollout import execute_pinned_policy
-
     policy = resolve_pinned_policy()
     mapping = resolve_scenario_mapping()
     rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)

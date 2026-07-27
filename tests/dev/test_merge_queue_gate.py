@@ -165,6 +165,8 @@ def test_workflow_dispatch_passes_pr_number_through_environment() -> None:
     assert '--pr "${{ inputs.pr_number }}"' not in workflow
     assert "pull_request:" in workflow
     assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in workflow
+    assert "PR-head evaluation is advisory; merge_group enforces the gate." in workflow
+    assert "exit 0" in workflow
 
 
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])

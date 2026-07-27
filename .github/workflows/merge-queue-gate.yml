@@ -17,8 +17,9 @@ name: Merge Queue Gate
 # To activate fail-closed behavior, add this job's status check
 # ("Merge Queue Gate / merge-queue-gate") to the merge queue's required status
 # checks and enable "Only merge non-failing pull requests" in the branch
-# protection rules for `main`. The check runs on the source PR head and on
-# `merge_group`; it does not locate or control direct merge dispatchers.
+# protection rules for `main`. The source-PR run reports the check context
+# advisory; the `merge_group` run enforces it fail-closed. The workflow does not
+# locate or control direct merge dispatchers.
 # See docs/dev_guide.md ("Merge queue gate") for the exact configuration and
 # residual issue #6274 acceptance proof.
 
@@ -65,17 +66,22 @@ jobs:
             --repo "${{ github.repository }}" \
             --json
 
-      - name: Run merge-queue gate (pull_request head)
+      - name: Report merge-queue gate context (pull_request head, advisory)
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          status=0
           python scripts/dev/merge_queue_gate.py \
             --pr "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
-            --json
+            --json || status=$?
+          if (( status != 0 )); then
+            echo "::notice::PR-head evaluation is advisory; merge_group enforces the gate."
+          fi
+          exit 0
 
       - name: Run merge-queue gate (advisory, workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'

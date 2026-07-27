@@ -107,6 +107,19 @@ def test_fetch_pr_snapshot_rejects_missing_review_request_data() -> None:
     assert "reviewRequests" in error
 
 
+def test_fetch_pr_snapshot_rejects_missing_draft_state() -> None:
+    """Missing draft metadata cannot be interpreted as a non-draft PR."""
+    raw_pr = _raw_pr()
+    raw_pr.pop("isDraft")
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(stdout=json.dumps(raw_pr))
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert snapshot == {}
+    assert error is not None
+    assert "isDraft" in error
+
+
 def test_fetch_pr_snapshot_records_outstanding_requested_reviewer() -> None:
     """A live reviewer request is preserved for the gate's fail-closed evaluation."""
     raw_pr = _raw_pr()
@@ -204,6 +217,7 @@ def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
         ),
         ([{"status": "COMPLETED", "conclusion": "STALE"}], "failure"),
         ([{"status": "COMPLETED", "conclusion": None}], "pending"),
+        ([{"status": "BROKEN", "conclusion": "SUCCESS"}], "unknown"),
     ],
 )
 def test_fetch_pr_snapshot_fails_closed_on_non_green_ci_rollups(
@@ -407,6 +421,24 @@ def test_outstanding_requested_reviewer_fails_closed() -> None:
     assert audit.passed is False
     assert audit.reviewer_request_status == "requested"
     assert "outstanding_requested_reviewers" in audit.reasons
+
+
+def test_evaluate_merge_gate_fails_closed_when_runtime_dimensions_are_missing() -> None:
+    """The pure evaluator must not pass when live preflight dimensions are omitted."""
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "draft": False,
+            "labels": ["merge-ready"],
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+        }
+    )
+
+    assert audit.passed is False
+    assert "ci_not_green:unknown" in audit.reasons
+    assert "review_threads_not_evaluated" in audit.reasons
+    assert "requested_reviewers_not_evaluated" in audit.reasons
 
 
 def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> None:

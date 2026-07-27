@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib
 import inspect
 from pathlib import Path
 
@@ -15,6 +16,15 @@ from robot_sf.eval import EnvMetrics, PedEnvMetrics, PedVecEnvMetrics, VecEnvMet
 from robot_sf.maps.import_svg_from_osm import import_svg_from_osm
 from robot_sf.maps.osm_zones_yaml import OSMZonesConfig, save_zones_yaml
 from robot_sf.recipes.cli import build_subparser
+
+ANNOTATED_ANALYSIS_MODULES = (
+    "robot_sf.data_analysis.extract_json_from_pickle",
+    "robot_sf.data_analysis.extract_obj_from_pickle",
+    "robot_sf.data_analysis.plot_dataset",
+    "robot_sf.data_analysis.plot_kernel_density",
+    "robot_sf.data_analysis.plot_npc_trajectory",
+    "robot_sf.data_analysis.recording_analysis",
+)
 
 
 def test_every_public_robot_sf_function_has_a_return_annotation() -> None:
@@ -66,3 +76,10 @@ def test_public_procedure_annotations_are_runtime_visible(tmp_path: Path) -> Non
 
     assert all(inspect.signature(procedure).return_annotation is None for procedure in procedures)
     save_zones_yaml(OSMZonesConfig(), str(tmp_path / "zones.yaml"))
+
+
+def test_annotation_only_analysis_modules_import_cleanly() -> None:
+    """Ensure annotation-only modules produce coverage data in the core lane."""
+    imported = [importlib.import_module(module_name) for module_name in ANNOTATED_ANALYSIS_MODULES]
+
+    assert [module.__name__ for module in imported] == list(ANNOTATED_ANALYSIS_MODULES)

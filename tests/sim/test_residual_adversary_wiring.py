@@ -97,6 +97,13 @@ def test_residual_adversary_opt_in_is_reflected_in_sim_config() -> None:
     assert settings.residual_adversary.is_active is True
 
 
+def test_residual_adversary_mapping_is_normalized_by_sim_config() -> None:
+    """A mapping config must become the validated residual-adversary dataclass."""
+    settings = SimulationSettings(residual_adversary={"is_active": True, "seed": 7})
+    assert isinstance(settings.residual_adversary, ResidualAdversaryConfig)
+    assert settings.residual_adversary.seed == 7
+
+
 def test_simulator_inactive_adversary_does_not_allocate_state() -> None:
     """When off, the simulator must not build any residual adversary state."""
     sim = _build_simulator(residual_active=False)
@@ -193,7 +200,11 @@ def test_collect_helpers_forward_geometry_from_map(monkeypatch) -> None:
     sim = _build_simulator(residual_active=True)
     # Normal map: routes and obstacles (bounds) are present.
     assert sim._collect_residual_route_polylines() is not None
-    assert sim._collect_residual_obstacle_segments() is not None
+    obstacle_segments = sim._collect_residual_obstacle_segments()
+    assert obstacle_segments is not None
+    # MapDefinition keeps fast-pysf's legacy [x1, x2, y1, y2] tuples. The
+    # residual projection must receive conventional endpoint coordinates.
+    np.testing.assert_allclose(obstacle_segments[0], [0.0, 0.0, 20.0, 0.0])
     assert sim._collect_residual_map_bounds() is not None
 
     # Map without pedestrian routes degrades the polyline source to None.

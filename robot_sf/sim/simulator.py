@@ -412,11 +412,19 @@ class Simulator:
         return [np.asarray(route.waypoints, dtype=float) for route in routes]
 
     def _collect_residual_obstacle_segments(self) -> np.ndarray | None:
-        """Return obstacle segments for the walkable-space projection, or ``None``."""
+        """Return standard ``[x1, y1, x2, y2]`` obstacle segments, or ``None``.
+
+        ``MapDefinition.obstacles_pysf`` stores its legacy fast-pysf ordering as
+        ``[x1, x2, y1, y2]``. The residual-adversary geometry helpers use the
+        conventional endpoint ordering so their segment projection is unambiguous.
+        """
         obstacles = getattr(self.map_def, "obstacles_pysf", None)
-        if not obstacles:
+        if obstacles is None or len(obstacles) == 0:
             return None
-        return np.asarray(obstacles, dtype=float)
+        obstacle_array = np.asarray(obstacles, dtype=float)
+        if obstacle_array.ndim != 2 or obstacle_array.shape[1] != 4:
+            raise ValueError("MapDefinition.obstacles_pysf must have shape (S, 4)")
+        return obstacle_array[:, [0, 2, 1, 3]]
 
     def _collect_residual_map_bounds(
         self,

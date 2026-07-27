@@ -63,6 +63,20 @@ def test_config_rejects_non_positive_or_non_finite_bounds() -> None:
         ResidualAdversaryConfig(is_active=True, min_separation_m=0.0)
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"is_active": 1},
+        {"target_ped_idx": [0, "invalid"]},
+        {"seed": "not-an-integer"},
+    ],
+)
+def test_config_rejects_invalid_control_values(kwargs: dict[str, object]) -> None:
+    """Opt-in controls must be typed so malformed mappings cannot activate runtime behavior."""
+    with pytest.raises(TypeError):
+        ResidualAdversaryConfig(**kwargs)  # type: ignore[arg-type]
+
+
 def test_build_returns_none_when_inactive() -> None:
     """When ``is_active`` is False the factory must return None (no state allocated)."""
     assert build_default_residual_adversary(ResidualAdversaryConfig(), 0.1, 3) is None
@@ -130,14 +144,28 @@ def test_bound_speed_caps_speed_delta_component() -> None:
 
 
 def test_bound_heading_change_caps_perpendicular_component() -> None:
-    """A pure turning residual is capped so the angular change is bounded."""
+    """A pure turning residual is capped so the exact angular change is bounded."""
     velocity = np.array([[1.0, 0.0]], dtype=float)
     # Large perpendicular residual that would rotate velocity sharply.
     residual = np.array([[0.0, 100.0]], dtype=float)
     allowance = 0.05
-    out = bound_heading_change(residual, velocity, allowance)
-    # The perpendicular component magnitude must be <= speed * allowance.
-    assert abs(out[0, 1]) <= 1.0 * allowance + 1e-9
+    dt_s = 0.1
+    out = bound_heading_change(residual, velocity, allowance, dt_s)
+    resulting_velocity = velocity + out * dt_s
+    heading_change = abs(float(np.arctan2(resulting_velocity[0, 1], resulting_velocity[0, 0])))
+    assert heading_change <= allowance + 1e-9
+
+
+def test_bound_heading_change_prevents_braking_residual_from_reversing_heading() -> None:
+    """A braking residual cannot bypass the turn cap by reversing a slow pedestrian."""
+    velocity = np.array([[0.1, 0.0]], dtype=float)
+    residual = np.array([[-10.0, 0.0]], dtype=float)
+    allowance = 0.05
+    out = bound_heading_change(residual, velocity, allowance, dt_s=0.1)
+    resulting_velocity = velocity + out * 0.1
+    assert resulting_velocity[0, 0] >= -1e-9
+    heading_change = abs(float(np.arctan2(resulting_velocity[0, 1], resulting_velocity[0, 0])))
+    assert heading_change <= allowance + 1e-9
 
 
 def test_bound_heading_change_leaves_stationary_rows_unchanged() -> None:
@@ -186,6 +214,18 @@ def test_project_residual_displacement_walkable_pushes_out_of_obstacle() -> None
     candidate = positions + corrected
     # The candidate must sit at least radius + margin from the wall.
     assert candidate[0, 0] >= 0.4 + 0.1 - 1e-6
+
+
+def test_project_residual_displacement_walkable_pushes_out_of_exact_obstacle_contact() -> None:
+    """Exact contact with a segment must be projected out instead of treated as already safe."""
+    positions = np.array([[1.0, 0.0]], dtype=float)
+    displacement = np.array([[-1.0, 0.0]], dtype=float)
+    obstacle = np.array([[[0.0, -5.0], [0.0, 5.0]]], dtype=float)
+    corrected = project_residual_displacement_walkable(
+        positions, displacement, obstacle, None, radius=0.4, margin_m=0.1
+    )
+    candidate = positions + corrected
+    assert abs(candidate[0, 0]) >= 0.4 + 0.1 - 1e-6
 
 
 def test_project_residual_displacement_walkable_clamps_to_bounds() -> None:

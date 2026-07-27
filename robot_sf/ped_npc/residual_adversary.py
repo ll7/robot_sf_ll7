@@ -131,6 +131,8 @@ class ResidualAdversaryConfig:
 
     def __post_init__(self) -> None:
         """Validate finite, positive bounds and fail closed on malformed input."""
+        if not isinstance(self.is_active, bool):
+            raise TypeError("is_active must be a bool")
         _require_finite(self.macro_action_dt_s, "macro_action_dt_s", strict_positive=True)
         _require_finite(
             self.max_residual_accel_mps2, "max_residual_accel_mps2", strict_positive=True
@@ -147,8 +149,18 @@ class ResidualAdversaryConfig:
         _require_finite(
             self.obstacle_projection_margin_m, "obstacle_projection_margin_m", strict_positive=True
         )
-        if not isinstance(self.target_ped_idx, int | list):
+        if isinstance(self.target_ped_idx, bool) or not isinstance(self.target_ped_idx, int | list):
             raise TypeError("target_ped_idx must be an int or a list[int]")
+        if isinstance(self.target_ped_idx, list):
+            if any(
+                isinstance(index, bool) or not isinstance(index, int)
+                for index in self.target_ped_idx
+            ):
+                raise TypeError("target_ped_idx entries must be ints")
+        if self.seed is not None and (
+            isinstance(self.seed, bool) or not isinstance(self.seed, int)
+        ):
+            raise TypeError("seed must be an int or None")
 
     def resolve_target_mask(self, num_peds: int) -> np.ndarray:
         """Return a boolean ``(num_peds,)`` mask of targeted pedestrians.
@@ -216,8 +228,7 @@ class ScriptedPullResidualAdversaryPolicy:
     """Deterministic example residual adversary that pulls targeted peds toward a point.
 
     The policy computes a point at ``pull_offset_m`` in front of the robot (along its
-    heading) and proposes a residual acceleration of magnitude
-    ``min(max_pull_accel_mps2, max_pull_accel_mps2)`` directed from each targeted
+    heading) and proposes a residual acceleration directed from each targeted
     pedestrian toward that point, scaled to ``max_pull_accel_mps2``. This is the
     bounded reactive baseline used for runtime wiring and tests.
 
@@ -371,14 +382,17 @@ def bound_heading_change(
     residual: np.ndarray,
     velocities: np.ndarray,
     per_step_allowance_rad: float,
+    dt_s: float = 1.0,
 ) -> np.ndarray:
-    """Limit how far the residual may rotate the velocity direction in one step.
+    """Limit the exact velocity-heading change caused by a residual acceleration.
 
-    The velocity change induced by the residual is decomposed into a perpendicular
-    (turning) and parallel component. The perpendicular component is capped so the
-    resulting angular change does not exceed ``per_step_allowance_rad``. Rows whose
-    velocity is below :data:`EPSILON` are left unchanged (no defined heading). Fails
-    closed on non-finite input.
+    The heading is measured after applying ``residual * dt_s`` to the current
+    velocity. For each over-limit row, the residual is scaled back to the largest
+    prefix whose resulting velocity remains within ``per_step_allowance_rad`` of the
+    current heading. Scaling the complete residual also prevents a large braking
+    component from reversing a pedestrian through the heading bound. Rows whose
+    velocity is below :data:`EPSILON` are left unchanged because their heading is not
+    defined. Fails closed on non-finite input.
 
     Returns
     -------
@@ -388,28 +402,41 @@ def bound_heading_change(
     residual_array = _validate_finite_array(residual, "residual")
     velocities_array = _validate_finite_array(velocities, "velocities")
     _require_finite(per_step_allowance_rad, "per_step_allowance_rad", strict_positive=True)
+    _require_finite(dt_s, "dt_s", strict_positive=True)
     if residual_array.shape != velocities_array.shape:
         raise ValueError("residual and velocities must have the same shape")
 
     speeds = np.linalg.norm(velocities_array, axis=1)
     moving = speeds > EPSILON
     result = residual_array.copy()
-    if not np.any(moving):
+    if not np.any(moving) or per_step_allowance_rad >= np.pi:
         return result
-    v = velocities_array[moving]
-    r = residual_array[moving]
-    speed = speeds[moving]
-    velocity_dir = v / speed[:, None]
-    parallel = np.sum(r * velocity_dir, axis=1)[:, None] * velocity_dir
-    perpendicular = r - parallel
-    # Angular change ~ |perpendicular| / speed for small angles; cap it.
-    perpendicular_norm = np.linalg.norm(perpendicular, axis=1)
-    max_perp = speed * float(per_step_allowance_rad)
-    scale = np.ones_like(perpendicular_norm)
-    np.divide(max_perp, perpendicular_norm, out=scale, where=perpendicular_norm > max_perp)
-    np.minimum(scale, 1.0, out=scale)
-    capped_perpendicular = perpendicular * scale[:, None]
-    result[moving] = parallel + capped_perpendicular
+
+    def heading_change(current_velocity: np.ndarray, candidate_velocity: np.ndarray) -> float:
+        cross = float(
+            current_velocity[0] * candidate_velocity[1]
+            - current_velocity[1] * candidate_velocity[0]
+        )
+        dot = float(np.dot(current_velocity, candidate_velocity))
+        return abs(float(np.arctan2(abs(cross), dot)))
+
+    for index in np.flatnonzero(moving):
+        current_velocity = velocities_array[index]
+        candidate_velocity = current_velocity + residual_array[index] * float(dt_s)
+        if heading_change(current_velocity, candidate_velocity) <= per_step_allowance_rad + EPSILON:
+            continue
+
+        lower_scale, upper_scale = 0.0, 1.0
+        for _ in range(48):
+            middle_scale = 0.5 * (lower_scale + upper_scale)
+            middle_velocity = current_velocity + residual_array[index] * (
+                middle_scale * float(dt_s)
+            )
+            if heading_change(current_velocity, middle_velocity) <= per_step_allowance_rad:
+                lower_scale = middle_scale
+            else:
+                upper_scale = middle_scale
+        result[index] = residual_array[index] * lower_scale
     return result
 
 
@@ -512,16 +539,21 @@ def _project_point_against_segment(
     if seg_len_sq <= EPSILON:
         delta = point - start
         dist = float(np.linalg.norm(delta))
-        if dist >= radius or dist <= EPSILON:
+        if dist >= radius:
             return None
+        if dist <= EPSILON:
+            return start + np.array([radius, 0.0])
         return start + delta / dist * radius
     t = float(np.dot(point - start, seg)) / seg_len_sq
     t = max(0.0, min(1.0, t))
     closest = start + t * seg
     delta = point - closest
     dist = float(np.linalg.norm(delta))
-    if dist >= radius or dist <= EPSILON:
+    if dist >= radius:
         return None
+    if dist <= EPSILON:
+        normal = np.array([-seg[1], seg[0]], dtype=float) / np.sqrt(seg_len_sq)
+        return closest + normal * radius
     return closest + delta / dist * radius
 
 
@@ -530,8 +562,9 @@ def _normalize_obstacle_segments(
 ) -> np.ndarray | None:
     """Return obstacle segments as an ``(S, 2, 2)`` float array, or ``None``.
 
-    Accepts the ``(S, 4)`` flat layout, the ``(S, 2, 2)`` stacked layout, or an
-    empty/``None`` input. Fails closed on non-finite or malformed segments.
+    Accepts the standard ``(S, 4)`` flat layout ``[x_start, y_start, x_end,
+    y_end]``, the ``(S, 2, 2)`` stacked layout, or an empty/``None`` input. Fails
+    closed on non-finite or malformed segments.
     """
     if obstacle_segments is None:
         return None
@@ -843,7 +876,7 @@ class BoundedResidualAdversary:
             self.config.max_speed_delta_mps,
         )
         per_step_allowance = self.config.max_heading_change_per_macro_rad / self._macro_steps
-        bounded = bound_heading_change(bounded, velocities, per_step_allowance)
+        bounded = bound_heading_change(bounded, velocities, per_step_allowance, self.dt_s)
         bounded = bound_route_deviation(
             bounded,
             positions,

@@ -238,6 +238,29 @@ def test_verify_durable_checkpoint_detects_checksum_mismatch(tmp_path: Path) -> 
     assert wrong_sha in detail
 
 
+def test_durable_ga3c_bundle_rejects_an_incomplete_manifest() -> None:
+    """The GA3C release manifest cannot silently omit a declared checkpoint component."""
+    repo_root = Path(__file__).resolve().parents[2]
+    registry_path = repo_root / "model" / "registry.yaml"
+    entry = load_registry(registry_path)["ga3c_cadrl_iros18"]
+    release = dict(entry["github_release"])
+    release["bundle_files"] = release["bundle_files"][:-1]
+    entry = {**entry, "github_release": release}
+    checkpoint = next(
+        item for item in checker.DURABLE_LEGACY_CHECKPOINTS if item.model_id == "ga3c_cadrl_iros18"
+    )
+
+    status, detail = checker._verify_durable_checkpoint(
+        checkpoint,
+        entry=entry,
+        repo_root=repo_root,
+        registry_path=registry_path,
+    )
+
+    assert status == "bundle_manifest_mismatch"
+    assert "exactly match" in detail
+
+
 def test_unsupported_root_local_guard_still_classifies_synthetic_entries(
     tmp_path: Path,
 ) -> None:

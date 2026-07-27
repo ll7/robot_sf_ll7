@@ -253,6 +253,37 @@ def _verify_multi_file_bundle_sources(
     return "verified", f"multi-file bundle byte-match ({'; '.join(details)})"
 
 
+def _validate_bundle_manifest(
+    entry: Mapping[str, Any], *, expected_sources: tuple[str, ...]
+) -> tuple[str, str]:
+    """Require the registry bundle metadata to cover the declared checkpoint exactly."""
+    release = entry.get("github_release")
+    if not isinstance(release, Mapping):
+        return "missing_release", "entry has no github_release mapping"
+    bundle_files = release.get("bundle_files")
+    if not isinstance(bundle_files, list):
+        return "missing_bundle_files", "github_release.bundle_files is absent"
+    configured_sources = tuple(str(path) for path in bundle_files)
+    if len(configured_sources) != len(set(configured_sources)):
+        return "duplicate_component", "github_release.bundle_files contains duplicate paths"
+    if set(configured_sources) != set(expected_sources):
+        return (
+            "bundle_manifest_mismatch",
+            "github_release.bundle_files must exactly match the declared checkpoint components",
+        )
+    per_file = release.get("per_file_sha256")
+    if not isinstance(per_file, Mapping):
+        return "missing_per_file_sha256", "github_release.per_file_sha256 is absent"
+    expected_names = {Path(path).name for path in expected_sources}
+    configured_names = {str(name) for name in per_file}
+    if configured_names != expected_names:
+        return (
+            "bundle_manifest_mismatch",
+            "github_release.per_file_sha256 must exactly match the declared checkpoint components",
+        )
+    return "verified", "bundle manifest covers every declared checkpoint component"
+
+
 def _verify_hydrated_multi_file_bundle(
     entry: Mapping[str, Any], *, archive_path: Path
 ) -> tuple[str, str]:
@@ -334,6 +365,11 @@ def _verify_durable_checkpoint(
             entry, resolved=repo_root / checkpoint.source_paths[0]
         )
     elif checkpoint.kind == "multi_file_bundle":
+        manifest_status, manifest_detail = _validate_bundle_manifest(
+            entry, expected_sources=checkpoint.source_paths
+        )
+        if manifest_status != "verified":
+            return manifest_status, manifest_detail
         source_status, source_detail = _verify_multi_file_bundle_sources(entry, repo_root=repo_root)
     else:
         return "unknown_kind", f"unsupported checkpoint kind: {checkpoint.kind}"

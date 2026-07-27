@@ -439,12 +439,13 @@ before the queue auto-merges a PR:
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
   `gate-verdict: accepted @ <head_sha>` trailer (reuses
-  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`), and no unresolved actionable
-  review threads. The current source-head CI rollup must also remain green; superseded check runs
-  are discarded with the same helper used by the guarded merger preflight, and the gate excludes
-  its own in-progress source-head check to avoid waiting on itself. The exact-head trailer binds
-  that CI and review evidence to the source head, while the merge queue independently runs its
-  required checks on the synthetic queue head. The live queue must use GitHub's `ALLGREEN`
+  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`), no unresolved actionable review
+  threads, and no outstanding explicitly requested reviewers. The current source-head CI rollup
+  must also remain green; superseded check runs are discarded with the same helper used by the
+  guarded merger preflight, and the gate excludes its own in-progress source-head check to avoid
+  waiting on itself. The exact-head trailer binds that CI and review evidence to the source head,
+  while the merge queue independently runs its required checks on the synthetic queue head. The
+  live queue must use GitHub's `ALLGREEN`
   strategy ("Only merge non-failing pull requests"), so every earlier entry represented by a
   grouped synthetic head must pass its own gate; `HEADGREEN` fails closed because it can merge a
   failing earlier entry with a passing tail entry. Staleness is fresh by construction inside the
@@ -452,7 +453,8 @@ before the queue auto-merges a PR:
 - **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
   source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
   SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread
-  resolution, so every merge decision is inspectable and reproducible.
+  resolution plus requested-reviewer status, so every merge decision is inspectable and
+  reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 

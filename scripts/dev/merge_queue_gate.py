@@ -11,6 +11,7 @@ fail-closed preflight as ``gh-pr-merger``:
   - a current exact-head ``gate-verdict: accepted @ <head_sha>`` trailer
     (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
   - no unresolved actionable review threads,
+  - no outstanding explicitly requested reviewers,
   - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
     pass its own required gate check,
   - staleness-free base (fresh by construction inside the merge queue, where the
@@ -18,8 +19,8 @@ fail-closed preflight as ``gh-pr-merger``:
 
 It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
 queue merging strategy, base SHA, label set, gate-verdict status, staleness
-verdict, CI conclusion, and reviewer-thread resolution so the merge decision is
-inspectable and reproducible.
+verdict, CI conclusion, reviewer-thread resolution, and requested-reviewer
+status so the merge decision is inspectable and reproducible.
 
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
@@ -114,6 +115,7 @@ class MergeGateAudit:
     gate_verdict_status: str
     staleness_verdict: str
     thread_resolution: str
+    reviewer_request_status: str
     merge_ready: bool
     passed: bool
     reasons: list[str] = field(default_factory=list)
@@ -166,13 +168,13 @@ def _gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
 
 def _fail_closed_reasons(
     *,
-    head_sha: str,
     draft: bool,
     merge_ready: bool,
     ci_overall: str,
     staleness_verdict: str,
     gate_verdict_status: str,
     thread_resolution: str,
+    reviewer_request_status: str,
     merge_group_head_binding: str,
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
@@ -181,8 +183,6 @@ def _fail_closed_reasons(
     stable so audit records are comparable across runs and machines.
     """
     reasons: list[str] = []
-    if not head_sha:
-        reasons.append("missing_head_sha")
     if draft:
         reasons.append("pr_is_draft")
     if not merge_ready:
@@ -197,6 +197,8 @@ def _fail_closed_reasons(
         reasons.append("merge_group_head_sha_mismatch")
     if thread_resolution == "unresolved":
         reasons.append("unresolved_review_threads")
+    if reviewer_request_status == "requested":
+        reasons.append("outstanding_requested_reviewers")
     return reasons
 
 
@@ -206,6 +208,7 @@ def evaluate_merge_gate(
     main_sha: str = "",
     ci_overall: str | None = None,
     threads_resolved: bool | None = None,
+    reviewers_requested: bool | None = None,
     merge_group_head_sha: str = "",
     queue_merging_strategy: str = "",
 ) -> MergeGateAudit:
@@ -234,6 +237,9 @@ def evaluate_merge_gate(
         ``False`` when at least one remains unresolved, ``None`` when not
         evaluated (does not block; the runtime CLI always supplies a definitive
         value and fails closed on a query error).
+      reviewers_requested: ``True`` when one or more explicitly requested
+        reviewers remain, ``False`` when no reviewer request remains, ``None``
+        when not evaluated. The runtime CLI always supplies a definitive value.
       merge_group_head_sha: source-head SHA encoded in a canonical
         ``merge_group.head_ref``. When provided, it must prefix-match the live
         PR head SHA; any mismatch fails closed so a queue ref cannot be rebound
@@ -278,16 +284,25 @@ def evaluate_merge_gate(
     else:
         thread_resolution = "not_applicable"
 
+    if reviewers_requested is True:
+        reviewer_request_status = "requested"
+    elif reviewers_requested is False:
+        reviewer_request_status = "clear"
+    else:
+        reviewer_request_status = "not_applicable"
+
     reasons = _fail_closed_reasons(
-        head_sha=head_sha,
         draft=draft,
         merge_ready=merge_ready,
         ci_overall=ci_overall,
         staleness_verdict=staleness_verdict,
         gate_verdict_status=gate_verdict_status,
         thread_resolution=thread_resolution,
+        reviewer_request_status=reviewer_request_status,
         merge_group_head_binding=merge_group_head_binding,
     )
+    if not head_sha:
+        reasons.insert(0, "missing_head_sha")
     if queue_merging_strategy not in {"not_applicable", "ALLGREEN"}:
         reasons.append(f"unsafe_merge_queue_strategy:{queue_merging_strategy}")
 
@@ -308,6 +323,7 @@ def evaluate_merge_gate(
         gate_verdict_status=gate_verdict_status,
         staleness_verdict=staleness_verdict,
         thread_resolution=thread_resolution,
+        reviewer_request_status=reviewer_request_status,
         merge_ready=merge_ready,
         passed=passed,
         reasons=reasons,
@@ -514,7 +530,7 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
             "--repo",
             repo,
             "--json",
-            "number,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews",
+            "number,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests",
         ]
     )
     if result.returncode != 0:
@@ -522,6 +538,10 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
         return {}, err or "gh pr view output is not a JSON object"
+
+    review_requests = payload.get("reviewRequests")
+    if not isinstance(review_requests, list):
+        return {}, "gh pr view reviewRequests field is missing or malformed"
 
     base_sha, base_err = _fetch_pr_base_sha(pr_number, repo=repo)
     if base_err:
@@ -537,6 +557,11 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
         "gate_verdicts": _extract_gate_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
+        # Each GitHub review request is an explicit request for review. Treat any
+        # outstanding request as protective rather than guessing whether a user,
+        # team, or bot is "external"; this is conservative parity with the
+        # gh-pr-merger preflight.
+        "reviewers_requested": bool(review_requests),
     }
     return snapshot, None
 
@@ -713,14 +738,16 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- staleness verdict: `{audit.staleness_verdict}`",
         f"- CI conclusion: `{audit.ci_overall}`",
         f"- thread resolution: `{audit.thread_resolution}`",
+        f"- requested-reviewer status: `{audit.reviewer_request_status}`",
     ]
     if audit.reasons:
         lines.append(f"- fail-closed reasons: `{', '.join(audit.reasons)}`")
     lines.append("")
     lines.append(
         "Gate contract: non-draft + `merge-ready` + current exact-head "
-        "`gate-verdict: accepted` trailer + resolved threads + `ALLGREEN` queue "
-        "strategy; fail-closed on any missing dimension. See `docs/dev_guide.md` and "
+        "`gate-verdict: accepted` trailer + resolved threads + no outstanding reviewer "
+        "requests + `ALLGREEN` queue strategy; fail-closed on any missing dimension. "
+        "See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."
     )
     return "\n".join(lines)
@@ -756,6 +783,7 @@ def _evaluate_live(
                 main_sha="",
                 ci_overall="unknown",
                 threads_resolved=None,
+                reviewers_requested=None,
                 merge_group_head_sha=merge_group_head_sha,
             ),
             err,
@@ -774,6 +802,7 @@ def _evaluate_live(
                     snapshot,
                     main_sha=main_sha,
                     threads_resolved=None,
+                    reviewers_requested=bool(snapshot["reviewers_requested"]),
                     merge_group_head_sha=merge_group_head_sha,
                     queue_merging_strategy="unknown",
                 ),
@@ -786,6 +815,7 @@ def _evaluate_live(
                 snapshot,
                 main_sha="",
                 threads_resolved=None,
+                reviewers_requested=bool(snapshot["reviewers_requested"]),
             )
             return _failed_audit(audit, "main_sha_unavailable"), (
                 "failed to fetch current main SHA; refusing a source-head gate pass"
@@ -800,6 +830,7 @@ def _evaluate_live(
                 snapshot,
                 main_sha=main_sha,
                 threads_resolved=False,
+                reviewers_requested=bool(snapshot["reviewers_requested"]),
                 merge_group_head_sha=merge_group_head_sha,
                 queue_merging_strategy=queue_merging_strategy or "",
             ),
@@ -810,6 +841,7 @@ def _evaluate_live(
         snapshot,
         main_sha=main_sha,
         threads_resolved=threads_resolved,
+        reviewers_requested=bool(snapshot["reviewers_requested"]),
         merge_group_head_sha=merge_group_head_sha,
         queue_merging_strategy=queue_merging_strategy or "",
     )
@@ -928,6 +960,21 @@ def _self_test() -> int:
         "unresolved-threads: thread resolution must be unresolved",
     )
 
+    # Explicitly requested reviewers must be allowed to complete their review.
+    audit = evaluate_merge_gate(
+        _pr(labels=["merge-ready"], gate_verdict_sha=full_sha),
+        threads_resolved=True,
+        reviewers_requested=True,
+    )
+    expect(
+        not audit.passed and "outstanding_requested_reviewers" in audit.reasons,
+        "requested-reviewer: an outstanding review request must fail closed",
+    )
+    expect(
+        audit.reviewer_request_status == "requested",
+        "requested-reviewer: audit must record the outstanding request",
+    )
+
     # Draft -> fail (merge queue must never merge a draft).
     audit = evaluate_merge_gate(_pr(labels=["merge-ready"], gate_verdict_sha=full_sha, draft=True))
     expect(
@@ -953,6 +1000,7 @@ def _self_test() -> int:
         main_sha=full_sha,
         ci_overall="success",
         threads_resolved=True,
+        reviewers_requested=False,
     )
     expect(audit.passed and audit.reasons == [], "full-pass: all dimensions green must pass")
 
@@ -973,6 +1021,7 @@ def _self_test() -> int:
         "gate_verdict_status",
         "staleness_verdict",
         "thread_resolution",
+        "reviewer_request_status",
         "merge_ready",
         "passed",
         "reasons",

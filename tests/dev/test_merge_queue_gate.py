@@ -34,6 +34,7 @@ def _raw_pr(*, body: str = "", carrier: str = "comments") -> dict[str, object]:
         "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
         "comments": [],
         "reviews": [],
+        "reviewRequests": [],
     }
     if body:
         payload[carrier] = [{"body": body}]
@@ -89,7 +90,36 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert first_call[:3] == ["pr", "view", "42"]
     fields = first_call[first_call.index("--json") + 1]
     assert "baseRefOid" not in fields
+    assert "reviewRequests" in fields
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
+def test_fetch_pr_snapshot_rejects_missing_review_request_data() -> None:
+    """Missing reviewer-request state cannot bypass the merger preflight."""
+    raw_pr = _raw_pr()
+    raw_pr.pop("reviewRequests")
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(stdout=json.dumps(raw_pr))
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert snapshot == {}
+    assert error is not None
+    assert "reviewRequests" in error
+
+
+def test_fetch_pr_snapshot_records_outstanding_requested_reviewer() -> None:
+    """A live reviewer request is preserved for the gate's fail-closed evaluation."""
+    raw_pr = _raw_pr()
+    raw_pr["reviewRequests"] = [{"requestedReviewer": {"login": "external-reviewer"}}]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["reviewers_requested"] is True
 
 
 def test_fetch_pr_snapshot_ignores_superseded_failed_check_run() -> None:
@@ -206,6 +236,7 @@ def test_workflow_dispatch_passes_pr_number_through_environment() -> None:
     assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
     assert "PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in workflow
     assert "checks: read" in workflow
+    assert "issues: read" in workflow
     assert "ref: ${{ steps.trusted-gate.outputs.ref }}" in workflow
     assert "persist-credentials: false" in workflow
     assert "statuses: read" in workflow
@@ -331,6 +362,26 @@ def test_headgreen_merge_queue_strategy_fails_closed() -> None:
     assert audit.passed is False
     assert audit.queue_merging_strategy == "HEADGREEN"
     assert "unsafe_merge_queue_strategy:HEADGREEN" in audit.reasons
+
+
+def test_outstanding_requested_reviewer_fails_closed() -> None:
+    """An explicit reviewer request receives the same fail-closed merger-preflight treatment."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "gate_verdicts": [gate_verdict],
+            "checks": {"overall": "success"},
+        },
+        threads_resolved=True,
+        reviewers_requested=True,
+    )
+
+    assert audit.passed is False
+    assert audit.reviewer_request_status == "requested"
+    assert "outstanding_requested_reviewers" in audit.reasons
 
 
 def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> None:

@@ -266,6 +266,41 @@ def test_project_residual_displacement_walkable_stays_on_current_side_of_wall() 
     assert candidate[0, 0] <= -0.5 + 1e-9
 
 
+def test_project_residual_displacement_walkable_prevents_wall_tunneling() -> None:
+    """A displacement ending beyond a wall must stop at the near-side clearance."""
+    positions = np.array([[-1.0, 0.0]], dtype=float)
+    displacement = np.array([[2.0, 0.0]], dtype=float)
+    obstacle = np.array([[[0.0, -5.0], [0.0, 5.0]]], dtype=float)
+    corrected = project_residual_displacement_walkable(
+        positions,
+        displacement,
+        obstacle,
+        None,
+        radius=0.4,
+        margin_m=0.1,
+    )
+    candidate = positions + corrected
+    assert candidate[0, 0] == pytest.approx(-0.5)
+
+
+def test_project_residual_displacement_walkable_prevents_endpoint_tunneling() -> None:
+    """The swept clearance includes round segment ends, not only the line body."""
+    positions = np.array([[-1.0, 0.4]], dtype=float)
+    displacement = np.array([[2.0, 0.0]], dtype=float)
+    obstacle = np.array([[[0.0, 0.0], [0.0, 0.0]]], dtype=float)
+    corrected = project_residual_displacement_walkable(
+        positions,
+        displacement,
+        obstacle,
+        None,
+        radius=0.4,
+        margin_m=0.1,
+    )
+    candidate = positions + corrected
+    assert candidate[0, 0] == pytest.approx(-0.3)
+    assert np.linalg.norm(candidate[0] - obstacle[0, 0]) >= 0.5 - 1e-9
+
+
 def test_project_residual_displacement_walkable_clamps_to_bounds() -> None:
     """A residual leaving the map is clamped inside the bounds with clearance."""
     positions = np.array([[0.2, 0.2]], dtype=float)

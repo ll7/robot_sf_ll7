@@ -33,6 +33,7 @@ Hard bounds enforced (all fail-closed on non-finite input)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from itertools import pairwise
 from math import cos, isfinite, sin
 from typing import TYPE_CHECKING, Protocol
 
@@ -624,6 +625,113 @@ def _project_point_against_segment(
     return closest + delta / dist * radius
 
 
+def _swept_clearance_contact_fraction(
+    start_point: np.ndarray,
+    end_point: np.ndarray,
+    segment: np.ndarray,
+    radius: float,
+) -> float | None:
+    """Return the first swept-path contact with a segment clearance capsule.
+
+    Endpoint-only projection permits tunneling when a displacement ends safely on
+    the far side of a thin obstacle. This helper treats the obstacle segment plus
+    ``radius`` clearance as a capsule and finds the first interval where the
+    displacement path enters it. ``None`` means the swept path remains clear.
+    """
+    movement = end_point - start_point
+    movement_len_sq = float(np.dot(movement, movement))
+    if movement_len_sq <= EPSILON:
+        return None
+
+    # A nominal position already inside the requested clearance is handled by the
+    # controller's existing "suppress rather than repair" path. Do not manufacture
+    # a swept-path correction from an already infeasible starting state.
+    if _distance_to_polyline(start_point, segment) < radius - EPSILON:
+        return None
+
+    critical_fractions = [0.0, 1.0]
+    critical_fractions.extend(
+        _circle_contact_fractions(
+            start_point,
+            movement,
+            segment,
+            radius,
+            movement_len_sq,
+        )
+    )
+    critical_fractions.extend(
+        _segment_body_contact_fractions(start_point, movement, segment, radius)
+    )
+
+    # Between consecutive capsule-boundary intersections, inside/outside status
+    # is constant. The first inside interval therefore identifies the entry
+    # contact without confusing a tangential touch with a crossing.
+    ordered = sorted(set(critical_fractions))
+    for left, right in pairwise(ordered):
+        if right - left <= EPSILON:
+            continue
+        midpoint = start_point + (0.5 * (left + right)) * movement
+        if _distance_to_polyline(midpoint, segment) < radius - EPSILON:
+            near_side_offset = 10.0 * EPSILON / np.sqrt(movement_len_sq)
+            return max(0.0, left - near_side_offset)
+    return None
+
+
+def _circle_contact_fractions(
+    start_point: np.ndarray,
+    movement: np.ndarray,
+    segment: np.ndarray,
+    radius: float,
+    movement_len_sq: float,
+) -> list[float]:
+    """Return displacement intersections with the round ends of a capsule."""
+    fractions: list[float] = []
+    for endpoint in segment:
+        relative_start = start_point - endpoint
+        quadratic_b = 2.0 * float(np.dot(relative_start, movement))
+        quadratic_c = float(np.dot(relative_start, relative_start)) - radius * radius
+        discriminant = quadratic_b * quadratic_b - 4.0 * movement_len_sq * quadratic_c
+        if discriminant < -EPSILON:
+            continue
+        sqrt_discriminant = float(np.sqrt(max(discriminant, 0.0)))
+        for numerator in (-quadratic_b - sqrt_discriminant, -quadratic_b + sqrt_discriminant):
+            fraction = numerator / (2.0 * movement_len_sq)
+            if -EPSILON <= fraction <= 1.0 + EPSILON:
+                fractions.append(float(np.clip(fraction, 0.0, 1.0)))
+    return fractions
+
+
+def _segment_body_contact_fractions(
+    start_point: np.ndarray,
+    movement: np.ndarray,
+    segment: np.ndarray,
+    radius: float,
+) -> list[float]:
+    """Return displacement intersections with a capsule's straight body."""
+    segment_vector = segment[1] - segment[0]
+    segment_length = float(np.linalg.norm(segment_vector))
+    if segment_length <= EPSILON:
+        return []
+    tangent = segment_vector / segment_length
+    normal = np.array([-tangent[1], tangent[0]], dtype=float)
+    normal_start = float(np.dot(start_point - segment[0], normal))
+    normal_movement = float(np.dot(movement, normal))
+    if abs(normal_movement) <= EPSILON:
+        return []
+
+    fractions: list[float] = []
+    for signed_radius in (-radius, radius):
+        fraction = (signed_radius - normal_start) / normal_movement
+        if not -EPSILON <= fraction <= 1.0 + EPSILON:
+            continue
+        clamped_fraction = float(np.clip(fraction, 0.0, 1.0))
+        contact_point = start_point + clamped_fraction * movement
+        tangent_offset = float(np.dot(contact_point - segment[0], tangent))
+        if -EPSILON <= tangent_offset <= segment_length + EPSILON:
+            fractions.append(clamped_fraction)
+    return fractions
+
+
 def _normalize_obstacle_segments(
     obstacle_segments: np.ndarray | list[Line2D] | None,
 ) -> np.ndarray | None:
@@ -668,6 +776,16 @@ def _push_out_of_obstacles(
     for i in range(candidate_positions.shape[0]):
         corrected_position = candidate_positions[i].copy()
         for segment in stacked_segments:
+            contact_fraction = _swept_clearance_contact_fraction(
+                positions[i],
+                corrected_position,
+                segment,
+                effective_radius,
+            )
+            if contact_fraction is not None:
+                corrected_position = positions[i] + contact_fraction * (
+                    corrected_position - positions[i]
+                )
             pushed = _project_point_against_segment(
                 corrected_position,
                 segment,

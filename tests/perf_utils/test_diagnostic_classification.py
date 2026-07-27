@@ -116,6 +116,8 @@ def test_diagnostic_matcher_is_path_separator_robust() -> None:
 
     backslash_node = GATE_NODE.replace("/", "\\")
     assert _diagnostic_note(backslash_node) is not None
+    absolute_node = f"/workspace/robot_sf_ll7/{GATE_NODE}"
+    assert _diagnostic_note(absolute_node) is not None
     # Unrelated nodes are never matched.
     assert _diagnostic_note("dummy::test_example") is None
     assert _diagnostic_note("") is None

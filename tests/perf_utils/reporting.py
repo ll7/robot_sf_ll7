@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 # expected ``"soft"`` breach, rather than as an unexplained ``"soft"`` breach.
 # The ``"hard"`` envelope is never exempted: a registered node at or above the
 # hard timeout remains a hard breach and therefore remains enforceable. This set
-# is intentionally narrow: only tests that own a separate, stricter budget (for
-# example an inner ``assert elapsed < N`` cap) belong here. Generic test
+# is intentionally narrow: only tests that own a separate, explicit gate-specific
+# budget (for example an inner ``assert elapsed < N`` cap) belong here. Generic test
 # slowness must keep flowing through the normal envelope. See issue #6320.
 DIAGNOSTIC_NODES: dict[str, str] = {
     "tests/dev/test_base_sensitive_gate_contract.py::TestGateScript::test_subset_run_under_two_minutes": (
@@ -115,7 +115,7 @@ def generate_report(
         breach = policy.classify(s.duration_seconds)
         note = _diagnostic_note(s.test_identifier)
         if note is not None and breach == "soft":
-            # Accepted, self-budgeted diagnostic contract: report it transparently
+            # Accepted, explicitly bounded diagnostic contract: report it transparently
             # as ``"diagnostic"`` with an explanation instead of a generic soft
             # breach whose episode/horizon guidance does not apply (issue #6320).
             # Do not bypass the hard boundary: that must remain enforceable.

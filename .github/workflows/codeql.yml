@@ -29,8 +29,12 @@ permissions:
   security-events: write
 
 concurrency:
+  # Latest-main-wins (issue #6399): same policy as ci.yml. Cancelling
+  # in-progress runs in the per-ref group lets the final aggregate SHA of a
+  # merge burst be analyzed without queueing behind superseded runs, while a
+  # new pull request push still only cancels its own superseded run.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

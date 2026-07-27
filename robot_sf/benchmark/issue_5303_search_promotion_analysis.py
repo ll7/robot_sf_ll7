@@ -409,14 +409,9 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             blockers.append(f"row {row_number} has invalid recertification lineage")
 
         readiness_status = row.get("readiness_status")
-        if not isinstance(readiness_status, str) or readiness_status.strip().lower() in {
-            "",
-            "unknown",
-            "fallback",
-            "degraded",
-            "unavailable",
-            "not_available",
-            "failed",
+        if not isinstance(readiness_status, str) or readiness_status.strip().lower() not in {
+            "native",
+            "adapter",
         }:
             blockers.append(f"row {row_number} has non-evidence readiness status")
         availability_status = row.get("availability_status")

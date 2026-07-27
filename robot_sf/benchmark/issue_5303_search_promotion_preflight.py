@@ -56,6 +56,8 @@ EXPECTED_FRESH_FAMILY = "classic_group_crossing_medium"
 EXPECTED_METHODS: tuple[str, ...] = ("optuna", "random")
 EXPECTED_CANDIDATE_BUDGET = 64
 EXPECTED_SEEDS_PER_METHOD = 3
+EXPECTED_SEARCH_SEEDS: tuple[int, ...] = (530301, 530302, 530303)
+EXPECTED_TOTAL_CANDIDATES_PER_METHOD = 192
 EXPECTED_HORIZON_STEPS = 100
 EXPECTED_DT_S = 0.1
 EXPECTED_TIME_CAP_S = 10.0
@@ -63,7 +65,29 @@ EXPECTED_DOORWAY_SEEDS: tuple[int, ...] = (128, 130)
 EXPECTED_NEGATIVE_CONTROL_FAMILY = "francis2023_blind_corner"
 EXPECTED_DIAGNOSTIC_EXECUTION_MODE = "adapter"
 EXPECTED_NULL_TEST_COUNT = 2
+EXPECTED_NULL_TEST_NAMES: tuple[str, ...] = (
+    "shuffled_outcome_seed_permutation",
+    "ranking_permutation_seed",
+)
 EXPECTED_COUNTED_GATE_COUNT = 7
+EXPECTED_COUNTED_GATE_NAMES: tuple[str, ...] = (
+    "corrected_scenario_path_certification",
+    "deterministic_replay",
+    "target_failure_in_at_least_4_of_5_seeds_no_retries",
+    "same_primary_mechanism_in_at_least_4_of_5_seeds",
+    "neutral_reference_planner_succeeds_in_at_least_4_of_5_seeds",
+    "shortlist_passes_threshold_in_second_execution_context",
+    "no_excluded_row_class",
+)
+EXPECTED_EXCLUDED_ROW_CLASSES = (
+    "fallback",
+    "degraded",
+    "unavailable",
+    "geometry_artifact",
+    "knife_edge",
+    "stress_only",
+    "duplicate",
+)
 NULL_THRESHOLD = 0.05
 DIAGNOSTIC_DECLARATION = "diagnostic_inconclusive"
 OUTCOME_ROW_SCHEMA_VERSION = "issue_5303_search_promotion_outcome_row.v1"
@@ -712,6 +736,14 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     checks["target_planner_config_exists"] = bool(target_cfg and target_cfg.is_file())
     if not checks["target_planner_config_exists"]:
         blockers.append("target_planner.config_path must point at an existing planner config")
+    checks["target_planner_config_frozen"] = (
+        target.get("config_path") == EXPECTED_PROVENANCE_PATHS["target_planner_config"]
+        and target.get("base_algo") == "hybrid_rule_local_planner"
+    )
+    if not checks["target_planner_config_frozen"]:
+        blockers.append(
+            "target planner must keep the frozen hybrid_rule_local_planner config binding"
+        )
 
     neutral = (
         contract.get("neutral_reference_planner")
@@ -722,9 +754,15 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     checks["neutral_reference_config_exists"] = bool(neutral_cfg and neutral_cfg.is_file())
     if not checks["neutral_reference_config_exists"]:
         blockers.append("neutral_reference_planner.config_path must point at an existing config")
-    checks["neutral_reference_not_target"] = neutral.get("name") != target.get("name")
+    checks["neutral_reference_not_target"] = (
+        neutral.get("name") == "scenario_adaptive_orca_v1"
+        and neutral.get("name") != target.get("name")
+        and neutral.get("config_path")
+        == EXPECTED_PROVENANCE_PATHS["neutral_reference_planner_config"]
+        and neutral.get("base_algo") == "orca"
+    )
     if not checks["neutral_reference_not_target"]:
-        blockers.append("neutral reference planner must differ from the target planner")
+        blockers.append("neutral reference planner must keep its frozen distinct ORCA binding")
 
     # ---- Family split matches the receipt exactly --------------------------------
     family_split = (
@@ -741,6 +779,18 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             "family_split must be classic_cross_trap_medium (fit) and "
             "classic_group_crossing_medium (fresh outcome), family-disjoint"
+        )
+    checks["family_split_inputs_frozen"] = (
+        family_split.get("fit_family_config") == EXPECTED_PROVENANCE_PATHS["fit_family_config"]
+        and family_split.get("fresh_outcome_family_config")
+        == EXPECTED_PROVENANCE_PATHS["fresh_family_config"]
+        and family_split.get("disjointness") == "family_disjoint_with_no_seed_or_archive_id_overlap"
+        and family_split.get("do_not_reuse_issue_3275_outcomes") is True
+    )
+    if not checks["family_split_inputs_frozen"]:
+        blockers.append(
+            "family split must retain the frozen source configs, disjointness policy, and "
+            "issue #3275 outcome exclusion"
         )
 
     contract_fit_ids = sorted(family_split.get("fit_family_eligible_records", []))
@@ -772,7 +822,8 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     if not checks["no_excluded_ids_in_eligible_sets"]:
         blockers.append(
             "an excluded (stress_only/knife_edge) record appears in an eligible set; "
-            "excluded rows may never be discoveries or denominator rows"
+            "excluded rows may never be discoveries, although scheduled attempts remain in "
+            "the primary denominator"
         )
     checks["excluded_records_count"] = family_split.get("excluded_records_count") == (
         EXPECTED_RECORD_COUNT - EXPECTED_ELIGIBLE_COUNT
@@ -830,6 +881,12 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     if not checks["warm_start_fit_family_only"]:
         blockers.append("warm_start must come from fit-family eligible records only")
+    checks["methods_and_warm_start_frozen"] = (
+        methods.get("allowed_methods_only") == list(EXPECTED_METHODS)
+        and methods.get("identical_warm_start_for_both_methods") is True
+    )
+    if not checks["methods_and_warm_start_frozen"]:
+        blockers.append("both frozen sampler arms must retain the same fit-family warm starts")
 
     budget = contract.get("budget") if isinstance(contract.get("budget"), dict) else {}
     checks["candidate_budget_64_per_seed"] = (
@@ -837,12 +894,21 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     if not checks["candidate_budget_64_per_seed"]:
         blockers.append("candidate budget must be exactly 64 per search seed per method")
+    search_seeds = _as_int_tuple(budget.get("search_seeds"))
     checks["search_seeds_exactly_three"] = (
         budget.get("search_seeds_per_method") == EXPECTED_SEEDS_PER_METHOD
-        and len(_as_int_tuple(budget.get("search_seeds"))) == EXPECTED_SEEDS_PER_METHOD
+        and search_seeds == EXPECTED_SEARCH_SEEDS
+        and len(set(search_seeds)) == EXPECTED_SEEDS_PER_METHOD
     )
     if not checks["search_seeds_exactly_three"]:
-        blockers.append("search seeds must be exactly three per method")
+        blockers.append(f"search seeds must be exactly {list(EXPECTED_SEARCH_SEEDS)} per method")
+    checks["total_candidates_per_method_frozen"] = (
+        budget.get("total_candidates_per_method") == EXPECTED_TOTAL_CANDIDATES_PER_METHOD
+    )
+    if not checks["total_candidates_per_method_frozen"]:
+        blockers.append(
+            f"total_candidates_per_method must be {EXPECTED_TOTAL_CANDIDATES_PER_METHOD}"
+        )
 
     time_cap = (
         contract.get("simulator_time_cap")
@@ -874,11 +940,23 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "objective tiers must be constraints-first: "
             "collision_or_severe_intrusion, liveness_or_goal_completion, comfort_and_efficiency"
         )
-    checks["objective_hard_constraint_veto"] = objective.get("ordering") in (
-        "constraints_first_lexicographic",
-    ) and bool(tier_names)
+    tiers = objective.get("tiers") if isinstance(objective.get("tiers"), list) else []
+    checks["objective_hard_constraint_veto"] = (
+        objective.get("ordering") == "constraints_first_lexicographic"
+        and len(tiers) == 3
+        and all(isinstance(tier, dict) for tier in tiers)
+        and tiers[0].get("kind") == "hard_constraint"
+        and tiers[0].get("veto") is True
+        and tiers[1].get("kind") == "liveness"
+        and tiers[1].get("no_soft_compensation_when_tier_1_fails") is True
+        and tiers[2].get("kind") == "soft"
+        and tiers[2].get("compensates_hard_constraint_or_zero_goal_completion") is False
+    )
     if not checks["objective_hard_constraint_veto"]:
-        blockers.append("objective.ordering must be constraints_first_lexicographic")
+        blockers.append(
+            "objective must retain the constraints-first ordering, tier-1 hard veto, and "
+            "no soft compensation for failed constraints or liveness"
+        )
     objective_registry_path = root / EXPECTED_PROVENANCE_PATHS["objective_registry"]
     checks["objective_runner_registered"] = (
         objective.get("name") == "constraints_first_lexicographic_v1"
@@ -897,9 +975,11 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         if isinstance(contract.get("counted_weak_point_gates"), dict)
         else {}
     )
+    gates = gates_block.get("gates")
+    gate_entries = gates if isinstance(gates, list) else []
     gate_ids = sorted(
         gate.get("id")
-        for gate in gates_block.get("gates", [])
+        for gate in gate_entries
         if isinstance(gate, dict) and isinstance(gate.get("id"), int)
     )
     checks["counted_weak_point_gates_all_seven"] = gate_ids == list(
@@ -919,6 +999,28 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     checks["confirmation_no_retries"] = confirmation.get("no_retries") is True
     if not checks["confirmation_no_retries"]:
         blockers.append("confirmation.no_retries must be true")
+    gate_names = tuple(
+        gate.get("name")
+        for gate in gate_entries
+        if isinstance(gate, dict) and isinstance(gate.get("name"), str)
+    )
+    checks["counted_weak_point_gate_semantics_frozen"] = (
+        isinstance(gates, list)
+        and len(gates) == EXPECTED_COUNTED_GATE_COUNT
+        and gate_names == EXPECTED_COUNTED_GATE_NAMES
+        and confirmation.get("fresh_confirmation_seeds") == 5
+        and confirmation.get("seeds_distinct_from_search_seeds") is True
+        and confirmation.get("mechanism_threshold_seeds") == "4_of_5"
+        and confirmation.get("neutral_reference_threshold_seeds") == "4_of_5"
+        and confirmation.get("second_recorded_execution_context_required") is True
+        and gates_block.get("excluded_row_classes_never_discoveries_but_remain_primary_denominator")
+        == list(EXPECTED_EXCLUDED_ROW_CLASSES)
+    )
+    if not checks["counted_weak_point_gate_semantics_frozen"]:
+        blockers.append(
+            "counted weak-point gates must retain their frozen names, 4-of-5 confirmation "
+            "thresholds, second-context requirement, and excluded-row classes"
+        )
 
     # ---- Estimand / uncertainty / null tests -------------------------------------
     estimand = contract.get("estimand") if isinstance(contract.get("estimand"), dict) else {}
@@ -954,15 +1056,24 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append("uncertainty must bootstrap over search-seed clusters (3 per method)")
 
     null_tests = contract.get("null_tests") if isinstance(contract.get("null_tests"), dict) else {}
-    null_test_names = tuple(
-        test.get("name")
-        for test in null_tests.get("tests", [])
-        if isinstance(test, dict) and isinstance(test.get("name"), str)
+    null_test_entries = null_tests.get("tests")
+    null_test_names = (
+        tuple(
+            test.get("name")
+            for test in null_test_entries
+            if isinstance(test, dict) and isinstance(test.get("name"), str)
+        )
+        if isinstance(null_test_entries, list)
+        else ()
     )
-    checks["null_tests_two_seed_permutations"] = len(
-        null_test_names
-    ) == EXPECTED_NULL_TEST_COUNT and all(
-        test.get("unit") == "search_seed" for test in null_tests.get("tests", [])
+    checks["null_tests_two_seed_permutations"] = (
+        isinstance(null_test_entries, list)
+        and len(null_test_entries) == EXPECTED_NULL_TEST_COUNT
+        and null_test_names == EXPECTED_NULL_TEST_NAMES
+        and all(
+            isinstance(test, dict) and test.get("unit") == "search_seed"
+            for test in null_test_entries
+        )
     )
     if not checks["null_tests_two_seed_permutations"]:
         blockers.append(
@@ -1024,13 +1135,20 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     decision = (
         contract.get("decision_rule") if isinstance(contract.get("decision_rule"), dict) else {}
     )
-    checks["decision_rule_three_outcomes"] = sorted(decision.get("outcomes", [])) == [
-        "inconclusive",
-        "promote",
-        "stop",
-    ]
+    checks["decision_rule_three_outcomes"] = (
+        sorted(decision.get("outcomes", []))
+        == [
+            "inconclusive",
+            "promote",
+            "stop",
+        ]
+        and decision.get("promote_requires_all_positive_gate_conditions") is True
+    )
     if not checks["decision_rule_three_outcomes"]:
-        blockers.append("decision_rule.outcomes must be promote | stop | inconclusive")
+        blockers.append(
+            "decision_rule must retain promote | stop | inconclusive and require every "
+            "positive-gate condition before promotion"
+        )
 
     # ---- Positive gate kept frozen (NOT weakened) --------------------------------
     positive_gate = (

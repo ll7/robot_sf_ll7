@@ -32,6 +32,7 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
+from robot_sf.benchmark.fallback_policy import summarize_benchmark_availability
 from robot_sf.benchmark.runner import run_batch
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
@@ -73,6 +74,16 @@ def _default_evaluator(
     record = read_first_jsonl_record(episode_path)
     trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
     attribution = attribution_from_episode_record(record or {})
+    availability = summarize_benchmark_availability(summary)
+    attribution = replace(
+        attribution,
+        details={
+            **attribution.details,
+            "execution_mode": availability.execution_mode,
+            "readiness_status": availability.readiness_status,
+            "availability_status": availability.availability_status,
+        },
+    )
     write_json(candidate_dir / "failure_attribution.json", attribution.to_json())
     return CandidateEvaluation(
         candidate=candidate,

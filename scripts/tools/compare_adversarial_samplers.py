@@ -71,8 +71,6 @@ class Issue5303DiagnosticContext:
     target_planner_config: Path
     neutral_reference_planner_config: Path
     execution_mode: str
-    readiness_status: str
-    availability_status: str
     execution_context_label: str
     execution_commit: str
 
@@ -332,7 +330,13 @@ def _episode_execution_status(
 ) -> tuple[str, str, str]:
     """Extract conservative execution status fields from an episode or attribution payload."""
     details = attribution.get("details") if isinstance(attribution.get("details"), dict) else {}
-    algorithm = record.get("algorithm") if isinstance(record.get("algorithm"), dict) else {}
+    algorithm = (
+        record.get("algorithm_metadata")
+        if isinstance(record.get("algorithm_metadata"), dict)
+        else record.get("algorithm")
+        if isinstance(record.get("algorithm"), dict)
+        else {}
+    )
     planner_kinematics = (
         algorithm.get("planner_kinematics")
         if isinstance(algorithm.get("planner_kinematics"), dict)
@@ -502,6 +506,12 @@ def build_issue_5303_search_outcome_rows(
             episode_path_raw = item.get("episode_record_path")
             episode_path = Path(str(episode_path_raw)) if episode_path_raw else None
             record = _first_jsonl_record(episode_path, manifest_path=manifest_path)
+            observed_execution_mode, readiness_status, availability_status = (
+                _episode_execution_status(
+                    record,
+                    attribution,
+                )
+            )
             row = {
                 "schema_version": "issue_5303_search_promotion_outcome_row.v1",
                 "row_id": (
@@ -533,13 +543,16 @@ def build_issue_5303_search_outcome_rows(
                     "confirmation_seeds": [],
                     "second_context_seed": None,
                 },
-                # These are frozen command bindings, not fields inferred from an episode
-                # payload. The production episode schema does not promise to include them,
-                # and treating their absence as ``unknown`` made the declared handoff fail
-                # its own accounting check even for adapter execution.
-                "execution_mode": context.execution_mode,
-                "readiness_status": context.readiness_status,
-                "availability_status": context.availability_status,
+                # The command fixes adapter mode, but availability/readiness are observed per
+                # attempt. Missing or degraded status must remain visible and fail closed in the
+                # accounting analyzer rather than being replaced by a command-level success tag.
+                "execution_mode": (
+                    observed_execution_mode
+                    if observed_execution_mode != "unknown"
+                    else context.execution_mode
+                ),
+                "readiness_status": readiness_status,
+                "availability_status": availability_status,
                 "constraints_first_outcome": _constraints_first_outcome(record),
                 "objective": comparison_row.objective,
                 "objective_value": item.get("objective_value"),
@@ -1309,8 +1322,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             target_planner_config=args.algo_config,
             neutral_reference_planner_config=args.reference_algo_config,
             execution_mode="adapter",
-            readiness_status="ready",
-            availability_status="available",
             execution_context_label=str(args.execution_context_label),
             execution_commit=execution_commit,
         )

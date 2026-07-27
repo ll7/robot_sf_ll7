@@ -166,11 +166,17 @@ def test_frozen_design_fields() -> None:
     for check_name in (
         "candidate_budget_64_per_seed",
         "search_seeds_exactly_three",
+        "total_candidates_per_method_frozen",
         "methods_exactly_optuna_and_random",
+        "methods_and_warm_start_frozen",
+        "target_planner_config_frozen",
+        "family_split_inputs_frozen",
         "simulator_time_cap_frozen",
         "objective_constraints_first",
+        "objective_hard_constraint_veto",
         "objective_runner_registered",
         "counted_weak_point_gates_all_seven",
+        "counted_weak_point_gate_semantics_frozen",
         "gates_fail_closed",
         "input_provenance_complete",
         "input_provenance_hashes",
@@ -295,6 +301,51 @@ def test_preflight_detects_threshold_weakening(tmp_path: Path) -> None:
     assert result.checks["positive_gate_thresholds_kept"] is False
     assert result.checks["positive_gate_not_robustly_testable"] is False
     assert result.checks["future_run_diagnostic_inconclusive"] is False
+
+
+@pytest.mark.parametrize(
+    ("mutation", "check_name"),
+    [
+        ("search_seed", "search_seeds_exactly_three"),
+        ("null_test_name", "null_tests_two_seed_permutations"),
+        ("hard_veto", "objective_hard_constraint_veto"),
+        ("confirmation_threshold", "counted_weak_point_gate_semantics_frozen"),
+    ],
+)
+def test_preflight_rejects_rehashed_frozen_design_drift(
+    tmp_path: Path,
+    mutation: str,
+    check_name: str,
+) -> None:
+    """Rehashing cannot hide drift in a seed, test, veto, or confirmation gate."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    if mutation == "search_seed":
+        contract["budget"]["search_seeds"] = [530301, 530302, 530399]
+    elif mutation == "null_test_name":
+        contract["null_tests"]["tests"][0]["name"] = "invented_permutation"
+    elif mutation == "hard_veto":
+        contract["objective"]["tiers"][0]["veto"] = False
+    elif mutation == "confirmation_threshold":
+        contract["counted_weak_point_gates"]["confirmation"]["mechanism_threshold_seeds"] = "3_of_5"
+    else:  # pragma: no cover - the parametrization above is exhaustive.
+        raise AssertionError(f"unknown mutation: {mutation}")
+    tampered_contract = tmp_path / "rehashed_drift.yaml"
+    tampered_contract.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest["contract_sha256"] = hashlib.sha256(tampered_contract.read_bytes()).hexdigest()
+    tampered_manifest = tmp_path / "contract_frozen.json"
+    tampered_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(
+        tampered_contract,
+        receipt_path=RECEIPT_PATH,
+        manifest_path=tampered_manifest,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.checks["contract_hash_matches_manifest"] is True
+    assert result.checks[check_name] is False
+    assert result.ready is False
 
 
 def test_preflight_detects_handoff_input_hash_tampering(tmp_path: Path) -> None:

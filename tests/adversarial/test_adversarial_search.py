@@ -2064,6 +2064,50 @@ def test_default_evaluator_treats_failures_as_failed_jobs(
         )
 
 
+def test_default_evaluator_records_fail_closed_benchmark_availability(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fallback availability is persisted with the candidate attribution for later accounting."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write one episode and return a fallback preflight summary."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "failures": [],
+            "algorithm_metadata_contract": {"planner_kinematics": {"execution_mode": "adapter"}},
+            "preflight": {"status": "fallback"},
+        }
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "adapter"
+    assert evaluation.failure_attribution.details["readiness_status"] == "fallback"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+    written = json.loads((tmp_path / "candidate" / "failure_attribution.json").read_text())
+    assert written["details"]["availability_status"] == "not_available"
+
+
 def test_failure_attribution_covers_primary_outcomes() -> None:
     """Failure attribution must distinguish collision, timeout, incomplete, and errors."""
     collision = attribution_from_episode_record(

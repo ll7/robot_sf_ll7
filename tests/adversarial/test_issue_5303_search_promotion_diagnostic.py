@@ -100,7 +100,7 @@ def _diagnostic_row(
             "second_context_seed": None,
         },
         "execution_mode": step3_execution["required_execution_mode"],
-        "readiness_status": "ready",
+        "readiness_status": "adapter",
         "availability_status": "available",
         "constraints_first_outcome": {"status": "observed"},
         "objective": step3_execution["diagnostic_objective"],
@@ -175,8 +175,8 @@ def test_diagnostic_cli_requires_the_frozen_execution_bindings() -> None:
     ]
 
 
-def test_diagnostic_context_records_frozen_execution_statuses(tmp_path: Path) -> None:
-    """Rows retain verified command bindings when episode records omit status metadata."""
+def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) -> None:
+    """Rows retain observed degraded status instead of claiming command-level availability."""
     scenario = tmp_path / "scenario.yaml"
     search_space = tmp_path / "space.yaml"
     scenario.write_text("scenarios: []\n", encoding="utf-8")
@@ -189,7 +189,18 @@ def test_diagnostic_context_records_frozen_execution_statuses(tmp_path: Path) ->
                     "scenario_template": str(scenario),
                     "search_space_path": str(search_space),
                 },
-                "candidates": [{"candidate": {"scenario_seed": 1}}],
+                "candidates": [
+                    {
+                        "candidate": {"scenario_seed": 1},
+                        "failure_attribution": {
+                            "details": {
+                                "execution_mode": "adapter",
+                                "readiness_status": "fallback",
+                                "availability_status": "not_available",
+                            }
+                        },
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -225,8 +236,6 @@ def test_diagnostic_context_records_frozen_execution_statuses(tmp_path: Path) ->
         neutral_reference_planner_config=REPO_ROOT
         / "configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml",
         execution_mode="adapter",
-        readiness_status="ready",
-        availability_status="available",
         execution_context_label="diagnostic_adapter_context_a",
         execution_commit="a" * 40,
     )
@@ -236,8 +245,8 @@ def test_diagnostic_context_records_frozen_execution_statuses(tmp_path: Path) ->
     )[0]
 
     assert row["execution_mode"] == "adapter"
-    assert row["readiness_status"] == "ready"
-    assert row["availability_status"] == "available"
+    assert row["readiness_status"] == "fallback"
+    assert row["availability_status"] == "not_available"
 
 
 def test_diagnostic_runner_checks_preflight_before_search(

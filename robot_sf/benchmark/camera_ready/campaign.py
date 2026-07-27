@@ -124,6 +124,8 @@ DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1
 
 @dataclass(frozen=True)
 class _CampaignRuntimeDependencies:
+    """Injected campaign collaborators (preflight, batch runner, aggregates, publication bundle)."""
+
     prepare_campaign_preflight: Callable[..., dict[str, Any]]
     run_batch: Callable[..., dict[str, Any]]
     compute_aggregates_with_ci: Callable[..., dict[str, Any]]
@@ -137,6 +139,11 @@ def _resolve_campaign_runtime_dependencies(
     compute_aggregates_with_ci: Callable[..., dict[str, Any]] | None = None,
     export_publication_bundle: Callable[..., Any] | None = None,
 ) -> _CampaignRuntimeDependencies:
+    """Return the four campaign runtime collaborators.
+
+    Lazily imports the canonical implementation for any collaborator that was not injected.
+    """
+
     if prepare_campaign_preflight is None:
         from robot_sf.benchmark.camera_ready._preflight import (  # noqa: PLC0415
             prepare_campaign_preflight,
@@ -222,6 +229,8 @@ def run_campaign(  # noqa: PLR0913
 
 @dataclass(frozen=True)
 class _CampaignPlannerRunResults:
+    """Collected output for one planner: run entries, planner rows, warnings, seed-variability records."""
+
     run_entries: list[dict[str, Any]]
     planner_rows: list[dict[str, Any]]
     warnings: list[str]
@@ -230,6 +239,8 @@ class _CampaignPlannerRunResults:
 
 @dataclass(frozen=True)
 class _CampaignPlannerMatrixContext:
+    """Shared matrix context iterated across planner variants."""
+
     cfg: CampaignConfig
     scenarios: list[Any]
     snqi_weights: dict[str, Any] | None
@@ -240,6 +251,8 @@ class _CampaignPlannerMatrixContext:
 
 @dataclass(frozen=True)
 class _CampaignPlannerVariantResult:
+    """Result of one planner variant, extending run results with a stop-requested flag."""
+
     run_entries: list[dict[str, Any]]
     planner_rows: list[dict[str, Any]]
     warnings: list[str]
@@ -249,6 +262,8 @@ class _CampaignPlannerVariantResult:
 
 @dataclass(frozen=True)
 class _CampaignPlannerVariantRun:
+    """Resolved parameters for one planner/kinematics batch run."""
+
     kinematics: str
     active_observation_mode: str
     planner_dir: Path
@@ -261,6 +276,8 @@ class _CampaignPlannerVariantRun:
 
 @dataclass(frozen=True)
 class _CampaignPlannerBatchResult:
+    """Outcome of one batch execution: status string, runner summary, and warnings."""
+
     status: str
     summary: dict[str, Any]
     warnings: list[str]
@@ -360,11 +377,39 @@ def _cleanup_gpu_memory_between_arms(
     return memory_metrics
 
 
+def _resolve_arm_safety_wrapper(
+    *, cfg: CampaignConfig, planner: PlannerSpec
+) -> dict[str, Any] | None:
+    """Resolve the effective safety-wrapper mapping for one campaign arm.
+
+    The per-arm ``PlannerSpec.safety_wrapper`` overrides the campaign-level
+    ``CampaignConfig.safety_wrapper`` default (issue #3501 / #4830). The factorial
+    ``planner x {wrapper_off, wrapper_on}`` design is encoded as distinct arms whose
+    per-arm value wins, while a campaign can still pin a default for arms that leave
+    the wrapper unset. ``None`` (the default) keeps the wrapper off at runtime.
+
+    Returns:
+        The resolved safety-wrapper mapping, or ``None`` when neither arm nor campaign
+        declares one (wrapper stays off).
+    """
+    if planner.safety_wrapper is not None:
+        return dict(planner.safety_wrapper)
+    if cfg.safety_wrapper is not None:
+        return dict(cfg.safety_wrapper)
+    return None
+
+
 def _execute_campaign_planner_batch(
     context: _CampaignPlannerMatrixContext,
     planner: PlannerSpec,
     run: _CampaignPlannerVariantRun,
 ) -> _CampaignPlannerBatchResult:
+    """Return the batch result of executing one planner/kinematics run via the injected runner.
+
+    Classifies availability from the summary and fails closed on checkpoint
+    fallback when ``error`` enforcement is configured.
+    """
+
     cfg = context.cfg
     dependencies = context.dependencies
     status = "ok"
@@ -403,6 +448,7 @@ def _execute_campaign_planner_batch(
             ),
             workers=run.effective_workers,
             resume=cfg.resume,
+            safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
         )
         availability = summarize_benchmark_availability(summary)
         if availability.availability_status == "not_available":
@@ -439,6 +485,12 @@ def _prepare_campaign_planner_variant_run(
     active_observation_mode: str,
     log_run: bool = True,
 ) -> _CampaignPlannerVariantRun:
+    """Return one planner/kinematics variant's resolved output paths and runtime settings.
+
+    Applies per-planner overrides for workers, horizon, and dt, and scopes
+    scenarios to the variant's kinematics.
+    """
+
     cfg = context.cfg
     planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
     planner_dir = context.runs_dir / planner_run_key
@@ -486,6 +538,11 @@ def _dependency_gated_planner_summary(
     planner: PlannerSpec,
     run: _CampaignPlannerVariantRun,
 ) -> dict[str, Any]:
+    """Return a ``not_available`` summary block for a dependency-gated planner.
+
+    Records the skip reason and algorithm-readiness tier without executing the arm.
+    """
+
     readiness = get_algorithm_readiness(planner.algo)
     reason = str(planner.fail_closed_reason or "").strip() or (
         f"{planner.key} blocked by availability_gate={planner.availability_gate!r}"
@@ -586,7 +643,7 @@ def _resolve_campaign_planner_batch_result(
     return _execute_campaign_planner_batch(context, planner, run)
 
 
-def _run_campaign_planner_variant(
+def _run_campaign_planner_variant(  # noqa: PLR0915
     context: _CampaignPlannerMatrixContext,
     *,
     planner: PlannerSpec,
@@ -594,6 +651,12 @@ def _run_campaign_planner_variant(
     active_observation_mode: str,
     resume_verdict: ArmResumeVerdict | None = None,
 ) -> _CampaignPlannerVariantResult:
+    """Return one planner variant's end-to-end result.
+
+    Prepares, executes or resumes, and aggregates one variant, returning its run
+    entries, planner rows, warnings, and seed-variability records.
+    """
+
     cfg = context.cfg
     run_entries: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
@@ -832,6 +895,7 @@ def _run_campaign_planner_variant_subprocess(
         algo_config_path=planner.algo_config_path,
         resume=cfg.resume,
         scoped_scenarios_path=scoped_scenarios_path,
+        safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
     )
 
     # Serialize parameters for subprocess. The Path-typed fields on
@@ -1110,6 +1174,11 @@ def _run_campaign_planner_matrix(
 
 
 def _build_skipped_combo_rows(run_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return one row per run entry whose preflight was skipped.
+
+    Records planner key, algo, kinematics, and the skip reason for reporting.
+    """
+
     skipped_combo_rows: list[dict[str, Any]] = []
     for entry in run_entries:
         summary = entry.get("summary", {})

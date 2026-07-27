@@ -19,6 +19,8 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
+ISSUE_1436_POLICY = ROOT / "docs" / "context" / "issue_1436_reproducibility_flaky_acceptance.md"
+QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
@@ -32,6 +34,8 @@ CI_JOB_TIMEOUTS = {
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "notebooks-smoke": 30,
+    "determinism-gate": 30,
+    "exact-repeat-model-preflight": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(
@@ -106,19 +110,31 @@ def _workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_main_push_workflows_queue_while_pull_request_runs_supersede() -> None:
-    """Keep post-merge validation from being starved while retaining fast PR feedback.
+def test_workflows_cancel_superseded_in_progress_runs_latest_main_wins() -> None:
+    """Lock the latest-main-wins concurrency policy (issue #6399).
 
-    GitHub Actions groups all runs for ``refs/heads/main`` together.  The explicit
-    expression queues those main runs, but still cancels superseded pull-request runs.
+    A bounded merge burst can push several main SHAs in quick succession.  The
+    intermediate runs are superseded by the final aggregate SHA, which contains
+    every earlier commit, so retaining them only adds queue latency without
+    adding coverage.  Setting ``cancel-in-progress`` to ``true`` for every ref
+    makes a new main push cancel any superseded in-progress main run, so the
+    final aggregate SHA is validated without waiting behind stale runs.
+
+    The existing ``${{ github.workflow }}-${{ github.ref }}`` group keeps each
+    ref isolated, so this is safe for pull requests too: a new pull-request push
+    shares a group only with its own ref and still cancels only its own
+    superseded run, never a main run or another PR's run.
     """
 
-    expected = "${{ github.ref != 'refs/heads/main' }}"
+    expected_group = "${{ github.workflow }}-${{ github.ref }}"
     for workflow_file in (CI_WORKFLOW, CODEQL_WORKFLOW):
         workflow = yaml.safe_load(workflow_file.read_text(encoding="utf-8")) or {}
         concurrency = workflow.get("concurrency", {})
         assert isinstance(concurrency, dict)
-        assert concurrency.get("cancel-in-progress") == expected
+        # A boolean ``true`` literal, not the queue-main expression and not a
+        # string: both latest-main-wins and per-PR supersession must hold.
+        assert concurrency.get("group") == expected_group
+        assert concurrency.get("cancel-in-progress") is True
 
 
 def _workflow_files() -> list[Path]:
@@ -336,7 +352,7 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     }
     assert setup_step["with"] == {
         "python-version": "${{ matrix.python }}",
-        "sync-args": "--frozen",
+        "sync-args": "--all-extras --frozen",
     }
     assert any(
         "pytest tests/common tests/contract tests/factories tests/gym_env tests/maps" in step
@@ -625,3 +641,40 @@ def test_ci_driver_lint_passes_when_all_checks_pass(tmp_path: Path) -> None:
         env=env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reproducibility_check_job_contract() -> None:
+    """Verify reproducibility-check trigger, fail-closed, and ci-aggregate exclusion.
+
+    The reproducibility-check job runs on pull_request and workflow_dispatch,
+    has no continue-on-error, and is intentionally excluded from the ci
+    aggregate's needs list so it provides visible diagnostic evidence without
+    blocking PR merges.
+    """
+    workflow = yaml.safe_load(_workflow_text())
+    repro_job = workflow["jobs"]["reproducibility-check"]
+    ci_job = workflow["jobs"]["ci"]
+
+    # Trigger is exclusively pull_request OR workflow_dispatch. Equality is
+    # intentional: containment would allow an undocumented third event.
+    assert repro_job["if"] == (
+        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+    )
+
+    # No continue-on-error on the job or any step
+    assert "continue-on-error" not in repro_job
+    for step in repro_job.get("steps", []):
+        assert "continue-on-error" not in step
+
+    # Excluded from ci aggregate needs
+    assert "reproducibility-check" not in ci_job["needs"]
+
+    policy_text = ISSUE_1436_POLICY.read_text(encoding="utf-8")
+    assert "cannot make that aggregate job fail" in policy_text
+    assert "no GitHub branch-protection required-status-check configuration" in policy_text
+    assert "reproducibility-check` is not presently merge-blocking" in policy_text
+    assert "If branch protection\nis added or changed" in policy_text
+
+    strategy_text = QA_TEST_STRATEGY.read_text(encoding="utf-8")
+    assert "no\nGitHub branch-protection required-status-check configuration" in strategy_text
+    assert "future branch-protection\nchange must explicitly decide" in strategy_text

@@ -334,6 +334,7 @@ def build_generated_population_control_trace_labels(
 
 
 def _single_pedestrians(scenario: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return the scenario's single-pedestrian entries that are mappings."""
     single_pedestrians = scenario.get("single_pedestrians")
     if not isinstance(single_pedestrians, Sequence) or isinstance(single_pedestrians, str):
         return []
@@ -341,6 +342,7 @@ def _single_pedestrians(scenario: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def _trace_label_records(scenario: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return validated per-pedestrian trace label records, raising on malformed entries."""
     if PEDESTRIAN_CONTROL_TRACE_LABELS_KEY not in scenario:
         return []
     labels = scenario.get(PEDESTRIAN_CONTROL_TRACE_LABELS_KEY)
@@ -360,6 +362,11 @@ def _aligned_pedestrian_metadata(
     scenario: Mapping[str, Any],
     pedestrian_count: int,
 ) -> list[Mapping[str, Any]]:
+    """Align scenario pedestrian metadata to the simulator count, padding leading slots.
+
+    Returns:
+        The pedestrian metadata list aligned to the simulator pedestrian count.
+    """
     if PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in scenario:
         trace_labels = _trace_label_records(scenario)
         return _aligned_trace_label_metadata(trace_labels, pedestrian_count)
@@ -383,6 +390,11 @@ def _aligned_trace_label_metadata(
     trace_labels: Sequence[Mapping[str, Any]],
     pedestrian_count: int,
 ) -> list[Mapping[str, Any]]:
+    """Order trace label records by simulator index to match the simulator pedestrian count.
+
+    Returns:
+        The trace label records ordered by simulator index, one per pedestrian slot.
+    """
     if pedestrian_count == 0:
         return []
     if len(trace_labels) != pedestrian_count:
@@ -415,6 +427,11 @@ def _aligned_trace_label_metadata(
 
 
 def _pedestrian_archetype(pedestrian: Mapping[str, Any]) -> str | None:
+    """Resolve a pedestrian's archetype label from metadata keys or a derived speed label.
+
+    Returns:
+        The resolved archetype label, a derived speed label, or ``None`` when unresolved.
+    """
     metadata = pedestrian.get("metadata") if isinstance(pedestrian.get("metadata"), Mapping) else {}
     for source in (metadata, pedestrian):
         for key in _ARCHETYPE_KEYS:
@@ -433,6 +450,7 @@ def _pedestrian_archetype(pedestrian: Mapping[str, Any]) -> str | None:
 
 
 def _copy_optional_label_fields(destination: dict[str, Any], source: Mapping[str, Any]) -> None:
+    """Copy optional, non-null label fields from ``source`` into ``destination``."""
     for key in _OPTIONAL_LABEL_KEYS:
         if key in source and source[key] is not None:
             destination[key] = source[key]

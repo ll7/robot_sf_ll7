@@ -1,0 +1,375 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collision_cause_analyser_run.v1.json",
+  "title": "Collision-Cause Analyser Controlled-Fixture Run v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analyser",
+    "issue",
+    "claim_boundary",
+    "provenance",
+    "verdicts",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "collision_cause_analyser_run.v1"
+    },
+    "analyser": {
+      "const": "rule_based_kinematic_replay"
+    },
+    "issue": {
+      "const": 5443
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 40
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "verdicts": {
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "items": {
+        "$ref": "#/$defs/verdict"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "cause": {
+      "type": "string",
+      "enum": [
+        "observation_omission",
+        "observation_delay",
+        "prediction_miss",
+        "candidate_omission",
+        "bad_selection",
+        "guard_omission",
+        "infeasible_applied_command",
+        "route_trap",
+        "already_unavoidable_contact",
+        "metric_artifact",
+        "interacting_ambiguous",
+        "none"
+      ]
+    },
+    "traceValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "channel",
+        "field",
+        "expected",
+        "observed"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "channel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "$ref": "#/$defs/traceValue"
+        },
+        "observed": {
+          "$ref": "#/$defs/traceValue"
+        }
+      }
+    },
+    "detectedFault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicted_cause",
+        "activation_step",
+        "gates_applied_command",
+        "events"
+      ],
+      "properties": {
+        "predicted_cause": {
+          "$ref": "#/$defs/cause"
+        },
+        "activation_step": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gates_applied_command": {
+          "type": "boolean"
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        }
+      }
+    },
+    "signatureRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "field",
+        "expected",
+        "observed",
+        "cause"
+      ],
+      "properties": {
+        "channel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "$ref": "#/$defs/traceValue"
+        },
+        "observed": {
+          "$ref": "#/$defs/traceValue"
+        },
+        "cause": {
+          "$ref": "#/$defs/cause"
+        }
+      }
+    },
+    "analyserConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "signature_rules",
+        "high_confidence",
+        "abstain_confidence",
+        "determinism_replays",
+        "repair_contact_lookahead",
+        "metric_artifact_requires_no_physical_contact_over_horizon"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "collision_cause_analyser_config.v1"
+        },
+        "signature_rules": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/signatureRule"
+          }
+        },
+        "high_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "abstain_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "determinism_replays": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "repair_contact_lookahead": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "metric_artifact_requires_no_physical_contact_over_horizon": {
+          "const": true
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "git_tree_dirty",
+        "manifest_path",
+        "manifest_sha256",
+        "analyser_config",
+        "analyser_config_sha256",
+        "payload_schema_sha256"
+      ],
+      "properties": {
+        "git_commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "git_tree_dirty": {
+          "type": "boolean"
+        },
+        "manifest_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "analyser_config": {
+          "$ref": "#/$defs/analyserConfig"
+        },
+        "analyser_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "payload_schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "predicted_cause",
+        "predicted_activation_step",
+        "confidence",
+        "avoidable_pred",
+        "abstained"
+      ],
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predicted_cause": {
+          "$ref": "#/$defs/cause"
+        },
+        "predicted_activation_step": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "avoidable_pred": {
+          "type": "boolean"
+        },
+        "abstained": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_id",
+        "replay_verdict",
+        "replay_t_uca",
+        "replay_t_inevitable",
+        "replay_t_contact",
+        "replay_deterministic",
+        "decisive_faults",
+        "present_faults",
+        "metric_quirk_onset",
+        "avoidable_pred"
+      ],
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "replay_verdict": {
+          "type": "string",
+          "minLength": 1
+        },
+        "replay_t_uca": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "replay_t_inevitable": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "replay_t_contact": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replay_deterministic": {
+          "type": "boolean"
+        },
+        "decisive_faults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detectedFault"
+          }
+        },
+        "present_faults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/detectedFault"
+          }
+        },
+        "metric_quirk_onset": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "avoidable_pred": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

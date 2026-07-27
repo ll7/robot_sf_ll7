@@ -217,6 +217,11 @@ def _build_manifest(  # noqa: PLR0913
     feature_schema: dict[str, Any],
     horizons_s: list[float],
 ) -> dict[str, Any]:
+    """Assemble the dataset manifest with split policy, provenance, and per-split entries.
+
+    Returns:
+        The assembled dataset manifest dictionary with provenance and per-split entries.
+    """
     rows_by_split: dict[str, list[dict[str, Any]]] = defaultdict(list)
     traces_by_split: dict[str, list[SimulationTraceExport]] = defaultdict(list)
     for row in rows:
@@ -270,6 +275,11 @@ def _split_manifest_entry(
     rows: Sequence[dict[str, Any]],
     traces: Sequence[SimulationTraceExport],
 ) -> dict[str, Any]:
+    """Build one split's manifest entry with example/trace counts and leakage-prevention keys.
+
+    Returns:
+        The split manifest entry dictionary with counts and leakage-prevention keys.
+    """
     scenario_ids = sorted({trace.source.scenario_id for trace in traces})
     seeds = sorted({trace.source.seed for trace in traces})
     scenario_seed_keys = sorted(
@@ -286,6 +296,11 @@ def _split_manifest_entry(
 
 
 def _trace_manifest_entry(trace: SimulationTraceExport, split: str) -> dict[str, Any]:
+    """Build one source-trace manifest entry carrying split and source metadata.
+
+    Returns:
+        The source-trace manifest entry dictionary with split and source metadata.
+    """
     return {
         "trace_id": trace.trace_id,
         "split": split,
@@ -300,6 +315,7 @@ def _trace_manifest_entry(trace: SimulationTraceExport, split: str) -> dict[str,
 
 
 def _validate_disjoint_split_values(splits: dict[str, Any], field: str) -> None:
+    """Raise when a split field value appears under more than one split, indicating leakage."""
     seen: dict[str, str] = {}
     for split in SPLIT_NAMES:
         values = splits.get(split, {}).get(field, [])
@@ -314,6 +330,11 @@ def _validate_disjoint_split_values(splits: dict[str, Any], field: str) -> None:
 
 
 def _trace_dict_for_adapter(trace: SimulationTraceExport) -> dict[str, Any]:
+    """Convert a trace export into the plain-dict shape expected by observation adapters.
+
+    Returns:
+        The plain-dict trace representation expected by observation adapters.
+    """
     return {
         "scenario_id": trace.source.scenario_id,
         "seed": trace.source.seed,
@@ -379,6 +400,7 @@ def _nearest_frame_index(
 def _pedestrian_by_id(
     pedestrians: Iterable[dict[str, Any]], actor_id: str
 ) -> dict[str, Any] | None:
+    """Return the pedestrian dict matching the actor id by id or actor_id, or None."""
     for pedestrian in pedestrians:
         pedestrian_id = pedestrian.get("id")
         pedestrian_actor_id = pedestrian.get("actor_id")
@@ -390,6 +412,11 @@ def _pedestrian_by_id(
 
 
 def _trace_dt_s(trace: SimulationTraceExport) -> float:
+    """Infer the trace timestep from the first two frames, defaulting to 0.1 s.
+
+    Returns:
+        The inferred timestep in seconds, defaulting to 0.1 s when it cannot be derived.
+    """
     if len(trace.frames) < 2:
         return 0.1
     dt_s = trace.frames[1].time_s - trace.frames[0].time_s
@@ -397,12 +424,22 @@ def _trace_dt_s(trace: SimulationTraceExport) -> float:
 
 
 def _require_feature_schema(feature_schema: dict[str, Any]) -> dict[str, Any]:
+    """Validate a non-empty feature schema and return it with stringified keys.
+
+    Returns:
+        The validated feature schema dictionary with all keys converted to strings.
+    """
     if not isinstance(feature_schema, dict) or not feature_schema:
         raise ValueError("feature_schema is required")
     return {str(key): value for key, value in feature_schema.items()}
 
 
 def _validate_horizons(horizons_s: Sequence[float]) -> list[float]:
+    """Validate that forecast horizons are positive and strictly increasing, returning them.
+
+    Returns:
+        The validated forecast horizons as a list of floats in seconds.
+    """
     horizons = [float(value) for value in horizons_s]
     if not horizons:
         raise ValueError("horizons_s must be non-empty")
@@ -424,6 +461,7 @@ def _validate_dataset_id(dataset_id: str) -> str:
 
 
 def _write_jsonl(path: Path, rows: Sequence[dict[str, Any]]) -> None:
+    """Atomically write dataset rows to a JSONL file via a temporary file and rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     try:
@@ -437,6 +475,7 @@ def _write_jsonl(path: Path, rows: Sequence[dict[str, Any]]) -> None:
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Atomically write a JSON payload to a file via a temporary file and rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     try:

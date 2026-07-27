@@ -194,6 +194,7 @@ def _candidate_from_entry(
         return None
 
     def _scalar(name: str, default: float) -> float | None:
+        """Return the finite float at ``name`` from the entry, or ``default`` when absent."""
         if name not in raw:
             return default
         return _finite_float(raw[name])
@@ -351,6 +352,11 @@ def warm_vs_cold_pilot(
         raise ValueError("warm_vs_cold_pilot requires at least one warm start")
 
     def _collapse(candidate: CandidateSpec) -> bool:
+        """Return whether ``candidate`` should be collapsed.
+
+        Delegates to the caller's ``collapse_predicate``; candidates are never
+        collapsed when no predicate was supplied.
+        """
         return bool(collapse_predicate(candidate)) if collapse_predicate else False
 
     warm_config = _replace_search_config(

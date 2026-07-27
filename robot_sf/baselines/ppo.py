@@ -484,6 +484,7 @@ class PPOPlanner:
         flattened: dict[str, Any] = dict(obs)
 
         def _flatten_recursive(payload: dict[str, Any], prefix: str = "") -> None:
+            """Recursively flatten ``payload`` into ``flattened`` using ``_``-joined prefixed keys."""
             for key, value in payload.items():
                 full_key = f"{prefix}_{key}" if prefix else str(key)
                 if isinstance(value, dict):
@@ -913,6 +914,12 @@ class PPOPlanner:
         }
 
     # --- Metadata ------------------------------------------------------
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Return live nested predictive-foresight provenance, when enabled."""
+        if self._predictive_foresight is None:
+            return {}
+        return self._predictive_foresight.foresight_diagnostics()
+
     def get_metadata(self) -> dict[str, Any]:
         """Return metadata describing the planner and load status.
 

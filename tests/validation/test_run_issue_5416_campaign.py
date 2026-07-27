@@ -113,6 +113,12 @@ def test_dry_run_lists_100_rows_without_executing(
     assert summary["selected_rows"] == 100
     assert len(summary["rows"]) == 100
     assert summary["executed_rows"] == 0
+    assert summary["geometry_gate_status"] == "blocked"
+    assert summary["geometry_blocked_rows"] == [
+        "classic_doorway_low",
+        "classic_station_platform_medium",
+        "classic_merging_low",
+    ]
     # Nothing is written during a dry run.
     assert not any(tmp_path.rglob("episodes.jsonl"))
 
@@ -150,6 +156,11 @@ def test_execute_resume_skip_and_checker_valid_output(
         return {"total_jobs": 1, "written": 1}
 
     monkeypatch.setattr(campaign, "run_map_batch", fake_run_map_batch)
+    monkeypatch.setattr(
+        campaign,
+        "validate_packet",
+        lambda *_args, **_kwargs: {"status": "ready", "blocked_rows": []},
+    )
 
     summary = run_campaign(
         config_path=CONFIG_PATH,
@@ -209,6 +220,11 @@ def test_resume_re_runs_a_row_that_is_not_checker_valid(
         return {"total_jobs": 1, "written": 1}
 
     monkeypatch.setattr(campaign, "run_map_batch", fake_run_map_batch)
+    monkeypatch.setattr(
+        campaign,
+        "validate_packet",
+        lambda *_args, **_kwargs: {"status": "ready", "blocked_rows": []},
+    )
     summary = run_campaign(
         config_path=CONFIG_PATH,
         output_root=tmp_path,

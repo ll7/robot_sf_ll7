@@ -130,6 +130,7 @@ def find_offending_paths(
     seen: set[str] = set()
 
     def _visit(value: Any) -> None:
+        """Recursively walk ``value`` and append private-path-leaking strings to ``found``."""
         if isinstance(value, str):
             if any(anchor in value for anchor in anchor_tuple) and value not in seen:
                 seen.add(value)

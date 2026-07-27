@@ -1,5 +1,13 @@
 # Context Retrieval Index
 
+Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
+upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the
+only permissible route is clean-room reimplementation (no upstream code copied, vendored, or
+adapted) unless and until a formal license or explicit permission is obtained and recorded; this is
+the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier `idea`, no policy
+or benchmark claim:
+[issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
+
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
 or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).
@@ -10,8 +18,8 @@ Issue #5936 result-job durability gate — producer-side probe (`result_job_dura
 Issue #5792 one-command demo reproducibility and CPU UX smoke record:
 [issue_5792_demo_validation_2026-07-15.md](evidence/issue_5792_demo_validation_2026-07-15.md).
 
-Issue #5579 MPC tuning-budget archaeology and bounded sensitivity packet (two prediction-MPC arms,
-20-point shared grid, fixed paired slice, and fail-closed diagnostic read):
+Issue #5579 MPC tuning-budget archaeology and completed bounded sensitivity diagnostic (two
+prediction-MPC arms, 20-point shared grid, fixed paired slice, and blocked fail-closed read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
 
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7

@@ -677,6 +677,7 @@ class RobotEnv(BaseEnv):
         paths: list[tuple[str, ...]] = []
 
         def _traverse(spaces_dict: dict, prefix: tuple[str, ...] = ()) -> None:
+            """Recursively collect leaf-space key-paths from a nested Dict space."""
             for key, child in spaces_dict.items():
                 path = prefix + (key,)
                 if isinstance(child, spaces.Dict):

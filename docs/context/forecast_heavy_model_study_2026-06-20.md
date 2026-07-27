@@ -67,13 +67,16 @@ CPU-only budget. Decision metric: the heavy model must beat the baseline ladder 
 `forecast_baseline_comparison` surface by a margin that justifies its integration burden, with
 calibration no worse than the baseline.
 
-This experiment is **BLOCKED** today. The preflight reports these prerequisites:
+This experiment remains **BLOCKED** today. The adapter and CPU budget are staged, but the
+holdout YAML is only a plan; no durable examples or validator-valid manifest are committed.
 
-Local (closeable in-repo, currently absent):
+Preflight status (2026-07-24 update):
 
-1. `staged_holdout_dataset` — a versioned, split-disjoint held-out forecast dataset + manifest.
-2. `heavy_model_adapter` — adapter from a heavy model's output to `ActorForecast`/`ForecastBatch`.
-3. `cpu_runtime_budget` — a config-first CPU-only runtime budget for the run.
+Local (closeable in-repo):
+
+1. `staged_holdout_dataset` — pending trace recording and a validated durable manifest.
+2. `heavy_model_adapter` — adapter at `robot_sf/benchmark/forecast_heavy_model_adapter.py`.
+3. `cpu_runtime_budget` — config at `configs/forecast/heavy_model_cpu_budget.yaml`.
 
 External (standing decisions, out of this slice's scope):
 
@@ -85,10 +88,10 @@ External (standing decisions, out of this slice's scope):
 **continue (assessment) — do NOT start implementation/training now.**
 
 - The offline-evaluation surface is sufficient to *score* heavy models, so the assessment lane is
-  worth continuing.
-- Do **not** begin heavy-model implementation or training until the three local prerequisites are
-  staged and the two external decisions are made. The cheapest first concrete step is staging the
-  bounded held-out dataset (prerequisite 1), which is also reusable by the lightweight baseline.
+  worth continuing while the durable holdout dataset is recorded.
+- Do **not** begin heavy-model implementation or training until the holdout dataset is staged and
+  the two external decisions (dependency decision, trained checkpoint) are resolved. The next
+  concrete step is recording the bounded held-out dataset.
 - **Stop condition for the heavy-model lane**: if, once a dataset and a single CVAE checkpoint
   exist, the heavy model does not beat the baseline ladder by a margin that justifies its
   integration burden (and at least matches its calibration), recommend `stop` for online
@@ -98,7 +101,7 @@ External (standing decisions, out of this slice's scope):
 ## Reproduce
 
 ```bash
-# Markdown verdict (exit 0 = required surfaces import; minimum experiment still reported BLOCKED)
+# Markdown verdict (exit 0 = required surfaces import; minimum experiment remains BLOCKED)
 uv run python scripts/research/check_forecast_heavy_model_inventory.py
 # Machine-readable report / static inventory
 uv run python scripts/research/check_forecast_heavy_model_inventory.py --json
@@ -108,6 +111,8 @@ uv run python scripts/research/check_forecast_heavy_model_inventory.py --decisio
 uv run python scripts/research/check_forecast_heavy_model_inventory.py --decision-packet --json
 # Tests
 uv run python -m pytest tests/research/test_forecast_heavy_model_inventory.py tests/prediction/test_forecast_heavy_model_decision_packet.py -q
+# Heavy-model adapter tests
+uv run python -m pytest tests/benchmark/test_forecast_heavy_model_adapter.py -q
 ```
 
 ## Related

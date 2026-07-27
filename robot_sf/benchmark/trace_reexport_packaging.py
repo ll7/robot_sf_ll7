@@ -107,6 +107,11 @@ class CampaignExpectation:
 
 
 def _canonical_bytes(payload: Any, *, newline: bool = False) -> bytes:
+    """Serialize a payload to compact, key-sorted JSON bytes with an optional newline.
+
+    Returns:
+        The compact JSON bytes, with a trailing newline appended when requested.
+    """
     data = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
     return data + (b"\n" if newline else b"")
 
@@ -121,10 +126,12 @@ def canonical_sha256(payload: Any) -> str:
 
 
 def _sha256_bytes(data: bytes) -> str:
+    """Return the SHA-256 hex digest of raw bytes."""
     return hashlib.sha256(data).hexdigest()
 
 
 def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 hex digest of a file, read in chunks."""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -133,6 +140,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _require_digest(actual: str, expected: str, label: str) -> None:
+    """Raise a packaging error when an actual digest does not match the expected one."""
     if actual != expected:
         raise TraceReexportPackagingError(
             f"{label} SHA-256 mismatch: expected {expected}, got {actual}"
@@ -140,6 +148,11 @@ def _require_digest(actual: str, expected: str, label: str) -> None:
 
 
 def _read_json_object_bytes(data: bytes, label: str) -> dict[str, Any]:
+    """Parse bytes as a JSON object, raising a packaging error on invalid input.
+
+    Returns:
+        The parsed JSON object as a dictionary.
+    """
     try:
         payload = json.loads(data)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -150,6 +163,11 @@ def _read_json_object_bytes(data: bytes, label: str) -> dict[str, Any]:
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
+    """Read a file and parse it as a JSON object, wrapping read errors.
+
+    Returns:
+        The parsed JSON object as a dictionary.
+    """
     try:
         return _read_json_object_bytes(path.read_bytes(), str(path))
     except OSError as exc:
@@ -157,6 +175,11 @@ def _read_json_object(path: Path) -> dict[str, Any]:
 
 
 def _read_jsonl_bytes(data: bytes, label: str) -> list[dict[str, Any]]:
+    """Parse JSON Lines bytes into a non-empty list of JSON object rows.
+
+    Returns:
+        A non-empty list of JSON object rows parsed from the bytes.
+    """
     rows: list[dict[str, Any]] = []
     try:
         lines = data.decode("utf-8").splitlines()
@@ -180,6 +203,7 @@ def _read_jsonl_bytes(data: bytes, label: str) -> list[dict[str, Any]]:
 
 
 def _verify_local_frozen_inputs(repo_root: Path) -> None:
+    """Verify frozen config files and the model registry match their pinned digests."""
     expected = {
         _CANONICAL_CONFIG: CANONICAL_CAMPAIGN_CONFIG_SHA256,
         _SCENARIO_MATRIX: SCENARIO_MATRIX_SHA256,
@@ -216,6 +240,11 @@ def _verify_local_frozen_inputs(repo_root: Path) -> None:
 
 
 def _archive_member_bytes(archive: tarfile.TarFile, suffix: str) -> tuple[str, bytes]:
+    """Extract the single safe archive member ending in a suffix as name and bytes.
+
+    Returns:
+        The matching member's name and raw bytes as a tuple.
+    """
     matches: list[tarfile.TarInfo] = []
     for member in archive.getmembers():
         path = PurePosixPath(member.name)
@@ -241,6 +270,7 @@ def _archive_member_bytes(archive: tarfile.TarFile, suffix: str) -> tuple[str, b
 
 
 def _payload_relative_path(member_name: str) -> str:
+    """Return an archive member's path relative to its single payload directory."""
     parts = PurePosixPath(member_name).parts
     if parts.count("payload") != 1:
         raise TraceReexportPackagingError(
@@ -260,6 +290,11 @@ def _load_release_rows(
     *,
     contract: FrozenTraceReexportContract,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]:
+    """Load and verify release episode rows and their digests from the bundle.
+
+    Returns:
+        Verified release rows keyed by planner alongside their JSONL digests.
+    """
     _require_digest(_sha256_file(release_bundle), contract.release_bundle_sha256, "release bundle")
     try:
         with tarfile.open(release_bundle, "r:*") as archive:
@@ -337,6 +372,11 @@ def campaign_expectations(repo_root: Path) -> dict[str, CampaignExpectation]:
 
 
 def _tuple_from_request(row: Mapping[str, Any]) -> tuple[str, str, int]:
+    """Extract and validate a planner/scenario/seed tuple from a request row.
+
+    Returns:
+        The validated planner, scenario, and seed tuple.
+    """
     planner = row.get("planner")
     scenario = row.get("scenario_id")
     seed = row.get("seed")
@@ -356,6 +396,11 @@ def _tuple_from_request(row: Mapping[str, Any]) -> tuple[str, str, int]:
 def _load_request_manifest(
     path: Path, *, contract: FrozenTraceReexportContract
 ) -> tuple[dict[tuple[str, str, int], str], dict[str, Any]]:
+    """Load and verify the 90-tuple request manifest, indexing episode IDs by tuple.
+
+    Returns:
+        The indexed episode IDs by tuple and the raw manifest payload.
+    """
     data = path.read_bytes()
     _require_digest(_sha256_bytes(data), contract.request_manifest_sha256, "request manifest")
     payload = _read_json_object_bytes(data, str(path))
@@ -394,6 +439,11 @@ def _load_request_manifest(
 
 
 def _row_tuple(row: Mapping[str, Any], *, planner_hint: str | None = None) -> tuple[str, str, int]:
+    """Extract a planner/scenario/seed tuple from an episode row, with a planner hint.
+
+    Returns:
+        The planner, scenario, and seed tuple extracted from the row.
+    """
     planner = row.get("algo")
     params = row.get("scenario_params")
     if not isinstance(planner, str) and isinstance(params, Mapping):
@@ -414,6 +464,11 @@ def _row_tuple(row: Mapping[str, Any], *, planner_hint: str | None = None) -> tu
 
 
 def _strict_bool(value: Any, *, field: str, key: tuple[str, str, int]) -> bool:
+    """Coerce a boolean or numeric 0/1 outcome field, rejecting other values.
+
+    Returns:
+        The coerced boolean value of the outcome field.
+    """
     if isinstance(value, bool):
         return value
     if isinstance(value, int | float) and not isinstance(value, bool) and value in (0, 1):
@@ -422,6 +477,11 @@ def _strict_bool(value: Any, *, field: str, key: tuple[str, str, int]) -> bool:
 
 
 def _outcome(row: Mapping[str, Any], key: tuple[str, str, int]) -> dict[str, bool]:
+    """Extract the canonical boolean outcome fields from an episode row.
+
+    Returns:
+        A mapping of canonical outcome field names to boolean values.
+    """
     metrics = row.get("metrics")
     outcome = row.get("outcome")
     if not isinstance(metrics, Mapping) or not isinstance(outcome, Mapping):
@@ -438,6 +498,11 @@ def _outcome(row: Mapping[str, Any], key: tuple[str, str, int]) -> dict[str, boo
 def _index_rows(
     rows: Iterable[dict[str, Any]], *, planner_hint: str | None = None
 ) -> dict[tuple[str, str, int], dict[str, Any]]:
+    """Index episode rows by tuple, raising on duplicate or ambiguous keys.
+
+    Returns:
+        A dictionary indexing episode rows by their planner/scenario/seed tuple.
+    """
     indexed: dict[tuple[str, str, int], dict[str, Any]] = {}
     for row in rows:
         key = _row_tuple(row, planner_hint=planner_hint)
@@ -450,6 +515,7 @@ def _index_rows(
 def _verify_campaign_manifest(
     manifest: Mapping[str, Any], expectation: CampaignExpectation
 ) -> None:
+    """Verify a rerun campaign manifest against the resolved campaign expectation."""
     checks = {
         "name": expectation.name,
         "scenario_matrix": _SCENARIO_MATRIX.as_posix(),
@@ -502,6 +568,11 @@ def _verify_campaign_manifest(
 def _load_rerun_output(
     root: Path, expectation: CampaignExpectation
 ) -> dict[tuple[str, str, int], dict[str, Any]]:
+    """Load and verify one rerun output's episode rows against its expectation.
+
+    Returns:
+        A dictionary indexing the verified rerun episode rows by tuple.
+    """
     manifest = _read_json_object(root / "campaign_manifest.json")
     _verify_campaign_manifest(manifest, expectation)
     episode_paths = sorted((root / "runs").glob("*/episodes.jsonl"))
@@ -529,6 +600,11 @@ def _load_rerun_output(
 
 
 def _nested_mapping(row: Mapping[str, Any], *keys: str) -> Mapping[str, Any] | None:
+    """Walk nested mappings along a key path, returning None if any step is absent.
+
+    Returns:
+        The nested mapping at the key path, or None if any step is absent.
+    """
     current: Any = row
     for key in keys:
         if not isinstance(current, Mapping):
@@ -540,6 +616,7 @@ def _nested_mapping(row: Mapping[str, Any], *keys: str) -> Mapping[str, Any] | N
 def _verify_rerun_row(  # noqa: C901
     row: Mapping[str, Any], key: tuple[str, str, int]
 ) -> None:
+    """Verify a rerun episode row's provenance, params, traces, and outcome."""
     planner, _scenario, _seed = key
     if row.get("git_hash") != EXECUTION_COMMIT:
         raise TraceReexportPackagingError(f"rerun row {key!r} execution commit mismatch")
@@ -603,6 +680,11 @@ def _release_selection(
     release_rows: Mapping[str, list[dict[str, Any]]],
     requests: Mapping[tuple[str, str, int], str],
 ) -> dict[tuple[str, str, int], dict[str, Any]]:
+    """Select and verify the release rows that cover every requested tuple.
+
+    Returns:
+        A dictionary of selected release rows indexed by requested tuple.
+    """
     selected: dict[tuple[str, str, int], dict[str, Any]] = {}
     for planner, rows in release_rows.items():
         indexed = _index_rows(rows, planner_hint=planner)
@@ -629,6 +711,11 @@ def _expected_outcomes_payload(
     *,
     contract: FrozenTraceReexportContract,
 ) -> dict[str, Any]:
+    """Build the versioned expected-outcome payload from selected release rows.
+
+    Returns:
+        The versioned expected-outcome payload with provenance and rows.
+    """
     rows = []
     for key in sorted(release):
         planner, scenario, seed = key
@@ -667,15 +754,18 @@ def expected_outcomes_payload_for_rows(
 
 
 def _row_sha256(row: Mapping[str, Any]) -> str:
+    """Return the canonical SHA-256 digest of a single episode row."""
     return _sha256_bytes(_canonical_bytes(row, newline=True))
 
 
 def _trace_uri(key: tuple[str, str, int]) -> str:
+    """Return the durable relative trace URI for a planner/scenario/seed tuple."""
     planner, scenario, seed = key
     return f"traces/{planner}/{scenario}/seed-{seed}.json"
 
 
 def _write_json(path: Path, payload: Any) -> None:
+    """Write a payload as canonical newline-terminated JSON, creating parent dirs."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(_canonical_bytes(payload, newline=True))
 
@@ -683,6 +773,11 @@ def _write_json(path: Path, payload: Any) -> None:
 def _validate_staged_package(  # noqa: C901
     root: Path, expected_rows: int
 ) -> dict[str, str]:
+    """Validate a staged package's receipts and traces, returning all file digests.
+
+    Returns:
+        A mapping of every staged file's relative path to its SHA-256 digest.
+    """
     outcomes = _read_json_object(root / "expected_outcomes.json")
     receipt = _read_json_object(root / "mapping_receipt.json")
     if outcomes.get("schema_version") != EXPECTED_OUTCOMES_SCHEMA:
@@ -759,6 +854,7 @@ def _validate_staged_package(  # noqa: C901
 
 
 def _verify_complete_output(root: Path) -> dict[str, Any] | None:
+    """Return a verified completion marker for an existing package, or None if absent."""
     marker_path = root / "package_complete.json"
     if not marker_path.exists():
         return None
@@ -787,10 +883,16 @@ def _verify_complete_output(root: Path) -> dict[str, Any] | None:
 
 
 def _paths_overlap(left: Path, right: Path) -> bool:
+    """Report whether two paths are equal or one is nested inside the other.
+
+    Returns:
+        True when the paths are equal or one is nested inside the other.
+    """
     return left == right or left in right.parents or right in left.parents
 
 
 def _validate_output_path(output_dir: Path, input_paths: Mapping[str, Path]) -> None:
+    """Reject output paths that overlap inputs or exist without a complete package."""
     canonical_output = output_dir.resolve()
     for label, input_path in input_paths.items():
         canonical_input = input_path.resolve()
@@ -806,6 +908,7 @@ def _validate_output_path(output_dir: Path, input_paths: Mapping[str, Path]) -> 
 
 
 def _install_staging(staging: Path, output_dir: Path) -> None:
+    """Atomically install a staged package, backing up and restoring on failure."""
     output_exists = os.path.lexists(output_dir)
     existing_marker = _verify_complete_output(output_dir) if output_exists else None
     if output_exists and existing_marker is None:
@@ -834,6 +937,7 @@ def _install_staging(staging: Path, output_dir: Path) -> None:
 
 
 def _cleanup_staging(staging: Path, *, completed: bool) -> None:
+    """Remove the staging directory, surfacing errors only when the run completed."""
     if not staging.exists():
         return
     try:

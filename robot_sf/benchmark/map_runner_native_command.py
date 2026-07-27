@@ -366,6 +366,7 @@ class _NoProgressDeadlockDetector:
         window_steps: int = _DEFAULT_DEADLOCK_WINDOW_STEPS,
         progress_threshold_m: float = _DEFAULT_DEADLOCK_PROGRESS_THRESHOLD_M,
     ) -> None:
+        """Initialize the stall detector window/threshold (validated) and reset state."""
         if window_steps < 1:
             raise ValueError("deadlock window_steps must be >= 1")
         if progress_threshold_m < 0.0:
@@ -525,6 +526,7 @@ class NativeCommandPlanner:
             self._start_process()
 
     def _start_process(self) -> None:
+        """Launch the native-command subprocess with pipes/env, stopping any prior one first."""
         self._stop_process()
         try:
             self._process = subprocess.Popen(
@@ -542,6 +544,7 @@ class NativeCommandPlanner:
             ) from exc
 
     def _stop_process(self) -> None:
+        """Terminate/kill the subprocess if running and clear the stdout buffer."""
         if self._process is not None:
             try:
                 self._process.stdin.close() if self._process.stdin else None
@@ -627,6 +630,11 @@ class NativeCommandPlanner:
     def _plan_per_episode(
         self, request: str
     ) -> tuple[list[str], float, float, dict[str, Any] | None]:
+        """Run one episode by spawning a fresh subprocess, sending the request, and parsing output.
+
+        Returns:
+            The command, linear/angular command, and geometry consumption.
+        """
         try:
             proc = subprocess.run(
                 self._spec.command,
@@ -669,6 +677,11 @@ class NativeCommandPlanner:
     def _plan_persistent(
         self, request: str
     ) -> tuple[list[str], float, float, dict[str, Any] | None]:
+        """Send one request to the long-lived subprocess and read its timed response line.
+
+        Returns:
+            The command, linear/angular command, and geometry consumption.
+        """
         if self._process is None or self._process.poll() is not None:
             self._start_process()
         assert self._process is not None
@@ -883,6 +896,7 @@ def build_native_command_policy(  # noqa: PLR0913
     _policy._planner_stats = planner.planner_stats  # type: ignore[attr-defined]
 
     def _bind_env(env: Any) -> None:
+        """Bind the environment to the native planner and surface its static geometry into metadata."""
         planner.bind_env(env, scenario_id=scenario_id)
         static_geometry = planner.run_state.get("static_geometry")
         if isinstance(static_geometry, dict):

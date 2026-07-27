@@ -128,16 +128,23 @@ def build_comparator_preflight(
 
 
 def _resolve(repo_root: Path, path: Path) -> Path:
+    """Return ``path`` unchanged when absolute, otherwise resolve it against ``repo_root``."""
     return path if path.is_absolute() else repo_root / path
 
 
 def _display_path(path: Path, repo_root: Path) -> str:
+    """Return a repo-relative display string for ``path`` when it lives under ``repo_root``."""
     if path.is_relative_to(repo_root):
         return str(path.relative_to(repo_root))
     return str(path)
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load a YAML mapping from ``path``, raising when the file is missing or not a mapping.
+
+    Returns:
+        The parsed YAML mapping loaded from ``path``.
+    """
     if not path.exists():
         raise FileNotFoundError(path)
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -153,6 +160,7 @@ def _shared_value(
     blockers: list[str],
     blocker: str,
 ) -> Any:
+    """Return the left config value, recording a blocker when the two configs disagree on ``key``."""
     left_value = left.get(key)
     right_value = right.get(key)
     if left_value != right_value:
@@ -161,6 +169,11 @@ def _shared_value(
 
 
 def _seed_list(config: dict[str, Any], blockers: list[str], label: str) -> list[int]:
+    """Extract the fixed-list seeds from a config's seed policy, recording blockers when invalid.
+
+    Returns:
+        The fixed-list seeds as integers, or an empty list when the policy is invalid.
+    """
     seed_policy = config.get("seed_policy")
     if not isinstance(seed_policy, dict):
         blockers.append(f"{label}_seed_policy_missing")
@@ -175,6 +188,7 @@ def _seed_list(config: dict[str, Any], blockers: list[str], label: str) -> list[
 
 
 def _single_planner(config: dict[str, Any], blockers: list[str], label: str) -> dict[str, Any]:
+    """Return the config's sole planner dict, recording a blocker unless exactly one is defined."""
     planners = config.get("planners")
     if not isinstance(planners, list) or len(planners) != 1 or not isinstance(planners[0], dict):
         blockers.append(f"{label}_must_define_one_planner")
@@ -188,6 +202,7 @@ def _require_planner_role(
     blockers: list[str],
     label: str,
 ) -> None:
+    """Record blockers unless the planner declares the expected issue #4013 role and boundary."""
     if planner.get("issue_4013_role") != expected_role:
         blockers.append(f"{label}_issue_4013_role_missing")
     if planner.get("claim_boundary") != DIAGNOSTIC_BOUNDARY:
@@ -195,6 +210,11 @@ def _require_planner_role(
 
 
 def _predictor_status(config: dict[str, Any], blockers: list[str]) -> tuple[str, str]:
+    """Classify the learned predictor source and fallback status, recording blockers as needed.
+
+    Returns:
+        A ``(source, status)`` tuple naming the predictor source and its fallback status.
+    """
     allow_untrained = bool(config.get("allow_untrained_smoke", False))
     fallback_to_cv = bool(config.get("fallback_to_constant_velocity", False))
     checkpoint_path = config.get("checkpoint_path")
@@ -215,6 +235,11 @@ def _claim_boundary(
     model_based_planner: dict[str, Any],
     blockers: list[str],
 ) -> str:
+    """Verify both planners declare the diagnostic claim boundary, recording a blocker otherwise.
+
+    Returns:
+        The diagnostic claim-boundary label shared by both planners.
+    """
     boundaries = {
         model_free_planner.get("claim_boundary"),
         model_based_planner.get("claim_boundary"),

@@ -27,18 +27,29 @@ from robot_sf.benchmark.pedestrian_forecast import (
 
 
 def _require_non_empty_str(name: str, value: object) -> str:
+    """Validate ``value`` is a non-empty string and return it stripped, else raise.
+
+    Returns:
+        The validated non-empty stripped string.
+    """
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} is required")
     return value.strip()
 
 
 def _require_feature_schema(feature_schema: dict[str, Any] | None) -> dict[str, Any]:
+    """Validate ``feature_schema`` is a non-empty dict and return a string-keyed copy.
+
+    Returns:
+        The validated string-keyed feature-schema dict.
+    """
     if not isinstance(feature_schema, dict) or not feature_schema:
         raise ValueError("feature_schema is required")
     return {str(key): value for key, value in feature_schema.items()}
 
 
 def _frame_at(trace: dict[str, Any], step_index: int) -> dict[str, Any]:
+    """Return the trace frame at ``step_index`` from its ``frames``/``steps`` list."""
     frames = trace.get("frames") or trace.get("steps")
     if not isinstance(frames, list):
         raise ValueError("trace must contain frames or steps")
@@ -51,6 +62,11 @@ def _frame_at(trace: dict[str, Any], step_index: int) -> dict[str, Any]:
 
 
 def _default_dt_s(trace: dict[str, Any]) -> float:
+    """Infer the timestep from the first two frames' ``time_s``, falling back to ``0.1``.
+
+    Returns:
+        The inferred timestep, defaulting to ``0.1``.
+    """
     frames = trace.get("frames") or trace.get("steps") or []
     if len(frames) < 2:
         return 0.1
@@ -83,6 +99,7 @@ def _forecast_timestamp(frame_payload: dict[str, Any]) -> str:
 
 
 def _stable_state_id(actor_id: object) -> int:
+    """Return a stable integer state id for an actor, hashing non-integer ids."""
     if isinstance(actor_id, bool):
         raise ValueError("actor id must not be bool")
     if isinstance(actor_id, (float, np.floating)):
@@ -96,11 +113,13 @@ def _stable_state_id(actor_id: object) -> int:
 
 
 def _actor_id_label(payload: dict[str, Any]) -> str:
+    """Return the non-empty actor id label from a trace actor ``payload``."""
     raw_id = payload.get("actor_id", payload.get("id"))
     return _require_non_empty_str("actor id", str(raw_id) if raw_id is not None else "")
 
 
 def _actor_available(payload: dict[str, Any]) -> bool:
+    """Return whether an actor is forecast-available (not masked/occluded)."""
     if payload.get("masked") is True or payload.get("occluded") is True:
         return False
     for key in ("forecast_available", "visible", "tracked"):
@@ -110,6 +129,7 @@ def _actor_available(payload: dict[str, Any]) -> bool:
 
 
 def _missing_reason(payload: dict[str, Any], default: str) -> str:
+    """Return the actor's missing reason, falling back to ``default`` when absent."""
     reason = payload.get("missing_reason") or payload.get("mask_reason")
     if not isinstance(reason, str) or not reason.strip():
         reason = default
@@ -117,6 +137,11 @@ def _missing_reason(payload: dict[str, Any], default: str) -> str:
 
 
 def _state_from_payload(payload: dict[str, Any]) -> PedestrianState:
+    """Build a :class:`PedestrianState` from a trace actor payload (normalizing its id).
+
+    Returns:
+        The pedestrian state built from the payload.
+    """
     normalized = dict(payload)
     normalized["id"] = _stable_state_id(payload.get("id", payload.get("actor_id")))
     return PedestrianState.from_trace(normalized)

@@ -82,6 +82,7 @@ def apply_search_space_update(config: Any, update: SearchSpaceUpdate) -> Any:
 
 
 def _validate_named_spec(name: str, spec: object) -> None:
+    """Validate a single named Optuna suggestion spec against the allowlisted types."""
     if not isinstance(spec, Mapping):
         raise ValueError(f"search_space.{name} must be a mapping.")
     spec_type = spec.get("type")
@@ -106,6 +107,11 @@ def _validate_named_spec(name: str, spec: object) -> None:
 
 
 def _suggest_value(trial: optuna.Trial, name: str, spec: object) -> object:
+    """Sample one hyperparameter value from a spec on an Optuna trial.
+
+    Returns:
+        The sampled hyperparameter value.
+    """
     if not isinstance(spec, Mapping):
         raise ValueError(f"search_space.{name} must be a mapping.")
     spec_type = str(spec["type"])
@@ -131,6 +137,11 @@ def _suggest_value(trial: optuna.Trial, name: str, spec: object) -> object:
 
 
 def _suggest_policy_net_arch(trial: optuna.Trial, spec: object) -> tuple[int, ...]:
+    """Sample an encoded policy-net-arch categorical choice and decode it to an int tuple.
+
+    Returns:
+        The decoded policy-net-arch integer tuple.
+    """
     if not isinstance(spec, Mapping):
         raise ValueError("search_space.policy_net_arch must be a mapping.")
     if spec.get("type") != "categorical":

@@ -25,7 +25,7 @@ def _write(root, relpath: str) -> None:
 
 
 def test_revival_decision_packet_is_fail_closed_on_real_checkout():
-    """The live checkout remains deferred; packet names blockers and allowed scope."""
+    """The live checkout remains deferred until a durable holdout dataset exists."""
     packet = build_revival_decision_packet(build_inventory_report(root=repo_root()))
 
     assert isinstance(packet, HeavyModelRevivalDecisionPacket)

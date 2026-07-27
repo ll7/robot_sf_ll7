@@ -1,0 +1,259 @@
+schema_version: robot_sf.scenario_matrix.v1
+defaults:
+  plausibility: &plausibility
+    status: unverified
+    verified_on: null
+    verified_by: null
+    method: null
+    notes: >
+      Temporary construction-corridor scenarios are ODD/context stress proxies.
+      They reuse existing 2D simulation primitives (SVG obstacle infrastructure)
+      to model temporary construction barriers. Not real-world reconstructions.
+      Requires runner integration and benchmark evidence before planner ranking.
+    metrics_updated_on: null
+    metrics:
+      min_distance: null
+      mean_distance: null
+      robot_ped_within_5m_frac: null
+      ped_force_mean: null
+      force_q95: null
+  seeds: &seeds [60551, 60552, 60553]
+
+scenarios:
+  - name: construction_corridor_narrowing
+    map_id: construction_corridor_narrowing
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    robot_config: {}
+    platform_semantics:
+      status: metadata_only
+      regions:
+        - id: construction_narrow_top
+          kind: hazard
+          shape: bbox
+          bounds: [8.0, 5.0, 12.0, 8.0]
+          note: >
+            Temporary construction barrier forming the top wall of the narrowed
+            corridor section (x=8..12, y=5..8).
+          metadata:
+            infrastructure_type: temporary_construction_barrier
+            barrier_role: corridor_narrowing
+            permanent: false
+            hazard_class: rigid_obstacle
+        - id: construction_narrow_bottom
+          kind: hazard
+          shape: bbox
+          bounds: [8.0, 12.0, 12.0, 15.0]
+          note: >
+            Temporary construction barrier forming the bottom wall of the narrowed
+            corridor section (x=8..12, y=12..15).
+          metadata:
+            infrastructure_type: temporary_construction_barrier
+            barrier_role: corridor_narrowing
+            permanent: false
+            hazard_class: rigid_obstacle
+    metadata:
+      archetype: construction_corridor_narrowing
+      label: construction corridor narrowing
+      scenario_family: temporary_construction_corridor
+      flow: uni
+      behavior: static_avoidance
+      density: zero
+      density_advisory: zero_baseline_route_spawn
+      spawn_mode: markers
+      primary_capability: static_avoidance
+      target_failure_mode: clearance_regression
+      purpose: >
+        Stress-test ODD/context handling for a corridor that narrows due to
+        temporary construction barriers. The wide corridor (width 10) narrows
+        to width 4 in the central section, forcing the robot to center itself
+        and traverse the constriction without wall contact.
+      expected_behavior: >
+        Approach the narrowing early, align with the constriction axis, pass
+        through once, and resume nominal corridor progress without scraping
+        either temporary barrier.
+      expected_pass_criteria: >
+        Reach the goal without obstacle contact and without repeated gap
+        re-approach or oscillation at the narrowing entrance.
+      failure_modes:
+        - obstacle collision
+        - passage collision
+        - opening oscillation
+        - refusal to enter viable gap
+        - excessive path elongation
+      determinism: deterministic
+      not_real_world_event_model: true
+      odd_stress_proxy: ammv_construction_corridor
+      odd_stressor_class: temporary_infrastructure
+      expected_failure_modes:
+        - collision
+        - near_miss
+        - stuck
+        - path_efficiency
+        - fallback
+      authoring:
+        status: draft
+        source_issue: https://github.com/ll7/robot_sf_ll7/issues/6055
+        benchmark_evidence: false
+        claim_boundary: >
+          Temporary construction-corridor ODD stress proxy. Not a real-world
+          event reconstruction. Uses existing 2D simulation primitives to stress
+          planner behavior under temporary infrastructure constraints.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: construction_corridor_detour
+    map_id: construction_corridor_detour
+    simulation_config:
+      max_episode_steps: 450
+      ped_density: 0.0
+    robot_config: {}
+    platform_semantics:
+      status: metadata_only
+      regions:
+        - id: construction_barrier_center
+          kind: hazard
+          shape: bbox
+          bounds: [8.0, 7.0, 12.0, 13.0]
+          note: >
+            Central temporary construction barrier blocking the direct corridor
+            path (x=8..12, y=7..13). Forces the robot to detour through the
+            narrow gap above the barrier (y=4..7).
+          metadata:
+            infrastructure_type: temporary_construction_barrier
+            barrier_role: path_blockage
+            permanent: false
+            hazard_class: rigid_obstacle
+    metadata:
+      archetype: construction_corridor_detour
+      label: construction corridor detour
+      scenario_family: temporary_construction_corridor
+      flow: uni
+      behavior: static_avoidance
+      density: zero
+      density_advisory: zero_baseline_route_spawn
+      spawn_mode: markers
+      primary_capability: static_avoidance
+      target_failure_mode: oscillation
+      purpose: >
+        Stress-test ODD/context handling for a corridor with a central temporary
+        construction barrier that blocks the direct path. The robot must detect
+        the blockage, plan a detour through the narrow gap above the barrier,
+        and resume nominal progress.
+      expected_behavior: >
+        Detect the blocked direct path, commit to a single detour side, navigate
+        the narrow gap, and continue to the goal without side-switch dithering.
+      expected_pass_criteria: >
+        Reach the goal after one committed detour without collision, deadlock,
+        or repeated path-side switching.
+      failure_modes:
+        - obstacle collision
+        - detour deadlock
+        - side-switch oscillation
+        - excessive path elongation
+        - stuck in narrow gap
+      determinism: deterministic
+      not_real_world_event_model: true
+      odd_stress_proxy: ammv_construction_corridor
+      odd_stressor_class: temporary_infrastructure
+      expected_failure_modes:
+        - collision
+        - near_miss
+        - stuck
+        - path_efficiency
+        - fallback
+      authoring:
+        status: draft
+        source_issue: https://github.com/ll7/robot_sf_ll7/issues/6055
+        benchmark_evidence: false
+        claim_boundary: >
+          Temporary construction-corridor ODD stress proxy. Not a real-world
+          event reconstruction. Uses existing 2D simulation primitives to stress
+          planner behavior under temporary infrastructure constraints.
+      plausibility: *plausibility
+    seeds: *seeds
+
+  - name: construction_corridor_zigzag
+    map_id: construction_corridor_zigzag
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.0
+    robot_config: {}
+    platform_semantics:
+      status: metadata_only
+      regions:
+        - id: construction_zigzag_1
+          kind: hazard
+          shape: bbox
+          bounds: [6.0, 4.0, 10.0, 10.0]
+          note: >
+            First temporary zigzag construction barrier extending from the top
+            wall (x=6..10, y=4..10). Forces the robot to descend into the lower
+            corridor gap.
+          metadata:
+            infrastructure_type: temporary_construction_barrier
+            barrier_role: zigzag_deflection
+            permanent: false
+            hazard_class: rigid_obstacle
+        - id: construction_zigzag_2
+          kind: hazard
+          shape: bbox
+          bounds: [10.0, 10.0, 14.0, 16.0]
+          note: >
+            Second temporary zigzag construction barrier extending from the
+            bottom wall (x=10..14, y=10..16). Forces the robot to ascend back
+            into the upper corridor gap.
+          metadata:
+            infrastructure_type: temporary_construction_barrier
+            barrier_role: zigzag_deflection
+            permanent: false
+            hazard_class: rigid_obstacle
+    metadata:
+      archetype: construction_corridor_zigzag
+      label: construction corridor zigzag
+      scenario_family: temporary_construction_corridor
+      flow: uni
+      behavior: static_avoidance
+      density: zero
+      density_advisory: zero_baseline_route_spawn
+      spawn_mode: markers
+      primary_capability: static_avoidance
+      target_failure_mode: local_minima
+      purpose: >
+        Stress-test ODD/context handling for a corridor with zigzag temporary
+        construction barriers that force a winding path. The robot must
+        navigate a serpentine route through alternating upper and lower
+        corridor gaps without getting trapped in local minima.
+      expected_behavior: >
+        Follow the zigzag corridor axis, commit to each deflection, and
+        traverse the full serpentine path without oscillation or deadlock.
+      expected_pass_criteria: >
+        Reach the goal after completing the zigzag detour without collision,
+        local-minimum deadlock, or repeated gap re-approach.
+      failure_modes:
+        - obstacle collision
+        - local minimum deadlock
+        - zigzag oscillation
+        - refusal to commit to deflection
+        - excessive path elongation
+      determinism: deterministic
+      not_real_world_event_model: true
+      odd_stress_proxy: ammv_construction_corridor
+      odd_stressor_class: temporary_infrastructure
+      expected_failure_modes:
+        - collision
+        - near_miss
+        - stuck
+        - path_efficiency
+        - fallback
+      authoring:
+        status: draft
+        source_issue: https://github.com/ll7/robot_sf_ll7/issues/6055
+        benchmark_evidence: false
+        claim_boundary: >
+          Temporary construction-corridor ODD stress proxy. Not a real-world
+          event reconstruction. Uses existing 2D simulation primitives to stress
+          planner behavior under temporary infrastructure constraints.
+      plausibility: *plausibility
+    seeds: *seeds

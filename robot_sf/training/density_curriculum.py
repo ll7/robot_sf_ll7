@@ -147,6 +147,11 @@ def curriculum_metadata(schedule: DensityCurriculumSchedule) -> dict[str, Any]:
 
 
 def _parse_stage(raw: object, index: int) -> DensityCurriculumStage:
+    """Parse a raw config mapping into a validated density-curriculum stage.
+
+    Returns:
+        The parsed :class:`DensityCurriculumStage`.
+    """
     if not isinstance(raw, Mapping):
         raise ValueError("density_curriculum.stages entries must be mappings.")
     stage_id = str(raw.get("id") or "").strip()
@@ -190,6 +195,7 @@ def _validate_stages(
     *,
     enforce_nondecreasing_density: bool,
 ) -> None:
+    """Validate unique ids, increasing step bounds, and non-decreasing density across stages."""
     seen_ids: set[str] = set()
     previous_until: int | None = None
     previous_density: float | None = None
@@ -215,6 +221,11 @@ def _validate_stages(
 
 
 def _optional_float(value: object, field_name: str) -> float | None:
+    """Coerce an optional config value to a finite non-negative float.
+
+    Returns:
+        The parsed float, or ``None`` when the value is absent.
+    """
     if value is None:
         return None
     parsed = float(value)
@@ -224,6 +235,11 @@ def _optional_float(value: object, field_name: str) -> float | None:
 
 
 def _optional_int(value: object, field_name: str) -> int | None:
+    """Coerce an optional config value to a non-negative int.
+
+    Returns:
+        The parsed int, or ``None`` when the value is absent.
+    """
     if value is None:
         return None
     parsed = int(value)
@@ -233,6 +249,11 @@ def _optional_int(value: object, field_name: str) -> int | None:
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
+    """Coerce an optional scenario filter list into a tuple of strings.
+
+    Returns:
+        Tuple of scenario filter strings (empty when the value is absent).
+    """
     if value is None:
         return ()
     if not isinstance(value, list | tuple):
@@ -241,4 +262,5 @@ def _string_tuple(value: object) -> tuple[str, ...]:
 
 
 def _deep_copy_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a deep copy of a mapping as a plain dict."""
     return copy.deepcopy(dict(value))

@@ -187,6 +187,11 @@ def write_sensitivity_report(summary: Mapping[str, Any], output_dir: str | Path)
 
 
 def _normalize_matrix_model(model: str) -> str:
+    """Normalize a matrix model name, preserving the literal ``unknown`` value.
+
+    Returns:
+        The normalized pedestrian-model name, or ``unknown`` when the input is ``unknown``.
+    """
     if str(model).strip() == "unknown":
         return "unknown"
     return normalize_pedestrian_model(str(model))
@@ -200,6 +205,11 @@ def _summarize_cell(
     planner_key: str,
     algo: str,
 ) -> dict[str, Any]:
+    """Aggregate episode records for one development/evaluation model pair into a summary cell.
+
+    Returns:
+        A summary-cell dict with episode counts, success and collision incidence, and status.
+    """
     episodes = len(records)
     fallback_degraded_rows = sum(1 for record in records if _record_is_fallback_or_degraded(record))
     if episodes == 0:
@@ -230,6 +240,7 @@ def _summarize_cell(
 
 
 def _record_success(record: Mapping[str, Any]) -> bool:
+    """Return whether a record indicates success via its outcome, metrics, or status field."""
     outcome = record.get("outcome")
     if isinstance(outcome, Mapping) and "success" in outcome:
         return bool(outcome["success"])
@@ -240,6 +251,7 @@ def _record_success(record: Mapping[str, Any]) -> bool:
 
 
 def _record_collision(record: Mapping[str, Any]) -> bool:
+    """Return whether a record indicates a collision via outcome, metrics, or termination reason."""
     outcome = record.get("outcome")
     if isinstance(outcome, Mapping) and "collision" in outcome:
         return bool(outcome["collision"])
@@ -250,6 +262,7 @@ def _record_collision(record: Mapping[str, Any]) -> bool:
 
 
 def _record_is_fallback_or_degraded(record: Mapping[str, Any]) -> bool:
+    """Return whether a record's pedestrian-model or algorithm metadata is fallback or degraded."""
     pedestrian_model = record.get("pedestrian_model")
     if isinstance(pedestrian_model, Mapping):
         status = pedestrian_model.get("fallback_degraded_status")
@@ -259,6 +272,7 @@ def _record_is_fallback_or_degraded(record: Mapping[str, Any]) -> bool:
 
 
 def _fallback_degraded_status(metadata: Mapping[str, Any] | None) -> str:
+    """Return the first fallback or degraded status found in metadata, otherwise ``native``."""
     if not isinstance(metadata, Mapping):
         return "native"
     candidates = [
@@ -282,6 +296,11 @@ def _fallback_degraded_status(metadata: Mapping[str, Any] | None) -> str:
 
 
 def _render_readme(summary: Mapping[str, Any]) -> str:
+    """Render the Markdown README, including the per-cell sensitivity result table.
+
+    Returns:
+        The rendered Markdown README text for the sensitivity smoke report.
+    """
     rows = [
         "| Development model | Evaluation model | Episodes | Success incidence | "
         "Collision incidence | Status |",
@@ -311,6 +330,11 @@ def _render_readme(summary: Mapping[str, Any]) -> str:
 
 
 def _format_rate(value: Any) -> str:
+    """Format a rate to six decimal places, returning ``NA`` when the value is ``None``.
+
+    Returns:
+        The rate formatted to six decimal places, or ``NA`` when ``value`` is ``None``.
+    """
     if value is None:
         return "NA"
     return f"{float(value):.6f}"

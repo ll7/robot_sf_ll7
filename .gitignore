@@ -94,3 +94,9 @@ robot_sf/_version.py
 # them) has repeatedly stalled the delivery loop (2026-07-20/21).
 .ll7_task_*
 RESULT.md
+
+# mutmut workspace (issue #5508 / #6122): mutmut 3.x hardcodes its mutants/
+# directory (no config redirect). The scheduled mutation-testing lane
+# (.github/workflows/mutation-testing.yml) regenerates it on each run, so it is
+# never committed.
+mutants/

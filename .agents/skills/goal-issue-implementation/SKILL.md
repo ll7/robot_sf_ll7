@@ -576,10 +576,13 @@ Each child skill or worker may fail. Handle failures per scenario:
     `blocked` instead of `pr_opened`.
 
 - `gh-pr-opener` failure:
-  - If the PR already exists for the branch, update the existing PR body with
-    `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`
-    instead of creating a duplicate. Do not use `gh pr edit --body-file` while its GraphQL query
-    requests retired Projects Classic fields.
+   - If the PR already exists for the branch, update the existing PR body with
+     `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`
+     instead of creating a duplicate. Do not use `gh pr edit --body-file` while its GraphQL query
+     requests retired Projects Classic fields.
+     For label operations, use
+     `uv run python scripts/dev/gh_pr_label_rest.py add <number> --label <name> --repo ll7/robot_sf_ll7`
+     or the remove variant instead of `gh pr edit --add-label` / `gh issue edit --label`.
   - If push fails, record the error and mark the issue blocked.
 
 - `gh-issue-creator` or `issue-splitter` failure:

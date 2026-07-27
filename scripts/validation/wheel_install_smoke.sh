@@ -6,6 +6,7 @@ REPORT_FILE="output/validation/wheel_install_smoke_report.json"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+VALIDATION_DIR="${REPO_ROOT}/output/validation"
 WHEEL_INPUT="${1:-${WHEEL_GLOB:-}}"
 WHEEL_PATH="$(python3 - "${REPO_ROOT}" "${WHEEL_INPUT}" <<'PY'
 import glob
@@ -37,6 +38,7 @@ if [[ ! -f "${WHEEL_PATH}" ]]; then
   exit 1
 fi
 
+mkdir -p "${VALIDATION_DIR}"
 WORK_DIR="$(mktemp -d)"
 cleanup() {
   rm -rf "${WORK_DIR}"
@@ -52,7 +54,6 @@ python3 -m venv "${VENV_DIR}"
 echo "Installing wheel with dependency resolution in clean temp venv: ${WHEEL_PATH}"
 "${PIP_BIN}" install --no-cache-dir "${WHEEL_PATH}"
 
-mkdir -p "${REPO_ROOT}/output/validation"
 python_check_output="$(
   cd /tmp && PYTHONPATH= PYTHONNOUSERSITE=1 "${PYTHON_BIN}" <<'PY'
 import json
@@ -101,18 +102,120 @@ if [[ -n "${EXTRAS_SMOKE}" ]]; then
     extra_venv="${WORK_DIR}/extra-${extra}-venv"
     extra_pip="${extra_venv}/bin/pip"
     extra_python="${extra_venv}/bin/python"
+    install_log="${VALIDATION_DIR}/wheel-extra-${extra}-install.log"
+    probe_log="${VALIDATION_DIR}/wheel-extra-${extra}-probe.log"
     python3 -m venv "${extra_venv}"
     echo "Installing optional extra independently: ${extra}"
-    "${extra_pip}" install --no-cache-dir "${WHEEL_PATH}[${extra}]"
-    cd /tmp && PYTHONPATH= PYTHONNOUSERSITE=1 "${extra_python}" - "${extra}" >>"${extras_status_file}" <<'PY'
+    if ! "${extra_pip}" install --no-cache-dir "${WHEEL_PATH}[${extra}]" \
+      >"${install_log}" 2>&1; then
+      echo "Optional extra installation failed: ${extra}"
+      tail -n 200 "${install_log}"
+      python3 - "${REPO_ROOT}/${REPORT_FILE}" "${WHEEL_PATH}" "${extra}" \
+        "${install_log}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+report_path, wheel, extra, install_log = sys.argv[1:]
+log_path = Path(install_log)
+log_tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-200:]
+Path(report_path).write_text(
+    json.dumps(
+        {
+            "wheel": wheel,
+            "status": "failed",
+            "stage": "extra_install",
+            "extra": extra,
+            "install_log": str(log_path),
+            "install_log_tail": log_tail,
+        },
+        indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+      exit 1
+    fi
+    if ! (
+      cd /tmp
+      PYTHONPATH= PYTHONNOUSERSITE=1 "${extra_python}" - "${extra}" >>"${extras_status_file}" <<'PY'
+import importlib
 import json
 import sys
 
 import robot_sf
 
 extra = sys.argv[1]
-print(json.dumps({"extra": extra, "status": "passed", "module_file": robot_sf.__file__}))
+feature_modules = {
+    "progress": ["tqdm"],
+    "analysis": ["seaborn"],
+    "analytics": ["duckdb", "pyarrow"],
+    "viz": [
+        "pygame",
+        "matplotlib",
+        "PIL",
+        "moviepy",
+        "seaborn",
+        "robot_sf.render.sim_view",
+    ],
+    "maps": [
+        "osmnx",
+        "geopandas",
+        "pyproj",
+        "robot_sf.nav.osm_map_builder",
+    ],
+    "benchmark": [
+        "pandas",
+        "scipy",
+        "robot_sf.benchmark.aggregate",
+    ],
+    "training": [
+        "stable_baselines3",
+        "torch",
+        "sklearn",
+        "optuna",
+        "tensorboard",
+        "wandb",
+        "optuna_dashboard",
+    ],
+    # The all-extra install is itself the dependency-resolution assertion. Probe
+    # representative modules from every new feature group so a self-referential
+    # meta-extra cannot pass while silently omitting one of the split stacks.
+    "all": [
+        "pygame",
+        "matplotlib",
+        "osmnx",
+        "geopandas",
+        "pandas",
+        "scipy",
+        "stable_baselines3",
+        "torch",
+        "robot_sf.render.sim_view",
+        "robot_sf.nav.osm_map_builder",
+        "robot_sf.benchmark.aggregate",
+    ],
+}
+modules = feature_modules.get(extra, [])
+for module_name in modules:
+    importlib.import_module(module_name)
+
+print(
+    json.dumps(
+        {
+            "extra": extra,
+            "status": "passed",
+            "module_file": robot_sf.__file__,
+            "feature_modules": modules,
+        }
+    )
+)
 PY
+    ) 2>"${probe_log}"; then
+      echo "Optional extra feature probe failed: ${extra}"
+      cat "${probe_log}"
+      exit 1
+    fi
   done
   extras_status_json="$("${PYTHON_BIN}" - "${extras_status_file}" <<'PY'
 import json

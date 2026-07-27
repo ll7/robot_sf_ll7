@@ -219,6 +219,7 @@ def smoke_plan(  # noqa: C901, PLR0915
         duration: float,
         result: ompl_base.State,
     ) -> None:
+        """Propagate the unicycle state forward under ``(v, omega)`` for ``duration`` seconds."""
         x = state[0]
         y = state[1]
         theta = state[2]
@@ -242,6 +243,7 @@ def smoke_plan(  # noqa: C901, PLR0915
             buffered_polygons = [poly.buffer(cfg.robot_radius) for poly in obstacle_polygons]
 
             def is_state_valid(state: ompl_base.State) -> bool:
+                """Return ``False`` when the position lies inside any buffered obstacle polygon."""
                 point = sg.Point(state[0], state[1])
                 for poly in buffered_polygons:
                     if poly.contains(point):

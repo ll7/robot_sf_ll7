@@ -1102,6 +1102,11 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
 
 
 def _episode_request_key(scenario_id: str, planner: str, seed: int) -> str:
+    """Build a stable ``scenario|planner|seed`` key identifying one episode request.
+
+    Returns:
+        The stable request key string.
+    """
     return f"scenario_id={scenario_id}|planner={planner}|seed={seed}"
 
 
@@ -1125,6 +1130,11 @@ def _canonical_outcome(value: Any) -> str | None:
 
 
 def _normalize_outcome(value: Any) -> str | None:
+    """Normalize a mapping or text outcome value into a canonical outcome label.
+
+    Returns:
+        The canonical outcome label, or ``None``.
+    """
     if isinstance(value, Mapping):
         for key in ("collision_event", "timeout_event", "route_complete", "success"):
             if value.get(key) is True:
@@ -1139,6 +1149,7 @@ def _normalize_outcome(value: Any) -> str | None:
 
 
 def _mapping_outcome(row: Mapping[str, Any]) -> str | None:
+    """Return the canonical outcome for ``row`` by probing its common outcome keys."""
     for key in ("outcome", "episode_outcome", "status"):
         if key in row:
             outcome = _normalize_outcome(row[key])

@@ -230,6 +230,11 @@ def _validate_structure(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
+    """Resolve relative trace-manifest paths from ``repo_root`` and normalize absolute paths directly.
+
+    Returns:
+        Resolved absolute trace-manifest path.
+    """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
@@ -279,6 +284,7 @@ def _check_artifact_uri(
 
 
 def _check_split_ids(split_ids: Any, blockers: list[str]) -> None:
+    """Record a blocker unless ``split_ids`` lists every required split."""
     if not isinstance(split_ids, list) or not split_ids:
         blockers.append("split_ids must be a non-empty list")
         return
@@ -289,6 +295,7 @@ def _check_split_ids(split_ids: Any, blockers: list[str]) -> None:
 
 
 def _check_required_fields(fields: Any, blockers: list[str]) -> None:
+    """Record a blocker unless ``required_episode_fields`` lists every required field."""
     required = ("scenario_id", "seed", "candidate_id", "termination_reason", "labels")
     if not isinstance(fields, list) or not fields:
         blockers.append("required_episode_fields must be a non-empty list")
@@ -300,6 +307,7 @@ def _check_required_fields(fields: Any, blockers: list[str]) -> None:
 
 
 def _check_labels(label_availability: dict[str, Any], blockers: list[str]) -> None:
+    """Record a blocker unless every required label name is marked present."""
     for label in _REQUIRED_LABEL_NAMES:
         state = label_availability.get(label)
         if state != _LABEL_PRESENT:
@@ -307,6 +315,11 @@ def _check_labels(label_availability: dict[str, Any], blockers: list[str]) -> No
 
 
 def _normalized_labels(label_availability: dict[str, Any]) -> dict[str, Any]:
+    """Project label availability down to the required label names.
+
+    Returns:
+        Mapping of required label names to their availability state.
+    """
     return {label: label_availability.get(label) for label in _REQUIRED_LABEL_NAMES}
 
 

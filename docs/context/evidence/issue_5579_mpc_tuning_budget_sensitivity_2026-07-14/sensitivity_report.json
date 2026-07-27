@@ -1,0 +1,1706 @@
+{
+  "benchmark_evidence": false,
+  "candidate_count": 20,
+  "candidate_rows": [
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "incumbent",
+      "config_sha256_16": "46b444dadd7ac51b",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {},
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_low",
+      "config_sha256_16": "b6564cac941f005b",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 0.75
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_high",
+      "config_sha256_16": "c853d802643e7ed4",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 1.2
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "horizon_low",
+      "config_sha256_16": "7862809cba258722",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "horizon_high",
+      "config_sha256_16": "e8cf12cfee051182",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "margin_low",
+      "config_sha256_16": "b7012356c5032230",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "margin_high",
+      "config_sha256_16": "44aa047e3f7afb93",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_low_horizon_low",
+      "config_sha256_16": "0809ebc00eb102aa",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 0.75
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_low_margin_low",
+      "config_sha256_16": "7027f7c4156776c4",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_high_horizon_high",
+      "config_sha256_16": "8d27ee0d8628c9d3",
+      "eligible_episodes": 5,
+      "episodes": 9,
+      "excluded_episodes": 4,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 1.2
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_high_margin_high",
+      "config_sha256_16": "6c5bdafbad6aa159",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "horizon_low_margin_low",
+      "config_sha256_16": "6087903cb93d8488",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "horizon_high_margin_high",
+      "config_sha256_16": "01cacffc878373b2",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_high_horizon_low_margin_low",
+      "config_sha256_16": "59b4d8e5a4982a09",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_low_horizon_high_margin_high",
+      "config_sha256_16": "a6484993630df32f",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_high_horizon_high_margin_low",
+      "config_sha256_16": "7681bd5f611bb47f",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_low_horizon_low_margin_high",
+      "config_sha256_16": "a98579ff9a5f1136",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_high_horizon_low_margin_high",
+      "config_sha256_16": "e65da271c722e2e8",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_low_horizon_high_margin_low",
+      "config_sha256_16": "f3c74a37858b70da",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc",
+      "candidate_id": "speed_high_horizon_high_margin_high",
+      "config_sha256_16": "8c87f22fa8274aae",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "incumbent",
+      "config_sha256_16": "9ed055d33550360c",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {},
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_low",
+      "config_sha256_16": "64b2617f49017284",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 0.75
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_high",
+      "config_sha256_16": "f8673a3263c59965",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 1.2
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "horizon_low",
+      "config_sha256_16": "61b7ee20d7e4c2cc",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "horizon_high",
+      "config_sha256_16": "a0bad0b7ba1e1f1d",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "margin_low",
+      "config_sha256_16": "729a095fdeecfdfd",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "margin_high",
+      "config_sha256_16": "21777f46e27c36e8",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_low_horizon_low",
+      "config_sha256_16": "984b667edb28bbcc",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 0.75
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_low_margin_low",
+      "config_sha256_16": "d4ed5ce543d0b955",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_high_horizon_high",
+      "config_sha256_16": "9e28582af9d9b28b",
+      "eligible_episodes": 5,
+      "episodes": 9,
+      "excluded_episodes": 4,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 1.2
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_high_margin_high",
+      "config_sha256_16": "2cce6d758a4c6461",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "horizon_low_margin_low",
+      "config_sha256_16": "9c74cd4cbd8cd3e6",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "horizon_high_margin_high",
+      "config_sha256_16": "5dba62ed038afebb",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_high_horizon_low_margin_low",
+      "config_sha256_16": "51e35eed53356787",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_low_horizon_high_margin_high",
+      "config_sha256_16": "023e9eed6496b27a",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_high_horizon_high_margin_low",
+      "config_sha256_16": "d14ae81cb1a12389",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_low_horizon_low_margin_high",
+      "config_sha256_16": "6ac1b8af25f5a445",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_high_horizon_low_margin_high",
+      "config_sha256_16": "4b644482e9f35445",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 4,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_low_horizon_high_margin_low",
+      "config_sha256_16": "e17fc298e80868a7",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 0.75,
+        "pedestrian_safety_margin": 0.25
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "candidate_id": "speed_high_horizon_high_margin_high",
+      "config_sha256_16": "1511cb5e8f34cf1b",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "solver_failure"
+      ],
+      "overrides": {
+        "horizon_steps": 8,
+        "max_linear_speed": 1.2,
+        "pedestrian_safety_margin": 0.45
+      },
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": true
+    },
+    {
+      "arm_key": "scenario_adaptive_hybrid_orca_v1",
+      "candidate_id": "incumbent",
+      "config_sha256_16": "09ef9f882d5f1368",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "fallback"
+      ],
+      "overrides": {},
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": false
+    },
+    {
+      "arm_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "candidate_id": "incumbent",
+      "config_sha256_16": "85a63cdefa262f13",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "fallback"
+      ],
+      "overrides": {},
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": false
+    },
+    {
+      "arm_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "candidate_id": "incumbent",
+      "config_sha256_16": "be7bd0d4a8e8ae3e",
+      "eligible_episodes": 7,
+      "episodes": 9,
+      "excluded_episodes": 2,
+      "exclusion_reasons": [
+        "fallback"
+      ],
+      "overrides": {},
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": false
+    },
+    {
+      "arm_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "candidate_id": "incumbent",
+      "config_sha256_16": "89c91c5280267fd9",
+      "eligible_episodes": 6,
+      "episodes": 9,
+      "excluded_episodes": 3,
+      "exclusion_reasons": [
+        "fallback"
+      ],
+      "overrides": {},
+      "status": "excluded",
+      "success_rate": 0.0,
+      "successes": 0,
+      "target": false
+    }
+  ],
+  "claim_boundary": "Diagnostic bounded sensitivity contract. A completed run can describe the tested fixed scenario slice and the observed best-found configuration, but it cannot establish a benchmark ranking, structural planner superiority, or a paper/dissertation claim. Fallback, degraded, failed, and unavailable rows are excluded from the success comparison and keep the report blocked.",
+  "config_path": "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml",
+  "config_sha256": "ceca5c8d28b2cba13869c73dc2cae22bed95b329c28bc6e25f2ff44dd99ab513",
+  "eligible_episode_rows": 295,
+  "evidence_tier": "diagnostic-only",
+  "excluded_episode_rows": 101,
+  "fallback_degraded_exclusion": "Rows are eligible only with explicit native/adapter/mixed execution, native/adapter readiness, available status, benchmark_success=true, and planner_runtime_status=eligible; missing, fallback, solver-failure, or malformed runtime diagnostics block the read.",
+  "incumbent_summary": [
+    {
+      "arm_key": "scenario_adaptive_hybrid_orca_v1",
+      "eligible_episodes": 7,
+      "excluded_episodes": 2,
+      "status": "excluded",
+      "success_rate": 0.0
+    },
+    {
+      "arm_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "eligible_episodes": 7,
+      "excluded_episodes": 2,
+      "status": "excluded",
+      "success_rate": 0.0
+    },
+    {
+      "arm_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "eligible_episodes": 7,
+      "excluded_episodes": 2,
+      "status": "excluded",
+      "success_rate": 0.0
+    },
+    {
+      "arm_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "eligible_episodes": 6,
+      "excluded_episodes": 3,
+      "status": "excluded",
+      "success_rate": 0.0
+    }
+  ],
+  "issue": 5579,
+  "normalized_episode_rows": "external-private/not-promoted",
+  "raw_artifact_root": "external-private/not-promoted",
+  "read": {
+    "decision": "blocked",
+    "detail": "Complete native/adapter rows are required before the pre-registered read."
+  },
+  "reproduction_command": "uv run python scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py --config configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml --out-dir <external-private-run-dir>",
+  "run_commit": "b58316cbcd43eba7b9d7f61c323c149aae230fba",
+  "scenario_scope": {
+    "dt": 0.1,
+    "horizon": 100,
+    "scenario_ids": [
+      "classic_bottleneck_medium",
+      "classic_cross_trap_high",
+      "francis2023_intersection_wait"
+    ],
+    "seeds": [
+      111,
+      112,
+      113
+    ],
+    "source_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "workers": 1
+  },
+  "schema_version": "issue_5579_mpc_tuning_sensitivity_report.v1",
+  "status": "blocked",
+  "study_id": "issue_5579_mpc_tuning_budget_sensitivity_v1",
+  "target_arm_count": 2,
+  "target_summary": [
+    {
+      "arm_key": "prediction_mpc",
+      "best_candidate": {
+        "arm_key": "prediction_mpc",
+        "candidate_id": "horizon_high",
+        "config_sha256_16": "e8cf12cfee051182",
+        "eligible_episodes": 7,
+        "episodes": 9,
+        "excluded_episodes": 2,
+        "exclusion_reasons": [
+          "solver_failure"
+        ],
+        "overrides": {
+          "horizon_steps": 8
+        },
+        "status": "excluded",
+        "success_rate": 0.0,
+        "successes": 0,
+        "target": true
+      },
+      "candidate_count": 20,
+      "candidates": [
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "incumbent",
+          "config_sha256_16": "46b444dadd7ac51b",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {},
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_low",
+          "config_sha256_16": "b6564cac941f005b",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 0.75
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_high",
+          "config_sha256_16": "c853d802643e7ed4",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 1.2
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "horizon_low",
+          "config_sha256_16": "7862809cba258722",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "horizon_high",
+          "config_sha256_16": "e8cf12cfee051182",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "margin_low",
+          "config_sha256_16": "b7012356c5032230",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "margin_high",
+          "config_sha256_16": "44aa047e3f7afb93",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_low_horizon_low",
+          "config_sha256_16": "0809ebc00eb102aa",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 0.75
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_low_margin_low",
+          "config_sha256_16": "7027f7c4156776c4",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_high_horizon_high",
+          "config_sha256_16": "8d27ee0d8628c9d3",
+          "eligible_episodes": 5,
+          "episodes": 9,
+          "excluded_episodes": 4,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 1.2
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_high_margin_high",
+          "config_sha256_16": "6c5bdafbad6aa159",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "horizon_low_margin_low",
+          "config_sha256_16": "6087903cb93d8488",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "horizon_high_margin_high",
+          "config_sha256_16": "01cacffc878373b2",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_high_horizon_low_margin_low",
+          "config_sha256_16": "59b4d8e5a4982a09",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_low_horizon_high_margin_high",
+          "config_sha256_16": "a6484993630df32f",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_high_horizon_high_margin_low",
+          "config_sha256_16": "7681bd5f611bb47f",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_low_horizon_low_margin_high",
+          "config_sha256_16": "a98579ff9a5f1136",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_high_horizon_low_margin_high",
+          "config_sha256_16": "e65da271c722e2e8",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_low_horizon_high_margin_low",
+          "config_sha256_16": "f3c74a37858b70da",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc",
+          "candidate_id": "speed_high_horizon_high_margin_high",
+          "config_sha256_16": "8c87f22fa8274aae",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        }
+      ]
+    },
+    {
+      "arm_key": "prediction_mpc_cbf",
+      "best_candidate": {
+        "arm_key": "prediction_mpc_cbf",
+        "candidate_id": "horizon_high",
+        "config_sha256_16": "a0bad0b7ba1e1f1d",
+        "eligible_episodes": 7,
+        "episodes": 9,
+        "excluded_episodes": 2,
+        "exclusion_reasons": [
+          "solver_failure"
+        ],
+        "overrides": {
+          "horizon_steps": 8
+        },
+        "status": "excluded",
+        "success_rate": 0.0,
+        "successes": 0,
+        "target": true
+      },
+      "candidate_count": 20,
+      "candidates": [
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "incumbent",
+          "config_sha256_16": "9ed055d33550360c",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {},
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_low",
+          "config_sha256_16": "64b2617f49017284",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 0.75
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_high",
+          "config_sha256_16": "f8673a3263c59965",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 1.2
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "horizon_low",
+          "config_sha256_16": "61b7ee20d7e4c2cc",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "horizon_high",
+          "config_sha256_16": "a0bad0b7ba1e1f1d",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "margin_low",
+          "config_sha256_16": "729a095fdeecfdfd",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "margin_high",
+          "config_sha256_16": "21777f46e27c36e8",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_low_horizon_low",
+          "config_sha256_16": "984b667edb28bbcc",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 0.75
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_low_margin_low",
+          "config_sha256_16": "d4ed5ce543d0b955",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_high_horizon_high",
+          "config_sha256_16": "9e28582af9d9b28b",
+          "eligible_episodes": 5,
+          "episodes": 9,
+          "excluded_episodes": 4,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 1.2
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_high_margin_high",
+          "config_sha256_16": "2cce6d758a4c6461",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "horizon_low_margin_low",
+          "config_sha256_16": "9c74cd4cbd8cd3e6",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "horizon_high_margin_high",
+          "config_sha256_16": "5dba62ed038afebb",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_high_horizon_low_margin_low",
+          "config_sha256_16": "51e35eed53356787",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_low_horizon_high_margin_high",
+          "config_sha256_16": "023e9eed6496b27a",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_high_horizon_high_margin_low",
+          "config_sha256_16": "d14ae81cb1a12389",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_low_horizon_low_margin_high",
+          "config_sha256_16": "6ac1b8af25f5a445",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_high_horizon_low_margin_high",
+          "config_sha256_16": "4b644482e9f35445",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 4,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_low_horizon_high_margin_low",
+          "config_sha256_16": "e17fc298e80868a7",
+          "eligible_episodes": 7,
+          "episodes": 9,
+          "excluded_episodes": 2,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 0.75,
+            "pedestrian_safety_margin": 0.25
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        },
+        {
+          "arm_key": "prediction_mpc_cbf",
+          "candidate_id": "speed_high_horizon_high_margin_high",
+          "config_sha256_16": "1511cb5e8f34cf1b",
+          "eligible_episodes": 6,
+          "episodes": 9,
+          "excluded_episodes": 3,
+          "exclusion_reasons": [
+            "solver_failure"
+          ],
+          "overrides": {
+            "horizon_steps": 8,
+            "max_linear_speed": 1.2,
+            "pedestrian_safety_margin": 0.45
+          },
+          "status": "excluded",
+          "success_rate": 0.0,
+          "successes": 0,
+          "target": true
+        }
+      ]
+    }
+  ],
+  "total_episode_rows": 396,
+  "promotion": {
+    "execution_started_commit": "b58316cbcd43eba7b9d7f61c323c149aae230fba",
+    "report_generated_commit": "4d4a4dbfff035b370afad4e68cb757f47acf43a4",
+    "source_report_sha256": "f1c12644563d7c67d4d144cf695d907e0f0fec5463e166186a24e6472e99fd48",
+    "normalized_rows_sha256": "aaeb4aef47e24d2c79e0ba4ae4c6d6df55afee45afa4d03ce442f4a14b6b3a2f",
+    "raw_retention": "external private artifacts retained for seven days; not promoted"
+  }
+}

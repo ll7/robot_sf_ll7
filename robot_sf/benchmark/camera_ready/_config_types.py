@@ -112,6 +112,13 @@ class PlannerSpec:
     # block; the manifest synthesizes a best-effort backfill-pending entry so the asymmetry is
     # always visible. Required (fail-closed) when ``tuning_effort_enforcement == "error"``.
     tuning: TuningSpec | None = None
+    # Per-arm planner-agnostic safety-wrapper binding (issue #3501 / #4830). ``None`` means the
+    # arm did not declare a wrapper; the campaign-level ``CampaignConfig.safety_wrapper`` default
+    # applies when set, otherwise the wrapper stays off (the runtime default). When provided it is
+    # a raw mapping consumed by ``runtime_config_from_mapping`` (enabled/arm_key/predeclared
+    # thresholds), so the factorial ``planner x {wrapper_off, wrapper_on}`` cells are encoded as
+    # distinct arms rather than a separate factor axis.
+    safety_wrapper: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -186,3 +193,9 @@ class CampaignConfig:
     # ``error`` also makes implicit learned checkpoints (such as SA-CADRL's registry default)
     # fail closed during preflight and disables planner fallback for campaign execution.
     checkpoint_provenance_enforcement: str = "off"
+    # Campaign-level planner-agnostic safety-wrapper default (issue #3501 / #4830). Applied to an
+    # arm only when the arm's own ``PlannerSpec.safety_wrapper`` is unset, so a campaign can pin a
+    # wrapper default while individual arms override it (the factorial off/on pairing is expressed
+    # as per-arm overrides). Raw mapping consumed by ``runtime_config_from_mapping``; ``None`` keeps
+    # the wrapper off.
+    safety_wrapper: dict[str, Any] | None = None

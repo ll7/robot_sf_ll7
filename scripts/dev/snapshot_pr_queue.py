@@ -19,6 +19,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_name,
     _rollup_status,
 )
+from scripts.dev.pr_loop_policy import GATE_VERDICT_RE
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ACTIVE_LIMIT = 20
@@ -390,6 +391,52 @@ def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
     return "review_attention"
 
 
+def _parse_explicit_verdict(item: Any) -> str | None:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        verdict = str(item.get("verdict", "")).lower()
+        accepted_flag = item.get("accepted")
+        sha = str(item.get("sha") or item.get("head_sha") or "")
+        if sha and (verdict == "accepted" or accepted_flag is True):
+            return f"gate-verdict: accepted @ {sha}"
+    return None
+
+
+def _extract_trailers_from_bodies(items: Any) -> list[str]:
+    trailers: list[str] = []
+    if not isinstance(items, list):
+        return trailers
+    for entry in items:
+        if isinstance(entry, dict):
+            body = entry.get("body")
+            if isinstance(body, str) and body:
+                for match in GATE_VERDICT_RE.finditer(body):
+                    trailers.append(f"gate-verdict: accepted @ {match.group(1)}")
+    return trailers
+
+
+def _extract_gate_verdicts(pr: dict[str, Any]) -> list[str]:
+    """Extract structured gate-verdict trailers from raw comment and review bodies."""
+    verdicts: list[str] = []
+
+    existing_list = pr.get("gate_verdicts")
+    if isinstance(existing_list, list):
+        for item in existing_list:
+            parsed = _parse_explicit_verdict(item)
+            if parsed:
+                verdicts.append(parsed)
+
+    parsed_single = _parse_explicit_verdict(pr.get("gate_verdict"))
+    if parsed_single:
+        verdicts.append(parsed_single)
+
+    verdicts.extend(_extract_trailers_from_bodies(pr.get("reviews")))
+    verdicts.extend(_extract_trailers_from_bodies(pr.get("comments")))
+
+    return list(dict.fromkeys(verdicts))
+
+
 def _pr_payload_from_dict(
     pr: dict[str, Any],
     *,
@@ -400,7 +447,7 @@ def _pr_payload_from_dict(
     is_draft = bool(pr.get("isDraft"))
     labels = _labels(pr)
     checks = _checks(pr)
-    head_sha = str(pr.get("headRefOid", ""))
+    head_sha = str(pr.get("headRefOid", "") or pr.get("head_sha", ""))
     mergeable = str(pr.get("mergeable", "unknown"))
     preflight = _preflight(
         checks_overall=str(checks.get("overall", "")),
@@ -410,6 +457,7 @@ def _pr_payload_from_dict(
         mergeable=mergeable,
     )
     reviews = _reviews(pr)
+    gate_verdicts = _extract_gate_verdicts(pr)
     pr_payload = {
         "number": pr.get("number", default_number),
         "status": "ok",
@@ -423,10 +471,12 @@ def _pr_payload_from_dict(
         "mergeable": mergeable,
         "checks": checks,
         "reviews": reviews,
+        "gate_verdicts": gate_verdicts,
         "review_snapshot": _review_snapshot(pr),
         "comment_snapshot": _comment_snapshot(pr),
         "preflight": preflight,
     }
+
     next_action = _next_action(
         is_draft=is_draft,
         labels=labels,

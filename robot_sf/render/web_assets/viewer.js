@@ -81,6 +81,7 @@ function buildStaticMap(map) {
   addZones(map.robot_goal_zones, 0x22c55e);
   addZones(map.ped_spawn_zones, 0xa78bfa);
   addZones(map.ped_goal_zones, 0xfbbf24);
+  addZones(map.ped_crowded_zones, 0xb3b3b3);
 }
 
 function addZones(zones, color) {
@@ -236,6 +237,7 @@ function animate() {
     drawFrame((currentFrame + 1) % payload.frames.length);
   }
   renderer.render(scene, camera);
+  document.documentElement.dataset.traceViewerRendered = "true";
 }
 
 function makeAgent(color, radius) {

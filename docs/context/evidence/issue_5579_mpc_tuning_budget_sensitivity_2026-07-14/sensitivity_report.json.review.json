@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_report.json",
+  "artifact_sha256": "c7f04c9781279a942a7f70353f67768506f503a718fd9e30dfaceed97ceeeb83",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

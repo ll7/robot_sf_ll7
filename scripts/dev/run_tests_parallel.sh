@@ -68,6 +68,7 @@ order_mode="${PYTEST_ORDER_MODE:-failed-first}"
 worker_override="${PYTEST_NUM_WORKERS:-}"
 lane_mode="${ROBOT_SF_TEST_LANE:-all}"
 core_test_paths=(
+  fast-pysf/tests
   tests/adversarial
   tests/analysis_workbench
   tests/common
@@ -230,6 +231,21 @@ case "$serial_fallback" in
     ;;
 esac
 
+if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
+  repo_root="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  pytest_temproot_owner_pid="$$"
+  pytest_temproot_helper="$repo_root/tests/support/pytest_temproot.py"
+  export PYTEST_DEBUG_TEMPROOT="$(
+    python3 "$pytest_temproot_helper" prepare \
+      --project-root "$repo_root" --pid "$pytest_temproot_owner_pid"
+  )"
+  cleanup_pytest_temproot() {
+    python3 "$pytest_temproot_helper" cleanup \
+      --project-root "$repo_root" --pid "$pytest_temproot_owner_pid"
+  }
+  trap cleanup_pytest_temproot EXIT
+fi
+
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
 
 # pytest-split sharding: when CI provisions multiple shards, run a disjoint
@@ -310,21 +326,43 @@ for pytest_arg in "${pytest_args[@]}"; do
   fi
 done
 
-# The fixed core list keeps routine readiness fast, but must not hide a newly
-# changed top-level core test that is absent from that list.
+# The fixed core list keeps routine readiness fast, but must not hide any changed
+# test under tests/ or fast-pysf/tests/ that is absent from that list.
 changed_top_level_core_test_paths=()
-if [[ "$lane_mode" == "core" ]]; then
-  changed_test_base_ref="${BASE_REF:-origin/main}"
-  if git rev-parse --verify --quiet "${changed_test_base_ref}^{commit}" >/dev/null 2>&1; then
-    while IFS= read -r changed_test_path; do
-      if [[ -f "$changed_test_path" ]] && ! is_optional_test_path "$changed_test_path"; then
-        changed_top_level_core_test_paths+=("$changed_test_path")
+changed_test_base_ref="${BASE_REF:-origin/main}"
+if git rev-parse --verify --quiet "${changed_test_base_ref}^{commit}" >/dev/null 2>&1; then
+  while IFS= read -r changed_test_path; do
+    [[ -z "$changed_test_path" ]] && continue
+    if [[ -f "$changed_test_path" && "$changed_test_path" == *.py ]]; then
+      test_filename="$(basename "$changed_test_path")"
+      if [[ "$test_filename" == test_*.py || "$test_filename" == *_test.py ]]; then
+        if is_optional_test_path "$changed_test_path"; then
+          if [[ "$lane_mode" == "optional" ]]; then
+            is_covered=0
+            for opt_path in "${optional_test_paths[@]}"; do
+              if [[ "$changed_test_path" == "$opt_path" || "$changed_test_path" == "$opt_path"/* ]]; then
+                is_covered=1
+                break
+              fi
+            done
+            if [[ "$is_covered" -eq 0 ]]; then
+              echo "Error: Changed test path '$changed_test_path' is classified for lane 'optional' but is omitted from collection targets." >&2
+              echo "Expected lane: optional" >&2
+              echo "Actual collection decision: omitted" >&2
+              echo "Remediation: Add '$changed_test_path' to tests/support/optional_test_allowlist.txt." >&2
+              exit 2
+            fi
+          fi
+        else
+          if [[ "$lane_mode" == "core" ]]; then
+            changed_top_level_core_test_paths+=("$changed_test_path")
+          fi
+        fi
       fi
-    done < <(
-      git diff --name-only --diff-filter=ACMR "${changed_test_base_ref}...HEAD" -- \
-        ':(top,glob)tests/test_*.py'
-    )
-  fi
+    fi
+  done < <(
+    git diff --name-only --diff-filter=ACMR "${changed_test_base_ref}...HEAD" -- tests fast-pysf/tests
+  )
 fi
 
 append_unique_pytest_arg() {

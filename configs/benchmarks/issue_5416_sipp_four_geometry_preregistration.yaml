@@ -34,17 +34,17 @@ scenario_contract:
       family: doorway
       geometry_role: doorway
       source_path: configs/scenarios/archetypes/classic_doorway.yaml
-      certification_caveat: stress_only_knife_edge
+      certification_caveat: excluded_geometrically_infeasible_post_pr_6172
     - scenario_id: classic_station_platform_medium
       family: platform
       geometry_role: station_platform
       source_path: configs/scenarios/archetypes/classic_station_platform.yaml
-      certification_caveat: eligible_dynamic_interaction
+      certification_caveat: excluded_geometrically_infeasible_post_pr_6172
     - scenario_id: classic_merging_low
       family: merging
       geometry_role: merging
       source_path: configs/scenarios/archetypes/classic_merging.yaml
-      certification_caveat: eligible_long_detour
+      certification_caveat: excluded_geometrically_infeasible_post_pr_6172
   smoke_seed: 111
   result_producing_seeds: [111, 112, 113, 114, 115]
   horizon_steps: 500
@@ -58,10 +58,11 @@ scenario_contract:
     checker_command: uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json
     allowed_eligibility: [eligible, stress_only]
     excluded_row_action: visible_exclusion_and_no_attribution
-    platform_and_merging_caveat: >-
-      If current geometry/solvability checks exclude either row, retain the row and
-      exclusion reason but do not attribute its failure to a planner; use a reviewed
-      repaired/certified row only if one already exists.
+    post_certification_caveat: >-
+      As of PR #6172 the path-swept-envelope certifier correctly classifies
+      classic_doorway_low, classic_station_platform_medium, and classic_merging_low
+      as geometrically_infeasible/excluded. They remain in the matrix as visible
+      excluded rows; no planner is attributed for these geometries.
 
 planner_roster:
   selection_policy: >-

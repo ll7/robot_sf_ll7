@@ -448,7 +448,10 @@ When working issue batches or Project #5 updates:
 - prefer REST endpoints for simple label/comment publication writes even before quota is low when
   `gh` routes through brittle GraphQL surfaces; PR #2520 hit a classic Projects deprecation error
   via `gh pr edit --add-label merge-ready` while the REST issue-label endpoint worked immediately,
-- for labels, use `gh api repos/:owner/:repo/issues/<number>/labels -f labels[]=<label>` to add
+- for labels, use the reusable helper
+  `uv run python scripts/dev/gh_pr_label_rest.py add <number> --label <name> --repo ll7/robot_sf_ll7`
+  or the remove variant, which wraps the same REST endpoints as
+  `gh api repos/:owner/:repo/issues/<number>/labels -f labels[]=<label>` to add
   and `gh api -X DELETE repos/:owner/:repo/issues/<number>/labels/<label>` to remove,
 - for comment creation or patching, use body files or JSON payloads such as
   `gh api repos/:owner/:repo/issues/<number>/comments -F body=@body.md` and

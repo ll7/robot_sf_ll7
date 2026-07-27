@@ -43,12 +43,12 @@ statistical variance is expected.
   `main` and `workflow_dispatch`.
 - Full performance smoke (`scripts/validation/performance_smoke_test.py`) runs
   only in strict mode (`main` or `workflow_dispatch`).
-- Reproducibility check (`scripts/benchmark_repro_check.py`) is triggered only
-  on `workflow_dispatch`.
+- Reproducibility check (`scripts/benchmark_repro_check.py`) runs on pull
+  requests and `workflow_dispatch`.
 
 ### 3. Benchmark-Facing Lane (Campaign Evidence)
 
-**CI job**: `workflow_dispatch` reproducibility check (optional)  
+**CI job**: Reproducibility-check provides diagnostic-only evidence
 **Local equivalent**: Config-first benchmark campaigns using
 `scripts/tools/run_benchmark_release.py` or `robot_sf_bench run` with committed
 matrix YAML.
@@ -60,17 +60,25 @@ matrix YAML.
   and [Issue #832 Paper-Matrix Extended Seed Schedule](issue_832_paper_matrix_extended_seed_schedule.md)
   for the current frozen camera-ready artifact contract.
 
-### Manual Reproducibility Diagnostic (Issue #5990, 2026-07-19)
+### Manual Reproducibility Diagnostic (Issue #5990, 2026-07-19; reconciled per #6249)
 
-`reproducibility-check` is a `workflow_dispatch`-only job with
-`continue-on-error: true`. It is excluded from the required `ci` aggregate job,
-so its result cannot become a pull-request gate. The diagnostic still fails
-closed: `scripts/benchmark_repro_check.py` exits non-zero when the canonical
-`simple_policy` aggregate group or required metric/statistic shape is absent,
-writes `output/benchmarks/reproducibility_check.json` before failure exit, and
-then uploads that report with `if: always()`. Failure reports use
+`reproducibility-check` runs on `pull_request` and `workflow_dispatch`. It has
+no `continue-on-error`, so a failing check is a visible failure (red X) on
+every run. The job is intentionally excluded from the `ci` aggregate job's
+`needs` list, so its failure cannot make that aggregate job fail. On 2026-07-24,
+`main` has no GitHub branch-protection required-status-check configuration, so
+`reproducibility-check` is not presently merge-blocking. If branch protection
+is added or changed, maintainers must explicitly decide whether this standalone
+check becomes required and update this policy; do not infer that from the
+aggregate-job dependency list.
+
+The diagnostic still fails closed: `scripts/benchmark_repro_check.py` exits
+non-zero when the canonical `simple_policy` aggregate group or required
+metric/statistic shape is absent, writes
+`output/benchmarks/reproducibility_check.json` before failure exit, and then
+uploads that report with `if: always()`. Failure reports use
 `benchmark_repro_check.report.v1` and include `status`, `stage`, and `error`
-details, so an optional-lane failure remains visible without becoming a gate.
+details, so a fail-closed failure remains visible without blocking the PR.
 
 The exact current local command is:
 

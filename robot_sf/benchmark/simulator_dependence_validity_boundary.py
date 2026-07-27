@@ -140,10 +140,12 @@ def write_simulator_dependence_decision(packet: Mapping[str, Any], path: str | P
 
 
 def _mapping_or_empty(value: object) -> Mapping[str, Any]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping."""
     return value if isinstance(value, Mapping) else {}
 
 
 def _append_rank_reasons(rank_stability: Mapping[str, Any], no_claim_reasons: list[str]) -> None:
+    """Append no-claim reasons for non-identifiable, unstable, or flipping rank stability."""
     if rank_stability.get("rank_identifiable") is not True:
         reason = rank_stability.get("rank_identifiability_reason")
         no_claim_reasons.append(
@@ -163,6 +165,7 @@ def _append_axis_coverage_reasons(
     missing_inputs: list[str],
     no_claim_reasons: list[str],
 ) -> None:
+    """Record missing-input or no-claim reasons when expected axes are absent from the study."""
     if not expected_axes:
         return
     axes = rank_stability.get("axes")
@@ -185,6 +188,7 @@ def _append_manifest_reasons(
     missing_inputs: list[str],
     no_claim_reasons: list[str],
 ) -> None:
+    """Record manifest check results and a no-claim reason when the manifest check fails."""
     if manifest_check is None:
         return
     if not isinstance(manifest_check, Mapping):
@@ -199,6 +203,7 @@ def _append_manifest_reasons(
 def _append_boundary_reasons(
     study_summary: Mapping[str, Any], boundary_violations: list[str]
 ) -> None:
+    """Record a violation for each required claim-boundary phrase missing from the summary."""
     boundary_value = study_summary.get("claim_boundary")
     boundary = str(boundary_value) if boundary_value is not None else ""
     for phrase in REQUIRED_CLAIM_BOUNDARY_PHRASES:
@@ -207,6 +212,7 @@ def _append_boundary_reasons(
 
 
 def _decision_claim_boundary(decision: str) -> str:
+    """Return the claim-boundary statement matching the given decision outcome."""
     if decision == DECISION_SUPPORTED:
         return (
             "Simulator-dependence validity-boundary claim is checker-supported for the supplied "

@@ -227,6 +227,39 @@ def test_global_route_probe_targets_next_waypoint_after_nearest() -> None:
     )
 
 
+def test_global_route_probe_preserves_origin_in_nested_route_layout() -> None:
+    """The unpadded structured route layout keeps a valid origin waypoint."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(global_route_probe_enabled=True))
+    observation = _observation(
+        robot=(1.0, 0.0),
+        route_waypoints=[(1.0, 0.0), (0.0, 0.0), (2.0, 0.0)],
+    )
+
+    target = planner._route_waypoint_target(
+        robot_pos=np.asarray([1.0, 0.0]),
+        observation=observation,
+    )
+
+    np.testing.assert_allclose(target, [0.0, 0.0])
+
+
+def test_global_route_probe_preserves_origin_before_padded_suffix() -> None:
+    """The padded sensor layout trims only its trailing zero suffix."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(global_route_probe_enabled=True))
+    observation = _observation()
+    observation["route_waypoints"] = np.asarray(
+        [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [0.0, 0.0]],
+        dtype=float,
+    )
+
+    target = planner._route_waypoint_target(
+        robot_pos=np.zeros(2),
+        observation=observation,
+    )
+
+    np.testing.assert_allclose(target, [0.0, 0.0])
+
+
 def test_global_route_probe_ignores_nan_waypoints() -> None:
     """Probe gracefully ignores NaN waypoint data and reports no activation."""
     config = DWAPlannerConfig(global_route_probe_enabled=True)
@@ -265,3 +298,37 @@ def test_global_route_probe_deterministic() -> None:
     first = planner.plan(observation)
     second = planner.plan(observation)
     assert first == second
+
+
+def test_global_route_probe_config_enables_route_waypoint_env_override() -> None:
+    """The probe config carries env_overrides.include_route_waypoints for the sensor."""
+    config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
+    probe = yaml.safe_load((config_dir / "dwa_global_route_probe.yaml").read_text(encoding="utf-8"))
+    env_overrides = probe.get("env_overrides")
+    assert isinstance(env_overrides, dict)
+    assert env_overrides.get("include_route_waypoints") is True
+
+
+def test_global_route_probe_env_override_propagates_to_sim_config() -> None:
+    """apply_policy_env_observation_overrides propagates include_route_waypoints."""
+    from robot_sf.benchmark.map_runner_env import apply_policy_env_observation_overrides
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
+    config = RobotSimulationConfig()
+    assert config.include_route_waypoints is False
+
+    apply_policy_env_observation_overrides(
+        config,
+        {"env_overrides": {"include_route_waypoints": True}},
+    )
+    assert config.include_route_waypoints is True
+
+
+def test_global_route_probe_env_override_absent_leaves_default() -> None:
+    """Without env_overrides, include_route_waypoints stays False."""
+    from robot_sf.benchmark.map_runner_env import apply_policy_env_observation_overrides
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
+    config = RobotSimulationConfig()
+    apply_policy_env_observation_overrides(config, {})
+    assert config.include_route_waypoints is False

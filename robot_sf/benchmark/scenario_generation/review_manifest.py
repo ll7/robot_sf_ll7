@@ -53,6 +53,11 @@ def validate_review_manifest(catalog_path: Path, review_path: Path) -> dict[str,
 
 
 def _entries_by_id(raw_entries: object, label: str) -> dict[str, Mapping[str, Any]]:
+    """Return entries indexed by ``scenario_id``.
+
+    Validates catalog entries when ``label`` is ``catalog`` and rejects duplicate ids.
+    """
+
     if not isinstance(raw_entries, list):
         raise ValueError(f"{label} entries must be a list")
     entries_by_id: dict[str, Mapping[str, Any]] = {}
@@ -71,6 +76,12 @@ def _entries_by_id(raw_entries: object, label: str) -> dict[str, Mapping[str, An
 def _validate_deduplication(
     catalog_by_id: Mapping[str, Mapping[str, Any]], threshold_value: object
 ) -> None:
+    """Re-run deduplication at the declared threshold.
+
+    Confirms the review catalog keeps exactly its declared entries and retains no
+    dropped duplicates.
+    """
+
     threshold = _finite_nonnegative(threshold_value)
     kept, dropped = deduplicate_catalog_entries(
         list(catalog_by_id.values()), distance_threshold=threshold
@@ -84,6 +95,8 @@ def _validate_deduplication(
 
 
 def _validate_catalog_header(catalog: Mapping[str, Any]) -> None:
+    """Validate the catalog header: the generated-catalog schema version and non-evidence flag."""
+
     if catalog.get("schema_version") != "generated-scenario-catalog.v1":
         raise ValueError("catalog.schema_version must be generated-scenario-catalog.v1")
     metadata = catalog.get("metadata")
@@ -92,6 +105,8 @@ def _validate_catalog_header(catalog: Mapping[str, Any]) -> None:
 
 
 def _validate_manifest_header(manifest: Mapping[str, Any]) -> None:
+    """Validate the review manifest header: schema version and the generated-hypothesis claim boundary."""
+
     if manifest.get("schema_version") != REVIEW_MANIFEST_SCHEMA_VERSION:
         raise ValueError(f"review manifest schema_version must be {REVIEW_MANIFEST_SCHEMA_VERSION}")
     if manifest.get("claim_boundary") != _CLAIM_BOUNDARY:
@@ -101,6 +116,11 @@ def _validate_manifest_header(manifest: Mapping[str, Any]) -> None:
 def _validate_review_entry(
     entry: Mapping[str, Any], review: Mapping[str, Any], catalog_dir: Path
 ) -> None:
+    """Validate one catalog entry against its review record.
+
+    Checks provenance, checklist, materialization, and criticality consistency.
+    """
+
     verdict, reason = _review_verdict_and_reason(entry, review)
     _validate_provenance_review(entry, verdict, reason)
     _validate_checklist(entry, review, verdict)
@@ -111,6 +131,11 @@ def _validate_review_entry(
 def _review_verdict_and_reason(
     entry: Mapping[str, Any], review: Mapping[str, Any]
 ) -> tuple[str, str]:
+    """Return a validated review's verdict and reason.
+
+    Accepts only ``certified``, ``rejected``, or ``needs-fix`` with a non-empty reason.
+    """
+
     verdict = review.get("verdict")
     reason = review.get("reason")
     if verdict not in {"certified", "rejected", "needs-fix"}:
@@ -121,6 +146,8 @@ def _review_verdict_and_reason(
 
 
 def _validate_provenance_review(entry: Mapping[str, Any], verdict: str, reason: str) -> None:
+    """Confirm the entry is marked reviewed and its provenance records the same verdict and reason."""
+
     provenance = entry["provenance"]
     if provenance.get("reviewed") is not True:
         raise ValueError(f"catalog entry is not marked reviewed: {_scenario_id(entry)}")
@@ -129,6 +156,11 @@ def _validate_provenance_review(entry: Mapping[str, Any], verdict: str, reason: 
 
 
 def _validate_checklist(entry: Mapping[str, Any], review: Mapping[str, Any], verdict: str) -> None:
+    """Validate the review checklist.
+
+    Requires every declared field and that certified reviews have all items checked.
+    """
+
     checklist = review.get("checklist")
     if not isinstance(checklist, Mapping) or set(checklist) != set(_CHECKLIST_FIELDS):
         raise ValueError(f"review checklist is incomplete for {_scenario_id(entry)}")
@@ -139,6 +171,12 @@ def _validate_checklist(entry: Mapping[str, Any], review: Mapping[str, Any], ver
 def _validate_materialized_scenario(
     entry: Mapping[str, Any], review: Mapping[str, Any], catalog_dir: Path
 ) -> None:
+    """Load and validate the materialized scenario referenced by a review.
+
+    Confirms a matching scenario id, preserved generated-only governance, and
+    replay validation status.
+    """
+
     candidate_path = review.get("materialized_scenario")
     if not isinstance(candidate_path, str) or not candidate_path.strip():
         raise ValueError(f"materialized scenario path is required for {_scenario_id(entry)}")
@@ -171,6 +209,8 @@ def _validate_materialized_scenario(
 
 
 def _validate_criticality(entry: Mapping[str, Any]) -> None:
+    """Confirm the recorded minimum clearance matches the closest approach in the critical frame."""
+
     observed_at = float(entry["criticality"]["observed_at_s"])
     frame = next(
         (
@@ -192,6 +232,8 @@ def _validate_criticality(entry: Mapping[str, Any]) -> None:
 
 
 def _load_mapping(path: Path) -> Mapping[str, Any]:
+    """Return the YAML mapping loaded from ``path``, raising if it is not a mapping."""
+
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(payload, Mapping):
         raise ValueError(f"{path} must contain a mapping")
@@ -199,6 +241,8 @@ def _load_mapping(path: Path) -> Mapping[str, Any]:
 
 
 def _scenario_id(payload: Mapping[str, Any]) -> str:
+    """Return a payload's non-empty ``scenario_id``, raising if it is absent."""
+
     value = payload.get("scenario_id")
     if not isinstance(value, str) or not value:
         raise ValueError("scenario_id must be a non-empty string")
@@ -206,6 +250,8 @@ def _scenario_id(payload: Mapping[str, Any]) -> str:
 
 
 def _finite_nonnegative(value: object) -> float:
+    """Return ``value`` as a finite non-negative number, raising otherwise."""
+
     if not isinstance(value, int | float) or isinstance(value, bool) or not math.isfinite(value):
         raise ValueError("deduplication_distance_threshold must be a finite number")
     if value < 0.0:

@@ -11,6 +11,11 @@ not a published tag, GitHub Release, or Zenodo version.
 - Frozen manifest: `docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml`
 - Frozen-manifest SHA-256: `84af86ca08b060132ed3d9f40d95254c8c73cc5096229623e173524d4ffe9177`
 
+The bundle's provenance distinguishes the commits that produced or registered
+the candidate evidence from the later draft-assembly commit. The latter only
+packages already frozen references and checksums; it did not run a campaign or
+change a metric or result. See `provenance` in `release_manifest.yaml`.
+
 ## Included Candidates
 
 | Candidate | Issue | Classification | Acceptance checker | Claim boundary |
@@ -47,5 +52,6 @@ release preflight, including the frozen-manifest checksum and claim audit.
 ## Files
 
 - `release_manifest.yaml` — candidate dispositions, claim boundaries, provenance, and residual risks.
-- `SHA256SUMS` — SHA-256 checksums for every file in this bundle directory.
+- `SHA256SUMS` — SHA-256 checksums for every other file in this bundle directory;
+  the outer release checksum manifest covers this checksum file and its review marker.
 - `candidates/` — one checksum-verified reference manifest for each included candidate.

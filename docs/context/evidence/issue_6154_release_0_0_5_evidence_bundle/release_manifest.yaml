@@ -15,6 +15,27 @@ frozen_manifest:
   sha256: 84af86ca08b060132ed3d9f40d95254c8c73cc5096229623e173524d4ffe9177
   evaluated_against_origin_main: e27a5a9900e9f83f1b1bbf2501de76bc71eed400
 
+provenance:
+  publication_assembly:
+    commit: 0d212c4f1e0bb0c280f09adbaf9050bd5b026c91
+    role: >-
+      Draft assembly baseline that finalized the tracked bundle's checksum and review-sidecar
+      coverage. It did not publish a tag, GitHub Release, or Zenodo version.
+  execution_commits:
+    - candidate_id: candidate_5034
+      commit: 484d3fd05a0e29da9e267fa18f817a1fe101de70
+      role: Source commit recorded by the frozen manifest for the candidate's metric evidence.
+    - candidate_id: candidate_5305
+      commit: ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f
+      role: Source commit recorded by the frozen manifest for the certified archive.
+    - candidate_id: candidate_5592
+      commit: 96776636e797b16baa2be833ad957dd071a3b815
+      role: Source commit recorded by the frozen manifest for the preregistration packet.
+  reconciliation: >-
+    Execution and draft-assembly commits differ because this release only packages frozen,
+    checksummed references. No campaign was run and no candidate metric, result, or claim
+    boundary changed during assembly.
+
 summary:
   included_candidates: 3
   excluded_candidates: 3

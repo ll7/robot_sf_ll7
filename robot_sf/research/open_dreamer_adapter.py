@@ -60,6 +60,8 @@ The adapter fails closed (raises :class:`OpenDreamerAdapterError`) when:
 * a stored action is not a finite 2D continuous ``(linear, angular)`` command, does not use the
   recorder's canonical ``linear_velocity``/``angular_velocity`` mapping, or falls outside the
   caller-supplied physical action bounds (incompatible action space);
+* metadata or terminal flags would require coercion, or source provenance already owns the
+  adapter's reserved provenance key;
 * a stored split does not equal the canonical deterministic assignment for its
   ``(scenario_id, seed)`` key, or the dataset leaks that key across more than one split.
 
@@ -360,16 +362,16 @@ class StructuredEpisode:
                 }
                 for step in self.observations
             ],
-            "raw_observations": list(self.raw_observations),
+            "raw_observations": _json_safe_value(self.raw_observations, "raw_observations"),
             "actions": [list(step.raw) for step in self.actions],
-            "raw_actions": list(self.raw_actions),
+            "raw_actions": _json_safe_value(self.raw_actions, "raw_actions"),
             "rewards": list(self.rewards),
             "return_to_go": list(self.return_to_go),
             "terminated": list(self.terminated),
             "truncated": list(self.truncated),
-            "pedestrians": list(self.pedestrians),
-            "robot_states": list(self.robot_states),
-            "provenance": dict(self.provenance),
+            "pedestrians": _json_safe_value(self.pedestrians, "pedestrians"),
+            "robot_states": _json_safe_value(self.robot_states, "robot_states"),
+            "provenance": _json_safe_value(self.provenance, "provenance"),
         }
 
 
@@ -552,6 +554,7 @@ def adapt_episode(
         raise OpenDreamerAdapterError(
             f"upstream RLTrajectoryEpisode.v1 validation failed: {exc}"
         ) from exc
+    _validate_episode_metadata_and_flags(episode)
     if episode.split not in SPLIT_NAMES:
         raise OpenDreamerAdapterError(f"split must be one of {SPLIT_NAMES}, got {episode.split!r}")
     expected_split = canonical_split(episode.scenario_id, episode.seed)
@@ -600,8 +603,8 @@ def adapt_episode(
         raw_actions=tuple(episode.actions),
         rewards=rewards,
         return_to_go=return_to_go,
-        terminated=tuple(bool(value) for value in episode.terminated),
-        truncated=tuple(bool(value) for value in episode.truncated),
+        terminated=tuple(episode.terminated),
+        truncated=tuple(episode.truncated),
         pedestrians=tuple(episode.pedestrians),
         robot_states=tuple(episode.robot_states),
         provenance=provenance,
@@ -666,7 +669,7 @@ def _extract_drive_state(robot_state: Any) -> np.ndarray:
     if position is None or heading is None or velocity is None:
         raise OpenDreamerAdapterError(
             "robot_states entry must expose position, heading, and velocity; "
-            f"got keys {sorted(robot_state.keys())}"
+            f"got keys {sorted(str(key) for key in robot_state)}"
         )
     components = [
         *_as_finite_float_pair(position, "position"),
@@ -860,6 +863,76 @@ def _finite_floats(values: Sequence[Any], field_name: str) -> tuple[float, ...]:
     return tuple(out)
 
 
+def _validate_episode_metadata_and_flags(episode: RLTrajectoryEpisode) -> None:
+    """Validate v1 metadata and terminal flags that the upstream validator leaves permissive.
+
+    The stable v1 validator owns episode alignment and terminal-marker placement, but programmatic
+    producers can still construct dataclass instances with coercible metadata or non-boolean flags.
+    The adapter must reject those values instead of changing their meaning while adapting them.
+
+    Args:
+        episode: Episode already checked by :func:`validate_rl_trajectory_episode`.
+
+    Raises:
+        OpenDreamerAdapterError: If identifiers are not non-empty strings, the seed is not a
+            non-boolean integer, provenance is not a mapping, or terminal flags are not booleans.
+    """
+    for field_name in ("dataset_id", "episode_id", "scenario_id", "source_policy_id", "split"):
+        value = getattr(episode, field_name)
+        if not isinstance(value, str) or not value:
+            raise OpenDreamerAdapterError(f"{field_name} must be a non-empty string, got {value!r}")
+    if isinstance(episode.seed, bool) or not isinstance(episode.seed, int):
+        raise OpenDreamerAdapterError(f"seed must be a non-boolean integer, got {episode.seed!r}")
+    if not isinstance(episode.provenance, Mapping):
+        raise OpenDreamerAdapterError(
+            f"provenance must be a mapping, got {type(episode.provenance).__name__}"
+        )
+    for field_name in ("terminated", "truncated"):
+        for step_index, value in enumerate(getattr(episode, field_name)):
+            if not isinstance(value, bool):
+                raise OpenDreamerAdapterError(
+                    f"{field_name}[{step_index}] must be a boolean, got {value!r}"
+                )
+
+
+def _json_safe_value(value: Any, field_name: str) -> Any:
+    """Return a recursively JSON-safe copy of an accepted raw v1 value.
+
+    Args:
+        value: Raw v1 value to serialize.
+        field_name: Field path used in fail-closed error messages.
+
+    Returns:
+        A JSON-safe scalar, list, or string-keyed mapping.
+
+    Raises:
+        OpenDreamerAdapterError: If a mapping key is not a string or a value has no supported
+            JSON representation.
+    """
+    if value is None or isinstance(value, str | bool | int | float):
+        return value
+    if isinstance(value, np.generic):
+        return _json_safe_value(value.item(), field_name)
+    if isinstance(value, np.ndarray):
+        return _json_safe_value(value.tolist(), field_name)
+    if isinstance(value, Mapping):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise OpenDreamerAdapterError(
+                    f"{field_name} mapping keys must be strings for JSON serialization, got {key!r}"
+                )
+            out[key] = _json_safe_value(item, f"{field_name}.{key}")
+        return out
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return [
+            _json_safe_value(item, f"{field_name}[{index}]") for index, item in enumerate(value)
+        ]
+    raise OpenDreamerAdapterError(
+        f"{field_name} contains unsupported JSON value {type(value).__name__}"
+    )
+
+
 def _as_finite_float(value: Any, name: str) -> float:
     """Coerce one value to a finite float.
 
@@ -916,7 +989,8 @@ def _augment_provenance(
     """Preserve the original episode provenance and add the adapter metadata entry.
 
     The original mapping is never mutated; a shallow copy is returned with the
-    :data:`ADAPTER_PROVENANCE_KEY` entry added or replaced.
+    :data:`ADAPTER_PROVENANCE_KEY` entry added. A source collision fails closed so existing
+    provenance is never overwritten.
 
     Args:
         provenance: The original v1 episode provenance mapping.
@@ -925,7 +999,15 @@ def _augment_provenance(
 
     Returns:
         A new mapping with the adapter provenance entry nested under ADAPTER_PROVENANCE_KEY.
+
+    Raises:
+        OpenDreamerAdapterError: If the source provenance already owns the adapter key.
     """
+    if ADAPTER_PROVENANCE_KEY in provenance:
+        raise OpenDreamerAdapterError(
+            f"provenance already contains reserved key {ADAPTER_PROVENANCE_KEY!r}; "
+            "refusing to overwrite source provenance"
+        )
     merged: dict[str, Any] = dict(provenance)
     merged[ADAPTER_PROVENANCE_KEY] = {
         "adapter_version": OPEN_DREAMER_ADAPTER_VERSION,
@@ -956,7 +1038,10 @@ def _episode_split(episode: RLTrajectoryEpisode | StructuredEpisode) -> str:
     Returns:
         The split name string.
     """
-    return str(episode.split)
+    split = episode.split
+    if not isinstance(split, str):
+        raise OpenDreamerAdapterError(f"split must be a string, got {split!r}")
+    return split
 
 
 def _episode_scenario_id(episode: RLTrajectoryEpisode | StructuredEpisode) -> str:
@@ -968,7 +1053,12 @@ def _episode_scenario_id(episode: RLTrajectoryEpisode | StructuredEpisode) -> st
     Returns:
         The scenario id string.
     """
-    return str(episode.scenario_id)
+    scenario_id = episode.scenario_id
+    if not isinstance(scenario_id, str) or not scenario_id:
+        raise OpenDreamerAdapterError(
+            f"scenario_id must be a non-empty string, got {scenario_id!r}"
+        )
+    return scenario_id
 
 
 def _episode_seed(episode: RLTrajectoryEpisode | StructuredEpisode) -> int:
@@ -980,7 +1070,10 @@ def _episode_seed(episode: RLTrajectoryEpisode | StructuredEpisode) -> int:
     Returns:
         The integer seed.
     """
-    return int(episode.seed)
+    seed = episode.seed
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise OpenDreamerAdapterError(f"seed must be a non-boolean integer, got {seed!r}")
+    return seed
 
 
 __all__ = [

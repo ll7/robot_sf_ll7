@@ -23,6 +23,7 @@ metric, or policy claim.
 from __future__ import annotations
 
 import importlib.util
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -401,6 +402,53 @@ def test_provenance_preserved_and_augmented_with_adapter_metadata() -> None:
     assert structured.to_dict()["observation_contract"] == OPEN_DREAMER_OBSERVATION_CONTRACT
 
 
+def test_adapter_rejects_reserved_provenance_collision_without_overwriting_source() -> None:
+    """A source-owned adapter key fails closed instead of silently destroying provenance."""
+    original_entry = {"source": "must-not-be-overwritten"}
+    episode = _make_episode(
+        step_count=1,
+        extra={"provenance": {ADAPTER_PROVENANCE_KEY: original_entry}},
+    )
+
+    with pytest.raises(OpenDreamerAdapterError, match="refusing to overwrite source provenance"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+    assert episode.provenance[ADAPTER_PROVENANCE_KEY] == original_entry
+
+
+def test_to_dict_is_json_safe_for_accepted_numpy_producer_values() -> None:
+    """The serialized view handles NumPy scalars accepted from programmatic v1 producers."""
+    episode = _make_episode(
+        step_count=1,
+        actions=([np.float32(0.5), np.float32(-0.25)],),
+        rewards=(np.float32(1.0),),
+        robot_states=(
+            {
+                "position": np.asarray([0.0, 1.0], dtype=np.float32),
+                "heading": np.float32(0.0),
+                "velocity": np.asarray([0.5, 0.0], dtype=np.float32),
+            },
+        ),
+        observations=(
+            {
+                "robot": {"quality": np.float32(0.75)},
+                "pedestrians": [],
+                "future_vector": np.asarray([1, 2], dtype=np.int64),
+            },
+        ),
+        extra={
+            "return_to_go": (np.float32(1.0),),
+            "provenance": {"producer_counter": np.int64(3)},
+        },
+    )
+
+    payload = adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS).to_dict()
+
+    json.dumps(payload)
+    assert payload["raw_observations"][0]["future_vector"] == [1, 2]
+    assert payload["provenance"]["producer_counter"] == 3
+
+
 def test_adapt_episodes_preserves_input_order_and_count() -> None:
     """adapt_episodes returns structured episodes in input order without flattening or reordering."""
     episodes = [_make_episode(seed=seed, step_count=2) for seed in (101, 202, 303)]
@@ -501,7 +549,8 @@ def test_stored_actions_must_lie_within_declared_physical_bounds() -> None:
 
 def test_fail_closed_on_missing_drive_state_components() -> None:
     """A robot_states entry missing heading/velocity fails closed rather than guessing a layout."""
-    robot_states = ({"position": [0.0, 0.0]},)  # legacy minimal shape: no heading/velocity.
+    # The mixed key types also prove malformed metadata cannot escape through error formatting.
+    robot_states = ({"position": [0.0, 0.0], 1: "unrecognized"},)
     episode = _make_episode(step_count=1, robot_states=robot_states)
     with pytest.raises(OpenDreamerAdapterError, match="position, heading, and velocity"):
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
@@ -529,6 +578,52 @@ def test_adapter_wraps_malformed_v1_field_types_in_its_fail_closed_error() -> No
 
     with pytest.raises(OpenDreamerAdapterError, match="upstream RLTrajectoryEpisode.v1 validation"):
         adapt_episode(malformed, action_bounds=_DEFAULT_BOUNDS)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("terminated", ("False",)),
+        ("truncated", (np.bool_(False),)),
+    ],
+)
+def test_adapter_rejects_coercible_non_boolean_terminal_flags(
+    field_name: str,
+    value: tuple[object, ...],
+) -> None:
+    """Terminal flags must already be booleans so adaptation cannot change their meaning."""
+    malformed = replace(_make_episode(step_count=1), **{field_name: value})
+
+    with pytest.raises(OpenDreamerAdapterError, match=rf"{field_name}\[0\] must be a boolean"):
+        adapt_episode(malformed, action_bounds=_DEFAULT_BOUNDS)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    [
+        ("source_policy_id", "", "source_policy_id must be a non-empty string"),
+        ("provenance", None, "provenance must be a mapping"),
+        ("seed", True, "seed must be a non-boolean integer"),
+    ],
+)
+def test_adapter_rejects_malformed_metadata_with_uniform_error(
+    field_name: str,
+    value: object,
+    message: str,
+) -> None:
+    """Malformed programmatic metadata fails with the adapter's public error type."""
+    malformed = replace(_make_episode(step_count=1), **{field_name: value})
+
+    with pytest.raises(OpenDreamerAdapterError, match=message):
+        adapt_episode(malformed, action_bounds=_DEFAULT_BOUNDS)
+
+
+def test_batch_adapter_rejects_malformed_seed_with_uniform_error() -> None:
+    """Batch leakage preflight cannot leak a raw conversion error for an invalid seed."""
+    malformed = replace(_make_episode(step_count=1), seed=None)  # type: ignore[arg-type]
+
+    with pytest.raises(OpenDreamerAdapterError, match="seed must be a non-boolean integer"):
+        adapt_episodes([malformed], action_bounds=_DEFAULT_BOUNDS)
 
 
 def test_fail_closed_on_non_finite_rays_when_present() -> None:

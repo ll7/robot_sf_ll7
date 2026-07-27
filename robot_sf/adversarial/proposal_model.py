@@ -726,14 +726,20 @@ class FailureArchiveProposalModel:
         evaluation_cfg = contract["evaluation"]
         frozen_start = evaluation_cfg.get("robot_start")
         frozen_goal = evaluation_cfg.get("robot_goal")
-        if candidate_robot_start is None:
-            candidate_robot_start = frozen_start
-        if candidate_robot_goal is None:
-            candidate_robot_goal = frozen_goal
-        if candidate_robot_start is None or candidate_robot_goal is None:
+        if frozen_start is None or frozen_goal is None:
             raise ValueError(
                 "frozen contract evaluation geometry must define robot_start and robot_goal"
             )
+        if candidate_robot_start is not None and candidate_robot_start != frozen_start:
+            raise ValueError(
+                "candidate_robot_start must match the frozen contract evaluation.robot_start"
+            )
+        if candidate_robot_goal is not None and candidate_robot_goal != frozen_goal:
+            raise ValueError(
+                "candidate_robot_goal must match the frozen contract evaluation.robot_goal"
+            )
+        candidate_robot_start = frozen_start
+        candidate_robot_goal = frozen_goal
         map_file = evaluation_cfg.get("map_file")
         expected_map_sha256 = evaluation_cfg.get("map_file_sha256")
         if not isinstance(map_file, str) or not map_file:

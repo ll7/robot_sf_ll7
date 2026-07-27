@@ -188,6 +188,16 @@ def test_frozen_contract_factory_rejects_recertification_artifact_hash_drift() -
         FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
 
 
+def test_frozen_contract_factory_rejects_evaluation_geometry_override() -> None:
+    """The frozen factory cannot score candidates with caller-selected geometry."""
+    with pytest.raises(ValueError, match="candidate_robot_start must match"):
+        FailureArchiveProposalModel.from_frozen_contract(
+            _CONTRACT,
+            repo_root=_REPO_ROOT,
+            candidate_robot_start=[3.5, 3.0],
+        )
+
+
 def test_negative_regression_excluded_records_cannot_change_scores_or_ranks() -> None:
     """Feeding the full archive (incl. 5 excluded records) must not change scores/ranks."""
     _contract, payload, archive = _load_contract_payload()

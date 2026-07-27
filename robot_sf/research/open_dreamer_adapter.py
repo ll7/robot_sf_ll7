@@ -261,7 +261,7 @@ class StructuredActionStep:
                 f"got {len(self.raw)}D"
             )
         for value in self.raw:
-            if isinstance(value, bool) or not isinstance(value, int | float):
+            if isinstance(value, bool) or not isinstance(value, Real):
                 raise OpenDreamerAdapterError(f"stored action must be numeric, got {value!r}")
             if not np.isfinite(float(value)):
                 raise OpenDreamerAdapterError(f"stored action must be finite, got {value!r}")
@@ -546,7 +546,7 @@ def adapt_episode(
     """
     try:
         validate_rl_trajectory_episode(episode)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         # The adapter presents a single fail-closed error type for any v1 contract violation so
         # callers do not have to catch both ValueError and OpenDreamerAdapterError.
         raise OpenDreamerAdapterError(
@@ -703,18 +703,23 @@ def _extract_rays(observation: Any) -> tuple[np.ndarray, bool]:
             continue
         raw = observation[key]
         try:
-            arr = np.asarray(raw, dtype=float)
+            raw_array = np.asarray(raw)
         except (TypeError, ValueError) as exc:
             raise OpenDreamerAdapterError(
                 f"observation ray-like key {key!r} must be numeric"
             ) from exc
-        if arr.ndim != 1:
+        if raw_array.ndim != 1:
             raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be a 1D sequence")
-        if arr.size == 0:
+        if raw_array.size == 0:
             raise OpenDreamerAdapterError(
                 f"observation ray-like key {key!r} must contain at least one range"
             )
-        if arr.size and not np.all(np.isfinite(arr)):
+        if any(isinstance(value, bool) or not isinstance(value, Real) for value in raw_array):
+            raise OpenDreamerAdapterError(
+                f"observation ray-like key {key!r} must contain finite real values"
+            )
+        arr = raw_array.astype(float)
+        if not np.all(np.isfinite(arr)):
             raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be finite")
         return arr, True
     return np.asarray([], dtype=float), False
@@ -812,7 +817,7 @@ def _coerce_action_step(
         )
     coerced: list[float] = []
     for value in values:
-        if isinstance(value, bool) or not isinstance(value, int | float):
+        if isinstance(value, bool) or not isinstance(value, Real):
             raise OpenDreamerAdapterError(
                 f"action at step {step_index} must be numeric, got {value!r}"
             )
@@ -847,7 +852,7 @@ def _finite_floats(values: Sequence[Any], field_name: str) -> tuple[float, ...]:
     """
     out: list[float] = []
     for value in values:
-        if isinstance(value, bool) or not isinstance(value, int | float):
+        if isinstance(value, bool) or not isinstance(value, Real):
             raise OpenDreamerAdapterError(f"{field_name} must be numeric, got {value!r}")
         out.append(float(value))
     if not all(np.isfinite(out)):
@@ -868,7 +873,7 @@ def _as_finite_float(value: Any, name: str) -> float:
     Raises:
         OpenDreamerAdapterError: If the value is non-numeric or non-finite.
     """
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if isinstance(value, bool) or not isinstance(value, Real):
         raise OpenDreamerAdapterError(f"drive_state {name} must be numeric, got {value!r}")
     out = float(value)
     if not np.isfinite(out):

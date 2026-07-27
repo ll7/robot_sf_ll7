@@ -23,6 +23,7 @@ metric, or policy claim.
 from __future__ import annotations
 
 import importlib.util
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -304,6 +305,29 @@ def test_raw_stored_action_preserved_verbatim() -> None:
     assert structured.to_dict()["raw_actions"] == list(actions)
 
 
+def test_adapter_accepts_numpy_real_scalars_from_programmatic_v1_producers() -> None:
+    """Programmatic v1 producers can supply finite NumPy real scalars without coercion failures."""
+    episode = _make_episode(
+        step_count=1,
+        actions=([np.float32(0.5), np.float32(-0.25)],),
+        rewards=(np.float32(1.0),),
+        robot_states=(
+            {
+                "position": [np.float32(0.0), np.float32(1.0)],
+                "heading": np.float32(0.0),
+                "velocity": [np.float32(0.5), np.float32(0.0)],
+            },
+        ),
+        extra={"return_to_go": (np.float32(1.0),)},
+    )
+
+    structured = adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+    assert structured.actions[0].raw == (0.5, -0.25)
+    assert structured.rewards == (1.0,)
+    np.testing.assert_allclose(structured.observations[0].drive_state, [0.0, 1.0, 0.0, 0.5, 0.0])
+
+
 def test_adapter_accepts_current_simulation_trace_recorder_action_mapping(tmp_path: Path) -> None:
     """The recorder's selected_action mapping reaches the adapter as the same physical command."""
     source_record = {
@@ -499,6 +523,14 @@ def test_fail_closed_on_non_finite_rewards() -> None:
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 
+def test_adapter_wraps_malformed_v1_field_types_in_its_fail_closed_error() -> None:
+    """Malformed v1 field types do not leak a raw validator TypeError to adapter consumers."""
+    malformed = replace(_make_episode(step_count=1), rewards=None)  # type: ignore[arg-type]
+
+    with pytest.raises(OpenDreamerAdapterError, match="upstream RLTrajectoryEpisode.v1 validation"):
+        adapt_episode(malformed, action_bounds=_DEFAULT_BOUNDS)
+
+
 def test_fail_closed_on_non_finite_rays_when_present() -> None:
     """A present-but-non-finite ray-like field fails closed instead of silently masking it."""
     observations = (
@@ -506,6 +538,20 @@ def test_fail_closed_on_non_finite_rays_when_present() -> None:
     )
     episode = _make_episode(step_count=1, observations=observations)
     with pytest.raises(OpenDreamerAdapterError, match="ray-like key 'rays' must be finite"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
+@pytest.mark.parametrize(
+    ("rays",),
+    [([True, False],), (["0.5", "0.25"],)],
+    ids=["booleans", "numeric-strings"],
+)
+def test_fail_closed_on_coercible_non_numeric_ray_values(rays: list[object]) -> None:
+    """Ray values must already be real numbers rather than coercible strings or booleans."""
+    observations = ({"robot": _full_robot_state(0), "pedestrians": [], "rays": rays},)
+    episode = _make_episode(step_count=1, observations=observations)
+
+    with pytest.raises(OpenDreamerAdapterError, match="finite real values"):
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 

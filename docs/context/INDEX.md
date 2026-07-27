@@ -5,6 +5,14 @@ fit anchors, cross-family same-planner evaluation, exact per-arm outcome
 admission, and the pending human-review boundary:
 [issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md).
 
+Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
+upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the
+only permissible route is clean-room reimplementation (no upstream code copied, vendored, or
+adapted) unless and until a formal license or explicit permission is obtained and recorded; this is
+the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier `idea`, no policy
+or benchmark claim:
+[issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
+
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
 or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).

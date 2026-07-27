@@ -102,12 +102,13 @@ SHA, scenario family + seed, **execution seed**, execution commit + command/conf
 native/fallback/degraded status, termination reason + independent failure
 outcome, scenario and candidate certification status, replay/confirmation
 lineage + record hash, and exclusion reason when inadmissible. Each admitted
-manifest SHA, candidate-pool index, and record SHA must match a separate,
-frozen binding from the arm manifests. That binding also declares the exact
-proposal and random manifest-ID sets (twelve per arm) and the allowed
+manifest SHA, candidate-pool index, scenario seed, and record SHA must match a
+separate, frozen binding from the arm manifests. That binding also declares the
+exact proposal and random manifest-ID sets (twelve per arm) and the allowed
 execution-seed set for every manifest; an outcome packet cannot self-attest any
-of those values. Its per-manifest pool-index and record-hash maps are
-`candidate_pool_index_by_manifest_id` and `record_sha256_by_manifest_id`.
+of those values. Its per-manifest pool-index, scenario-seed, and record-hash
+maps are `candidate_pool_index_by_manifest_id`,
+`scenario_seed_by_manifest_id`, and `record_sha256_by_manifest_id`.
 A candidate manifest ID may appear in one arm only. Aggregate arrays derive
 from admitted rows only, and can become complete only when every predeclared
 manifest and every predeclared execution seed is present exactly once. Missing,
@@ -142,7 +143,7 @@ Decision rule vocabulary is exactly `continue | stop | inconclusive`:
 - `continue`: independent outcomes valid AND
   (proposal_yield - random_yield) >= minimally important AND null rejected AND
   powered;
-- `stop`: independent outcomes valid AND powered AND
+- `stop`: independent outcomes valid AND powered AND null rejected AND
   (proposal_yield - random_yield) <= 0;
 - `inconclusive`: outcomes unavailable/fail-closed, underpowered, or null not
   rejected. Underpowered comes first, so it is never `continue` or `stop`.

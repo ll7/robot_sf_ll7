@@ -13,9 +13,9 @@ arrays (proposal/random/ranked outcomes) are DERIVED from admitted rows only and
 are never supplied independently of them. Rows that are missing, malformed,
 mismatched, fallback, degraded, or lineage-incomplete fail closed: they can never
 open the held-out gate or drive a verdict. The candidate manifest hash,
-candidate-pool index, and outcome record hash must also match an external,
-frozen per-manifest binding; the packet cannot self-attest that lineage. A
-candidate manifest ID may appear in one arm only.
+candidate-pool index, scenario seed, and outcome record hash must also match an
+external, frozen per-manifest binding; the packet cannot self-attest that
+lineage. A candidate manifest ID may appear in one arm only.
 
 When valid v2 rows are available, the top-level proposal/random metrics, the
 comparison, and the issue #2921 stop rule are computed EXCLUSIVELY from those
@@ -104,6 +104,7 @@ class AdmissionSpec:
     expected_target_planner_config_sha256: str | None = None
     expected_candidate_manifest_sha256_by_id: dict[str, str] | None = None
     expected_candidate_pool_index_by_manifest_id: dict[str, int] | None = None
+    expected_scenario_seed_by_manifest_id: dict[str, int] | None = None
     expected_record_sha256_by_manifest: dict[str, str] | None = None
     expected_candidate_manifest_ids_by_arm: dict[str, tuple[str, ...]] | None = None
     expected_execution_seeds_by_manifest_id: dict[str, tuple[int, ...]] | None = None
@@ -195,8 +196,10 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
 
     An outcome packet is not allowed to choose its own denominator. Before any
     row can be admitted, the caller must supply exact per-arm manifest sets,
-    their external SHA-256 binding, execution-seed lineage, and the shared pool
-    seed. This prevents a larger post-hoc packet from manufacturing power.
+    their external SHA-256, pool-index, and scenario-seed bindings,
+    execution-seed lineage, and the shared pool seed. This prevents a larger
+    post-hoc packet from manufacturing power or mixing scenarios under a
+    manifest ID.
     """
     if not isinstance(budget_per_arm, int) or isinstance(budget_per_arm, bool):
         return "budget_per_arm must be an integer"
@@ -249,6 +252,21 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
         return "candidate-pool index binding keys must be strings and values non-negative integers"
     if len(set(expected_pool_indices.values())) != len(expected_ids):
         return "candidate-pool index binding must assign unique indices to manifest IDs"
+
+    expected_scenario_seeds = spec.expected_scenario_seed_by_manifest_id
+    if (
+        not isinstance(expected_scenario_seeds, dict)
+        or set(expected_scenario_seeds) != expected_ids
+    ):
+        return "scenario-seed binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(scenario_seed, int)
+        or isinstance(scenario_seed, bool)
+        for manifest_id, scenario_seed in expected_scenario_seeds.items()
+    ):
+        return "scenario-seed binding keys must be strings and values integers"
 
     expected_record_hashes = spec.expected_record_sha256_by_manifest
     if not isinstance(expected_record_hashes, dict) or set(expected_record_hashes) != expected_ids:
@@ -343,8 +361,20 @@ def _row_missing_fields(  # noqa: C901
             return f"missing required field {field_name!r}"
     if not isinstance(row.get("row_id"), str) or not row["row_id"].strip():
         return "row_id must be a non-empty string"
+    if (
+        not isinstance(row.get("candidate_manifest_id"), str)
+        or not row["candidate_manifest_id"].strip()
+    ):
+        return "candidate_manifest_id must be a non-empty string"
     if row.get("selection_arm") not in _ARMS:
         return f"invalid selection_arm {row.get('selection_arm')!r}"
+    selection_rank = row.get("selection_rank")
+    if (
+        not isinstance(selection_rank, int)
+        or isinstance(selection_rank, bool)
+        or selection_rank <= 0
+    ):
+        return "selection_rank must be a positive integer"
     if not isinstance(row.get("independent_failure_outcome"), bool):
         return "independent_failure_outcome must be bool"
     if not isinstance(row.get("candidate_manifest_sha256"), str) or not row.get(
@@ -367,6 +397,9 @@ def _row_missing_fields(  # noqa: C901
     execution_seed = row.get("execution_seed")
     if not isinstance(execution_seed, int) or isinstance(execution_seed, bool):
         return "execution_seed must be an integer"
+    candidate_pool_seed = row.get("candidate_pool_seed")
+    if not isinstance(candidate_pool_seed, int) or isinstance(candidate_pool_seed, bool):
+        return "candidate_pool_seed must be an integer"
     if not isinstance(row.get("termination_reason"), str) or not row["termination_reason"].strip():
         return "termination_reason must be a non-empty string"
     if not isinstance(row.get("record_sha256"), str) or not row.get("record_sha256"):
@@ -478,6 +511,20 @@ def _row_candidate_pool_index_drift(
     return None
 
 
+def _row_scenario_seed_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -> str | None:
+    """Require each row's scenario seed to match its frozen candidate manifest."""
+    expected_seeds = spec.expected_scenario_seed_by_manifest_id
+    if not expected_seeds:
+        return "expected scenario_seed binding is unavailable"
+    manifest_id = str(row["candidate_manifest_id"])
+    expected = expected_seeds.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected scenario-seed binding"
+    if row["scenario_seed"] != expected:
+        return "scenario_seed mismatch for manifest"
+    return None
+
+
 def _row_predeclared_selection_drift(
     row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
 ) -> str | None:
@@ -517,6 +564,7 @@ _ROW_CHECKERS = (
     _row_lineage_drift,
     _row_candidate_manifest_hash_drift,
     _row_candidate_pool_index_drift,
+    _row_scenario_seed_drift,
     _row_record_hash_drift,
     _row_predeclared_selection_drift,
 )

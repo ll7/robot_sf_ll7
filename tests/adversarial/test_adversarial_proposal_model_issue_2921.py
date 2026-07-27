@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from robot_sf.adversarial.config import CandidateSpec, Pose2D
+from robot_sf.adversarial.config import CandidateSpec, Pose2D, SearchSpaceConfig
 from robot_sf.adversarial.proposal_model import (
     FailureArchiveProposalModel,
     derive_fit_payload_from_recertification,
@@ -599,6 +600,9 @@ def _manifest_hash_binding(
         "candidate_pool_index_by_manifest_id": {
             row["candidate_manifest_id"]: row["candidate_pool_index"] for row in rows
         },
+        "scenario_seed_by_manifest_id": {
+            row["candidate_manifest_id"]: row["scenario_seed"] for row in rows
+        },
         "record_sha256_by_manifest_id": {
             row["candidate_manifest_id"]: row["record_sha256"] for row in rows
         },
@@ -641,7 +645,7 @@ def _v2_row(
         "target_planner_id": "social_force",
         "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
         "scenario_family": "classic_cross_trap_medium",
-        "scenario_seed": 99_001 + rank * 10 + seed_offset,
+        "scenario_seed": 99_001 + rank,
         "execution_seed": 70_001 + rank * 10 + seed_offset,
         "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
@@ -667,8 +671,19 @@ def _v2_row(
     }
 
 
-def _contract_v2_outcome_packet(report: dict[str, Any]) -> dict[str, Any]:
+def _contract_v2_outcome_packet(
+    report: dict[str, Any], *, candidate_pool_seed: int = 42
+) -> dict[str, Any]:
     """Build outcomes whose frozen IDs and pool indexes match a contract-run report."""
+    contract = load_issue_3275_contract(_CONTRACT)
+    search_space = SearchSpaceConfig.from_file(
+        _REPO_ROOT / contract["evaluation"]["search_space_path"]
+    )
+    pool_rng = random.Random(candidate_pool_seed)
+    scenario_seeds_by_id = {
+        f"pool_{pool_index}": int(search_space.sample_candidate(pool_rng).scenario_seed)
+        for pool_index in range(contract["budget"]["candidate_pool_size"])
+    }
     rows: list[dict[str, Any]] = []
     for arm in ("proposal", "random"):
         manifest_ids = report["arm_manifest_ids_by_arm"][arm]
@@ -682,8 +697,9 @@ def _contract_v2_outcome_packet(report: dict[str, Any]) -> dict[str, Any]:
                     failure=arm == "proposal",
                     seed_offset=seed,
                 )
-                row["candidate_pool_seed"] = 42
+                row["candidate_pool_seed"] = candidate_pool_seed
                 row["candidate_pool_index"] = int(manifest_id.removeprefix("pool_"))
+                row["scenario_seed"] = scenario_seeds_by_id[manifest_id]
                 rows.append(row)
     return {
         "schema_version": "adversarial_independent_outcomes.v2",
@@ -700,8 +716,10 @@ def _contract_v2_outcome_packet(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def test_external_manifest_binding_requires_pool_index_and_record_hash(tmp_path: Path) -> None:
-    """The v2 binding parser rejects incomplete pool-index or record-hash lineage."""
+def test_external_manifest_binding_requires_pool_index_scenario_seed_and_record_hash(
+    tmp_path: Path,
+) -> None:
+    """The v2 binding parser rejects incomplete pool-index, seed, or record lineage."""
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
         load_expected_candidate_manifest_binding,
     )
@@ -724,6 +742,13 @@ def test_external_manifest_binding_requires_pool_index_and_record_hash(tmp_path:
     loaded, reason = load_expected_candidate_manifest_binding(binding_path)
     assert loaded is None
     assert "candidate_pool_index_by_manifest_id" in reason
+
+    missing_scenario_seed = dict(binding)
+    missing_scenario_seed.pop("scenario_seed_by_manifest_id")
+    binding_path.write_text(json.dumps(missing_scenario_seed), encoding="utf-8")
+    loaded, reason = load_expected_candidate_manifest_binding(binding_path)
+    assert loaded is None
+    assert "scenario_seed_by_manifest_id" in reason
 
     missing_record_hash = dict(binding)
     missing_record_hash.pop("record_sha256_by_manifest_id")
@@ -909,6 +934,7 @@ def test_contract_runner_binds_pool_index_and_record_hash_from_external_manifest
         "schema_version": "adversarial_candidate_manifest_bindings.v2",
         "exact_arm_membership_required": True,
         "candidate_pool_index_lineage_required": True,
+        "scenario_seed_lineage_required": True,
         "record_sha256_lineage_required": True,
         "execution_seed_lineage_required": True,
         "reason": "ok",
@@ -931,6 +957,18 @@ def test_contract_runner_binds_pool_index_and_record_hash_from_external_manifest
     assert record_drift_report["independent_outcome_evaluation"]["status"] == "blocked"
     assert (
         "record_sha256 mismatch" in record_drift_report["independent_outcome_evaluation"]["reason"]
+    )
+
+    scenario_seed_drift = json.loads(json.dumps(binding))
+    manifest_id = next(iter(scenario_seed_drift["scenario_seed_by_manifest_id"]))
+    scenario_seed_drift["scenario_seed_by_manifest_id"][manifest_id] += 1
+    outcomes_path.write_text(json.dumps(packet), encoding="utf-8")
+    binding_path.write_text(json.dumps(scenario_seed_drift), encoding="utf-8")
+    scenario_seed_drift_report = run_with_outcomes(tmp_path / "scenario_seed_drift_report.json")
+    assert scenario_seed_drift_report["independent_outcome_evaluation"]["status"] == "blocked"
+    assert (
+        "external scenario_seed does not match"
+        in scenario_seed_drift_report["independent_outcome_evaluation"]["reason"]
     )
 
 

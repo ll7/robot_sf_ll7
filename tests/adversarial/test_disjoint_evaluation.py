@@ -466,7 +466,21 @@ def test_classify_issue_3275_decision_inconclusive_without_outcomes() -> None:
 
 
 def test_classify_issue_3275_decision_stop_when_random_better() -> None:
-    """A powered random-favoring result stops the proposal lane."""
+    """A powered, significant random-favoring result stops the proposal lane."""
+    decision = classify_issue_3275_decision(
+        proposal_yield=0.1,
+        random_yield=0.5,
+        minimally_important=0.2,
+        null_rejected=True,
+        powered=True,
+        independent_available=True,
+    )
+    assert decision["status"] == "stop"
+    assert decision["reason"] == "proposal_does_not_beat_random"
+
+
+def test_classify_issue_3275_decision_non_significant_random_better_is_inconclusive() -> None:
+    """A non-rejected null takes precedence over a random-favoring point estimate."""
     decision = classify_issue_3275_decision(
         proposal_yield=0.1,
         random_yield=0.5,
@@ -475,8 +489,9 @@ def test_classify_issue_3275_decision_stop_when_random_better() -> None:
         powered=True,
         independent_available=True,
     )
-    assert decision["status"] == "stop"
-    assert decision["reason"] == "proposal_does_not_beat_random"
+
+    assert decision["status"] == "inconclusive"
+    assert decision["reason"] == "null_not_rejected"
 
 
 def test_classify_issue_3275_decision_underpowered_random_better_is_inconclusive() -> None:

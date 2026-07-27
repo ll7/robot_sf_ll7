@@ -126,7 +126,7 @@ def _balanced_packet(*, proposal_failures: int, random_failures: int, per_arm: i
                 arm="proposal",
                 rank=rank + 1,
                 failure=rank < proposal_failures,
-                scenario_seed=99_000 + rank * 10 + seed,
+                scenario_seed=99_000 + rank,
                 execution_seed=70_000 + rank * 10 + seed,
                 confirmation=_confirmation(confirmed=5 if rank < proposal_failures else 0),
             )
@@ -140,7 +140,7 @@ def _balanced_packet(*, proposal_failures: int, random_failures: int, per_arm: i
                 arm="random",
                 rank=rank + 1,
                 failure=rank < random_failures,
-                scenario_seed=199_000 + rank * 10 + seed,
+                scenario_seed=199_000 + rank,
                 execution_seed=170_000 + rank * 10 + seed,
                 confirmation=_confirmation(confirmed=5 if rank < random_failures else 0),
             )
@@ -163,6 +163,7 @@ def _spec_for_packet(  # noqa: C901
     ids_by_arm: dict[str, list[str]] = {"proposal": [], "random": []}
     execution_seeds: dict[str, list[int]] = {}
     candidate_pool_indices: dict[str, int] = {}
+    scenario_seeds: dict[str, int] = {}
     record_hashes: dict[str, str] = {}
     next_padding_pool_index = 100_000
     for row in packet.get("rows", []):
@@ -186,6 +187,13 @@ def _spec_for_packet(  # noqa: C901
             else:
                 candidate_pool_indices[manifest_id] = next_padding_pool_index
                 next_padding_pool_index += 1
+        scenario_seed = row.get("scenario_seed")
+        if manifest_id and manifest_id not in scenario_seeds:
+            scenario_seeds[manifest_id] = (
+                scenario_seed
+                if isinstance(scenario_seed, int) and not isinstance(scenario_seed, bool)
+                else 0
+            )
         record_sha256 = row.get("record_sha256")
         if manifest_id and manifest_id not in record_hashes:
             record_hashes[manifest_id] = (
@@ -212,6 +220,7 @@ def _spec_for_packet(  # noqa: C901
             ]
             candidate_pool_indices[manifest_id] = next_padding_pool_index
             next_padding_pool_index += 1
+            scenario_seeds[manifest_id] = 0
             record_hashes[manifest_id] = _sha256(f"record-{manifest_id}")
     expected_ids = ids_by_arm["proposal"] + ids_by_arm["random"]
     return AdmissionSpec(
@@ -224,6 +233,9 @@ def _spec_for_packet(  # noqa: C901
         },
         expected_candidate_pool_index_by_manifest_id={
             manifest_id: candidate_pool_indices[manifest_id] for manifest_id in expected_ids
+        },
+        expected_scenario_seed_by_manifest_id={
+            manifest_id: scenario_seeds[manifest_id] for manifest_id in expected_ids
         },
         expected_record_sha256_by_manifest={
             manifest_id: record_hashes[manifest_id] for manifest_id in expected_ids
@@ -344,6 +356,8 @@ def test_malformed_execution_lineage_fields_fail_closed() -> None:
         ("row_id", "", "row_id"),
         ("execution_command", ["python", ""], "execution_command"),
         ("execution_config_lineage", {}, "execution_config_lineage"),
+        ("selection_rank", True, "selection_rank"),
+        ("candidate_pool_seed", True, "candidate_pool_seed"),
         ("scenario_seed", True, "scenario_seed"),
         ("termination_reason", "", "termination_reason"),
     )
@@ -416,6 +430,39 @@ def test_candidate_pool_index_mismatch_fails_closed() -> None:
     assert "candidate_pool_index mismatch" in result["reason"]
 
 
+def test_scenario_seed_requires_external_binding() -> None:
+    """Rows cannot self-attest the candidate scenario seed across confirmation runs."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    unbound_spec = replace(
+        _spec_for_packet(packet, budget_per_arm=1),
+        expected_scenario_seed_by_manifest_id=None,
+    )
+
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=unbound_spec
+    )
+
+    assert result["status"] == "blocked"
+    assert "scenario-seed binding" in result["reason"]
+
+
+def test_scenario_seed_mismatch_fails_closed() -> None:
+    """All execution rows must use the manifest's single frozen scenario seed."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    spec = _spec_for_packet(packet, budget_per_arm=1)
+    proposal_id = packet["rows"][0]["candidate_manifest_id"]
+    expected_seeds = dict(spec.expected_scenario_seed_by_manifest_id or {})
+    expected_seeds[proposal_id] += 1
+    drifted_spec = replace(spec, expected_scenario_seed_by_manifest_id=expected_seeds)
+
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=drifted_spec
+    )
+
+    assert result["status"] == "blocked"
+    assert "scenario_seed mismatch" in result["reason"]
+
+
 def test_record_hash_requires_external_binding() -> None:
     """Rows cannot self-attest record lineage without a frozen record-hash binding."""
     packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
@@ -476,7 +523,7 @@ def test_confirmation_below_threshold_is_a_valid_candidate_non_failure() -> None
                 arm="proposal",
                 rank=1,
                 failure=seed <= 2,
-                scenario_seed=seed,
+                scenario_seed=99_001,
                 execution_seed=seed,
                 confirmation=_confirmation(confirmed=2),
             )
@@ -489,7 +536,7 @@ def test_confirmation_below_threshold_is_a_valid_candidate_non_failure() -> None
                 arm="random",
                 rank=1,
                 failure=False,
-                scenario_seed=100 + seed,
+                scenario_seed=199_001,
                 execution_seed=100 + seed,
                 confirmation=_confirmation(confirmed=0),
             )
@@ -623,7 +670,7 @@ def test_three_of_five_confirmation_counts_as_one_candidate_failure() -> None:
                 arm="proposal",
                 rank=1,
                 failure=seed <= 3,
-                scenario_seed=seed,
+                scenario_seed=99_001,
                 execution_seed=seed,
             )
             for seed in range(1, 6)
@@ -635,7 +682,7 @@ def test_three_of_five_confirmation_counts_as_one_candidate_failure() -> None:
                 arm="random",
                 rank=1,
                 failure=False,
-                scenario_seed=100 + seed,
+                scenario_seed=199_001,
                 execution_seed=100 + seed,
                 confirmation=_confirmation(confirmed=0),
             )
@@ -660,7 +707,7 @@ def test_different_confirming_termination_reasons_fail_closed() -> None:
                 arm="proposal",
                 rank=1,
                 failure=True,
-                scenario_seed=seed,
+                scenario_seed=99_001,
                 execution_seed=seed,
                 confirmation=_confirmation(confirmed=5),
             )
@@ -673,7 +720,7 @@ def test_different_confirming_termination_reasons_fail_closed() -> None:
                 arm="random",
                 rank=1,
                 failure=False,
-                scenario_seed=100 + seed,
+                scenario_seed=199_001,
                 execution_seed=100 + seed,
                 confirmation=_confirmation(confirmed=0),
             )

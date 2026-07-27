@@ -208,8 +208,8 @@
     "fail_closed_conditions": [
       "missing required field",
       "malformed row",
-      "candidate_manifest_sha256, candidate_pool_index, or record_sha256 mismatch against the external binding",
-      "missing external frozen candidate-manifest binding (ID-to-manifest-SHA-256, exact arm membership, candidate-pool indexes, ID-to-record-SHA-256, execution seeds, and pool seed)",
+      "candidate_manifest_sha256, candidate_pool_index, scenario_seed, or record_sha256 mismatch against the external binding",
+      "missing external frozen candidate-manifest binding (ID-to-manifest-SHA-256, exact arm membership, candidate-pool indexes, scenario seeds, ID-to-record-SHA-256, execution seeds, and pool seed)",
       "arm membership or frozen per-arm candidate count differs from the predeclared manifest binding",
       "execution_seed differs from the predeclared manifest seed lineage",
       "candidate_manifest_id appears in both arms",
@@ -235,7 +235,7 @@
     "no_revise": true,
     "no_generic_blocked": true,
     "continue": "independent outcomes valid AND powered for the minimally important effect AND (proposal_yield - random_yield) >= minimally_important_absolute_yield_improvement AND Fisher-exact two-sided null rejected at alpha=0.05.",
-    "stop": "independent outcomes valid AND powered for the minimally important effect AND (proposal_yield - random_yield) <= 0 (proposal does not beat random, or random is better).",
+    "stop": "independent outcomes valid AND powered for the minimally important effect AND the Fisher-exact two-sided null is rejected AND (proposal_yield - random_yield) <= 0 (proposal does not beat random, or random is better).",
     "inconclusive": "independent outcomes unavailable, fail-closed, underpowered for the minimally important effect (regardless of outcome sign), or the null is not rejected. Includes any missing/malformed/mismatched/fallback/degraded/lineage-incomplete outcome row.",
     "follows_execution_under_opposite_signs": "When archive-nearness and independent execution disagree (either sign), the decision follows independent execution. Both opposite-sign regressions are required tests."
   },

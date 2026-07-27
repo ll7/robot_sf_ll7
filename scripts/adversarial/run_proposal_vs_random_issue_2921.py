@@ -655,8 +655,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Frozen external v2 arm-manifest binding (exact arm IDs, SHA-256 values, "
-            "candidate-pool indexes, record SHA-256 values, execution-seed lineage, and "
-            "pool seed); required before supplied independent outcomes can drive a decision."
+            "candidate-pool indexes, scenario seeds, record SHA-256 values, execution-seed "
+            "lineage, and pool seed); required before supplied independent outcomes can drive a "
+            "decision."
         ),
     )
     parser.add_argument(
@@ -684,9 +685,10 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
     The outcome packet cannot establish its own manifest lineage. This separate
     input must use ``adversarial_candidate_manifest_bindings.v2`` and bind
     exact proposal/random membership, every candidate's manifest SHA-256,
-    candidate-pool index, expected record SHA-256, execution-seed lineage, and
-    the shared candidate-pool seed. The v1 hash-only format cannot establish a
-    frozen denominator or complete record lineage and is intentionally rejected.
+    candidate-pool index, scenario seed, expected record SHA-256,
+    execution-seed lineage, and the shared candidate-pool seed. The v1 hash-only
+    format cannot establish a frozen denominator or complete record lineage and
+    is intentionally rejected.
     """
     if path is None:
         return None, "expected candidate-manifest hash binding was not provided"
@@ -751,6 +753,17 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
         )
     if len(set(candidate_pool_indices.values())) != len(expected_ids):
         return None, "candidate_pool_index_by_manifest_id must assign unique indices"
+    scenario_seeds = payload.get("scenario_seed_by_manifest_id")
+    if not isinstance(scenario_seeds, dict) or set(scenario_seeds) != expected_ids:
+        return None, "scenario_seed_by_manifest_id must cover exactly the predeclared arm IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(scenario_seed, int)
+        or isinstance(scenario_seed, bool)
+        for manifest_id, scenario_seed in scenario_seeds.items()
+    ):
+        return None, "scenario_seed_by_manifest_id values must be integers"
     record_hashes = payload.get("record_sha256_by_manifest_id")
     if not isinstance(record_hashes, dict) or set(record_hashes) != expected_ids:
         return None, "record_sha256_by_manifest_id must cover exactly the predeclared arm IDs"
@@ -790,6 +803,10 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
         "candidate_pool_index_by_manifest_id": {
             str(manifest_id): int(pool_index)
             for manifest_id, pool_index in candidate_pool_indices.items()
+        },
+        "scenario_seed_by_manifest_id": {
+            str(manifest_id): int(scenario_seed)
+            for manifest_id, scenario_seed in scenario_seeds.items()
         },
         "record_sha256_by_manifest_id": {
             str(manifest_id): str(digest) for manifest_id, digest in record_hashes.items()
@@ -984,6 +1001,7 @@ def _frozen_binding_matches_generated_arms(
     proposal_ids: list[str],
     random_ids: list[str],
     candidate_pool_indices_by_id: dict[str, int],
+    candidate_scenario_seeds_by_id: dict[str, int],
     candidate_pool_seed: int,
     budget_per_arm: int,
 ) -> str | None:
@@ -1001,9 +1019,12 @@ def _frozen_binding_matches_generated_arms(
         if bound_ids != generated_ids:
             return f"external {arm} manifest IDs do not match this frozen candidate draw"
         expected_pool_indices = binding["candidate_pool_index_by_manifest_id"]
+        expected_scenario_seeds = binding["scenario_seed_by_manifest_id"]
         for manifest_id in generated_ids:
             if expected_pool_indices[manifest_id] != candidate_pool_indices_by_id[manifest_id]:
                 return "external candidate_pool_index does not match this frozen candidate draw"
+            if expected_scenario_seeds[manifest_id] != candidate_scenario_seeds_by_id[manifest_id]:
+                return "external scenario_seed does not match this frozen candidate draw"
     if binding["candidate_pool_seed"] != candidate_pool_seed:
         return "external candidate_pool_seed does not match this frozen candidate draw"
     return None
@@ -1023,6 +1044,9 @@ def _admission_spec_from_binding(frozen: dict[str, Any], binding: dict[str, Any]
         ),
         expected_candidate_pool_index_by_manifest_id=(
             dict(binding["candidate_pool_index_by_manifest_id"]) if binding is not None else None
+        ),
+        expected_scenario_seed_by_manifest_id=(
+            dict(binding["scenario_seed_by_manifest_id"]) if binding is not None else None
         ),
         expected_record_sha256_by_manifest=(
             dict(binding["record_sha256_by_manifest_id"]) if binding is not None else None
@@ -1321,6 +1345,10 @@ def main() -> int:
     candidate_pool_indices_by_id = {
         pool_id: pool_index for pool_index, pool_id in enumerate(pool_ids)
     }
+    candidate_scenario_seeds_by_id = {
+        pool_id: int(candidate.scenario_seed)
+        for pool_id, candidate in zip(pool_ids, pool, strict=True)
+    }
     ranked_ids = _rank_pool_ids_by_candidate_identity(model, pool, pool_ids)
 
     from robot_sf.adversarial.disjoint_evaluation import assign_arms_disjoint_by_candidate
@@ -1351,6 +1379,7 @@ def main() -> int:
             proposal_ids=arms.proposal_ids,
             random_ids=arms.random_ids,
             candidate_pool_indices_by_id=candidate_pool_indices_by_id,
+            candidate_scenario_seeds_by_id=candidate_scenario_seeds_by_id,
             candidate_pool_seed=args.seed,
             budget_per_arm=run_budget,
         )
@@ -1375,6 +1404,7 @@ def main() -> int:
         ),
         "exact_arm_membership_required": True,
         "candidate_pool_index_lineage_required": True,
+        "scenario_seed_lineage_required": True,
         "record_sha256_lineage_required": True,
         "execution_seed_lineage_required": True,
         "reason": frozen_binding_reason or manifest_binding_reason,

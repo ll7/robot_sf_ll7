@@ -1198,8 +1198,9 @@ def classify_issue_3275_decision(
     * independent outcomes unavailable/fail-closed -> ``inconclusive``;
     * outcomes valid but underpowered for the minimally important effect ->
       ``inconclusive`` (before any continue/stop outcome sign is considered);
-    * powered outcomes with ``proposal_yield - random_yield <= 0`` -> ``stop``;
     * powered outcomes whose null is not rejected -> ``inconclusive``;
+    * powered, null-rejected outcomes with
+      ``proposal_yield - random_yield <= 0`` -> ``stop``;
     * otherwise (delta >= minimally important and null rejected and powered) ->
       ``continue``.
 
@@ -1225,12 +1226,12 @@ def classify_issue_3275_decision(
     elif not powered:
         status = "inconclusive"
         reason = "underpowered_for_minimally_important_effect"
-    elif delta <= 0.0:
-        status = "stop"
-        reason = "proposal_does_not_beat_random"
     elif not null_rejected:
         status = "inconclusive"
         reason = "null_not_rejected"
+    elif delta <= 0.0:
+        status = "stop"
+        reason = "proposal_does_not_beat_random"
     elif delta >= float(minimally_important):
         status = "continue"
         reason = "proposal_beats_random_beyond_minimally_important_effect"

@@ -449,6 +449,46 @@ class TestVerificationScript:
             "Bundle-evidence file 'docs/evidence.txt' is missing from checksum entries.",
         ]
 
+    def test_repository_entry_verification_covers_all_declared_bundle_directory_files(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A directory-backed bundle cannot silently omit a tracked sidecar."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        bundle = tmp_path / "docs" / "bundle"
+        bundle.mkdir(parents=True)
+        evidence_path = bundle / "evidence.txt"
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        (bundle / "evidence.txt.review.json").write_text("{}\n", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "directory": "docs/bundle",
+                    "files": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+                },
+            },
+            "entries": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "Bundle directory file 'docs/bundle/evidence.txt.review.json' is missing from checksum entries.",
+        ]
+
     def test_null_bundle_archive_cannot_fall_back_to_repository_entries(
         self,
         tmp_path: Path,

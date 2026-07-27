@@ -9,25 +9,44 @@ generated_by: scripts/repro/verify_release_checksums.py --no-download
 
 artifact_set:
   bundle_evidence:
+    directory: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle
     files:
       - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md
-        sha256: 14d0eda5a37f0f597429044f2e5725773dea9d4d5cbfc2afdfab33023de3ecd4
+        sha256: 3c8b98d768724a0e0a30d73f7a13f6df139528b1531317a46b939dbf2b069075
         description: Release 0.0.5 bundle summary, candidate dispositions, and verification commands.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md.review.json
+        sha256: 241f0e313cbc6496ccc609b79e903ce1f09da7504a66523b8a41ba360e74e8b7
+        description: Review marker proving the README bytes were preserved for review.
       - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml
         sha256: 2df7a72c25d21c0746de8c177b1c231c80392a57c8471766a92e38427fff0092
         description: Release evidence manifest with reverified candidate provenance and claim boundaries.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml.review.json
+        sha256: 195aba1cc2d239eaa65c1001a77dbed943971197cc3e35c38591bf6ce2fea91d
+        description: Review marker proving the release manifest bytes were preserved for review.
       - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS
-        sha256: 20d2e64efbd07de634bcca6fea560ab9ad4f2b7b85c4d152775427ce092b6d74
+        sha256: a667e268d780da50a926fe41b2462f09684497cda19e9ee55e75bd7c0d5b628d
         description: SHA-256 checksums for the other files in the evidence bundle directory.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS.review.json
+        sha256: c442ab264478109a80797fdca4cd71559a02468a8ac257e24ed1881be62e6403
+        description: Review marker proving the SHA-256 manifest bytes were preserved for review.
       - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml
         sha256: d1ad274c3dd2c6856254f81ad60d92abe2bcbd8273a75cc60dead59e1fd2f00f
         description: Reference manifest for candidate #5034 control-action-latency evidence.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml.review.json
+        sha256: 4204e6c49833d100cb5dfefb54f115b190948dd1a4cfac049c354025b1656f16
+        description: Review marker proving the candidate #5034 reference bytes were preserved.
       - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
         sha256: df92e9f7c739cc630f5dc271a8dd8a7205441e49ab988e75079e7458ad82be6c
         description: Reference manifest for candidate #5305 certified adversarial archive.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml.review.json
+        sha256: 136c69c013b70b283d046e6bfffd31b057f2eaf807d7a71bc6075056c8d7a56e
+        description: Review marker proving the candidate #5305 reference bytes were preserved.
       - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
         sha256: 4c2f97a4439fd5337eab25a0cf9c552165e5d675b5e16e89f058af891e341bd7
         description: Reference manifest for candidate #5592 cross-matrix preregistration.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml.review.json
+        sha256: 42c4abcd314290a1d69e85a8b431d2ff5dc4597719420ae0666e24f4cc5d35d2
+        description: Review marker proving the candidate #5592 reference bytes were preserved.
 
 embedded_artifacts:
   frozen_candidate_manifest:
@@ -58,17 +77,29 @@ candidates:
 
 entries:
   - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md
-    sha256: 14d0eda5a37f0f597429044f2e5725773dea9d4d5cbfc2afdfab33023de3ecd4
+    sha256: 3c8b98d768724a0e0a30d73f7a13f6df139528b1531317a46b939dbf2b069075
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md.review.json
+    sha256: 241f0e313cbc6496ccc609b79e903ce1f09da7504a66523b8a41ba360e74e8b7
   - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml
     sha256: 2df7a72c25d21c0746de8c177b1c231c80392a57c8471766a92e38427fff0092
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml.review.json
+    sha256: 195aba1cc2d239eaa65c1001a77dbed943971197cc3e35c38591bf6ce2fea91d
   - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS
-    sha256: 20d2e64efbd07de634bcca6fea560ab9ad4f2b7b85c4d152775427ce092b6d74
+    sha256: a667e268d780da50a926fe41b2462f09684497cda19e9ee55e75bd7c0d5b628d
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS.review.json
+    sha256: c442ab264478109a80797fdca4cd71559a02468a8ac257e24ed1881be62e6403
   - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml
     sha256: d1ad274c3dd2c6856254f81ad60d92abe2bcbd8273a75cc60dead59e1fd2f00f
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml.review.json
+    sha256: 4204e6c49833d100cb5dfefb54f115b190948dd1a4cfac049c354025b1656f16
   - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
     sha256: df92e9f7c739cc630f5dc271a8dd8a7205441e49ab988e75079e7458ad82be6c
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml.review.json
+    sha256: 136c69c013b70b283d046e6bfffd31b057f2eaf807d7a71bc6075056c8d7a56e
   - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
     sha256: 4c2f97a4439fd5337eab25a0cf9c552165e5d675b5e16e89f058af891e341bd7
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml.review.json
+    sha256: 42c4abcd314290a1d69e85a8b431d2ff5dc4597719420ae0666e24f4cc5d35d2
   - path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
     sha256: 84af86ca08b060132ed3d9f40d95254c8c73cc5096229623e173524d4ffe9177
   - path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256

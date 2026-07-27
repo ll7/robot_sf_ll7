@@ -39,9 +39,10 @@ uv run python scripts/repro/verify_release_checksums.py \
   --manifest configs/releases/release_0_0_5_checksum_manifest.yaml --no-download
 ```
 
-The first command verifies all bundle files. The second verifies the release
-preflight, including the frozen-manifest checksum and claim audit. The third
-independently verifies every repository-local entry in the checksum manifest.
+The first command verifies every payload file and review marker except the
+checksum manifest's own review marker; the third command verifies that final
+marker through the outer release checksum manifest. The second verifies the
+release preflight, including the frozen-manifest checksum and claim audit.
 
 ## Files
 

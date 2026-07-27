@@ -226,8 +226,12 @@ def _bundle_file_coverage_errors(
     return []
 
 
-def _verify_bundle_evidence_coverage(bundle_evidence: Any, entries: Any) -> list[str]:
-    """Verify every declared bundle-evidence file has an identical checksum entry."""
+def _verify_bundle_evidence_coverage(
+    bundle_evidence: Any,
+    entries: Any,
+    repo_root: Path,
+) -> list[str]:
+    """Verify declared bundle files and, when configured, the whole bundle directory."""
     if not isinstance(bundle_evidence, dict):
         return ["artifact_set.bundle_evidence must be a mapping."]
     files = bundle_evidence.get("files")
@@ -240,6 +244,26 @@ def _verify_bundle_evidence_coverage(bundle_evidence: Any, entries: Any) -> list
         errors.extend(
             _bundle_file_coverage_errors(index, bundle_file, entry_digests, bundle_paths),
         )
+
+    bundle_directory = bundle_evidence.get("directory")
+    if bundle_directory is None:
+        return errors
+    if not isinstance(bundle_directory, str) or not bundle_directory:
+        return [*errors, "artifact_set.bundle_evidence.directory must be a non-empty path."]
+    directory = (repo_root.resolve() / bundle_directory).resolve()
+    try:
+        directory.relative_to(repo_root.resolve())
+    except ValueError:
+        return [*errors, "artifact_set.bundle_evidence.directory escapes the repository root."]
+    if not directory.is_dir():
+        return [*errors, "artifact_set.bundle_evidence.directory is missing or not a directory."]
+
+    for path in sorted(candidate for candidate in directory.rglob("*") if candidate.is_file()):
+        relative_path = path.relative_to(repo_root.resolve()).as_posix()
+        if relative_path not in bundle_paths:
+            errors.append(
+                f"Bundle directory file {relative_path!r} is missing from checksum entries."
+            )
     return errors
 
 
@@ -310,6 +334,7 @@ def verify_release(  # noqa: C901, PLR0912 - failures need distinct structured r
         coverage_errors = _verify_bundle_evidence_coverage(
             artifact_set["bundle_evidence"],
             manifest.get("entries"),
+            repo_root or Path.cwd(),
         )
         report["verdicts"]["bundle_evidence_coverage"] = {
             "match": not coverage_errors,

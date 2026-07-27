@@ -110,19 +110,31 @@ def _workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_main_push_workflows_queue_while_pull_request_runs_supersede() -> None:
-    """Keep post-merge validation from being starved while retaining fast PR feedback.
+def test_workflows_cancel_superseded_in_progress_runs_latest_main_wins() -> None:
+    """Lock the latest-main-wins concurrency policy (issue #6399).
 
-    GitHub Actions groups all runs for ``refs/heads/main`` together.  The explicit
-    expression queues those main runs, but still cancels superseded pull-request runs.
+    A bounded merge burst can push several main SHAs in quick succession.  The
+    intermediate runs are superseded by the final aggregate SHA, which contains
+    every earlier commit, so retaining them only adds queue latency without
+    adding coverage.  Setting ``cancel-in-progress`` to ``true`` for every ref
+    makes a new main push cancel any superseded in-progress main run, so the
+    final aggregate SHA is validated without waiting behind stale runs.
+
+    The existing ``${{ github.workflow }}-${{ github.ref }}`` group keeps each
+    ref isolated, so this is safe for pull requests too: a new pull-request push
+    shares a group only with its own ref and still cancels only its own
+    superseded run, never a main run or another PR's run.
     """
 
-    expected = "${{ github.ref != 'refs/heads/main' }}"
+    expected_group = "${{ github.workflow }}-${{ github.ref }}"
     for workflow_file in (CI_WORKFLOW, CODEQL_WORKFLOW):
         workflow = yaml.safe_load(workflow_file.read_text(encoding="utf-8")) or {}
         concurrency = workflow.get("concurrency", {})
         assert isinstance(concurrency, dict)
-        assert concurrency.get("cancel-in-progress") == expected
+        # A boolean ``true`` literal, not the queue-main expression and not a
+        # string: both latest-main-wins and per-PR supersession must hold.
+        assert concurrency.get("group") == expected_group
+        assert concurrency.get("cancel-in-progress") is True
 
 
 def _workflow_files() -> list[Path]:

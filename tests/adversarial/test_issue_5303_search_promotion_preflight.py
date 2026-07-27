@@ -33,6 +33,7 @@ from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
     DEFAULT_RECEIPT_PATH,
     SCHEMA_VERSION,
     _min_permutation_p_values,
+    _warm_start_space_errors,
     dump_preflight_payload,
     preflight_issue_5303_contract,
 )
@@ -76,6 +77,102 @@ def test_preflight_passes_on_frozen_contract() -> None:
     assert not result.blockers
     failed = [name for name, ok in result.checks.items() if not ok]
     assert failed == [], f"failed checks: {failed}"
+
+
+def test_warm_start_space_errors_fail_closed_for_malformed_inputs(tmp_path: Path) -> None:
+    """The side-effect-free warm-start check reports malformed and out-of-space records."""
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "space.yaml"
+
+    missing_errors = _warm_start_space_errors(
+        archive_path=archive_path,
+        record_ids=("record",),
+        search_space_path=search_space_path,
+    )
+    assert missing_errors and "could not be loaded" in missing_errors[0]
+
+    archive_path.write_text(json.dumps({"entries": {}}), encoding="utf-8")
+    search_space_path.write_text("variables: {}\nconstraints: {}\n", encoding="utf-8")
+    assert _warm_start_space_errors(
+        archive_path=archive_path,
+        record_ids=("record",),
+        search_space_path=search_space_path,
+    ) == ["warm-start archive must contain an entries list"]
+
+    archive_path.write_text(json.dumps({"entries": []}), encoding="utf-8")
+    search_space_path.write_text("variables: []\nconstraints: {}\n", encoding="utf-8")
+    assert _warm_start_space_errors(
+        archive_path=archive_path,
+        record_ids=("record",),
+        search_space_path=search_space_path,
+    ) == ["warm-start search space must contain variables and constraints mappings"]
+
+    archive_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {"archive_id": "missing_candidate", "candidate": None},
+                    {"archive_id": "bad_pose", "candidate": {"start": {}, "goal": []}},
+                    {
+                        "archive_id": "bad_values",
+                        "candidate": {
+                            "start": {"x": "not-a-number", "y": "nan"},
+                            "goal": {"x": 1.0, "y": 1.0},
+                            "spawn_time_s": -1.0,
+                            "pedestrian_speed_mps": 0.0,
+                            "pedestrian_delay_s": -1.0,
+                            "scenario_seed": 1.5,
+                        },
+                    },
+                    {
+                        "archive_id": "short_distance",
+                        "candidate": {
+                            "start": {"x": 1.0, "y": 1.0},
+                            "goal": {"x": 1.0, "y": 1.0},
+                            "spawn_time_s": 1.0,
+                            "pedestrian_speed_mps": 1.0,
+                            "pedestrian_delay_s": 1.0,
+                            "scenario_seed": 42,
+                        },
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    search_space_path.write_text(
+        yaml.safe_dump(
+            {
+                "variables": {
+                    "start_x": {"min": 0.0, "max": 2.0},
+                    "start_y": {"min": 0.0, "max": 2.0},
+                    "goal_x": {"min": "nan", "max": 2.0},
+                    "goal_y": {"min": "invalid", "max": 2.0},
+                    "spawn_time_s": {"min": 0.0, "max": 2.0},
+                    "pedestrian_speed_mps": {"min": 0.1, "max": 2.0},
+                    "pedestrian_delay_s": {"min": 0.0, "max": 2.0},
+                    "scenario_seed": {"min": 0, "max": 100},
+                },
+                "constraints": {"min_start_goal_distance_m": 10.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    errors = _warm_start_space_errors(
+        archive_path=archive_path,
+        record_ids=("missing_candidate", "bad_pose", "bad_values", "short_distance", "absent"),
+        search_space_path=search_space_path,
+    )
+    assert any("has no candidate mapping" in error for error in errors)
+    assert any("invalid start/goal poses" in error for error in errors)
+    assert any("non-numeric start_x" in error for error in errors)
+    assert any("non-finite start_y" in error for error in errors)
+    assert any("invalid bounds for goal_y" in error for error in errors)
+    assert any("outside" in error for error in errors)
+    assert any("scenario_seed must be an integer" in error for error in errors)
+    assert any("must be non-negative" in error for error in errors)
+    assert any("must be positive" in error for error in errors)
+    assert any("distance" in error for error in errors)
 
 
 def test_preflight_schema_and_contract_schema_versions() -> None:
@@ -194,6 +291,7 @@ def test_frozen_design_fields() -> None:
         "step3_runner_row_schema_matches_contract",
         "step3_analysis_static_support",
         "step3_execution_command_complete",
+        "step3_warm_start_search_space_compatible",
         "step3_analysis_command_complete",
     ):
         assert result.checks[check_name], check_name

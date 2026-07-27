@@ -62,6 +62,10 @@ EXPECTED_HORIZON_STEPS = 100
 EXPECTED_DT_S = 0.1
 EXPECTED_TIME_CAP_S = 10.0
 EXPECTED_DOORWAY_SEEDS: tuple[int, ...] = (128, 130)
+EXPECTED_WARM_START_RECORD_IDS: tuple[str, ...] = (
+    "issue5305_classic_cross_trap_medium_fbbd96687d61",
+    "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
+)
 EXPECTED_NEGATIVE_CONTROL_FAMILY = "francis2023_blind_corner"
 EXPECTED_DIAGNOSTIC_EXECUTION_MODE = "adapter"
 EXPECTED_NULL_TEST_COUNT = 2
@@ -118,7 +122,7 @@ EXPECTED_PROVENANCE_PATHS = {
     "diagnostic_scenario_template": (
         "configs/adversarial/issue_5303_classic_group_crossing_medium.yaml"
     ),
-    "search_space": "configs/adversarial/crossing_ttc_space.yaml",
+    "search_space": "configs/adversarial/issue_5303_search_promotion_space.yaml",
     "certification_runner": "robot_sf/adversarial/certification.py",
     "objective_registry": "robot_sf/adversarial/objectives.py",
     "diagnostic_runner": "scripts/tools/compare_adversarial_samplers.py",
@@ -402,6 +406,107 @@ def _command_options(command: Any) -> tuple[dict[str, list[str | None]], str | N
         options.setdefault(token, []).append(tokens[index + 1])
         index += 2
     return options, None
+
+
+def _warm_start_space_errors(  # noqa: C901, PLR0912, PLR0915
+    *, archive_path: Path, record_ids: tuple[str, ...], search_space_path: Path
+) -> list[str]:
+    """Validate frozen archive warm starts against the declared search-space bounds.
+
+    This mirrors the input checks that ``SearchConfig.validate`` performs without importing
+    adversarial execution modules into the side-effect-free preflight.
+
+    Returns:
+        A list of compatibility errors; an empty list means all selected warm starts fit.
+    """
+    errors: list[str] = []
+    try:
+        archive = json.loads(archive_path.read_text(encoding="utf-8"))
+        search_space = yaml.safe_load(search_space_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        return [f"warm-start compatibility inputs could not be loaded: {exc}"]
+    entries = archive.get("entries") if isinstance(archive, dict) else None
+    variables = search_space.get("variables") if isinstance(search_space, dict) else None
+    constraints = search_space.get("constraints", {}) if isinstance(search_space, dict) else {}
+    if not isinstance(entries, list):
+        return ["warm-start archive must contain an entries list"]
+    if not isinstance(variables, dict) or not isinstance(constraints, dict):
+        return ["warm-start search space must contain variables and constraints mappings"]
+    by_id = {
+        entry.get("archive_id"): entry
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("archive_id"), str)
+    }
+    for record_id in record_ids:
+        entry = by_id.get(record_id)
+        candidate = entry.get("candidate") if isinstance(entry, dict) else None
+        if not isinstance(candidate, dict):
+            errors.append(f"warm-start record {record_id!r} has no candidate mapping")
+            continue
+        start = candidate.get("start")
+        goal = candidate.get("goal")
+        if not isinstance(start, dict) or not isinstance(goal, dict):
+            errors.append(f"warm-start record {record_id!r} has invalid start/goal poses")
+            continue
+        values = {
+            "start_x": start.get("x"),
+            "start_y": start.get("y"),
+            "goal_x": goal.get("x"),
+            "goal_y": goal.get("y"),
+            "spawn_time_s": candidate.get("spawn_time_s"),
+            "pedestrian_speed_mps": candidate.get("pedestrian_speed_mps"),
+            "pedestrian_delay_s": candidate.get("pedestrian_delay_s"),
+            "scenario_seed": candidate.get("scenario_seed"),
+        }
+        numeric_values: dict[str, float] = {}
+        for name, raw_value in values.items():
+            try:
+                parsed = float(raw_value)
+            except (TypeError, ValueError):
+                errors.append(f"warm-start {record_id!r} has non-numeric {name}")
+                continue
+            if not math.isfinite(parsed):
+                errors.append(f"warm-start {record_id!r} has non-finite {name}")
+                continue
+            numeric_values[name] = parsed
+            bound = variables.get(name)
+            if not isinstance(bound, dict):
+                errors.append(f"warm-start search space is missing bounds for {name}")
+                continue
+            try:
+                lower = float(bound["min"])
+                upper = float(bound["max"])
+            except (KeyError, TypeError, ValueError):
+                errors.append(f"warm-start search space has invalid bounds for {name}")
+                continue
+            if not math.isfinite(lower) or not math.isfinite(upper) or not lower <= parsed <= upper:
+                errors.append(
+                    f"warm-start {record_id!r} {name}={parsed} is outside [{lower}, {upper}]"
+                )
+        seed = numeric_values.get("scenario_seed")
+        if seed is not None and not seed.is_integer():
+            errors.append(f"warm-start {record_id!r} scenario_seed must be an integer")
+        if numeric_values.get("spawn_time_s", 0.0) < 0.0:
+            errors.append(f"warm-start {record_id!r} spawn_time_s must be non-negative")
+        if numeric_values.get("pedestrian_speed_mps", 1.0) <= 0.0:
+            errors.append(f"warm-start {record_id!r} pedestrian_speed_mps must be positive")
+        if numeric_values.get("pedestrian_delay_s", 0.0) < 0.0:
+            errors.append(f"warm-start {record_id!r} pedestrian_delay_s must be non-negative")
+        min_distance = constraints.get("min_start_goal_distance_m", 0.25)
+        try:
+            min_distance_value = float(min_distance)
+            distance = math.hypot(
+                numeric_values["goal_x"] - numeric_values["start_x"],
+                numeric_values["goal_y"] - numeric_values["start_y"],
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+        if distance < min_distance_value:
+            errors.append(
+                f"warm-start {record_id!r} start/goal distance {distance:.6f} "
+                f"is below {min_distance_value:.6f}"
+            )
+    return errors
 
 
 def _single_command_value(options: dict[str, list[str | None]], option: str) -> str | None:
@@ -1379,11 +1484,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         and "--issue-5303-diagnostic-only" in command_options
         and "--synthetic" not in command_options
         and "--empirical" not in command_options
-        and command_options.get("--warm-start-record")
-        == [
-            "issue5305_classic_cross_trap_medium_fbbd96687d61",
-            "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
-        ]
+        and command_options.get("--warm-start-record") == list(EXPECTED_WARM_START_RECORD_IDS)
     )
     artifact_paths_match = expected_artifacts == {
         "output_dir": "output/adversarial/issue_5303_search_promotion",
@@ -1403,6 +1504,26 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             "the frozen diagnostic command must bind target/reference/configuration/certification "
             "inputs, all seeds/arms, and report/outcome artifact paths"
+        )
+    warm_start_archive = certified_archive_resolved
+    warm_start_search_space = _resolve(root, EXPECTED_PROVENANCE_PATHS["search_space"])
+    warm_start_errors = (
+        _warm_start_space_errors(
+            archive_path=warm_start_archive,
+            record_ids=EXPECTED_WARM_START_RECORD_IDS,
+            search_space_path=warm_start_search_space,
+        )
+        if warm_start_archive is not None and warm_start_search_space is not None
+        else ["warm-start archive or search-space path is unavailable"]
+    )
+    metadata["warm_start_compatibility_errors"] = warm_start_errors
+    checks["step3_warm_start_search_space_compatible"] = (
+        checks["step3_execution_command_complete"] and not warm_start_errors
+    )
+    if not checks["step3_warm_start_search_space_compatible"]:
+        blockers.append(
+            "the frozen fit-family warm starts must exist and validate against the declared "
+            "diagnostic search space: " + "; ".join(warm_start_errors)
         )
     checks["step3_warm_start_wiring"] = (
         "_load_archive_warm_starts" in runner_functions

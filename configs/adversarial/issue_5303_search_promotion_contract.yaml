@@ -95,8 +95,8 @@ input_provenance:
       path: configs/adversarial/issue_5303_classic_group_crossing_medium.yaml
       sha256: 22eee6b350a9314db73514fc871fee66a97d2695811cbfadd87b4484155d32e3
     - id: search_space
-      path: configs/adversarial/crossing_ttc_space.yaml
-      sha256: e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34
+      path: configs/adversarial/issue_5303_search_promotion_space.yaml
+      sha256: 04906a154f88c17b5d2797a4d6d934f5b6b74cc25d7e99796bd603f9823f2106
     - id: certification_runner
       path: robot_sf/adversarial/certification.py
       sha256: e335b00366db1066ae751e6c437bde3700488aa5680fcbed05a5b614b005cf97
@@ -198,7 +198,7 @@ simulator_time_cap:
 # ---------------------------------------------------------------------------
 candidate_space_and_feasibility:
   search_space_schema: adversarial-search-space.v1
-  candidate_space_structure_ref: configs/adversarial/crossing_ttc_space.yaml
+  candidate_space_structure_ref: configs/adversarial/issue_5303_search_promotion_space.yaml
   identical_for_both_methods: true
   feasibility_rules:
     - corrected_swept_envelope_full_polyline_clearance
@@ -474,7 +474,7 @@ step3_execution:
     --reference-algo-config configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml
     --scenario-template configs/adversarial/issue_5303_classic_group_crossing_medium.yaml
     --scenario-family classic_group_crossing_medium
-    --search-space configs/adversarial/crossing_ttc_space.yaml
+    --search-space configs/adversarial/issue_5303_search_promotion_space.yaml
     --sampler random --sampler optuna
     --budget 64
     --seed 530301 --seed 530302 --seed 530303

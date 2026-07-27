@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from robot_sf.adversarial.config import SearchConfig
 from robot_sf.benchmark.issue_5303_search_promotion_analysis import (
     OUTCOME_ROW_SCHEMA_VERSION,
     analyze_issue_5303_search_promotion,
@@ -173,6 +174,40 @@ def test_diagnostic_cli_requires_the_frozen_execution_bindings() -> None:
         "issue5305_classic_cross_trap_medium_fbbd96687d61",
         "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
     ]
+
+
+def test_frozen_diagnostic_search_config_accepts_selected_warm_starts() -> None:
+    """The authoritative command builds a valid config before any planner execution."""
+    step3_execution = FROZEN_CONTRACT["step3_execution"]
+    assert isinstance(step3_execution, dict)
+    command = step3_execution["diagnostic_search_command"]
+    assert isinstance(command, str)
+    command_parts = shlex.split(command)
+    args = compare_adversarial_samplers.parse_args(command_parts[4:])
+    assert args.warm_start_archive is not None
+    assert args.warm_start_record is not None
+    warm_starts = compare_adversarial_samplers._load_archive_warm_starts(
+        REPO_ROOT / args.warm_start_archive,
+        tuple(args.warm_start_record),
+        scenario=args.scenario_family,
+        planner=args.policy,
+    )
+    config = SearchConfig.from_files(
+        policy=args.policy,
+        scenario_template=REPO_ROOT / args.scenario_template,
+        search_space=REPO_ROOT / args.search_space,
+        objective=args.objectives[0],
+        output_dir=REPO_ROOT / args.output_dir,
+        budget=args.budget[0],
+        seed=args.seed[0],
+        algo_config_path=REPO_ROOT / args.algo_config,
+        horizon=args.horizon,
+        dt=args.dt,
+        require_certification=args.require_certification,
+        benchmark_profile=args.benchmark_profile,
+        warm_start=warm_starts,
+    )
+    config.validate()
 
 
 def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) -> None:

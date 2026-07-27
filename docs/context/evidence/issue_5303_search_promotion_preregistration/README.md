@@ -76,6 +76,10 @@ match the frozen entry-gate digest:
 - **Budget:** exactly **64** candidates per search seed per method, exactly **3** search
   seeds per method (`530301, 530302, 530303`), simulator-time cap `horizon=100, dt=0.1`
   (10.0 s), identical candidate space, feasibility rules, and execution mode for both.
+- **Candidate space:** the issue-specific
+  `configs/adversarial/issue_5303_search_promotion_space.yaml` keeps the canonical
+  crossing/TTC geometry and includes the two frozen fit-family warm-start seeds (`14821`,
+  `14890`) in its declared scenario-seed interval.
 - **Objective:** constraints-first lexicographic ordering — (1) collision or severe
   intrusion [hard veto], (2) liveness/goal completion, (3) comfort/efficiency. No
   weighted comfort or SNQI (Social Navigation Quality Index) improvement may compensate

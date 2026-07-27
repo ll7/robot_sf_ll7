@@ -142,6 +142,59 @@ def test_min_labeled_fraction_out_of_range_fails_closed(tmp_path: Path, base_pay
         load_preregistration(path)
 
 
+def test_boolean_min_labeled_fraction_fails_closed(tmp_path: Path, base_payload: dict) -> None:
+    """A YAML boolean must not satisfy the numeric fraction contract."""
+    base_payload["required_outputs"]["failure_mechanism"]["min_trace_verified_labeled_fraction"] = (
+        True
+    )
+    path = _write_config(tmp_path, base_payload)
+    with pytest.raises(RerunPreregistrationError, match="min_trace_verified_labeled_fraction"):
+        load_preregistration(path)
+
+
+def test_missing_denominator_field_fails_closed(tmp_path: Path, base_payload: dict) -> None:
+    """A contract that omits the denominator declaration fails closed.
+
+    Issue #5779 structural correction: the floor denominator must be declared
+    explicitly so it cannot silently drift back to the unreachable all-rows
+    denominator. A missing declaration is rejected.
+    """
+    del base_payload["required_outputs"]["failure_mechanism"][
+        "min_trace_verified_labeled_fraction_denominator"
+    ]
+    path = _write_config(tmp_path, base_payload)
+    with pytest.raises(
+        RerunPreregistrationError, match="min_trace_verified_labeled_fraction_denominator"
+    ):
+        load_preregistration(path)
+
+
+def test_all_rows_denominator_fails_closed(tmp_path: Path, base_payload: dict) -> None:
+    """Declaring the all_rows denominator is rejected.
+
+    Only ``failure_episodes`` is ratified (issue #5779): success episodes carry no
+    failure-mechanism label, so an all-rows denominator makes the floor
+    unreachable by construction and must not be re-introduced silently.
+    """
+    base_payload["required_outputs"]["failure_mechanism"][
+        "min_trace_verified_labeled_fraction_denominator"
+    ] = "all_rows"
+    path = _write_config(tmp_path, base_payload)
+    with pytest.raises(
+        RerunPreregistrationError, match="min_trace_verified_labeled_fraction_denominator"
+    ):
+        load_preregistration(path)
+
+
+def test_dry_run_manifest_propagates_denominator(base_payload: dict) -> None:
+    """The dry-run manifest carries the declared denominator for downstream consumers."""
+    manifest = build_dry_run_manifest(base_payload)
+    assert (
+        manifest["required_outputs"]["min_trace_verified_labeled_fraction_denominator"]
+        == "failure_episodes"
+    )
+
+
 def test_empty_roster_fails_closed(tmp_path: Path, base_payload: dict) -> None:
     """An empty planner roster is rejected."""
     base_payload["planner_roster"]["structural_classes"] = {}

@@ -1080,6 +1080,52 @@ def test_contract_runner_binds_pool_index_and_record_hash_from_external_manifest
     )
 
 
+def test_contract_runner_blocks_unbound_supplied_outcomes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A supplied packet without its external binding cannot remain an active run."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    initial_output = tmp_path / "initial_contract_report.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--output",
+            initial_output.as_posix(),
+        ],
+    )
+    assert script_main() == 0
+    packet = _contract_v2_outcome_packet(json.loads(initial_output.read_text("utf-8")))
+    outcomes_path = tmp_path / "outcomes.json"
+    outcomes_path.write_text(json.dumps(packet), encoding="utf-8")
+
+    blocked_output = tmp_path / "blocked_contract_report.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--evaluation-outcomes",
+            outcomes_path.as_posix(),
+            "--output",
+            blocked_output.as_posix(),
+        ],
+    )
+    assert script_main() == 0
+
+    report = json.loads(blocked_output.read_text("utf-8"))
+    assert report["state"] == "blocked"
+    assert "External manifest binding blocked" in report["reason"]
+    assert report["independent_outcome_evaluation"]["status"] == "blocked"
+    assert (
+        report["independent_outcome_evaluation"]["candidate_manifest_binding"]["available"] is False
+    )
+
+
 def test_contract_runner_rejects_a_budget_outside_the_frozen_contract(
     tmp_path: Path, monkeypatch
 ) -> None:

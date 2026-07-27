@@ -1290,6 +1290,63 @@ def _assemble_report(  # noqa: PLR0913
     }
 
 
+def _apply_supplied_outcome_binding_gate(
+    *,
+    state: str,
+    reason: str,
+    contract: dict[str, Any] | None,
+    outcome_data: dict[str, Any] | None,
+    binding_for_admission: dict[str, Any] | None,
+    binding_failure_reason: str,
+) -> tuple[str, str]:
+    """Block a frozen run when supplied outcomes lack a matching external binding."""
+    if contract is None or outcome_data is None or binding_for_admission is not None:
+        return state, reason
+    # A supplied execution packet without a matching external binding has no
+    # independently frozen denominator or manifest/seed lineage. Keep no-outcome
+    # contract smoke runs active, but surface attempted unbound admission as
+    # blocked at the top-level as well as in the outcome evaluation.
+    return "blocked", f"{reason} External manifest binding blocked: {binding_failure_reason}"
+
+
+def _resolve_frozen_binding_for_run(  # noqa: PLR0913
+    *,
+    contract: dict[str, Any] | None,
+    manifest_binding: dict[str, Any] | None,
+    manifest_binding_reason: str,
+    outcome_data: dict[str, Any] | None,
+    arms: Any,
+    candidate_pool_indices_by_id: dict[str, int],
+    candidate_scenario_seeds_by_id: dict[str, int],
+    candidate_pool_seed: int,
+    budget_per_arm: int,
+    state: str,
+    reason: str,
+) -> tuple[dict[str, Any] | None, str | None, str, str]:
+    """Validate a supplied frozen binding and propagate any admission block."""
+    frozen_binding_reason = None
+    if contract is not None and manifest_binding is not None:
+        frozen_binding_reason = _frozen_binding_matches_generated_arms(
+            manifest_binding,
+            proposal_ids=arms.proposal_ids,
+            random_ids=arms.random_ids,
+            candidate_pool_indices_by_id=candidate_pool_indices_by_id,
+            candidate_scenario_seeds_by_id=candidate_scenario_seeds_by_id,
+            candidate_pool_seed=candidate_pool_seed,
+            budget_per_arm=budget_per_arm,
+        )
+    binding_for_admission = manifest_binding if frozen_binding_reason is None else None
+    state, reason = _apply_supplied_outcome_binding_gate(
+        state=state,
+        reason=reason,
+        contract=contract,
+        outcome_data=outcome_data,
+        binding_for_admission=binding_for_admission,
+        binding_failure_reason=frozen_binding_reason or manifest_binding_reason,
+    )
+    return binding_for_admission, frozen_binding_reason, state, reason
+
+
 def main() -> int:
     """Main execution function."""
     args = parse_args()
@@ -1411,18 +1468,19 @@ def main() -> int:
         model_provenance=model_provenance,
         search_space_provenance=search_space_provenance,
     )
-    frozen_binding_reason = None
-    if contract is not None and manifest_binding is not None:
-        frozen_binding_reason = _frozen_binding_matches_generated_arms(
-            manifest_binding,
-            proposal_ids=arms.proposal_ids,
-            random_ids=arms.random_ids,
-            candidate_pool_indices_by_id=candidate_pool_indices_by_id,
-            candidate_scenario_seeds_by_id=candidate_scenario_seeds_by_id,
-            candidate_pool_seed=args.seed,
-            budget_per_arm=run_budget,
-        )
-    binding_for_admission = manifest_binding if frozen_binding_reason is None else None
+    binding_for_admission, frozen_binding_reason, state, reason = _resolve_frozen_binding_for_run(
+        contract=contract,
+        manifest_binding=manifest_binding,
+        manifest_binding_reason=manifest_binding_reason,
+        outcome_data=outcome_data,
+        arms=arms,
+        candidate_pool_indices_by_id=candidate_pool_indices_by_id,
+        candidate_scenario_seeds_by_id=candidate_scenario_seeds_by_id,
+        candidate_pool_seed=args.seed,
+        budget_per_arm=run_budget,
+        state=state,
+        reason=reason,
+    )
     independent_evaluation = build_independent_outcome_evaluation(
         outcome_data,
         budget_per_arm=run_budget,

@@ -1862,12 +1862,17 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                 f"rows={len(rows)}, missing={sorted(missing)[:3]}, extra={sorted(extra)[:3]}"
             )
 
-        _write_cell_summaries(rows, cell_path)
         non_native = [row for row in rows if row["execution_mode"] != "native"]
         if non_native:
+            # Quarantine rejected rows away from the canonical cell-summaries artifact so a
+            # fallback/degraded/failed run can never populate the path consumed by
+            # ``--synthesize``. Only the all-native branch below writes the canonical path.
+            rejected_path = cell_path.with_suffix(".rejected.jsonl")
+            _write_cell_summaries(rows, rejected_path)
             report["status"] = "rejected_non_native_rows"
             report["native_cell_count"] = len(rows) - len(non_native)
             report["excluded_cell_count"] = len(non_native)
+            report["rejected_cell_summaries_path"] = _repo_rel(rejected_path)
             report["finished_at_utc"] = _utc_timestamp()
             _write_jsonl(report_file, report)
             raise AuthorizedCampaignError(
@@ -1875,6 +1880,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                 "no synthesis was promoted"
             )
 
+        _write_cell_summaries(rows, cell_path)
         synthesis = synthesize_from_cell_summaries(cell_path, output_path=synthesis_path)
         report.update(
             {
@@ -2041,10 +2047,11 @@ def _run_authorized_full_run(args: argparse.Namespace) -> int:
         )
     manifest = compile_campaign_manifest(config_path=args.config)
     raw_root = pathlib.Path(args.raw_root or DEFAULT_RAW_ROOT)
-    cell_summaries_path = pathlib.Path(
-        args.cell_summaries_out or raw_root.parent / "cell_summaries.jsonl"
-    )
-    synthesis_path = pathlib.Path(args.synthesis_out or raw_root.parent / "synthesis.json")
+    # Anchor defaults to the module-level canonical paths so a custom ``--raw-root`` (for
+    # example ``--raw-root raw``) cannot drop cell_summaries.jsonl / synthesis.json into the
+    # repository root. Explicit ``--cell-summaries-out`` / ``--synthesis-out`` still win.
+    cell_summaries_path = pathlib.Path(args.cell_summaries_out or DEFAULT_CELL_SUMMARY_PATH)
+    synthesis_path = pathlib.Path(args.synthesis_out or DEFAULT_SYNTHESIS_PATH)
     report = execute_authorized_campaign(
         manifest,
         raw_root=raw_root,

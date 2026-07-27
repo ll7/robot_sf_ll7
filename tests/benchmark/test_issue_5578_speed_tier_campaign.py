@@ -400,6 +400,162 @@ def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
     assert all(json.loads(line)["execution_mode"] == "native" for line in cells)
 
 
+def test_authorized_campaign_rejection_quarantines_non_native_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fallback/degraded row rejects the run without polluting the canonical artifact.
+
+    The canonical cell-summaries path (consumed by ``--synthesize``) must never be written
+    when the grid contains any non-native row. Rejected rows are quarantined to a
+    distinctly-named ``.rejected.jsonl`` path for diagnosis, and the report records both
+    the rejection and the quarantine path.
+    """
+    degrade_first = {"active": True}
+
+    def fake_run_native_batch(
+        scenarios: list[dict[str, Any]],
+        out_path: Path,
+        *,
+        algo: str,
+        algo_config_path: str | None,
+        resume: bool,
+    ) -> dict[str, Any]:
+        del algo_config_path, resume
+        cap = float(scenarios[0]["robot_config"]["max_velocity"])
+        planner_mode = "adapter" if algo == "orca" else "native"
+        rows: list[dict[str, Any]] = []
+        for scenario in scenarios:
+            for seed in scenario["seeds"]:
+                # The first emitted row is a fallback; the rest are native. A single
+                # non-native row is enough to fail the whole campaign closed.
+                status = "fallback" if degrade_first["active"] else "ok"
+                degrade_first["active"] = False
+                rows.append(
+                    {
+                        "episode_id": f"{scenario['name']}--{seed}",
+                        "scenario_id": scenario["name"],
+                        "seed": seed,
+                        "horizon": 600,
+                        "algorithm_metadata": {
+                            "status": status,
+                            "canonical_algorithm": algo,
+                            "planner_kinematics": {"execution_mode": planner_mode},
+                            "simulation_step_trace": {
+                                "dt": 0.1,
+                                "steps": [
+                                    {
+                                        "robot": {"velocity": [cap, 0.0]},
+                                        "planner": {"selected_action": {"linear_velocity": cap}},
+                                    },
+                                    {
+                                        "robot": {"velocity": [cap, 0.0]},
+                                        "planner": {"selected_action": {"linear_velocity": cap}},
+                                    },
+                                ],
+                            },
+                        },
+                        "metrics": {
+                            "success": True,
+                            "total_collision_count": 0,
+                            "collisions": 0,
+                            "ped_collision_count": 0,
+                            "obstacle_collision_count": 0,
+                            "agent_collision_count": 0,
+                            "near_misses": 0,
+                            "time_to_goal_norm": 0.5,
+                            "socnavbench_path_length": 1.0,
+                            "mean_clearance": 1.0,
+                            "min_clearance": 0.5,
+                        },
+                        "interaction_exposure": {
+                            "interaction_exposure_share": 0.0,
+                            "interaction_exposure_denominator_steps": 2,
+                        },
+                        "result_provenance": {"repo_commit": "test"},
+                    }
+                )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return {"written": len(rows), "failed_jobs": 0}
+
+    monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
+    manifest = _manifest()
+    cells = tmp_path / "cells.jsonl"
+    report_path = tmp_path / "report.json"
+    with pytest.raises(campaign.AuthorizedCampaignError, match="rejected"):
+        campaign.execute_authorized_campaign(
+            manifest,
+            raw_root=tmp_path / "raw",
+            cell_summaries_path=cells,
+            synthesis_path=tmp_path / "synthesis.json",
+            report_path=report_path,
+            authorization_issue=6102,
+        )
+
+    # Canonical path consumed by --synthesize must not exist for a rejected run.
+    assert not cells.exists()
+    # Rejected rows are quarantined under a distinct name and recorded in the report.
+    quarantine = cells.with_suffix(".rejected.jsonl")
+    assert quarantine.exists()
+    quarantined = [json.loads(line) for line in quarantine.read_text(encoding="utf-8").splitlines()]
+    assert any(row["execution_mode"] != "native" for row in quarantined)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["status"] == "rejected_non_native_rows"
+    assert report["excluded_cell_count"] >= 1
+    assert report["rejected_cell_summaries_path"] == campaign._repo_rel(quarantine)
+
+
+def test_authorized_full_run_defaults_anchor_to_module_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default cell/synthesis paths anchor to module constants, not ``--raw-root``'s parent.
+
+    A custom ``--raw-root`` (for example a bare ``raw``) must not drop
+    ``cell_summaries.jsonl`` / ``synthesis.json`` into the repository root; the canonical
+    module paths remain the defaults and explicit ``--cell-summaries-out`` /
+    ``--synthesis-out`` overrides still win.
+    """
+    captured: dict[str, str] = {}
+
+    def fake_execute(
+        manifest: Any,
+        *,
+        raw_root: Any,
+        cell_summaries_path: Any,
+        synthesis_path: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del manifest, kwargs
+        captured["raw_root"] = str(raw_root)
+        captured["cell_summaries_path"] = str(cell_summaries_path)
+        captured["synthesis_path"] = str(synthesis_path)
+        return {
+            "status": "complete_native",
+            "native_cell_count": EXPECTED_CELL_COUNT,
+            "manifest_hash": "test",
+            "synthesis_path": str(synthesis_path),
+            "report_path": "output/issue_5578_robot_speed_tier_sweep/report.json",
+        }
+
+    monkeypatch.setattr(campaign, "execute_authorized_campaign", fake_execute)
+    rc = main(
+        [
+            "--authorized-full-run",
+            "--authorization-issue",
+            "6102",
+            "--raw-root",
+            "raw",
+            "--json",
+        ]
+    )
+    assert rc == 0
+    # The bare ``raw`` --raw-root is honored for episodes but must not relocate the
+    # canonical cell-summaries / synthesis artifacts into the repository root.
+    assert captured["raw_root"] == "raw"
+    assert captured["cell_summaries_path"] == campaign.DEFAULT_CELL_SUMMARY_PATH
+    assert captured["synthesis_path"] == campaign.DEFAULT_SYNTHESIS_PATH
+
+
 def test_synthesize_adapter_connects_to_reviewed_synthesizer(tmp_path: Path) -> None:
     """File-backed rows flow through the adapter into the reviewed synthesizer."""
     rows = _smoke_rows()

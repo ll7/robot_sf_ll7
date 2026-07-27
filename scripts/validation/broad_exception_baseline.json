@@ -510,7 +510,7 @@
       "context": "execute_authorized_campaign",
       "fingerprint": "78129ae8c6d9e8e2",
       "handler": "Exception",
-      "lineno": 1896,
+      "lineno": 1902,
       "path": "scripts/benchmark/run_issue_5578_speed_tier_campaign.py",
       "source": "except Exception as exc:"
     },

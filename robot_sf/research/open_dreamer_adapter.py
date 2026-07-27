@@ -141,7 +141,10 @@ def _finite_action_bound(value: Any, field_name: str) -> float:
     """Return one finite real-valued action bound, rejecting booleans and coercible strings."""
     if isinstance(value, bool) or not isinstance(value, Real):
         raise OpenDreamerAdapterError(f"{field_name} must be a finite real number, got {value!r}")
-    numeric_value = float(value)
+    try:
+        numeric_value = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise OpenDreamerAdapterError(f"{field_name} must be finite, got {value!r}") from exc
     if not np.isfinite(numeric_value):
         raise OpenDreamerAdapterError(f"{field_name} must be finite, got {value!r}")
     return numeric_value
@@ -272,7 +275,13 @@ class StructuredActionStep:
         for value in self.raw:
             if isinstance(value, bool) or not isinstance(value, Real):
                 raise OpenDreamerAdapterError(f"stored action must be numeric, got {value!r}")
-            if not np.isfinite(float(value)):
+            try:
+                numeric_value = float(value)
+            except (OverflowError, TypeError, ValueError) as exc:
+                raise OpenDreamerAdapterError(
+                    f"stored action must be finite, got {value!r}"
+                ) from exc
+            if not np.isfinite(numeric_value):
                 raise OpenDreamerAdapterError(f"stored action must be finite, got {value!r}")
 
 
@@ -439,7 +448,7 @@ def map_action_to_velocity(
     """
     try:
         arr = np.asarray(normalized, dtype=float)
-    except (TypeError, ValueError) as exc:
+    except (OverflowError, TypeError, ValueError) as exc:
         raise OpenDreamerAdapterError(
             "normalized action must be a numeric length-2 sequence"
         ) from exc
@@ -738,7 +747,12 @@ def _extract_rays(observation: Any) -> tuple[np.ndarray, bool]:
             raise OpenDreamerAdapterError(
                 f"observation ray-like key {key!r} must contain finite real values"
             )
-        arr = raw_array.astype(float)
+        try:
+            arr = raw_array.astype(float)
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise OpenDreamerAdapterError(
+                f"observation ray-like key {key!r} must contain finite real values"
+            ) from exc
         if not np.all(np.isfinite(arr)):
             raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be finite")
         return arr, True
@@ -839,15 +853,7 @@ def _coerce_action_step(
             f"action at step {step_index} must be {EXPECTED_ACTION_DIM}D (linear, angular), "
             f"got {len(values)}D -- incompatible action space"
         )
-    coerced: list[float] = []
-    for value in values:
-        if isinstance(value, bool) or not isinstance(value, Real):
-            raise OpenDreamerAdapterError(
-                f"action at step {step_index} must be numeric, got {value!r}"
-            )
-        coerced.append(float(value))
-    if not all(np.isfinite(coerced)):
-        raise OpenDreamerAdapterError(f"action at step {step_index} must be finite")
+    coerced = [_finite_action_component(value, step_index) for value in values]
     linear_velocity, angular_velocity = coerced
     if not (
         action_bounds.min_linear_speed <= linear_velocity <= action_bounds.max_linear_speed
@@ -859,6 +865,21 @@ def _coerce_action_step(
             f"angular in [-{action_bounds.max_angular_speed}, {action_bounds.max_angular_speed}]"
         )
     return StructuredActionStep(raw=tuple(coerced))
+
+
+def _finite_action_component(value: Any, step_index: int) -> float:
+    """Return one finite stored-action component through the public adapter error boundary."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise OpenDreamerAdapterError(f"action at step {step_index} must be numeric, got {value!r}")
+    try:
+        numeric_value = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise OpenDreamerAdapterError(
+            f"action at step {step_index} must be finite, got {value!r}"
+        ) from exc
+    if not np.isfinite(numeric_value):
+        raise OpenDreamerAdapterError(f"action at step {step_index} must be finite")
+    return numeric_value
 
 
 def _finite_floats(values: Sequence[Any], field_name: str) -> tuple[float, ...]:
@@ -878,7 +899,10 @@ def _finite_floats(values: Sequence[Any], field_name: str) -> tuple[float, ...]:
     for value in values:
         if isinstance(value, bool) or not isinstance(value, Real):
             raise OpenDreamerAdapterError(f"{field_name} must be numeric, got {value!r}")
-        out.append(float(value))
+        try:
+            out.append(float(value))
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise OpenDreamerAdapterError(f"{field_name} must be finite, got {value!r}") from exc
     if not all(np.isfinite(out)):
         raise OpenDreamerAdapterError(f"{field_name} must be finite")
     return tuple(out)
@@ -973,7 +997,10 @@ def _as_finite_float(value: Any, name: str) -> float:
     """
     if isinstance(value, bool) or not isinstance(value, Real):
         raise OpenDreamerAdapterError(f"drive_state {name} must be numeric, got {value!r}")
-    out = float(value)
+    try:
+        out = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise OpenDreamerAdapterError(f"drive_state {name} must be finite, got {value!r}") from exc
     if not np.isfinite(out):
         raise OpenDreamerAdapterError(f"drive_state {name} must be finite, got {value!r}")
     return out

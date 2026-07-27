@@ -47,6 +47,7 @@ from robot_sf.research.open_dreamer_adapter import (
     OPEN_DREAMER_OBSERVATION_CONTRACT,
     ActionBounds,
     OpenDreamerAdapterError,
+    StructuredActionStep,
     adapt_episode,
     adapt_episodes,
     map_action_to_velocity,
@@ -563,6 +564,18 @@ def test_action_bounds_validate_non_degenerate_envelope() -> None:
         ActionBounds(max_linear_speed=True, max_angular_speed=1.0)  # type: ignore[arg-type]
 
 
+def test_action_bounds_and_mapping_wrap_overflowing_numeric_inputs() -> None:
+    """Huge numeric inputs stay inside the adapter's public fail-closed error boundary."""
+    huge = 10**400
+
+    with pytest.raises(OpenDreamerAdapterError, match="max_linear_speed.*finite"):
+        ActionBounds(max_linear_speed=huge, max_angular_speed=1.0)
+    with pytest.raises(OpenDreamerAdapterError, match="numeric length-2"):
+        map_action_to_velocity([huge, 0.0], _DEFAULT_BOUNDS)
+    with pytest.raises(OpenDreamerAdapterError, match="stored action must be finite"):
+        StructuredActionStep(raw=(huge, 0.0))
+
+
 def test_stored_actions_must_lie_within_declared_physical_bounds() -> None:
     """Stored physical commands accept envelope endpoints and reject out-of-range values."""
     boundary_actions = (
@@ -613,6 +626,24 @@ def test_fail_closed_on_non_finite_rewards() -> None:
     rewards = (1.0, float("nan"))
     episode = _make_episode(step_count=2, rewards=rewards)
     with pytest.raises(OpenDreamerAdapterError, match="rewards must be finite"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"actions": ([10**400, 0.0],)},
+        {"rewards": (10**400,)},
+        {"robot_states": ({"position": [0.0, 0.0], "heading": 10**400, "velocity": [0.0, 0.0]},)},
+        {"observations": ({"robot": _full_robot_state(0), "pedestrians": [], "rays": [10**400]},)},
+    ],
+    ids=["action", "reward", "drive-state", "rays"],
+)
+def test_adapter_wraps_overflowing_numeric_values(overrides: dict[str, tuple]) -> None:
+    """Overflow during numeric conversion raises the documented fail-closed error type."""
+    episode = _make_episode(step_count=1, **overrides)
+
+    with pytest.raises(OpenDreamerAdapterError, match="finite"):
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 

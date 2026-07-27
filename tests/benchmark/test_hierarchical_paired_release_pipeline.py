@@ -471,3 +471,30 @@ def test_download_release_bundle_fails_fast_when_gh_cannot_execute(
     with pytest.raises(ReleaseAnalysisPipelineError, match="Could not execute gh release download"):
         script._download_release_bundle(Path("/tmp/example.tar.gz"))
     assert sleeps == []
+
+
+def test_find_or_download_bundle_repairs_a_partial_implicit_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An interrupted implicit cache is repaired through the bounded download path."""
+    import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
+
+    target = tmp_path / script.BUNDLE_ASSET_NAME
+    target.write_bytes(b"partial")
+    download_calls: list[Path] = []
+
+    def fake_download(download_target: Path) -> None:
+        download_calls.append(download_target)
+        download_target.write_bytes(b"verified")
+
+    def fake_sha256(path: Path) -> str:
+        if path.read_bytes() == b"verified":
+            return script.EXPECTED_BUNDLE_SHA256
+        return "partial-cache-digest"
+
+    monkeypatch.setattr(script, "BUNDLE_DOWNLOAD_TARGET", target)
+    monkeypatch.setattr(script, "_download_release_bundle", fake_download)
+    monkeypatch.setattr(script, "sha256_file", fake_sha256)
+
+    assert script.find_or_download_bundle(None, repo_root=tmp_path) == target
+    assert download_calls == [target]

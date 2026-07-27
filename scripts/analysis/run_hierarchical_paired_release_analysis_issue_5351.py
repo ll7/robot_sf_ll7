@@ -51,6 +51,11 @@ EXPECTED_TOTAL_EPISODES = 20160
 EXPECTED_ARMS_COUNT = 14
 EXPECTED_ROWS_PER_ARM = 1440
 DEFAULT_HORIZON = 600.0
+BUNDLE_ASSET_NAME = (
+    "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_"
+    "publication_bundle.tar.gz"
+)
+BUNDLE_DOWNLOAD_TARGET = Path("/tmp") / BUNDLE_ASSET_NAME
 
 DEFAULT_MANIFEST_PATH = (
     "configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml"
@@ -223,7 +228,7 @@ def _download_release_bundle(target: Path) -> None:
         "--repo",
         "ll7/robot_sf_ll7",
         "-p",
-        "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+        BUNDLE_ASSET_NAME,
         # A failed transfer can leave a partial asset at the fixed cache path.
         # Without this, a retry can fail immediately because gh refuses to
         # replace the filename left by the previous attempt.
@@ -285,23 +290,28 @@ def find_or_download_bundle(bundle_path: Path | None, *, repo_root: Path) -> Pat
         candidates.append(bundle_path)
     candidates.extend(
         [
-            Path(
-                "/tmp/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz"
-            ),
-            repo_root
-            / "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+            BUNDLE_DOWNLOAD_TARGET,
+            repo_root / BUNDLE_ASSET_NAME,
         ]
     )
 
     existing = next((c for c in candidates if c.is_file()), None)
+    target = BUNDLE_DOWNLOAD_TARGET
     if existing is None:
-        target = Path(
-            "/tmp/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz"
-        )
         _download_release_bundle(target)
         existing = target
 
     actual_sha256 = sha256_file(existing)
+    if actual_sha256 != EXPECTED_BUNDLE_SHA256 and bundle_path is None:
+        # A prior interrupted gh invocation can leave a partial implicit cache.
+        # Repair it through the same bounded, clobbering download path instead
+        # of failing before the retry helper has a chance to run. An explicitly
+        # supplied bundle remains fail-closed below so caller input is never
+        # silently replaced.
+        print(f"Cached release bundle failed digest verification; re-downloading {target}...")
+        _download_release_bundle(target)
+        existing = target
+        actual_sha256 = sha256_file(existing)
     if actual_sha256 != EXPECTED_BUNDLE_SHA256:
         raise ReleaseAnalysisPipelineError(
             f"Release archive SHA-256 digest mismatch: expected {EXPECTED_BUNDLE_SHA256!r}, "

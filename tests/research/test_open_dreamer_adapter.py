@@ -552,7 +552,10 @@ def test_structured_observation_groups_are_immutable_after_validation() -> None:
 
 def test_adapt_episodes_preserves_input_order_and_count() -> None:
     """adapt_episodes returns structured episodes in input order without flattening or reordering."""
-    episodes = [_make_episode(seed=seed, step_count=2) for seed in (101, 202, 303)]
+    episodes = [
+        _make_episode(scenario_id=f"ordered_map_{seed}", seed=seed, step_count=2)
+        for seed in (101, 202, 303)
+    ]
     structured = adapt_episodes(episodes, action_bounds=_DEFAULT_BOUNDS)
 
     assert [item.episode_id for item in structured] == [item.episode_id for item in episodes]
@@ -869,14 +872,14 @@ def test_fail_closed_on_non_finite_action() -> None:
 
 
 # ----------------------------------------------------------------------------------------------
-# Scenario/seed split leakage (must respect assign_deterministic_split).
+# Scenario and scenario/seed split leakage (must respect source manifest ownership rules).
 # ----------------------------------------------------------------------------------------------
 
 
 def test_validate_split_leakage_passes_for_deterministic_assignment() -> None:
-    """A dataset split entirely via assign_deterministic_split has zero leakage by construction."""
+    """Unique scenarios split via assign_deterministic_split have zero leakage by construction."""
     episodes = [
-        _make_episode(scenario_id=f"map_{i}", seed=seed, step_count=1)
+        _make_episode(scenario_id=f"map_{i}_seed_{seed}", seed=seed, step_count=1)
         for i in range(3)
         for seed in range(10)
     ]
@@ -885,6 +888,27 @@ def test_validate_split_leakage_passes_for_deterministic_assignment() -> None:
     assert report.leaked_keys == ()
     # Every split name is represented in the canonical names tuple.
     assert set(report.split_scenario_seed_keys).issubset({"train", "validation", "test"})
+
+
+def test_validate_split_leakage_rejects_scenario_id_across_canonical_splits() -> None:
+    """Scenario identity cannot cross splits even when individual scenario-seed hashes are canonical."""
+    scenario_id = "scenario_level_leak"
+    validation_episode = _make_episode(scenario_id=scenario_id, seed=0, step_count=1)
+    train_episode = _make_episode(scenario_id=scenario_id, seed=1, step_count=1)
+    assert validation_episode.split == "validation"
+    assert train_episode.split == "train"
+
+    report = validate_split_leakage([validation_episode, train_episode])
+
+    assert report.ok is False
+    assert report.leaked_keys == ()
+    assert report.leaked_scenario_ids == (scenario_id,)
+    assert report.split_scenario_ids["validation"] == (scenario_id,)
+    assert report.split_scenario_ids["train"] == (scenario_id,)
+    with pytest.raises(
+        OpenDreamerAdapterError, match="scenario split leakage.*scenario_level_leak"
+    ):
+        adapt_episodes([validation_episode, train_episode], action_bounds=_DEFAULT_BOUNDS)
 
 
 @pytest.mark.parametrize(

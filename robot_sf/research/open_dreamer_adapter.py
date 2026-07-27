@@ -63,11 +63,12 @@ The adapter fails closed (raises :class:`OpenDreamerAdapterError`) when:
 * metadata or terminal flags would require coercion, or source provenance already owns the
   adapter's reserved provenance key;
 * a stored split does not equal the canonical deterministic assignment for its
-  ``(scenario_id, seed)`` key, or the dataset leaks that key across more than one split.
+  ``(scenario_id, seed)`` key, or the dataset leaks either a scenario or scenario/seed key across
+  more than one split.
 
 Split policy is the canonical :func:`assign_deterministic_split` from the benchmark contract;
-:func:`adapt_episode` enforces it and :func:`validate_split_leakage` verifies no scenario-seed key
-appears in two stored splits.
+:func:`adapt_episode` enforces it and :func:`validate_split_leakage` verifies the source manifest's
+scenario-level and scenario-seed split ownership rules.
 """
 
 from __future__ import annotations
@@ -432,29 +433,37 @@ class StructuredEpisode:
 
 @dataclass(frozen=True, slots=True)
 class SplitLeakageReport:
-    """Result of checking that no ``(scenario_id, seed)`` key leaks across splits.
+    """Result of checking that no scenario or ``(scenario_id, seed)`` key leaks across splits.
 
     Attributes:
-        ok: True when every scenario-seed key maps to exactly one split.
+        ok: True when every scenario and scenario-seed key maps to exactly one split.
+        split_scenario_ids: Mapping of split name to the sorted scenario ids it owns.
         split_scenario_seed_keys: Mapping of split name to the sorted scenario-seed keys it owns.
+        leaked_scenario_ids: Scenario ids that appear in more than one split (empty when ``ok``).
         leaked_keys: Scenario-seed keys that appear in more than one split (empty when ``ok``).
     """
 
     ok: bool
     split_scenario_seed_keys: Mapping[str, tuple[str, ...]]
     leaked_keys: tuple[str, ...]
+    split_scenario_ids: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    leaked_scenario_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation of the leakage check.
 
         Returns:
-            A dictionary with ``ok``, per-split scenario-seed keys, and any leaked keys.
+            A dictionary with ``ok``, per-split scenario and scenario-seed keys, and any leaks.
         """
         return {
             "ok": bool(self.ok),
+            "split_scenario_ids": {
+                name: list(ids) for name, ids in self.split_scenario_ids.items()
+            },
             "split_scenario_seed_keys": {
                 name: list(keys) for name, keys in self.split_scenario_seed_keys.items()
             },
+            "leaked_scenario_ids": list(self.leaked_scenario_ids),
             "leaked_keys": list(self.leaked_keys),
         }
 
@@ -524,8 +533,9 @@ def canonical_split(scenario_id: str, seed: int) -> str:
     This is a thin delegation to the benchmark contract's
     :func:`assign_deterministic_split`, re-exposed so consumers of the adapter have a single
     import surface and the split policy enforced by :func:`adapt_episode` is explicit.
-    A dataset split entirely through this function cannot leak a scenario-seed key by
-    construction.
+    The source manifest additionally requires every scenario id to stay in one split, which
+    :func:`validate_split_leakage` checks across an episode batch because this per-key assignment can
+    otherwise place different seeds for one scenario in different splits.
 
     Args:
         scenario_id: Scenario id.
@@ -546,38 +556,55 @@ def canonical_split(scenario_id: str, seed: int) -> str:
 def validate_split_leakage(
     episodes: Sequence[RLTrajectoryEpisode | StructuredEpisode],
 ) -> SplitLeakageReport:
-    """Verify no ``(scenario_id, seed)`` key appears in more than one stored split.
+    """Verify no scenario or ``(scenario_id, seed)`` key appears in more than one stored split.
 
     :func:`adapt_episode` separately rejects each stored split that differs from the canonical
-    :func:`assign_deterministic_split` result. This batch-level report detects the additional
-    duplicate-key case before adaptation, so a mixed stored assignment cannot silently reach a
+    :func:`assign_deterministic_split` result. This batch-level report additionally preserves the
+    source ``RLTrajectoryDataset.v1`` manifest's stricter ownership rule: each scenario id and each
+    scenario-seed key must belong to one split. The per-key hash can otherwise assign separate seeds
+    for one scenario to different splits, which would leak scenario-specific information into a
     future model.
 
     Args:
         episodes: Episodes carrying ``scenario_id``, ``seed``, and ``split`` attributes.
 
     Returns:
-        A :class:`SplitLeakageReport` with per-split scenario-seed keys and any leaked keys.
+        A :class:`SplitLeakageReport` with per-split scenario/scenario-seed keys and any leaks.
     """
+    scenario_owners: dict[str, str] = {}
     owners: dict[str, str] = {}
+    split_scenario_ids: dict[str, list[str]] = {name: [] for name in SPLIT_NAMES}
     split_keys: dict[str, list[str]] = {name: [] for name in SPLIT_NAMES}
+    leaked_scenario_ids: list[str] = []
     leaked: list[str] = []
     for episode in episodes:
         split = _episode_split(episode)
         if split not in SPLIT_NAMES:
             raise OpenDreamerAdapterError(f"split must be one of {SPLIT_NAMES}, got {split!r}")
-        key = f"{_episode_scenario_id(episode)}:{_episode_seed(episode)}"
+        scenario_id = _episode_scenario_id(episode)
+        key = f"{scenario_id}:{_episode_seed(episode)}"
+        split_scenario_ids[split].append(scenario_id)
         split_keys[split].append(key)
+        scenario_owner = scenario_owners.get(scenario_id)
+        if scenario_owner is None:
+            scenario_owners[scenario_id] = split
+        elif scenario_owner != split and scenario_id not in leaked_scenario_ids:
+            leaked_scenario_ids.append(scenario_id)
         existing = owners.get(key)
         if existing is None:
             owners[key] = split
         elif existing != split and key not in leaked:
             leaked.append(key)
+    frozen_scenarios = {
+        name: tuple(sorted(set(ids))) for name, ids in split_scenario_ids.items() if ids
+    }
     frozen = {name: tuple(sorted(set(keys))) for name, keys in split_keys.items() if keys}
     return SplitLeakageReport(
-        ok=len(leaked) == 0,
+        ok=not leaked_scenario_ids and not leaked,
         split_scenario_seed_keys=frozen,
         leaked_keys=tuple(leaked),
+        split_scenario_ids=frozen_scenarios,
+        leaked_scenario_ids=tuple(leaked_scenario_ids),
     )
 
 
@@ -682,11 +709,11 @@ def adapt_episodes(
 ) -> list[StructuredEpisode]:
     """Adapt a sequence of v1 episodes into episode-major structured episodes.
 
-    The batch is first checked for cross-episode scenario/seed split leakage, then each episode is
-    adapted independently (see :func:`adapt_episode`), including canonical split enforcement. The
-    result is returned in input order and stays episode-major. Rejecting leakage here prevents a
-    caller from passing a mixed-split batch to a future model while incorrectly treating the adapter
-    as the fail-closed contract boundary.
+    The batch is first checked for cross-episode scenario and scenario/seed split leakage, then each
+    episode is adapted independently (see :func:`adapt_episode`), including canonical split
+    enforcement. The result is returned in input order and stays episode-major. Rejecting leakage
+    here prevents a caller from passing a mixed-split batch to a future model while incorrectly
+    treating the adapter as the fail-closed contract boundary.
 
     Args:
         episodes: Validated ``RLTrajectoryEpisode.v1`` rows from the benchmark contract.
@@ -696,15 +723,23 @@ def adapt_episodes(
         A list of :class:`StructuredEpisode` in input order.
 
     Raises:
-        OpenDreamerAdapterError: If the batch leaks a ``(scenario_id, seed)`` key across splits or
-            any episode fails the fail-closed contract in :func:`adapt_episode`.
+        OpenDreamerAdapterError: If the batch leaks a scenario or ``(scenario_id, seed)`` key across
+            splits or any episode fails the fail-closed contract in :func:`adapt_episode`.
     """
     action_bounds = _require_action_bounds(action_bounds)
     leakage_report = validate_split_leakage(episodes)
     if not leakage_report.ok:
+        leak_descriptions: list[str] = []
+        if leakage_report.leaked_scenario_ids:
+            leak_descriptions.append(
+                "scenario split leakage: " + ", ".join(leakage_report.leaked_scenario_ids)
+            )
+        if leakage_report.leaked_keys:
+            leak_descriptions.append(
+                "scenario/seed split leakage: " + ", ".join(leakage_report.leaked_keys)
+            )
         raise OpenDreamerAdapterError(
-            "scenario/seed split leakage detected across batch: "
-            f"{', '.join(leakage_report.leaked_keys)}"
+            "split leakage detected across batch: " + "; ".join(leak_descriptions)
         )
     return [adapt_episode(episode, action_bounds=action_bounds) for episode in episodes]
 

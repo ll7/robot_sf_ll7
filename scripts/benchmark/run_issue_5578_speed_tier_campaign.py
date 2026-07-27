@@ -1931,6 +1931,36 @@ def _write_cell_summaries(rows: Sequence[Mapping[str, Any]], path: pathlib.Path)
     )
 
 
+def _require_fresh_campaign_promotion_paths(
+    cell_summaries_path: pathlib.Path,
+    synthesis_path: pathlib.Path,
+) -> None:
+    """Reject launches that would overwrite promoted or quarantined campaign outputs.
+
+    Raw batches are protected by the matching-descriptor checks in
+    ``_prepare_authorized_output_root``. The promoted cell-summary, synthesis, and
+    rejected-row paths can be outside that root, so protect them separately before
+    any registered episode is launched. A resume may reuse matching raw batches,
+    but it must never overwrite a previously promoted or quarantined result.
+    """
+    rejected_path = cell_summaries_path.with_suffix(".rejected.jsonl")
+    named_paths = {
+        "cell summaries": cell_summaries_path,
+        "synthesis": synthesis_path,
+        "rejected cell summaries": rejected_path,
+    }
+    if len(set(named_paths.values())) != len(named_paths):
+        raise AuthorizedCampaignError(
+            "authorized campaign requires distinct cell-summary, synthesis, and rejected-row paths"
+        )
+    existing = [f"{name}={path}" for name, path in named_paths.items() if path.exists()]
+    if existing:
+        raise AuthorizedCampaignError(
+            "authorized campaign refuses to overwrite existing promoted or quarantined artifacts: "
+            + ", ".join(existing)
+        )
+
+
 def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
     manifest: CampaignManifest,
     *,
@@ -1963,6 +1993,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
     )
     execution_provenance = _git_provenance()
     execution_commit = _require_clean_execution_provenance(execution_provenance)
+    _require_fresh_campaign_promotion_paths(cell_path, synthesis_path)
     descriptor_path = _prepare_authorized_output_root(raw_path, manifest, resume=resume)
     manifest_path = raw_path / "campaign_manifest.json"
     write_manifest(manifest, manifest_path)

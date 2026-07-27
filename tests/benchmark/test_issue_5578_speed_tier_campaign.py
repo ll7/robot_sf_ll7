@@ -538,6 +538,73 @@ def test_authorized_output_resume_requires_matching_descriptor(tmp_path: Path) -
         campaign._prepare_authorized_output_root(orphan_root, manifest, resume=True)
 
 
+@pytest.mark.parametrize("existing_kind", ["cell", "synthesis", "rejected"])
+def test_authorized_campaign_refuses_to_overwrite_promoted_or_quarantined_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing_kind: str,
+) -> None:
+    """A fresh or resumed launch must not overwrite a prior promotion or quarantine."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
+    launched: list[object] = []
+
+    def unexpected_runner(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        launched.append(object())
+        raise AssertionError("runner must not launch when promotion paths already exist")
+
+    monkeypatch.setattr(campaign, "_run_native_batch", unexpected_runner)
+    cells = tmp_path / "cells.jsonl"
+    synthesis = tmp_path / "synthesis.json"
+    existing_paths = {
+        "cell": cells,
+        "synthesis": synthesis,
+        "rejected": cells.with_suffix(".rejected.jsonl"),
+    }
+    existing_paths[existing_kind].write_text("preserve me\n", encoding="utf-8")
+
+    with pytest.raises(campaign.AuthorizedCampaignError, match="refuses to overwrite"):
+        campaign.execute_authorized_campaign(
+            _manifest(),
+            raw_root=tmp_path / "raw",
+            cell_summaries_path=cells,
+            synthesis_path=synthesis,
+            authorization_issue=6102,
+            resume=True,
+        )
+
+    assert launched == []
+    assert existing_paths[existing_kind].read_text(encoding="utf-8") == "preserve me\n"
+    assert not (tmp_path / "raw").exists()
+
+
+def test_authorized_campaign_requires_distinct_promotion_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cell summaries and synthesis cannot alias one another and lose campaign evidence."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
+    shared_path = tmp_path / "shared.json"
+
+    with pytest.raises(campaign.AuthorizedCampaignError, match="distinct cell-summary"):
+        campaign.execute_authorized_campaign(
+            _manifest(),
+            raw_root=tmp_path / "raw",
+            cell_summaries_path=shared_path,
+            synthesis_path=shared_path,
+            authorization_issue=6102,
+        )
+
+    assert not (tmp_path / "raw").exists()
+
+
 def test_runtime_preflight_requires_clean_worktree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

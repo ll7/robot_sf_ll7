@@ -23,7 +23,10 @@ GATE_NODE = (
 def test_gate_node_is_registered_diagnostic() -> None:
     """The gate-contract node must be in the scoped diagnostic set with a note."""
     assert GATE_NODE in DIAGNOSTIC_NODES
-    assert DIAGNOSTIC_NODES[GATE_NODE], "diagnostic note must be non-empty"
+    note = DIAGNOSTIC_NODES[GATE_NODE]
+    assert note, "diagnostic note must be non-empty"
+    assert "20s soft breach" in note
+    assert "60s hard threshold still applies" in note
 
 
 def test_diagnostic_set_is_scoped_to_gate_node_only() -> None:

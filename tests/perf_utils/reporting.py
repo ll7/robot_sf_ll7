@@ -37,8 +37,8 @@ DIAGNOSTIC_NODES: dict[str, str] = {
         "Base-sensitive gate subset subprocess contract. The outer test walls a "
         "`pytest -m base_sensitive` subprocess whose runtime is dominated by full "
         "suite collection (~tens of seconds, by design); the test carries its own "
-        "120s hard cap (`assert elapsed < 120`), so the 20s/60s per-test envelope "
-        "does not apply to this node."
+        "120s hard cap (`assert elapsed < 120`). Its expected 20s soft breach is "
+        "therefore diagnostic, while the report's 60s hard threshold still applies."
     ),
 }
 

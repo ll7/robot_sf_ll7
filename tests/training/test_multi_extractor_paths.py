@@ -13,6 +13,9 @@ These tests lock the filesystem contracts exposed by
 * ``make_extractor_directory`` creates the per-extractor directory under
   ``extractors/`` using a filesystem-safe normalized name and rejects names
   that contain no alphanumeric characters.
+* ``load_configuration`` rejects extractor names that normalize or case-fold to
+  the same artifact directory before a training run can overwrite one profile
+  with another.
 * ``summary_paths`` returns the canonical ``summary.json`` / ``summary.md``
   locations for a run.
 
@@ -257,22 +260,31 @@ def test_make_extractor_directory_normalizes_to_safe_single_component(
     assert extractor_dir.parent == run_dir / "extractors"
 
 
+@pytest.mark.parametrize(
+    ("first_name", "second_name", "normalized_name"),
+    [
+        ("alpha/beta", "alpha beta", "alpha_beta"),
+        ("CNN", "cnn", "cnn"),
+    ],
+)
 def test_load_configuration_rejects_colliding_normalized_extractor_names(
     tmp_path: Path,
+    first_name: str,
+    second_name: str,
+    normalized_name: str,
 ) -> None:
-    """Reject names that would otherwise write distinct extractors into one directory."""
+    """Reject names that would otherwise write into one artifact directory."""
 
     config_path = tmp_path / "colliding_extractors.yaml"
     config_path.write_text(
-        """
-extractors:
-  - name: alpha/beta
-  - name: alpha beta
-""".lstrip(),
+        f"extractors:\n  - name: {first_name}\n  - name: {second_name}\n",
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match=r"alpha/beta.*alpha beta.*alpha_beta"):
+    collision_message = (
+        rf"{re.escape(first_name)}.*{re.escape(second_name)}.*{re.escape(normalized_name)}"
+    )
+    with pytest.raises(ValueError, match=collision_message):
         load_configuration(config_path)
 
 

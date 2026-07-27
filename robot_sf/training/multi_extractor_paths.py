@@ -26,18 +26,19 @@ def _normalize_extractor_name(extractor_name: str) -> str:
 
 
 def validate_unique_extractor_names(extractor_names: Iterable[str]) -> None:
-    """Reject extractor names that would map to the same artifact directory."""
+    """Reject names that collide after directory normalization or case folding."""
 
     names_by_directory: dict[str, str] = {}
     for extractor_name in extractor_names:
         normalized = _normalize_extractor_name(extractor_name)
-        first_name = names_by_directory.get(normalized)
+        directory_key = normalized.casefold()
+        first_name = names_by_directory.get(directory_key)
         if first_name is not None:
             raise ValueError(
-                "Extractor names normalize to the same artifact directory: "
+                "Extractor names collide after normalization/case folding: "
                 f"{first_name!r} and {extractor_name!r} -> {normalized!r}"
             )
-        names_by_directory[normalized] = extractor_name
+        names_by_directory[directory_key] = extractor_name
 
 
 def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:

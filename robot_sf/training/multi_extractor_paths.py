@@ -14,19 +14,20 @@ if TYPE_CHECKING:
 
 ENV_TMP_OVERRIDE = "ROBOT_SF_MULTI_EXTRACTOR_TMP"
 DEFAULT_TMP_ROOT = Path("tmp/multi_extractor_training")
+RUN_TIMESTAMP_PATTERN = re.compile(r"\d{8}-\d{6}")
 
 
 def _normalize_artifact_component(component: str, *, parameter_name: str) -> str:
-    """Return a filesystem-safe, single-component artifact path component."""
+    """Return a separator-free component containing only ``[A-Za-z0-9._-]``."""
 
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", component.strip()).strip("._-")
     if not normalized:
-        raise ValueError(f"{parameter_name} must contain at least one alphanumeric character")
+        raise ValueError(f"{parameter_name} must contain at least one ASCII alphanumeric character")
     return normalized
 
 
 def _normalize_extractor_name(extractor_name: str) -> str:
-    """Return a filesystem-safe, single-component extractor directory name."""
+    """Return a separator-free ASCII extractor directory name."""
 
     return _normalize_artifact_component(extractor_name, parameter_name="extractor_name")
 
@@ -70,10 +71,12 @@ def make_run_directory(
         raise ValueError("run_id must be a non-empty string")
 
     safe_run_id = _normalize_artifact_component(run_id, parameter_name="run_id")
+    stamp = timestamp if timestamp is not None else datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    if RUN_TIMESTAMP_PATTERN.fullmatch(stamp) is None:
+        raise ValueError("timestamp must match YYYYMMDD-HHMMSS")
+
     base_root = resolve_base_output_root(env)
     base_root.mkdir(parents=True, exist_ok=True)
-
-    stamp = timestamp or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     run_dir = base_root / f"{stamp}-{safe_run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
 

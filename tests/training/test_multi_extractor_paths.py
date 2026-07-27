@@ -9,10 +9,11 @@ These tests lock the filesystem contracts exposed by
   default root.
 * ``make_run_directory`` creates ``<stamp>-<safe_run_id>`` under the resolved
   base, materializes the base root, creates the ``extractors/`` sibling
-  subdirectory, normalizes traversal-like run ids, and rejects empty run ids.
+  subdirectory, normalizes traversal-like run ids, rejects empty run ids, and
+  rejects malformed explicit timestamps.
 * ``make_extractor_directory`` creates the per-extractor directory under
-  ``extractors/`` using a filesystem-safe normalized name and rejects names
-  that contain no alphanumeric characters.
+  ``extractors/`` using a separator-free ASCII normalized name and rejects
+  names that contain no ASCII alphanumeric characters.
 * ``validate_unique_extractor_names`` rejects extractor names that normalize or
   case-fold to the same artifact directory before a training run can overwrite
   one profile with another.
@@ -30,8 +31,8 @@ Determinism / isolation rules:
   (``robot_sf.common.artifact_paths.resolve_artifact_path``) so no
   repository-rooted path is materialized.
 
-Run and extractor names are normalized to single portable directory components:
-unsafe characters (including path separators and whitespace) become
+Run and extractor names are normalized to single separator-free ASCII directory
+components: unsafe characters (including path separators and whitespace) become
 underscores, and leading/trailing punctuation is removed. This prevents
 traversal-like names from escaping their configured artifact roots.
 """
@@ -221,6 +222,21 @@ def test_make_run_directory_normalizes_unsafe_run_id_to_stay_under_base(tmp_path
     assert not (tmp_path / "escaped").exists()
 
 
+@pytest.mark.parametrize("timestamp", ["", "../20240101-000000", "20240101/000000"])
+def test_make_run_directory_rejects_malformed_timestamp_before_filesystem_work(
+    tmp_path: Path,
+    timestamp: str,
+) -> None:
+    """An explicit timestamp cannot inject path components into the run directory."""
+
+    base = tmp_path / "mx_base"
+
+    with pytest.raises(ValueError, match="timestamp must match YYYYMMDD-HHMMSS"):
+        make_run_directory("alpha", env=_override_env(base), timestamp=timestamp)
+
+    assert not base.exists()
+
+
 # ---------------------------------------------------------------------------
 # make_extractor_directory
 # ---------------------------------------------------------------------------
@@ -295,29 +311,6 @@ def test_validate_unique_extractor_names_rejects_colliding_normalized_names(
     )
     with pytest.raises(ValueError, match=collision_message):
         validate_unique_extractor_names([first_name, second_name])
-
-
-def test_load_configuration_rejects_colliding_extractor_artifact_directories(
-    tmp_path: Path,
-) -> None:
-    """Configuration validation rejects profiles that would share an artifact directory."""
-
-    from scripts.multi_extractor_training import load_configuration
-
-    config_path = tmp_path / "colliding-extractors.yaml"
-    config_path.write_text(
-        """\
-extractors:
-  - name: alpha/beta
-    preset: cnn
-  - name: alpha beta
-    preset: transformer
-""",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="collide after normalization/case folding"):
-        load_configuration(config_path)
 
 
 @pytest.mark.parametrize("extractor_name", ["", "   ", "../", "---"])

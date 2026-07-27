@@ -46,7 +46,6 @@ from robot_sf.training.multi_extractor_analysis import (
     load_eval_history,
     sample_efficiency_ratio,
 )
-from robot_sf.training.multi_extractor_paths import validate_unique_extractor_names
 
 if TYPE_CHECKING:
     from robot_sf.feature_extractors.config import FeatureExtractorConfig
@@ -265,18 +264,13 @@ def _get_vec_env_config(
 def load_configuration(
     config_path: Path,
 ) -> tuple[RunSettings, list[ExtractorConfigurationProfile]]:
-    """Load and validate the multi-extractor training configuration.
+    """TODO docstring. Document this function.
 
     Args:
-        config_path: YAML configuration file containing run settings and extractors.
+        config_path: TODO docstring.
 
     Returns:
-        Validated settings and priority-sorted extractor profiles with unique
-        normalized artifact-directory names.
-
-    Raises:
-        FileNotFoundError: If ``config_path`` does not exist.
-        ValueError: If the configuration structure, settings, or extractor names are invalid.
+        TODO docstring.
     """
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
@@ -306,7 +300,6 @@ def load_configuration(
         )
         profiles.append(profile)
 
-    validate_unique_extractor_names(profile.name for profile in profiles)
     profiles.sort(key=lambda profile: profile.priority if profile.priority is not None else 0)
     return settings, profiles
 

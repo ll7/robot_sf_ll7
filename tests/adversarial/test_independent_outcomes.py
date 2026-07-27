@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -19,6 +20,11 @@ _PLANNER = "social_force"
 _PLANNER_CFG = "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
 _EVAL_FAMILY = "classic_cross_trap_medium"
 _EXECUTION_COMMIT = "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
+
+
+def _sha256(label: str) -> str:
+    """Return a deterministic test-only SHA-256 digest."""
+    return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
 def _replay() -> dict[str, Any]:
@@ -49,7 +55,7 @@ def _row(  # noqa: PLR0913
     candidate_pool_index: int | None = None,
     scenario_seed: int = 99001,
     execution_seed: int = 70001,
-    record_sha256: str = "rec-hash",
+    record_sha256: str | None = None,
     admission_status: str = "admitted",
     exclusion_reason: str | None = None,
     execution_mode: str = "native",
@@ -62,7 +68,7 @@ def _row(  # noqa: PLR0913
     return {
         "row_id": row_id,
         "candidate_manifest_id": manifest_id,
-        "candidate_manifest_sha256": f"manifest-{manifest_id}",
+        "candidate_manifest_sha256": _sha256(f"manifest-{manifest_id}"),
         "selection_arm": arm,
         "selection_rank": rank,
         "candidate_pool_seed": 42,
@@ -84,7 +90,7 @@ def _row(  # noqa: PLR0913
         "candidate_certification_status": candidate_cert,
         "replay_lineage": replay if replay is not None else _replay(),
         "confirmation_lineage": _confirmation(),
-        "record_sha256": record_sha256,
+        "record_sha256": record_sha256 or _sha256(f"record-{manifest_id}"),
         "admission_status": admission_status,
         "exclusion_reason": exclusion_reason,
     }
@@ -175,7 +181,7 @@ def _spec_for_packet(  # noqa: C901
             record_hashes[manifest_id] = (
                 record_sha256
                 if isinstance(record_sha256, str) and record_sha256
-                else f"record-{manifest_id}"
+                else _sha256(f"record-{manifest_id}")
             )
     for arm in ("proposal", "random"):
         padding_index = 0
@@ -188,7 +194,7 @@ def _spec_for_packet(  # noqa: C901
             execution_seeds[manifest_id] = [80000 + padding_index]
             candidate_pool_indices[manifest_id] = next_padding_pool_index
             next_padding_pool_index += 1
-            record_hashes[manifest_id] = f"record-{manifest_id}"
+            record_hashes[manifest_id] = _sha256(f"record-{manifest_id}")
     expected_ids = ids_by_arm["proposal"] + ids_by_arm["random"]
     return AdmissionSpec(
         expected_target_planner_id=_PLANNER,
@@ -196,7 +202,7 @@ def _spec_for_packet(  # noqa: C901
         confirmation_threshold="3_of_5",
         expected_target_planner_config_sha256=_PLANNER_CFG,
         expected_candidate_manifest_sha256_by_id={
-            manifest_id: f"manifest-{manifest_id}" for manifest_id in expected_ids
+            manifest_id: _sha256(f"manifest-{manifest_id}") for manifest_id in expected_ids
         },
         expected_candidate_pool_index_by_manifest_id={
             manifest_id: candidate_pool_indices[manifest_id] for manifest_id in expected_ids

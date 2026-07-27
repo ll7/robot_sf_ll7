@@ -156,6 +156,15 @@ def _payload_sha256(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _is_sha256_hex(value: Any) -> bool:
+    """Return whether ``value`` is a complete SHA-256 hex digest."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
+
+
 def load_search_space(path: Path | None) -> tuple[str, str, Any, bool]:
     """Load SearchSpaceConfig, returning state and synthetic fallback provenance."""
     from robot_sf.adversarial.config import SearchSpaceConfig
@@ -499,7 +508,9 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
     recertification_path = root / source["corrected_recertification_path"]
     recertification_bytes = recertification_path.read_bytes()
     recert = json.loads(recertification_bytes)
-    archive = json.loads((root / source["pre_correction_archive_path"]).read_text("utf-8"))
+    archive_path = root / source["pre_correction_archive_path"]
+    archive_bytes = archive_path.read_bytes()
+    archive = json.loads(archive_bytes)
     checks: dict[str, Any] = {
         "contract_schema_version": contract["schema_version"],
         "contract_path": str(contract_path),
@@ -515,6 +526,8 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
             recert.get("counts", {}).get("before_after_status", {}).get("unchanged")
             == recert.get("counts", {}).get("record_count")
         ),
+        "pre_correction_archive_sha256_expected": source["pre_correction_archive_sha256"],
+        "pre_correction_archive_sha256_observed": hashlib.sha256(archive_bytes).hexdigest(),
     }
     failures: list[str] = []
     try:
@@ -548,6 +561,11 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
         != checks["recertification_artifact_sha256_expected"]
     ):
         failures.append("corrected recertification artifact SHA-256 does not match contract")
+    if (
+        checks["pre_correction_archive_sha256_observed"]
+        != checks["pre_correction_archive_sha256_expected"]
+    ):
+        failures.append("pre-correction archive SHA-256 does not match contract")
 
     fit_cfg = contract["fit"]
     excl_cfg = contract["exclusions"]
@@ -688,13 +706,13 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
     if not isinstance(bindings, dict) or not bindings:
         return None, "candidate_manifest_sha256_by_id must be a non-empty object"
     if any(
-        not isinstance(manifest_id, str)
-        or not manifest_id
-        or not isinstance(digest, str)
-        or not digest
+        not isinstance(manifest_id, str) or not manifest_id or not _is_sha256_hex(digest)
         for manifest_id, digest in bindings.items()
     ):
-        return None, "candidate-manifest hash binding keys and values must be non-empty strings"
+        return (
+            None,
+            "candidate-manifest hash binding keys and values must be non-empty strings and SHA-256 hex",
+        )
     ids_by_arm = payload.get("candidate_manifest_ids_by_arm")
     if not isinstance(ids_by_arm, dict) or set(ids_by_arm) != {"proposal", "random"}:
         return None, "candidate_manifest_ids_by_arm must define exactly proposal and random arms"
@@ -737,13 +755,13 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
     if not isinstance(record_hashes, dict) or set(record_hashes) != expected_ids:
         return None, "record_sha256_by_manifest_id must cover exactly the predeclared arm IDs"
     if any(
-        not isinstance(manifest_id, str)
-        or not manifest_id
-        or not isinstance(digest, str)
-        or not digest
+        not isinstance(manifest_id, str) or not manifest_id or not _is_sha256_hex(digest)
         for manifest_id, digest in record_hashes.items()
     ):
-        return None, "record_sha256_by_manifest_id keys and values must be non-empty strings"
+        return (
+            None,
+            "record_sha256_by_manifest_id keys and values must be non-empty strings and SHA-256 hex",
+        )
     execution_seeds = payload.get("execution_seeds_by_manifest_id")
     if not isinstance(execution_seeds, dict) or set(execution_seeds) != expected_ids:
         return None, "execution_seeds_by_manifest_id must cover exactly the predeclared arm IDs"

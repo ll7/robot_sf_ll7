@@ -84,6 +84,10 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["checks"]["excluded_from_nominal_fit_ids_sha256_matches_contract"] is True
     assert verdict["checks"]["search_space_raw_sha256_matches_contract"] is True
     assert (
+        verdict["checks"]["pre_correction_archive_sha256_observed"]
+        == verdict["checks"]["pre_correction_archive_sha256_expected"]
+    )
+    assert (
         verdict["checks"]["recertification_artifact_sha256_observed"]
         == (verdict["checks"]["recertification_artifact_sha256_expected"])
     )
@@ -94,6 +98,20 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["checks"]["negative_regression_dropped_ids_match_contract"] is True
     assert verdict["checks"]["no_held_out_family_in_model"] is True
     assert verdict["failures"] == []
+
+
+def test_check_contract_rejects_pre_correction_archive_hash_drift(tmp_path: Path) -> None:
+    """The side-effect-free check validates the archive source lineage it consumes."""
+    contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    contract["source_lineage"]["pre_correction_archive_sha256"] = "wrong-hash"
+    drifted_contract = tmp_path / "contract.json"
+    drifted_contract.write_text(json.dumps(contract), encoding="utf-8")
+
+    exit_code, verdict = run_check_contract(drifted_contract, repo_root=_REPO_ROOT)
+
+    assert exit_code == 1
+    assert verdict["ok"] is False
+    assert "pre-correction archive SHA-256 does not match contract" in verdict["failures"]
 
 
 def test_frozen_search_space_rejects_raw_sha_drift(tmp_path: Path) -> None:
@@ -584,7 +602,7 @@ def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -
     return {
         "row_id": row_id,
         "candidate_manifest_id": manifest_id,
-        "candidate_manifest_sha256": f"manifest-{manifest_id}",
+        "candidate_manifest_sha256": hashlib.sha256(f"manifest-{manifest_id}".encode()).hexdigest(),
         "selection_arm": arm,
         "selection_rank": rank + 1,
         "candidate_pool_seed": 7,
@@ -612,7 +630,7 @@ def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -
             "attempt_count": 5,
             "stable_attribution": True,
         },
-        "record_sha256": f"rec-{manifest_id}",
+        "record_sha256": hashlib.sha256(f"record-{manifest_id}".encode()).hexdigest(),
         "admission_status": "admitted",
         "exclusion_reason": None,
     }
@@ -680,6 +698,14 @@ def test_external_manifest_binding_requires_pool_index_and_record_hash(tmp_path:
     loaded, reason = load_expected_candidate_manifest_binding(binding_path)
     assert loaded is None
     assert "record_sha256_by_manifest_id" in reason
+
+    invalid_digest = json.loads(json.dumps(binding))
+    manifest_id = next(iter(invalid_digest["candidate_manifest_sha256_by_id"]))
+    invalid_digest["candidate_manifest_sha256_by_id"][manifest_id] = "not-a-sha256"
+    binding_path.write_text(json.dumps(invalid_digest), encoding="utf-8")
+    loaded, reason = load_expected_candidate_manifest_binding(binding_path)
+    assert loaded is None
+    assert "SHA-256 hex" in reason
 
 
 def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(

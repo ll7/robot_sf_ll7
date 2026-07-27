@@ -47,6 +47,16 @@ OUTCOME_SCHEMA_VERSION = "adversarial_independent_outcomes.v2"
 #: Selection arms admitted by the contract.
 _ARMS = ("proposal", "random")
 
+
+def _is_sha256_hex(value: Any) -> bool:
+    """Return whether ``value`` is a complete SHA-256 hex digest."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
+
+
 #: Every field that an ADMITTED row must carry, well-typed and consistent. Rows
 #: whose ``admission_status`` is ``"excluded"`` only need ``row_id``,
 #: ``candidate_manifest_id``, ``selection_arm``, ``admission_status`` and a
@@ -220,13 +230,10 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
     if not isinstance(expected_hashes, dict) or set(expected_hashes) != expected_ids:
         return "manifest SHA-256 binding must cover exactly the predeclared arm manifest IDs"
     if any(
-        not isinstance(manifest_id, str)
-        or not manifest_id
-        or not isinstance(digest, str)
-        or not digest
+        not isinstance(manifest_id, str) or not manifest_id or not _is_sha256_hex(digest)
         for manifest_id, digest in expected_hashes.items()
     ):
-        return "manifest SHA-256 binding keys and values must be non-empty strings"
+        return "manifest SHA-256 binding keys and values must be non-empty strings and SHA-256 hex"
 
     expected_pool_indices = spec.expected_candidate_pool_index_by_manifest_id
     if not isinstance(expected_pool_indices, dict) or set(expected_pool_indices) != expected_ids:
@@ -247,13 +254,10 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
     if not isinstance(expected_record_hashes, dict) or set(expected_record_hashes) != expected_ids:
         return "record SHA-256 binding must cover exactly the predeclared arm manifest IDs"
     if any(
-        not isinstance(manifest_id, str)
-        or not manifest_id
-        or not isinstance(digest, str)
-        or not digest
+        not isinstance(manifest_id, str) or not manifest_id or not _is_sha256_hex(digest)
         for manifest_id, digest in expected_record_hashes.items()
     ):
-        return "record SHA-256 binding keys and values must be non-empty strings"
+        return "record SHA-256 binding keys and values must be non-empty strings and SHA-256 hex"
 
     expected_seeds = spec.expected_execution_seeds_by_manifest_id
     if not isinstance(expected_seeds, dict) or set(expected_seeds) != expected_ids:

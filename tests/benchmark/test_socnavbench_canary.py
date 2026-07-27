@@ -184,9 +184,10 @@ def test_robot_sf_receipt_records_executed_scenario_id_from_rollout() -> None:
     """The Robot SF receipt surfaces PolicyRolloutResult.scenario_id as executed_scenario_id.
 
     The additive field records the scenario that *actually ran*, independent of the canonical
-    cross-suite mapping label (scenario_mapping.robot_sf_scenario_id), so the receipt stays
-    honest if the two ever diverge. It must come from the rollout ground truth, not from the
-    mapping, and it must never silently reuse the SocNavBench (cross-suite) label.
+    cross-suite mapping label (scenario_mapping.robot_sf_scenario_id). The canary fails closed
+    before publishing a receipt if the two differ, so a successful receipt carries the verified
+    rollout value rather than re-deriving it from the mapping. It must never silently reuse the
+    SocNavBench (cross-suite) label.
     """
     policy = resolve_pinned_policy()
     mapping = resolve_scenario_mapping()

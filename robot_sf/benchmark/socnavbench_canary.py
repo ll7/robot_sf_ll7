@@ -457,9 +457,9 @@ def run_robot_sf_receipt_from_rollout(
 
     The receipt records ``executed_scenario_id`` from ``PolicyRolloutResult.scenario_id`` so it
     honestly reflects the scenario that *actually ran*, independent of the canonical cross-suite
-    mapping label (``scenario_mapping.robot_sf_scenario_id``). The two are expected to agree for
-    this canary, but carrying the executed value separately keeps the receipt honest if they
-    ever diverge and avoids re-deriving ground truth from the mapping.
+    mapping label (``scenario_mapping.robot_sf_scenario_id``). The canary fails closed when the
+    two differ, so every returned receipt contains the verified rollout value rather than
+    re-deriving it from the mapping.
 
     Returns:
         JSON-safe Robot SF receipt dict with policy identity (including runtime provenance),

@@ -83,13 +83,14 @@ PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested",
 GATE_WORKFLOW_NAME = "Merge Queue Gate"
 GATE_JOB_NAME = "merge-queue-gate"
 
-# GitHub's documented native merge-queue ref is
-# ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>``.  The
-# ``pr-<number>`` component identifies the source pull request; it is not the
-# source branch name.  Keep this strict so a changed queue-ref format fails
-# closed rather than selecting an unrelated PR.
+# GitHub's native merge-queue ref is exposed as either the full
+# ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>`` ref or its
+# branch-name form in event payload surfaces. The ``pr-<number>`` component
+# identifies the source pull request; it is not the source branch name. Keep
+# this strict so a changed queue-ref format fails closed rather than selecting
+# an unrelated PR.
 _MERGE_QUEUE_REF_RE = re.compile(
-    r"^refs/heads/gh-readonly-queue/(?P<base>.+)/pr-"
+    r"^(?:refs/heads/)?gh-readonly-queue/(?P<base>.+)/pr-"
     r"(?P<number>[1-9][0-9]*)-(?P<head_sha>[0-9a-f]{7,40})$",
     re.IGNORECASE,
 )
@@ -427,7 +428,11 @@ def resolve_pr_from_merge_group(event: dict[str, Any]) -> MergeGroupPR | None:
     source branch. The caller binds ``head_sha`` to the current PR head before
     evaluating the gate, and fails closed on a mismatch.
     """
-    merge_group = event.get("merge_group") or {}
+    if not isinstance(event, dict):
+        return None
+    merge_group = event.get("merge_group")
+    if not isinstance(merge_group, dict):
+        return None
     head_ref = str(merge_group.get("head_ref") or "")
     match = _MERGE_QUEUE_REF_RE.match(head_ref)
     if not match:
@@ -959,6 +964,7 @@ def _self_test() -> int:
         "head_sha",
         "merge_group_head_sha",
         "merge_group_head_binding",
+        "queue_merging_strategy",
         "base_sha",
         "main_sha",
         "labels",
@@ -1008,6 +1014,27 @@ def _self_test() -> int:
     return 0
 
 
+def _load_merge_group_event(path: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Load and validate the native merge-group event envelope."""
+    try:
+        event = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"Failed to read merge_group event payload: {exc}"
+    if not isinstance(event, dict):
+        return None, "Event payload is not a JSON object; failing closed."
+    event_name = event.get("event_name")
+    if "merge_group" not in event or (event_name is not None and event_name != "merge_group"):
+        return (
+            None,
+            "Event payload is not a merge_group event; "
+            "merge_queue_gate only gates the native merge queue; failing closed.",
+        )
+    merge_group = event.get("merge_group")
+    if not isinstance(merge_group, dict) or not merge_group.get("base_sha"):
+        return None, "merge_group.base_sha is missing; failing closed."
+    return event, None
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point: evaluate the merge-queue gate and print the audit JSON."""
     parser = argparse.ArgumentParser(
@@ -1050,18 +1077,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.from_event:
-        try:
-            event = json.loads(Path(args.from_event).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            print(f"Failed to read merge_group event payload: {exc}", file=sys.stderr)
+        event, event_error = _load_merge_group_event(args.from_event)
+        if event_error:
+            print(event_error, file=sys.stderr)
             return 1
-        if event.get("event_name") != "merge_group" and "merge_group" not in event:
-            print(
-                "Event payload is not a merge_group event; "
-                "merge_queue_gate only gates the native merge queue.",
-                file=sys.stderr,
-            )
-            return 1
+        assert event is not None
         merge_group_pr = resolve_pr_from_merge_group(event)
         if merge_group_pr is None:
             print(
@@ -1072,7 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         pr_number = merge_group_pr.number
         merge_group_head_sha = merge_group_pr.head_sha
-        merge_group_base_sha = str((event.get("merge_group") or {}).get("base_sha") or "")
+        merge_group_base_sha = str(event["merge_group"]["base_sha"])
     else:
         pr_number = _safe_int(args.pr)
         if pr_number is None:

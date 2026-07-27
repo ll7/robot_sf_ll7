@@ -205,8 +205,10 @@ def test_workflow_dispatch_passes_pr_number_through_environment() -> None:
     assert "PR-head evaluation is advisory; merge_group enforces the gate." in workflow
     assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
     assert "PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in workflow
+    assert "checks: read" in workflow
     assert "ref: ${{ steps.trusted-gate.outputs.ref }}" in workflow
     assert "persist-credentials: false" in workflow
+    assert "statuses: read" in workflow
     assert "Trusted base does not contain scripts/dev/merge_queue_gate.py" in workflow
     assert "exit 0" in workflow
 
@@ -362,6 +364,52 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
     calls = [call.args[0] for call in mock_gh.call_args_list]
     assert calls[0][:3] == ["pr", "view", "42"]
     assert ["pr", "list"] not in [call[:2] for call in calls]
+
+
+def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
+    """The event payload's branch-name queue ref resolves like its full ref form."""
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "merge_group": {
+                    "head_ref": f"gh-readonly-queue/main/pr-42-{FULL_SHA[:12]}",
+                    "base_sha": "queue_base_sha",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
+
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
+            _gh_response(stdout=json.dumps(threads)),
+        ]
+        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+
+    assert exit_code == 0
+
+
+@pytest.mark.parametrize(
+    "event",
+    [[], {"event_name": "pull_request", "merge_group": {}}, {"merge_group": {}}],
+)
+def test_from_event_rejects_malformed_event_payload(tmp_path, capsys, event) -> None:
+    """Malformed or non-queue payloads fail closed before any GitHub query."""
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+
+    assert exit_code == 1
+    assert mock_gh.call_count == 0
+    assert "failing closed" in capsys.readouterr().err
 
 
 def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, capsys) -> None:

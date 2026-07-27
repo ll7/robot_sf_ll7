@@ -104,7 +104,9 @@ calibrated pedestrian-behavior probability model we do not have).
 - The walkable-space projection uses obstacle segments and rectangular map
   bounds; it is a push-out/clamp projection, not a full polygon containment
   test, and degrades to a no-op when geometry is unavailable (the kinematic and
-  separation bounds still fire).
+  separation bounds still fire). If nominal state is already inside the
+  controller's configured clearance margin, the controller suppresses its
+  residual instead of attempting an unsafe partial repair.
 - Route-deviation references per-route polylines; the controller assigns
   polylines by target slot, so precise per-pedestrian route attribution is left
   to a later slice.

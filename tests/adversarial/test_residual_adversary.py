@@ -490,6 +490,39 @@ def test_residual_fails_closed_when_jerk_and_route_bounds_are_infeasible() -> No
     np.testing.assert_allclose(adversary._last_residual, [[0.0, 0.5]])
 
 
+def test_residual_is_suppressed_when_nominal_state_is_inside_walkable_clearance() -> None:
+    """The controller must not worsen a nominal state already inside its extra margin."""
+
+    @dataclass
+    class _ZeroPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            return np.zeros((1, 2))
+
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(
+            is_active=True,
+            max_residual_accel_mps2=1.5,
+            max_jerk_mps3=1e9,
+        ),
+        policy=_ZeroPolicy(),
+        dt_s=0.1,
+        num_peds=1,
+        obstacle_segments=np.array([[[0.0, -5.0], [0.0, 5.0]]]),
+    )
+
+    # At x=0.45, the centre is outside the wall but inside the required 0.5 m
+    # radius-plus-margin clearance. Restoring clearance needs 5 m/s², which is
+    # incompatible with the 1.5 m/s² hard acceleration cap, so the bounded
+    # residual must be suppressed rather than applying an unsafe partial repair.
+    residual = adversary.step_residual(
+        np.array([[0.45, 0.0]]),
+        np.zeros((1, 2)),
+        np.array([10.0]),
+        ROBOT_POSE,
+    )
+    np.testing.assert_allclose(residual, [[0.0, 0.0]])
+
+
 @pytest.mark.parametrize(
     (
         "positions",

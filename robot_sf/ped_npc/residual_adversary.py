@@ -886,14 +886,37 @@ class BoundedResidualAdversary:
             self.config.max_route_deviation_m,
         )
         residual_displacement = bounded * (self.dt_s * self.dt_s)
-        residual_displacement = project_residual_displacement_walkable(
-            positions,
-            residual_displacement,
-            self.obstacle_segments,
-            self.bounds,
-            self.ped_radius,
-            self.config.obstacle_projection_margin_m,
-        )
+        if np.any(self._target_mask):
+            target_positions = positions[self._target_mask]
+            target_displacement = residual_displacement[self._target_mask]
+            zero_displacement = np.zeros_like(target_displacement)
+            current_projection = project_residual_displacement_walkable(
+                target_positions,
+                zero_displacement,
+                self.obstacle_segments,
+                self.bounds,
+                self.ped_radius,
+                self.config.obstacle_projection_margin_m,
+            )
+            currently_walkable = np.all(
+                np.isclose(current_projection, zero_displacement, rtol=0.0, atol=EPSILON),
+                axis=1,
+            )
+            if np.any(currently_walkable):
+                target_displacement[currently_walkable] = project_residual_displacement_walkable(
+                    target_positions[currently_walkable],
+                    target_displacement[currently_walkable],
+                    self.obstacle_segments,
+                    self.bounds,
+                    self.ped_radius,
+                    self.config.obstacle_projection_margin_m,
+                )
+            # The nominal simulator may already be inside this controller's extra
+            # clearance margin. A residual cannot safely repair that state under a
+            # hard acceleration cap, so suppress it rather than worsening or
+            # teleporting the nominal trajectory.
+            target_displacement[~currently_walkable] = 0.0
+            residual_displacement[self._target_mask] = target_displacement
         bounded = residual_displacement / (self.dt_s * self.dt_s)
         bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
         residual_displacement = bounded * (self.dt_s * self.dt_s)

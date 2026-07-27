@@ -40,7 +40,7 @@ class HardwareProfile:
     cuda_version: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert hardware profile to dictionary for serialization.
+        """Convert hardware profile to a schema-valid dictionary for serialization.
 
         Returns:
             Dictionary representation of hardware profile
@@ -51,9 +51,9 @@ class HardwareProfile:
             "python_version": self.python_version,
             "workers": self.workers,
         }
-        if self.gpu_model is not None:
+        # The public training-summary schema requires GPU metadata as an atomic pair.
+        if self.gpu_model is not None and self.cuda_version is not None:
             payload["gpu_model"] = self.gpu_model
-        if self.cuda_version is not None:
             payload["cuda_version"] = self.cuda_version
         return payload
 

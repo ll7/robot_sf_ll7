@@ -6,8 +6,8 @@ artifact emitters keep a stable contract:
 
 - ``ExtractorConfigurationProfile.merged_parameters`` defensive-copy behavior
   for ``None`` and populated parameter dictionaries.
-- ``HardwareProfile.to_dict`` optional ``gpu_model``/``cuda_version`` omission
-  and inclusion.
+- ``HardwareProfile.to_dict`` paired optional ``gpu_model``/``cuda_version``
+  omission and inclusion.
 - ``ExtractorRunRecord.to_dict`` and ``TrainingRunSummary.to_dict`` nested
   serialization, default empty collections, and optional ``reason``/``notes``
   omission versus populated inclusion.
@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 from typing import Any
+
+import pytest
 
 from robot_sf.training import (
     ExtractorConfigurationProfile,
@@ -179,20 +181,33 @@ def test_hardware_profile_to_dict_includes_optional_gpu_and_cuda() -> None:
     }
 
 
-def test_hardware_profile_to_dict_includes_only_populated_optional_field() -> None:
-    """A populated ``gpu_model`` with ``None`` ``cuda_version`` includes only GPU."""
+@pytest.mark.parametrize(
+    ("gpu_model", "cuda_version"),
+    [("OnlyGPU-1", None), (None, "12.4")],
+)
+def test_hardware_profile_to_dict_omits_incomplete_gpu_cuda_pair(
+    gpu_model: str | None,
+    cuda_version: str | None,
+) -> None:
+    """Incomplete GPU/CUDA metadata must be omitted as a pair to match the schema."""
     profile = HardwareProfile(
         platform="linux",
         arch="x86_64",
         python_version="3.13",
         workers=2,
-        gpu_model="OnlyGPU-1",
-        cuda_version=None,
+        gpu_model=gpu_model,
+        cuda_version=cuda_version,
     )
 
     payload = profile.to_dict()
 
-    assert payload["gpu_model"] == "OnlyGPU-1"
+    assert payload == {
+        "platform": "linux",
+        "arch": "x86_64",
+        "python_version": "3.13",
+        "workers": 2,
+    }
+    assert "gpu_model" not in payload
     assert "cuda_version" not in payload
 
 

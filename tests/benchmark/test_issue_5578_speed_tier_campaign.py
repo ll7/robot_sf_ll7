@@ -65,6 +65,88 @@ def _manifest() -> Any:
     return compile_campaign_manifest()
 
 
+def _successful_runner_summary(written: int) -> dict[str, Any]:
+    """Return the fail-closed runner summary required by authorized execution."""
+    return {
+        "written": written,
+        "failed_jobs": 0,
+        "skipped_jobs": 0,
+        "failures": [],
+        "benchmark_availability": {
+            "availability_status": "available",
+            "benchmark_success": True,
+        },
+        "provenance": {"result_manifest_status": "available"},
+    }
+
+
+def _fake_episode_row(
+    scenario: dict[str, Any],
+    seed: int,
+    *,
+    algo: str,
+    cap: float,
+    status: str = "ok",
+) -> dict[str, Any]:
+    """Build one canonical fake map-runner row for authorized-lane tests."""
+    planner_mode = "adapter" if algo == "orca" else "native"
+    return {
+        "episode_id": f"{scenario['name']}--{seed}",
+        "scenario_id": scenario["name"],
+        "seed": seed,
+        "horizon": 600,
+        "algorithm_metadata": {
+            "status": status,
+            "canonical_algorithm": algo,
+            "planner_kinematics": {"execution_mode": planner_mode},
+            "simulation_step_trace": {
+                "dt": 0.1,
+                "steps": [
+                    {
+                        "robot": {"velocity": [cap, 0.0]},
+                        "planner": {"selected_action": {"linear_velocity": cap}},
+                    },
+                    {
+                        "robot": {"velocity": [cap, 0.0]},
+                        "planner": {"selected_action": {"linear_velocity": cap}},
+                    },
+                ],
+            },
+        },
+        "metrics": {
+            "success": True,
+            "total_collision_count": 0,
+            "collisions": 0,
+            "ped_collision_count": 0,
+            "obstacle_collision_count": 0,
+            "agent_collision_count": 0,
+            "near_misses": 0,
+            "time_to_goal_norm": 0.5,
+            "socnavbench_path_length": 1.0,
+            "mean_clearance": 1.0,
+            "min_clearance": 0.5,
+        },
+        "interaction_exposure": {
+            "interaction_exposure_share": 0.0,
+            "interaction_exposure_denominator_steps": 2,
+        },
+        "config_hash": "a" * 16,
+        "git_hash": "a" * 40,
+        "result_provenance": {
+            "schema_version": "benchmark_row_provenance.v1",
+            "scenario_id": scenario["name"],
+            "seed": seed,
+            "config_hash": "a" * 16,
+            "repo_commit": "a" * 40,
+            "simulator_settings": {"horizon": 600, "dt": 0.1},
+            "postprocessing": [
+                {"step": "compute_all_metrics", "status": "completed"},
+                {"step": "post_process_metrics", "status": "completed"},
+            ],
+        },
+    }
+
+
 def test_manifest_has_exactly_2160_unique_registered_identities() -> None:
     """The manifest materializes the exact 6x3x4x30 frozen cross."""
     manifest = _manifest()
@@ -273,6 +355,545 @@ def test_full_run_cli_fails_closed(capsys: pytest.CaptureFixture[str]) -> None:
     output = capsys.readouterr().out
     assert "not authorized" in output.lower()
     assert "--cell-summaries-out /tmp/issue-5578-cells.jsonl" in output
+
+
+def test_authorized_full_run_requires_exact_operational_issue() -> None:
+    """Registered execution cannot start without the explicit #6102 flag."""
+    with pytest.raises(campaign.CampaignAuthorizationError, match="6102"):
+        main(["--authorized-full-run"])
+
+
+def test_authorized_runtime_preflight_requires_exact_operational_issue() -> None:
+    """Runtime binding checks cannot start without the explicit #6102 flag."""
+    with pytest.raises(campaign.CampaignAuthorizationError, match="6102"):
+        main(["--authorized-runtime-preflight"])
+
+
+def test_execution_disposition_allows_expected_adapter_but_rejects_fallback() -> None:
+    """Planner command adapters remain native rows; fallback/degraded states do not."""
+    adapter_record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "adapter"},
+        }
+    }
+    assert campaign._campaign_execution_disposition(adapter_record) == ("native", None)
+
+    fallback_record = {"algorithm_metadata": {"status": "fallback"}}
+    assert campaign._campaign_execution_disposition(fallback_record)[0] == "degraded"
+
+    degraded_record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "foresight_prediction": {"evidence_eligible": False},
+        }
+    }
+    assert campaign._campaign_execution_disposition(degraded_record)[0] == "degraded"
+
+
+def test_execution_disposition_requires_explicit_planner_execution_mode() -> None:
+    """A healthy status without a native/adapter mode must not become campaign evidence."""
+    missing_mode = {"algorithm_metadata": {"status": "ok"}}
+    unknown_mode = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "unknown"},
+        }
+    }
+    assert campaign._campaign_execution_disposition(missing_mode)[0] == "failed"
+    assert campaign._campaign_execution_disposition(unknown_mode)[0] == "failed"
+
+
+def test_episode_provenance_requires_canonical_row_contract() -> None:
+    """Missing or fabricated row provenance must fail before cell conversion."""
+    with pytest.raises(campaign.AuthorizedCampaignError, match="result_provenance"):
+        campaign._validate_episode_provenance(
+            {},
+            scenario_id=PREFLIGHT_SCENARIO,
+            seed=211,
+            horizon_steps=600,
+            dt_seconds=0.1,
+            expected_repo_commit="a" * 40,
+        )
+
+    malformed = {
+        "result_provenance": {
+            "schema_version": "benchmark_row_provenance.v1",
+            "scenario_id": PREFLIGHT_SCENARIO,
+            "seed": 211,
+            "config_hash": "not-a-hash",
+            "repo_commit": "not-a-commit",
+        }
+    }
+    with pytest.raises(campaign.AuthorizedCampaignError, match="config_hash"):
+        campaign._validate_episode_provenance(
+            malformed,
+            scenario_id=PREFLIGHT_SCENARIO,
+            seed=211,
+            horizon_steps=600,
+            dt_seconds=0.1,
+            expected_repo_commit="a" * 40,
+        )
+
+
+def test_episode_provenance_requires_the_authorized_execution_commit() -> None:
+    """Rows from another revision cannot be resumed into a registered campaign."""
+    record = {
+        "result_provenance": {
+            "schema_version": "benchmark_row_provenance.v1",
+            "scenario_id": PREFLIGHT_SCENARIO,
+            "seed": 211,
+            "config_hash": "a" * 16,
+            "repo_commit": "a" * 40,
+            "simulator_settings": {"horizon": 600, "dt": 0.1},
+            "postprocessing": [
+                {"step": "compute_all_metrics", "status": "completed"},
+                {"step": "post_process_metrics", "status": "completed"},
+            ],
+        }
+    }
+    with pytest.raises(campaign.AuthorizedCampaignError, match="does not match"):
+        campaign._validate_episode_provenance(
+            record,
+            scenario_id=PREFLIGHT_SCENARIO,
+            seed=211,
+            horizon_steps=600,
+            dt_seconds=0.1,
+            expected_repo_commit="b" * 40,
+        )
+
+
+def test_runner_summary_rejects_failed_jobs_before_reading_rows() -> None:
+    """A runner-level failure cannot be hidden by a later row-count check."""
+    with pytest.raises(campaign.AuthorizedCampaignError, match="failed jobs"):
+        campaign._validate_runner_summary(
+            {"failed_jobs": 1, "written": EXPECTED_CELL_COUNT},
+            batch_name="cap_2_0_nominal__orca",
+            expected_count=EXPECTED_CELL_COUNT,
+            resume=False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("summary", "match"),
+    [
+        (
+            {"written": 1, "failed_jobs": 0, "skipped_jobs": 0, "failures": []},
+            "benchmark_availability",
+        ),
+        (
+            {
+                "written": 1,
+                "failed_jobs": 0,
+                "skipped_jobs": 0,
+                "failures": [],
+                "benchmark_availability": {
+                    "availability_status": "available",
+                    "benchmark_success": True,
+                },
+            },
+            "provenance",
+        ),
+        (
+            {
+                **_successful_runner_summary(1),
+                "provenance": {"result_manifest_status": "error"},
+            },
+            "not available",
+        ),
+    ],
+)
+def test_runner_summary_requires_availability_and_provenance(
+    summary: dict[str, Any],
+    match: str,
+) -> None:
+    """Malformed runner summaries cannot cross the authorized campaign boundary."""
+    with pytest.raises(campaign.AuthorizedCampaignError, match=match):
+        campaign._validate_runner_summary(
+            summary,
+            batch_name="cap_2_0_nominal__orca",
+            expected_count=1,
+            resume=False,
+        )
+
+
+def test_authorized_output_resume_requires_matching_descriptor(tmp_path: Path) -> None:
+    """Resume accepts owned partial batches and rejects orphaned batch artifacts."""
+    manifest = _manifest()
+    raw_root = tmp_path / "owned"
+    descriptor = campaign._prepare_authorized_output_root(
+        raw_root,
+        manifest,
+        resume=False,
+    )
+    (raw_root / "partial.jsonl").write_text("{}\n", encoding="utf-8")
+    (raw_root / "partial.summary.json").write_text("{}\n", encoding="utf-8")
+
+    assert campaign._prepare_authorized_output_root(raw_root, manifest, resume=True) == descriptor
+
+    orphan_root = tmp_path / "orphan"
+    orphan_root.mkdir()
+    (orphan_root / "partial.jsonl").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(campaign.AuthorizedCampaignError, match="matching descriptor"):
+        campaign._prepare_authorized_output_root(orphan_root, manifest, resume=True)
+
+
+@pytest.mark.parametrize("existing_kind", ["cell", "synthesis", "rejected"])
+def test_authorized_campaign_refuses_to_overwrite_promoted_or_quarantined_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing_kind: str,
+) -> None:
+    """A fresh or resumed launch must not overwrite a prior promotion or quarantine."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
+    launched: list[object] = []
+
+    def unexpected_runner(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        launched.append(object())
+        raise AssertionError("runner must not launch when promotion paths already exist")
+
+    monkeypatch.setattr(campaign, "_run_native_batch", unexpected_runner)
+    cells = tmp_path / "cells.jsonl"
+    synthesis = tmp_path / "synthesis.json"
+    existing_paths = {
+        "cell": cells,
+        "synthesis": synthesis,
+        "rejected": cells.with_suffix(".rejected.jsonl"),
+    }
+    existing_paths[existing_kind].write_text("preserve me\n", encoding="utf-8")
+
+    with pytest.raises(campaign.AuthorizedCampaignError, match="refuses to overwrite"):
+        campaign.execute_authorized_campaign(
+            _manifest(),
+            raw_root=tmp_path / "raw",
+            cell_summaries_path=cells,
+            synthesis_path=synthesis,
+            authorization_issue=6102,
+            resume=True,
+        )
+
+    assert launched == []
+    assert existing_paths[existing_kind].read_text(encoding="utf-8") == "preserve me\n"
+    assert not (tmp_path / "raw").exists()
+
+
+def test_authorized_campaign_requires_distinct_promotion_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cell summaries and synthesis cannot alias one another and lose campaign evidence."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
+    shared_path = tmp_path / "shared.json"
+
+    with pytest.raises(campaign.AuthorizedCampaignError, match="distinct cell-summary"):
+        campaign.execute_authorized_campaign(
+            _manifest(),
+            raw_root=tmp_path / "raw",
+            cell_summaries_path=shared_path,
+            synthesis_path=shared_path,
+            authorization_issue=6102,
+        )
+
+    assert not (tmp_path / "raw").exists()
+
+
+def test_runtime_preflight_requires_clean_worktree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Operational preflight cannot attest rows from uncommitted source state."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {
+            "git_head": "a" * 40,
+            "git_worktree_dirty": True,
+            "git_status_short": [" M local-change.py"],
+        },
+    )
+
+    with pytest.raises(campaign.AuthorizedCampaignError, match="clean git worktree"):
+        campaign.run_authorized_runtime_preflight(
+            _manifest(),
+            output_root=tmp_path / "preflight",
+            authorization_issue=6102,
+        )
+
+
+def test_runtime_preflight_records_unexpected_runner_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected runner errors leave a terminal operational report."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {
+            "git_head": "a" * 40,
+            "git_worktree_dirty": False,
+            "git_status_short": [],
+        },
+    )
+    monkeypatch.setattr(
+        campaign,
+        "_authorized_campaign_scenarios",
+        lambda _manifest: {PREFLIGHT_SCENARIO: {"name": PREFLIGHT_SCENARIO}},
+    )
+
+    def fail_runner(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("runner exploded")
+
+    monkeypatch.setattr(campaign, "_run_native_batch", fail_runner)
+    output_root = tmp_path / "preflight"
+    with pytest.raises(campaign.AuthorizedCampaignError, match="runner exploded"):
+        campaign.run_authorized_runtime_preflight(
+            _manifest(),
+            output_root=output_root,
+            authorization_issue=6102,
+        )
+
+    report = json.loads((output_root / "runtime_preflight_report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "failed"
+    assert report["error"] == "RuntimeError: runner exploded"
+
+
+def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The authorized lane enforces the exact grid before synthesis."""
+
+    def fake_run_native_batch(
+        scenarios: list[dict[str, Any]],
+        out_path: Path,
+        *,
+        algo: str,
+        algo_config_path: str | None,
+        horizon_steps: int,
+        dt_seconds: float,
+        resume: bool,
+    ) -> dict[str, Any]:
+        del algo_config_path, resume
+        assert horizon_steps == 600
+        assert dt_seconds == 0.1
+        cap = float(scenarios[0]["robot_config"]["max_velocity"])
+        rows = [
+            _fake_episode_row(scenario, seed, algo=algo, cap=cap)
+            for scenario in scenarios
+            for seed in scenario["seeds"]
+        ]
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return _successful_runner_summary(len(rows))
+
+    monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
+    manifest = _manifest()
+    report = campaign.execute_authorized_campaign(
+        manifest,
+        raw_root=tmp_path / "raw",
+        cell_summaries_path=tmp_path / "cells.jsonl",
+        synthesis_path=tmp_path / "synthesis.json",
+        authorization_issue=6102,
+    )
+    assert report["status"] == "complete_native"
+    assert report["native_cell_count"] == EXPECTED_CELL_COUNT
+    assert report["git_provenance"]["git_head"]
+    assert report["command_environment_manifest"]["runner"] == (
+        "robot_sf.benchmark.map_runner.run_map_batch"
+    )
+    cells = (tmp_path / "cells.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(cells) == EXPECTED_CELL_COUNT
+    assert all(json.loads(line)["execution_mode"] == "native" for line in cells)
+
+
+def test_authorized_campaign_rejection_quarantines_non_native_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fallback/degraded row rejects the run without polluting the canonical artifact.
+
+    The canonical cell-summaries path (consumed by ``--synthesize``) must never be written
+    when the grid contains any non-native row. Rejected rows are quarantined to a
+    distinctly-named ``.rejected.jsonl`` path for diagnosis, and the report records both
+    the rejection and the quarantine path.
+    """
+    degrade_first = {"active": True}
+
+    def fake_run_native_batch(
+        scenarios: list[dict[str, Any]],
+        out_path: Path,
+        *,
+        algo: str,
+        algo_config_path: str | None,
+        horizon_steps: int,
+        dt_seconds: float,
+        resume: bool,
+    ) -> dict[str, Any]:
+        del algo_config_path, resume
+        assert horizon_steps == 600
+        assert dt_seconds == 0.1
+        cap = float(scenarios[0]["robot_config"]["max_velocity"])
+        planner_mode = "adapter" if algo == "orca" else "native"
+        rows: list[dict[str, Any]] = []
+        for scenario in scenarios:
+            for seed in scenario["seeds"]:
+                # The first emitted row is a fallback; the rest are native. A single
+                # non-native row is enough to fail the whole campaign closed.
+                status = "fallback" if degrade_first["active"] else "ok"
+                degrade_first["active"] = False
+                rows.append(
+                    {
+                        "episode_id": f"{scenario['name']}--{seed}",
+                        "scenario_id": scenario["name"],
+                        "seed": seed,
+                        "horizon": 600,
+                        "algorithm_metadata": {
+                            "status": status,
+                            "canonical_algorithm": algo,
+                            "planner_kinematics": {"execution_mode": planner_mode},
+                            "simulation_step_trace": {
+                                "dt": 0.1,
+                                "steps": [
+                                    {
+                                        "robot": {"velocity": [cap, 0.0]},
+                                        "planner": {"selected_action": {"linear_velocity": cap}},
+                                    },
+                                    {
+                                        "robot": {"velocity": [cap, 0.0]},
+                                        "planner": {"selected_action": {"linear_velocity": cap}},
+                                    },
+                                ],
+                            },
+                        },
+                        "metrics": {
+                            "success": True,
+                            "total_collision_count": 0,
+                            "collisions": 0,
+                            "ped_collision_count": 0,
+                            "obstacle_collision_count": 0,
+                            "agent_collision_count": 0,
+                            "near_misses": 0,
+                            "time_to_goal_norm": 0.5,
+                            "socnavbench_path_length": 1.0,
+                            "mean_clearance": 1.0,
+                            "min_clearance": 0.5,
+                        },
+                        "interaction_exposure": {
+                            "interaction_exposure_share": 0.0,
+                            "interaction_exposure_denominator_steps": 2,
+                        },
+                        "config_hash": "a" * 16,
+                        "git_hash": "a" * 40,
+                        "result_provenance": {
+                            "schema_version": "benchmark_row_provenance.v1",
+                            "scenario_id": scenario["name"],
+                            "seed": seed,
+                            "config_hash": "a" * 16,
+                            "repo_commit": "a" * 40,
+                            "simulator_settings": {"horizon": 600, "dt": 0.1},
+                            "postprocessing": [
+                                {"step": "compute_all_metrics", "status": "completed"},
+                                {"step": "post_process_metrics", "status": "completed"},
+                            ],
+                        },
+                    }
+                )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return _successful_runner_summary(len(rows))
+
+    monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
+    manifest = _manifest()
+    cells = tmp_path / "cells.jsonl"
+    report_path = tmp_path / "report.json"
+    with pytest.raises(campaign.AuthorizedCampaignError, match="rejected"):
+        campaign.execute_authorized_campaign(
+            manifest,
+            raw_root=tmp_path / "raw",
+            cell_summaries_path=cells,
+            synthesis_path=tmp_path / "synthesis.json",
+            report_path=report_path,
+            authorization_issue=6102,
+        )
+
+    # Canonical path consumed by --synthesize must not exist for a rejected run.
+    assert not cells.exists()
+    # Rejected rows are quarantined under a distinct name and recorded in the report.
+    quarantine = cells.with_suffix(".rejected.jsonl")
+    assert quarantine.exists()
+    quarantined = [json.loads(line) for line in quarantine.read_text(encoding="utf-8").splitlines()]
+    assert any(row["execution_mode"] != "native" for row in quarantined)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["status"] == "rejected_non_native_rows"
+    assert report["excluded_cell_count"] >= 1
+    assert report["rejected_cell_summaries_path"] == campaign._repo_rel(quarantine)
+
+
+def test_authorized_full_run_defaults_anchor_to_module_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default cell/synthesis paths anchor to module constants, not ``--raw-root``'s parent.
+
+    A custom ``--raw-root`` (for example a bare ``raw``) must not drop
+    ``cell_summaries.jsonl`` / ``synthesis.json`` into the repository root; the canonical
+    module paths remain the defaults and explicit ``--cell-summaries-out`` /
+    ``--synthesis-out`` overrides still win.
+    """
+    captured: dict[str, str] = {}
+
+    def fake_execute(
+        manifest: Any,
+        *,
+        raw_root: Any,
+        cell_summaries_path: Any,
+        synthesis_path: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del manifest, kwargs
+        captured["raw_root"] = str(raw_root)
+        captured["cell_summaries_path"] = str(cell_summaries_path)
+        captured["synthesis_path"] = str(synthesis_path)
+        return {
+            "status": "complete_native",
+            "native_cell_count": EXPECTED_CELL_COUNT,
+            "manifest_hash": "test",
+            "synthesis_path": str(synthesis_path),
+            "report_path": "output/issue_5578_robot_speed_tier_sweep/report.json",
+        }
+
+    monkeypatch.setattr(campaign, "execute_authorized_campaign", fake_execute)
+    rc = main(
+        [
+            "--authorized-full-run",
+            "--authorization-issue",
+            "6102",
+            "--raw-root",
+            "raw",
+            "--json",
+        ]
+    )
+    assert rc == 0
+    # The bare ``raw`` --raw-root is honored for episodes but must not relocate the
+    # canonical cell-summaries / synthesis artifacts into the repository root.
+    assert captured["raw_root"] == "raw"
+    assert captured["cell_summaries_path"] == campaign.DEFAULT_CELL_SUMMARY_PATH
+    assert captured["synthesis_path"] == campaign.DEFAULT_SYNTHESIS_PATH
 
 
 def test_synthesize_adapter_connects_to_reviewed_synthesizer(tmp_path: Path) -> None:

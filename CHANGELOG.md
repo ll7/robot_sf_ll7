@@ -11,22 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **issue #6154 release 0.0.5 evidence bundle.** Assembled release evidence bundle
-  from four frozen candidates (issue #6153): #5034 control-action-latency metric
-  evidence, #5305 certified adversarial archive (17 entries), #5416 SIPP
-  four-geometry preregistration, #5592 cross-matrix preregistration. Bundle
+* **issue #6154 release 0.0.5 evidence bundle.** Assembled the draft release
+  evidence bundle from the three reverified frozen candidates (issue #6153):
+  #5034 control-action-latency metric evidence, #5305 certified adversarial
+  archive (17 entries), and #5592 cross-matrix preregistration. Candidate
+  #5416 is excluded because its current acceptance checker is blocked. The bundle
   includes per-candidate reference manifests, SHA-256 checksums, release
   checksum manifest (`configs/releases/release_0_0_5_checksum_manifest.yaml`),
   preflight checklist (`configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml`),
   and catalog registration. Zenodo concept DOI: 10.5281/zenodo.19482025. See
   `docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md` for
-  plain-language summary and caveats.
-
-* **issue #5416 acceptance checker regression documented.** The
-  `check_issue_5416_sipp_four_geometry_packet.py` checker regressed from
-  `status=ready` to `status=blocked` after PR #6172 changed the geometry
-  certifier. Three scenarios are now geometrically_infeasible; the preregistration
-  packet documents them as expected. Gap routed back to #5416 for correction.
+  plain-language summary and verification commands. It does not publish a tag,
+  GitHub Release, or Zenodo version.
 
 ### Added
 

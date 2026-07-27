@@ -4752,10 +4752,6 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
-- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5416_reference.yaml
-  status: evidence
-  freshness: evidence
-  area: release_evidence
 - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
   status: evidence
   freshness: evidence

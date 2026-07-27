@@ -65,14 +65,6 @@ items:
       Candidate #5305 reference manifest is present with checksum verification.
     path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
 
-  - item_id: candidate_5416_reference
-    criterion: reproduction
-    check: artifact_present
-    description: >-
-      Candidate #5416 reference manifest is present with checksum verification
-      and caveat documentation.
-    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5416_reference.yaml
-
   - item_id: candidate_5592_reference
     criterion: reproduction
     check: artifact_present
@@ -101,13 +93,6 @@ items:
     description: >-
       Candidate #5305 original acceptance report is present and checksummed.
     path: docs/context/evidence/issue_5305_certified_archive/acceptance_report.json
-
-  - item_id: candidate_5416_packet_present
-    criterion: reproduction
-    check: artifact_present
-    description: >-
-      Candidate #5416 preregistration config is present and checksummed.
-    path: configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml
 
   - item_id: candidate_5592_packet_present
     criterion: reproduction

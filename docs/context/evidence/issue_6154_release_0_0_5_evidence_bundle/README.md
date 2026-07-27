@@ -1,43 +1,50 @@
 # Release 0.0.5 Evidence Bundle
 
-Plain-language summary: this bundle assembles four frozen release candidates from issue #6153's frozen candidate manifest into the 0.0.5 release evidence bundle. Two additional candidates are excluded per the frozen manifest disposition.
+Plain-language summary: this draft bundle assembles the three candidates that passed
+the reverified frozen manifest from issue #6153. It is a release-preflight handoff,
+not a published tag, GitHub Release, or Zenodo version.
 
 - Schema: `release_0_0_5_evidence_bundle.v1`
 - Issue: #6154
 - Parent issue: #6149
 - Zenodo concept DOI: `10.5281/zenodo.19482025`
-- Bundle assembly commit: `adadabacabfa663d6ace7eac10e23c67e6a18da7`
+- Frozen manifest: `docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml`
+- Frozen-manifest SHA-256: `84af86ca08b060132ed3d9f40d95254c8c73cc5096229623e173524d4ffe9177`
 
 ## Included Candidates
 
-| Candidate | Issue | Classification | Acceptance Checker | Claim Boundary |
-|---|---|---|---|---|
-| `candidate_5034` | #5034 | metric_evidence_promotion | verified | control-action-latency metric-evidence promotion only |
-| `candidate_5305` | #5305 | certified_adversarial_archive | passed | certified adversarial archive of 17 entries, disjoint splits |
-| `candidate_5416` | #5416 | preregistration_packet | blocked (see caveat) | Preregistration and CPU contract only |
-| `candidate_5592` | #5592 | preregistration_packet | ready | Generalization check contract, two matrices only |
+| Candidate | Issue | Classification | Acceptance checker | Claim boundary |
+| --- | --- | --- | --- | --- |
+| `candidate_5034` | #5034 | metric evidence promotion | passed | Targeted-smoke metric evidence for eligible native/adapter latency cells only. |
+| `candidate_5305` | #5305 | certified adversarial archive | passed | 17 certified episode entries with stable failure-mechanism attributions and disjoint scenario splits. |
+| `candidate_5592` | #5592 | preregistration packet | passed | Generalization-check contract across two scenario matrices only; no paper/dissertation ranking. |
 
 ## Excluded Candidates
 
-| Candidate | Issue | Disposition | Rationale |
-|---|---|---|---|
-| `candidate_5756` | #5756 | exclude | Campaign in progress, no completed evidence directory |
-| `candidate_4977` | #4977 | exclude | Campaign not executed, metric evidence promoted under #5034 |
+| Candidate | Issue | Reason |
+| --- | --- | --- |
+| `candidate_4977` | #4977 | Campaign was not executed; its metric evidence is evaluated separately under #5034. |
+| `candidate_5416` | #5416 | Current full acceptance checker is blocked by three geometrically infeasible rows; the owning issue retains the correction. |
+| `candidate_5756` | #5756 | Campaign is still in progress and has no completed durable evidence directory. |
 
-## Caveats
+## Verification
 
-1. **#5416 acceptance checker regression**: The `check_issue_5416_sipp_four_geometry_packet.py` checker now reports `status=blocked` instead of the frozen manifest's recorded `status=ready`. This is because PR #6172 updated the geometry certifier (`scenario_cert.v1`), which now correctly classifies `classic_doorway_low`, `classic_station_platform_medium`, and `classic_merging_low` as `geometrically_infeasible`. The preregistration packet itself documents these as expected exclusions via `certification_caveat: excluded_geometrically_infeasible_post_pr_6172`. Candidate remains in the bundle with this caveat; correction routed to owning issue #5416.
+Run these commands from the repository root. Each must report a passing status.
 
-2. **Changelog entries**: The CHANGELOG.md release notes restate only each candidate's `allowed_claim` from the frozen manifest. No claim is widened beyond its recorded boundary.
+```bash
+(cd docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle && sha256sum -c SHA256SUMS)
+uv run python scripts/tools/release_preflight_check.py \
+  --checklist configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml --fail-on-blocked
+uv run python scripts/repro/verify_release_checksums.py \
+  --manifest configs/releases/release_0_0_5_checksum_manifest.yaml --no-download
+```
 
-3. **Provenance recording**: Execution-versus-publication commit lineage is recorded in the release_manifest.yaml. For #5034: source_commit=484d3fd0 matches manifest. For #5305: source_commit=ecf997d3 matches manifest. For #5416: source_commit=13cb68de matches manifest. For #5592: source_commit=96776636 matches manifest.
+The first command verifies all bundle files. The second verifies the release
+preflight, including the frozen-manifest checksum and claim audit. The third
+independently verifies every repository-local entry in the checksum manifest.
 
 ## Files
 
-- `release_manifest.yaml` — full release evidence bundle manifest with per-candidate metadata, checksums, and residual risks.
-- `SHA256SUMS` — sha256 checksums for all files in this bundle directory.
-- `candidates/candidate_5034_reference.yaml` — reference to #5034 evidence with checksum verification.
-- `candidates/candidate_5305_reference.yaml` — reference to #5305 evidence with checksum verification.
-- `candidates/candidate_5416_reference.yaml` — reference to #5416 preregistration packet with checksum verification.
-- `candidates/candidate_5592_reference.yaml` — reference to #5592 preregistration packet with checksum verification.
-- `README.md` — this file.
+- `release_manifest.yaml` — candidate dispositions, claim boundaries, provenance, and residual risks.
+- `SHA256SUMS` — SHA-256 checksums for every file in this bundle directory.
+- `candidates/` — one checksum-verified reference manifest for each included candidate.

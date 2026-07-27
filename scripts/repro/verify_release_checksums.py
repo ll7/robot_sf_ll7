@@ -124,11 +124,63 @@ def _list_archive_contents(bundle_path: Path) -> list[str]:
         return sorted(tar.getnames())
 
 
+def _verify_repository_entries(entries: Any, repo_root: Path) -> list[dict[str, Any]]:
+    """Verify repository-relative checksum entries without a release archive."""
+    if not isinstance(entries, list) or not entries:
+        return [{"match": False, "error": "Manifest entries must be a non-empty list."}]
+
+    resolved_root = repo_root.resolve()
+    results: list[dict[str, Any]] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            results.append({"match": False, "error": f"entries[{index}] must be a mapping."})
+            continue
+        raw_path = entry.get("path")
+        expected_sha256 = entry.get("sha256")
+        result: dict[str, Any] = {
+            "path": raw_path,
+            "expected_sha256": expected_sha256,
+            "match": False,
+        }
+        if not isinstance(raw_path, str) or not raw_path:
+            result["error"] = f"entries[{index}] is missing a non-empty path."
+            results.append(result)
+            continue
+        if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+            result["error"] = f"entries[{index}] has an invalid SHA-256 digest."
+            results.append(result)
+            continue
+
+        candidate = Path(raw_path)
+        if candidate.is_absolute():
+            result["error"] = "Repository entry path must be relative."
+            results.append(result)
+            continue
+        path = (resolved_root / candidate).resolve()
+        try:
+            path.relative_to(resolved_root)
+        except ValueError:
+            result["error"] = "Repository entry path escapes the repository root."
+            results.append(result)
+            continue
+        if not path.is_file():
+            result["error"] = "Repository entry is missing or not a regular file."
+            results.append(result)
+            continue
+
+        actual_sha256 = _sha256_file(path)
+        result["actual_sha256"] = actual_sha256
+        result["match"] = actual_sha256 == expected_sha256
+        results.append(result)
+    return results
+
+
 def verify_release(  # noqa: C901 - each manifest/download/checksum failure needs a structured report.
     manifest_path: Path,
     bundle_path: Path | None,
     output_dir: Path,
     download: bool = True,
+    repo_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run the full release checksum verification.
 
@@ -172,7 +224,30 @@ def verify_release(  # noqa: C901 - each manifest/download/checksum failure need
         "errors": [],
     }
 
-    expected_bundle = manifest["artifact_set"]["bundle_archive"]
+    artifact_set = manifest.get("artifact_set")
+    if not isinstance(artifact_set, dict):
+        report["errors"].append("Checksum manifest must define an artifact_set mapping.")
+        report["overall_verdict"] = "error"
+        return report
+
+    expected_bundle = artifact_set.get("bundle_archive")
+    if expected_bundle is None:
+        repository_results = _verify_repository_entries(
+            manifest.get("entries"),
+            repo_root or Path.cwd(),
+        )
+        report["verdicts"]["repository_entries"] = repository_results
+        for result in repository_results:
+            if not result.get("match"):
+                report["errors"].append(
+                    f"Repository entry checksum verification failed: {result.get('path', 'unknown')}",
+                )
+        report["overall_verdict"] = "pass" if not report["errors"] else "fail"
+        return report
+    if not isinstance(expected_bundle, dict):
+        report["errors"].append("artifact_set.bundle_archive must be a mapping.")
+        report["overall_verdict"] = "error"
+        return report
     bundle_sha256 = expected_bundle["sha256"]
     bundle_url = expected_bundle["url"]
 
@@ -246,6 +321,12 @@ def main() -> None:
         action="store_true",
         help="Disable automatic download from GitHub release",
     )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository root for manifests that verify tracked entries instead of an archive.",
+    )
     args = parser.parse_args()
 
     manifest_path = args.manifest
@@ -262,6 +343,7 @@ def main() -> None:
         bundle_path=args.bundle_path,
         output_dir=args.output_dir,
         download=not args.no_download,
+        repo_root=args.repo_root,
     )
 
     report_path = args.output_dir / "checksum_verification_report.json"

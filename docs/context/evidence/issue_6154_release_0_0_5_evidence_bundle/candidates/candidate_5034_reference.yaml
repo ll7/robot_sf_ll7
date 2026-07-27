@@ -4,10 +4,10 @@ title: "control-action latency metric-evidence promotion"
 source_commit: 484d3fd05a0e29da9e267fa18f817a1fe101de70
 evidence_location: "docs/context/evidence/issue_5034_control_action_latency_sweep/"
 evidence_classification: metric_evidence_promotion
-allowed_claim: "control-action-latency metric-evidence promotion only: action latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell"
+allowed_claim: "control-action-latency metric evidence for eligible native/adapter latency cells only; evidence_tier=targeted smoke and result_classification=diagnostic-only"
 acceptance_checker:
-  status: verified
-  detail: "fixed_scope_coverage.status=verified (1296 result rows across 48 scenarios, 3 latency variants, 3 planners)"
+  status: passed
+  detail: "fixed_scope_coverage.status=verified (1296 expected and observed rows); re-verified 2026-07-26"
 sha256_verification:
   summary_json: caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba
   README.md: d9fe91eed69843bd85919233199aa67b0476b68d39180a07aee7a39ce0e378ba

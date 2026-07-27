@@ -20,11 +20,13 @@ metric, or policy claim.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from robot_sf.benchmark.map_runner_trace import _command_action_payload
 from robot_sf.benchmark.rl_trajectory_dataset import (
     RL_TRAJECTORY_EPISODE_SCHEMA_VERSION,
     RLTrajectoryEpisode,
@@ -58,6 +60,20 @@ _EVIDENCE_PREVIEW = (
     / "issue_4011_rl_trajectory_dataset_smoke_2026-07-02"
     / "issue_4011_smoke.preview.jsonl"
 )
+
+_RECORDER_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "benchmark"
+    / "record_rl_trajectory_dataset.py"
+)
+_RECORDER_SPEC = importlib.util.spec_from_file_location(
+    "record_rl_trajectory_dataset", _RECORDER_PATH
+)
+assert _RECORDER_SPEC is not None
+assert _RECORDER_SPEC.loader is not None
+record_rl_trajectory_dataset = importlib.util.module_from_spec(_RECORDER_SPEC)
+_RECORDER_SPEC.loader.exec_module(record_rl_trajectory_dataset)
 
 
 def _full_robot_state(index: int) -> dict:
@@ -252,6 +268,40 @@ def test_raw_stored_action_preserved_verbatim() -> None:
         assert step.raw == tuple(actions[index])
 
 
+def test_adapter_accepts_current_simulation_trace_recorder_action_mapping(tmp_path: Path) -> None:
+    """The recorder's selected_action mapping reaches the adapter as the same physical command."""
+    source_record = {
+        "episode_id": "classic_cross_trap_low:seed101:goal:000000",
+        "scenario_id": "classic_cross_trap_low",
+        "seed": 101,
+        "algo": "goal",
+        "algorithm_metadata": {
+            "simulation_step_trace": {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "step": 0,
+                        "robot": _full_robot_state(0),
+                        "pedestrians": [],
+                        "planner": {"selected_action": _command_action_payload([0.5, -0.25])},
+                        "rl": {"reward": 1.0, "terminated": True, "truncated": False},
+                    }
+                ],
+            }
+        },
+    }
+
+    episode = record_rl_trajectory_dataset.convert_source_records(
+        [source_record],
+        dataset_id="issue_6318_adapter_smoke",
+        source_jsonl=tmp_path / "simulation_steps.jsonl",
+    )[0]
+    structured = adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+    assert episode.actions == ({"linear_velocity": 0.5, "angular_velocity": -0.25},)
+    assert structured.actions[0].raw == (0.5, -0.25)
+
+
 def test_episode_view_stays_episode_major() -> None:
     """The structured view never flattens to transitions: per-step lengths equal the step count."""
     episode = _make_episode(step_count=4)
@@ -346,6 +396,29 @@ def test_action_bounds_validate_non_degenerate_envelope() -> None:
         ActionBounds(max_linear_speed=1.0, max_angular_speed=-1.0)
     with pytest.raises(OpenDreamerAdapterError, match="min_linear_speed"):
         ActionBounds(max_linear_speed=1.0, max_angular_speed=1.0, min_linear_speed=-2.0)
+
+
+def test_stored_actions_must_lie_within_declared_physical_bounds() -> None:
+    """Stored physical commands accept envelope endpoints and reject out-of-range values."""
+    boundary_actions = (
+        {"linear_velocity": 0.0, "angular_velocity": -1.0},
+        {"linear_velocity": 2.0, "angular_velocity": 1.0},
+    )
+    structured = adapt_episode(
+        _make_episode(step_count=2, actions=boundary_actions), action_bounds=_DEFAULT_BOUNDS
+    )
+    assert [step.raw for step in structured.actions] == [(0.0, -1.0), (2.0, 1.0)]
+
+    for action in (
+        {"linear_velocity": -0.01, "angular_velocity": 0.0},
+        {"linear_velocity": 2.01, "angular_velocity": 0.0},
+        {"linear_velocity": 1.0, "angular_velocity": -1.01},
+        {"linear_velocity": 1.0, "angular_velocity": 1.01},
+    ):
+        with pytest.raises(OpenDreamerAdapterError, match="supplied action bounds"):
+            adapt_episode(
+                _make_episode(step_count=1, actions=(action,)), action_bounds=_DEFAULT_BOUNDS
+            )
 
 
 # ----------------------------------------------------------------------------------------------

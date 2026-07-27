@@ -47,8 +47,9 @@ The adapter fails closed (raises :class:`OpenDreamerAdapterError`) when:
 * a required field is missing (e.g. ``robot_states`` lacks ``position``/``heading``/``velocity``);
 * any produced output is non-finite (NaN/Inf in ``drive_state``, ``rays``, ``rewards``,
   ``return_to_go``, or the mapped velocity);
-* a stored action is not a finite 2D continuous ``(linear, angular)`` command (incompatible action
-  space);
+* a stored action is not a finite 2D continuous ``(linear, angular)`` command, does not use the
+  recorder's canonical ``linear_velocity``/``angular_velocity`` mapping, or falls outside the
+  caller-supplied physical action bounds (incompatible action space);
 * a stored split does not equal the canonical deterministic assignment for its
   ``(scenario_id, seed)`` key, or the dataset leaks that key across more than one split.
 
@@ -211,13 +212,13 @@ class StructuredObservationStep:
 class StructuredActionStep:
     """One step of the preserved action view.
 
-    The raw stored ``(linear, angular)`` command is preserved verbatim (semantics untouched) and
-    validated to be a finite 2D continuous command. The forward ``[-1, 1] -> velocity`` mapping is
-    provided separately by :func:`map_action_to_velocity` so the adapter does not assert an
-    unverified unit for the stored action; the bounds used are recorded in the episode provenance.
+    The recorder's canonical mapping and legacy two-element sequences are normalized to the same
+    physical ``(linear, angular)`` command, then validated against the caller-supplied bounds. The
+    forward ``[-1, 1] -> velocity`` mapping is provided separately by :func:`map_action_to_velocity`;
+    the bounds used are recorded in the episode provenance.
 
     Attributes:
-        raw: The preserved raw ``(linear, angular)`` action exactly as recorded, finite-validated.
+        raw: The normalized physical ``(linear, angular)`` action, finite- and bounds-validated.
     """
 
     raw: tuple[float, ...]
@@ -485,8 +486,9 @@ def adapt_episode(
 
     Raises:
         OpenDreamerAdapterError: If a required field is missing, any produced output is non-finite,
-            the stored action is not a finite 2D continuous command, or the stored split is invalid
-            or differs from its canonical deterministic assignment.
+            the stored action is not a finite 2D continuous command within the supplied physical
+            action bounds, or the stored split is invalid or differs from its canonical deterministic
+            assignment.
     """
     try:
         validate_rl_trajectory_episode(episode)
@@ -525,7 +527,7 @@ def adapt_episode(
             )
         )
         raw_action = episode.actions[step_index]
-        structured_actions.append(_coerce_action_step(raw_action, step_index))
+        structured_actions.append(_coerce_action_step(raw_action, step_index, action_bounds))
 
     provenance = _augment_provenance(
         episode.provenance,
@@ -660,26 +662,43 @@ def _extract_rays(observation: Any) -> tuple[np.ndarray, bool]:
     return np.asarray([], dtype=float), False
 
 
-def _coerce_action_step(raw_action: Any, step_index: int) -> StructuredActionStep:
-    """Validate and preserve one stored action as a finite 2D continuous command.
+def _coerce_action_step(
+    raw_action: Any,
+    step_index: int,
+    action_bounds: ActionBounds,
+) -> StructuredActionStep:
+    """Normalize and validate one stored physical ``(linear, angular)`` command.
 
     Args:
-        raw_action: The raw stored action for the given step.
+        raw_action: The raw stored action for the given step. The current recorder emits a mapping
+            with ``linear_velocity`` and ``angular_velocity`` keys; a two-element sequence remains
+            supported for compatible legacy datasets.
         step_index: Step index used only for a clear error message.
+        action_bounds: Physical linear and angular velocity envelope that the command must satisfy.
 
     Returns:
-        A :class:`StructuredActionStep` preserving the raw ``(linear, angular)`` command.
+        A :class:`StructuredActionStep` containing the normalized ``(linear, angular)`` command.
 
     Raises:
-        OpenDreamerAdapterError: If the action is not a finite 2D numeric ``(linear, angular)``
-            command (incompatible action space).
+        OpenDreamerAdapterError: If the action does not have a supported representation, is not a
+            finite 2D numeric ``(linear, angular)`` command, or lies outside ``action_bounds``.
     """
-    try:
+    if isinstance(raw_action, Mapping):
+        required_keys = ("linear_velocity", "angular_velocity")
+        missing_keys = [key for key in required_keys if key not in raw_action]
+        if missing_keys:
+            raise OpenDreamerAdapterError(
+                f"action at step {step_index} mapping must contain {required_keys}, "
+                f"missing {missing_keys}"
+            )
+        values = [raw_action[key] for key in required_keys]
+    elif isinstance(raw_action, Sequence | np.ndarray) and not isinstance(raw_action, str | bytes):
         values = list(raw_action)
-    except TypeError as exc:
+    else:
         raise OpenDreamerAdapterError(
-            f"action at step {step_index} must be a sequence, got {type(raw_action).__name__}"
-        ) from exc
+            f"action at step {step_index} must be a recorder action mapping or sequence, "
+            f"got {type(raw_action).__name__}"
+        )
     if len(values) != EXPECTED_ACTION_DIM:
         raise OpenDreamerAdapterError(
             f"action at step {step_index} must be {EXPECTED_ACTION_DIM}D (linear, angular), "
@@ -694,6 +713,16 @@ def _coerce_action_step(raw_action: Any, step_index: int) -> StructuredActionSte
         coerced.append(float(value))
     if not all(np.isfinite(coerced)):
         raise OpenDreamerAdapterError(f"action at step {step_index} must be finite")
+    linear_velocity, angular_velocity = coerced
+    if not (
+        action_bounds.min_linear_speed <= linear_velocity <= action_bounds.max_linear_speed
+        and -action_bounds.max_angular_speed <= angular_velocity <= action_bounds.max_angular_speed
+    ):
+        raise OpenDreamerAdapterError(
+            f"action at step {step_index} must lie within supplied action bounds: "
+            f"linear in [{action_bounds.min_linear_speed}, {action_bounds.max_linear_speed}], "
+            f"angular in [-{action_bounds.max_angular_speed}, {action_bounds.max_angular_speed}]"
+        )
     return StructuredActionStep(raw=tuple(coerced))
 
 

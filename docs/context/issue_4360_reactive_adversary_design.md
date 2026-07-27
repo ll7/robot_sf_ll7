@@ -110,5 +110,8 @@ calibrated pedestrian-behavior probability model we do not have).
 - Route-deviation references each route-following pedestrian's assigned route
   polyline. Pedestrians without a route assignment (for example, crowded-zone
   or scripted pedestrians) intentionally have no route-deviation projection.
+- In pedestrian-centric simulations, the externally controlled ego-pedestrian
+  row is never an adversary target. It remains visible to inter-agent separation
+  checks so targeted non-player pedestrians cannot be nudged through it.
 - The bundled scripted policy is a placeholder baseline; adversarial strength
   is not claimed and not measured here.

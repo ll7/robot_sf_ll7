@@ -14,12 +14,12 @@ from __future__ import annotations
 import numpy as np
 
 from robot_sf.common.types import Line2D, Rect
-from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
 from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
 from robot_sf.sim.sim_config import SimulationSettings
-from robot_sf.sim.simulator import init_simulators
+from robot_sf.sim.simulator import init_ped_simulators, init_simulators
 
 
 def _minimal_map() -> MapDefinition:
@@ -188,6 +188,41 @@ def test_apply_residual_adversary_short_circuits_empty_crowd() -> None:
     # Building for an empty crowd still produces a finite-sized adversary handle,
     # but no residual is applied to the empty force matrix.
     assert np.all(np.isfinite(out)) if out.size else True
+
+
+def test_ped_simulator_excludes_controlled_ego_from_adversary_targets() -> None:
+    """The residual policy may target NPC rows, never the controlled ego row."""
+    map_def = _minimal_map()
+    sim_config = SimulationSettings(
+        sim_time_in_secs=4.0,
+        time_per_step_in_secs=0.1,
+        difficulty=0,
+        ped_density_by_difficulty=[0.02, 0.02, 0.02, 0.02],
+        residual_adversary=ResidualAdversaryConfig(
+            is_active=True,
+            target_ped_idx=-1,
+            max_jerk_mps3=1e9,
+        ),
+    )
+    config = PedestrianSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"test": map_def}),
+        sim_config=sim_config,
+    )
+    sim = init_ped_simulators(
+        config,
+        map_def,
+        random_start_pos=False,
+        peds_have_obstacle_forces=True,
+    )[0]
+
+    adversary = sim._build_residual_adversary()
+
+    assert adversary is not None
+    assert adversary._target_mask[:-1].all()
+    assert not adversary._target_mask[-1]
+    sim.step_once([(0.0, 0.0)], ego_ped_actions=[(0.0, 0.0)])
+    assert sim._residual_adversary is not None
+    np.testing.assert_allclose(sim._residual_adversary.last_residual[-1], [0.0, 0.0])
 
 
 def test_collect_helpers_forward_geometry_from_map(monkeypatch) -> None:

@@ -78,6 +78,21 @@ def _readonly_array_snapshot(array: np.ndarray) -> np.ndarray:
     return snapshot
 
 
+def _normalize_robot_pose(robot_pose: RobotPose) -> RobotPose:
+    """Return a finite, immutable robot pose or fail closed."""
+    try:
+        position, heading = robot_pose
+        position_array = np.asarray(position, dtype=float)
+        heading_value = float(heading)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("robot_pose must contain a finite 2D position and heading") from exc
+    if position_array.shape != (2,) or not np.all(np.isfinite(position_array)):
+        raise ValueError("robot_pose position must have shape (2,) with finite values")
+    if not isfinite(heading_value):
+        raise ValueError("robot_pose heading must be finite")
+    return ((float(position_array[0]), float(position_array[1])), heading_value)
+
+
 @dataclass(frozen=True)
 class ResidualAdversaryConfig:
     """Opt-in bounded residual-control adversary parameters.
@@ -850,7 +865,9 @@ def enforce_inter_agent_separation(
     the all-target case atomic: every candidate pair is evaluated from the same
     positions rather than from stale, row-by-row candidates.  The scale is the
     largest prefix of the proposed displacement that preserves every pairwise
-    separation. Non-targeted rows are never modified.
+    separation. Non-targeted rows are never modified. If fixed non-target motion
+    alone would turn a currently valid target/non-target pair invalid, the helper
+    fails closed because scaling targeted rows cannot preserve a safe prefix from zero.
 
     Returns
     -------
@@ -881,9 +898,25 @@ def enforce_inter_agent_separation(
         for j in range(num_peds):
             if j == i or (target_mask[j] and j < i):
                 continue
+            relative_position = positions_array[i] - positions_array[j]
+            if target_mask[j]:
+                relative_displacement = displacement_array[i] - displacement_array[j]
+            else:
+                fixed_relative_position = relative_position - displacement_array[j]
+                current_distance = float(np.linalg.norm(relative_position))
+                fixed_distance = float(np.linalg.norm(fixed_relative_position))
+                if (
+                    current_distance >= min_separation_m - EPSILON
+                    and fixed_distance < min_separation_m - EPSILON
+                ):
+                    raise ValueError(
+                        "non-targeted residual displacement would violate minimum separation"
+                    )
+                relative_position = fixed_relative_position
+                relative_displacement = displacement_array[i]
             pair_scale = _pairwise_separation_scale(
-                positions_array[i] - positions_array[j],
-                displacement_array[i] - displacement_array[j],
+                relative_position,
+                relative_displacement,
                 min_separation_m,
             )
             shared_scale = min(shared_scale, pair_scale)
@@ -1134,6 +1167,7 @@ class BoundedResidualAdversary:
             raise ValueError("velocities must match positions shape")
         if max_speeds_array.shape != (self.num_peds,):
             raise ValueError(f"max_speeds must have shape ({self.num_peds},)")
+        normalized_robot_pose = _normalize_robot_pose(robot_pose)
 
         if self.num_peds == 0:
             self._step_index += 1
@@ -1147,7 +1181,7 @@ class BoundedResidualAdversary:
                 velocities=_readonly_array_snapshot(velocities_array),
                 max_speeds=_readonly_array_snapshot(max_speeds_array),
                 target_ped_mask=_readonly_array_snapshot(self._target_mask),
-                robot_pose=robot_pose,
+                robot_pose=normalized_robot_pose,
                 sim_time_s=sim_time_s,
                 step_index=self._step_index,
                 macro_action_index=self._macro_action_index,

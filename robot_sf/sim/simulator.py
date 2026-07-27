@@ -63,6 +63,7 @@ from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.ped_npc.residual_adversary import (
     BoundedResidualAdversary,
+    ResidualAdversaryConfig,
     build_default_residual_adversary,
 )
 from robot_sf.sim.pedestrian_model_variants import (
@@ -392,8 +393,8 @@ class Simulator:
         BoundedResidualAdversary | None
             A ready-to-step adversary, or ``None`` when the config is inactive.
         """
-        config = self.config.residual_adversary
         num_peds = self.pysf_state.num_peds
+        config = self._residual_adversary_config(num_peds)
         return build_default_residual_adversary(
             config,
             self.config.time_per_step_in_secs,
@@ -403,6 +404,11 @@ class Simulator:
             bounds=self._collect_residual_map_bounds(),
             ped_radius=float(self.config.ped_radius),
         )
+
+    def _residual_adversary_config(self, num_peds: int) -> ResidualAdversaryConfig:
+        """Return residual-adversary config for rows controlled by this simulator."""
+        del num_peds
+        return self.config.residual_adversary
 
     def _collect_residual_route_polylines(self) -> dict[int, np.ndarray] | None:
         """Return actual route polylines keyed by global pedestrian index.
@@ -826,6 +832,24 @@ class PedSimulator(Simulator):
     """
 
     ego_ped: UnicycleDrivePedestrian
+
+    def _residual_adversary_config(self, num_peds: int) -> ResidualAdversaryConfig:
+        """Exclude the externally controlled ego pedestrian from policy targets.
+
+        The ego row remains in controller state as a stationary separation
+        constraint, so targeted non-player pedestrians cannot be nudged through it.
+
+        Returns
+        -------
+        ResidualAdversaryConfig
+            Config whose target set excludes the final ego-pedestrian row.
+        """
+        config = self.config.residual_adversary
+        if num_peds == 0:
+            return config
+        target_mask = config.resolve_target_mask(num_peds)
+        target_mask[-1] = False
+        return replace(config, target_ped_idx=np.flatnonzero(target_mask).tolist())
 
     @staticmethod
     def _validate_ego_ped_action_count(ego_ped_actions: list[UnicycleAction]) -> None:

@@ -362,6 +362,19 @@ def test_enforce_inter_agent_separation_checks_lower_index_non_target() -> None:
     assert np.linalg.norm(candidate[0] - candidate[1]) >= 0.6 - 1e-9
 
 
+def test_enforce_inter_agent_separation_rejects_unsafe_non_target_motion() -> None:
+    """A fixed non-target residual cannot silently invalidate the safety proof."""
+    positions = np.array([[0.0, 0.0], [2.0, 0.0]], dtype=float)
+    displacement = np.array([[0.25, 0.0], [-1.5, 0.0]], dtype=float)
+    target_mask = np.array([True, False])
+
+    with pytest.raises(
+        ValueError,
+        match="non-targeted residual displacement would violate minimum separation",
+    ):
+        enforce_inter_agent_separation(displacement, positions, target_mask, 1.0)
+
+
 # ---------------------------------------------------------------------------
 # Fail-closed behavior on malformed / non-finite input
 # ---------------------------------------------------------------------------
@@ -407,6 +420,30 @@ def test_controller_fail_closed_on_non_finite_state() -> None:
             np.zeros((1, 2)),
             np.array([1.0]),
             ROBOT_POSE,
+        )
+
+
+def test_controller_fail_closed_on_non_finite_robot_pose() -> None:
+    """Robot-pose validation must not depend on whether a policy reads the pose."""
+
+    @dataclass
+    class _ZeroPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            return np.zeros_like(observation.positions)
+
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(is_active=True),
+        policy=_ZeroPolicy(),
+        dt_s=0.1,
+        num_peds=1,
+    )
+
+    with pytest.raises(ValueError, match="robot_pose heading must be finite"):
+        adversary.step_residual(
+            np.array([[1.0, 1.0]]),
+            np.zeros((1, 2)),
+            np.array([1.0]),
+            ((0.0, 0.0), float("nan")),
         )
 
 

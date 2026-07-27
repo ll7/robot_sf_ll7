@@ -343,6 +343,31 @@ def test_fetch_threads_resolved_rejects_partial_graphql_errors() -> None:
     assert "incomplete" in error
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"data": None},
+        {"data": {"repository": None}},
+        {"data": {"repository": {"pullRequest": None}}},
+    ],
+)
+def test_graphql_queries_reject_malformed_pull_request_data(
+    payload: dict[str, object],
+) -> None:
+    """Malformed GraphQL data fails closed without an uncaught attribute error."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(stdout=json.dumps(payload))
+
+        strategy, strategy_error = fetch_merge_queue_strategy(42, repo="owner/repo")
+        threads, threads_error = fetch_threads_resolved(42, repo="owner/repo")
+
+    assert strategy is None
+    assert strategy_error is not None
+    assert threads is None
+    assert threads_error is not None
+    assert mock_gh.call_count == 2
+
+
 def test_headgreen_merge_queue_strategy_fails_closed() -> None:
     """A passing tail entry cannot carry an earlier ungated entry through."""
     gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
@@ -512,3 +537,14 @@ def test_pr_mode_fails_closed_when_current_main_sha_is_unavailable(capsys) -> No
     assert exit_code == 1
     assert audit["main_sha"] == ""
     assert "main_sha_unavailable" in audit["reasons"]
+
+
+def test_pr_mode_records_snapshot_failure_in_audit(capsys) -> None:
+    """A PR snapshot failure is visible in the machine-readable fail-closed audit."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(returncode=1, stderr="snapshot unavailable")
+        exit_code = main(["--pr", "42", "--repo", "owner/repo"])
+
+    audit = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert "pr_snapshot_unavailable" in audit["reasons"]

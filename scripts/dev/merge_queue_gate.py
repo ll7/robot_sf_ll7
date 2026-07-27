@@ -413,6 +413,20 @@ def _graphql_error(payload: dict[str, Any]) -> str | None:
     return "; ".join(messages) or "GraphQL returned errors"
 
 
+def _graphql_pull_request(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """Return the pull-request object from a validated GraphQL response."""
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None, "GraphQL data is missing or malformed"
+    repository = data.get("repository")
+    if not isinstance(repository, dict):
+        return None, "GraphQL repository data is missing or malformed"
+    pull_request = repository.get("pullRequest")
+    if not isinstance(pull_request, dict):
+        return None, "GraphQL pull-request data is missing or malformed"
+    return pull_request, None
+
+
 def _failed_audit(audit: MergeGateAudit, reason: str) -> MergeGateAudit:
     """Return an audit forced to fail with one additional machine-readable reason."""
     return replace(audit, passed=False, reasons=[*audit.reasons, reason])
@@ -647,10 +661,10 @@ def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str 
     graphql_err = _graphql_error(payload)
     if graphql_err:
         return None, graphql_err
-    data = payload.get("data")
-    repository = data.get("repository") if isinstance(data, dict) else None
-    pull_request = repository.get("pullRequest") if isinstance(repository, dict) else None
-    entry = pull_request.get("mergeQueueEntry") if isinstance(pull_request, dict) else None
+    pull_request, pull_request_error = _graphql_pull_request(payload)
+    if pull_request_error or pull_request is None:
+        return None, pull_request_error or "GraphQL pull-request data is missing"
+    entry = pull_request.get("mergeQueueEntry")
     queue = entry.get("mergeQueue") if isinstance(entry, dict) else None
     configuration = queue.get("configuration") if isinstance(queue, dict) else None
     strategy = configuration.get("mergingStrategy") if isinstance(configuration, dict) else None
@@ -699,12 +713,10 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
     graphql_err = _graphql_error(payload)
     if graphql_err:
         return None, graphql_err
-    threads = (
-        payload.get("data", {})
-        .get("repository", {})
-        .get("pullRequest", {})
-        .get("reviewThreads", {})
-    )
+    pull_request, pull_request_error = _graphql_pull_request(payload)
+    if pull_request_error or pull_request is None:
+        return None, pull_request_error or "GraphQL pull-request data is missing"
+    threads = pull_request.get("reviewThreads")
     nodes, connection_error = _complete_review_thread_nodes(threads)
     if connection_error or nodes is None:
         return None, connection_error or "reviewThreads connection is incomplete"
@@ -777,17 +789,15 @@ def _evaluate_live(
     """Fetch live PR state, evaluate the gate, and return ``(audit, error)``."""
     snapshot, err = fetch_pr_snapshot(pr_number, repo=repo)
     if err:
-        return (
-            evaluate_merge_gate(
-                {"number": pr_number, "head_sha": ""},
-                main_sha="",
-                ci_overall="unknown",
-                threads_resolved=None,
-                reviewers_requested=None,
-                merge_group_head_sha=merge_group_head_sha,
-            ),
-            err,
+        audit = evaluate_merge_gate(
+            {"number": pr_number, "head_sha": ""},
+            main_sha="",
+            ci_overall="unknown",
+            threads_resolved=None,
+            reviewers_requested=None,
+            merge_group_head_sha=merge_group_head_sha,
         )
+        return _failed_audit(audit, "pr_snapshot_unavailable"), err
 
     if merge_group_base_sha:
         # Inside the merge queue the base SHA is the prospective current main, so

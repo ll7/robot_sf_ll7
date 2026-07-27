@@ -150,6 +150,7 @@ def test_robot_sf_receipt_computes_real_metric() -> None:
     # Policy identity must include runtime provenance (not a static metadata copy).
     assert "runtime_planner_config" in receipt["policy_identity"]
     assert receipt["executed_policy"] is True
+    assert receipt["executed_scenario_id"] == mapping.robot_sf_scenario_id
 
 
 def test_robot_sf_receipt_from_rollout_matches_independent_receipt() -> None:

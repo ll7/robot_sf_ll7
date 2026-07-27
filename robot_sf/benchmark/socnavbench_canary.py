@@ -520,7 +520,7 @@ def run_robot_sf_receipt(
 
     Returns:
         JSON-safe Robot SF receipt dict with policy identity, mapping, metric value, and
-        the suite-specific ratio definition.
+        the suite-specific ratio definition and the actually executed scenario id.
     """
     try:
         rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)

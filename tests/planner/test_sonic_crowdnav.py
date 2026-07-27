@@ -171,6 +171,7 @@ def test_sonic_import_context_evicts_and_restores_stale_upstream_modules(
         monkeypatch.setitem(sys.modules, name, module)
 
     original_modules = dict(sys.modules)
+    original_path = list(sys.path)
     with _sonic_import_context(repo_root):
         imported_modules = {
             name: importlib.import_module(name)
@@ -192,6 +193,7 @@ def test_sonic_import_context_evicts_and_restores_stale_upstream_modules(
         assert sys.modules["rl.networks.envs"] is not stale_modules["rl.networks.envs"]
 
     assert dict(sys.modules) == original_modules
+    assert sys.path == original_path
 
 
 def test_sonic_import_context_restores_stale_modules_after_import_failure(

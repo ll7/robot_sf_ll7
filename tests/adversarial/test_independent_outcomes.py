@@ -353,6 +353,17 @@ def test_missing_required_field_fails_closed() -> None:
     assert "record_sha256" in result["reason"]
 
 
+def test_missing_admission_status_fails_closed() -> None:
+    """A v2 row must state whether it is admitted or excluded."""
+    row = _row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)
+    del row["admission_status"]
+
+    result = _evaluate(_packet([row]), budget_per_arm=1)
+
+    assert result["status"] == "blocked"
+    assert "admission_status" in result["reason"]
+
+
 def test_malformed_execution_lineage_fields_fail_closed() -> None:
     """Required row-level execution lineage must be well typed and non-empty."""
     malformed_values = (

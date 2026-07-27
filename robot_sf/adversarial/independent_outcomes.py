@@ -86,6 +86,7 @@ REQUIRED_ADMITTED_ROW_FIELDS = (
     "replay_lineage",
     "confirmation_lineage",
     "record_sha256",
+    "admission_status",
 )
 
 #: Confirmation thresholds accepted by the contract and their numeric rule.
@@ -584,7 +585,9 @@ def _admit_row(
         return None, f"row[{row_index}]: not an object"
     row_id = row.get("row_id")
     prefix = f"row[{row_index}] ({row_id}): "
-    admission_status = row.get("admission_status", "admitted")
+    if "admission_status" not in row:
+        return None, prefix + "missing required field 'admission_status'"
+    admission_status = row["admission_status"]
     if admission_status == "excluded":
         exclusion_reason = row.get("exclusion_reason")
         if not isinstance(exclusion_reason, str) or not exclusion_reason.strip():

@@ -71,6 +71,13 @@ def _validate_finite_array(array: np.ndarray, name: str) -> np.ndarray:
     return coerced
 
 
+def _readonly_array_snapshot(array: np.ndarray) -> np.ndarray:
+    """Return an owning, read-only copy suitable for a policy observation."""
+    snapshot = np.array(array, copy=True)
+    snapshot.setflags(write=False)
+    return snapshot
+
+
 @dataclass(frozen=True)
 class ResidualAdversaryConfig:
     """Opt-in bounded residual-control adversary parameters.
@@ -525,12 +532,17 @@ def bound_route_deviation(
 
 
 def _project_point_against_segment(
-    point: np.ndarray, segment: np.ndarray, radius: float
+    point: np.ndarray,
+    segment: np.ndarray,
+    radius: float,
+    reference_point: np.ndarray | None = None,
 ) -> np.ndarray | None:
     """Return a corrected point pushed at least ``radius`` out of ``segment``.
 
     Returns ``None`` when the point is already at least ``radius`` away. The push-out
-    direction is the shortest vector from the segment to the point.
+    direction is the shortest vector from the segment to the point. When a
+    ``reference_point`` is supplied, its side of the obstacle is preferred so a
+    projection cannot jump across a wall and then be clamped back into it.
     """
     start = segment[0]
     end = segment[1]
@@ -541,6 +553,11 @@ def _project_point_against_segment(
         dist = float(np.linalg.norm(delta))
         if dist >= radius:
             return None
+        if reference_point is not None:
+            reference_delta = reference_point - start
+            reference_distance = float(np.linalg.norm(reference_delta))
+            if reference_distance > EPSILON:
+                return start + reference_delta / reference_distance * radius
         if dist <= EPSILON:
             return start + np.array([radius, 0.0])
         return start + delta / dist * radius
@@ -551,6 +568,11 @@ def _project_point_against_segment(
     dist = float(np.linalg.norm(delta))
     if dist >= radius:
         return None
+    if reference_point is not None:
+        reference_delta = reference_point - closest
+        reference_distance = float(np.linalg.norm(reference_delta))
+        if reference_distance > EPSILON:
+            return closest + reference_delta / reference_distance * radius
     if dist <= EPSILON:
         normal = np.array([-seg[1], seg[0]], dtype=float) / np.sqrt(seg_len_sq)
         return closest + normal * radius
@@ -591,29 +613,51 @@ def _push_out_of_obstacles(
 ) -> np.ndarray:
     """Return displacement updated so candidate positions clear every obstacle.
 
-    For each pedestrian whose candidate position lies within ``effective_radius`` of
-    a segment, the displacement is replaced by the vector to the nearest pushed-out
-    point. Positions already clear of all obstacles keep their original displacement.
+    Each candidate is projected against every segment in sequence. The caller repeats
+    this projection with the map-bounds clamp because satisfying one constraint can
+    reintroduce a conflict with an earlier one.
     """
     if stacked_segments is None:
         return displacement
     corrected = displacement.copy()
     for i in range(candidate_positions.shape[0]):
-        best_position = None
-        best_norm = float("inf")
+        corrected_position = candidate_positions[i].copy()
         for segment in stacked_segments:
             pushed = _project_point_against_segment(
-                candidate_positions[i], segment, effective_radius
+                corrected_position,
+                segment,
+                effective_radius,
+                reference_point=positions[i],
             )
-            if pushed is None:
-                continue
-            move_norm = float(np.linalg.norm(pushed - candidate_positions[i]))
-            if move_norm < best_norm:
-                best_norm = move_norm
-                best_position = pushed
-        if best_position is not None:
-            corrected[i] = best_position - positions[i]
+            if pushed is not None:
+                corrected_position = pushed
+        corrected[i] = corrected_position - positions[i]
     return corrected
+
+
+def _walkable_mask(
+    positions: np.ndarray,
+    stacked_segments: np.ndarray | None,
+    validated_bounds: tuple[float, float, float, float] | None,
+    effective_radius: float,
+) -> np.ndarray:
+    """Return which positions satisfy every obstacle and map-bounds clearance."""
+    walkable = np.ones(positions.shape[0], dtype=bool)
+    if stacked_segments is not None:
+        for index, point in enumerate(positions):
+            walkable[index] = all(
+                _project_point_against_segment(point, segment, effective_radius) is None
+                for segment in stacked_segments
+            )
+    if validated_bounds is not None:
+        min_x, max_x, min_y, max_y = validated_bounds
+        walkable &= (
+            (positions[:, 0] >= min_x + effective_radius - EPSILON)
+            & (positions[:, 0] <= max_x - effective_radius + EPSILON)
+            & (positions[:, 1] >= min_y + effective_radius - EPSILON)
+            & (positions[:, 1] <= max_y - effective_radius + EPSILON)
+        )
+    return walkable
 
 
 def _validate_bounds(
@@ -660,29 +704,86 @@ def project_residual_displacement_walkable(
     positions_array = _validate_finite_array(positions, "positions")
     displacement_array = _validate_finite_array(residual_displacement, "residual_displacement")
     _require_finite(radius, "radius")
+    _require_finite(margin_m, "margin_m")
     if radius < 0:
         raise ValueError("radius must be >= 0")
+    if margin_m < 0:
+        raise ValueError("margin_m must be >= 0")
     if displacement_array.shape != positions_array.shape:
         raise ValueError("residual_displacement and positions must have the same shape")
 
     effective_radius = max(float(radius) + max(float(margin_m), MIN_WALKABLE_MARGIN_M), EPSILON)
     stacked_segments = _normalize_obstacle_segments(obstacle_segments)
     validated_bounds = _validate_bounds(bounds)
-
-    candidate_positions = positions_array + displacement_array
-    corrected = _push_out_of_obstacles(
-        positions_array, candidate_positions, displacement_array, stacked_segments, effective_radius
-    )
     if validated_bounds is not None:
         min_x, max_x, min_y, max_y = validated_bounds
+        if (
+            min_x + effective_radius > max_x - effective_radius
+            or min_y + effective_radius > max_y - effective_radius
+        ):
+            raise ValueError("bounds are too small for the requested radius and margin")
+
+    corrected = displacement_array.copy()
+    # Alternating projections are needed at corners and near bounds: clearing one
+    # segment or clamping to the map can otherwise violate a constraint handled
+    # earlier in the pass.
+    # Keep runtime linear in the number of obstacle segments. More passes make
+    # alternating projection quadratic on dense maps; unresolved corners fall back
+    # conservatively below.
+    projection_passes = 8
+    for _ in range(projection_passes):
         candidate_positions = positions_array + corrected
-        candidate_positions[:, 0] = np.clip(
-            candidate_positions[:, 0], min_x + effective_radius, max_x - effective_radius
+        corrected = _push_out_of_obstacles(
+            positions_array,
+            candidate_positions,
+            corrected,
+            stacked_segments,
+            effective_radius,
         )
-        candidate_positions[:, 1] = np.clip(
-            candidate_positions[:, 1], min_y + effective_radius, max_y - effective_radius
+        if validated_bounds is not None:
+            min_x, max_x, min_y, max_y = validated_bounds
+            candidate_positions = positions_array + corrected
+            candidate_positions[:, 0] = np.clip(
+                candidate_positions[:, 0], min_x + effective_radius, max_x - effective_radius
+            )
+            candidate_positions[:, 1] = np.clip(
+                candidate_positions[:, 1], min_y + effective_radius, max_y - effective_radius
+            )
+            corrected = candidate_positions - positions_array
+        if np.all(
+            _walkable_mask(
+                positions_array + corrected,
+                stacked_segments,
+                validated_bounds,
+                effective_radius,
+            )
+        ):
+            return corrected
+
+    # If projections oscillate between incompatible constraints, a zero residual is
+    # the conservative answer whenever the nominal position is already walkable.
+    final_walkable = _walkable_mask(
+        positions_array + corrected,
+        stacked_segments,
+        validated_bounds,
+        effective_radius,
+    )
+    current_walkable = _walkable_mask(
+        positions_array,
+        stacked_segments,
+        validated_bounds,
+        effective_radius,
+    )
+    corrected[~final_walkable & current_walkable] = 0.0
+    if not np.all(
+        _walkable_mask(
+            positions_array + corrected,
+            stacked_segments,
+            validated_bounds,
+            effective_radius,
         )
-        corrected = candidate_positions - positions_array
+    ):
+        raise ValueError("walkable-space constraints are infeasible from the current position")
     return corrected
 
 
@@ -919,6 +1020,29 @@ class BoundedResidualAdversary:
             residual_displacement[self._target_mask] = target_displacement
         bounded = residual_displacement / (self.dt_s * self.dt_s)
         bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
+        # Geometry projection can change both magnitude and direction, so reapply
+        # the kinematic and route constraints before the final separation pass.
+        bounded = bound_speed(
+            bounded,
+            velocities,
+            max_speeds,
+            self.dt_s,
+            self.config.max_speed_delta_mps,
+        )
+        bounded = bound_heading_change(
+            bounded,
+            velocities,
+            self.config.max_heading_change_per_macro_rad / self._macro_steps,
+            self.dt_s,
+        )
+        bounded = bound_route_deviation(
+            bounded,
+            positions,
+            self.dt_s,
+            self.route_polylines,
+            self._target_indices,
+            self.config.max_route_deviation_m,
+        )
         residual_displacement = bounded * (self.dt_s * self.dt_s)
         residual_displacement = enforce_inter_agent_separation(
             residual_displacement,
@@ -926,6 +1050,28 @@ class BoundedResidualAdversary:
             self._target_mask,
             self.config.min_separation_m,
         )
+        if np.any(self._target_mask):
+            target_candidates = (
+                positions[self._target_mask] + residual_displacement[self._target_mask]
+            )
+            effective_radius = max(
+                self.ped_radius
+                + max(self.config.obstacle_projection_margin_m, MIN_WALKABLE_MARGIN_M),
+                EPSILON,
+            )
+            if not np.all(
+                _walkable_mask(
+                    target_candidates,
+                    _normalize_obstacle_segments(self.obstacle_segments),
+                    _validate_bounds(self.bounds),
+                    effective_radius,
+                )
+            ):
+                # Later acceleration/separation scaling can move a projected point
+                # back into non-convex geometry. Suppress the complete targeted
+                # residual atomically; the caller's jerk check will reject this
+                # fallback if zero is not reachable from the prior residual.
+                residual_displacement[self._target_mask] = 0.0
         bounded = residual_displacement / (self.dt_s * self.dt_s)
         return clamp_magnitude(
             bounded * self._target_mask[:, None], self.config.max_residual_accel_mps2
@@ -965,10 +1111,10 @@ class BoundedResidualAdversary:
         sim_time_s = self._step_index * self.dt_s
         if self._step_index % self._macro_steps == 0:
             observation = ResidualAdversaryObservation(
-                positions=positions_array,
-                velocities=velocities_array,
-                max_speeds=max_speeds_array,
-                target_ped_mask=self._target_mask,
+                positions=_readonly_array_snapshot(positions_array),
+                velocities=_readonly_array_snapshot(velocities_array),
+                max_speeds=_readonly_array_snapshot(max_speeds_array),
+                target_ped_mask=_readonly_array_snapshot(self._target_mask),
                 robot_pose=robot_pose,
                 sim_time_s=sim_time_s,
                 step_index=self._step_index,
@@ -982,7 +1128,7 @@ class BoundedResidualAdversary:
                     "policy.propose_residual must return shape "
                     f"({self.num_peds}, 2), got {proposal.shape}"
                 )
-            self._held_proposal = proposal
+            self._held_proposal = proposal.copy()
             self._macro_action_index += 1
 
         # Zero out non-targeted rows before bounding so only targets are perturbed.

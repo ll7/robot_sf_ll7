@@ -228,6 +228,23 @@ def test_project_residual_displacement_walkable_pushes_out_of_exact_obstacle_con
     assert abs(candidate[0, 0]) >= 0.4 + 0.1 - 1e-6
 
 
+def test_project_residual_displacement_walkable_stays_on_current_side_of_wall() -> None:
+    """A projection cannot jump walls because of the segment's endpoint ordering."""
+    positions = np.array([[-1.0, 0.0]], dtype=float)
+    displacement = np.array([[1.0, 0.0]], dtype=float)
+    reversed_obstacle = np.array([[[0.0, 5.0], [0.0, -5.0]]], dtype=float)
+    corrected = project_residual_displacement_walkable(
+        positions,
+        displacement,
+        reversed_obstacle,
+        None,
+        radius=0.4,
+        margin_m=0.1,
+    )
+    candidate = positions + corrected
+    assert candidate[0, 0] <= -0.5 + 1e-9
+
+
 def test_project_residual_displacement_walkable_clamps_to_bounds() -> None:
     """A residual leaving the map is clamped inside the bounds with clearance."""
     positions = np.array([[0.2, 0.2]], dtype=float)
@@ -239,6 +256,43 @@ def test_project_residual_displacement_walkable_clamps_to_bounds() -> None:
     candidate = positions + corrected
     assert candidate[0, 0] >= 0.4 + 0.1 - 1e-6
     assert candidate[0, 1] >= 0.4 + 0.1 - 1e-6
+
+
+def test_project_residual_displacement_walkable_clears_every_obstacle() -> None:
+    """A corner projection must satisfy both segments, not only the nearest one."""
+    positions = np.array([[1.0, 1.0]], dtype=float)
+    displacement = np.array([[-0.9, -0.9]], dtype=float)
+    obstacles = np.array(
+        [
+            [[0.0, -2.0], [0.0, 2.0]],
+            [[-2.0, 0.0], [2.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    corrected = project_residual_displacement_walkable(
+        positions, displacement, obstacles, None, radius=0.4, margin_m=0.1
+    )
+    candidate = positions + corrected
+    assert abs(candidate[0, 0]) >= 0.5 - 1e-9
+    assert abs(candidate[0, 1]) >= 0.5 - 1e-9
+
+
+def test_project_residual_displacement_walkable_rechecks_after_bounds_clamp() -> None:
+    """Bounds clamping must not leave the candidate inside an obstacle margin."""
+    positions = np.array([[1.0, 1.0]], dtype=float)
+    displacement = np.array([[-0.7, 0.0]], dtype=float)
+    obstacle = np.array([[[0.4, -2.0], [0.4, 2.0]]], dtype=float)
+    corrected = project_residual_displacement_walkable(
+        positions,
+        displacement,
+        obstacle,
+        ((0.0, 2.0), (0.0, 2.0)),
+        radius=0.4,
+        margin_m=0.1,
+    )
+    candidate = positions + corrected
+    assert candidate[0, 0] >= 0.5 - 1e-9
+    assert abs(candidate[0, 0] - 0.4) >= 0.5 - 1e-9
 
 
 def test_enforce_inter_agent_separation_prevents_overlap() -> None:
@@ -351,6 +405,40 @@ def test_controller_fail_closed_on_non_finite_policy_output() -> None:
         )
 
 
+def test_policy_observation_arrays_are_read_only_snapshots() -> None:
+    """A policy cannot mutate either caller state or the controller's target mask."""
+    observed: dict[str, np.ndarray] = {}
+
+    @dataclass
+    class _InspectingPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            observed["positions"] = observation.positions
+            observed["velocities"] = observation.velocities
+            observed["max_speeds"] = observation.max_speeds
+            observed["target_mask"] = observation.target_ped_mask
+            return np.zeros((1, 2))
+
+    positions = np.array([[1.0, 2.0]])
+    velocities = np.array([[0.1, 0.2]])
+    max_speeds = np.array([1.5])
+    adversary = BoundedResidualAdversary(
+        ResidualAdversaryConfig(is_active=True),
+        _InspectingPolicy(),
+        dt_s=0.1,
+        num_peds=1,
+    )
+    adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+
+    for snapshot in observed.values():
+        assert snapshot.flags.owndata
+        assert not snapshot.flags.writeable
+        with pytest.raises(ValueError, match="read-only"):
+            snapshot.flat[0] = 99.0
+    np.testing.assert_allclose(positions, [[1.0, 2.0]])
+    np.testing.assert_allclose(velocities, [[0.1, 0.2]])
+    np.testing.assert_allclose(max_speeds, [1.5])
+
+
 # ---------------------------------------------------------------------------
 # Cadence
 # ---------------------------------------------------------------------------
@@ -382,6 +470,35 @@ def test_macro_action_cadence_holds_proposal_between_boundaries() -> None:
     assert call_counter["count"] == 1
     adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
     assert call_counter["count"] == 2  # step 6 is the next boundary
+
+
+def test_macro_action_cadence_copies_the_held_policy_proposal() -> None:
+    """Mutating a retained policy output cannot alter a held macro-action."""
+    shared_proposal = np.array([[1.0, 0.0]])
+
+    @dataclass
+    class _RetainingPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            return shared_proposal
+
+    adversary = BoundedResidualAdversary(
+        ResidualAdversaryConfig(
+            is_active=True,
+            macro_action_dt_s=0.5,
+            max_jerk_mps3=1e9,
+        ),
+        _RetainingPolicy(),
+        dt_s=0.1,
+        num_peds=1,
+    )
+    positions = np.array([[2.0, 0.0]])
+    velocities = np.zeros((1, 2))
+    max_speeds = np.array([10.0])
+    first = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+    shared_proposal[0] = [-1.0, 0.0]
+    second = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+    np.testing.assert_allclose(first, [[1.0, 0.0]])
+    np.testing.assert_allclose(second, first)
 
 
 def test_default_macro_cadence_is_half_second() -> None:
@@ -521,6 +638,77 @@ def test_residual_is_suppressed_when_nominal_state_is_inside_walkable_clearance(
         ROBOT_POSE,
     )
     np.testing.assert_allclose(residual, [[0.0, 0.0]])
+
+
+def test_residual_geometry_remains_safe_after_acceleration_clamp() -> None:
+    """A wall projection cannot be clamped back inside the obstacle margin."""
+
+    @dataclass
+    class _CrossWallPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            return np.array([[100.0, 0.0]])
+
+    dt = 0.1
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(
+            is_active=True,
+            macro_action_dt_s=dt,
+            max_residual_accel_mps2=100.0,
+            max_jerk_mps3=1e9,
+            max_speed_delta_mps=100.0,
+            max_heading_change_per_macro_rad=math.pi,
+        ),
+        policy=_CrossWallPolicy(),
+        dt_s=dt,
+        num_peds=1,
+        obstacle_segments=np.array([[[0.0, 2.0], [0.0, -2.0]]]),
+        ped_radius=0.4,
+    )
+    positions = np.array([[-1.0, 0.0]])
+    residual = adversary.step_residual(
+        positions,
+        np.zeros((1, 2)),
+        np.array([1000.0]),
+        ROBOT_POSE,
+    )
+    candidate = positions + residual_displacement_from_accel(residual, dt)
+    assert candidate[0, 0] <= -0.5 + 1e-9
+
+
+def test_residual_geometry_projection_preserves_route_bound() -> None:
+    """Obstacle projection cannot silently invalidate the route corridor."""
+
+    @dataclass
+    class _AlongRoutePolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            return np.array([[1.0, 0.0]])
+
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(
+            is_active=True,
+            macro_action_dt_s=1.0,
+            max_residual_accel_mps2=10.0,
+            max_jerk_mps3=1e9,
+            max_speed_delta_mps=10.0,
+            max_heading_change_per_macro_rad=math.pi,
+            max_route_deviation_m=0.05,
+        ),
+        policy=_AlongRoutePolicy(),
+        dt_s=1.0,
+        num_peds=1,
+        route_polylines=[np.array([[-2.0, 0.0], [2.0, 0.0]])],
+        obstacle_segments=np.array([[[1.25181969, -1.49411554], [0.96643757, -0.06688083]]]),
+        ped_radius=0.1,
+    )
+    positions = np.array([[0.0, 0.0]])
+    residual = adversary.step_residual(
+        positions,
+        np.zeros((1, 2)),
+        np.array([100.0]),
+        ROBOT_POSE,
+    )
+    candidate = positions + residual_displacement_from_accel(residual, 1.0)
+    assert abs(candidate[0, 1]) <= 0.05 + 1e-9
 
 
 @pytest.mark.parametrize(

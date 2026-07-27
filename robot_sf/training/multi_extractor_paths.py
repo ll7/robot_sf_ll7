@@ -16,13 +16,19 @@ ENV_TMP_OVERRIDE = "ROBOT_SF_MULTI_EXTRACTOR_TMP"
 DEFAULT_TMP_ROOT = Path("tmp/multi_extractor_training")
 
 
+def _normalize_artifact_component(component: str, *, parameter_name: str) -> str:
+    """Return a filesystem-safe, single-component artifact path component."""
+
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", component.strip()).strip("._-")
+    if not normalized:
+        raise ValueError(f"{parameter_name} must contain at least one alphanumeric character")
+    return normalized
+
+
 def _normalize_extractor_name(extractor_name: str) -> str:
     """Return a filesystem-safe, single-component extractor directory name."""
 
-    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", extractor_name.strip()).strip("._-")
-    if not normalized:
-        raise ValueError("extractor_name must contain at least one alphanumeric character")
-    return normalized
+    return _normalize_artifact_component(extractor_name, parameter_name="extractor_name")
 
 
 def validate_unique_extractor_names(extractor_names: Iterable[str]) -> None:
@@ -54,7 +60,7 @@ def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:
 def make_run_directory(
     run_id: str, *, env: dict[str, str] | None = None, timestamp: str | None = None
 ) -> Path:
-    """Create and return the timestamped directory for a training run.
+    """Create a timestamped training-run directory with a safe run-id component.
 
     Returns:
         Path: The created run directory path.
@@ -63,11 +69,12 @@ def make_run_directory(
     if not run_id:
         raise ValueError("run_id must be a non-empty string")
 
+    safe_run_id = _normalize_artifact_component(run_id, parameter_name="run_id")
     base_root = resolve_base_output_root(env)
     base_root.mkdir(parents=True, exist_ok=True)
 
     stamp = timestamp or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    run_dir = base_root / f"{stamp}-{run_id}"
+    run_dir = base_root / f"{stamp}-{safe_run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     (run_dir / "extractors").mkdir(exist_ok=True)

@@ -7,15 +7,15 @@ These tests lock the filesystem contracts exposed by
   override (``~`` expansion plus symlink / relative-path resolution) and
   otherwise delegates to the shared artifact resolver with the canonical
   default root.
-* ``make_run_directory`` creates ``<stamp>-<run_id>`` under the resolved base,
-  materializes the base root, creates the ``extractors/`` sibling subdirectory,
-  and rejects empty run ids.
+* ``make_run_directory`` creates ``<stamp>-<safe_run_id>`` under the resolved
+  base, materializes the base root, creates the ``extractors/`` sibling
+  subdirectory, normalizes traversal-like run ids, and rejects empty run ids.
 * ``make_extractor_directory`` creates the per-extractor directory under
   ``extractors/`` using a filesystem-safe normalized name and rejects names
   that contain no alphanumeric characters.
-* ``load_configuration`` rejects extractor names that normalize or case-fold to
-  the same artifact directory before a training run can overwrite one profile
-  with another.
+* ``validate_unique_extractor_names`` rejects extractor names that normalize or
+  case-fold to the same artifact directory before a training run can overwrite
+  one profile with another.
 * ``summary_paths`` returns the canonical ``summary.json`` / ``summary.md``
   locations for a run.
 
@@ -30,10 +30,10 @@ Determinism / isolation rules:
   (``robot_sf.common.artifact_paths.resolve_artifact_path``) so no
   repository-rooted path is materialized.
 
-Extractor names are normalized to a single portable directory component: unsafe
-characters (including path separators and whitespace) become underscores, and
-leading/trailing punctuation is removed. This prevents traversal-like names
-from escaping the run's ``extractors/`` directory.
+Run and extractor names are normalized to single portable directory components:
+unsafe characters (including path separators and whitespace) become
+underscores, and leading/trailing punctuation is removed. This prevents
+traversal-like names from escaping their configured artifact roots.
 """
 
 from __future__ import annotations
@@ -51,8 +51,8 @@ from robot_sf.training.multi_extractor_paths import (
     make_run_directory,
     resolve_base_output_root,
     summary_paths,
+    validate_unique_extractor_names,
 )
-from scripts.multi_extractor_training import load_configuration
 
 # %Y%m%d-%H%M%S as produced by ``datetime.now(UTC).strftime`` in make_run_directory.
 RUN_TIMESTAMP_PATTERN = re.compile(r"^\d{8}-\d{6}$")
@@ -205,6 +205,22 @@ def test_make_run_directory_empty_run_id_raises(tmp_path: Path) -> None:
         )
 
 
+def test_make_run_directory_normalizes_unsafe_run_id_to_stay_under_base(tmp_path: Path) -> None:
+    """A traversal-like run id cannot create a directory outside the configured base."""
+
+    base = tmp_path / "mx_base"
+
+    run_dir = make_run_directory(
+        "/../../escaped",
+        env=_override_env(base),
+        timestamp="20240101-000000",
+    )
+
+    assert run_dir == base / "20240101-000000-escaped"
+    assert run_dir.resolve().is_relative_to(base.resolve())
+    assert not (tmp_path / "escaped").exists()
+
+
 # ---------------------------------------------------------------------------
 # make_extractor_directory
 # ---------------------------------------------------------------------------
@@ -267,25 +283,18 @@ def test_make_extractor_directory_normalizes_to_safe_single_component(
         ("CNN", "cnn", "cnn"),
     ],
 )
-def test_load_configuration_rejects_colliding_normalized_extractor_names(
-    tmp_path: Path,
+def test_validate_unique_extractor_names_rejects_colliding_normalized_names(
     first_name: str,
     second_name: str,
     normalized_name: str,
 ) -> None:
     """Reject names that would otherwise write into one artifact directory."""
 
-    config_path = tmp_path / "colliding_extractors.yaml"
-    config_path.write_text(
-        f"extractors:\n  - name: {first_name}\n  - name: {second_name}\n",
-        encoding="utf-8",
-    )
-
     collision_message = (
         rf"{re.escape(first_name)}.*{re.escape(second_name)}.*{re.escape(normalized_name)}"
     )
     with pytest.raises(ValueError, match=collision_message):
-        load_configuration(config_path)
+        validate_unique_extractor_names([first_name, second_name])
 
 
 @pytest.mark.parametrize("extractor_name", ["", "   ", "../", "---"])

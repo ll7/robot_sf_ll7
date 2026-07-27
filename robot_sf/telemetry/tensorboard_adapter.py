@@ -31,9 +31,18 @@ __all__ = ["TensorBoardAdapter", "iter_telemetry_snapshots"]
 _SNAPSHOT_FIELDS = tuple(field.name for field in fields(TelemetrySnapshot))
 
 
-@dataclass(slots=True)
+@dataclass
 class TensorBoardAdapter:
-    """Mirror telemetry snapshots into TensorBoard event files."""
+    """Mirror telemetry snapshots into TensorBoard event files.
+
+    Note: this dataclass intentionally does not use ``slots=True``. ``__post_init__``
+    initializes private bookkeeping attributes (``_writer_cls``, ``_writer``,
+    ``_samples``) that are not declared dataclass fields; with ``slots=True`` the
+    instance has no ``__dict__`` and those assignments raised ``AttributeError``,
+    which previously made every construction fail. Dropping slots is the minimal
+    repair: tag names, lifecycle semantics, equality, repr, and the constructor
+    signature are unchanged.
+    """
 
     log_dir: Path
     tag_prefix: str = "telemetry"
@@ -100,10 +109,12 @@ class TensorBoardAdapter:
         """
 
         count = 0
-        for snapshot in iter_telemetry_snapshots(telemetry_file):
-            self.consume_snapshot(snapshot)
-            count += 1
-        self.close()
+        try:
+            for snapshot in iter_telemetry_snapshots(telemetry_file):
+                self.consume_snapshot(snapshot)
+                count += 1
+        finally:
+            self.close()
         return count
 
 

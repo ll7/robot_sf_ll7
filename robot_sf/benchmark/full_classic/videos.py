@@ -260,7 +260,9 @@ def generate_videos(records, out_dir, cfg) -> list[_VideoArtifact]:  # noqa: C90
     return artifacts
 
 
-def artifacts_to_manifest(artifacts: list[_VideoArtifact]) -> dict[str, list[dict]]:
+def artifacts_to_manifest(
+    artifacts: list[_VideoArtifact],
+) -> dict[str, list[dict[str, str | float | None]]]:
     """Convert internal artifacts list to manifest dict for JSON dumping.
 
     Returns:

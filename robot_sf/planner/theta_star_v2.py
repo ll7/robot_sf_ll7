@@ -184,11 +184,11 @@ class HighPerformanceThetaStar(ThetaStar):
     a faster implementation before delegating to the parent plan().
     """
 
-    def plan(self) -> list[tuple[float, ...]] | dict[str, Any]:
+    def plan(self) -> tuple[list[tuple[float, ...]], dict[str, Any]]:
         """Run planning with a fast in-collision check bound to the grid.
 
         Returns:
-            list | dict: Path or planner metadata from the upstream Theta* implementation.
+            tuple: Path and planner metadata from the upstream Theta* implementation.
         """
         if getattr(self.map_, "dim", None) != 2:
             logger.warning(

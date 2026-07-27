@@ -643,11 +643,11 @@ class SimulationView:
             self.offset[1] = self._prev_offset_for_ego_up[1]
             self._prev_offset_for_ego_up = None
 
-    def exit_simulation(self, return_frames: bool = False) -> list | None:
+    def exit_simulation(self, return_frames: bool = False) -> list[np.ndarray] | None:
         """Exit the simulation.
 
         Returns:
-            list | None: Captured video frames if return_frames=True, otherwise None (implicit).
+            list[np.ndarray] | None: Captured frames when requested, otherwise ``None``.
         """
         logger.debug("Exiting the simulation.")
         self.is_exit_requested = True

@@ -182,7 +182,7 @@ class SocialForcePlanner(BasePolicy):
             loc: float = 0.0,
             scale: float = 1.0,
             size: int | tuple[int, ...] | None = None,
-        ) -> np.floating | np.ndarray:
+        ) -> float | np.ndarray:
             """Return samples from a normal distribution.
 
             Args:

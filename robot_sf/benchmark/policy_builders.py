@@ -21,6 +21,10 @@ from robot_sf.planner.teb_commitment import (
     TEBCommitmentPlannerAdapter,
     build_teb_commitment_config,
 )
+from robot_sf.planner.topology_parallel_nmpc import (
+    TopologyParallelNMPCPlannerAdapter,
+    build_topology_parallel_nmpc_config,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -162,6 +166,36 @@ def _build_sipp_lattice_policy_spec(algo_config: dict[str, Any]) -> AdapterPolic
     )
 
 
+def _build_topology_parallel_nmpc_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build the topology-parallel NMPC experimental adapter spec.
+
+    Returns:
+        AdapterPolicySpec: Adapter construction payload for the map runner.
+    """
+
+    raw_opt_in = algo_config.get("allow_testing_algorithms", False)
+    opt_in = (
+        raw_opt_in
+        if isinstance(raw_opt_in, bool)
+        else str(raw_opt_in).strip().lower() in {"true", "1", "yes"}
+    )
+    if not opt_in:
+        raise ValueError(
+            "topology_parallel_nmpc is experimental/testing-only and "
+            "requires allow_testing_algorithms: true"
+        )
+
+    return AdapterPolicySpec(
+        algo_key="topology_parallel_nmpc",
+        algo_config=algo_config,
+        adapter=TopologyParallelNMPCPlannerAdapter(
+            config=build_topology_parallel_nmpc_config(algo_config)
+        ),
+        adapter_name="TopologyParallelNMPCPlannerAdapter",
+        limitations="experimental_topology_parallel_nmpc",
+    )
+
+
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
     "chance_constrained_mpc": _build_chance_constrained_mpc_policy_spec,
     **dict.fromkeys(LEARNED_PREDICTION_MPC_ALIASES, _build_learned_prediction_mpc_policy_spec),
@@ -173,6 +207,7 @@ _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec
     "risk_dwa": _build_risk_dwa_policy_spec,
     "sipp_lattice": _build_sipp_lattice_policy_spec,
     "teb": _build_teb_policy_spec,
+    "topology_parallel_nmpc": _build_topology_parallel_nmpc_policy_spec,
 }
 
 

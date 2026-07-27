@@ -1,3 +1,5 @@
+<!-- AI-GENERATED NEEDS-REVIEW -->
+
 <!-- AI-GENERATED (robot_sf#5164, 2026-07-10) — NEEDS-REVIEW -->
 # Issue 4195 h600 Aggregation Artifact
 
@@ -26,8 +28,12 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - `f_c4_ii_interpretation_gate.md`: integrates the hybrid-roster packet (13282) with the confirm/extended bundle (13268/13273) into the diagnostic F-C4(ii) boundary (supported / diagnostic-only / not-supported) so issue #4195 checklist reading comes from committed artifacts. Records the maintainer sign-off (2026-07-03, F-C4 draft→supported, diss `0d853df`) as durable provenance; the evidence stays diagnostic-tier and this note promotes nothing on its own.
 - `source_manifest.json`: input paths, campaign metadata, and source file SHA-256 digests.
 - `h600_source_reports_manifest.json`: fail-closed acquisition contract for the six compact source
-  reports needed by issue #5138's family-breakdown export. It pins their intended tracked paths and
-  SHA-256 digests; until all six resolve, the downstream export remains blocked and diagnostic-only.
+  reports needed by issue #5138's family-breakdown export. It pins their tracked paths and SHA-256
+  digests; the issue #5164 checker now verifies all six, allowing the diagnostic-only export.
+- `h600_source_reports_recovery.json`: provenance for the verbatim 2026-07-16 recovery of the
+  original 2026-07-02 job 13268 and 13273 report outputs from `imech192`. It records the Slurm end
+  times, source workdirs, per-file sizes and SHA-256 digests, and the two summary companions needed
+  by the issue #5138 exporter. This was a recovery, not a regeneration.
 - `SHA256SUMS`: checksums for generated files in this directory.
 
 ## F-C4(ii) integration gate
@@ -59,3 +65,15 @@ claims, run campaigns, submit Slurm or graphics processing unit jobs, or copy ra
 
 New compact artifacts, when the fail-closed preflight is ready, use the
 `snqi_weight_set_h600_*` prefix and are checksummed in `SHA256SUMS`.
+
+## Issue #5138 per-family + per-cell h600 breakdown export
+
+Per-scenario-family and per-cell success / near-miss / collision / SNQI breakdowns for the two retained h600 campaign legs (jobs 13268 `confirm` and 13273 `extended_roster`), promoted into this bundle so the family-difficulty question is answerable from the exported artifacts. The per-family table uses the release campaign's family-breakdown schema (with `run_label`/`job_id`/`scenario_matrix_hash` prepended); the per-cell table adds `scenario_id` (the cell granularity). Every row carries `episodes` (the per-cell `n`) so any cell's sample size is computable.
+
+- `h600_scenario_family_breakdown.csv` / `.md`: per-family breakdown, release-schema columns, both legs concatenated.
+- `h600_scenario_cell_breakdown.csv` / `.md`: per-cell (scenario_id) breakdown, both legs concatenated.
+- `h600_universally_hard_families_summary.csv` / `.md`: bottleneck, cross-trap, head-on-corridor per (leg, planner, family) with a `zero_completion` flag.
+
+None of the universally-hard families (bottleneck, cross-trap, head-on-corridor) stays at zero completion across every planner arm at h600: at least one arm clears each family. This weakens a strict 'universally impossible' reading of the family-difficulty finding; the per-cell table shows which speed/context cells remain hard. All values are diagnostic-only, three-seed h600 evidence.
+
+Claim boundary: diagnostic-only, reporting over existing campaign bundles; no new compute. Collision-count columns are republished verbatim from the h600 campaign breakdowns and are not paper/dissertation evidence (release 0.0.2 collision-count provenance withdrawn by issue #3482). The h600 legs are three-seed campaigns, so per-cell `n` is small (typically 3) and per-cell success is diagnostic, not a stable estimate. `jerk_mean` is absent from the h600 campaign breakdowns and is emitted as an empty field.

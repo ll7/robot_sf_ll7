@@ -428,6 +428,7 @@ def assess_campaign_readiness(
     blockers: list[str] = []
 
     def _record(name: str, ok: bool, detail: str) -> None:
+        """Record a readiness criterion result, appending to ``blockers`` when not ok."""
         criteria[name] = {"ready": bool(ok), "detail": detail}
         if not ok:
             blockers.append(f"{name}: {detail}")
@@ -596,6 +597,7 @@ def _check_registry_pinned(config_path: Path, registry_path: str | Path | None) 
 
 
 def _validate_factorial_arms(value: Any, *, config_path: str | Path | None) -> None:
+    """Validate ``factorial_arms`` is the ordered 2x2 set with the ``A0_B0`` baseline."""
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError("factorial_arms must be list")
     if not all(isinstance(arm, Mapping) for arm in value):
@@ -618,6 +620,7 @@ def _validate_factorial_arms(value: Any, *, config_path: str | Path | None) -> N
 
 
 def _validate_seed_policy(value: Any) -> None:
+    """Validate ``seed_policy`` selects the preregistered ``paper_eval_s30`` seed set."""
     if not isinstance(value, Mapping):
         raise ValueError("seed_policy must be mapping")
     if value.get("mode") != "seed-set" or value.get("seed_set") != "paper_eval_s30":
@@ -625,6 +628,7 @@ def _validate_seed_policy(value: Any) -> None:
 
 
 def _validate_seed_budget(value: Any) -> None:
+    """Validate ``seed_budget`` uses paired ``paper_eval_s30`` with 30 seeds per arm."""
     if not isinstance(value, Mapping):
         raise ValueError("seed_budget must be mapping")
     if value.get("mode") != "paired" or value.get("seed_set") != "paper_eval_s30":
@@ -636,6 +640,7 @@ def _validate_seed_budget(value: Any) -> None:
 def _validate_scenario_provenance(
     config: Mapping[str, Any], *, config_path: str | Path | None
 ) -> None:
+    """Validate ``scenario_matrix_sha256`` matches the referenced scenario matrix file."""
     expected_digest = str(config.get("scenario_matrix_sha256", ""))
     if len(expected_digest) != 64 or any(
         char not in "0123456789abcdef" for char in expected_digest
@@ -655,6 +660,7 @@ def _validate_scenario_provenance(
 
 
 def _normalized_arms(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return factorial arms as dicts with coerced key/baseline/factor/algo_config fields."""
     normalized: list[dict[str, Any]] = []
     for arm in arms:
         normalized.append(
@@ -670,6 +676,11 @@ def _normalized_arms(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _load_seeds(seed_sets_path: str, seed_set_name: str) -> list[int]:
+    """Load the integer seed list for ``seed_set_name`` from YAML, defaulting to ``[111,112,113]``.
+
+    Returns:
+        The integer seed list for the named set.
+    """
     path = Path(seed_sets_path)
     if not path.exists():
         return [111, 112, 113]
@@ -679,6 +690,11 @@ def _load_seeds(seed_sets_path: str, seed_set_name: str) -> list[int]:
 
 
 def _load_scenario_ids(scenario_matrix_path: str) -> list[str]:
+    """Load scenario ids from a scenario matrix YAML, returning ``[]`` when unavailable.
+
+    Returns:
+        The scenario ids from the matrix.
+    """
     path = Path(scenario_matrix_path)
     if not path.exists():
         return []
@@ -690,6 +706,11 @@ def _load_scenario_ids(scenario_matrix_path: str) -> list[str]:
 
 
 def _resolve_existing_path(path_text: str, *, config_path: Path) -> Path:
+    """Resolve a config-relative path against cwd or config parents (absolute passthrough).
+
+    Returns:
+        The resolved config-relative path.
+    """
     candidate = Path(path_text)
     if candidate.is_absolute():
         return candidate
@@ -704,6 +725,7 @@ def _resolve_existing_path(path_text: str, *, config_path: Path) -> Path:
 
 
 def _reject_transient_routing_state(config: Mapping[str, Any]) -> None:
+    """Raise when a tracked config carries forbidden transient queue-routing keys."""
     forbidden_keys = {"target_host", "packet_lineage", "queue_route", "submit_host"}
     found = sorted(forbidden_keys & set(config))
     if found:

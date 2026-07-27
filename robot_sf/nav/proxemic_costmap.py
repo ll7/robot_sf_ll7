@@ -103,12 +103,18 @@ def proxemic_cost_at_points(
 
 
 def _require_finite_non_negative(name: str, value: float) -> None:
+    """Raise ValueError unless value is finite and >= 0."""
     scalar = float(value)
     if not np.isfinite(scalar) or scalar < 0.0:
         raise ValueError(f"{name} must be finite and >= 0")
 
 
 def _as_points_array(name: str, values: np.ndarray) -> np.ndarray:
+    """Coerce an array to shape (N, 2) and validate finiteness.
+
+    Returns:
+        Array with shape (N, 2).
+    """
     arr = np.asarray(values, dtype=float)
     if arr.size == 0:
         return np.empty((0, 2), dtype=float)
@@ -122,6 +128,7 @@ def _as_points_array(name: str, values: np.ndarray) -> np.ndarray:
 
 
 def _as_velocity_array(values: np.ndarray | None, count: int) -> np.ndarray:
+    """Return a validated velocity array matching pedestrian position count."""
     if values is None:
         return np.zeros((count, 2), dtype=float)
     arr = _as_points_array("pedestrian_velocities", values)
@@ -135,6 +142,7 @@ def _elongated_distance(
     velocity: np.ndarray,
     config: ProxemicCostmapConfig,
 ) -> np.ndarray:
+    """Return per-point distance elongated along the pedestrian's velocity direction."""
     speed = float(np.linalg.norm(velocity))
     if speed <= 1e-9 or config.velocity_elongation_factor <= 0.0:
         return np.linalg.norm(relative_points, axis=1)
@@ -147,6 +155,7 @@ def _elongated_distance(
 
 
 def _decay(distance: np.ndarray, radius: float, decay_function: DecayFunction) -> np.ndarray:
+    """Return per-point decay weights using linear or gaussian falloff."""
     if radius <= 0.0:
         return np.zeros_like(distance, dtype=float)
     if decay_function == "linear":

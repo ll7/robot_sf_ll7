@@ -7,10 +7,10 @@ Provides optional JSON Schema validation for the three visual manifests:
 
 Design:
  - Imports jsonschema lazily; if missing, returns without error.
- - Raises ValueError with concise context when validation fails (caller may catch).
+ - Collects concise validation errors instead of raising for invalid input.
  - Accepts base directory containing manifests and path to contracts dir.
  - Exposed single entry: validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]
-   Returns list of validated manifest filenames (subset of the three if present).
+   Returns validation errors; an empty list means no validation errors were found.
 """
 
 from __future__ import annotations
@@ -45,7 +45,8 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
     Returns
     -------
     list[str]
-        Filenames successfully validated. Empty if jsonschema not installed.
+        Descriptive validation errors. Empty when every present manifest is valid,
+        no manifests are present, or jsonschema is not installed.
     """
     try:
         jsonschema = importlib.import_module("jsonschema")  # type: ignore
@@ -53,7 +54,7 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
         logger.debug("jsonschema not installed; skipping visuals manifest validation")
         return []
 
-    validated: list[str] = []
+    errors: list[str] = []
     for manifest_name, schema_name in MANIFEST_FILES.items():
         manifest_path = base_dir / manifest_name
         if not manifest_path.exists():
@@ -66,16 +67,12 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
             data = _load_json(manifest_path)
             schema = _load_json(schema_path)
             jsonschema.validate(data, schema)  # type: ignore[arg-type]
-            validated.append(manifest_name)
         except jsonschema.ValidationError as exc:  # type: ignore[attr-defined]
-            raise ValueError(
-                f"Validation failed for {manifest_name}: {exc.message} at path {'/'.join(str(p) for p in exc.path)}",
-            ) from exc
+            location = "/".join(str(part) for part in exc.path) or "<root>"
+            errors.append(f"Validation failed for {manifest_name} at {location}: {exc.message}")
         except (jsonschema.SchemaError, OSError, ValueError, TypeError) as exc:
-            raise ValueError(
-                f"Error validating {manifest_name}: {exc.__class__.__name__}: {exc}",
-            ) from exc
-    return validated
+            errors.append(f"Error validating {manifest_name}: {exc.__class__.__name__}: {exc}")
+    return errors
 
 
 __all__ = ["validate_visual_manifests"]

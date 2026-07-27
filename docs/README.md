@@ -116,6 +116,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### Getting Started
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[Security Triage Guidance](./security_triage.md)** - Vulnerability reporting, dependency scanning, static-analysis triage, and accepted-risk handling for research code
@@ -432,7 +433,8 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue 483 Execution Notes](./context/issue_483_execution.md)** - Cold/warm regression guard implementation details and workflow wiring
 * **[Issue 495 Execution Notes](./context/issue_495_execution.md)** - Overall trend benchmark matrix, history comparison, and nightly cache-backed tracking
 * **[Warning Hygiene Sweep](./context/warning_hygiene_2026-02-13.md)** - Warning-noise root-cause fixes and dependency mitigation notes
-* **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, CI integration
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, absolute floor enforcement, and CI integration
 
 ### Hardware & Environment
 
@@ -449,9 +451,10 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### 🏗️ Architecture & Development
 
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, testing, and quality standards
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Configuration Architecture](./architecture/configuration.md)** - Configuration hierarchy, precedence rules, and migration guide
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
-* **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, and CI integration
+* **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, absolute floor enforcement, and CI integration
 * **[Environment Refactoring](./refactoring/)** - **NEW**: Complete guide to the refactored environment architecture
   + [Deployment Status](./refactoring/DEPLOYMENT_READY.md) - Current implementation status
   + [Refactoring Plan](./refactoring/refactoring_plan.md) - Technical architecture details
@@ -489,6 +492,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * [**Full SNQI Flow (episodes → baseline → figures)**](../examples/benchmarks/snqi_full_flow.py) - End-to-end reproducible pipeline script
 
 * [**Benchmark Schema & Aggregation Diagnostics**](./benchmark.md) - Episode metadata mirrors, algorithm grouping keys,  `_meta` warnings, and validation hooks
+* [**Actuator-Feasibility Validation (Issue #6056)**](./actuator_feasibility.md) - Experimental diagnostic for distinguishing geometric clearance from actuator-feasible maneuvers, with provisional-limit and claim-boundary documentation
 * [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
 * [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
 * **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).

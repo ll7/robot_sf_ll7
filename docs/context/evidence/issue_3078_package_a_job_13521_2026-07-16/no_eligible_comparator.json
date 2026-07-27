@@ -1,0 +1,35 @@
+{
+  "schema_version": "issue3078.no_eligible_comparator_receipt.v1",
+  "issue": 3078,
+  "target_issue": 6150,
+  "job_id": 13521,
+  "status": "no_eligible_comparator",
+  "reason": "No benchmark-set campaign matching the job 13521 execution mode (native goal, adapter social_force/orca), scenario partition (issue_2128_heldout_family_transfer_partitions), horizon, metrics, seed handling (seed 111), and provenance was found in catalog.yaml or retained evidence directories.",
+  "validated_criteria": {
+    "job_id": 13521,
+    "unique_identity_count": 18,
+    "rows_per_planner": 6,
+    "planners": [
+      "goal",
+      "social_force",
+      "orca"
+    ],
+    "seeds": [
+      111
+    ],
+    "fallback_degraded_rows": 0,
+    "synthetic_fixture_used": false,
+    "source_episode_store_sha256": "46466cd3db27d6f8a10181a8ec7c4676b24179bb97902aa8eec686d09a53942b",
+    "baseline_table_empty": true,
+    "transfer_delta_benchmark_set_snqi_empty": true,
+    "transfer_delta_snqi_empty": true
+  },
+  "comparator_audit": {
+    "matching_benchmark_set_campaign_found": false,
+    "audit_sources": [
+      "docs/context/catalog.yaml",
+      "docs/context/evidence/*"
+    ],
+    "audit_verdict": "No benchmark_set campaign with matching planner identity, scenario partition, horizon, metrics, seed handling, execution mode, and provenance exists."
+  }
+}

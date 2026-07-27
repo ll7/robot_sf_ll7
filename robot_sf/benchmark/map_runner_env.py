@@ -126,6 +126,7 @@ def apply_active_observation_mode_to_env_config(
 
 _POLICY_ENV_OBSERVATION_OVERRIDE_KEYS = frozenset(
     {
+        "include_route_waypoints",
         "predictive_foresight_enabled",
         "predictive_foresight_model_id",
         "predictive_foresight_checkpoint_path",

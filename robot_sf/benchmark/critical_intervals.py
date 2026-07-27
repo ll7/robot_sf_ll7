@@ -1242,6 +1242,11 @@ def report_to_dict(report: CriticalIntervalReport) -> dict[str, Any]:
     """
 
     def _interval_to_dict(iv: CriticalInterval) -> dict[str, Any]:
+        """Convert a single :class:`CriticalInterval` to a JSON-serializable dict.
+
+        Returns:
+            The interval as a JSON-serializable dict.
+        """
         return {
             "anchor": iv.anchor,
             "status": iv.status,
@@ -1253,6 +1258,11 @@ def report_to_dict(report: CriticalIntervalReport) -> dict[str, Any]:
         }
 
     def _metrics_to_dict(im: IntervalMetrics) -> dict[str, Any]:
+        """Convert :class:`IntervalMetrics` to a JSON-serializable dict (NaN/inf -> None).
+
+        Returns:
+            The interval metrics as a JSON-serializable dict.
+        """
         d: dict[str, Any] = {"anchor": im.anchor, "n_steps": im.n_steps}
         for k in (
             "min_clearance_m",

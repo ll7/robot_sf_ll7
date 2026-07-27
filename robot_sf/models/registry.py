@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -261,13 +263,13 @@ def resolve_model_path(
             local_path=str(local_path) if local_path is not None else None,
         )
 
-    if not allow_download:
-        raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
-
+    downloads_allowed = allow_download and os.environ.get("ROBOT_SF_DISABLE_MODEL_DOWNLOADS") != "1"
     if entry.get("github_release"):
-        return _download_from_github_release(entry, cache_dir=cache_dir)
+        return _download_from_github_release(
+            entry, cache_dir=cache_dir, allow_download=downloads_allowed
+        )
 
-    return _download_from_wandb(entry, cache_dir=cache_dir)
+    return _download_from_wandb(entry, cache_dir=cache_dir, allow_download=downloads_allowed)
 
 
 def _sha256(path: Path) -> str:
@@ -277,6 +279,12 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _require_downloads_allowed(*, allow_download: bool, model_id: str) -> None:
+    """Raise when a cache miss would require a disabled model download."""
+    if not allow_download:
+        raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
 
 
 def sha256_of_file(path: str | Path) -> str:
@@ -291,7 +299,9 @@ def sha256_of_file(path: str | Path) -> str:
     return _sha256(Path(path))
 
 
-def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
+def _download_from_github_release(
+    entry: dict[str, Any], *, cache_dir: str | Path | None, allow_download: bool = True
+) -> Path:
     """Download a model artifact from a GitHub release asset.
 
     Returns:
@@ -322,20 +332,16 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
     if cached_path.exists() and _cached_release_path_is_valid(cached_path, expected_sha256):
         return cached_path
 
+    _require_downloads_allowed(allow_download=allow_download, model_id=model_id)
+
     logger.info("Downloading model artifact {} from GitHub release {}", asset_name, url)
     try:
-        _stream_download_url(url, cached_path)
+        _stream_download_url(url, cached_path, expected_sha256=expected_sha256)
     except (HTTPError, URLError, TimeoutError) as exc:
         raise RuntimeError(
             f"Could not download model '{model_id}' from GitHub release asset: {url}"
         ) from exc
 
-    _verify_download_checksum(
-        cached_path,
-        expected_sha256=expected_sha256,
-        model_id=model_id,
-        asset_name=asset_name,
-    )
     return cached_path
 
 
@@ -391,7 +397,6 @@ def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
                 "Cached GitHub release model artifact checksum mismatch; redownloading: {}",
                 path,
             )
-            path.unlink()
             return False
     resolved_cached_path = path.resolve()
     if resolved_cached_path not in _LOGGED_CACHED_MODEL_ARTIFACTS:
@@ -400,33 +405,39 @@ def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
     return True
 
 
-def _stream_download_url(url: str, target_path: Path) -> None:
-    """Stream a URL to a local target path."""
-    with urlopen(url, timeout=60) as response, target_path.open("wb") as handle:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            handle.write(chunk)
-
-
-def _verify_download_checksum(
-    path: Path,
+def _stream_download_url(
+    url: str,
+    target_path: Path,
     *,
-    expected_sha256: str,
-    model_id: str,
-    asset_name: str,
+    expected_sha256: str = "",
 ) -> None:
-    """Validate a downloaded artifact checksum."""
-    if not expected_sha256:
-        return
-    observed = _sha256(path)
-    if observed != expected_sha256:
-        path.unlink(missing_ok=True)
-        raise ValueError(
-            f"Checksum mismatch for model '{model_id}' from GitHub release asset "
-            f"{asset_name}: expected {expected_sha256}, observed {observed}."
-        )
+    """Stream a URL to a local target path atomically.
+
+    The response is streamed to a sibling temp file and then moved into place with
+    :func:`os.replace`, which is atomic within the cache directory. A registry-pinned
+    checksum is verified while the file remains private, so callers never observe
+    an unverified artifact at ``target_path``. A random suffix makes concurrent
+    downloads safe even when multiple hosts share the cache directory. On any
+    failure the temp file is removed.
+    """
+    tmp_path = target_path.with_name(f".{target_path.name}.{os.getpid()}.{uuid.uuid4().hex}.part")
+    try:
+        with urlopen(url, timeout=60) as response, tmp_path.open("wb") as handle:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+        if expected_sha256:
+            observed = _sha256(tmp_path)
+            if observed != expected_sha256:
+                raise ValueError(
+                    f"Checksum mismatch for downloaded model artifact {target_path.name}: "
+                    f"expected {expected_sha256}, observed {observed}."
+                )
+        os.replace(tmp_path, target_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def resolve_latest_wandb_model(  # noqa: PLR0913
@@ -544,15 +555,14 @@ def find_latest_wandb_model(
     return candidates[-1][1]
 
 
-def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
+def _download_from_wandb(
+    entry: dict[str, Any], *, cache_dir: str | Path | None, allow_download: bool = True
+) -> Path:
     """Download a model artifact from W&B using metadata stored in the registry.
 
     Returns:
         Path: Local filesystem path to the downloaded artifact.
     """
-
-    if wandb is None:  # pragma: no cover - optional dependency
-        raise RuntimeError("W&B not available; cannot download model artifact.")
 
     file_name = entry.get("wandb_file", "model.zip")
     model_id = entry.get("model_id", "unknown-model")
@@ -567,6 +577,11 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
             _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
             logger.info("Using cached model artifact: {}", cached_path)
         return cached_path
+
+    _require_downloads_allowed(allow_download=allow_download, model_id=model_id)
+
+    if wandb is None:  # pragma: no cover - optional dependency
+        raise RuntimeError("W&B not available; cannot download model artifact.")
 
     artifact_path = entry.get("wandb_artifact_path")
     if artifact_path:

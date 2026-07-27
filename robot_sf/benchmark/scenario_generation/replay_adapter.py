@@ -234,6 +234,8 @@ def apply_generated_replay_runtime(  # noqa: C901
 
 
 def _point(value: object, field_name: str) -> tuple[float, float]:
+    """Return ``value`` parsed as a two-item finite-coordinate point, raising with ``field_name`` otherwise."""
+
     if not isinstance(value, list) or len(value) != 2:
         raise ValueError(f"{field_name} must be a two-item list")
     coordinates = tuple(float(coordinate) for coordinate in value)
@@ -243,6 +245,8 @@ def _point(value: object, field_name: str) -> tuple[float, float]:
 
 
 def _trajectory(value: object, field_name: str) -> list[tuple[float, float]]:
+    """Return ``value`` parsed as a trajectory of at least two finite points, raising with ``field_name`` otherwise."""
+
     if not isinstance(value, list) or len(value) < 2:
         raise ValueError(f"{field_name} must contain at least two positions")
     return [_point(point, f"{field_name}[{index}]") for index, point in enumerate(value)]
@@ -255,6 +259,8 @@ def _point_zone(point: tuple[float, float]) -> tuple[tuple[float, float], ...]:
 
 
 def _not_representable(detail: str) -> GeneratedScenarioMaterialization:
+    """Return a ``not_representable_yet`` result carrying the replay-gap ``detail``."""
+
     return GeneratedScenarioMaterialization(
         "not_representable_yet",
         (f"replay_gap: {detail}",),

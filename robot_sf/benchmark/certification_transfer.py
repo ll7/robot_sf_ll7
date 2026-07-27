@@ -456,6 +456,11 @@ def _build_gate_cells(
     scenario_family: str,
     gates: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
+    """Build per-arm, per-model gate cells with aggregated metrics and gate verdicts.
+
+    Returns:
+        A list of per-arm, per-model gate cells with aggregated metrics and verdicts.
+    """
     cells: list[dict[str, Any]] = []
     for arm in arms:
         for evaluation_model in models:
@@ -509,6 +514,11 @@ def _build_transfer_matrix(
     models: Sequence[str],
     scenario_family: str,
 ) -> list[dict[str, Any]]:
+    """Build certification-vs-evaluation transfer rows comparing gate statuses across models.
+
+    Returns:
+        A list of transfer rows comparing gate statuses across model pairs.
+    """
     cells_by_key = {(cell["planner_key"], cell["evaluation_model"]): cell for cell in gate_cells}
     rows: list[dict[str, Any]] = []
     for arm in arms:
@@ -553,6 +563,11 @@ def _build_metric_deltas(
     models: Sequence[str],
     scenario_family: str,
 ) -> list[dict[str, Any]]:
+    """Build per-metric value deltas between the two pedestrian models for each arm.
+
+    Returns:
+        A list of per-metric delta rows between the two pedestrian models.
+    """
     if len(models) != 2:
         return []
     cells_by_key = {(cell["planner_key"], cell["evaluation_model"]): cell for cell in gate_cells}
@@ -585,6 +600,11 @@ def _build_metric_deltas(
 
 
 def _aggregate_metrics(records: Sequence[Mapping[str, Any]]) -> dict[str, float | None]:
+    """Aggregate per-episode records into the gate-evaluable metric set for a cell.
+
+    Returns:
+        The aggregated gate-evaluable metric set for the cell.
+    """
     if not records:
         return {}
     metrics: dict[str, float | None] = {
@@ -644,6 +664,11 @@ def _interaction_metric_summary(gate_cells: Sequence[Mapping[str, Any]]) -> dict
 
 
 def _evaluate_gate(metrics: Mapping[str, float | None], gate: Mapping[str, Any]) -> dict[str, Any]:
+    """Evaluate one release gate against aggregated metrics, never passing a missing metric.
+
+    Returns:
+        A gate result mapping with the gate id, status, value, and threshold.
+    """
     metric = str(gate["metric"])
     value = metrics.get(metric)
     if value is None:
@@ -703,6 +728,11 @@ def _transfer_interaction(certification_status: str, evaluation_status: str) -> 
 
 
 def _transfer_status(certification_status: str, evaluation_status: str) -> tuple[str, str]:
+    """Classify the transfer status and flip type between two gate statuses.
+
+    Returns:
+        The transfer status and flip type as a tuple.
+    """
     if "not_evaluable" in {certification_status, evaluation_status}:
         return "not_evaluable", ""
     if certification_status == "pass" and evaluation_status == "pass":
@@ -715,6 +745,11 @@ def _transfer_status(certification_status: str, evaluation_status: str) -> tuple
 
 
 def _validate_arms(raw_arms: object, *, base_dir: Path) -> list[dict[str, Any]]:
+    """Validate and normalize the three or four declared planner arms.
+
+    Returns:
+        The list of normalized planner-arm mappings.
+    """
     if (
         not isinstance(raw_arms, Sequence)
         or isinstance(raw_arms, str)
@@ -748,6 +783,7 @@ def _copy_optional_arm_fields(
     *,
     base_dir: Path,
 ) -> None:
+    """Copy optional observation, fallback, and artifact-path fields onto a normalized arm."""
     for field in ("observation_mode", "observation_level"):
         if arm.get(field) is not None:
             normalized[field] = str(arm[field])
@@ -771,6 +807,11 @@ def _normalized_arm_base(
     structural_class: str,
     algo: str,
 ) -> dict[str, Any]:
+    """Build the base normalized-arm mapping with identity and profile defaults.
+
+    Returns:
+        The base normalized-arm mapping with identity and profile defaults.
+    """
     return {
         "key": key,
         "structural_class": structural_class,
@@ -787,6 +828,7 @@ def _copy_optional_existing_path(
     *,
     base_dir: Path,
 ) -> None:
+    """Resolve and copy an optional path field when present in the source mapping."""
     if source.get(field) is not None:
         target[field] = str(_resolve_existing_path(source.get(field), base_dir=base_dir))
 
@@ -813,6 +855,11 @@ def _trained_planner_claim_status(arm: Mapping[str, Any]) -> tuple[str, str]:
 
 
 def _trained_planner_readiness(arms: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Summarize trained-planner artifact readiness and blockers across the arms.
+
+    Returns:
+        A readiness summary mapping with per-arm rows and blocker counts.
+    """
     rows: list[dict[str, Any]] = []
     for arm in arms:
         status = str(arm["trained_planner_claim_status"])
@@ -860,6 +907,11 @@ def _trained_planner_readiness(arms: Sequence[Mapping[str, Any]]) -> dict[str, A
 
 
 def _readiness_status(status: str, missing_fields: Sequence[str]) -> str:
+    """Map a claim status and missing fields to a trained-planner readiness label.
+
+    Returns:
+        The trained-planner readiness label for the claim status.
+    """
     if status == TRAINED_PLANNER_NOT_A_TRAINED_PLANNER:
         return "not_required_baseline"
     if status == TRAINED_PLANNER_EXCLUDED_FALLBACK:
@@ -870,6 +922,11 @@ def _readiness_status(status: str, missing_fields: Sequence[str]) -> str:
 
 
 def _is_trained_planner_arm(arm: Mapping[str, Any]) -> bool:
+    """Report whether an arm is a learned or predictive trained-planner arm.
+
+    Returns:
+        True when the arm is a learned or predictive trained-planner arm.
+    """
     return (
         str(arm.get("structural_class", "")) in TRAINED_PLANNER_STRUCTURAL_CLASSES
         or str(arm.get("algo", "")) in TRAINED_PLANNER_ALGOS
@@ -877,6 +934,11 @@ def _is_trained_planner_arm(arm: Mapping[str, Any]) -> bool:
 
 
 def _collision_value(record: Mapping[str, Any]) -> float | None:
+    """Extract a per-episode collision value from outcome or metrics, or None.
+
+    Returns:
+        The per-episode collision value, or None when unavailable.
+    """
     outcome = record.get("outcome")
     if isinstance(outcome, Mapping) and outcome.get("collision") is not None:
         return 1.0 if bool(outcome["collision"]) else 0.0
@@ -889,6 +951,11 @@ def _collision_value(record: Mapping[str, Any]) -> float | None:
 
 
 def _success_value(record: Mapping[str, Any]) -> float | None:
+    """Extract a per-episode success value from outcome or metrics, or None.
+
+    Returns:
+        The per-episode success value, or None when unavailable.
+    """
     outcome = record.get("outcome")
     if isinstance(outcome, Mapping) and outcome.get("success") is not None:
         return 1.0 if bool(outcome["success"]) else 0.0
@@ -901,10 +968,12 @@ def _success_value(record: Mapping[str, Any]) -> float | None:
 
 
 def _mean_named_metric(records: Sequence[Mapping[str, Any]], names: Sequence[str]) -> float | None:
+    """Return the mean of a metric looked up under any of the given names."""
     return _mean_optional(_metric_values(records, names))
 
 
 def _min_named_metric(records: Sequence[Mapping[str, Any]], names: Sequence[str]) -> float | None:
+    """Return the minimum of a metric looked up under any of the given names."""
     values = [value for value in _metric_values(records, names) if value is not None]
     return min(values) if values else None
 
@@ -912,6 +981,11 @@ def _min_named_metric(records: Sequence[Mapping[str, Any]], names: Sequence[str]
 def _metric_values(
     records: Sequence[Mapping[str, Any]], names: Sequence[str]
 ) -> list[float | None]:
+    """Collect a metric's per-record values under any of the given names.
+
+    Returns:
+        A list of per-record metric values, with None where absent.
+    """
     values: list[float | None] = []
     for record in records:
         metrics = record.get("metrics")
@@ -924,6 +998,7 @@ def _metric_values(
 
 
 def _mean_optional(values: Sequence[float | None]) -> float | None:
+    """Return the mean of non-None values, or None when all are missing."""
     concrete = [value for value in values if value is not None]
     if not concrete:
         return None
@@ -931,6 +1006,11 @@ def _mean_optional(values: Sequence[float | None]) -> float | None:
 
 
 def _resolve_existing_path(raw_path: object, *, base_dir: Path) -> Path:
+    """Resolve a required path against base or cwd, raising when it does not exist.
+
+    Returns:
+        The resolved existing path.
+    """
     if raw_path is None or not str(raw_path).strip():
         raise ValueError("path value is required")
     path = Path(str(raw_path))
@@ -943,6 +1023,7 @@ def _resolve_existing_path(raw_path: object, *, base_dir: Path) -> Path:
 
 
 def _write_csv(path: Path, columns: Sequence[str], rows: Sequence[Mapping[str, Any]]) -> None:
+    """Write rows to a CSV file with the given ordered columns."""
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
             handle, fieldnames=columns, extrasaction="ignore", lineterminator="\n"
@@ -953,6 +1034,11 @@ def _write_csv(path: Path, columns: Sequence[str], rows: Sequence[Mapping[str, A
 
 
 def _csv_value(value: Any) -> Any:
+    """Format a value for CSV output, mapping None to NA and floats to fixed precision.
+
+    Returns:
+        The CSV-formatted value, with None mapped to NA.
+    """
     if value is None:
         return "NA"
     if isinstance(value, float):
@@ -961,6 +1047,11 @@ def _csv_value(value: Any) -> Any:
 
 
 def _metadata_payload(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the compact metadata payload from the full certification-transfer report.
+
+    Returns:
+        The compact metadata payload for the certification-transfer report.
+    """
     return {
         "schema_version": report["schema_version"],
         "issue": report["issue"],
@@ -984,6 +1075,11 @@ def _metadata_payload(report: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _claim_boundary_markdown(report: Mapping[str, Any]) -> str:
+    """Render the claim-boundary Markdown document for the evidence packet.
+
+    Returns:
+        The rendered claim-boundary Markdown document.
+    """
     lines = [
         "# Claim Boundary",
         "",
@@ -1005,6 +1101,11 @@ def _claim_boundary_markdown(report: Mapping[str, Any]) -> str:
 
 
 def _readme_markdown(report: Mapping[str, Any]) -> str:
+    """Render the evidence-packet README Markdown with counts and file listing.
+
+    Returns:
+        The rendered evidence-packet README Markdown.
+    """
     interaction_metrics = report["interaction_metric_summary"]
     lines = [
         "# Issue #4207 Certification-Transfer Probe Evidence",
@@ -1057,6 +1158,11 @@ def _readme_markdown(report: Mapping[str, Any]) -> str:
 
 
 def _checksums(paths: Iterable[Path]) -> str:
+    """Render a SHA256SUMS-style checksum listing for the given artifact paths.
+
+    Returns:
+        The SHA256SUMS-style checksum listing for the artifact paths.
+    """
     rows = [
         f"{_sha256_file(path)}  {path.name}" for path in sorted(paths, key=lambda item: item.name)
     ]

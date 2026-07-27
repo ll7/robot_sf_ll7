@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+import multiprocessing
+import os
 from pathlib import Path
 from typing import Any
 
@@ -600,6 +602,44 @@ def test_record_is_degraded_ignores_malformed_fallback_counter():
     )
 
 
+# --- _record_is_degraded foresight-model-load fallback (issue #6190) ------
+
+
+def test_record_is_degraded_detects_predictive_foresight_model_fallback():
+    """A foresight-model-load fallback status marks a record as degraded (issue #6190).
+
+    When ``PredictionPlannerAdapter`` cannot load the predictive model with
+    ``allow_fallback=True`` it silently degrades to constant-velocity prediction.
+    ``enrich_algorithm_metadata`` surfaces that as a
+    ``predictive_foresight_model_fallback`` status prefix; the classifier must
+    disposition the run as degraded before the determinism assertion fires.
+    """
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "predictive_foresight_model_fallback",
+                    "foresight_prediction": {"fallback_used": True},
+                },
+                "outcome": {},
+            }
+        )
+        is True
+    )
+    # Diagnostic suffixes (load error class, model id) must still match the prefix.
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "predictive_foresight_model_fallback:KeyError",
+                },
+                "outcome": {},
+            }
+        )
+        is True
+    )
+
+
 # --- _record_is_isolation_failure (issue #5781) --------------------------
 
 
@@ -1022,6 +1062,140 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, res
     assert len(set(fingerprints)) == 1, "native PPO repeats must be bitwise-identical"
 
 
+def test_native_runner_preflights_before_repeats_and_blocks_late_downloads(
+    monkeypatch, tmp_path, resolved_bundle
+):
+    """The production exact-repeat path stages models once and disables late downloads."""
+    import robot_sf.benchmark.exact_repeat_campaign as campaign
+
+    ppo_target = next(target for target in resolved_bundle["targets"] if target["planner"] == "ppo")
+    ppo_bundle = {key: value for key, value in resolved_bundle.items() if key != "bundle_sha256"}
+    ppo_bundle["targets"] = [ppo_target]
+    ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
+
+    preflight_calls: list[tuple[object, object]] = []
+    monkeypatch.setattr(
+        campaign,
+        "_preflight_runtime_model_assets",
+        lambda targets, definitions: preflight_calls.append((targets, definitions)),
+    )
+    download_guards: list[str | None] = []
+
+    def native_runner(*args, **kwargs):
+        download_guards.append(os.environ.get("ROBOT_SF_DISABLE_MODEL_DOWNLOADS"))
+        return _build_mock_record(int(kwargs["seed"]))
+
+    native_runner.__module__ = "robot_sf.benchmark.runner"
+    host_result = execute_campaign(
+        ppo_bundle, output_dir=tmp_path / "native_preflight", run_episode=native_runner
+    )
+
+    assert len(preflight_calls) == 1
+    assert download_guards == ["1", "1", "1"]
+    assert "disposition" not in host_result["results"][0]
+
+
+@pytest.mark.slow
+def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle, monkeypatch):
+    """After preflight seeds the model, the exact-repeat PPO path runs with networking disabled.
+
+    Issue #6189: the native-PPO arm's config enables the predictive-foresight
+    planner (``predictive_foresight_enabled: true`` ->
+    ``predictive_proxy_selected_v2_full``), so before this fix every forked worker
+    would download the model checkpoint from a GitHub release *inside* the timed
+    repeat loop. This test proves the fix: a shared preflight resolves the asset
+    into the cache first, and the timed loop then performs **no** network download.
+
+    Proof of "no in-loop download": the registry streamer is monkeypatched to drop
+    a sentinel file and raise if it is ever called. Because ``os.replace`` and the
+    forked planner-step workers all inherit this patched module under the fork
+    start method, any in-loop download attempt -- in the parent or in any fork --
+    would create the sentinel. We assert the sentinel never appears. Combined with
+    three bitwise-identical repeats, this shows the run succeeded offline using the
+    preflighted asset.
+
+    This is a required CI proof, not an optional local diagnostic: unavailable
+    dependencies, preflight failure, unsupported process isolation, or a native
+    worker failure are test failures rather than green skips.
+    """
+    if not is_runnable_algo("ppo"):
+        pytest.fail("native PPO is required for the offline exact-repeat proof")
+    # The native-PPO real-runner path needs the ``training`` extra (stable_baselines3)
+    # to load the policy; CI installs it before this job.
+    try:
+        __import__("stable_baselines3")
+    except ImportError as exc:
+        pytest.fail(f"stable_baselines3 is required for the offline exact-repeat proof: {exc}")
+
+    if multiprocessing.get_start_method() != "fork":
+        pytest.fail(
+            "offline exact-repeat proof requires fork so workers inherit the network sentinel"
+        )
+
+    import yaml
+
+    from robot_sf.models import preflight_models, required_model_ids_for_config
+    from robot_sf.models import registry as model_registry
+    from robot_sf.models.preflight import ModelPreflightError
+
+    ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
+    ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
+    ppo_bundle["targets"] = [ppo_target]
+    ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
+
+    # 1) Preflight: resolve + checksum-verify EVERY model the PPO arm resolves at
+    #    runtime (its own policy checkpoint AND, because the config enables the
+    #    predictive-foresight planner, the predictive checkpoint) into the cache
+    #    BEFORE any worker is created. The CI setup job seeds this cache; failure to
+    #    stage is a failed proof rather than a green skip.
+    ppo_algo_config = yaml.safe_load(
+        (
+            REPOSITORY_ROOT / "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    required_models = required_model_ids_for_config(ppo_algo_config)
+    assert "predictive_proxy_selected_v2_full" in required_models
+    try:
+        preflight_models(required_models, backoff_seconds=0.0)
+    except ModelPreflightError as exc:
+        pytest.fail(f"required model asset could not be preflighted: {exc}")
+
+    # 2) Disable networking for the timed loop. Any download attempt -- in the
+    #    parent or an inherited fork -- drops a sentinel and raises.
+    sentinel = tmp_path / "in_loop_download_attempted"
+
+    def _network_disabled(url: str, target_path, **_):
+        sentinel.write_text(url, encoding="utf-8")
+        raise AssertionError(f"in-loop network download attempted after preflight: {url}")
+
+    monkeypatch.setattr(model_registry, "_stream_download_url", _network_disabled)
+
+    host_result = execute_campaign(
+        ppo_bundle,
+        output_dir=tmp_path / "native_ppo_offline",
+        run_episode=run_episode,
+    )
+    result = host_result["results"][0]
+
+    if result.get("disposition") == PROCESS_ISOLATION_DISPOSITION:
+        pytest.fail(
+            "native PPO could not execute: planner-step isolation boundary failed "
+            "during the required offline proof"
+        )
+
+    # No worker fetched the model inside the timed loop -- the preflighted cache
+    # served every fork.
+    assert not sentinel.exists(), (
+        "a worker attempted a network download inside the timed loop after preflight"
+    )
+    assert "disposition" not in result, "native PPO must not be dispositioned as unrunnable"
+    assert result.get("degraded") is not True
+    assert len(result["repeats"]) == 3
+
+    fingerprints = [r["trajectory_sha256"] for r in result["repeats"]]
+    assert len(set(fingerprints)) == 1, "offline native PPO repeats must be bitwise-identical"
+
+
 def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest, resolved_bundle):
     """A single degraded repeat prevents a mixed target from becoming evidence."""
     calls = 0
@@ -1045,6 +1219,77 @@ def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest
     assert all(result["degraded"] is True for result in host_result["results"])
     assert all(result["repeats"] == [] for result in host_result["results"])
     verified = verify_host_report(manifest, host_result)
+    assert verified["summary"]["n_runnable_cells"] == 0
+    assert verified["summary"]["n_unrunnable_cells"] == 7
+    assert verified["summary"]["all_cells_bitwise_identical"] is False
+
+
+def _foresight_fallback_mock_runner(
+    scenario_params: dict[str, Any],
+    seed: int,
+    *,
+    algo: str = "goal",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Mock run_episode whose records look like a silent foresight fallback.
+
+    Issue #6190: ``PredictionPlannerAdapter`` silently degrades to
+    constant-velocity prediction when the predictive model cannot be loaded with
+    ``allow_fallback=True``. ``enrich_algorithm_metadata`` surfaces that as a
+    ``predictive_foresight_model_fallback`` status with evidence-ineligible
+    structured foresight provenance. The campaign must disposition such a run as
+    degraded (excluded from the bitwise-identical determinism claim) rather than
+    asserting bitwise trajectory identity.
+    """
+    record = _build_mock_record(seed)
+    record["algorithm_metadata"] = {
+        "status": "predictive_foresight_model_fallback",
+        "foresight_prediction": {
+            "requested_model_id": "predictive_proxy_selected_v2_full",
+            "load_status": "failed",
+            "effective_prediction_mode": "constant_velocity",
+            "fallback_used": True,
+            "fallback_reason": "predictive_model_load_failed",
+            "evidence_eligible": False,
+        },
+    }
+    record["outcome"] = {"timeout_event": True}
+    return record
+
+
+def test_execute_campaign_dispositions_foresight_fallback_as_degraded(
+    tmp_path, manifest, resolved_bundle
+):
+    """A silent foresight-model-load fallback is dispositioned as degraded (issue #6190).
+
+    The classifier must surface the degraded status (via ``_record_is_degraded``)
+    *before* the determinism assertion is reached, so a constant-velocity
+    fallback run is recorded with the ``unrunnable_on_current_main`` disposition
+    (``degraded=True``, empty repeats) and excluded from the bitwise-identical
+    determinism claim — instead of failing with a cryptic fingerprint mismatch.
+    """
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "foresight_fallback_disposition",
+        run_episode=_foresight_fallback_mock_runner,
+    )
+
+    by_planner = {}
+    for result in host_result["results"]:
+        by_planner.setdefault(result["planner"], []).append(result)
+
+    # Every planner target silently degraded to constant-velocity prediction.
+    for results in by_planner.values():
+        for result in results:
+            assert result["disposition"] == UNRUNNABLE_DISPOSITION
+            assert result["degraded"] is True
+            assert result["repeats"] == []
+            assert "fallback" in result["disposition_reason"]
+            # It is degraded, never a process-isolation failure.
+            assert result.get("isolation_failure") is not True
+
+    verified = verify_host_report(manifest, host_result)
+    # No cell is promoted to a bitwise-identical determinism verdict.
     assert verified["summary"]["n_runnable_cells"] == 0
     assert verified["summary"]["n_unrunnable_cells"] == 7
     assert verified["summary"]["all_cells_bitwise_identical"] is False

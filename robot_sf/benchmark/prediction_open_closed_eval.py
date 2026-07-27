@@ -28,6 +28,8 @@ _TIMEOUT_REASONS = frozenset({"timeout", "truncated", "max_steps"})
 
 @dataclass(frozen=True)
 class _ScalarSummary:
+    """Container for one scalar metric with its status, denominator, and optional note."""
+
     value: float | None
     status: str
     denominator: int
@@ -260,11 +262,18 @@ def build_paired_prediction_eval_report(
 
 @dataclass(frozen=True)
 class _SpreadValues:
+    """Container for forecast uncertainty-spread values plus a deterministic-only flag."""
+
     values: list[float]
     deterministic_only: bool
 
 
 def _open_loop_unavailable(note: str) -> dict[str, Any]:
+    """Build an all-unavailable open-loop metrics summary carrying the given note.
+
+    Returns:
+        An all-unavailable open-loop metrics summary.
+    """
     status = _ScalarSummary(value=None, status="unavailable", denominator=0, note=note)
     return {
         "ade": None,
@@ -291,6 +300,7 @@ def _open_loop_unavailable(note: str) -> dict[str, Any]:
 
 
 def _batch_key(batch: ForecastBatch, index: int) -> str:
+    """Return a stable key identifying a forecast batch (id/scenario, else its index)."""
     metadata = batch.metadata if isinstance(batch.metadata, dict) else {}
     for key in ("batch_id", "trace_id", "episode_id"):
         value = metadata.get(key)
@@ -306,6 +316,11 @@ def _ground_truth_for_batch(
     batch_count: int,
     ground_truth_by_batch: Mapping[str, GroundTruthPositions] | GroundTruthPositions,
 ) -> GroundTruthPositions | None:
+    """Resolve the ground-truth positions for a batch from a single payload or keyed mapping.
+
+    Returns:
+        The batch's ground-truth positions, or ``None`` when not found.
+    """
     if batch_count == 1 and _looks_like_ground_truth(ground_truth_by_batch):
         return ground_truth_by_batch  # type: ignore[return-value]
     key_candidates = [
@@ -321,6 +336,7 @@ def _ground_truth_for_batch(
 
 
 def _looks_like_ground_truth(value: Mapping[str, Any]) -> bool:
+    """Return whether ``value`` is one ground-truth payload rather than keyed batches."""
     if not value:
         return False
     first_value = next(iter(value.values()))
@@ -328,6 +344,11 @@ def _looks_like_ground_truth(value: Mapping[str, Any]) -> bool:
 
 
 def _metric_values(metric_report: dict[str, Any], metric: str) -> list[float]:
+    """Extract finite ``metric`` values from a report's ``metric_rows``.
+
+    Returns:
+        Finite values of ``metric`` from the report's rows.
+    """
     values: list[float] = []
     for row in metric_report.get("metric_rows", []):
         if row.get("metric") != metric or row.get("status") != "ok":
@@ -344,6 +365,7 @@ def _gaussian_calibration_counts(
     ground_truth: GroundTruthPositions,
     confidence_level: float,
 ) -> tuple[int, int]:
+    """Return Gaussian-calibration (hits, count) for a batch against ``ground_truth``."""
     threshold = chi_square_2d_threshold(confidence_level)
     hits = 0
     count = 0
@@ -369,6 +391,11 @@ def _gaussian_calibration_counts(
 
 
 def _prediction_spread_values(batch: ForecastBatch) -> _SpreadValues:
+    """Collect forecast uncertainty-spread values, flagging deterministic-only forecasts.
+
+    Returns:
+        The forecast spread values and deterministic-only flag.
+    """
     values: list[float] = []
     deterministic_only = True
     for forecast in batch.forecasts:
@@ -392,6 +419,7 @@ def _truth_array(
     actor_id: str,
     expected_steps: int,
 ) -> np.ndarray | None:
+    """Return the actor's ``(steps, 2)`` ground-truth array, or ``None`` if invalid."""
     if actor_id not in ground_truth:
         return None
     truth = np.asarray(ground_truth[actor_id], dtype=float)
@@ -401,6 +429,11 @@ def _truth_array(
 
 
 def _position_array(value: object) -> np.ndarray | None:
+    """Validate ``value`` as a finite 2-vector position and return it, else ``None``.
+
+    Returns:
+        The validated 2-vector position, or ``None``.
+    """
     if value is None:
         return None
     try:
@@ -413,6 +446,11 @@ def _position_array(value: object) -> np.ndarray | None:
 
 
 def _covariance_array(value: object, *, positive_definite: bool = False) -> np.ndarray | None:
+    """Validate ``value`` as a finite 2x2 (optionally positive-definite) covariance.
+
+    Returns:
+        The validated 2x2 covariance, or ``None``.
+    """
     if value is None:
         return None
     try:
@@ -434,6 +472,7 @@ def _covariance_array(value: object, *, positive_definite: bool = False) -> np.n
 
 
 def _mean_summary(values: Sequence[float], *, unavailable_note: str) -> _ScalarSummary:
+    """Return a ``_ScalarSummary`` holding the mean of ``values`` (or unavailable when empty)."""
     if not values:
         return _ScalarSummary(
             value=None,
@@ -450,6 +489,7 @@ def _calibration_summary(
     count: int,
     confidence_level: float,
 ) -> _ScalarSummary:
+    """Return a calibration-error summary (|empirical coverage - confidence level|)."""
     if count == 0:
         return _ScalarSummary(
             value=None,
@@ -466,6 +506,7 @@ def _calibration_summary(
 
 
 def _spread_summary(values: Sequence[float], deterministic_spread_only: bool) -> _ScalarSummary:
+    """Return a forecast-spread summary, distinguishing deterministic-no-spread from unavailable."""
     if values:
         return _ScalarSummary(value=float(np.mean(values)), status="ok", denominator=len(values))
     if deterministic_spread_only:
@@ -484,6 +525,11 @@ def _spread_summary(values: Sequence[float], deterministic_spread_only: bool) ->
 
 
 def _status_dict(summary: _ScalarSummary) -> dict[str, Any]:
+    """Render a ``_ScalarSummary``'s status/denominator/note as a JSON-friendly dict.
+
+    Returns:
+        The status/denominator/note dict for ``summary``.
+    """
     payload: dict[str, Any] = {
         "status": summary.status,
         "denominator": summary.denominator,
@@ -502,6 +548,11 @@ def _closed_loop_denominators(
     time_to_goal_count: int,
     jerk_count: int,
 ) -> dict[str, int]:
+    """Assemble the closed-loop denominator-counts dict from its component counts.
+
+    Returns:
+        The assembled closed-loop denominator-counts dict.
+    """
     return {
         "episode_count": episode_count,
         "collision_rate_denominator": collision_count,
@@ -514,6 +565,7 @@ def _closed_loop_denominators(
 
 
 def _collision_event(row: Mapping[str, Any]) -> bool | None:
+    """Return the collision event state (``True``/``False``/``None``) from a row."""
     metrics = _metrics(row)
     outcome = _mapping(row.get("outcome"))
     return _event_from_candidates(
@@ -525,11 +577,13 @@ def _collision_event(row: Mapping[str, Any]) -> bool | None:
 
 
 def _near_miss_event(row: Mapping[str, Any]) -> bool | None:
+    """Return the near-miss event state (``True``/``False``/``None``) from a row."""
     metrics = _metrics(row)
     return _event_from_candidates(metrics.get("near_misses"), row.get("near_misses"))
 
 
 def _timeout_event(row: Mapping[str, Any]) -> bool | None:
+    """Return the timeout event state (``True``/``False``/``None``) from a row."""
     metrics = _metrics(row)
     outcome = _mapping(row.get("outcome"))
     termination_signal = None
@@ -579,6 +633,7 @@ def _rate_or_none(events: Sequence[bool]) -> float | None:
 
 
 def _number_from_row(row: Mapping[str, Any], key: str) -> float | None:
+    """Return a finite numeric ``key`` from a row's metrics, falling back to its root."""
     metrics = _metrics(row)
     value = _finite_float(metrics.get(key))
     if value is not None:
@@ -587,19 +642,31 @@ def _number_from_row(row: Mapping[str, Any], key: str) -> float | None:
 
 
 def _metrics(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return the ``metrics`` mapping of a row, or an empty mapping when absent."""
     return _mapping(row.get("metrics"))
 
 
 def _mapping(value: object) -> Mapping[str, Any]:
+    """Return ``value`` if it is a Mapping, otherwise an empty mapping."""
     return value if isinstance(value, Mapping) else {}
 
 
 def _number(value: object, *, default: float) -> float:
+    """Coerce ``value`` to a finite float, returning ``default`` when not parseable.
+
+    Returns:
+        The coerced finite float, or ``default``.
+    """
     number = _finite_float(value)
     return default if number is None else number
 
 
 def _finite_float(value: object) -> float | None:
+    """Coerce ``value`` to a finite float, returning ``None`` for bool/missing/non-finite.
+
+    Returns:
+        The coerced finite float, or ``None``.
+    """
     if value is None or isinstance(value, bool):
         return None
     try:
@@ -610,16 +677,23 @@ def _finite_float(value: object) -> float | None:
 
 
 def _mean_or_none(values: Sequence[float]) -> float | None:
+    """Return the mean of ``values``, or ``None`` when empty."""
     return float(np.mean(values)) if values else None
 
 
 def _availability_status(denominator: int, note: str) -> dict[str, Any]:
+    """Build an availability status dict (``ok`` when ``denominator`` > 0, else unavailable).
+
+    Returns:
+        The availability status dict.
+    """
     if denominator:
         return {"status": "ok", "denominator": denominator}
     return {"status": "unavailable", "denominator": 0, "note": note}
 
 
 def _attach_rank_comparisons(reports: list[dict[str, Any]]) -> None:
+    """Attach open/closed-loop rank-comparison divergence to each predictor report in place."""
     if len(reports) < 2:
         return
     open_ranks = _rank_by_metric(
@@ -665,6 +739,11 @@ def _rank_by_metric(
     key: str,
     reverse: bool,
 ) -> dict[Any, int]:
+    """Rank reports by one ``section.key`` metric, returning ``predictor_id`` to rank.
+
+    Returns:
+        Mapping of ``predictor_id`` to its rank.
+    """
     sortable: list[tuple[float, Any]] = []
     for report in reports:
         value = _finite_float(_mapping(report.get(section)).get(key))
@@ -675,6 +754,11 @@ def _rank_by_metric(
 
 
 def _rank_closed_loop(reports: Iterable[dict[str, Any]]) -> dict[Any, int]:
+    """Rank reports by closed-loop safety metrics, returning ``predictor_id`` to rank.
+
+    Returns:
+        Mapping of ``predictor_id`` to its rank.
+    """
     sortable: list[tuple[float, float, float, Any]] = []
     for report in reports:
         closed_loop = _mapping(report.get("closed_loop"))

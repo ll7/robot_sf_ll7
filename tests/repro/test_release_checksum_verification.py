@@ -61,6 +61,28 @@ def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(_read_text_file(path))
 
 
+def _valid_subset_actual(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build one strict actual row per planner from the frozen subset contract."""
+    manifest = manifest or _read_yaml(MANIFEST_PATH)
+    contract = manifest["subset_replay_contract"]
+    return {
+        "status": "pass",
+        "planners": {
+            planner: {
+                "scenario_id": contract["scenario_id"],
+                "seed": contract["seed"],
+                "status": info["status"],
+                "execution_mode": info["execution_mode"],
+                "algorithm_metadata_status": "ok",
+                "git_hash": contract["replay_source_commit"],
+                "config_hash": info["config_hash"],
+                "metrics": dict(info["metrics"]),
+            }
+            for planner, info in contract["expected_rows"].items()
+        },
+    }
+
+
 class TestChecksumManifestSchema:
     """Tests for the checksum manifest YAML file."""
 
@@ -140,6 +162,32 @@ class TestChecksumManifestSchema:
         borderline = {p["name"] for p in contract["borderline_planners"]}
         assert "orca" in borderline
         assert "prediction_planner" in borderline
+
+    def test_manifest_has_subset_replay_contract(self) -> None:
+        manifest = _read_yaml(MANIFEST_PATH)
+        assert "subset_replay_contract" in manifest
+        contract = manifest["subset_replay_contract"]
+        assert contract["scenario_id"] == "francis2023_blind_corner"
+        assert contract["seed"] == 111
+        assert set(contract["planners"]) == {
+            "goal",
+            "orca",
+            "ppo",
+            "prediction_planner",
+            "sacadrl",
+            "social_force",
+            "socnav_sampling",
+        }
+        assert len(contract["expected_rows"]) == 7
+        assert contract["replay_source_commit"] == ("cbeaca6109654b4053c19542a0a17ed656a387a6")
+        assert contract["tolerances"] == {
+            "source": "docs/benchmark_release_reproducibility.md",
+            "near_misses_abs": 0.31,
+            "snqi_abs": 0.3082583,
+        }
+        for row in contract["expected_rows"].values():
+            assert row["algorithm_metadata_status"] == "ok"
+            assert len(row["config_hash"]) == 16
 
     def test_manifest_references_existing_docs(self) -> None:
         manifest = _read_yaml(MANIFEST_PATH)
@@ -475,6 +523,54 @@ class TestReproductionReport:
             assert "python_version" in env
             assert "architecture" in env
 
+    def test_report_hashes_executed_release_clone_lockfile(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """The canonical lock hash identifies the release clone that executed."""
+        from scripts.repro import cold_start_reproduction_report as report_module
+
+        tooling_root = tmp_path / "tooling"
+        release_clone = tmp_path / "release-clone"
+        manifest_path = (
+            tooling_root / "configs" / "releases" / "release_0_0_2_checksum_manifest.yaml"
+        )
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text("release_id: test\n")
+        (tooling_root / "uv.lock").write_text("tooling lock\n")
+        release_clone.mkdir()
+        (release_clone / "uv.lock").write_text("executed release lock\n")
+        monkeypatch.setattr(report_module, "REPO_ROOT", tooling_root)
+
+        mock_manifest = {
+            "release_tag": "0.0.2",
+            "release_id": "test",
+            "artifact_set": {
+                "bundle_archive": {
+                    "name": "test.tar.gz",
+                    "url": "https://example.com/test.tar.gz",
+                    "sha256": "0" * 64,
+                },
+            },
+            "embedded_artifacts": {},
+        }
+        with (
+            patch.object(report_module, "_load_manifest", return_value=mock_manifest),
+            patch.object(
+                report_module,
+                "_step_verify_checksums",
+                return_value={"step": "verify_checksums", "status": "pass"},
+            ),
+        ):
+            report = report_module.generate_reproduction_report(
+                tag="0.0.2",
+                output_dir=tmp_path / "output",
+                local_repo=release_clone,
+                checksums_only=True,
+            )
+
+        assert report["lockfile_sha256"] == hashlib.sha256(b"executed release lock\n").hexdigest()
+        assert report["tooling_lockfile_sha256"] == hashlib.sha256(b"tooling lock\n").hexdigest()
+
     def test_load_manifest_rejects_non_mapping_root(self, tmp_path: Path, monkeypatch: Any) -> None:
         from scripts.repro import cold_start_reproduction_report as report_module
         from scripts.repro.cold_start_reproduction_report import _load_manifest
@@ -489,13 +585,22 @@ class TestReproductionReport:
         with pytest.raises(ValueError, match="root must be a mapping"):
             _load_manifest("1.2.3")
 
-    def test_subset_config_path_uses_manifest_release_tag(self, tmp_path: Path) -> None:
+    def test_subset_fails_when_smoke_manifest_missing(self, tmp_path: Path) -> None:
         from scripts.repro.cold_start_reproduction_report import _step_run_subset
 
-        result = _step_run_subset(tmp_path, {"release_tag": "1.2.3"})
+        result = _step_run_subset(
+            tmp_path,
+            {
+                "release_tag": "0.0.2",
+                "subset_replay_contract": {
+                    "smoke_manifest": "configs/benchmarks/releases/missing.yaml"
+                },
+            },
+            tmp_path / "output",
+        )
 
-        assert result["status"] == "skip"
-        assert "v1_2_3_scoped.yaml" in result["reason"]
+        assert result["status"] == "fail"
+        assert "Smoke manifest not found" in result["error"]
 
     @pytest.mark.parametrize("path_kind", ["missing", "directory"])
     def test_supplied_bundle_path_must_be_a_file(self, tmp_path: Path, path_kind: str) -> None:
@@ -520,6 +625,486 @@ class TestReproductionReport:
 
         assert result["status"] == "fail"
         assert result["error"] == f"Provided bundle path is not a file: {bundle_path}"
+
+
+class TestSubsetReplayComparison:
+    """Tests for numeric subset replay execution and comparison logic."""
+
+    @pytest.mark.parametrize(
+        ("mutation", "expected_verdict"),
+        [
+            (None, "pass"),
+            ("fallback", "fail"),
+            ("numeric_mismatch", "fail"),
+        ],
+    )
+    def test_report_run_mode_reaches_comparison_and_fails_closed(
+        self, tmp_path: Path, mutation: str | None, expected_verdict: str
+    ) -> None:
+        """Exercise the public report boundary from run-mode output through comparison."""
+        from scripts.repro import cold_start_reproduction_report as report_module
+
+        clone_dir = tmp_path / "release-clone"
+        smoke_manifest = _read_yaml(MANIFEST_PATH)["subset_replay_contract"]["smoke_manifest"]
+        (clone_dir / smoke_manifest).parent.mkdir(parents=True)
+        (clone_dir / smoke_manifest).write_text("schema_version: test\n", encoding="utf-8")
+        (clone_dir / "uv.lock").write_text("release lock\n", encoding="utf-8")
+        output_dir = tmp_path / "reproduction"
+        actual = _valid_subset_actual()
+        if mutation == "fallback":
+            actual["planners"]["ppo"]["algorithm_metadata_status"] = "fallback"
+        elif mutation == "numeric_mismatch":
+            actual["planners"]["ppo"]["metrics"]["snqi"] = -5.0
+
+        def fake_run(command: list[str], **kwargs: Any) -> str:
+            assert command[command.index("--mode") + 1] == "run"
+            output_root = Path(command[command.index("--output-root") + 1])
+            assert output_root.is_absolute()
+            campaign_root = output_root / "campaign-001"
+            for planner, row in actual["planners"].items():
+                episode = {
+                    "algo": planner,
+                    "scenario_id": row["scenario_id"],
+                    "seed": row["seed"],
+                    "status": row["status"],
+                    "git_hash": row["git_hash"],
+                    "config_hash": row["config_hash"],
+                    "metrics": row["metrics"],
+                    "algorithm_metadata": {
+                        "status": row["algorithm_metadata_status"],
+                        "planner_kinematics": {"execution_mode": row["execution_mode"]},
+                    },
+                }
+                episode_path = campaign_root / "runs" / planner / "episodes.jsonl"
+                episode_path.parent.mkdir(parents=True, exist_ok=True)
+                episode_path.write_text(json.dumps(episode) + "\n", encoding="utf-8")
+            return json.dumps(
+                {
+                    "mode": "run",
+                    "status": "ok",
+                    "campaign_execution_status": "completed",
+                    "benchmark_success": True,
+                    "release_benchmark_success": True,
+                    "campaign_root": str(campaign_root),
+                }
+            )
+
+        with (
+            patch.object(report_module, "_env_info", return_value={}),
+            patch.object(report_module, "_git_commit_for_path", return_value="test-commit"),
+            patch.object(
+                report_module,
+                "_step_verify_checksums",
+                return_value={"step": "verify_checksums", "status": "pass"},
+            ),
+            patch.object(
+                report_module, "_step_build", return_value={"step": "build", "status": "pass"}
+            ),
+            patch.object(
+                report_module.subprocess, "check_output", side_effect=fake_run
+            ) as run_mock,
+        ):
+            report = report_module.generate_reproduction_report(
+                tag="0.0.2",
+                output_dir=output_dir,
+                local_repo=clone_dir,
+                checksums_only=False,
+            )
+
+        run_mock.assert_called_once()
+        assert report["steps"]["run_subset"]["status"] == "pass"
+        comparison = report["steps"]["compare_subset"]
+        assert comparison["status"] == expected_verdict
+        assert len(comparison["comparison_rows"]) == 7
+        assert report["overall_verdict"] == ("fail" if expected_verdict == "fail" else "partial")
+        if mutation == "fallback":
+            ppo_row = next(row for row in comparison["comparison_rows"] if row["planner"] == "ppo")
+            assert any("metadata status: fallback" in item for item in ppo_row["deviations"])
+        elif mutation == "numeric_mismatch":
+            ppo_row = next(row for row in comparison["comparison_rows"] if row["planner"] == "ppo")
+            assert any("SNQI score breach" in item for item in ppo_row["deviations"])
+
+    def test_run_subset_executes_run_mode_not_preflight(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_run_subset
+
+        smoke_dir = tmp_path / "configs" / "benchmarks" / "releases"
+        smoke_dir.mkdir(parents=True)
+        (smoke_dir / "paper_experiment_matrix_v1_release_smoke_v0_1.yaml").write_text(
+            "schema_version: test"
+        )
+
+        smoke_manifest = (
+            "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+        )
+        manifest = {
+            "release_tag": "0.0.2",
+            "planners": ["goal"],
+            "seed_policy": {},
+            "subset_replay_contract": {"smoke_manifest": smoke_manifest},
+        }
+        out_dir = tmp_path / "output"
+        campaign_root = out_dir / "subset_run" / "run_123"
+
+        fake_output = json.dumps(
+            {
+                "mode": "run",
+                "status": "ok",
+                "campaign_execution_status": "completed",
+                "benchmark_success": True,
+                "release_benchmark_success": True,
+                "campaign_root": str(campaign_root),
+            }
+        )
+
+        def fake_exec(*args: Any, **kwargs: Any) -> str:
+            campaign_root.mkdir(parents=True)
+            return fake_output
+
+        with patch("subprocess.check_output", side_effect=fake_exec) as mock_exec:
+            res = _step_run_subset(tmp_path, manifest, out_dir)
+
+        assert res["status"] == "pass"
+        assert "--mode" in res["command"]
+        assert "run" in res["command"]
+        assert "preflight" not in res["command"]
+        mock_exec.assert_called_once()
+
+    def test_run_subset_makes_relative_output_root_absolute_before_child_launch(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_run_subset
+
+        tooling_dir = tmp_path / "tooling"
+        clone_dir = tmp_path / "release-clone"
+        smoke_manifest = "configs/benchmarks/releases/smoke.yaml"
+        smoke_path = clone_dir / smoke_manifest
+        smoke_path.parent.mkdir(parents=True)
+        smoke_path.write_text("schema_version: test")
+        tooling_dir.mkdir()
+        monkeypatch.chdir(tooling_dir)
+        manifest = {
+            "subset_replay_contract": {"smoke_manifest": smoke_manifest},
+            "planners": ["goal"],
+            "seed_policy": {},
+        }
+
+        def fake_exec(command: list[str], **kwargs: Any) -> str:
+            output_root = Path(command[command.index("--output-root") + 1])
+            assert output_root.is_absolute()
+            campaign_root = output_root / "run_123"
+            campaign_root.mkdir()
+            return json.dumps(
+                {
+                    "mode": "run",
+                    "status": "ok",
+                    "campaign_execution_status": "completed",
+                    "benchmark_success": True,
+                    "release_benchmark_success": True,
+                    "campaign_root": str(campaign_root),
+                }
+            )
+
+        with patch("subprocess.check_output", side_effect=fake_exec):
+            result = _step_run_subset(clone_dir, manifest, Path("output/default"))
+
+        assert result["status"] == "pass"
+        assert Path(result["campaign_root"]).parent == (
+            tooling_dir / "output" / "default" / "subset_run"
+        )
+
+    @pytest.mark.parametrize("reported_root", ["output-root", "nested-child"])
+    def test_run_subset_rejects_non_direct_campaign_root(
+        self, tmp_path: Path, reported_root: str
+    ) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_run_subset
+
+        smoke_manifest = "configs/benchmarks/releases/smoke.yaml"
+        smoke_path = tmp_path / smoke_manifest
+        smoke_path.parent.mkdir(parents=True)
+        smoke_path.write_text("schema_version: test")
+        output_dir = tmp_path / "output"
+        subset_root = output_dir / "subset_run"
+        manifest = {
+            "subset_replay_contract": {"smoke_manifest": smoke_manifest},
+            "planners": ["goal"],
+            "seed_policy": {},
+        }
+
+        def fake_exec(*args: Any, **kwargs: Any) -> str:
+            if reported_root == "output-root":
+                campaign_root = subset_root
+            else:
+                campaign_root = subset_root / "container" / "run_123"
+                campaign_root.mkdir(parents=True)
+            return json.dumps(
+                {
+                    "mode": "run",
+                    "status": "ok",
+                    "campaign_execution_status": "completed",
+                    "benchmark_success": True,
+                    "release_benchmark_success": True,
+                    "campaign_root": str(campaign_root),
+                }
+            )
+
+        with patch("subprocess.check_output", side_effect=fake_exec):
+            result = _step_run_subset(tmp_path, manifest, output_dir)
+
+        assert result["status"] == "fail"
+        assert "new direct child" in result["error"]
+
+    def test_run_subset_rejects_preexisting_campaign_root(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_run_subset
+
+        smoke_manifest = "configs/benchmarks/releases/smoke.yaml"
+        smoke_path = tmp_path / smoke_manifest
+        smoke_path.parent.mkdir(parents=True)
+        smoke_path.write_text("schema_version: test")
+        output_dir = tmp_path / "output"
+        stale_root = output_dir / "subset_run" / "stale"
+        stale_root.mkdir(parents=True)
+        manifest = {
+            "subset_replay_contract": {"smoke_manifest": smoke_manifest},
+            "planners": ["goal"],
+            "seed_policy": {},
+        }
+        fake_output = json.dumps(
+            {
+                "mode": "run",
+                "status": "ok",
+                "campaign_execution_status": "completed",
+                "benchmark_success": True,
+                "release_benchmark_success": True,
+                "campaign_root": str(stale_root),
+            }
+        )
+
+        with patch("subprocess.check_output", return_value=fake_output):
+            result = _step_run_subset(tmp_path, manifest, output_dir)
+
+        assert result["status"] == "fail"
+        assert "pre-existing campaign_root" in result["error"]
+
+    def test_preflight_alone_cannot_pass_run_subset(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_run_subset
+
+        smoke_dir = tmp_path / "configs" / "benchmarks" / "releases"
+        smoke_dir.mkdir(parents=True)
+        (smoke_dir / "paper_experiment_matrix_v1_release_smoke_v0_1.yaml").write_text(
+            "schema_version: test"
+        )
+
+        manifest = {
+            "release_tag": "0.0.2",
+            "planners": ["goal"],
+            "seed_policy": {},
+            "subset_replay_contract": {
+                "smoke_manifest": (
+                    "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+                )
+            },
+        }
+        out_dir = tmp_path / "output"
+
+        fake_output = json.dumps(
+            {
+                "mode": "preflight",
+                "campaign_execution_status": "preflight_completed",
+            }
+        )
+
+        with patch("subprocess.check_output", return_value=fake_output):
+            res = _step_run_subset(tmp_path, manifest, out_dir)
+
+        assert res["status"] == "fail"
+        assert "preflight mode instead of run mode" in res["error"]
+
+    def test_unparseable_child_stdout_fails_run_subset(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_run_subset
+
+        smoke_manifest = "configs/benchmarks/releases/smoke.yaml"
+        smoke_path = tmp_path / smoke_manifest
+        smoke_path.parent.mkdir(parents=True)
+        smoke_path.write_text("schema_version: test")
+        manifest = {
+            "subset_replay_contract": {"smoke_manifest": smoke_manifest},
+            "planners": ["goal"],
+            "seed_policy": {},
+        }
+
+        with patch("subprocess.check_output", return_value="not a JSON payload"):
+            result = _step_run_subset(tmp_path, manifest, tmp_path / "output")
+
+        assert result["status"] == "fail"
+        assert "parse" in result["error"].lower()
+
+    def test_compare_step_requires_explicit_bound_campaign_root(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_compare_subset
+
+        stale = tmp_path / "output" / "subset_run" / "stale_campaign"
+        stale.mkdir(parents=True)
+        result = _step_compare_subset(
+            tmp_path,
+            _read_yaml(MANIFEST_PATH),
+            tmp_path / "output",
+            {"status": "pass"},
+        )
+
+        assert result["status"] == "fail"
+        assert "campaign_root" in result["error"]
+
+    def test_compare_subset_results_passes_on_valid_match(self) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+
+        res = compare_subset_results(extracted, manifest)
+        assert res["status"] == "pass"
+        assert res["overall_match"] is True
+        assert len(res["comparison_rows"]) == 7
+
+    def test_compare_subset_results_fails_on_missing_planner(self) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+        del extracted["planners"]["social_force"]
+
+        res = compare_subset_results(extracted, manifest)
+        assert res["status"] == "fail"
+        assert res["overall_match"] is False
+        sf_row = next(r for r in res["comparison_rows"] if r["planner"] == "social_force")
+        assert sf_row["match"] is False
+
+    def test_compare_subset_results_fails_on_fallback_mode(self) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+        extracted["planners"]["orca"]["execution_mode"] = "fallback"
+
+        res = compare_subset_results(extracted, manifest)
+        assert res["status"] == "fail"
+        orca_row = next(r for r in res["comparison_rows"] if r["planner"] == "orca")
+        assert orca_row["match"] is False
+        assert any("untrusted mode: fallback" in dev for dev in orca_row["deviations"])
+
+    def test_compare_subset_results_fails_on_tolerance_breach(self) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+        extracted["planners"]["ppo"]["metrics"]["snqi"] = -5.0
+
+        res = compare_subset_results(extracted, manifest)
+        assert res["status"] == "fail"
+        ppo_row = next(r for r in res["comparison_rows"] if r["planner"] == "ppo")
+        assert ppo_row["match"] is False
+        assert any("SNQI score breach" in dev for dev in ppo_row["deviations"])
+
+    def test_compare_subset_results_fails_on_missing_provenance(self) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+        extracted["planners"]["goal"]["git_hash"] = None
+
+        res = compare_subset_results(extracted, manifest)
+        assert res["status"] == "fail"
+        goal_row = next(r for r in res["comparison_rows"] if r["planner"] == "goal")
+        assert goal_row["match"] is False
+        assert any("missing provenance hashes" in dev for dev in goal_row["deviations"])
+
+    @pytest.mark.parametrize(
+        ("field", "bad_value", "expected_message"),
+        [
+            ("scenario_id", "wrong_scenario", "scenario mismatch"),
+            ("seed", 999, "seed mismatch"),
+            ("status", "collision", "status mismatch"),
+            ("execution_mode", "adapter", "execution mode mismatch"),
+            ("git_hash", "1" * 40, "git hash mismatch"),
+            ("config_hash", "0" * 16, "config hash mismatch"),
+        ],
+    )
+    def test_compare_subset_results_rejects_wrong_identity_and_provenance(
+        self,
+        field: str,
+        bad_value: Any,
+        expected_message: str,
+    ) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+        extracted["planners"]["goal"][field] = bad_value
+
+        result = compare_subset_results(extracted, manifest)
+        goal_row = next(row for row in result["comparison_rows"] if row["planner"] == "goal")
+
+        assert result["status"] == "fail"
+        assert goal_row["match"] is False
+        assert any(expected_message in item.lower() for item in goal_row["deviations"])
+
+    @pytest.mark.parametrize(
+        "metric",
+        ["success", "collisions", "near_misses", "time_to_goal_norm", "snqi"],
+    )
+    def test_compare_subset_results_rejects_missing_required_metric(self, metric: str) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+        del extracted["planners"]["goal"]["metrics"][metric]
+
+        result = compare_subset_results(extracted, manifest)
+        goal_row = next(row for row in result["comparison_rows"] if row["planner"] == "goal")
+
+        assert result["status"] == "fail"
+        assert any(f"missing required metric '{metric}'" in item for item in goal_row["deviations"])
+
+    def test_compare_subset_results_rejects_real_ppo_fallback_signature(self) -> None:
+        """Regression for the exact fallback-to-goal false pass found in PR #6136 review."""
+        from scripts.repro.release_0_0_2_subset_comparison import compare_subset_results
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        extracted = _valid_subset_actual(manifest)
+        ppo = extracted["planners"]["ppo"]
+        ppo["algorithm_metadata_status"] = "fallback"
+        ppo["metrics"]["snqi"] = -0.09491099136070058
+
+        result = compare_subset_results(extracted, manifest)
+        ppo_row = next(row for row in result["comparison_rows"] if row["planner"] == "ppo")
+
+        assert result["status"] == "fail"
+        assert ppo_row["match"] is False
+        assert any("metadata status: fallback" in item for item in ppo_row["deviations"])
+
+    def test_extract_subset_run_metrics_rejects_duplicate_planner_rows(
+        self, tmp_path: Path
+    ) -> None:
+        from scripts.repro.release_0_0_2_subset_comparison import extract_subset_run_metrics
+
+        manifest = _read_yaml(MANIFEST_PATH)
+        goal = _valid_subset_actual(manifest)["planners"]["goal"]
+        episode = {
+            "algo": "goal",
+            **goal,
+            "algorithm_metadata": {
+                "status": goal["algorithm_metadata_status"],
+                "planner_kinematics": {"execution_mode": goal["execution_mode"]},
+            },
+        }
+        run_dir = tmp_path / "runs" / "goal__differential_drive"
+        run_dir.mkdir(parents=True)
+        (run_dir / "episodes.jsonl").write_text(
+            "\n".join([json.dumps(episode), json.dumps(episode)]) + "\n"
+        )
+
+        result = extract_subset_run_metrics(tmp_path, manifest)
+
+        assert result["status"] == "fail"
+        assert "Duplicate replay row" in result["error"]
 
 
 @pytest.fixture(scope="module")
@@ -770,12 +1355,14 @@ class TestDurableEvidenceReport:
         assert report["schema"] == "cold-start-reproduction-report.v1"
         assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
 
-    def test_evidence_report_pins_the_checksum_manifest(self) -> None:
+    def test_evidence_report_preserves_historical_manifest_provenance(self) -> None:
         report = _read_json(DURABLE_EVIDENCE_REPORT)
         manifest_path = ROOT / report["config_path"]
         assert manifest_path.is_file()
-        assert report["config_sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-        assert len(report["config_commit"]) == 40
+        assert report["config_sha256"] == (
+            "b894143d35ae357f8fbc9d23eb2d79f8a22dc21b786cc68dedb7565dc788f8d6"
+        )
+        assert report["config_commit"] == "7a31102acd6dbc481868a23eec08a3b72755e01b"
 
     def test_evidence_report_is_partial_when_the_clone_was_skipped(self) -> None:
         report = _read_json(DURABLE_EVIDENCE_REPORT)

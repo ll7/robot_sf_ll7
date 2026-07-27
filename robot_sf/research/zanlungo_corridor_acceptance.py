@@ -469,6 +469,10 @@ def render_acceptance_markdown(report: Mapping[str, Any]) -> str:
 
 
 def _normalize_fixture(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``payload`` with ``left_start``/``right_start`` coerced to finite-real tuples.
+
+    Each coordinate pair must be a two-value list; otherwise a ``ValueError`` is raised.
+    """
     normalized = dict(payload)
     for key in ("left_start", "right_start"):
         value = normalized.get(key)
@@ -482,6 +486,11 @@ def _normalize_fixture(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_case(payload: Any) -> SensitivityCase:
+    """Return a validated :class:`SensitivityCase` built from a raw case payload.
+
+    Zanlungo-model cases additionally have their parameters checked via
+    ``_validate_zanlungo_parameters``.
+    """
     if not isinstance(payload, dict):
         raise ValueError("each sensitivity case must be a mapping")
     parameters = payload.get("parameters", {})
@@ -545,6 +554,12 @@ def _validate_zanlungo_parameters(parameters: Mapping[str, Any]) -> None:
 def _parameter_bookkeeping_complete(
     cases: tuple[SensitivityCase, ...], reference_case_id: str
 ) -> bool:
+    """Return whether Zanlungo cases satisfy reference and variant parameter bookkeeping.
+
+    Non-Zanlungo cases must carry no parameters. The reference Zanlungo row deliberately uses the
+    ``varied_parameter="reference"`` sentinel and a factor of ``1.0``; each non-reference variant
+    must differ from it in exactly its declared parameter and by the recorded relative factor.
+    """
     reference = next(case for case in cases if case.case_id == reference_case_id)
     reference_parameters = dict(reference.parameters)
     for case in cases:
@@ -586,6 +601,7 @@ def _parameter_bookkeeping_complete(
 
 
 def _require_mapping(payload: Mapping[str, Any], field_name: str) -> Mapping[str, Any]:
+    """Return ``payload[field_name]`` if it is a mapping, raising ``ValueError`` otherwise."""
     value = payload.get(field_name)
     if not isinstance(value, dict):
         raise ValueError(f"{field_name} must be a mapping")
@@ -593,6 +609,11 @@ def _require_mapping(payload: Mapping[str, Any], field_name: str) -> Mapping[str
 
 
 def _build_corridor_map(fixture: CorridorFixtureConfig) -> MapDefinition:
+    """Return the diagnostic corridor :class:`MapDefinition` for a Zanlungo acceptance fixture.
+
+    Two opposing walls bound a corridor with two counter-walking pedestrians and stub robot
+    spawn/goal zones plus a route (no robot is inserted).
+    """
     obstacles = [
         Obstacle(
             [
@@ -666,6 +687,7 @@ def _build_corridor_map(fixture: CorridorFixtureConfig) -> MapDefinition:
 
 
 def _trace_sha256(trace: CorridorTrace) -> str:
+    """Return a deterministic SHA-256 digest over a corridor trace's positions and velocities."""
     digest = hashlib.sha256()
     for array in (trace.positions, trace.velocities):
         canonical = np.ascontiguousarray(array, dtype="<f8")
@@ -675,6 +697,7 @@ def _trace_sha256(trace: CorridorTrace) -> str:
 
 
 def _max_consecutive_true(mask: np.ndarray) -> int:
+    """Return the length of the longest run of true values in ``mask``."""
     maximum = 0
     current = 0
     for value in np.asarray(mask, dtype=bool):
@@ -684,4 +707,5 @@ def _max_consecutive_true(mask: np.ndarray) -> int:
 
 
 def _rect(x0: float, y0: float, x1: float, y1: float) -> Rect:
+    """Return a rectangular :class:`Rect` zone built from two x and two y bounds."""
     return ((x0, y1), (x1, y1), (x1, y0))

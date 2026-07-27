@@ -17,6 +17,9 @@ import yaml
 from loguru import logger
 
 from robot_sf.benchmark import map_runner, map_runner_episode
+from robot_sf.benchmark.aggregate import compute_aggregates
+from robot_sf.benchmark.algorithm_metadata import PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS
+from robot_sf.benchmark.exact_repeat_campaign import _record_is_degraded
 from robot_sf.benchmark.map_runner import (
     _accumulate_batch_metadata,
     _apply_planner_selector_v2_context,
@@ -2810,6 +2813,138 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(ammv_feasibility["tip_over_violation"], bool)
     assert ammv_feasibility["n_curvature_violations"] >= 0
     assert isinstance(ammv_feasibility["feasible"], bool)
+
+
+def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Map-runner records must carry a live foresight fallback through aggregation."""
+
+    class _DummySim:
+        """Simulator stub for the map-runner provenance path."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        """Environment stub which executes one planner step."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            """Return a minimal map-runner observation."""
+            del seed
+            return {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                "goal": {"current": [1.0, 1.0]},
+            }, {}
+
+        def step(self, action):
+            """Terminate after the policy has materialized its live diagnostics."""
+            del action
+            return (
+                {
+                    "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                    "goal": {"current": [1.0, 1.0]},
+                },
+                0.0,
+                True,
+                False,
+                {"success": True},
+            )
+
+        def close(self) -> None:
+            """Provide the lifecycle hook expected by the episode runner."""
+
+    foresight = {
+        "foresight_prediction": {
+            "requested_model_id": "unavailable-test-model",
+            "requested_checkpoint_sha256": None,
+            "load_status": "failed",
+            "effective_prediction_mode": "constant_velocity",
+            "fallback_used": True,
+            "fallback_reason": "predictive_model_load_failed",
+            "load_error": "FileNotFoundError: unavailable-test-model",
+        }
+    }
+
+    def _build_policy_stub(*args, **kwargs):
+        """Return a policy with the live PPO/adapter runtime diagnostics hook."""
+        del args, kwargs
+
+        def _policy(obs: dict[str, object]) -> tuple[float, float]:
+            """Produce a deterministic command after the modeled fallback."""
+            del obs
+            return 0.0, 0.0
+
+        _policy._planner_stats = lambda: foresight
+        return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
+
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    record = _run_map_episode(
+        {"name": "foresight-fallback", "simulation_config": {"max_episode_steps": 1}},
+        seed=1,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="prediction_planner",
+        algo_config_path=None,
+        scenario_path=Path("."),
+    )
+
+    metadata = record["algorithm_metadata"]
+    provenance = metadata["foresight_prediction"]
+    assert metadata["status"] == PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS
+    assert provenance["fallback_used"] is True
+    assert provenance["evidence_eligible"] is False
+    assert _record_is_degraded(record) is True
+
+    summary = compute_aggregates(
+        [
+            record,
+            {
+                "episode_id": "healthy-foresight",
+                "scenario_id": "foresight-fallback",
+                "algo": "prediction_planner",
+                "metrics": {"success": 1.0},
+                "algorithm_metadata": {"foresight_prediction": {"evidence_eligible": True}},
+            },
+        ],
+        group_by="algo",
+    )
+
+    assert summary["prediction_planner"]["success"]["mean"] == 1.0
+    assert summary["_meta"]["evidence_eligibility"]["excluded_record_count"] == 1
 
 
 def test_run_map_episode_tracking_precision_clamps_and_records(

@@ -12,7 +12,13 @@ from math import ceil, cos, floor, pi, sin
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 import numpy as np
-import pygame
+
+try:
+    import pygame
+except ImportError as err:
+    pygame = None  # type: ignore[assignment]
+    _PYGAME_IMPORT_ERROR = err
+
 from loguru import logger
 
 from robot_sf.common.types import PedPose, RgbColor, RobotPose, Vec2D
@@ -250,6 +256,11 @@ class SimulationView:
 
     def __post_init__(self):
         """Initialize PyGame components."""
+        if pygame is None:
+            raise ImportError(
+                "Visualization features require optional dependency 'pygame'. "
+                "Install with: pip install robot_sf[viz] (or uv sync --extra viz)"
+            ) from _PYGAME_IMPORT_ERROR
         logger.debug("Initializing the simulation view.")
         # Environment variable override for max_frames (e.g., runtime tuning / CI scenarios)
         env_cap = os.environ.get("ROBOT_SF_MAX_VIDEO_FRAMES")

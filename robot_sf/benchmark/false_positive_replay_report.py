@@ -260,6 +260,11 @@ def _paired_episode_deltas(
     perturbed_rows: Sequence[Mapping[str, Any]],
     pair_keys: Sequence[str],
 ) -> list[dict[str, Any]]:
+    """Compute per-episode metric/action deltas between paired nominal and perturbed rows.
+
+    Returns:
+        Per-episode metric/action deltas for paired rows.
+    """
     nominal_index = {_pair_key(row, pair_keys): row for row in nominal_rows}
     perturbed_index = {_pair_key(row, pair_keys): row for row in perturbed_rows}
     deltas: list[dict[str, Any]] = []
@@ -291,6 +296,11 @@ def _paired_episode_deltas(
 
 
 def _injection_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate noise-injection stats (pedestrians added, steps, profiles, hashes).
+
+    Returns:
+        The aggregated noise-injection stats, profiles, and hashes.
+    """
     stats = {"pedestrians_added": 0, "steps_with_noise": 0}
     profiles: set[str] = set()
     hashes: set[str] = set()
@@ -307,6 +317,7 @@ def _injection_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def _metric_delta(nominal: Mapping[str, Any], perturbed: Mapping[str, Any]) -> dict[str, float]:
+    """Return per-field metric deltas (perturbed minus nominal) for predeclared metrics."""
     deltas: dict[str, float] = {}
     for field in _PREDECLARED_METRICS:
         clean = _metric_value(nominal, field)
@@ -318,12 +329,14 @@ def _metric_delta(nominal: Mapping[str, Any], perturbed: Mapping[str, Any]) -> d
 
 
 def _action_delta(nominal: Mapping[str, Any], perturbed: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the selected-action comparison between nominal and perturbed rows."""
     clean = _selected_action(nominal)
     noisy = _selected_action(perturbed)
     return {"nominal": clean, "perturbed": noisy, "changed": clean != noisy}
 
 
 def _has_predeclared_delta(report: Mapping[str, Any]) -> bool:
+    """Return whether the report shows any non-zero predeclared metric or action delta."""
     for row in report.get("planner_rows", []):
         if not isinstance(row, Mapping):
             continue
@@ -338,6 +351,11 @@ def _has_predeclared_delta(report: Mapping[str, Any]) -> bool:
 
 
 def _pair_key(row: Mapping[str, Any], pair_keys: Sequence[str]) -> tuple[tuple[str, Any], ...]:
+    """Build a hashable pairing key for ``row`` from the named ``pair_keys`` fields.
+
+    Returns:
+        The hashable pairing-key tuple.
+    """
     values: list[tuple[str, Any]] = []
     for key in pair_keys:
         if key == "planner_identity":
@@ -360,6 +378,7 @@ def _planner_identity(row: Mapping[str, Any]) -> str:
 
 
 def _metric_value(row: Mapping[str, Any], field: str) -> Any:
+    """Return a metric field value from a row (metrics/outcome/summary/root paths)."""
     for prefix in ("metrics", "outcome", "summary"):
         value = _get_nested(row, f"{prefix}.{field}")
         if value is not None:
@@ -368,6 +387,7 @@ def _metric_value(row: Mapping[str, Any], field: str) -> Any:
 
 
 def _noise_stat(row: Mapping[str, Any], field: str) -> int:
+    """Return an integer noise-stat field from a row's ``observation_noise_stats``."""
     stats = row.get("observation_noise_stats")
     if isinstance(stats, Mapping):
         return int(_number(stats.get(field)))
@@ -375,6 +395,7 @@ def _noise_stat(row: Mapping[str, Any], field: str) -> int:
 
 
 def _actor_count(row: Mapping[str, Any]) -> int | None:
+    """Return the observed actor count from a row, probing its common count fields."""
     for field in (
         "observed_actor_count",
         "actor_count",
@@ -389,6 +410,7 @@ def _actor_count(row: Mapping[str, Any]) -> int | None:
 
 
 def _noise_profile(row: Mapping[str, Any]) -> str | None:
+    """Return the observation-noise profile label from a row, if declared."""
     spec = row.get("observation_noise")
     if isinstance(spec, Mapping) and spec.get("profile"):
         return str(spec["profile"])
@@ -397,6 +419,7 @@ def _noise_profile(row: Mapping[str, Any]) -> str | None:
 
 
 def _selected_action(row: Mapping[str, Any]) -> Any:
+    """Return the selected action from a row, probing its common action fields."""
     for field in ("selected_action", "action", "actions.selected", "planner_action"):
         value = _get_nested(row, field)
         if value is not None:
@@ -405,6 +428,7 @@ def _selected_action(row: Mapping[str, Any]) -> Any:
 
 
 def _first_present(first_row: Mapping[str, Any], second_row: Mapping[str, Any], *keys: str) -> Any:
+    """Return the first non-null value among ``keys`` across two rows."""
     for key in keys:
         for row in (first_row, second_row):
             value = _get_nested(row, key)
@@ -414,6 +438,7 @@ def _first_present(first_row: Mapping[str, Any], second_row: Mapping[str, Any], 
 
 
 def _get_nested(row: Mapping[str, Any], path: str) -> Any:
+    """Return a dotted-path nested value from ``row``, or ``None`` when absent."""
     current: Any = row
     for part in path.split("."):
         if not isinstance(current, Mapping) or part not in current:
@@ -423,10 +448,16 @@ def _get_nested(row: Mapping[str, Any], path: str) -> Any:
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
+    """Return ``value`` if it is a Mapping, otherwise an empty dict."""
     return value if isinstance(value, Mapping) else {}
 
 
 def _number(value: Any) -> float:
+    """Coerce ``value`` to a finite float (bool -> 1.0/0.0; non-numeric -> 0.0).
+
+    Returns:
+        The coerced finite float.
+    """
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     try:

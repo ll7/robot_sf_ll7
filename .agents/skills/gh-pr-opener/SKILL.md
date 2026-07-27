@@ -55,9 +55,16 @@ Freshness check:
    Use `--draft` only when the user explicitly requests draft status or when the branch is an
    intentional handoff with incomplete validation, unresolved scope, or another clearly documented
    reason that should block review.
-   For an existing PR, update its body with
-   `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`;
-   do not use `gh pr edit --body-file` while it queries retired Projects Classic fields.
+    For an existing PR, update its body with
+    `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`;
+    do not use `gh pr edit --body-file` while it queries retired Projects Classic fields.
+
+    For label operations on issues or PRs, use
+    `uv run python scripts/dev/gh_pr_label_rest.py add <number> --label <name> --repo ll7/robot_sf_ll7`
+    or
+    `uv run python scripts/dev/gh_pr_label_rest.py remove <number> --label <name> --repo ll7/robot_sf_ll7`
+    instead of `gh pr edit --add-label` / `gh issue edit --label` which route through the same
+    deprecated Projects Classic GraphQL path.
 9. Keep parent issue open unless repository policy indicates closure wording in PR description.
 
 ## Proof and Artifact Rules

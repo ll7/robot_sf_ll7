@@ -173,6 +173,11 @@ def write_pedestrian_prior_extraction_report(
 
 
 def _parse_observations(raw_observations: Any) -> list[dict[str, float | str]]:
+    """Parse raw observations into validated id/time/x/y dicts, sorted by pedestrian then time.
+
+    Returns:
+        The validated id/time/x/y dicts.
+    """
     if not isinstance(raw_observations, list) or not raw_observations:
         raise PedestrianPriorExtractionError("observations must be a non-empty list")
     observations: list[dict[str, float | str]] = []
@@ -204,6 +209,11 @@ def _parse_observations(raw_observations: Any) -> list[dict[str, float | str]]:
 
 
 def _parse_bounds(raw_bounds: Any) -> tuple[float, float, float, float]:
+    """Parse density bounds (min/max x/y), requiring positive width and height.
+
+    Returns:
+        The ``(min_x, max_x, min_y, max_y)`` bounds.
+    """
     if raw_bounds is None:
         raise PedestrianPriorExtractionError("bounds are required for density extraction")
     if not isinstance(raw_bounds, Mapping):
@@ -227,6 +237,11 @@ def _parse_bounds(raw_bounds: Any) -> tuple[float, float, float, float]:
 def _group_by_pedestrian(
     observations: Iterable[Mapping[str, float | str]],
 ) -> dict[str, list[Mapping[str, float | str]]]:
+    """Group observation mappings by pedestrian id, preserving insertion order.
+
+    Returns:
+        Observations grouped by pedestrian id.
+    """
     grouped: dict[str, list[Mapping[str, float | str]]] = {}
     for observation in observations:
         grouped.setdefault(str(observation["pedestrian_id"]), []).append(observation)
@@ -234,6 +249,11 @@ def _group_by_pedestrian(
 
 
 def _segment_speeds(observations: list[Mapping[str, float | str]]) -> list[float]:
+    """Compute per-segment speeds across each pedestrian's time-ordered track.
+
+    Returns:
+        The per-segment speeds.
+    """
     speeds: list[float] = []
     for track in _group_by_pedestrian(observations).values():
         ordered = sorted(track, key=lambda item: float(item["time"]))
@@ -251,6 +271,11 @@ def _segment_speeds(observations: list[Mapping[str, float | str]]) -> list[float
 
 
 def _pedestrian_headings(observations: list[Mapping[str, float | str]]) -> list[float]:
+    """Compute the absolute final-displacement heading (degrees) per moving pedestrian.
+
+    Returns:
+        The absolute heading (degrees) per pedestrian.
+    """
     headings: list[float] = []
     for track in _group_by_pedestrian(observations).values():
         ordered = sorted(track, key=lambda item: float(item["time"]))
@@ -271,6 +296,11 @@ def _frame_densities(
     observations: list[Mapping[str, float | str]],
     bounds: tuple[float, float, float, float],
 ) -> list[float]:
+    """Compute per-timestamp pedestrian densities (count per unit area) within bounds.
+
+    Returns:
+        The per-timestep densities within bounds.
+    """
     min_x, max_x, min_y, max_y = bounds
     area = (max_x - min_x) * (max_y - min_y)
     frame_counts: dict[float, int] = {}
@@ -286,6 +316,11 @@ def _frame_densities(
 
 
 def _interaction_distances(observations: list[Mapping[str, float | str]]) -> list[float]:
+    """Compute each pedestrian's nearest-neighbour distance within each timestamp frame.
+
+    Returns:
+        The nearest-neighbour distances per frame.
+    """
     by_time: dict[float, list[Mapping[str, float | str]]] = {}
     for observation in observations:
         by_time.setdefault(float(observation["time"]), []).append(observation)
@@ -315,6 +350,13 @@ def _stop_yield_durations(
     *,
     speed_threshold_mps: float = 0.05,
 ) -> list[float]:
+    """Measure contiguous low-speed (stop/yield) durations across each pedestrian track.
+
+    Returns a list of run durations, or ``[0.0]`` when none are observed.
+
+    Returns:
+        The contiguous low-speed run durations.
+    """
     durations: list[float] = []
     for track in _group_by_pedestrian(observations).values():
         ordered = sorted(track, key=lambda item: float(item["time"]))
@@ -347,6 +389,11 @@ def _summarize(
     *,
     value_status: str,
 ) -> PriorParameterSummary:
+    """Build a min/max/mean summary for one required prior parameter.
+
+    Returns:
+        The prior parameter summary.
+    """
     if name not in REQUIRED_PRIOR_PARAMETERS:
         raise PedestrianPriorExtractionError(f"unexpected prior parameter: {name}")
     if not values:
@@ -363,6 +410,14 @@ def _summarize(
 
 
 def _provenance(payload: Mapping[str, Any], *, value_status: str) -> dict[str, Any]:
+    """Build the provenance block with conservative defaults.
+
+    Defaults source kind to ``fixture`` for placeholder values, and always sets
+    raw-trajectory storage and the prior-extraction claim boundary.
+
+    Returns:
+        The provenance block.
+    """
     raw_provenance = payload.get("provenance", {})
     provenance = dict(raw_provenance) if isinstance(raw_provenance, Mapping) else {}
     provenance.setdefault(

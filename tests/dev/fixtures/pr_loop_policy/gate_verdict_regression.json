@@ -1,0 +1,94 @@
+{
+  "schema": "pr_queue_snapshot.v1",
+  "regression_for": "issue #6019",
+  "note": "Regression fixture for the CI-pending / no-current-exact-head-gate-verdict dispatcher state. The dispatcher must reject any exact head unless all required checks are green AND a current exact-head 'gate-verdict: accepted @ <SHA>' trailer exists.",
+  "_head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+  "prs": [
+    {
+      "number": 6019,
+      "status": "ok",
+      "title": "CI-pending head: checks in progress, no gate verdict",
+      "draft": false,
+      "head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "labels": ["merge-ready"],
+      "checks": {
+        "overall": "pending",
+        "total": 19,
+        "by_conclusion": {},
+        "by_status": {"in_progress": 19},
+        "names": ["ci", "lint", "test"]
+      },
+      "comment_snapshot": {"total": 0, "latest": []},
+      "expected_state": "pending_ci"
+    },
+    {
+      "number": 6020,
+      "status": "ok",
+      "title": "Green CI + merge-ready but NO gate-verdict trailer (must be rejected)",
+      "draft": false,
+      "head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "labels": ["merge-ready"],
+      "checks": {
+        "overall": "success",
+        "total": 19,
+        "by_conclusion": {"success": 19},
+        "by_status": {"completed": 19},
+        "names": ["ci", "lint", "test"]
+      },
+      "comment_snapshot": {"total": 0, "latest": []},
+      "expected_state": "pending_gate_verdict"
+    },
+    {
+      "number": 6021,
+      "status": "ok",
+      "title": "Green CI + merge-ready with STALE gate verdict (SHA mismatch, must be rejected)",
+      "draft": false,
+      "head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "labels": ["merge-ready"],
+      "checks": {
+        "overall": "success",
+        "total": 19,
+        "by_conclusion": {"success": 19},
+        "by_status": {"completed": 19},
+        "names": ["ci", "lint", "test"]
+      },
+      "comment_snapshot": {
+        "total": 1,
+        "latest": [
+          {
+            "author": "gate-bot",
+            "created_at": "2026-07-18T10:00:00Z",
+            "body_excerpt": "gate-verdict: accepted @ 0000000111122223333444455556666777788889999"
+          }
+        ]
+      },
+      "expected_state": "pending_gate_verdict"
+    },
+    {
+      "number": 6022,
+      "status": "ok",
+      "title": "Green CI + merge-ready with CURRENT exact-head accepted gate verdict (positive control)",
+      "draft": false,
+      "head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "labels": ["merge-ready"],
+      "checks": {
+        "overall": "success",
+        "total": 19,
+        "by_conclusion": {"success": 19},
+        "by_status": {"completed": 19},
+        "names": ["ci", "lint", "test"]
+      },
+      "comment_snapshot": {
+        "total": 1,
+        "latest": [
+          {
+            "author": "gate-bot",
+            "created_at": "2026-07-19T12:00:00Z",
+            "body_excerpt": "gate-verdict: accepted @ a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+          }
+        ]
+      },
+      "expected_state": "ready_to_merge"
+    }
+  ]
+}

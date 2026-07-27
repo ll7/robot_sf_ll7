@@ -732,6 +732,7 @@ def _handle_classify_failure_mechanisms(args) -> int:
             output_csv=args.out_csv,
             fixed_horizon=args.fixed_horizon,
             long_horizon=args.long_horizon,
+            include_taxonomy_crosswalk=True,
         )
         logging.info(
             "Failure mechanism classification wrote %d rows to %s",

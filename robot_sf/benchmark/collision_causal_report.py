@@ -350,6 +350,11 @@ def collide_causal_report_from_last_avoidable(
     mechanism_metadata = metadata if supported_actual_cause else None
 
     def _ts(available: bool, step: int | None) -> dict[str, Any]:
+        """Build a critical-timestamp payload (available/step/time_s/source) from a replay step.
+
+        Returns:
+            The critical-timestamp payload.
+        """
         # The replay reports t_* as integer control steps; express them as steps
         # (time_s is unknown without a recorded dt in the replay contract).
         return {
@@ -505,12 +510,14 @@ def _join_interventions(
 
 
 def _normative_fault_violations(record: Mapping[str, Any]) -> list[str]:
+    """Return violation messages when ``normative_fault`` is not ``'not_assessed'``."""
     if record.get("normative_fault") != "not_assessed":
         return ["normative_fault must be 'not_assessed'"]
     return []
 
 
 def _vocabulary_violations(record: Mapping[str, Any]) -> list[str]:
+    """Return violations for out-of-vocabulary mechanism labels or confidence levels."""
     violations: list[str] = []
     mechanism = record.get("proximate_mechanism", {})
     label = mechanism.get("mechanism_label")
@@ -528,6 +535,11 @@ def _vocabulary_violations(record: Mapping[str, Any]) -> list[str]:
 
 
 def _timestamp_violations(record: Mapping[str, Any]) -> list[str]:
+    """Validate critical-timestamp availability against their step/time_s fields.
+
+    Returns:
+        Violation messages for inconsistent critical timestamps.
+    """
     violations: list[str] = []
     timestamps = record.get("observed_reconstruction", {}).get("critical_timestamps", {})
     for key in CRITICAL_TIMESTAMP_KEYS:
@@ -546,6 +558,11 @@ def _timestamp_violations(record: Mapping[str, Any]) -> list[str]:
 
 
 def _missing_field_violations(record: Mapping[str, Any]) -> list[str]:
+    """Validate that unavailable timestamps/elements are declared in ``missing_fields``.
+
+    Returns:
+        Violation messages for undeclared unavailable fields.
+    """
     # Every unavailable element/timestamp must be declared in missing_fields.
     violations: list[str] = []
     declared = set(record.get("missing_fields", []))
@@ -568,6 +585,11 @@ def _missing_field_violations(record: Mapping[str, Any]) -> list[str]:
 
 
 def _abstention_violations(record: Mapping[str, Any]) -> list[str]:
+    """Validate abstained reports carry a reason and an ``unknown`` causal verdict.
+
+    Returns:
+        Violation messages for abstained reports.
+    """
     if not record.get("abstained"):
         return []
     violations: list[str] = []
@@ -582,6 +604,11 @@ def _abstention_violations(record: Mapping[str, Any]) -> list[str]:
 
 
 def _actual_cause_violations(record: Mapping[str, Any]) -> list[str]:
+    """Validate a supported actual cause has a prevented-contact intervention and verdict.
+
+    Returns:
+        Violation messages for unsupported actual causes.
+    """
     # An intervention-supported actual cause needs an intervention that prevented contact.
     contribution = record.get("causal_contribution", {})
     if not contribution.get("supported_actual_cause"):
@@ -602,6 +629,11 @@ def _actual_cause_violations(record: Mapping[str, Any]) -> list[str]:
 
 
 def _inevitability_violations(record: Mapping[str, Any]) -> list[str]:
+    """Reject unavoidable-contact (``t_inevitable <= t_uca``) claims of a planner actual cause.
+
+    Returns:
+        Violation message when unavoidable contact is mis-attributed.
+    """
     # If contact was already inevitable at/before the first unsafe action, no planner cause.
     # From the design doc: when t_inevitable <= t_uca the system must not assign a planner
     # action as the collision cause; contact was unavoidable under that model.

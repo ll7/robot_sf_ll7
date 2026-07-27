@@ -82,6 +82,8 @@ class SensitivityPreflightIssue:
 
 @dataclass(slots=True)
 class _SensitivityPreflightState:
+    """Mutable accumulator for preflight issues, grouped records, and coverage."""
+
     issues: list[SensitivityPreflightIssue]
     malformed: bool
     grouped: dict[str, list[Mapping[str, Any]]]
@@ -90,6 +92,7 @@ class _SensitivityPreflightState:
 
     @classmethod
     def empty(cls) -> _SensitivityPreflightState:
+        """Return a fresh state with no issues, records, or scenario-horizon coverage."""
         return cls(
             issues=[],
             malformed=False,
@@ -99,6 +102,7 @@ class _SensitivityPreflightState:
         )
 
     def add_issue(self, code: str, severity: str, message: str) -> None:
+        """Record a preflight issue and flag the run as malformed when applicable."""
         self.issues.append(SensitivityPreflightIssue(code, severity, message))
         if severity == SENSITIVITY_PREFLIGHT_MALFORMED:
             self.malformed = True
@@ -140,6 +144,11 @@ def _validate_preflight_inputs(
     weights: Mapping[str, float],
     baseline: Mapping[str, Mapping[str, float]],
 ) -> Sequence[Mapping[str, Any]]:
+    """Validate top-level preflight inputs and record malformed-input issues.
+
+    Returns:
+        The validated episode records, coerced to an empty sequence when malformed.
+    """
     if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
         state.add_issue(
             "records_not_sequence",
@@ -180,6 +189,7 @@ def _collect_preflight_records(
     scenario_key: str,
     horizon_key: str,
 ) -> None:
+    """Iterate records, collecting each valid one and flagging non-mapping rows."""
     for index, record in enumerate(records, start=1):
         if not isinstance(record, Mapping):
             state.add_issue(
@@ -210,6 +220,7 @@ def _collect_preflight_record(
     scenario_key: str,
     horizon_key: str,
 ) -> None:
+    """Validate one record and add it to the grouped planner coverage state."""
     planner = _preflight_planner(record, planner_key, fallback_planner_key)
     if planner in (None, ""):
         state.add_issue(
@@ -242,6 +253,11 @@ def _collect_preflight_record(
 def _preflight_planner(
     record: Mapping[str, Any], planner_key: str, fallback_planner_key: str
 ) -> Any:
+    """Resolve a record's planner identity from primary, fallback, and algo keys.
+
+    Returns:
+        The resolved planner identity, or None when no key provides one.
+    """
     planner = _get_nested(record, planner_key)
     if planner in (None, ""):
         planner = _get_nested(record, fallback_planner_key)
@@ -256,6 +272,7 @@ def _add_metric_preflight_issues(
     metrics: Mapping[str, Any],
     weights: Mapping[str, float],
 ) -> None:
+    """Flag missing, non-finite, or out-of-range required and optional SNQI terms."""
     for metric in REQUIRED_SENSITIVITY_METRICS:
         if metric not in metrics:
             state.add_issue(
@@ -300,6 +317,11 @@ def _add_global_preflight_issues(
     records: Sequence[Mapping[str, Any]],
     min_planners: int,
 ) -> dict[str, list[tuple[str, str]]]:
+    """Add global readiness issues and return each planner's missing cells.
+
+    Returns:
+        Each planner's missing scenario-horizon cells keyed by planner name.
+    """
     if not records:
         state.add_issue(
             "no_records",
@@ -339,6 +361,7 @@ def _add_pareto_preflight_issues(
     baseline: Mapping[str, Mapping[str, float]],
     min_planners: int,
 ) -> None:
+    """Verify Pareto-front prerequisites can be derived without error."""
     _add_normalization_preflight_issues(state, baseline)
     if len(state.grouped) < min_planners or state.malformed:
         return
@@ -371,6 +394,7 @@ def _add_pareto_preflight_issues(
 def _add_normalization_preflight_issues(
     state: _SensitivityPreflightState, baseline: Mapping[str, Mapping[str, float]]
 ) -> None:
+    """Validate finite, well-ordered med/p95 baseline stats for each count metric."""
     for metric in ("collisions", "near_misses", "force_exceed_events", "jerk_mean"):
         stats = baseline.get(metric)
         if not isinstance(stats, Mapping):
@@ -410,6 +434,11 @@ def _format_preflight_report(
     records: Sequence[Mapping[str, Any]],
     missing_cells: Mapping[str, Sequence[tuple[str, str]]],
 ) -> dict[str, Any]:
+    """Assemble the JSON-ready readiness report from the accumulated preflight state.
+
+    Returns:
+        The JSON-ready readiness report assembled from the preflight state.
+    """
     status = SENSITIVITY_PREFLIGHT_READY
     if state.malformed:
         status = SENSITIVITY_PREFLIGHT_MALFORMED
@@ -804,6 +833,11 @@ def _weight_family_classification(
     violations: Sequence[str],
     group_masses: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
+    """Build the JSON-ready admissible-or-stress-probe classification for a vector.
+
+    Returns:
+        The JSON-ready admissible-or-stress-probe classification for the vector.
+    """
     admissible = not violations
     return {
         "family_id": family["id"],
@@ -852,6 +886,11 @@ def _weight_family_sensitivity_summary(
 
 
 def _inversion_summary(variants: Sequence[Mapping[str, Any]]) -> dict[str, int | float]:
+    """Summarize pairwise-reversal totals across a collection of weight variants.
+
+    Returns:
+        Pairwise-reversal totals across the collection of weight variants.
+    """
     reversals = [int(variant["pairwise_reversal_count_vs_base"]) for variant in variants]
     return {
         "vector_count": len(variants),
@@ -1220,9 +1259,19 @@ def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: in
     y_ticks = _nice_ticks(y_min, y_max)
 
     def x_pos(value: float) -> float:
+        """Map a constraints-first data value to a horizontal SVG pixel coordinate.
+
+        Returns:
+            The horizontal SVG pixel coordinate for the data value.
+        """
         return margin_left + ((value - x_min) / (x_max - x_min)) * plot_width
 
     def y_pos(value: float) -> float:
+        """Map an SNQI data value to a vertical SVG pixel coordinate.
+
+        Returns:
+            The vertical SVG pixel coordinate for the data value.
+        """
         return margin_top + (1.0 - ((value - y_min) / (y_max - y_min))) * plot_height
 
     front = [
@@ -1373,6 +1422,11 @@ def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: in
 def _group_records(
     records: Iterable[Mapping[str, Any]], planner_key: str, fallback_planner_key: str
 ) -> dict[str, list[Mapping[str, Any]]]:
+    """Group episode records by resolved planner key, raising on a missing planner.
+
+    Returns:
+        Episode records grouped by resolved planner key.
+    """
     grouped: dict[str, list[Mapping[str, Any]]] = {}
     for index, record in enumerate(records, start=1):
         planner = _get_nested(record, planner_key)
@@ -1430,6 +1484,11 @@ def _planner_snqi_scores(
     weights: Mapping[str, float],
     baseline: Mapping[str, Mapping[str, float]],
 ) -> dict[str, float]:
+    """Compute the mean SNQI score for each planner's episodes.
+
+    Returns:
+        The mean SNQI score for each planner.
+    """
     scores: dict[str, float] = {}
     for planner, rows in grouped.items():
         episode_scores = [compute_snqi(_metrics(row), weights, baseline) for row in rows]
@@ -1438,6 +1497,11 @@ def _planner_snqi_scores(
 
 
 def _constraints_first_endpoint(rows: Sequence[Mapping[str, Any]]) -> dict[str, float | int]:
+    """Compute constraints-first rates and the composite score for a planner's episodes.
+
+    Returns:
+        The constraints-first rates and composite score for the planner's episodes.
+    """
     n = len(rows)
     if n == 0:
         raise ValueError("planner must have at least one episode")
@@ -1482,6 +1546,11 @@ def _planner_rows(
     snqi_order: Sequence[str],
     constraints_order: Sequence[str],
 ) -> list[dict[str, Any]]:
+    """Build per-planner rows combining SNQI and constraints-first ranks and front membership.
+
+    Returns:
+        A list of per-planner rows with ranks, scores, and front membership.
+    """
     snqi_ranks = {planner: index + 1 for index, planner in enumerate(snqi_order)}
     constraints_ranks = {planner: index + 1 for index, planner in enumerate(constraints_order)}
     rows: list[dict[str, Any]] = []
@@ -1504,6 +1573,7 @@ def _planner_rows(
 
 
 def _pareto_points(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return the non-dominated planner points on the constraints-first/SNQI front."""
     points: list[dict[str, Any]] = []
     for row in rows:
         x = float(row.get("constraints_first_score", 0.0))
@@ -1529,6 +1599,11 @@ def _pareto_points(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _variant_summary(base_order: Sequence[str], variant_order: Sequence[str]) -> dict[str, Any]:
+    """Summarize how a variant ranking diverges from the base ranking.
+
+    Returns:
+        A summary of how the variant ranking diverges from the base ranking.
+    """
     return {
         "order": list(variant_order),
         "winner_changed": bool(base_order and variant_order and base_order[0] != variant_order[0]),
@@ -1544,6 +1619,11 @@ def _variant_summary(base_order: Sequence[str], variant_order: Sequence[str]) ->
 def _rank_disagreement(
     snqi_order: Sequence[str], constraints_order: Sequence[str]
 ) -> dict[str, Any]:
+    """Summarize rank disagreement between the SNQI and constraints-first orders.
+
+    Returns:
+        A summary of rank disagreement between the two orders.
+    """
     return {
         "pairwise_reversal_count": _pairwise_reversal_count(snqi_order, constraints_order),
         "pairwise_disagreement_rate": _pairwise_disagreement_rate(snqi_order, constraints_order),
@@ -1558,6 +1638,11 @@ def _rank_disagreement(
 
 
 def _pairwise_reversal_count(left_order: Sequence[str], right_order: Sequence[str]) -> int:
+    """Count pairwise inversions between two planner rank orders.
+
+    Returns:
+        The number of pairwise inversions between the two rank orders.
+    """
     if set(left_order) != set(right_order):
         raise ValueError("rank orders must contain the same planners")
     right_pos = {planner: index for index, planner in enumerate(right_order)}
@@ -1570,6 +1655,11 @@ def _pairwise_reversal_count(left_order: Sequence[str], right_order: Sequence[st
 
 
 def _pairwise_disagreement_rate(left_order: Sequence[str], right_order: Sequence[str]) -> float:
+    """Express the pairwise reversal count as a fraction of all planner pairs.
+
+    Returns:
+        The pairwise reversal count as a fraction of all planner pairs.
+    """
     possible = len(left_order) * (len(left_order) - 1) / 2
     if possible <= 0:
         return 0.0
@@ -1581,6 +1671,11 @@ def _term_dominance(
     weights: Mapping[str, float],
     baseline: Mapping[str, Mapping[str, float]],
 ) -> list[dict[str, Any]]:
+    """Rank SNQI components by mean absolute weighted contribution across episodes.
+
+    Returns:
+        SNQI components ranked by mean absolute weighted contribution.
+    """
     contributions: dict[str, list[float]] = {name: [] for name in WEIGHT_NAMES}
     for rows in grouped.values():
         for row in rows:
@@ -1635,6 +1730,7 @@ def _term_dominance(
 
 
 def _write_planner_csv(path: Path, report: Mapping[str, Any]) -> None:
+    """Write the per-planner rank and score table to a CSV file."""
     headers = [
         "planner",
         "snqi_rank",
@@ -1690,6 +1786,11 @@ def _write_decision_disagreement_csv(path: Path, report: Mapping[str, Any]) -> N
 
 
 def _rank_order(scores: Mapping[str, float], *, higher_is_better: bool) -> list[str]:
+    """Sort planners into a deterministic rank order by score.
+
+    Returns:
+        The planners sorted into a deterministic rank order by score.
+    """
     return [
         key
         for key, _value in sorted(
@@ -1703,11 +1804,17 @@ def _rank_order(scores: Mapping[str, float], *, higher_is_better: bool) -> list[
 
 
 def _metrics(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return a record's metrics mapping, falling back to the record itself."""
     metrics = record.get("metrics")
     return metrics if isinstance(metrics, Mapping) else record
 
 
 def _metric_float(metrics: Mapping[str, Any], key: str, default: float) -> float:
+    """Read a finite float metric, coercing booleans and falling back to a default.
+
+    Returns:
+        The finite float metric value, or the default when unavailable.
+    """
     value = metrics.get(key, default)
     if isinstance(value, bool):
         return 1.0 if value else 0.0
@@ -1719,6 +1826,11 @@ def _metric_float(metrics: Mapping[str, Any], key: str, default: float) -> float
 
 
 def _is_finite_metric(value: Any) -> bool:
+    """Report whether a metric value is finite, treating booleans as finite.
+
+    Returns:
+        True when the metric value is finite, treating booleans as finite.
+    """
     if isinstance(value, bool):
         return True
     try:
@@ -1728,10 +1840,20 @@ def _is_finite_metric(value: Any) -> bool:
 
 
 def _is_unit_interval(value: Any) -> bool:
+    """Report whether a numeric value lies within the closed unit interval.
+
+    Returns:
+        True when the value lies within the closed unit interval.
+    """
     return 0.0 <= float(value) <= 1.0
 
 
 def _is_active_weight(value: Any) -> bool:
+    """Report whether a weight value is finite and nonzero.
+
+    Returns:
+        True when the weight value is finite and nonzero.
+    """
     try:
         weight = float(value)
     except (TypeError, ValueError):
@@ -1757,6 +1879,7 @@ def _is_active_optional_weight(weights: Any, metric: str) -> bool:
 
 
 def _mean(values: Iterable[float]) -> float:
+    """Return the mean of finite values, or 0.0 when none are finite."""
     clean = [float(value) for value in values if math.isfinite(float(value))]
     if not clean:
         return 0.0
@@ -1764,6 +1887,11 @@ def _mean(values: Iterable[float]) -> float:
 
 
 def _get_nested(record: Mapping[str, Any], dotted_key: str) -> Any:
+    """Resolve a dotted key path through nested mappings, or None if absent.
+
+    Returns:
+        The value at the dotted key path, or None if any step is absent.
+    """
     current: Any = record
     for part in dotted_key.split("."):
         if not isinstance(current, Mapping) or part not in current:
@@ -1773,6 +1901,7 @@ def _get_nested(record: Mapping[str, Any], dotted_key: str) -> Any:
 
 
 def _padded_domain(values: Sequence[float]) -> tuple[float, float]:
+    """Return a numeric domain padded around the data range for plotting."""
     low = min(values)
     high = max(values)
     if math.isclose(low, high):

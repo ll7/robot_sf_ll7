@@ -1,0 +1,956 @@
+{
+  "archive_path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
+  "archive_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+  "claim_boundary": "corrected_recertification_not_benchmark_evidence",
+  "correction": {
+    "accepted_archive_modified": false,
+    "simulator_collision_check": "planned path samples replayed through ContinuousOccupancy.is_obstacle_collision using simulator-normalized MapDefinition.obstacles_pysf segments; a runtime collision fails closed",
+    "summary": "Re-derive scenario_cert.v1 eligibility with continuous swept-envelope and runtime simulator-collision validation of the planned A* path (issue #6139).",
+    "swept_envelope_check": "planned path full-polyline clearance against the parsed obstacle union after robot-radius inflation; negative clearance fails closed"
+  },
+  "counts": {
+    "after_benchmark_eligibility": {
+      "eligible": 8,
+      "stress_only": 9
+    },
+    "after_classification": {
+      "hard_but_solvable": 4,
+      "knife_edge": 9,
+      "valid": 4
+    },
+    "before_after_status": {
+      "unchanged": 17
+    },
+    "record_count": 17
+  },
+  "issue": "6139",
+  "recertification_sha256": "7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0",
+  "reconstruction_fidelity": {
+    "fidelity_basis": "reconstructed shortest_path_length_m and minimum_static_clearance_m match the embedded certificate bit-for-bit at cells_per_meter=2.0",
+    "fidelity_mismatch_count": 0,
+    "fidelity_tolerance_m": 1e-06,
+    "max_minimum_static_clearance_abs_error_m": 0.0,
+    "max_shortest_path_length_abs_error_m": 0.0
+  },
+  "records": [
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.08720912058007535,
+        "shortest_path_length_m": 6.621320343559643,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 136,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 13,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_cross_trap_medium_34f8c43d3260",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.08720912058007535,
+        "shortest_path_length_m": 6.621320343559643
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.08720912058007535,
+        "embedded_shortest_path_length_m": 6.621320343559643,
+        "map_file": "maps/svg_maps/classic_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.08720912058007535,
+        "reconstructed_shortest_path_length_m": 6.621320343559643,
+        "robot_goal": [
+          8.037748561021171,
+          2.0872091205800753
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.177117147165591,
+          3.850140370040573
+        ]
+      },
+      "scenario_family": "classic_cross_trap_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.059389014426533215,
+        "shortest_path_length_m": 6.207106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 126,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 13,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_cross_trap_medium_7910406dad49",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.059389014426533215,
+        "shortest_path_length_m": 6.207106781186548
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.059389014426533215,
+        "embedded_shortest_path_length_m": 6.207106781186548,
+        "map_file": "maps/svg_maps/classic_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.059389014426533215,
+        "reconstructed_shortest_path_length_m": 6.207106781186548,
+        "robot_goal": [
+          8.219189192666223,
+          2.6526674358134716
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.059389014426533,
+          3.046890443426194
+        ]
+      },
+      "scenario_family": "classic_cross_trap_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.14466628881143295,
+        "shortest_path_length_m": 6.207106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 126,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 13,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_cross_trap_medium_e7cebb2b0b06",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.14466628881143295,
+        "shortest_path_length_m": 6.207106781186548
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.14466628881143295,
+        "embedded_shortest_path_length_m": 6.207106781186548,
+        "map_file": "maps/svg_maps/classic_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.14466628881143295,
+        "reconstructed_shortest_path_length_m": 6.207106781186548,
+        "robot_goal": [
+          8.016255615554028,
+          2.867763837240469
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.144666288811433,
+          3.4141758963020665
+        ]
+      },
+      "scenario_family": "classic_cross_trap_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.27493966316004137,
+        "shortest_path_length_m": 5.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 116,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 12,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_cross_trap_medium_fbbd96687d61",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.27493966316004137,
+        "shortest_path_length_m": 5.707106781186548
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.27493966316004137,
+        "embedded_shortest_path_length_m": 5.707106781186548,
+        "map_file": "maps/svg_maps/classic_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.27493966316004137,
+        "reconstructed_shortest_path_length_m": 5.707106781186548,
+        "robot_goal": [
+          8.15977724605582,
+          2.2749396631600414
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.6708028198335345,
+          2.9820414982542864
+        ]
+      },
+      "scenario_family": "classic_cross_trap_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.840606632329165,
+        "shortest_path_length_m": 5.0,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 101,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.75,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 11,
+          "validated": true,
+          "vertex_clearance_m": 0.75
+        }
+      },
+      "archive_id": "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.840606632329165,
+        "shortest_path_length_m": 5.0
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.840606632329165,
+        "embedded_shortest_path_length_m": 5.0,
+        "map_file": "maps/svg_maps/classic_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.840606632329165,
+        "reconstructed_shortest_path_length_m": 5.0,
+        "robot_goal": [
+          7.9982727551355675,
+          3.904336248136061
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.840606632329165,
+          3.9279250313290532
+        ]
+      },
+      "scenario_family": "classic_cross_trap_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.24485091617336763,
+        "shortest_path_length_m": 5.414213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 111,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 11,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_0405a12b9e1b",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.24485091617336763,
+        "shortest_path_length_m": 5.414213562373095
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.24485091617336763,
+        "embedded_shortest_path_length_m": 5.414213562373095,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.24485091617336763,
+        "reconstructed_shortest_path_length_m": 5.414213562373095,
+        "robot_goal": [
+          7.9146371486173095,
+          2.244850916173368
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.5234537637973338,
+          3.34286984332341
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.3212957342563223,
+        "shortest_path_length_m": 5.207106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 106,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 11,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_16c4a20e71aa",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.3212957342563223,
+        "shortest_path_length_m": 5.207106781186548
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.3212957342563223,
+        "embedded_shortest_path_length_m": 5.207106781186548,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.3212957342563223,
+        "reconstructed_shortest_path_length_m": 5.207106781186548,
+        "robot_goal": [
+          7.354588401942236,
+          2.4323191745306056
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.3212957342563225,
+          2.5920760556772313
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.0686558375253119,
+        "shortest_path_length_m": 6.914213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 141,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 14,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_24f49e195565",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.0686558375253119,
+        "shortest_path_length_m": 6.914213562373095
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.0686558375253119,
+        "embedded_shortest_path_length_m": 6.914213562373095,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.0686558375253119,
+        "reconstructed_shortest_path_length_m": 6.914213562373095,
+        "robot_goal": [
+          8.923517397013253,
+          2.912525816250799
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.068655837525312,
+          3.5945083160143483
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.09678231270025872,
+        "shortest_path_length_m": 5.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 116,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 12,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_3537f5d4f870",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.09678231270025872,
+        "shortest_path_length_m": 5.707106781186548
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.09678231270025872,
+        "embedded_shortest_path_length_m": 5.707106781186548,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.09678231270025872,
+        "reconstructed_shortest_path_length_m": 5.707106781186548,
+        "robot_goal": [
+          7.919266703742897,
+          2.1154625072530786
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.0967823127002587,
+          2.791736798529307
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.09191515415932994,
+        "shortest_path_length_m": 5.914213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 121,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 12,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_47bd4c497818",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.09191515415932994,
+        "shortest_path_length_m": 5.914213562373095
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.09191515415932994,
+        "embedded_shortest_path_length_m": 5.914213562373095,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.09191515415932994,
+        "reconstructed_shortest_path_length_m": 5.914213562373095,
+        "robot_goal": [
+          7.528195513231147,
+          2.28802730435194
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.09191515415933,
+          3.1580084040844754
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.10742221289619014,
+        "shortest_path_length_m": 6.621320343559643,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 136,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 13,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_4de6bcf99283",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.10742221289619014,
+        "shortest_path_length_m": 6.621320343559643
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.10742221289619014,
+        "embedded_shortest_path_length_m": 6.621320343559643,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.10742221289619014,
+        "reconstructed_shortest_path_length_m": 6.621320343559643,
+        "robot_goal": [
+          8.182390249303246,
+          2.4461885277281947
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.10742221289619,
+          3.844189273297793
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.1874712993367873,
+        "shortest_path_length_m": 6.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 136,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 14,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_58a4877312cc",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "hard_but_solvable",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.1874712993367873,
+        "shortest_path_length_m": 6.707106781186548
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.1874712993367873,
+        "embedded_shortest_path_length_m": 6.707106781186548,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.1874712993367873,
+        "reconstructed_shortest_path_length_m": 6.707106781186548,
+        "robot_goal": [
+          8.55737549312796,
+          2.81704114013526
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.480770357015124,
+          2.1874712993367873
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.769333883467695,
+        "shortest_path_length_m": 6.0,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 121,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.75,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 13,
+          "validated": true,
+          "vertex_clearance_m": 0.75
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_5b9f237a8aee",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.769333883467695,
+        "shortest_path_length_m": 6.0
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.769333883467695,
+        "embedded_shortest_path_length_m": 6.0,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.769333883467695,
+        "reconstructed_shortest_path_length_m": 6.0,
+        "robot_goal": [
+          8.73751244936059,
+          3.0205606237042675
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.769333883467695,
+          3.006127457779855
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.5191150388984573,
+        "shortest_path_length_m": 5.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 116,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.75,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 12,
+          "validated": true,
+          "vertex_clearance_m": 0.75
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_d8b09e0e988a",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.5191150388984573,
+        "shortest_path_length_m": 5.707106781186548
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.5191150388984573,
+        "embedded_shortest_path_length_m": 5.707106781186548,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.5191150388984573,
+        "reconstructed_shortest_path_length_m": 5.707106781186548,
+        "robot_goal": [
+          8.166972807633382,
+          3.1814852104103273
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.9775557486577835,
+          2.519115038898457
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.05622294126477012,
+        "shortest_path_length_m": 7.121320343559643,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 146,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 14,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_e3856ba0906d",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.05622294126477012,
+        "shortest_path_length_m": 7.121320343559643
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.05622294126477012,
+        "embedded_shortest_path_length_m": 7.121320343559643,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.05622294126477012,
+        "reconstructed_shortest_path_length_m": 7.121320343559643,
+        "robot_goal": [
+          8.938260006550887,
+          3.695893052872229
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.3269919437473057,
+          2.05622294126477
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.1050352966667889,
+        "shortest_path_length_m": 6.914213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 141,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 14,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_f32fc5117cfa",
+      "before": {
+        "benchmark_eligibility": "stress_only",
+        "classification": "knife_edge",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.1050352966667889,
+        "shortest_path_length_m": 6.914213562373095
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.1050352966667889,
+        "embedded_shortest_path_length_m": 6.914213562373095,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.1050352966667889,
+        "reconstructed_shortest_path_length_m": 6.914213562373095,
+        "robot_goal": [
+          8.936501494876119,
+          2.5090854722178975
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.105035296666789,
+          3.650104960066146
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    },
+    {
+      "after": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.35408940448534776,
+        "shortest_path_length_m": 5.414213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 111,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
+        "swept_envelope": {
+          "clearance_m": 0.25,
+          "clipped_vertex_count": 0,
+          "clips_obstacle": false,
+          "planned_waypoint_count": 11,
+          "validated": true,
+          "vertex_clearance_m": 0.25
+        }
+      },
+      "archive_id": "issue5305_classic_group_crossing_medium_fc6bf8300e51",
+      "before": {
+        "benchmark_eligibility": "eligible",
+        "classification": "valid",
+        "inflated_collision_free_path": true,
+        "minimum_static_clearance_m": 0.35408940448534776,
+        "shortest_path_length_m": 5.414213562373095
+      },
+      "reconstruction": {
+        "cells_per_meter": 2.0,
+        "clearance_abs_error_m": 0.0,
+        "embedded_minimum_static_clearance_m": 0.35408940448534776,
+        "embedded_shortest_path_length_m": 5.414213562373095,
+        "map_file": "maps/svg_maps/classic_group_crossing.svg",
+        "path_length_abs_error_m": 0.0,
+        "reconstructed_minimum_static_clearance_m": 0.35408940448534776,
+        "reconstructed_shortest_path_length_m": 5.414213562373095,
+        "robot_goal": [
+          7.653211345157571,
+          2.3540894044853475
+        ],
+        "robot_radius_m": 1.0,
+        "robot_start": [
+          2.8776101080979957,
+          3.0776990526486836
+        ]
+      },
+      "scenario_family": "classic_group_crossing_medium",
+      "status": "unchanged"
+    }
+  ],
+  "schema_version": "issue_6139_recertification.v1"
+}

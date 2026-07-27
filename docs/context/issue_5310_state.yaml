@@ -1,0 +1,26 @@
+# Issue #5310 state tracking: topology-parallel NMPC prototype (#6152)
+schema: issue_state.v1
+issue: 5310
+title: "planner: topology-driven parallel NMPC with shared solver objective"
+status: in_progress
+children:
+  - issue: 6152
+    title: "planner: implement the bounded offline topology-parallel NMPC prototype for #5310"
+    status: implemented
+    branch: orchestrator/ll7-lease-6152-e44209354a1b
+    changed_files:
+      - robot_sf/planner/nmpc_social.py
+      - robot_sf/planner/topology_parallel_nmpc.py
+      - robot_sf/planner/__init__.py
+      - robot_sf/benchmark/policy_builders.py
+      - robot_sf/benchmark/algorithm_metadata.py
+      - robot_sf/benchmark/algorithm_readiness.py
+      - configs/algos/issue_5310_topology_parallel_nmpc.yaml
+      - tests/planner/test_nmpc_social.py
+      - tests/planner/test_topology_parallel_nmpc.py
+      - CHANGELOG.md
+      - docs/context/issue_5310_state.yaml
+limitations:
+  - "testing-only/experimental: not benchmark evidence"
+  - "offline only: 2.0s control_period_s does not meet 100ms real-time gate"
+  - "no learned prediction, SIPP, DPCBF, or additional objective terms"

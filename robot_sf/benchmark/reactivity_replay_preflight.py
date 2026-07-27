@@ -571,6 +571,11 @@ def _resolve_arm_seeds(packet: dict[str, Any]) -> dict[str, tuple[int, ...]]:
     """
 
     def _as_seed_tuple(value: Any, where: str) -> tuple[int, ...]:
+        """Validate a seed list and return it as a tuple of integers, raising on bad input.
+
+        Returns:
+            The validated seed list as a tuple of integers.
+        """
         if not isinstance(value, list) or not all(
             isinstance(s, int) and not isinstance(s, bool) for s in value
         ):

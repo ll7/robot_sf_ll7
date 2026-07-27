@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "failure_mechanism_classification.schema.v1.json",
+  "$id": "https://robot-sf.local/schemas/failure_mechanism_classification.schema.v1.json",
   "title": "Failure Mechanism Classification v1",
   "type": "object",
   "required": [
@@ -167,6 +167,9 @@
       "items": {
         "type": "string"
       }
+    },
+    "taxonomy_crosswalk": {
+      "$ref": "https://robot-sf.local/schemas/failure_mechanism_taxonomy_crosswalk.schema.v1.json"
     }
   }
 }

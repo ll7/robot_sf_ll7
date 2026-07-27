@@ -58,3 +58,36 @@ For a real import, keep the source data outside Git unless its licence and repos
 tracking it. The checker accepts only `exploratory_only`: importing geometry alone does not establish
 benchmark evidence. Commit the small YAML map and provenance manifest only after the source,
 annotations, and scenario use have been reviewed.
+
+## Reviewed real-location example
+
+The repository includes a small OpenStreetMap extract from the Otto von Guericke University (OVGU)
+campus under the Open Data Commons Open Database License (ODbL) v1.0. It retains four public source
+features and adds three clearly marked Robot SF annotations: a short, clearance-certified walkway
+route plus its start and goal zones.
+
+- input and attribution: `maps/imported/ovgu_campus_walk.geojson` and
+  `maps/imported/ovgu_campus_walk.provenance.yaml`;
+- deterministic converted map: `maps/imported/ovgu_campus_walk.yaml`;
+- runnable scenario: `configs/scenarios/single/ovgu_campus_walk.yaml`.
+
+Reproduce the checked conversion:
+
+```bash
+uv run python scripts/validation/check_geojson_import.py \
+  maps/imported/ovgu_campus_walk.geojson \
+  maps/imported/ovgu_campus_walk.provenance.yaml \
+  /tmp/ovgu_campus_walk.yaml
+```
+
+Run the single-seed CPU smoke without video at the scenario's configured 80-step horizon:
+
+```bash
+uv run robot_sf_bench run \
+  --matrix configs/scenarios/single/ovgu_campus_walk.yaml \
+  --out output/benchmarks/ovgu_campus_walk_smoke/episodes.jsonl \
+  --algo goal --workers 1 --horizon 80 --no-video --no-resume
+```
+
+This is exploratory smoke evidence that a real extract converts, loads, and executes. It is not a
+benchmark result or a claim about planner performance at the location.

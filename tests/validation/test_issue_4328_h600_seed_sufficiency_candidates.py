@@ -183,6 +183,9 @@ def test_run_candidate_closure_fails_closed_for_named_roots(tmp_path: Path) -> N
     # Durable artifacts must be written even in the blocked case.
     assert (evidence_dir / "summary.json").is_file()
     assert (evidence_dir / "README.md").is_file()
+    assert (evidence_dir / "README.md").read_text(encoding="utf-8").splitlines()[0] == (
+        "<!-- AI-GENERATED (robot_sf#4328) - NEEDS-REVIEW -->"
+    )
     on_disk = json.loads((evidence_dir / "summary.json").read_text(encoding="utf-8"))
     assert on_disk["schema_version"] == "issue_4328_h600_candidate_closure.v1"
     # The analyzer must not have run because no candidate qualified.

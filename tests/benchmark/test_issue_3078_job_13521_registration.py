@@ -64,13 +64,39 @@ def test_heldout_table_contains_all_eighteen_real_rows() -> None:
         rows = list(csv.DictReader(handle))
     with (BUNDLE / "transfer_delta.csv").open(newline="", encoding="utf-8") as handle:
         deltas = list(csv.DictReader(handle))
+    with (BUNDLE / "baseline_table.csv").open(newline="", encoding="utf-8") as handle:
+        baseline_rows = list(csv.DictReader(handle))
 
     assert len(rows) == 6
     assert sum(int(row["episode_count"]) for row in rows) == 18
     assert all(int(row["eligible_episode_count"]) == 3 for row in rows)
     assert {row["planner"] for row in rows} == {"goal", "social_force", "orca"}
+    assert len(baseline_rows) == 0
     assert all(row["claim_eligible"] == "false" for row in deltas)
+    assert all(row["benchmark_set_mean_snqi"] == "" for row in deltas)
     assert all(row["transfer_delta_snqi"] == "" for row in deltas)
+
+
+def test_no_eligible_comparator_receipt_is_recorded() -> None:
+    """Verify that a no_eligible_comparator receipt exists and documents eligibility audit."""
+    receipt = _load_json("no_eligible_comparator.json")
+    readiness_receipt = json.loads(
+        (
+            REPO_ROOT
+            / "docs/context/evidence/issue_3078_package_a_readiness/no_eligible_comparator.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert receipt["status"] == "no_eligible_comparator"
+    assert readiness_receipt["status"] == "no_eligible_comparator"
+    assert receipt["validated_criteria"]["job_id"] == 13521
+    assert receipt["validated_criteria"]["source_episode_store_sha256"] == (
+        "46466cd3db27d6f8a10181a8ec7c4676b24179bb97902aa8eec686d09a53942b"
+    )
+    assert receipt["validated_criteria"]["baseline_table_empty"] is True
+    assert receipt["validated_criteria"]["transfer_delta_benchmark_set_snqi_empty"] is True
+    assert receipt["validated_criteria"]["transfer_delta_snqi_empty"] is True
+    assert receipt["comparator_audit"]["matching_benchmark_set_campaign_found"] is False
 
 
 def test_registration_preserves_private_row_store_checksum_without_committing_rows() -> None:

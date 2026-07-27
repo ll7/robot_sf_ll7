@@ -129,7 +129,9 @@ def build_adapter_policy(  # noqa: C901
         _policy._planner_bind_env = adapter.bind_env
     if hasattr(adapter, "close"):
         _policy._planner_close = adapter.close
-    if hasattr(adapter, "diagnostics") or cbf_filter is not None:
+    adapter_diagnostics = getattr(adapter, "diagnostics", None)
+    foresight_diagnostics = getattr(adapter, "foresight_diagnostics", None)
+    if callable(adapter_diagnostics) or callable(foresight_diagnostics) or cbf_filter is not None:
 
         def _planner_stats() -> dict[str, Any]:
             """Expose adapter diagnostics for episode metadata.
@@ -137,11 +139,15 @@ def build_adapter_policy(  # noqa: C901
             Returns:
                 dict[str, Any]: Adapter diagnostic payload.
             """
-            diagnostics = adapter.diagnostics() if hasattr(adapter, "diagnostics") else {}
+            diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
+            runtime = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+            foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
+            if isinstance(foresight, dict):
+                runtime.update(foresight)
             if cbf_filter is None:
-                return diagnostics
+                return runtime
             return {
-                **diagnostics,
+                **runtime,
                 "cbf_safety_filter": cbf_filter.diagnostics(),
             }
 

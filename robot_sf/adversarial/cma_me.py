@@ -87,6 +87,7 @@ def default_optimizer_factory(
         x0: list[float],
         seed: int,
     ) -> CellOptimizer:
+        """Construct a per-cell CMA-ES optimizer from the caller's bounds, seed, and settings."""
         return _CmaCellOptimizer(
             lower=lower,
             upper=upper,

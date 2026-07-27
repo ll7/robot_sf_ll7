@@ -892,7 +892,15 @@ def test_preflight_excludes_negative_start_delay_result(tmp_path: Path) -> None:
 def test_preflight_certifies_bounded_occluder_timing_offset(
     tmp_path: Path,
 ) -> None:
-    """Occluder timing should certify only with explicit occlusion fixture metadata."""
+    """Occluder timing metadata is collected even when the route is infeasible.
+
+    The occluder-timing preflight mechanism (perturbation summary, occlusion fixture
+    contract) is independent of the certification gate, so it remains populated. The
+    underlying ``francis2023_blind_corner`` route is now correctly rejected by the
+    certifier because its continuous swept envelope clips the inner corner
+    (issue #6139): the variant's ``validity_status`` is ``invalid`` and it is excluded
+    from success evidence, rather than silently accepted as it was pre-correction.
+    """
     manifest_path = _write_occluder_timing_manifest(tmp_path / "perturbations.yaml")
 
     report = preflight_perturbation_manifest(manifest_path)
@@ -901,7 +909,14 @@ def test_preflight_certifies_bounded_occluder_timing_offset(
         "issue_2756_occluded_emergence_noop",
         "issue_2756_occluded_emergence_occluder_timing_offset",
     ]
-    assert {result.validity_status for result in report.results} == {"valid"}
+    # Issue #6139: the blind-corner A* path clips the inner corner, so the corrected
+    # certifier excludes both variants instead of certifying an infeasible route.
+    assert {result.validity_status for result in report.results} == {"invalid"}
+    assert {result.benchmark_evidence_status for result in report.results} == {
+        "excluded_from_success_evidence"
+    }
+    for result in report.results:
+        assert any("swept_envelope_clips_obstacle" in reason for reason in result.reasons)
     result = report.results[1]
     assert result.family == "occluder_timing_offset"
     assert result.perturbation_summary["dt_s"] == pytest.approx(0.5)
@@ -1068,7 +1083,14 @@ def test_preflight_excludes_negative_occluder_timing_result(tmp_path: Path) -> N
 
 
 def test_tracked_occluder_timing_manifest_preflights() -> None:
-    """The checked-in #3369 pilot manifest should remain schema-valid and preflight-clean."""
+    """The checked-in #3369 pilot manifest remains schema-valid after the #6139 fix.
+
+    The manifest itself is unchanged, but issue #6139 repairs the certifier so the
+    ``francis2023_blind_corner`` route is correctly rejected: its continuous swept
+    envelope clips the inner corner, so both preflight variants are now ``invalid``
+    and excluded from success evidence rather than silently accepted. The preflight
+    still parses the manifest and reports the occluder-timing perturbation summary.
+    """
     report = preflight_perturbation_manifest(
         "configs/scenarios/perturbations/issue_3369_occluder_timing_pilot_v1.yaml"
     )
@@ -1077,7 +1099,13 @@ def test_tracked_occluder_timing_manifest_preflights() -> None:
         "issue_2756_occluded_emergence_noop",
         "issue_2756_occluded_emergence_occluder_timing_h1_p050",
     ]
-    assert {result.validity_status for result in report.results} == {"valid"}
+    # Issue #6139: corrected swept-envelope validation rejects the blind-corner route.
+    assert {result.validity_status for result in report.results} == {"invalid"}
+    assert {result.benchmark_evidence_status for result in report.results} == {
+        "excluded_from_success_evidence"
+    }
+    for result in report.results:
+        assert any("swept_envelope_clips_obstacle" in reason for reason in result.reasons)
     assert report.results[1].perturbation_summary["updated_start_delay_s"] == pytest.approx(0.5)
 
 
@@ -1608,8 +1636,18 @@ def test_materialize_pilot_matrix_writes_start_delay_overrides(tmp_path: Path) -
     assert delays["h3"] == pytest.approx(0.5)
 
 
-def test_materialize_pilot_matrix_writes_occluder_timing_overrides(tmp_path: Path) -> None:
-    """Occluder-timing variants should update only the emerging pedestrian delay."""
+def test_materialize_pilot_matrix_excludes_occluder_timing_after_corner_cut_repair(
+    tmp_path: Path,
+) -> None:
+    """Occluder-timing variants on the blind-corner route are excluded after #6139.
+
+    Issue #6139 repairs the certifier so the ``francis2023_blind_corner`` route is
+    rejected: its continuous swept envelope clips the inner corner. Both occluder-timing
+    variants therefore fail preflight certification and are excluded from the
+    materialized pilot matrix instead of being silently accepted. The
+    override-writing mechanism itself is covered by the other materialization tests
+    that use routes which remain certifiable.
+    """
     manifest_path = _write_occluder_timing_manifest(tmp_path / "perturbations.yaml")
 
     materialized = materialize_perturbation_pilot_matrix(
@@ -1618,29 +1656,18 @@ def test_materialize_pilot_matrix_writes_occluder_timing_overrides(tmp_path: Pat
         seed_limit=1,
     )
 
-    assert materialized.included_variants == (
+    assert materialized.included_variants == ()
+    assert materialized.excluded_variants == (
         "issue_2756_occluded_emergence_noop",
         "issue_2756_occluded_emergence_occluder_timing_offset",
     )
-    matrix_path = Path(materialized.scenario_matrix_path)
-    generated_scenarios = load_scenarios(matrix_path)
-    offset_scenario = generated_scenarios[1]
-    overrides = {entry["id"]: entry for entry in offset_scenario["single_pedestrians"]}
-    assert overrides["h1"]["metadata"]["role"] == "emerging_ped"
-    assert overrides["h1"]["start_delay_s"] == pytest.approx(0.5)
-    metadata = offset_scenario["metadata"]["scenario_perturbation"]
-    assert metadata["family"] == "occluder_timing_offset"
-    assert metadata["perturbation_summary"]["occlusion"]["selected_pedestrian_role"] == (
-        "emerging_ped"
+    summary = json.loads(Path(materialized.summary_path).read_text(encoding="utf-8"))
+    assert summary["variant_count"] == 0
+    # No scenario matrix scenarios are materialized for excluded variants.
+    matrix_payload = yaml.safe_load(
+        Path(materialized.scenario_matrix_path).read_text(encoding="utf-8")
     )
-
-    offset_config = build_robot_config_from_scenario(
-        offset_scenario,
-        scenario_path=matrix_path,
-    )
-    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
-    delays = {ped.id: ped.start_delay_s for ped in offset_map.single_pedestrians}
-    assert delays["h1"] == pytest.approx(0.5)
+    assert matrix_payload["scenarios"] == []
 
 
 def test_materialize_pilot_matrix_start_delay_selector_all(tmp_path: Path) -> None:

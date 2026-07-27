@@ -2,13 +2,50 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 ENV_TMP_OVERRIDE = "ROBOT_SF_MULTI_EXTRACTOR_TMP"
 DEFAULT_TMP_ROOT = Path("tmp/multi_extractor_training")
+RUN_TIMESTAMP_PATTERN = re.compile(r"\d{8}-\d{6}")
+
+
+def _normalize_artifact_component(component: str, *, parameter_name: str) -> str:
+    """Return a separator-free component containing only ``[A-Za-z0-9._-]``."""
+
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", component.strip()).strip("._-")
+    if not normalized:
+        raise ValueError(f"{parameter_name} must contain at least one ASCII alphanumeric character")
+    return normalized
+
+
+def _normalize_extractor_name(extractor_name: str) -> str:
+    """Return a separator-free ASCII extractor directory name."""
+
+    return _normalize_artifact_component(extractor_name, parameter_name="extractor_name")
+
+
+def validate_unique_extractor_names(extractor_names: Iterable[str]) -> None:
+    """Reject names that collide after directory normalization or case folding."""
+
+    names_by_directory: dict[str, str] = {}
+    for extractor_name in extractor_names:
+        normalized = _normalize_extractor_name(extractor_name)
+        directory_key = normalized.casefold()
+        first_name = names_by_directory.get(directory_key)
+        if first_name is not None:
+            raise ValueError(
+                "Extractor names collide after normalization/case folding: "
+                f"{first_name!r} and {extractor_name!r} -> {normalized!r}"
+            )
+        names_by_directory[directory_key] = extractor_name
 
 
 def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:
@@ -24,7 +61,7 @@ def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:
 def make_run_directory(
     run_id: str, *, env: dict[str, str] | None = None, timestamp: str | None = None
 ) -> Path:
-    """Create and return the timestamped directory for a training run.
+    """Create a timestamped training-run directory with a safe run-id component.
 
     Returns:
         Path: The created run directory path.
@@ -33,11 +70,14 @@ def make_run_directory(
     if not run_id:
         raise ValueError("run_id must be a non-empty string")
 
+    safe_run_id = _normalize_artifact_component(run_id, parameter_name="run_id")
+    stamp = timestamp if timestamp is not None else datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    if RUN_TIMESTAMP_PATTERN.fullmatch(stamp) is None:
+        raise ValueError("timestamp must match YYYYMMDD-HHMMSS")
+
     base_root = resolve_base_output_root(env)
     base_root.mkdir(parents=True, exist_ok=True)
-
-    stamp = timestamp or datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    run_dir = base_root / f"{stamp}-{run_id}"
+    run_dir = base_root / f"{stamp}-{safe_run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     (run_dir / "extractors").mkdir(exist_ok=True)
@@ -45,16 +85,13 @@ def make_run_directory(
 
 
 def make_extractor_directory(run_dir: Path, extractor_name: str) -> Path:
-    """Ensure the per-extractor subdirectory exists and return it.
+    """Ensure the normalized per-extractor subdirectory exists and return it.
 
     Returns:
         Path: The path to the extractor-specific directory.
     """
 
-    if not extractor_name:
-        raise ValueError("extractor_name must be provided")
-
-    extractor_dir = run_dir / "extractors" / extractor_name
+    extractor_dir = run_dir / "extractors" / _normalize_extractor_name(extractor_name)
     extractor_dir.mkdir(parents=True, exist_ok=True)
     return extractor_dir
 

@@ -241,6 +241,8 @@ class StructuredObservationStep:
             raise OpenDreamerAdapterError("rays must be finite floats")
         if not self.rays_available and self.rays.size != 0:
             raise OpenDreamerAdapterError("rays_available=False requires an empty rays vector")
+        if self.rays_available and self.rays.size == 0:
+            raise OpenDreamerAdapterError("rays_available=True requires at least one ray value")
 
         drive_state = np.array(self.drive_state, copy=True)
         rays = np.array(self.rays, copy=True)

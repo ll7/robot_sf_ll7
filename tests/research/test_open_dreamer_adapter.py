@@ -48,6 +48,7 @@ from robot_sf.research.open_dreamer_adapter import (
     ActionBounds,
     OpenDreamerAdapterError,
     StructuredActionStep,
+    StructuredObservationStep,
     adapt_episode,
     adapt_episodes,
     map_action_to_velocity,
@@ -216,6 +217,16 @@ def test_rays_group_is_unavailable_when_observation_has_no_ray_key() -> None:
         assert step.rays_available is False
         assert step.rays.size == 0
     assert structured.rays_available is False
+
+
+def test_structured_observation_step_rejects_available_empty_rays() -> None:
+    """A directly constructed available rays group must not represent a zero-width sensor."""
+    with pytest.raises(OpenDreamerAdapterError, match="at least one ray value"):
+        StructuredObservationStep(
+            drive_state=np.zeros(len(DRIVE_STATE_LAYOUT), dtype=float),
+            rays=np.asarray([], dtype=float),
+            rays_available=True,
+        )
 
 
 def test_rays_group_is_populated_when_observation_carries_ray_key() -> None:

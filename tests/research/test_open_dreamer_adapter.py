@@ -583,6 +583,25 @@ def test_to_dict_rejects_non_finite_preserved_raw_values() -> None:
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS).to_dict()
 
 
+def test_to_dict_rejects_cyclic_preserved_raw_values() -> None:
+    """Serialization reports cyclic programmatic payloads through the adapter error boundary."""
+    cyclic_payload: dict[str, object] = {}
+    cyclic_payload["self"] = cyclic_payload
+    episode = _make_episode(
+        step_count=1,
+        observations=(
+            {
+                "robot": _full_robot_state(0),
+                "pedestrians": [],
+                "cyclic_payload": cyclic_payload,
+            },
+        ),
+    )
+
+    with pytest.raises(OpenDreamerAdapterError, match="raw_observations.*cyclic raw container"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS).to_dict()
+
+
 def test_structured_observation_groups_are_immutable_after_validation() -> None:
     """Derived arrays cannot be mutated into an invalid state after adaptation."""
     structured = adapt_episode(

@@ -73,7 +73,7 @@ scenario-level and scenario-seed split ownership rules.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from numbers import Real
 from typing import Any
@@ -1108,20 +1108,28 @@ def _validate_episode_per_step_containers(episode: RLTrajectoryEpisode) -> None:
             )
 
 
-def _json_safe_value(value: Any, field_name: str) -> Any:
+def _json_safe_value(
+    value: Any,
+    field_name: str,
+    _ancestor_ids: set[int] | None = None,
+) -> Any:
     """Return a recursively JSON-safe copy of an accepted raw v1 value.
 
     Args:
         value: Raw v1 value to serialize.
         field_name: Field path used in fail-closed error messages.
+        _ancestor_ids: Container identities on the active serialization path. This internal value
+            prevents a programmatic v1 producer from escaping the adapter error boundary with a
+            Python recursion error through a cyclic raw payload.
 
     Returns:
         A JSON-safe scalar, list, or string-keyed mapping.
 
     Raises:
-        OpenDreamerAdapterError: If a mapping key is not a string or a value has no supported
-            JSON representation.
+        OpenDreamerAdapterError: If a mapping key is not a string, a raw container is cyclic, or a
+            value has no supported JSON representation.
     """
+    ancestor_ids = set() if _ancestor_ids is None else _ancestor_ids
     if value is None or isinstance(value, str | bool | int):
         return value
     if isinstance(value, float):
@@ -1131,23 +1139,61 @@ def _json_safe_value(value: Any, field_name: str) -> Any:
     if isinstance(value, np.generic):
         return _json_safe_numpy_scalar(value, field_name)
     if isinstance(value, np.ndarray):
-        return _json_safe_value(value.tolist(), field_name)
+        return _json_safe_container(
+            value,
+            field_name,
+            ancestor_ids,
+            lambda: _json_safe_value(value.tolist(), field_name, ancestor_ids),
+        )
     if isinstance(value, Mapping):
-        out: dict[str, Any] = {}
-        for key, item in value.items():
+        for key in value:
             if not isinstance(key, str):
                 raise OpenDreamerAdapterError(
                     f"{field_name} mapping keys must be strings for JSON serialization, got {key!r}"
                 )
-            out[key] = _json_safe_value(item, f"{field_name}.{key}")
-        return out
+        return _json_safe_container(
+            value,
+            field_name,
+            ancestor_ids,
+            lambda: {
+                key: _json_safe_value(item, f"{field_name}.{key}", ancestor_ids)
+                for key, item in value.items()
+            },
+        )
     if isinstance(value, Sequence) and not isinstance(value, str | bytes):
-        return [
-            _json_safe_value(item, f"{field_name}[{index}]") for index, item in enumerate(value)
-        ]
+        return _json_safe_container(
+            value,
+            field_name,
+            ancestor_ids,
+            lambda: [
+                _json_safe_value(item, f"{field_name}[{index}]", ancestor_ids)
+                for index, item in enumerate(value)
+            ],
+        )
     raise OpenDreamerAdapterError(
         f"{field_name} contains unsupported JSON value {type(value).__name__}"
     )
+
+
+def _json_safe_container(
+    value: Any,
+    field_name: str,
+    ancestor_ids: set[int],
+    serialize: Callable[[], Any],
+) -> Any:
+    """Serialize one nested container while rejecting cycles on the active traversal path.
+
+    Returns:
+        The JSON-safe value produced by ``serialize``.
+    """
+    value_id = id(value)
+    if value_id in ancestor_ids:
+        raise OpenDreamerAdapterError(f"{field_name} contains a cyclic raw container")
+    ancestor_ids.add(value_id)
+    try:
+        return serialize()
+    finally:
+        ancestor_ids.remove(value_id)
 
 
 def _json_safe_numpy_scalar(value: np.generic, field_name: str) -> Any:

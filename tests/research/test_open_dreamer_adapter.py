@@ -230,6 +230,19 @@ def test_structured_observation_step_rejects_available_empty_rays() -> None:
         )
 
 
+@pytest.mark.parametrize("rays_available", [1, "true", np.bool_(True)])
+def test_structured_observation_step_rejects_non_boolean_ray_availability(
+    rays_available: object,
+) -> None:
+    """Availability metadata must be a real boolean, not a truthy coercible value."""
+    with pytest.raises(OpenDreamerAdapterError, match="rays_available must be a boolean"):
+        StructuredObservationStep(
+            drive_state=np.zeros(len(DRIVE_STATE_LAYOUT), dtype=float),
+            rays=np.asarray([1.0], dtype=float),
+            rays_available=rays_available,  # type: ignore[arg-type]
+        )
+
+
 def test_rays_group_is_populated_when_observation_carries_ray_key() -> None:
     """A recognized ray-like key populates the finite rays group and flips episode availability."""
     observations = tuple(_full_observation(step, with_rays=True) for step in range(2))

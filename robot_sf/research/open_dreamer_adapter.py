@@ -228,6 +228,10 @@ class StructuredObservationStep:
 
     def __post_init__(self) -> None:
         """Validate the finite-output contract for both groups."""
+        if not isinstance(self.rays_available, bool):
+            raise OpenDreamerAdapterError(
+                f"rays_available must be a boolean, got {self.rays_available!r}"
+            )
         if self.drive_state.ndim != 1 or self.drive_state.shape[0] != len(DRIVE_STATE_LAYOUT):
             raise OpenDreamerAdapterError(
                 "drive_state must be a 1D vector of length "

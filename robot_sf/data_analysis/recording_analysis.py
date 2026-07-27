@@ -2,13 +2,18 @@
 Anaylsis of the data recorded from the simulation.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import matplotlib.pyplot as plt
 import numpy as np
 from loguru import logger
 from scipy.stats import gaussian_kde
 
-from robot_sf.nav.map_config import MapDefinition
-from robot_sf.render.sim_view import VisualizableSimState
+if TYPE_CHECKING:
+    from robot_sf.nav.map_config import MapDefinition
+    from robot_sf.render.sim_view import VisualizableSimState
 
 
 def extract_pedestrian_positions(states: list[VisualizableSimState]) -> np.ndarray:

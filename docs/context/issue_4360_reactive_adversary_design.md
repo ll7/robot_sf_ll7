@@ -24,8 +24,10 @@ default and changes nothing about existing pedestrian models.
 - `robot_sf/ped_npc/residual_adversary.py`:
   - `ResidualAdversaryConfig` — validated, opt-in config (`is_active=False`
     default) with every hard bound.
-  - `ResidualAdversaryPolicy` — the `Protocol` that future adversaries
-    (CMA-ES/MCTS, PPO) implement; `propose_residual(observation) -> (N, 2)`.
+  - `ResidualAdversaryPolicy` — the `Protocol` that future Covariance Matrix
+    Adaptation Evolution Strategy (CMA-ES), Monte Carlo Tree Search (MCTS), or
+    Proximal Policy Optimization (PPO) adversaries implement;
+    `propose_residual(observation) -> (N, 2)`.
   - `ScriptedPullResidualAdversaryPolicy` — a deterministic, bounded example
     policy for runtime wiring and tests. It is NOT the search or learned
     adversary.

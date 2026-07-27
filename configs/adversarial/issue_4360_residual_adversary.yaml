@@ -3,9 +3,10 @@
 # Capability-only slice: enabling this perturbs (does NOT replace) the nominal
 # Social Force pedestrian behavior at a 0.5 s macro-action cadence via a bounded
 # residual acceleration. It makes no benchmark, planner-ranking, safety, or
-# paper-facing claim and defines no stress-case metric. The CMA-ES/MCTS
-# search-baseline adversary and any PPO/learned adversary are deferred slices
-# that will implement the same ResidualAdversaryPolicy interface.
+# paper-facing claim and defines no stress-case metric. Covariance Matrix
+# Adaptation Evolution Strategy (CMA-ES), Monte Carlo Tree Search (MCTS), and
+# Proximal Policy Optimization (PPO) adversaries are deferred slices that will
+# implement the same ResidualAdversaryPolicy interface.
 #
 # This file documents the opt-in knobs for humans and downstream tooling. It is
 # not consumed directly by a runner; the residual adversary is configured through

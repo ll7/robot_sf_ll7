@@ -13,9 +13,10 @@ Capability-only slice
 This is a capability-only slice. It makes no benchmark, planner-ranking, safety, or
 paper-facing claim. It defines no new stress-case metric (issue item 4, which
 requires a maintainer Domain-Aware Approval, is deferred). It implements no
-CMA-ES/MCTS search-baseline adversary and no PPO/learned adversary; those are
-later sequenced slices. The :class:`ResidualAdversaryPolicy` interface below is the
-seam those future adversaries will plug into. The bundled
+Covariance Matrix Adaptation Evolution Strategy (CMA-ES), Monte Carlo Tree
+Search (MCTS), or Proximal Policy Optimization (PPO) adversary; those are later
+sequenced slices. The :class:`ResidualAdversaryPolicy` interface below is the seam
+those future adversaries will plug into. The bundled
 :class:`ScriptedPullResidualAdversaryPolicy` is a deterministic, bounded example
 policy used for wiring and tests -- it is not the search or learned adversary.
 

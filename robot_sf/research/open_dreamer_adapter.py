@@ -644,6 +644,7 @@ def adapt_episode(
         raise OpenDreamerAdapterError(
             f"upstream RLTrajectoryEpisode.v1 validation failed: {exc}"
         ) from exc
+    _validate_episode_per_step_containers(episode)
     _validate_episode_metadata_and_flags(episode)
     if episode.split not in SPLIT_NAMES:
         raise OpenDreamerAdapterError(f"split must be one of {SPLIT_NAMES}, got {episode.split!r}")
@@ -1029,6 +1030,34 @@ def _validate_episode_metadata_and_flags(episode: RLTrajectoryEpisode) -> None:
                 )
 
 
+def _validate_episode_per_step_containers(episode: RLTrajectoryEpisode) -> None:
+    """Require every v1 per-step field to retain ordered sequence semantics.
+
+    ``validate_rl_trajectory_episode`` validates aligned lengths, but a programmatic producer can
+    still supply a mapping with numeric keys. Iterating such a mapping yields its keys, which could
+    silently replace recorded rewards or raw payloads with unrelated integers. The adapter rejects
+    those containers rather than treating mapping keys as trajectory values.
+    """
+    field_names = (
+        "observations",
+        "actions",
+        "rewards",
+        "return_to_go",
+        "terminated",
+        "truncated",
+        "pedestrians",
+        "robot_states",
+    )
+    for field_name in field_names:
+        values = getattr(episode, field_name)
+        if isinstance(values, str | bytes | Mapping) or not isinstance(
+            values, Sequence | np.ndarray
+        ):
+            raise OpenDreamerAdapterError(
+                f"{field_name} must be an ordered per-step sequence, got {type(values).__name__}"
+            )
+
+
 def _json_safe_value(value: Any, field_name: str) -> Any:
     """Return a recursively JSON-safe copy of an accepted raw v1 value.
 
@@ -1121,6 +1150,10 @@ def _as_finite_float_pair(value: Any, name: str) -> tuple[float, float]:
     Raises:
         OpenDreamerAdapterError: If the value is not a length-2 finite numeric sequence.
     """
+    if isinstance(value, str | bytes | Mapping) or not isinstance(value, Sequence | np.ndarray):
+        raise OpenDreamerAdapterError(
+            f"drive_state {name} must be a sequence, got {type(value).__name__}"
+        )
     try:
         items = list(value)
     except TypeError as exc:

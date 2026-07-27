@@ -289,13 +289,42 @@ def test_rays_group_is_populated_when_observation_carries_ray_key() -> None:
 
 
 @pytest.mark.parametrize("field_name", ["observations", "actions", "robot_states"])
-def test_adapter_wraps_non_indexable_per_step_fields(field_name: str) -> None:
-    """Correct-length but non-indexable step fields stay inside the public error boundary."""
+def test_adapter_rejects_unordered_per_step_fields(field_name: str) -> None:
+    """Correct-length but unordered step fields fail at the public adapter boundary."""
     episode = replace(_make_episode(step_count=2), **{field_name: {0, 1}})
 
     with pytest.raises(
         OpenDreamerAdapterError,
-        match=rf"{field_name} must support positional access at step 0",
+        match=rf"{field_name} must be an ordered per-step sequence",
+    ):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["observations", "actions", "rewards", "return_to_go", "pedestrians", "robot_states"],
+)
+def test_adapter_rejects_mapping_per_step_containers(field_name: str) -> None:
+    """Numeric mapping keys cannot be mistaken for ordered trajectory values."""
+    source = _make_episode(step_count=2)
+    malformed = replace(
+        source,
+        **{field_name: dict(enumerate(getattr(source, field_name)))},
+    )
+
+    with pytest.raises(OpenDreamerAdapterError, match=rf"{field_name} must be an ordered"):
+        adapt_episode(malformed, action_bounds=_DEFAULT_BOUNDS)
+
+
+@pytest.mark.parametrize("field_name", ["position", "velocity"])
+def test_adapter_rejects_mapping_drive_state_pairs(field_name: str) -> None:
+    """Numeric mapping keys cannot be misread as a position or velocity vector."""
+    robot_state = _full_robot_state(0)
+    robot_state[field_name] = {0: 100.0, 1: 200.0}
+    episode = _make_episode(step_count=1, robot_states=(robot_state,))
+
+    with pytest.raises(
+        OpenDreamerAdapterError, match=rf"drive_state {field_name} must be a sequence"
     ):
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 

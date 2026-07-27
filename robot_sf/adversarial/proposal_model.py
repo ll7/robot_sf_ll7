@@ -71,6 +71,30 @@ def _load_json(path: str | Path) -> dict[str, Any]:
     return data
 
 
+def _load_raw_sha256_pinned_json(
+    path: str | Path,
+    *,
+    expected_sha256: Any,
+    label: str,
+) -> tuple[dict[str, Any], str]:
+    """Load one JSON object after verifying its frozen raw-byte digest."""
+    if not isinstance(expected_sha256, str) or not expected_sha256:
+        raise ValueError(f"frozen contract missing {label} SHA-256")
+    raw_bytes = Path(path).read_bytes()
+    observed_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    if observed_sha256 != expected_sha256:
+        raise ValueError(
+            f"{label} SHA-256 mismatch: observed={observed_sha256} expected={expected_sha256}"
+        )
+    try:
+        payload = json.loads(raw_bytes)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"failed to load {label}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return payload, observed_sha256
+
+
 def _fit_family_records(
     recertification_data: dict[str, Any], *, fit_family: str
 ) -> list[dict[str, Any]]:
@@ -713,7 +737,11 @@ class FailureArchiveProposalModel:
             raise ValueError(f"failed to load corrected recertification artifact: {exc}") from exc
         if not isinstance(recert, dict):
             raise ValueError("corrected recertification artifact must be a JSON object")
-        archive = _load_json(root / source["pre_correction_archive_path"])
+        archive, observed_archive_sha = _load_raw_sha256_pinned_json(
+            root / source["pre_correction_archive_path"],
+            expected_sha256=source.get("pre_correction_archive_sha256"),
+            label="pre-correction archive",
+        )
         expected_recert_sha = source["corrected_recertification_sha256"]
         if recert.get("recertification_sha256") != expected_recert_sha:
             raise ValueError(
@@ -793,7 +821,7 @@ class FailureArchiveProposalModel:
             "excluded_count": len(payload.excluded_entry_ids),
             "recertification_sha256": payload.recertification_sha256,
             "recertification_artifact_sha256": observed_artifact_sha,
-            "pre_correction_archive_sha256": source["pre_correction_archive_sha256"],
+            "pre_correction_archive_sha256": observed_archive_sha,
             "fit_only_initialized": model.state == "active",
             "model_state": model.state,
             "model_entry_count": len(model.entries),

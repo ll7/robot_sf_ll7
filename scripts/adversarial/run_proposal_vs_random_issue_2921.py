@@ -528,6 +528,7 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
         ),
         "pre_correction_archive_sha256_expected": source["pre_correction_archive_sha256"],
         "pre_correction_archive_sha256_observed": hashlib.sha256(archive_bytes).hexdigest(),
+        "human_review_gate_open": contract["claim_boundary"].get("human_review_gate_open"),
     }
     failures: list[str] = []
     try:
@@ -566,6 +567,8 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
         != checks["pre_correction_archive_sha256_expected"]
     ):
         failures.append("pre-correction archive SHA-256 does not match contract")
+    if checks["human_review_gate_open"] is not True:
+        failures.append("human research-contract review gate must remain explicitly open")
 
     fit_cfg = contract["fit"]
     excl_cfg = contract["exclusions"]

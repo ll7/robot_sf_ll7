@@ -7,7 +7,7 @@
   "claim_boundary": {
     "label": "preregistered_execution_path_and_failure_neighborhood_ranker",
     "statement": "This contract freezes a preregistered, same-planner held-out-family execution path and a failure-neighborhood ranker. It is NOT a calibrated failure-probability model, and producing this contract generates no new empirical outcome, no proposal-yield claim, no benchmark evidence, and no planner-performance evidence. Any future empirical run is diagnostic/inconclusive until human research-contract review and a powered execution.",
-    "human_review_gate_open": false,
+    "human_review_gate_open": true,
     "self_closed": false
   },
   "design": {

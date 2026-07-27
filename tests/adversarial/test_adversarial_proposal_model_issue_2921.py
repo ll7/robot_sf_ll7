@@ -98,6 +98,7 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["checks"]["negative_regression_non_eligible_fit_dropped_count"] == 6
     assert verdict["checks"]["negative_regression_dropped_ids_match_contract"] is True
     assert verdict["checks"]["no_held_out_family_in_model"] is True
+    assert verdict["checks"]["human_review_gate_open"] is True
     assert verdict["failures"] == []
 
 
@@ -185,6 +186,15 @@ def test_frozen_contract_factory_rejects_recertification_artifact_hash_drift() -
     contract["source_lineage"]["corrected_recertification_artifact_sha256"] = "wrong-hash"
 
     with pytest.raises(ValueError, match="recertification artifact SHA-256 mismatch"):
+        FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
+
+
+def test_frozen_contract_factory_rejects_pre_correction_archive_hash_drift() -> None:
+    """The public frozen factory pins the raw archive bytes it consumes."""
+    contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    contract["source_lineage"]["pre_correction_archive_sha256"] = "wrong-hash"
+
+    with pytest.raises(ValueError, match="pre-correction archive SHA-256 mismatch"):
         FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
 
 

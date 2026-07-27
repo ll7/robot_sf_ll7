@@ -84,9 +84,11 @@ def test_build_returns_none_when_inactive() -> None:
 
 
 def test_resolve_target_mask_supports_all_minus_one_and_list() -> None:
-    """``-1`` targets everyone; a list targets only valid indices."""
+    """The all-target sentinel is preserved when config normalization uses a list."""
     config_all = ResidualAdversaryConfig(is_active=True, target_ped_idx=-1)
     np.testing.assert_array_equal(config_all.resolve_target_mask(3), [True, True, True])
+    config_all_list = ResidualAdversaryConfig(is_active=True, target_ped_idx=[-1])
+    np.testing.assert_array_equal(config_all_list.resolve_target_mask(3), [True, True, True])
     config_list = ResidualAdversaryConfig(is_active=True, target_ped_idx=[0, 2])
     np.testing.assert_array_equal(config_list.resolve_target_mask(3), [True, False, True])
     config_oob = ResidualAdversaryConfig(is_active=True, target_ped_idx=[99])

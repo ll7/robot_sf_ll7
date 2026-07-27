@@ -138,7 +138,8 @@ class ResidualAdversaryConfig:
         pedestrians (m).
     target_ped_idx:
         Index or indices of pedestrians the adversary may perturb. Non-targeted
-        pedestrians always receive a zero residual. ``-1`` targets all pedestrians.
+        pedestrians always receive a zero residual. A ``-1`` sentinel, either on
+        its own or inside an index list, targets all pedestrians.
     obstacle_projection_margin_m:
         Extra clearance beyond the pedestrian radius enforced by the walkable-space
         obstacle projection (m).
@@ -211,6 +212,9 @@ class ResidualAdversaryConfig:
             indices = [self.target_ped_idx]
         else:
             indices = list(self.target_ped_idx)
+            if -1 in indices:
+                mask[:] = True
+                return mask
         for raw in indices:
             if not isinstance(raw, int):
                 raise TypeError("target_ped_idx entries must be ints")

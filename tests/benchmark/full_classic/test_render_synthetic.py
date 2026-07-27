@@ -66,12 +66,14 @@ def test_generate_fallback_videos_propagates_legacy_exception(monkeypatch) -> No
     class _LegacyRendererError(RuntimeError):
         """Marker exception standing in for a legacy renderer failure."""
 
-    legacy = MagicMock(side_effect=_LegacyRendererError("encoder unavailable"))
+    expected_exception = _LegacyRendererError("encoder unavailable")
+    legacy = MagicMock(side_effect=expected_exception)
     monkeypatch.setattr(render_synthetic._legacy_videos, "generate_videos", legacy)
 
-    with pytest.raises(_LegacyRendererError, match="encoder unavailable"):
+    with pytest.raises(_LegacyRendererError) as exc_info:
         render_synthetic.generate_fallback_videos([{"episode_id": "ep0"}], _NEVER_WRITTEN, object())
 
+    assert exc_info.value is expected_exception
     # The exception propagates on the first call; the wrapper does not retry.
     assert legacy.call_count == 1
 

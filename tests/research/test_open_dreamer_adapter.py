@@ -449,6 +449,23 @@ def test_to_dict_is_json_safe_for_accepted_numpy_producer_values() -> None:
     assert payload["provenance"]["producer_counter"] == 3
 
 
+def test_to_dict_rejects_non_finite_preserved_raw_values() -> None:
+    """Serialization fails closed instead of emitting non-standard JSON NaN values."""
+    episode = _make_episode(
+        step_count=1,
+        observations=(
+            {
+                "robot": {"quality": np.float32(0.75)},
+                "pedestrians": [],
+                "unrecognized_raw_value": float("nan"),
+            },
+        ),
+    )
+
+    with pytest.raises(OpenDreamerAdapterError, match="raw_observations.*non-finite float"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS).to_dict()
+
+
 def test_adapt_episodes_preserves_input_order_and_count() -> None:
     """adapt_episodes returns structured episodes in input order without flattening or reordering."""
     episodes = [_make_episode(seed=seed, step_count=2) for seed in (101, 202, 303)]

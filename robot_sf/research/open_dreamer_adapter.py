@@ -909,7 +909,11 @@ def _json_safe_value(value: Any, field_name: str) -> Any:
         OpenDreamerAdapterError: If a mapping key is not a string or a value has no supported
             JSON representation.
     """
-    if value is None or isinstance(value, str | bool | int | float):
+    if value is None or isinstance(value, str | bool | int):
+        return value
+    if isinstance(value, float):
+        if not np.isfinite(value):
+            raise OpenDreamerAdapterError(f"{field_name} contains a non-finite float")
         return value
     if isinstance(value, np.generic):
         return _json_safe_value(value.item(), field_name)

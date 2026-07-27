@@ -40,7 +40,9 @@ from robot_sf.research.open_dreamer_adapter import (
     DRIVE_STATE_LAYOUT,
     EVIDENCE_BOUNDARY,
     EXPECTED_ACTION_DIM,
+    OBSERVATION_NORMALIZATION,
     OPEN_DREAMER_ADAPTER_VERSION,
+    OPEN_DREAMER_OBSERVATION_CONTRACT,
     ActionBounds,
     OpenDreamerAdapterError,
     adapt_episode,
@@ -274,6 +276,7 @@ def test_all_v1_fields_preserved_verbatim() -> None:
     assert structured.source_policy_id == episode.source_policy_id
     assert structured.split == episode.split
     assert structured.raw_observations == episode.observations
+    assert structured.raw_actions == episode.actions
     assert structured.raw_observations[0]["future_model_feature"] == {
         "source": "preserve-me",
         "step": 0,
@@ -285,6 +288,7 @@ def test_all_v1_fields_preserved_verbatim() -> None:
     assert structured.pedestrians == episode.pedestrians
     assert structured.robot_states == episode.robot_states
     assert structured.to_dict()["raw_observations"] == list(episode.observations)
+    assert structured.to_dict()["raw_actions"] == list(episode.actions)
 
 
 def test_raw_stored_action_preserved_verbatim() -> None:
@@ -294,8 +298,10 @@ def test_raw_stored_action_preserved_verbatim() -> None:
     structured = adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
     assert len(structured.actions) == 3
+    assert structured.raw_actions == tuple(actions)
     for index, step in enumerate(structured.actions):
         assert step.raw == tuple(actions[index])
+    assert structured.to_dict()["raw_actions"] == list(actions)
 
 
 def test_adapter_accepts_current_simulation_trace_recorder_action_mapping(tmp_path: Path) -> None:
@@ -337,8 +343,8 @@ def test_episode_view_stays_episode_major() -> None:
     episode = _make_episode(step_count=4)
     structured = adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
-    assert structured.step_count if hasattr(structured, "step_count") else True
     expected = 4
+    assert structured.step_count == expected
     assert len(structured.observations) == expected
     assert len(structured.actions) == expected
     assert len(structured.rewards) == expected
@@ -364,8 +370,11 @@ def test_provenance_preserved_and_augmented_with_adapter_metadata() -> None:
     assert adapter_entry["consumed_episode_schema"] == RL_TRAJECTORY_EPISODE_SCHEMA_VERSION
     assert adapter_entry["evidence_boundary"] == EVIDENCE_BOUNDARY
     assert adapter_entry["split_policy"] == "assign_deterministic_split"
+    assert adapter_entry["observation_contract"] == OPEN_DREAMER_OBSERVATION_CONTRACT
+    assert adapter_entry["observation_normalization"] == OBSERVATION_NORMALIZATION
     assert adapter_entry["action_bounds"] == _DEFAULT_BOUNDS.to_dict()
     assert "drive_state_layout" in adapter_entry
+    assert structured.to_dict()["observation_contract"] == OPEN_DREAMER_OBSERVATION_CONTRACT
 
 
 def test_adapt_episodes_preserves_input_order_and_count() -> None:
@@ -416,6 +425,8 @@ def test_action_mapping_rejects_wrong_shape_nonfinite_and_far_out_of_domain() ->
         map_action_to_velocity([float("nan"), 0.0], bounds)
     with pytest.raises(OpenDreamerAdapterError, match=r"\[-1, 1\]"):
         map_action_to_velocity([5.0, 0.0], bounds)
+    with pytest.raises(OpenDreamerAdapterError, match="numeric length-2"):
+        map_action_to_velocity(["not-a-number", 0.0], bounds)  # type: ignore[list-item]
 
 
 def test_action_bounds_validate_non_degenerate_envelope() -> None:
@@ -426,6 +437,10 @@ def test_action_bounds_validate_non_degenerate_envelope() -> None:
         ActionBounds(max_linear_speed=1.0, max_angular_speed=-1.0)
     with pytest.raises(OpenDreamerAdapterError, match="min_linear_speed"):
         ActionBounds(max_linear_speed=1.0, max_angular_speed=1.0, min_linear_speed=-2.0)
+    with pytest.raises(OpenDreamerAdapterError, match="strictly less"):
+        ActionBounds(max_linear_speed=1.0, max_angular_speed=1.0, min_linear_speed=1.0)
+    with pytest.raises(OpenDreamerAdapterError, match="finite real number"):
+        ActionBounds(max_linear_speed=True, max_angular_speed=1.0)  # type: ignore[arg-type]
 
 
 def test_stored_actions_must_lie_within_declared_physical_bounds() -> None:
@@ -490,11 +505,29 @@ def test_fail_closed_on_non_finite_rays_when_present() -> None:
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 
+def test_fail_closed_on_empty_rays_when_key_is_present() -> None:
+    """An explicit but empty ray field is malformed, not an available zero-width sensor."""
+    observations = ({"robot": _full_robot_state(0), "pedestrians": [], "rays": []},)
+    episode = _make_episode(step_count=1, observations=observations)
+
+    with pytest.raises(OpenDreamerAdapterError, match="must contain at least one range"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
 def test_fail_closed_on_incompatible_action_dimensionality() -> None:
     """A stored action that is not 2D (linear, angular) fails closed as an incompatible action space."""
     actions = ([0.5, 0.0, 0.0],)  # 3D command -- e.g. an upstream VPT-style container.
     episode = _make_episode(step_count=1, actions=actions)
     with pytest.raises(OpenDreamerAdapterError, match="incompatible action space"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
+def test_fail_closed_on_action_mapping_with_unrecognized_extra_dimension() -> None:
+    """A mapping cannot smuggle an extra action dimension past the canonical two-key contract."""
+    actions = ({"linear_velocity": 0.5, "angular_velocity": 0.0, "camera_pitch": 0.1},)
+    episode = _make_episode(step_count=1, actions=actions)
+
+    with pytest.raises(OpenDreamerAdapterError, match="only .*incompatible action space"):
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 

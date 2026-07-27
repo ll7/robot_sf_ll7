@@ -31,6 +31,12 @@ module is never edited by this slice) and produces a leakage-safe, episode-major
   bounds (:class:`ActionBounds`) so the adapter never hardcodes or assumes a particular robot
   drivetrain; the bounds used are recorded in the structured episode's provenance.
 
+Despite sharing group labels with the environment, this is an adapter-specific raw-recording
+contract, not ``ObservationMode.DEFAULT_GYM``: its ``drive_state`` layout is
+``[x, y, heading, vx, vy]`` rather than the native sensor-fusion layout, and neither group is
+implicitly normalized. :data:`OPEN_DREAMER_OBSERVATION_CONTRACT` and the provenance fields make
+that boundary explicit for later model consumers.
+
 What this module does NOT do (out of scope -- Steps 3-4 on parent #6318)
 -----------------------------------------------------------------------
 
@@ -66,6 +72,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import Any
 
 import numpy as np
@@ -85,6 +92,14 @@ OPEN_DREAMER_ADAPTER_VERSION = "open_dreamer_adapter.v1"
 
 #: Evidence tier for this slice. Diagnostic/contract evidence only -- never a benchmark claim.
 EVIDENCE_BOUNDARY = "idea"
+
+#: Explicit version for the adapter's raw, structured-observation view. This prevents consumers
+#: from confusing its ``drive_state`` group with the differently shaped and normalized native
+#: ``ObservationMode.DEFAULT_GYM`` group.
+OPEN_DREAMER_OBSERVATION_CONTRACT = "open_dreamer_adapter.raw_structured_observation.v1"
+
+#: Values remain in the source recorder's units; later model consumers must declare normalization.
+OBSERVATION_NORMALIZATION = "raw_recorder_values_unscaled"
 
 #: Provenance key under which the adapter records its own metadata on each structured episode.
 ADAPTER_PROVENANCE_KEY = "open_dreamer_adapter"
@@ -120,6 +135,16 @@ class OpenDreamerAdapterError(ValueError):
     """
 
 
+def _finite_action_bound(value: Any, field_name: str) -> float:
+    """Return one finite real-valued action bound, rejecting booleans and coercible strings."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise OpenDreamerAdapterError(f"{field_name} must be a finite real number, got {value!r}")
+    numeric_value = float(value)
+    if not np.isfinite(numeric_value):
+        raise OpenDreamerAdapterError(f"{field_name} must be finite, got {value!r}")
+    return numeric_value
+
+
 @dataclass(frozen=True, slots=True)
 class ActionBounds:
     """Speed bounds for the bounded ``[-1, 1] -> (linear, angular)`` velocity mapping.
@@ -133,7 +158,7 @@ class ActionBounds:
         max_angular_speed: Maximum angular velocity magnitude (rad/s). Must be strictly positive.
         min_linear_speed: Minimum linear velocity (m/s). ``0.0`` means forward-only; a negative
             value enables backwards motion. Must satisfy
-            ``-max_linear_speed <= min_linear_speed <= max_linear_speed``.
+            ``-max_linear_speed <= min_linear_speed < max_linear_speed``.
     """
 
     max_linear_speed: float
@@ -142,26 +167,25 @@ class ActionBounds:
 
     def __post_init__(self) -> None:
         """Validate that the speed bounds define a non-degenerate, finite velocity envelope."""
-        if not np.isfinite(self.max_linear_speed) or self.max_linear_speed <= 0.0:
+        max_linear_speed = _finite_action_bound(self.max_linear_speed, "max_linear_speed")
+        max_angular_speed = _finite_action_bound(self.max_angular_speed, "max_angular_speed")
+        min_linear_speed = _finite_action_bound(self.min_linear_speed, "min_linear_speed")
+        if max_linear_speed <= 0.0:
             raise OpenDreamerAdapterError(
                 f"max_linear_speed must be positive and finite, got {self.max_linear_speed!r}"
             )
-        if not np.isfinite(self.max_angular_speed) or self.max_angular_speed <= 0.0:
+        if max_angular_speed <= 0.0:
             raise OpenDreamerAdapterError(
                 f"max_angular_speed must be positive and finite, got {self.max_angular_speed!r}"
             )
-        if not np.isfinite(self.min_linear_speed):
-            raise OpenDreamerAdapterError(
-                f"min_linear_speed must be finite, got {self.min_linear_speed!r}"
-            )
-        if self.min_linear_speed < -self.max_linear_speed:
+        if min_linear_speed < -max_linear_speed:
             raise OpenDreamerAdapterError(
                 f"min_linear_speed ({self.min_linear_speed}) must be >= "
                 f"-max_linear_speed (-{self.max_linear_speed})"
             )
-        if self.min_linear_speed > self.max_linear_speed:
+        if min_linear_speed >= max_linear_speed:
             raise OpenDreamerAdapterError(
-                f"min_linear_speed ({self.min_linear_speed}) must be <= "
+                f"min_linear_speed ({self.min_linear_speed}) must be strictly less than "
                 f"max_linear_speed ({self.max_linear_speed})"
             )
 
@@ -250,8 +274,8 @@ class StructuredEpisode:
     The view is **episode-major**: per-step fields are aligned tuples whose lengths equal the
     episode step count. Episodes are never flattened into transitions here, so terminal/truncated
     semantics cannot be silently crossed. Every v1 field is preserved verbatim in addition to the
-    structured groups; ``raw_observations`` retains the original per-step observation mappings
-    verbatim; ``provenance`` carries the original episode provenance plus an
+    structured groups; ``raw_observations`` and ``raw_actions`` retain the original per-step
+    payloads verbatim; ``provenance`` carries the original episode provenance plus an
     :data:`ADAPTER_PROVENANCE_KEY` entry recording the adapter version, bounds, and rays
     availability.
 
@@ -266,6 +290,8 @@ class StructuredEpisode:
         raw_observations: Original v1 per-step observation mappings, retained verbatim alongside
             the derived groups so unrecognized source fields remain recoverable.
         actions: Per-step preserved action view.
+        raw_actions: Original v1 per-step action payloads, retained verbatim alongside the
+            normalized physical action view so source representation remains auditable.
         rewards: Preserved v1 per-step rewards, finite-validated.
         return_to_go: Preserved v1 per-step return-to-go, finite-validated.
         terminated: Preserved v1 per-step terminated flags.
@@ -277,6 +303,8 @@ class StructuredEpisode:
             shared ray-vector width. False when no step exposed one; partial availability or mixed
             widths fail closed during adaptation.
         drive_state_layout: The fixed component order of :attr:`observations[i].drive_state`.
+        observation_contract: Versioned adapter-specific observation contract. It intentionally
+            differs from the native environment's ``ObservationMode.DEFAULT_GYM`` contract.
     """
 
     dataset_id: str
@@ -288,6 +316,7 @@ class StructuredEpisode:
     observations: tuple[StructuredObservationStep, ...]
     raw_observations: tuple[Any, ...]
     actions: tuple[StructuredActionStep, ...]
+    raw_actions: tuple[Any, ...]
     rewards: tuple[float, ...]
     return_to_go: tuple[float, ...]
     terminated: tuple[bool, ...]
@@ -297,13 +326,19 @@ class StructuredEpisode:
     provenance: Mapping[str, Any]
     rays_available: bool
     drive_state_layout: tuple[str, ...] = field(default=DRIVE_STATE_LAYOUT)
+    observation_contract: str = OPEN_DREAMER_OBSERVATION_CONTRACT
+
+    @property
+    def step_count(self) -> int:
+        """Return the aligned per-step count without flattening the episode."""
+        return len(self.rewards)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe summary of the structured episode (groups as lists).
 
         Returns:
-            A dictionary with all preserved v1 fields, including ``raw_observations``, and the
-            structured-observation/action groups.
+            A dictionary with all preserved v1 fields, including raw observation/action payloads,
+            and the structured-observation/action groups.
         """
         return {
             "schema_version": OPEN_DREAMER_ADAPTER_VERSION,
@@ -313,6 +348,8 @@ class StructuredEpisode:
             "seed": self.seed,
             "source_policy_id": self.source_policy_id,
             "split": self.split,
+            "observation_contract": self.observation_contract,
+            "observation_normalization": OBSERVATION_NORMALIZATION,
             "drive_state_layout": list(self.drive_state_layout),
             "rays_available": self.rays_available,
             "observations": [
@@ -325,6 +362,7 @@ class StructuredEpisode:
             ],
             "raw_observations": list(self.raw_observations),
             "actions": [list(step.raw) for step in self.actions],
+            "raw_actions": list(self.raw_actions),
             "rewards": list(self.rewards),
             "return_to_go": list(self.return_to_go),
             "terminated": list(self.terminated),
@@ -390,7 +428,12 @@ def map_action_to_velocity(
         OpenDreamerAdapterError: If the action is not length-2, is out of ``[-1, 1]``, is
             non-finite, or maps to a non-finite velocity.
     """
-    arr = np.asarray(normalized, dtype=float)
+    try:
+        arr = np.asarray(normalized, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise OpenDreamerAdapterError(
+            "normalized action must be a numeric length-2 sequence"
+        ) from exc
     if arr.shape != (EXPECTED_ACTION_DIM,):
         raise OpenDreamerAdapterError(
             f"normalized action must have shape ({EXPECTED_ACTION_DIM},), got {arr.shape}"
@@ -552,6 +595,7 @@ def adapt_episode(
         observations=tuple(structured_obs),
         raw_observations=tuple(episode.observations),
         actions=tuple(structured_actions),
+        raw_actions=tuple(episode.actions),
         rewards=rewards,
         return_to_go=return_to_go,
         terminated=tuple(bool(value) for value in episode.terminated),
@@ -664,6 +708,10 @@ def _extract_rays(observation: Any) -> tuple[np.ndarray, bool]:
             ) from exc
         if arr.ndim != 1:
             raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be a 1D sequence")
+        if arr.size == 0:
+            raise OpenDreamerAdapterError(
+                f"observation ray-like key {key!r} must contain at least one range"
+            )
         if arr.size and not np.all(np.isfinite(arr)):
             raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be finite")
         return arr, True
@@ -740,6 +788,12 @@ def _coerce_action_step(
             raise OpenDreamerAdapterError(
                 f"action at step {step_index} mapping must contain {required_keys}, "
                 f"missing {missing_keys}"
+            )
+        unexpected_keys = sorted(str(key) for key in raw_action if key not in required_keys)
+        if unexpected_keys:
+            raise OpenDreamerAdapterError(
+                f"action at step {step_index} mapping must contain only {required_keys}, "
+                f"unexpected {unexpected_keys} -- incompatible action space"
             )
         values = [raw_action[key] for key in required_keys]
     elif isinstance(raw_action, Sequence | np.ndarray) and not isinstance(raw_action, str | bytes):
@@ -871,6 +925,8 @@ def _augment_provenance(
         "consumed_episode_schema": RL_TRAJECTORY_EPISODE_SCHEMA_VERSION,
         "evidence_boundary": EVIDENCE_BOUNDARY,
         "split_policy": "assign_deterministic_split",
+        "observation_contract": OPEN_DREAMER_OBSERVATION_CONTRACT,
+        "observation_normalization": OBSERVATION_NORMALIZATION,
         "drive_state_layout": list(DRIVE_STATE_LAYOUT),
         "action_mapping": {
             "kind": "affine_linear_symmetric_angular",
@@ -925,7 +981,9 @@ __all__ = [
     "DRIVE_STATE_LAYOUT",
     "EVIDENCE_BOUNDARY",
     "EXPECTED_ACTION_DIM",
+    "OBSERVATION_NORMALIZATION",
     "OPEN_DREAMER_ADAPTER_VERSION",
+    "OPEN_DREAMER_OBSERVATION_CONTRACT",
     "RAY_OBSERVATION_KEYS",
     "ActionBounds",
     "OpenDreamerAdapterError",

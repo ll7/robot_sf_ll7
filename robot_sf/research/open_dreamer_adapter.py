@@ -571,6 +571,7 @@ def validate_split_leakage(
     Returns:
         A :class:`SplitLeakageReport` with per-split scenario/scenario-seed keys and any leaks.
     """
+    episodes = _require_episode_sequence(episodes, field_name="episodes")
     scenario_owners: dict[str, str] = {}
     owners: dict[str, str] = {}
     split_scenario_ids: dict[str, list[str]] = {name: [] for name in SPLIT_NAMES}
@@ -578,6 +579,7 @@ def validate_split_leakage(
     leaked_scenario_ids: list[str] = []
     leaked: list[str] = []
     for episode in episodes:
+        _require_supported_episode(episode)
         split = _episode_split(episode)
         if split not in SPLIT_NAMES:
             raise OpenDreamerAdapterError(f"split must be one of {SPLIT_NAMES}, got {split!r}")
@@ -636,6 +638,7 @@ def adapt_episode(
             assignment.
     """
     action_bounds = _require_action_bounds(action_bounds)
+    _require_source_episode(episode)
     try:
         validate_rl_trajectory_episode(episode)
     except (TypeError, ValueError) as exc:
@@ -728,6 +731,9 @@ def adapt_episodes(
             splits or any episode fails the fail-closed contract in :func:`adapt_episode`.
     """
     action_bounds = _require_action_bounds(action_bounds)
+    episodes = _require_episode_sequence(episodes, field_name="episodes")
+    for episode in episodes:
+        _require_source_episode(episode)
     leakage_report = validate_split_leakage(episodes)
     if not leakage_report.ok:
         leak_descriptions: list[str] = []
@@ -743,6 +749,50 @@ def adapt_episodes(
             "split leakage detected across batch: " + "; ".join(leak_descriptions)
         )
     return [adapt_episode(episode, action_bounds=action_bounds) for episode in episodes]
+
+
+def _require_episode_sequence(
+    episodes: Any,
+    *,
+    field_name: str,
+) -> Sequence[RLTrajectoryEpisode | StructuredEpisode]:
+    """Require an ordered episode sequence at public batch boundaries.
+
+    Returns:
+        The validated ordered episode sequence.
+    """
+    if isinstance(episodes, str | bytes | Mapping) or not isinstance(episodes, Sequence):
+        raise OpenDreamerAdapterError(
+            f"{field_name} must be an ordered sequence of episodes, got {type(episodes).__name__}"
+        )
+    return episodes
+
+
+def _require_source_episode(episode: Any) -> RLTrajectoryEpisode:
+    """Require a source v1 episode before accessing its fields.
+
+    Returns:
+        The validated source episode.
+    """
+    if not isinstance(episode, RLTrajectoryEpisode):
+        raise OpenDreamerAdapterError(
+            f"episode must be an RLTrajectoryEpisode, got {type(episode).__name__}"
+        )
+    return episode
+
+
+def _require_supported_episode(episode: Any) -> RLTrajectoryEpisode | StructuredEpisode:
+    """Require one supported episode type before split-leakage field access.
+
+    Returns:
+        The validated source or structured episode.
+    """
+    if not isinstance(episode, RLTrajectoryEpisode | StructuredEpisode):
+        raise OpenDreamerAdapterError(
+            "episodes must contain RLTrajectoryEpisode or StructuredEpisode values, "
+            f"got {type(episode).__name__}"
+        )
+    return episode
 
 
 def _episode_step_value(values: Any, field_name: str, step_index: int) -> Any:

@@ -610,6 +610,24 @@ def test_adapt_episodes_preserves_input_order_and_count() -> None:
     assert [item.seed for item in structured] == [101, 202, 303]
 
 
+@pytest.mark.parametrize("malformed", [None, {"episode": "not a sequence"}])
+def test_batch_adapter_rejects_malformed_episode_sequences(malformed: object) -> None:
+    """Batch entry points reject unordered or non-sequence containers uniformly."""
+    with pytest.raises(OpenDreamerAdapterError, match="ordered sequence of episodes"):
+        adapt_episodes(malformed, action_bounds=_DEFAULT_BOUNDS)  # type: ignore[arg-type]
+    with pytest.raises(OpenDreamerAdapterError, match="ordered sequence of episodes"):
+        validate_split_leakage(malformed)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("malformed", [None, {"episode": "not a v1 row"}])
+def test_adapter_rejects_non_episode_values_at_public_boundaries(malformed: object) -> None:
+    """Malformed episode objects stay inside the adapter's documented error boundary."""
+    with pytest.raises(OpenDreamerAdapterError, match="episode must be an RLTrajectoryEpisode"):
+        adapt_episode(malformed, action_bounds=_DEFAULT_BOUNDS)  # type: ignore[arg-type]
+    with pytest.raises(OpenDreamerAdapterError, match="episodes must contain RLTrajectoryEpisode"):
+        validate_split_leakage([malformed])  # type: ignore[list-item]
+
+
 # ----------------------------------------------------------------------------------------------
 # [-1, 1] -> (linear velocity, angular velocity) action mapping.
 # ----------------------------------------------------------------------------------------------

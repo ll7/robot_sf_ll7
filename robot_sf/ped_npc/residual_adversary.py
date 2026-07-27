@@ -1298,12 +1298,23 @@ class BoundedResidualAdversary:
             raise ValueError("velocities must match positions shape")
         if max_speeds_array.shape != (self.num_peds,):
             raise ValueError(f"max_speeds must have shape ({self.num_peds},)")
-        normalized_robot_pose = _normalize_robot_pose(robot_pose)
 
         if self.num_peds == 0:
             self._step_index += 1
             self._last_residual = np.zeros((0, 2), dtype=float)
             return self._last_residual.copy()
+
+        # An out-of-range target selection intentionally targets no one. Avoid
+        # invoking a policy (which may be expensive or stateful) when there is
+        # no row on which it could act, while preserving the physics-step clock.
+        # No robot-pose validation is needed on this no-op path because neither
+        # the policy nor any bound consumes it.
+        if not np.any(self._target_mask):
+            self._step_index += 1
+            self._last_residual = np.zeros((self.num_peds, 2), dtype=float)
+            return self._last_residual.copy()
+
+        normalized_robot_pose = _normalize_robot_pose(robot_pose)
 
         sim_time_s = self._step_index * self.dt_s
         if self._step_index % self._macro_steps == 0:

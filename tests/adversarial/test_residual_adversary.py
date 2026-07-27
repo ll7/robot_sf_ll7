@@ -637,6 +637,33 @@ def test_non_targeted_pedestrians_receive_zero_residual() -> None:
     assert np.linalg.norm(residual[0]) > 0.0
 
 
+def test_out_of_range_target_selection_is_a_policy_free_no_op() -> None:
+    """A configuration that targets no pedestrian must not invoke its policy."""
+
+    @dataclass
+    class _FailIfCalledPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            raise AssertionError("policy must not run when no pedestrian is targeted")
+
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(is_active=True, target_ped_idx=99),
+        policy=_FailIfCalledPolicy(),
+        dt_s=0.1,
+        num_peds=2,
+    )
+
+    residual = adversary.step_residual(
+        np.array([[1.0, 0.0], [2.0, 0.0]]),
+        np.zeros((2, 2)),
+        np.array([1.5, 1.5]),
+        ((0.0, 0.0), float("nan")),
+    )
+
+    np.testing.assert_allclose(residual, np.zeros((2, 2)))
+    assert adversary.step_index == 1
+    assert adversary.macro_action_index == 0
+
+
 def test_residual_acceleration_stays_within_magnitude_bound() -> None:
     """The applied residual must never exceed the acceleration magnitude bound."""
     max_accel = 0.8

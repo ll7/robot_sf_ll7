@@ -32,6 +32,10 @@ What this module owns
 5. A ``--full-run`` surface that is documented but **fails closed** here: registered
    execution belongs to the downstream campaign lane (#6102) and is not authorized
    in this issue.
+6. A narrow ``--authorized-full-run`` surface that requires the explicit
+   ``--authorization-issue 6102`` flag, invokes the canonical native map runner for
+   the exact manifest, rejects fallback/degraded rows, and feeds complete native
+   output into the reviewed synthesis adapter.
 
 Evidence boundary
 -----------------
@@ -44,6 +48,8 @@ stability. The preflight artifact states prominently:
 from __future__ import annotations
 
 import argparse
+import copy
+import datetime
 import json
 import math
 import pathlib
@@ -105,6 +111,10 @@ PREFLIGHT_PLANNER = "goal_seek"
 PREFLIGHT_STEPS = 120
 CAMPAIGN_RUNTIME_PATH = REPO_ROOT / "scripts/benchmark/run_fidelity_sensitivity_campaign.py"
 SYNTHESIZER_PATH = REPO_ROOT / "robot_sf/benchmark/issue_5578_speed_tier_synthesis.py"
+AUTHORIZED_EXECUTION_ISSUE = 6102
+AUTHORIZED_EXECUTION_SCHEMA_VERSION = "robot_sf.issue_5578_authorized_campaign_execution.v1"
+CAMPAIGN_SCENARIO_MATRIX = REPO_ROOT / "configs/scenarios/classic_interactions.yaml"
+EPISODE_SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 EVIDENCE_BASE_DIR = REPO_ROOT / "docs/context/evidence/issue_5578_robot_speed_tier_sweep"
 PREFLIGHT_EVIDENCE_DIR = EVIDENCE_BASE_DIR / "preflight"
 NOT_EVIDENCE_BANNER = "NOT BENCHMARK EVIDENCE -- DISJOINT-SEED ACTIVATION CHECK ONLY"
@@ -135,6 +145,14 @@ class PreflightActivationError(RuntimeError):
 
 class FullRunBlockedError(RuntimeError):
     """Raised when the documented full-run surface is invoked in this issue."""
+
+
+class CampaignAuthorizationError(RuntimeError):
+    """Raised when the authorized campaign mode is not explicitly authorized."""
+
+
+class AuthorizedCampaignError(RuntimeError):
+    """Raised when an authorized campaign cannot produce a complete native grid."""
 
 
 @dataclass(frozen=True)
@@ -1047,6 +1065,842 @@ def synthesize_from_cell_summaries(
     return report
 
 
+def _utc_timestamp() -> str:
+    """Return a stable UTC timestamp for operational provenance."""
+    return datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
+
+
+def _read_jsonl_records(path: pathlib.Path) -> list[dict[str, Any]]:
+    """Read a JSONL episode artifact and reject malformed rows."""
+    if not path.is_file():
+        raise AuthorizedCampaignError(f"raw episode artifact not found: {path}")
+    records: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise AuthorizedCampaignError(
+                    f"invalid JSONL in {path} at line {line_number}: {exc}"
+                ) from exc
+            if not isinstance(payload, Mapping):
+                raise AuthorizedCampaignError(
+                    f"episode row in {path} at line {line_number} is not an object"
+                )
+            records.append(dict(payload))
+    return records
+
+
+def _write_jsonl(path: pathlib.Path, payload: Mapping[str, Any]) -> None:
+    """Write one deterministic JSON object to a JSONL-compatible artifact path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(payload), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _finite_episode_number(value: Any, field_name: str) -> float:
+    """Coerce one JSON episode value to a finite float."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise AuthorizedCampaignError(f"episode field {field_name} must be numeric, got {value!r}")
+    number = float(value)
+    if not math.isfinite(number):
+        raise AuthorizedCampaignError(f"episode field {field_name} must be finite, got {value!r}")
+    return number
+
+
+def _episode_metric(metrics: Mapping[str, Any], *names: str) -> float:
+    """Read the first present finite metric from a map-runner metrics payload."""
+    for name in names:
+        if name in metrics:
+            return _finite_episode_number(metrics[name], f"metrics.{name}")
+    raise AuthorizedCampaignError(
+        "episode metrics missing required field; tried " + ", ".join(names)
+    )
+
+
+def _binary_metric(value: Any, field_name: str) -> float:
+    """Convert an event count/flag to the per-episode rate contract."""
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    number = _finite_episode_number(value, field_name)
+    return 1.0 if number > 0.0 else 0.0
+
+
+def _campaign_execution_disposition(  # noqa: C901
+    record: Mapping[str, Any],
+) -> tuple[str, str | None]:
+    """Classify planner runtime availability without confusing adapters with fallback.
+
+    The preregistered roster explicitly allows planner command adapters (for example
+    ORCA's world-velocity-to-unicycle adapter). Those are still native benchmark rows.
+    Only an explicit fallback/degraded status, fallback counter, or ineligible predictive
+    foresight state excludes a row from native campaign evidence.
+    """
+    metadata = record.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        return "failed", "missing algorithm_metadata"
+
+    status = str(metadata.get("status", "")).strip().lower()
+    degraded_prefixes = (
+        "fallback",
+        "degraded",
+        "policy_step_error_fallback",
+        "policy_step_timeout_fallback",
+        "predictive_foresight_model_fallback",
+    )
+    if status.startswith(degraded_prefixes):
+        return "degraded", f"algorithm_metadata.status={status}"
+
+    timeout_metadata = metadata.get("policy_step_timeout")
+    if isinstance(timeout_metadata, Mapping):
+        fallback_actions = timeout_metadata.get("fallback_actions")
+        if fallback_actions is not None:
+            try:
+                if float(fallback_actions) > 0.0:
+                    return "degraded", "policy_step_timeout.fallback_actions>0"
+            except (TypeError, ValueError):
+                return "failed", "malformed policy_step_timeout.fallback_actions"
+
+    if metadata.get("fallback_or_degraded") is True:
+        return "degraded", "algorithm_metadata.fallback_or_degraded=true"
+
+    foresight = metadata.get("foresight_prediction")
+    if isinstance(foresight, Mapping):
+        if foresight.get("fallback_used") is True:
+            return "degraded", "foresight_prediction.fallback_used=true"
+        if foresight.get("evidence_eligible") is False:
+            return "degraded", "foresight_prediction.evidence_eligible=false"
+
+    planner_kinematics = metadata.get("planner_kinematics")
+    if isinstance(planner_kinematics, Mapping):
+        planner_mode = str(planner_kinematics.get("execution_mode", "")).strip().lower()
+        if planner_mode in {"fallback", "degraded"}:
+            return "degraded", f"planner_kinematics.execution_mode={planner_mode}"
+
+    if status == "ok":
+        return "native", None
+    if not status:
+        return "failed", "algorithm_metadata.status is missing"
+    return "failed", f"unsupported algorithm_metadata.status={status}"
+
+
+def _trace_speed_diagnostics(
+    record: Mapping[str, Any],
+    *,
+    cap_m_s: float,
+    expected_dt: float,
+) -> dict[str, float]:
+    """Derive the preregistered speed diagnostics from the retained native trace."""
+    metadata = record.get("algorithm_metadata")
+    trace = metadata.get("simulation_step_trace") if isinstance(metadata, Mapping) else None
+    if not isinstance(trace, Mapping) or not isinstance(trace.get("steps"), list):
+        raise AuthorizedCampaignError("episode is missing simulation_step_trace.steps")
+    steps = trace["steps"]
+    if not steps:
+        raise AuthorizedCampaignError("episode simulation_step_trace.steps is empty")
+    trace_dt = _finite_episode_number(trace.get("dt", expected_dt), "simulation_step_trace.dt")
+    if not math.isclose(trace_dt, expected_dt, abs_tol=1e-9):
+        raise AuthorizedCampaignError(
+            f"episode trace dt drift: expected {expected_dt}, got {trace_dt}"
+        )
+
+    commanded: list[float] = []
+    realized: list[float] = []
+    for index, step in enumerate(steps):
+        if not isinstance(step, Mapping):
+            raise AuthorizedCampaignError(f"simulation trace step {index} is not an object")
+        planner = step.get("planner")
+        planner = planner if isinstance(planner, Mapping) else {}
+        action = planner.get("selected_action")
+        action = action if isinstance(action, Mapping) else {}
+        command = action.get("linear_velocity", action.get("v"))
+        if command is None:
+            amv = planner.get("amv")
+            if isinstance(amv, Mapping):
+                command = amv.get("requested_linear_m_s")
+        commanded.append(_finite_episode_number(command, f"trace[{index}].planner.linear_velocity"))
+
+        robot = step.get("robot")
+        robot = robot if isinstance(robot, Mapping) else {}
+        velocity = robot.get("velocity")
+        if isinstance(velocity, (list, tuple)) and len(velocity) >= 2:
+            vx = _finite_episode_number(velocity[0], f"trace[{index}].robot.velocity[0]")
+            vy = _finite_episode_number(velocity[1], f"trace[{index}].robot.velocity[1]")
+            realized.append(math.hypot(vx, vy))
+        else:
+            realized.append(_finite_episode_number(velocity, f"trace[{index}].robot.velocity"))
+
+    count = len(realized)
+    return {
+        "commanded_speed_mean_m_s": sum(commanded) / len(commanded),
+        "realized_speed_mean_m_s": sum(realized) / count,
+        "realized_speed_peak_m_s": max(realized),
+        "fraction_above_2_0_mps": sum(speed > 2.0 for speed in realized) / count,
+        "cap_saturation_fraction": sum(speed >= cap_m_s - 1e-6 for speed in realized) / count,
+    }
+
+
+def _cell_summary_from_episode(
+    record: Mapping[str, Any],
+    *,
+    scenario_id: str,
+    tier: SpeedTierRuntime,
+    planner: PlannerIdentity,
+    seed: int,
+    horizon_steps: int,
+    dt_seconds: float,
+) -> dict[str, Any]:
+    """Convert one canonical map-runner episode into the reviewed cell contract."""
+    if str(record.get("scenario_id")) != scenario_id:
+        raise AuthorizedCampaignError(
+            f"raw episode scenario mismatch: expected {scenario_id}, got {record.get('scenario_id')!r}"
+        )
+    if int(record.get("seed", -1)) != int(seed):
+        raise AuthorizedCampaignError(
+            f"raw episode seed mismatch: expected {seed}, got {record.get('seed')!r}"
+        )
+    if int(record.get("horizon", -1)) != horizon_steps:
+        raise AuthorizedCampaignError(
+            f"raw episode horizon mismatch: expected {horizon_steps}, got {record.get('horizon')!r}"
+        )
+
+    metadata = record.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        raise AuthorizedCampaignError("raw episode missing algorithm_metadata")
+    canonical_algorithm = str(metadata.get("canonical_algorithm", "")).strip()
+    if canonical_algorithm != planner.algorithm:
+        raise AuthorizedCampaignError(
+            f"raw episode planner mismatch: expected {planner.algorithm}, got {canonical_algorithm}"
+        )
+    disposition, disposition_reason = _campaign_execution_disposition(record)
+    speed = _trace_speed_diagnostics(
+        record,
+        cap_m_s=tier.cap_m_s,
+        expected_dt=dt_seconds,
+    )
+    metrics = record.get("metrics")
+    if not isinstance(metrics, Mapping):
+        raise AuthorizedCampaignError("raw episode missing metrics")
+
+    total_collision_count = max(
+        _episode_metric(metrics, "total_collision_count", "collisions"),
+        _episode_metric(metrics, "collisions", "total_collision_count"),
+    )
+    ped_collision_count = _episode_metric(metrics, "ped_collision_count")
+    obstacle_collision_count = _episode_metric(metrics, "obstacle_collision_count")
+    agent_collision_count = _episode_metric(metrics, "agent_collision_count")
+    typed_count = ped_collision_count + obstacle_collision_count + agent_collision_count
+    exposure = record.get("interaction_exposure")
+    if not isinstance(exposure, Mapping):
+        raise AuthorizedCampaignError("raw episode missing interaction_exposure")
+    exposure_share = _finite_episode_number(
+        exposure.get("interaction_exposure_share"),
+        "interaction_exposure.interaction_exposure_share",
+    )
+    exposure_steps = _finite_episode_number(
+        exposure.get("interaction_exposure_denominator_steps"),
+        "interaction_exposure.interaction_exposure_denominator_steps",
+    )
+
+    planner_execution_mode = "unknown"
+    planner_kinematics = metadata.get("planner_kinematics")
+    if isinstance(planner_kinematics, Mapping):
+        planner_execution_mode = str(planner_kinematics.get("execution_mode", "unknown"))
+
+    return {
+        "scenario_id": scenario_id,
+        "speed_tier_id": tier.tier_id,
+        "speed_cap_m_s": tier.cap_m_s,
+        "planner_id": planner.planner_id,
+        "seed": int(seed),
+        "horizon_steps": horizon_steps,
+        "dt_seconds": dt_seconds,
+        "execution_mode": disposition,
+        "execution_disposition_reason": disposition_reason,
+        "planner_execution_mode": planner_execution_mode,
+        "algorithm_metadata_status": str(metadata.get("status", "")),
+        "success_rate": _binary_metric(metrics.get("success"), "metrics.success"),
+        "collision_rate": 1.0 if total_collision_count > 0.0 else 0.0,
+        "near_miss_rate": _binary_metric(
+            _episode_metric(metrics, "near_misses"), "metrics.near_misses"
+        ),
+        "ped_collision_rate": 1.0 if ped_collision_count > 0.0 else 0.0,
+        "obstacle_collision_rate": 1.0 if obstacle_collision_count > 0.0 else 0.0,
+        "agent_collision_rate": 1.0 if agent_collision_count > 0.0 else 0.0,
+        "unclassified_collision_rate": 1.0 if total_collision_count > typed_count + 1e-9 else 0.0,
+        **speed,
+        "resolved_actuation_envelope": dict(tier.resolved_actuation_envelope),
+        "time_to_goal_norm": _episode_metric(metrics, "time_to_goal_norm"),
+        "total_exposure_seconds": exposure_share * exposure_steps * dt_seconds,
+        "travel_distance_m": _episode_metric(metrics, "socnavbench_path_length"),
+        "mean_clearance_m": _episode_metric(metrics, "mean_clearance"),
+        "min_clearance_m": _episode_metric(metrics, "min_clearance"),
+        "raw_episode_id": str(record.get("episode_id", "")),
+        "raw_repo_commit": str(
+            (record.get("result_provenance") or {}).get(
+                "repo_commit", record.get("git_hash", "unknown")
+            )
+        ),
+    }
+
+
+def _authorized_campaign_scenarios(manifest: CampaignManifest) -> dict[str, Mapping[str, Any]]:
+    """Build one exact scenario payload per frozen campaign scenario."""
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    source = {str(s["name"]): s for s in load_scenarios(CAMPAIGN_SCENARIO_MATRIX)}
+    result: dict[str, Mapping[str, Any]] = {}
+    for scenario_identity in manifest.scenarios:
+        base = source.get(scenario_identity.scenario_id)
+        if base is None:
+            raise AuthorizedCampaignError(
+                f"frozen scenario missing from campaign matrix: {scenario_identity.scenario_id}"
+            )
+        result[scenario_identity.scenario_id] = base
+    return result
+
+
+def _authorized_batch_scenario(
+    base: Mapping[str, Any],
+    *,
+    tier: SpeedTierRuntime,
+    seeds: Sequence[int],
+    horizon_steps: int,
+) -> dict[str, Any]:
+    """Apply one frozen tier and registered seed block to a scenario copy."""
+    scenario = copy.deepcopy(dict(base))
+    robot_config = scenario.get("robot_config")
+    robot_config = dict(robot_config) if isinstance(robot_config, Mapping) else {}
+    robot_config.update(_tier_variant_patch(tier))
+    scenario["robot_config"] = robot_config
+    simulation_config = scenario.get("simulation_config")
+    simulation_config = dict(simulation_config) if isinstance(simulation_config, Mapping) else {}
+    simulation_config["max_episode_steps"] = horizon_steps
+    scenario["simulation_config"] = simulation_config
+    scenario["seeds"] = [int(seed) for seed in seeds]
+    return scenario
+
+
+def _run_native_batch(
+    scenarios: list[dict[str, Any]],
+    out_path: pathlib.Path,
+    *,
+    algo: str,
+    algo_config_path: str | None,
+    resume: bool,
+) -> dict[str, Any]:
+    """Invoke the canonical map runner; this seam is intentionally testable."""
+    from robot_sf.benchmark.map_runner import run_map_batch
+
+    return run_map_batch(
+        scenarios,
+        out_path,
+        EPISODE_SCHEMA_PATH,
+        scenario_path=CAMPAIGN_SCENARIO_MATRIX,
+        horizon=HORIZON_STEPS,
+        dt=DT_SECONDS,
+        record_forces=False,
+        algo=algo,
+        algo_config_path=(str(REPO_ROOT / algo_config_path) if algo_config_path else None),
+        benchmark_profile="experimental",
+        socnav_missing_prereq_policy="fail-fast",
+        record_simulation_step_trace=True,
+        workers=1,
+        resume=resume,
+    )
+
+
+def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
+    manifest: CampaignManifest,
+    *,
+    output_root: str | pathlib.Path,
+    authorization_issue: int,
+    scenario_id: str = PREFLIGHT_SCENARIO,
+    seeds: Sequence[int] = (PREFLIGHT_SEEDS[0],),
+) -> dict[str, Any]:
+    """Exercise every planner/tier binding on disjoint seeds before registration.
+
+    This preflight is operational launch evidence only. It uses one frozen scenario
+    and disjoint seeds, retains traces, and verifies that every planner/tier batch
+    reaches the native benchmark-row boundary without fallback or degradation. It
+    never executes a registered seed and never produces benchmark synthesis.
+    """
+    if int(authorization_issue) != AUTHORIZED_EXECUTION_ISSUE:
+        raise CampaignAuthorizationError(
+            f"runtime preflight requires exactly --authorization-issue {AUTHORIZED_EXECUTION_ISSUE}"
+        )
+    if scenario_id not in {scenario.scenario_id for scenario in manifest.scenarios}:
+        raise AuthorizedCampaignError(
+            f"runtime preflight scenario is not frozen in the manifest: {scenario_id}"
+        )
+    preflight_seeds = tuple(int(seed) for seed in seeds)
+    if not preflight_seeds:
+        raise AuthorizedCampaignError("runtime preflight requires at least one disjoint seed")
+    if set(preflight_seeds) & set(manifest.seeds):
+        raise AuthorizedCampaignError("runtime preflight seeds overlap registered seeds 111-140")
+
+    root = pathlib.Path(output_root)
+    root.mkdir(parents=True, exist_ok=True)
+    descriptor = {
+        "schema_version": AUTHORIZED_EXECUTION_SCHEMA_VERSION,
+        "preflight_kind": "native_runtime_binding",
+        "authorization_issue": AUTHORIZED_EXECUTION_ISSUE,
+        "manifest_hash": manifest.manifest_hash,
+        "scenario_id": scenario_id,
+        "seeds": list(preflight_seeds),
+        "horizon_steps": manifest.horizon_steps,
+        "dt_seconds": manifest.dt_seconds,
+        "not_benchmark_evidence": True,
+    }
+    descriptor_path = root / "runtime_preflight_descriptor.json"
+    if descriptor_path.exists():
+        existing = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        if existing != descriptor:
+            raise AuthorizedCampaignError(
+                "runtime preflight output exists for a different manifest or seed set"
+            )
+        if any(root.glob("*.jsonl")) or (root / "runtime_preflight_report.json").exists():
+            raise AuthorizedCampaignError(
+                "runtime preflight output already exists for this manifest; refusing to rerun"
+            )
+    elif any(root.glob("*.jsonl")):
+        raise AuthorizedCampaignError(
+            "runtime preflight JSONL already exists without a matching descriptor"
+        )
+    descriptor_path.write_text(
+        json.dumps(descriptor, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    base = _authorized_campaign_scenarios(manifest)[scenario_id]
+    rows: list[dict[str, Any]] = []
+    report: dict[str, Any] = {
+        "schema_version": AUTHORIZED_EXECUTION_SCHEMA_VERSION,
+        "preflight_kind": "native_runtime_binding",
+        "not_benchmark_evidence": True,
+        "authorization_issue": AUTHORIZED_EXECUTION_ISSUE,
+        "manifest_hash": manifest.manifest_hash,
+        "scenario_id": scenario_id,
+        "seeds": list(preflight_seeds),
+        "batches": [],
+        "status": "running",
+    }
+    try:
+        for tier in manifest.speed_tiers:
+            for planner in manifest.planners:
+                batch_name = f"{tier.tier_id}__{planner.planner_id}"
+                raw_batch_path = root / f"{batch_name}.jsonl"
+                scenario = _authorized_batch_scenario(
+                    base,
+                    tier=tier,
+                    seeds=preflight_seeds,
+                    horizon_steps=manifest.horizon_steps,
+                )
+                runner_summary = _run_native_batch(
+                    [scenario],
+                    raw_batch_path,
+                    algo=planner.algorithm,
+                    algo_config_path=planner.config_path,
+                    resume=False,
+                )
+                records = _read_jsonl_records(raw_batch_path)
+                if len(records) != len(preflight_seeds):
+                    raise AuthorizedCampaignError(
+                        f"runtime preflight batch {batch_name} produced {len(records)} rows; "
+                        f"expected {len(preflight_seeds)}"
+                    )
+                expected_keys = {(scenario_id, seed) for seed in preflight_seeds}
+                seen_keys: set[tuple[str, int]] = set()
+                modes: dict[str, int] = {}
+                for record in records:
+                    record_seed = int(record.get("seed", -1))
+                    record_key = (str(record.get("scenario_id")), record_seed)
+                    if record_key in seen_keys:
+                        raise AuthorizedCampaignError(
+                            f"runtime preflight batch {batch_name} contains duplicate row "
+                            f"{record_key}"
+                        )
+                    seen_keys.add(record_key)
+                    cell = _cell_summary_from_episode(
+                        record,
+                        scenario_id=scenario_id,
+                        tier=tier,
+                        planner=planner,
+                        seed=record_seed,
+                        horizon_steps=manifest.horizon_steps,
+                        dt_seconds=manifest.dt_seconds,
+                    )
+                    rows.append(cell)
+                    mode = str(cell["execution_mode"])
+                    modes[mode] = modes.get(mode, 0) + 1
+                if seen_keys != expected_keys:
+                    raise AuthorizedCampaignError(
+                        f"runtime preflight batch {batch_name} does not cover the exact "
+                        "disjoint scenario/seed block"
+                    )
+                report["batches"].append(
+                    {
+                        "batch": batch_name,
+                        "speed_tier_id": tier.tier_id,
+                        "planner_id": planner.planner_id,
+                        "row_count": len(records),
+                        "execution_modes": modes,
+                        "runner_written": runner_summary.get("written"),
+                        "runner_failed_jobs": runner_summary.get("failed_jobs"),
+                    }
+                )
+        non_native = [row for row in rows if row["execution_mode"] != "native"]
+        if non_native:
+            report.update(
+                {
+                    "status": "rejected_non_native_rows",
+                    "native_cell_count": len(rows) - len(non_native),
+                    "excluded_cell_count": len(non_native),
+                    "exclusions": [
+                        {
+                            "scenario_id": row["scenario_id"],
+                            "speed_tier_id": row["speed_tier_id"],
+                            "planner_id": row["planner_id"],
+                            "seed": row["seed"],
+                            "execution_mode": row["execution_mode"],
+                            "reason": row.get("execution_disposition_reason"),
+                        }
+                        for row in non_native
+                    ],
+                    "finished_at_utc": _utc_timestamp(),
+                }
+            )
+            _write_jsonl(root / "runtime_preflight_report.json", report)
+            raise AuthorizedCampaignError(
+                f"runtime preflight rejected {len(non_native)} non-native rows"
+            )
+        report.update(
+            {
+                "status": "complete_native",
+                "native_cell_count": len(rows),
+                "excluded_cell_count": 0,
+                "finished_at_utc": _utc_timestamp(),
+            }
+        )
+        _write_jsonl(root / "runtime_preflight_report.json", report)
+        return report
+    except AuthorizedCampaignError:
+        if report.get("status") == "running":
+            report["status"] = "blocked_or_failed"
+            report["finished_at_utc"] = _utc_timestamp()
+            _write_jsonl(root / "runtime_preflight_report.json", report)
+        raise
+
+
+def _campaign_descriptor(manifest: CampaignManifest) -> dict[str, Any]:
+    """Return the immutable descriptor used by duplicate/resume preflight."""
+    return {
+        "schema_version": AUTHORIZED_EXECUTION_SCHEMA_VERSION,
+        "authorization_issue": AUTHORIZED_EXECUTION_ISSUE,
+        "manifest_hash": manifest.manifest_hash,
+        "expected_cell_count": manifest.expected_cell_count,
+        "scenario_ids": [s.scenario_id for s in manifest.scenarios],
+        "speed_tier_ids": [t.tier_id for t in manifest.speed_tiers],
+        "planner_ids": [p.planner_id for p in manifest.planners],
+        "seeds": list(manifest.seeds),
+        "horizon_steps": manifest.horizon_steps,
+        "dt_seconds": manifest.dt_seconds,
+        "execution_boundary": "native_campaign_rows_only; fallback_and_degraded_rejected",
+    }
+
+
+def _prepare_authorized_output_root(
+    raw_root: pathlib.Path,
+    manifest: CampaignManifest,
+    *,
+    resume: bool,
+) -> pathlib.Path:
+    """Run duplicate and descriptor checks before any episode launch."""
+    raw_root.mkdir(parents=True, exist_ok=True)
+    descriptor_path = raw_root / "campaign_descriptor.json"
+    descriptor = _campaign_descriptor(manifest)
+    if descriptor_path.exists():
+        try:
+            existing = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise AuthorizedCampaignError(
+                f"campaign descriptor is invalid JSON: {descriptor_path}"
+            ) from exc
+        if existing != descriptor:
+            raise AuthorizedCampaignError(
+                "duplicate/pre-existing campaign output has a different manifest or contract"
+            )
+    elif any(raw_root.glob("*.jsonl")):
+        raise AuthorizedCampaignError(
+            "raw campaign JSONL already exists without a matching descriptor; refusing to append"
+        )
+    elif any(raw_root.glob("*.summary.json")):
+        raise AuthorizedCampaignError(
+            "campaign summaries already exist without a matching descriptor; refusing to run"
+        )
+    if not resume:
+        existing_batches = sorted([*raw_root.glob("*.jsonl"), *raw_root.glob("*.summary.json")])
+        if existing_batches:
+            raise AuthorizedCampaignError(
+                "resume is disabled but campaign batch output already exists: "
+                + ", ".join(str(path) for path in existing_batches[:3])
+            )
+    descriptor_path.write_text(
+        json.dumps(descriptor, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return descriptor_path
+
+
+def _write_cell_summaries(rows: Sequence[Mapping[str, Any]], path: pathlib.Path) -> None:
+    """Write deterministic JSONL cell summaries."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ordered = sorted(
+        rows,
+        key=lambda row: (
+            str(row["scenario_id"]),
+            str(row["speed_tier_id"]),
+            str(row["planner_id"]),
+            int(row["seed"]),
+        ),
+    )
+    path.write_text(
+        "".join(json.dumps(dict(row), sort_keys=True) + "\n" for row in ordered),
+        encoding="utf-8",
+    )
+
+
+def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
+    manifest: CampaignManifest,
+    *,
+    raw_root: str | pathlib.Path,
+    cell_summaries_path: str | pathlib.Path,
+    synthesis_path: str | pathlib.Path,
+    report_path: str | pathlib.Path | None = None,
+    authorization_issue: int,
+    resume: bool = False,
+) -> dict[str, Any]:
+    """Execute the exact #5578 grid after an explicit #6102 authorization.
+
+    This is the only function in this module permitted to launch registered
+    episodes. It runs one serial, native map-runner batch per planner/tier pair,
+    records a public-safe execution report, rejects any fallback/degraded row, and
+    synthesizes only after the complete 2,160-row grid is present.
+    """
+    if int(authorization_issue) != AUTHORIZED_EXECUTION_ISSUE:
+        raise CampaignAuthorizationError(
+            "registered issue #5578 execution requires exactly "
+            f"--authorization-issue {AUTHORIZED_EXECUTION_ISSUE}"
+        )
+    raw_path = pathlib.Path(raw_root)
+    cell_path = pathlib.Path(cell_summaries_path)
+    synthesis_path = pathlib.Path(synthesis_path)
+    report_file = (
+        pathlib.Path(report_path)
+        if report_path is not None
+        else raw_path / "campaign_run_report.json"
+    )
+    descriptor_path = _prepare_authorized_output_root(raw_path, manifest, resume=resume)
+    manifest_path = raw_path / "campaign_manifest.json"
+    write_manifest(manifest, manifest_path)
+
+    report: dict[str, Any] = {
+        "schema_version": AUTHORIZED_EXECUTION_SCHEMA_VERSION,
+        "status": "running",
+        "authorization_issue": AUTHORIZED_EXECUTION_ISSUE,
+        "manifest_hash": manifest.manifest_hash,
+        "expected_cell_count": manifest.expected_cell_count,
+        "raw_root": _repo_rel(raw_path),
+        "cell_summaries_path": _repo_rel(cell_path),
+        "synthesis_path": _repo_rel(synthesis_path),
+        "report_path": _repo_rel(report_file),
+        "descriptor_path": _repo_rel(descriptor_path),
+        "manifest_path": _repo_rel(manifest_path),
+        "started_at_utc": _utc_timestamp(),
+        "resume": bool(resume),
+        "workers": 1,
+        "horizon_steps": manifest.horizon_steps,
+        "dt_seconds": manifest.dt_seconds,
+        "fallback_or_degraded_policy": "reject",
+        "batches": [],
+        "exclusions": [],
+    }
+    rows: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, str, str, int]] = set()
+    base_scenarios = _authorized_campaign_scenarios(manifest)
+    try:
+        for tier in manifest.speed_tiers:
+            for planner in manifest.planners:
+                batch_name = f"{tier.tier_id}__{planner.planner_id}"
+                raw_batch_path = raw_path / f"{batch_name}.jsonl"
+                scenario_batch = [
+                    _authorized_batch_scenario(
+                        base_scenarios[scenario.scenario_id],
+                        tier=tier,
+                        seeds=manifest.seeds,
+                        horizon_steps=manifest.horizon_steps,
+                    )
+                    for scenario in manifest.scenarios
+                ]
+                summary = _run_native_batch(
+                    scenario_batch,
+                    raw_batch_path,
+                    algo=planner.algorithm,
+                    algo_config_path=planner.config_path,
+                    resume=resume,
+                )
+                batch_records = _read_jsonl_records(raw_batch_path)
+                expected_batch_count = len(manifest.scenarios) * len(manifest.seeds)
+                if len(batch_records) != expected_batch_count:
+                    raise AuthorizedCampaignError(
+                        f"batch {batch_name} has {len(batch_records)} rows; "
+                        f"expected {expected_batch_count}"
+                    )
+                batch_seen: set[tuple[str, int]] = set()
+                batch_modes: dict[str, int] = {}
+                declared_scenario_ids = {scenario.scenario_id for scenario in manifest.scenarios}
+                declared_seeds = set(manifest.seeds)
+                expected_batch_keys = {
+                    (scenario_id, int(seed))
+                    for scenario_id in declared_scenario_ids
+                    for seed in declared_seeds
+                }
+                for record in batch_records:
+                    scenario_id = str(record.get("scenario_id"))
+                    seed = int(record.get("seed", -1))
+                    if scenario_id not in declared_scenario_ids:
+                        raise AuthorizedCampaignError(
+                            f"batch {batch_name} contains undeclared scenario: {scenario_id}"
+                        )
+                    if seed not in declared_seeds:
+                        raise AuthorizedCampaignError(
+                            f"batch {batch_name} contains undeclared seed: {seed}"
+                        )
+                    local_key = (scenario_id, seed)
+                    if local_key in batch_seen:
+                        raise AuthorizedCampaignError(
+                            f"duplicate raw episode in batch {batch_name}: {local_key}"
+                        )
+                    batch_seen.add(local_key)
+                    cell = _cell_summary_from_episode(
+                        record,
+                        scenario_id=scenario_id,
+                        tier=tier,
+                        planner=planner,
+                        seed=seed,
+                        horizon_steps=manifest.horizon_steps,
+                        dt_seconds=manifest.dt_seconds,
+                    )
+                    cell_key = (
+                        scenario_id,
+                        tier.tier_id,
+                        planner.planner_id,
+                        seed,
+                    )
+                    if cell_key in seen_keys:
+                        raise AuthorizedCampaignError(f"duplicate campaign cell: {cell_key}")
+                    seen_keys.add(cell_key)
+                    rows.append(cell)
+                    mode = str(cell["execution_mode"])
+                    batch_modes[mode] = batch_modes.get(mode, 0) + 1
+                    if mode != "native":
+                        report["exclusions"].append(
+                            {
+                                "cell": cell_key,
+                                "execution_mode": mode,
+                                "reason": cell.get("execution_disposition_reason"),
+                            }
+                        )
+                if batch_seen != expected_batch_keys:
+                    raise AuthorizedCampaignError(
+                        f"batch {batch_name} does not cover the exact scenario/seed block"
+                    )
+                _write_jsonl(
+                    raw_path / f"{batch_name}.summary.json",
+                    {
+                        "schema_version": AUTHORIZED_EXECUTION_SCHEMA_VERSION,
+                        "batch": batch_name,
+                        "planner_id": planner.planner_id,
+                        "algorithm": planner.algorithm,
+                        "speed_tier_id": tier.tier_id,
+                        "manifest_hash": manifest.manifest_hash,
+                        "runner_summary": summary,
+                        "row_count": len(batch_records),
+                        "execution_modes": batch_modes,
+                    },
+                )
+                report["batches"].append(
+                    {
+                        "batch": batch_name,
+                        "planner_id": planner.planner_id,
+                        "algorithm": planner.algorithm,
+                        "speed_tier_id": tier.tier_id,
+                        "raw_episode_jsonl": _repo_rel(raw_batch_path),
+                        "row_count": len(batch_records),
+                        "execution_modes": batch_modes,
+                        "runner_written": summary.get("written"),
+                        "runner_failed_jobs": summary.get("failed_jobs"),
+                    }
+                )
+
+        expected_keys = {
+            (
+                scenario.scenario_id,
+                tier.tier_id,
+                planner.planner_id,
+                int(seed),
+            )
+            for scenario in manifest.scenarios
+            for tier in manifest.speed_tiers
+            for planner in manifest.planners
+            for seed in manifest.seeds
+        }
+        missing = expected_keys - seen_keys
+        extra = seen_keys - expected_keys
+        if missing or extra or len(rows) != manifest.expected_cell_count:
+            raise AuthorizedCampaignError(
+                "authorized campaign grid mismatch: "
+                f"rows={len(rows)}, missing={sorted(missing)[:3]}, extra={sorted(extra)[:3]}"
+            )
+
+        _write_cell_summaries(rows, cell_path)
+        non_native = [row for row in rows if row["execution_mode"] != "native"]
+        if non_native:
+            report["status"] = "rejected_non_native_rows"
+            report["native_cell_count"] = len(rows) - len(non_native)
+            report["excluded_cell_count"] = len(non_native)
+            report["finished_at_utc"] = _utc_timestamp()
+            _write_jsonl(report_file, report)
+            raise AuthorizedCampaignError(
+                f"authorized campaign rejected {len(non_native)} fallback/degraded/failed rows; "
+                "no synthesis was promoted"
+            )
+
+        synthesis = synthesize_from_cell_summaries(cell_path, output_path=synthesis_path)
+        report.update(
+            {
+                "status": "complete_native",
+                "native_cell_count": len(rows),
+                "excluded_cell_count": 0,
+                "synthesis": synthesis,
+                "finished_at_utc": _utc_timestamp(),
+            }
+        )
+        _write_jsonl(report_file, report)
+        return report
+    except AuthorizedCampaignError:
+        if report.get("status") == "running":
+            report["status"] = "blocked_or_failed"
+            report["finished_at_utc"] = _utc_timestamp()
+            _write_jsonl(report_file, report)
+        raise
+    except Exception as exc:
+        report["status"] = "failed"
+        report["error"] = f"{type(exc).__name__}: {exc}"
+        report["finished_at_utc"] = _utc_timestamp()
+        _write_jsonl(report_file, report)
+        raise AuthorizedCampaignError(str(exc)) from exc
+
+
 def _full_run_documentation(
     cell_summaries_path: str | pathlib.Path | None = None,
 ) -> dict[str, Any]:
@@ -1063,6 +1917,10 @@ def _full_run_documentation(
         "documented_command": (
             "uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py --full-run "
             f"--cell-summaries-out {cell_summaries}"
+        ),
+        "authorized_command": (
+            "uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py "
+            "--authorized-full-run --authorization-issue 6102"
         ),
         "expected_output_locations": {
             "raw_episode_jsonl": DEFAULT_RAW_ROOT,
@@ -1174,6 +2032,69 @@ def _run_full_run(args: argparse.Namespace) -> int:
     raise FullRunBlockedError(FULL_RUN_BLOCKED_REASON)
 
 
+def _run_authorized_full_run(args: argparse.Namespace) -> int:
+    """Run the registered campaign only with the explicit #6102 authorization."""
+    if args.authorization_issue != AUTHORIZED_EXECUTION_ISSUE:
+        raise CampaignAuthorizationError(
+            "authorized campaign mode requires exactly "
+            f"--authorization-issue {AUTHORIZED_EXECUTION_ISSUE}"
+        )
+    manifest = compile_campaign_manifest(config_path=args.config)
+    raw_root = pathlib.Path(args.raw_root or DEFAULT_RAW_ROOT)
+    cell_summaries_path = pathlib.Path(
+        args.cell_summaries_out or raw_root.parent / "cell_summaries.jsonl"
+    )
+    synthesis_path = pathlib.Path(args.synthesis_out or raw_root.parent / "synthesis.json")
+    report = execute_authorized_campaign(
+        manifest,
+        raw_root=raw_root,
+        cell_summaries_path=cell_summaries_path,
+        synthesis_path=synthesis_path,
+        report_path=args.campaign_report_out,
+        authorization_issue=args.authorization_issue,
+        resume=args.resume,
+    )
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(
+            "PASS: issue #5578 authorized native campaign completed "
+            f"({report['native_cell_count']} cells, manifest={report['manifest_hash']})"
+        )
+        print(f"  synthesis: {report['synthesis_path']}")
+        print(f"  report: {report['report_path']}")
+    return 0
+
+
+def _run_authorized_runtime_preflight(args: argparse.Namespace) -> int:
+    """Exercise the authorized native planner/tier bindings on disjoint seeds."""
+    if args.authorization_issue != AUTHORIZED_EXECUTION_ISSUE:
+        raise CampaignAuthorizationError(
+            "authorized runtime preflight requires exactly "
+            f"--authorization-issue {AUTHORIZED_EXECUTION_ISSUE}"
+        )
+    manifest = compile_campaign_manifest(config_path=args.config)
+    output_root = pathlib.Path(
+        args.runtime_preflight_out or "output/issue_5578_robot_speed_tier_sweep/runtime_preflight"
+    )
+    report = run_authorized_runtime_preflight(
+        manifest,
+        output_root=output_root,
+        authorization_issue=args.authorization_issue,
+        scenario_id=args.runtime_preflight_scenario,
+        seeds=tuple(args.runtime_preflight_seeds),
+    )
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(
+            "PASS: issue #5578 authorized native runtime preflight completed "
+            f"({report['native_cell_count']} cells; {NOT_EVIDENCE_BANNER})."
+        )
+        print(f"  output: {_repo_rel(output_root)}")
+    return 0
+
+
 def _run_synthesize(args: argparse.Namespace) -> int:
     """Feed file-backed per-cell summaries through the reviewed adapter."""
     smoke_scenarios = {args.smoke_declared_scenario} if args.smoke_declared_scenario else None
@@ -1206,6 +2127,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_preflight(args)
     if args.full_run:
         return _run_full_run(args)
+    if args.authorized_full_run:
+        return _run_authorized_full_run(args)
+    if args.authorized_runtime_preflight:
+        return _run_authorized_runtime_preflight(args)
     if args.synthesize:
         return _run_synthesize(args)
     return 0
@@ -1236,10 +2161,67 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Documented only; registered execution is not authorized in this issue.",
     )
+    mode.add_argument(
+        "--authorized-full-run",
+        action="store_true",
+        help=(
+            "Execute the registered grid only with the explicit #6102 authorization; "
+            "fallback/degraded rows fail closed."
+        ),
+    )
+    mode.add_argument(
+        "--authorized-runtime-preflight",
+        action="store_true",
+        help=(
+            "Exercise every planner/tier binding on disjoint seeds only with the explicit "
+            "#6102 authorization; this is not benchmark evidence."
+        ),
+    )
+    parser.add_argument(
+        "--authorization-issue",
+        type=int,
+        help=(
+            "Required for authorized modes; must be the operational authorization "
+            f"issue {AUTHORIZED_EXECUTION_ISSUE}."
+        ),
+    )
     parser.add_argument(
         "--cell-summaries-out",
         type=pathlib.Path,
-        help="Cell-summary output path recorded by the documented full-run handoff.",
+        help="Cell-summary output path for the authorized campaign or documented handoff.",
+    )
+    parser.add_argument(
+        "--raw-root",
+        type=pathlib.Path,
+        help="Raw episode root for --authorized-full-run (defaults under output/).",
+    )
+    parser.add_argument(
+        "--campaign-report-out",
+        type=pathlib.Path,
+        help="Public-safe authorized campaign report path (defaults inside --raw-root).",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume a matching authorized campaign descriptor after a partial run.",
+    )
+    parser.add_argument(
+        "--runtime-preflight-out",
+        type=pathlib.Path,
+        help="Output directory for --authorized-runtime-preflight.",
+    )
+    parser.add_argument(
+        "--runtime-preflight-scenario",
+        type=str,
+        default=PREFLIGHT_SCENARIO,
+        help="Frozen scenario for --authorized-runtime-preflight.",
+    )
+    parser.add_argument(
+        "--runtime-preflight-seeds",
+        type=int,
+        nargs="+",
+        default=[PREFLIGHT_SEEDS[0]],
+        help="Disjoint seeds for --authorized-runtime-preflight (outside 111-140).",
     )
     mode.add_argument(
         "--synthesize",

@@ -275,6 +275,131 @@ def test_full_run_cli_fails_closed(capsys: pytest.CaptureFixture[str]) -> None:
     assert "--cell-summaries-out /tmp/issue-5578-cells.jsonl" in output
 
 
+def test_authorized_full_run_requires_exact_operational_issue() -> None:
+    """Registered execution cannot start without the explicit #6102 flag."""
+    with pytest.raises(campaign.CampaignAuthorizationError, match="6102"):
+        main(["--authorized-full-run"])
+
+
+def test_authorized_runtime_preflight_requires_exact_operational_issue() -> None:
+    """Runtime binding checks cannot start without the explicit #6102 flag."""
+    with pytest.raises(campaign.CampaignAuthorizationError, match="6102"):
+        main(["--authorized-runtime-preflight"])
+
+
+def test_execution_disposition_allows_expected_adapter_but_rejects_fallback() -> None:
+    """Planner command adapters remain native rows; fallback/degraded states do not."""
+    adapter_record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "adapter"},
+        }
+    }
+    assert campaign._campaign_execution_disposition(adapter_record) == ("native", None)
+
+    fallback_record = {"algorithm_metadata": {"status": "fallback"}}
+    assert campaign._campaign_execution_disposition(fallback_record)[0] == "degraded"
+
+    degraded_record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "foresight_prediction": {"evidence_eligible": False},
+        }
+    }
+    assert campaign._campaign_execution_disposition(degraded_record)[0] == "degraded"
+
+
+def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The authorized lane enforces the exact grid before synthesis."""
+
+    def fake_run_native_batch(
+        scenarios: list[dict[str, Any]],
+        out_path: Path,
+        *,
+        algo: str,
+        algo_config_path: str | None,
+        resume: bool,
+    ) -> dict[str, Any]:
+        del algo_config_path, resume
+        cap = float(scenarios[0]["robot_config"]["max_velocity"])
+        planner_mode = "adapter" if algo == "orca" else "native"
+        rows: list[dict[str, Any]] = []
+        for scenario in scenarios:
+            for seed in scenario["seeds"]:
+                rows.append(
+                    {
+                        "episode_id": f"{scenario['name']}--{seed}",
+                        "scenario_id": scenario["name"],
+                        "seed": seed,
+                        "horizon": 600,
+                        "algorithm_metadata": {
+                            "status": "ok",
+                            "canonical_algorithm": algo,
+                            "planner_kinematics": {"execution_mode": planner_mode},
+                            "simulation_step_trace": {
+                                "dt": 0.1,
+                                "steps": [
+                                    {
+                                        "robot": {"velocity": [cap, 0.0]},
+                                        "planner": {
+                                            "selected_action": {
+                                                "linear_velocity": cap,
+                                            }
+                                        },
+                                    },
+                                    {
+                                        "robot": {"velocity": [cap, 0.0]},
+                                        "planner": {
+                                            "selected_action": {
+                                                "linear_velocity": cap,
+                                            }
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                        "metrics": {
+                            "success": True,
+                            "total_collision_count": 0,
+                            "collisions": 0,
+                            "ped_collision_count": 0,
+                            "obstacle_collision_count": 0,
+                            "agent_collision_count": 0,
+                            "near_misses": 0,
+                            "time_to_goal_norm": 0.5,
+                            "socnavbench_path_length": 1.0,
+                            "mean_clearance": 1.0,
+                            "min_clearance": 0.5,
+                        },
+                        "interaction_exposure": {
+                            "interaction_exposure_share": 0.0,
+                            "interaction_exposure_denominator_steps": 2,
+                        },
+                        "result_provenance": {"repo_commit": "test"},
+                    }
+                )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return {"written": len(rows), "failed_jobs": 0}
+
+    monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
+    manifest = _manifest()
+    report = campaign.execute_authorized_campaign(
+        manifest,
+        raw_root=tmp_path / "raw",
+        cell_summaries_path=tmp_path / "cells.jsonl",
+        synthesis_path=tmp_path / "synthesis.json",
+        authorization_issue=6102,
+    )
+    assert report["status"] == "complete_native"
+    assert report["native_cell_count"] == EXPECTED_CELL_COUNT
+    cells = (tmp_path / "cells.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(cells) == EXPECTED_CELL_COUNT
+    assert all(json.loads(line)["execution_mode"] == "native" for line in cells)
+
+
 def test_synthesize_adapter_connects_to_reviewed_synthesizer(tmp_path: Path) -> None:
     """File-backed rows flow through the adapter into the reviewed synthesizer."""
     rows = _smoke_rows()

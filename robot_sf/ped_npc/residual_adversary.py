@@ -759,7 +759,7 @@ def _normalize_obstacle_segments(
     if len(obstacle_segments) == 0:
         return None
     segments = np.asarray(obstacle_segments, dtype=float)
-    if segments.ndim == 3 and segments.shape[2] == 2:
+    if segments.ndim == 3 and segments.shape[1:] == (2, 2):
         stacked = segments
     elif segments.ndim == 2 and segments.shape[1] == 4:
         stacked = segments.reshape(segments.shape[0], 2, 2)

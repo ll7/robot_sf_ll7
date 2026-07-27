@@ -317,6 +317,19 @@ def test_project_residual_displacement_walkable_prevents_endpoint_tunneling() ->
     assert np.linalg.norm(candidate[0] - obstacle[0, 0]) >= 0.5 - 1e-9
 
 
+def test_project_residual_displacement_walkable_rejects_malformed_obstacle_segments() -> None:
+    """Malformed obstacle rows must fail closed instead of silently truncating geometry."""
+    with pytest.raises(ValueError, match="obstacle_segments must have shape"):
+        project_residual_displacement_walkable(
+            np.array([[1.0, 1.0]], dtype=float),
+            np.zeros((1, 2), dtype=float),
+            np.zeros((1, 3, 2), dtype=float),
+            None,
+            radius=0.4,
+            margin_m=0.1,
+        )
+
+
 def test_project_residual_displacement_walkable_clamps_to_bounds() -> None:
     """A residual leaving the map is clamped inside the bounds with clearance."""
     positions = np.array([[0.2, 0.2]], dtype=float)

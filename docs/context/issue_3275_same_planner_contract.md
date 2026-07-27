@@ -99,7 +99,7 @@ verdict. Both opposite-sign regressions are required tests:
 One row per candidate x execution seed binds: candidate/manifest ID + manifest
 SHA, selection arm + rank, candidate-pool seed/index, target planner ID + config
 SHA, scenario family + seed, **execution seed**, execution commit + command/config lineage +
-native/fallback/degraded status, termination reason + independent failure
+native/fallback/degraded status, primary failure + termination reason + independent failure
 outcome, scenario and candidate certification status, replay/confirmation
 lineage + record hash, and exclusion reason when inadmissible. Each admitted
 manifest SHA, candidate-pool index, scenario seed, and record SHA must match a
@@ -152,27 +152,27 @@ There is no `revise` and no generic `blocked` in this contract.
 
 ## Cross-family feature semantics (issue #6103 gap 6)
 
-The frozen feature view is **family-invariant robot-path-relative**
-(`robot_sf.adversarial.disjoint_evaluation.family_invariant_features`): each
-pedestrian candidate is projected onto the robot's start-to-goal path, giving
-lateral/longitudinal spawn and goal features (normalized by path length; a
-longitudinal value of 0 is at the robot start and 1 is at the goal, while values
-outside `[0,1]` retain before-start or beyond-goal placement) plus the
-three inherently family-invariant scalars (pedestrian speed, delay, spawn time).
-The per-feature semantic argument is recorded in the contract config: lateral and
-longitudinal features have identical operational meaning in
-`classic_group_crossing_medium` and `classic_cross_trap_medium` ("how far off the
-robot corridor the pedestrian appears, and where along the route"). The transform
-is deterministic geometry, frozen against outcomes, and does not use the excluded
-cross-trap/goal failures for tuning.
+The frozen feature view is **family-invariant shared-search-space normalization**
+(`robot_sf.adversarial.disjoint_evaluation.family_invariant_features`).
+`CandidateSpec.start` and `CandidateSpec.goal` are robot-route endpoints: the
+materializer writes them to `route_overrides.robot_routes`. They are not
+pedestrian spawn and goal points. The ranker therefore normalizes the robot
+route's start x/y and goal x/y coordinates plus pedestrian speed, pedestrian
+delay, and spawn time by the one pinned search-space contract used for both
+families.
 
-For the normal `--contract` path, the evaluation geometry is itself frozen in
-the contract: the explicit `classic_crossing.svg` robot-zone centres at
-`[3.0, 3.0]` to `[17.0, 17.0]` metres (`cells_per_meter=2.0`). The runner
-records this map-backed geometry in its provenance and does not substitute a
-geometry derived from the excluded held-out failures.
+This keeps the fit anchors' distinct robot routes visible. Projecting each fit
+candidate onto its own reconstructed robot route would collapse all six
+spatial anchor vectors to `(0, 0, 0, 1)` and erase the geometry the
+failure-neighborhood ranker is meant to compare. Both classic maps use
+metre-valued coordinates in a 40x40 SVG frame at two cells per metre, and both
+sides use the exact same crossing/TTC candidate intervals.
 
-The same normal path also freezes the candidate-pool bounds in
+The normal `--contract` path separately pins `classic_crossing.svg` as the
+held-out execution map. Its `[3.0, 3.0]` to `[17.0, 17.0]` zone centres are
+scenario defaults; candidate manifests override the robot route, so those
+defaults do not define ranker features. The same path freezes candidate-pool
+bounds in
 `configs/adversarial/crossing_ttc_space.yaml` by raw SHA-256. It samples the
 verified canonical file and rejects any `--search-space` override whose bytes do
 not match, preventing candidate-pool, ranking, or arm-selection drift.

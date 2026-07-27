@@ -103,33 +103,34 @@
       17.0,
       17.0
     ],
-    "robot_geometry_source": "Frozen centres (in metres at cells_per_meter=2.0) of classic_crossing.svg's explicit robot_spawn_zone and robot_goal_zone; this geometry is a scenario-definition input, not inferred from excluded held-out failures or outcomes.",
+    "robot_geometry_source": "Frozen default centres (in metres at cells_per_meter=2.0) of classic_crossing.svg's explicit robot_spawn_zone and robot_goal_zone. Candidate manifests replace the robot route with CandidateSpec.start/goal; these defaults do not define ranker features.",
     "note": "Restores the parent #3275 held-out design: evaluate on classic_cross_trap_medium with social_force in both arms. This is NOT classic_group_crossing_medium for both fit and evaluation."
   },
   "feature_representation": {
-    "view": "family_invariant_robot_path_relative",
+    "view": "family_invariant_shared_search_space",
     "frozen_against_outcomes": true,
     "uses_excluded_cross_trap_goal_failures_for_tuning": false,
     "implementation": "robot_sf.adversarial.disjoint_evaluation.family_invariant_features",
+    "candidate_route_semantics": "CandidateSpec.start and CandidateSpec.goal are robot-route endpoints materialized into route_overrides.robot_routes; they are not pedestrian endpoints.",
     "retained_features": [
-      "lateral_spawn_path_fraction",
-      "longitudinal_spawn_fraction",
-      "lateral_goal_path_fraction",
-      "longitudinal_goal_fraction",
-      "pedestrian_speed_mps",
-      "pedestrian_delay_s",
-      "spawn_time_s"
+      "robot_start_x_space_fraction",
+      "robot_start_y_space_fraction",
+      "robot_goal_x_space_fraction",
+      "robot_goal_y_space_fraction",
+      "pedestrian_speed_space_fraction",
+      "pedestrian_delay_space_fraction",
+      "spawn_time_space_fraction"
     ],
     "per_feature_semantic_argument": {
-      "lateral_spawn_path_fraction": "Dimensionless signed perpendicular offset from the pedestrian spawn point to the robot's start-to-goal path, divided by path length. Identical operational meaning in group_crossing and cross_trap: relative lateral displacement from the robot corridor.",
-      "longitudinal_spawn_fraction": "Projection of the pedestrian spawn point onto the robot path as a path-length fraction (0 at the start and 1 at the goal; values outside [0,1] retain before-start or beyond-goal placement). Identical meaning in both families: where along the robot route the pedestrian spawns.",
-      "lateral_goal_path_fraction": "Dimensionless signed perpendicular offset from the pedestrian goal to the robot path, divided by path length. Same meaning in both families.",
-      "longitudinal_goal_fraction": "Projection of the pedestrian goal onto the robot path as a path-length fraction (0 at the start and 1 at the goal; values outside [0,1] retain before-start or beyond-goal placement). Same meaning in both families.",
-      "pedestrian_speed_mps": "Pedestrian speed. Inherently family-invariant scalar; identical units and operational meaning in both families.",
-      "pedestrian_delay_s": "Pedestrian start delay. Inherently family-invariant scalar.",
-      "spawn_time_s": "Pedestrian spawn time. Inherently family-invariant scalar."
+      "robot_start_x_space_fraction": "Robot route start x-coordinate normalized by the frozen crossing/TTC start_x interval. Both families use metre-valued coordinates in the same 40x40 SVG frame at two cells per metre.",
+      "robot_start_y_space_fraction": "Robot route start y-coordinate normalized by the frozen crossing/TTC start_y interval under the same shared map-coordinate convention.",
+      "robot_goal_x_space_fraction": "Robot route goal x-coordinate normalized by the frozen crossing/TTC goal_x interval under the same shared map-coordinate convention.",
+      "robot_goal_y_space_fraction": "Robot route goal y-coordinate normalized by the frozen crossing/TTC goal_y interval under the same shared map-coordinate convention.",
+      "pedestrian_speed_space_fraction": "Pedestrian speed normalized by the frozen shared search interval; identical units and operational meaning in both families.",
+      "pedestrian_delay_space_fraction": "Pedestrian start delay normalized by the frozen shared search interval.",
+      "spawn_time_space_fraction": "Pedestrian spawn time normalized by the frozen shared search interval."
     },
-    "robot_geometry_source": "Per-record robot_start/robot_goal come from the corrected recertification reconstruction for fit records, and from the evaluation scenario definition for candidates scored at evaluation time. The transform is a deterministic geometric projection; it does not consume any outcome."
+    "normalization_source": "The raw-SHA-pinned configs/adversarial/crossing_ttc_space.yaml file supplies every interval. The deterministic transform consumes no outcome. It preserves the six fit anchors' distinct robot routes instead of projecting every route onto itself."
   },
   "estimand": {
     "definition": "proposal-minus-random difference in candidate-level certified failure yield under identical candidate budget.",
@@ -194,6 +195,7 @@
       "execution_command",
       "execution_config_lineage",
       "execution_mode",
+      "primary_failure",
       "termination_reason",
       "independent_failure_outcome",
       "scenario_certification_status",

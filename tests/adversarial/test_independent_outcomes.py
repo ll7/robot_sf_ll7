@@ -8,6 +8,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from robot_sf.adversarial.independent_outcomes import (
     OUTCOME_SCHEMA_VERSION,
     AdmissionSpec,
@@ -86,6 +88,7 @@ def _row(  # noqa: PLR0913
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
         "execution_config_lineage": {"config": "eval.yaml", "sha256": "cfg-hash"},
         "execution_mode": execution_mode,
+        "primary_failure": "collision" if failure else "none",
         "termination_reason": "collision" if failure else "goal_reached",
         "independent_failure_outcome": failure,
         "scenario_certification_status": scenario_cert,
@@ -359,6 +362,7 @@ def test_malformed_execution_lineage_fields_fail_closed() -> None:
         ("selection_rank", True, "selection_rank"),
         ("candidate_pool_seed", True, "candidate_pool_seed"),
         ("scenario_seed", True, "scenario_seed"),
+        ("primary_failure", "", "primary_failure"),
         ("termination_reason", "", "termination_reason"),
     )
     for field_name, value, reason_fragment in malformed_values:
@@ -697,8 +701,15 @@ def test_three_of_five_confirmation_counts_as_one_candidate_failure() -> None:
     assert result["random"]["outcomes"] == [False]
 
 
-def test_different_confirming_termination_reasons_fail_closed() -> None:
-    """The confirming seeds must retain a stable failure attribution."""
+@pytest.mark.parametrize(
+    ("field", "drifted_value"),
+    [("primary_failure", "deadlock"), ("termination_reason", "timeout")],
+)
+def test_different_confirming_attributions_fail_closed(
+    field: str,
+    drifted_value: str,
+) -> None:
+    """Confirming seeds must retain the same failure mechanism and termination."""
     rows = [
         *[
             _row(
@@ -727,7 +738,7 @@ def test_different_confirming_termination_reasons_fail_closed() -> None:
             for seed in range(1, 6)
         ],
     ]
-    rows[1]["termination_reason"] = "timeout"
+    rows[1][field] = drifted_value
 
     result = _evaluate(_packet(rows), budget_per_arm=1)
 

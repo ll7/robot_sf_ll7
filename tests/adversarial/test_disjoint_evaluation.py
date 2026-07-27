@@ -6,6 +6,8 @@ simulation/torch surfaces, so these tests run standalone.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from robot_sf.adversarial.disjoint_evaluation import (
@@ -277,8 +279,24 @@ from robot_sf.adversarial.disjoint_evaluation import (  # noqa: E402
 )
 
 
-def test_family_invariant_features_are_robot_path_relative() -> None:
-    """Lateral/longitudinal features are computed relative to the robot path."""
+def _shared_search_space() -> Any:
+    """Return the frozen crossing/TTC ranges used by feature tests."""
+    from robot_sf.adversarial.config import RangeConfig, SearchSpaceConfig
+
+    return SearchSpaceConfig(
+        start_x=RangeConfig(1.0, 3.0),
+        start_y=RangeConfig(2.0, 4.0),
+        goal_x=RangeConfig(7.0, 9.0),
+        goal_y=RangeConfig(2.0, 4.0),
+        spawn_time_s=RangeConfig(0.0, 2.0),
+        pedestrian_speed_mps=RangeConfig(0.8, 1.4),
+        pedestrian_delay_s=RangeConfig(0.0, 2.0),
+        scenario_seed=RangeConfig(100.0, 999.0),
+    )
+
+
+def test_family_invariant_features_normalize_robot_route_controls() -> None:
+    """Candidate route endpoints and controls use the pinned shared ranges."""
     candidate = {
         "start": {"x": 2.0, "y": 4.0},
         "goal": {"x": 8.0, "y": 4.0},
@@ -286,17 +304,17 @@ def test_family_invariant_features_are_robot_path_relative() -> None:
         "pedestrian_speed_mps": 1.2,
         "pedestrian_delay_s": 0.5,
     }
-    # Robot walks straight along x from (0,0) to (10,0): path length 10.
-    feats = family_invariant_features(candidate, (0.0, 0.0), (10.0, 0.0))
+    feats = family_invariant_features(candidate, _shared_search_space())
     assert set(feats) == set(FAMILY_INVARIANT_FEATURE_NAMES)
-    # Pedestrian spawns at (2,4): longitudinal fraction 0.2, lateral 4/10 = 0.4.
-    assert feats["longitudinal_spawn_fraction"] == pytest.approx(0.2)
-    assert feats["lateral_spawn_path_fraction"] == pytest.approx(0.4)
-    assert feats["pedestrian_speed_mps"] == pytest.approx(1.2)
+    assert feats["robot_start_x_space_fraction"] == pytest.approx(0.5)
+    assert feats["robot_start_y_space_fraction"] == pytest.approx(1.0)
+    assert feats["robot_goal_x_space_fraction"] == pytest.approx(0.5)
+    assert feats["robot_goal_y_space_fraction"] == pytest.approx(1.0)
+    assert feats["pedestrian_speed_space_fraction"] == pytest.approx(2.0 / 3.0)
 
 
-def test_family_invariant_features_keep_longitudinal_positions_outside_path() -> None:
-    """Longitudinal fractions retain before-start and beyond-goal positions."""
+def test_family_invariant_features_retain_values_outside_frozen_ranges() -> None:
+    """Out-of-contract values remain visible rather than being silently clipped."""
     candidate = {
         "start": {"x": -2.0, "y": 0.0},
         "goal": {"x": 13.0, "y": 0.0},
@@ -305,14 +323,18 @@ def test_family_invariant_features_keep_longitudinal_positions_outside_path() ->
         "pedestrian_delay_s": 0.5,
     }
 
-    feats = family_invariant_features(candidate, (0.0, 0.0), (10.0, 0.0))
+    feats = family_invariant_features(candidate, _shared_search_space())
 
-    assert feats["longitudinal_spawn_fraction"] == pytest.approx(-0.2)
-    assert feats["longitudinal_goal_fraction"] == pytest.approx(1.3)
+    assert feats["robot_start_x_space_fraction"] == pytest.approx(-1.5)
+    assert feats["robot_goal_x_space_fraction"] == pytest.approx(3.0)
 
 
-def test_family_invariant_features_coincident_robot_path_fails_closed() -> None:
-    """A zero-length robot path has no family-invariant projection."""
+def test_family_invariant_features_zero_span_range_fails_closed() -> None:
+    """Every retained search-space dimension must have a positive span."""
+    from dataclasses import replace
+
+    from robot_sf.adversarial.config import RangeConfig
+
     candidate = {
         "start": {"x": 1.0, "y": 1.0},
         "goal": {"x": 2.0, "y": 2.0},
@@ -320,15 +342,13 @@ def test_family_invariant_features_coincident_robot_path_fails_closed() -> None:
         "pedestrian_speed_mps": 1.0,
         "pedestrian_delay_s": 0.0,
     }
-    with pytest.raises(ValueError, match="path length is zero"):
-        family_invariant_features(candidate, (5.0, 5.0), (5.0, 5.0))
+    invalid_space = replace(_shared_search_space(), start_x=RangeConfig(1.0, 1.0))
+    with pytest.raises(ValueError, match="start_x.*positive span"):
+        family_invariant_features(candidate, invalid_space)
 
 
-def test_family_invariant_features_same_meaning_both_families() -> None:
-    """Same RELATIVE geometry yields the same features under either family's robot path."""
-    # Identical relative geometry: candidate offset (2,4)->(8,4) from the robot
-    # start, on a 10-unit eastward path. Path A lives at (0,0); path B is the same
-    # path translated to (5,5), with the candidate translated identically.
+def test_family_invariant_features_preserve_distinct_robot_routes() -> None:
+    """Distinct route endpoints cannot collapse to one spatial anchor vector."""
     cand_a = {
         "start": {"x": 2.0, "y": 4.0},
         "goal": {"x": 8.0, "y": 4.0},
@@ -343,9 +363,9 @@ def test_family_invariant_features_same_meaning_both_families() -> None:
         "pedestrian_speed_mps": 1.2,
         "pedestrian_delay_s": 0.5,
     }
-    a = family_invariant_features(cand_a, (0.0, 0.0), (10.0, 0.0))
-    b = family_invariant_features(cand_b, (5.0, 5.0), (15.0, 5.0))
-    assert a == b
+    a = family_invariant_features(cand_a, _shared_search_space())
+    b = family_invariant_features(cand_b, _shared_search_space())
+    assert a != b
 
 
 def test_family_invariant_distance_zero_for_identical_geometry() -> None:
@@ -357,7 +377,7 @@ def test_family_invariant_distance_zero_for_identical_geometry() -> None:
         "pedestrian_speed_mps": 1.2,
         "pedestrian_delay_s": 0.5,
     }
-    dist = family_invariant_distance(cand, cand, (0.0, 0.0), (10.0, 0.0), (0.0, 0.0), (10.0, 0.0))
+    dist = family_invariant_distance(cand, cand, _shared_search_space())
     assert dist == pytest.approx(0.0)
 
 

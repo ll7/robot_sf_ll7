@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import random
 from dataclasses import dataclass, field
 from math import comb
@@ -33,6 +32,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from robot_sf.adversarial.config import SearchSpaceConfig
 
 # Permutation-test float comparison tolerance.
 _EPS = 1e-12
@@ -798,160 +799,97 @@ def assess_archive_file_readiness(path: Path | None) -> ArchiveReadinessReport:
 ISSUE_3275_DECISION_VOCABULARY = ("continue", "stop", "inconclusive")
 
 
-def _point(value: Any) -> tuple[float, float]:
-    """Return an ``(x, y)`` pair from a dict, tuple/list, or ``Pose2D``-like obj."""
-    if isinstance(value, dict):
-        return float(value["x"]), float(value["y"])
-    if isinstance(value, (list, tuple)) and len(value) >= 2:
-        return float(value[0]), float(value[1])
-    # Pose2D-like dataclass with x/y attributes.
-    return float(value.x), float(value.y)
-
-
-def _path_projection(
-    point: tuple[float, float],
-    robot_start: tuple[float, float],
-    robot_goal: tuple[float, float],
-) -> tuple[float, float]:
-    """Project ``point`` onto the robot start->goal path.
-
-    Returns:
-        ``(lateral_path_fraction, longitudinal_fraction)`` where
-        ``lateral_path_fraction`` is the signed perpendicular distance to the path
-        divided by path length, and
-        ``longitudinal_fraction`` is the projection onto the path as a fraction
-        of path length (0 at the start, 1 at the goal; may fall outside [0, 1]).
-    """
-    sx, sy = robot_start
-    gx, gy = robot_goal
-    dx, dy = gx - sx, gy - sy
-    path_len = math.hypot(dx, dy)
-    if path_len <= 0.0:
-        raise ValueError("robot start and goal coincide; path length is zero")
-    ux, uy = dx / path_len, dy / path_len
-    nx, ny = -uy, ux  # left-hand normal
-    px, py = point
-    rel_x, rel_y = px - sx, py - sy
-    lateral = (rel_x * nx + rel_y * ny) / path_len
-    longitudinal = (rel_x * ux + rel_y * uy) / path_len
-    return lateral, longitudinal
-
-
 def family_invariant_features(
     candidate: Any,
-    robot_start: Any,
-    robot_goal: Any,
+    search_space: SearchSpaceConfig,
 ) -> dict[str, float]:
     """Return a frozen, family-invariant feature view for one candidate.
 
-    The view expresses the pedestrian candidate relative to the robot's planned
-    path, so every retained feature has the same operational meaning in both the
-    fit family (``classic_group_crossing_medium``) and the held-out evaluation
-    family (``classic_cross_trap_medium``). This is the cross-family semantic
-    audit required by issue #6103 review gate #3: it replaces a boolean audit
-    flag with a concrete, deterministic, outcome-free geometric representation.
+    ``CandidateSpec.start`` and ``CandidateSpec.goal`` are robot-route endpoints:
+    the materializer writes them to ``route_overrides.robot_routes``. The frozen
+    view therefore keeps those endpoint coordinates as robot-route features and
+    normalizes all seven candidate controls by the one pinned search space shared
+    by the fit and held-out families. This preserves failure-anchor variation;
+    projecting each archive route onto itself would collapse every anchor to the
+    same spatial vector.
 
     Per-feature semantic argument:
 
-    * ``lateral_spawn_path_fraction`` / ``lateral_goal_path_fraction``:
-      dimensionless signed perpendicular offset of pedestrian spawn/goal from the
-      robot corridor, divided by path length. Same meaning in both families:
-      relative lateral displacement from the robot corridor.
-    * ``longitudinal_spawn_fraction`` / ``longitudinal_goal_fraction``:
-      projection of spawn/goal onto the robot path as a fraction of path length.
-      Same meaning in both families (where along the route the pedestrian is).
-    * ``pedestrian_speed_mps``, ``pedestrian_delay_s``, ``spawn_time_s``:
-      inherently family-invariant scalars carried unchanged.
+    * ``robot_start_x/y_space_fraction`` and ``robot_goal_x/y_space_fraction``:
+      the robot route endpoints within the pinned crossing/TTC search intervals.
+      Both scenario families use metre-valued coordinates in the same 40x40 SVG
+      frame at two cells per metre, and the exact same search-space file.
+    * ``pedestrian_speed_space_fraction``,
+      ``pedestrian_delay_space_fraction``, and ``spawn_time_space_fraction``:
+      the remaining candidate controls, normalized by their pinned intervals.
 
-    The transform is deterministic geometry only. It does not consume any
-    outcome and does not use the excluded cross-trap/goal failures for tuning.
+    The transform is deterministic config normalization only. It consumes no
+    outcome and does not use excluded cross-trap/goal failures for tuning.
 
     Args:
-        candidate: A ``CandidateSpec`` or dict with ``start``, ``goal``, and the
-            three scalar pedestrian fields.
-        robot_start: Robot start as a dict/tuple/object with ``x``/``y``.
-        robot_goal: Robot goal as a dict/tuple/object with ``x``/"y``.
+        candidate: A ``CandidateSpec`` or equivalent candidate dict.
+        search_space: The raw-SHA-pinned shared search-space contract.
 
     Returns:
         A dict with the seven frozen family-invariant feature values.
     """
-    rs = _point(robot_start)
-    rg = _point(robot_goal)
-    start = _point(
-        getattr(candidate, "start", None) if not isinstance(candidate, dict) else candidate["start"]
-    )
-    goal = _point(
-        getattr(candidate, "goal", None) if not isinstance(candidate, dict) else candidate["goal"]
-    )
-    lat_start, lon_start = _path_projection(start, rs, rg)
-    lat_goal, lon_goal = _path_projection(goal, rs, rg)
 
-    def _scalar(name: str) -> float:
+    def _value(name: str) -> float:
         if isinstance(candidate, dict):
+            if name.startswith(("start_", "goal_")):
+                pose_name, axis = name.split("_", maxsplit=1)
+                return float(candidate[pose_name][axis])
             return float(candidate[name])
+        if name.startswith(("start_", "goal_")):
+            pose_name, axis = name.split("_", maxsplit=1)
+            return float(getattr(getattr(candidate, pose_name), axis))
         return float(getattr(candidate, name))
 
-    return {
-        "lateral_spawn_path_fraction": round(lat_start, 9),
-        "longitudinal_spawn_fraction": round(lon_start, 9),
-        "lateral_goal_path_fraction": round(lat_goal, 9),
-        "longitudinal_goal_fraction": round(lon_goal, 9),
-        "pedestrian_speed_mps": _scalar("pedestrian_speed_mps"),
-        "pedestrian_delay_s": _scalar("pedestrian_delay_s"),
-        "spawn_time_s": _scalar("spawn_time_s"),
+    source_names = {
+        "robot_start_x_space_fraction": "start_x",
+        "robot_start_y_space_fraction": "start_y",
+        "robot_goal_x_space_fraction": "goal_x",
+        "robot_goal_y_space_fraction": "goal_y",
+        "pedestrian_speed_space_fraction": "pedestrian_speed_mps",
+        "pedestrian_delay_space_fraction": "pedestrian_delay_s",
+        "spawn_time_space_fraction": "spawn_time_s",
     }
+    features: dict[str, float] = {}
+    for output_name, source_name in source_names.items():
+        bounds = getattr(search_space, source_name)
+        span = float(bounds.max) - float(bounds.min)
+        if span <= 0.0:
+            raise ValueError(f"frozen search-space range {source_name!r} must have positive span")
+        features[output_name] = round((_value(source_name) - float(bounds.min)) / span, 9)
+    return features
 
 
 #: Feature names of the frozen family-invariant view, in canonical order.
 FAMILY_INVARIANT_FEATURE_NAMES = (
-    "lateral_spawn_path_fraction",
-    "longitudinal_spawn_fraction",
-    "lateral_goal_path_fraction",
-    "longitudinal_goal_fraction",
-    "pedestrian_speed_mps",
-    "pedestrian_delay_s",
-    "spawn_time_s",
+    "robot_start_x_space_fraction",
+    "robot_start_y_space_fraction",
+    "robot_goal_x_space_fraction",
+    "robot_goal_y_space_fraction",
+    "pedestrian_speed_space_fraction",
+    "pedestrian_delay_space_fraction",
+    "spawn_time_space_fraction",
 )
 
 
 def family_invariant_distance(
     candidate: Any,
     anchor: Any,
-    robot_start: Any,
-    robot_goal: Any,
-    anchor_robot_start: Any,
-    anchor_robot_goal: Any,
+    search_space: SearchSpaceConfig,
 ) -> float:
     """L1 distance in the frozen family-invariant feature space.
 
-    Both ``candidate`` (scored relative to ``robot_start``/``robot_goal``) and
-    ``anchor`` (an archive entry scored relative to its own recorded
-    ``anchor_robot_start``/``anchor_robot_goal``) are projected into the same
-    family-invariant feature space, so the distance is comparable across
-    families. Speed/delay/time features are normalized to [0, 1] using
-    conservative fixed ranges before the L1 sum.
+    Candidate and anchor controls are normalized by the same raw-SHA-pinned
+    search-space intervals, so every dimension is directly comparable across
+    the fit and held-out scenario families.
     """
-    a = family_invariant_features(candidate, robot_start, robot_goal)
-    b = family_invariant_features(anchor, anchor_robot_start, anchor_robot_goal)
-    # Fixed, predeclared scalar ranges (no outcome tuning). These bound the
-    # inherently family-invariant scalars to [0, 1]; spatial features are already
-    # normalized by path length.
-    scalar_ranges = {
-        "pedestrian_speed_mps": (0.5, 2.0),
-        "pedestrian_delay_s": (0.0, 3.0),
-        "spawn_time_s": (0.0, 5.0),
-    }
-    total = 0.0
-    for name in FAMILY_INVARIANT_FEATURE_NAMES:
-        va, vb = float(a[name]), float(b[name])
-        if name in scalar_ranges:
-            lo, hi = scalar_ranges[name]
-            span = hi - lo
-            if span > 0.0:
-                va = (va - lo) / span
-                vb = (vb - lo) / span
-        total += abs(va - vb)
-    return total
+    a = family_invariant_features(candidate, search_space)
+    b = family_invariant_features(anchor, search_space)
+    return sum(abs(float(a[name]) - float(b[name])) for name in FAMILY_INVARIANT_FEATURE_NAMES)
 
 
 def frozen_held_out_family_split(

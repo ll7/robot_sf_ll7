@@ -78,6 +78,7 @@ REQUIRED_ADMITTED_ROW_FIELDS = (
     "execution_command",
     "execution_config_lineage",
     "execution_mode",
+    "primary_failure",
     "termination_reason",
     "independent_failure_outcome",
     "scenario_certification_status",
@@ -352,7 +353,7 @@ def _replay_ok(replay_lineage: Any) -> tuple[bool, str]:
     return True, "ok"
 
 
-def _row_missing_fields(  # noqa: C901
+def _row_missing_fields(  # noqa: C901, PLR0912
     row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec
 ) -> str | None:
     """Check required-field presence and well-typedness for an admitted row."""
@@ -402,6 +403,8 @@ def _row_missing_fields(  # noqa: C901
         return "candidate_pool_seed must be an integer"
     if not isinstance(row.get("termination_reason"), str) or not row["termination_reason"].strip():
         return "termination_reason must be a non-empty string"
+    if not isinstance(row.get("primary_failure"), str) or not row["primary_failure"].strip():
+        return "primary_failure must be a non-empty string"
     if not isinstance(row.get("record_sha256"), str) or not row.get("record_sha256"):
         return "record_sha256 missing"
     return None
@@ -631,11 +634,13 @@ def _candidate_outcome_from_seed_rows(
             )
     if confirmed_count < min_confirmed:
         return False, None
-    termination_reasons = {str(row["termination_reason"]) for row in confirming_rows}
-    if len(termination_reasons) != 1:
+    attributions = {
+        (str(row["primary_failure"]), str(row["termination_reason"])) for row in confirming_rows
+    }
+    if len(attributions) != 1:
         return None, (
             f"unstable attribution: candidate {manifest_id} in arm {arm} has "
-            "different termination reasons across confirming seeds"
+            "different primary_failure/termination_reason pairs across confirming seeds"
         )
     return True, None
 

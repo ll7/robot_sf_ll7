@@ -320,14 +320,13 @@ def attach_robot_geometry(
     payload: FitPayload,
     recertification_data: dict[str, Any],
 ) -> None:
-    """Attach per-entry robot geometry from the recertification reconstruction.
+    """Attach recertification route metadata for legacy diagnostic consumers.
 
-    The frozen family-invariant feature view projects each pedestrian candidate
-    relative to its scenario's robot start/goal. For fit entries that geometry is
-    recorded in the corrected recertification artifact's ``reconstruction`` block.
-    This copies ``robot_start``/``robot_goal``/``map_file`` onto each fit archive
-    entry under a ``robot`` key so the ranker can score in family-invariant
-    space without consuming any outcome.
+    The #3275 ranker does not call this helper: ``CandidateSpec.start/goal``
+    already are robot-route endpoints, and the frozen scorer normalizes them
+    with the pinned shared search space. The attached ``robot`` block is only
+    retained for callers that inspect recertification metadata; it cannot
+    influence frozen scores.
     """
     records = recertification_data.get("records")
     if not isinstance(records, list):
@@ -398,9 +397,6 @@ class FailureArchiveProposalModel:
         *,
         fit_entry_ids: Any = None,
         feature_view: str = "absolute",
-        candidate_robot_start: Any = None,
-        candidate_robot_goal: Any = None,
-        entry_robot_field: str = "robot",
     ) -> None:
         """Initialize the FailureArchiveProposalModel.
 
@@ -415,12 +411,7 @@ class FailureArchiveProposalModel:
                 the input archive contains only the fit IDs or also the excluded
                 records.
             feature_view: ``"absolute"`` (legacy) or ``"family_invariant"`` (the
-                frozen #3275 cross-family view).
-            candidate_robot_start: Robot start used by the family-invariant view
-                when scoring candidates.
-            candidate_robot_goal: Robot goal used by the family-invariant view.
-            entry_robot_field: Per-entry field carrying that entry's robot
-                geometry for the family-invariant view (default ``"robot"``).
+                frozen #3275 view normalized by the shared search-space contract).
         """
         self.archive_path_or_data = archive_path_or_data
         self.search_space = search_space
@@ -428,9 +419,6 @@ class FailureArchiveProposalModel:
             {str(identifier) for identifier in fit_entry_ids} if fit_entry_ids is not None else None
         )
         self.feature_view = feature_view
-        self.candidate_robot_start = candidate_robot_start
-        self.candidate_robot_goal = candidate_robot_goal
-        self.entry_robot_field = entry_robot_field
         self.excluded_entry_ids: list[str] = []
         self.entries: list[dict[str, Any]] = []
         self.state = "active"
@@ -526,26 +514,12 @@ class FailureArchiveProposalModel:
         """Distance from ``candidate`` to one archive entry under the active view."""
         if self.feature_view != "family_invariant":
             return self._distance(candidate, entry.get("candidate", {}))
-        robot = entry.get(self.entry_robot_field)
         anchor = entry.get("candidate", {})
-        if not isinstance(robot, dict) or "robot_start" not in robot or "robot_goal" not in robot:
+        if self.search_space is None:
             raise ValueError(
-                f"entry {entry.get('archive_id')} missing robot geometry for "
-                "the family_invariant feature view"
+                "family_invariant feature view requires the frozen shared search space"
             )
-        if self.candidate_robot_start is None or self.candidate_robot_goal is None:
-            raise ValueError(
-                "family_invariant feature view requires candidate_robot_start "
-                "and candidate_robot_goal at scoring time"
-            )
-        return family_invariant_distance(
-            candidate,
-            anchor,
-            self.candidate_robot_start,
-            self.candidate_robot_goal,
-            robot["robot_start"],
-            robot["robot_goal"],
-        )
+        return family_invariant_distance(candidate, anchor, self.search_space)
 
     def get_tabular_view(self) -> list[dict[str, Any]]:
         """Build a tabular feature view from archive entries."""
@@ -702,13 +676,11 @@ class FailureArchiveProposalModel:
         *,
         repo_root: str | Path | None = None,
         feature_view: str = "family_invariant",
-        candidate_robot_start: Any = None,
-        candidate_robot_goal: Any = None,
     ) -> tuple[FailureArchiveProposalModel, dict[str, Any]]:
         """Build the fit-only model from the frozen #3275 contract.
 
         Derives the fit IDs from the corrected recertification artifact,
-        validates count/hash/planner/family, attaches per-entry robot geometry
+        validates count/hash/planner/family, ignores legacy robot geometry
         from the reconstruction, and constructs the model from the fit-only
         payload with the family-invariant feature view. Returns the model and a
         JSON-safe provenance dict for the contract checker.
@@ -752,22 +724,26 @@ class FailureArchiveProposalModel:
         excl_cfg = contract["exclusions"]
         planner_cfg = contract["target_planner"]
         evaluation_cfg = contract["evaluation"]
-        frozen_start = evaluation_cfg.get("robot_start")
-        frozen_goal = evaluation_cfg.get("robot_goal")
-        if frozen_start is None or frozen_goal is None:
+        search_space_file = evaluation_cfg.get("search_space_path")
+        expected_search_space_sha256 = evaluation_cfg.get("search_space_sha256")
+        if not isinstance(search_space_file, str) or not search_space_file:
             raise ValueError(
-                "frozen contract evaluation geometry must define robot_start and robot_goal"
+                "frozen contract evaluation.search_space_path must be a non-empty string"
             )
-        if candidate_robot_start is not None and candidate_robot_start != frozen_start:
+        if not isinstance(expected_search_space_sha256, str) or not expected_search_space_sha256:
             raise ValueError(
-                "candidate_robot_start must match the frozen contract evaluation.robot_start"
+                "frozen contract evaluation.search_space_sha256 must be a non-empty string"
             )
-        if candidate_robot_goal is not None and candidate_robot_goal != frozen_goal:
+        search_space_path = root / search_space_file
+        search_space_bytes = search_space_path.read_bytes()
+        observed_search_space_sha256 = hashlib.sha256(search_space_bytes).hexdigest()
+        if observed_search_space_sha256 != expected_search_space_sha256:
             raise ValueError(
-                "candidate_robot_goal must match the frozen contract evaluation.robot_goal"
+                "frozen contract search-space SHA-256 mismatch: "
+                f"observed={observed_search_space_sha256} "
+                f"expected={expected_search_space_sha256}"
             )
-        candidate_robot_start = frozen_start
-        candidate_robot_goal = frozen_goal
+        search_space = SearchSpaceConfig.from_file(search_space_path)
         map_file = evaluation_cfg.get("map_file")
         expected_map_sha256 = evaluation_cfg.get("map_file_sha256")
         if not isinstance(map_file, str) or not map_file:
@@ -797,7 +773,6 @@ class FailureArchiveProposalModel:
             expected_non_eligible_count=fit_cfg["excluded_from_nominal_fit_count"],
             expected_non_eligible_ids_sha256=fit_cfg["excluded_from_nominal_fit_entry_ids_sha256"],
         )
-        attach_robot_geometry(payload, recert)
         planner_drift = validate_fit_payload_integrity(
             payload,
             expected_planner=planner_cfg["id"],
@@ -807,11 +782,9 @@ class FailureArchiveProposalModel:
             raise ValueError(f"frozen fit payload has planner/family drift: {planner_drift}")
         model = cls(
             payload.archive_payload,
-            search_space=None,
+            search_space=search_space,
             fit_entry_ids=payload.entry_ids,
             feature_view=feature_view,
-            candidate_robot_start=candidate_robot_start,
-            candidate_robot_goal=candidate_robot_goal,
         )
         provenance = {
             "contract_schema_version": contract["schema_version"],
@@ -828,8 +801,9 @@ class FailureArchiveProposalModel:
             "excluded_entry_ids_dropped": model.excluded_entry_ids,
             "planner_drift": planner_drift,
             "feature_view": feature_view,
-            "evaluation_robot_start": candidate_robot_start,
-            "evaluation_robot_goal": candidate_robot_goal,
+            "feature_semantics": "robot_route_and_controls_normalized_by_shared_search_space",
+            "search_space_file": search_space_file,
+            "search_space_sha256": observed_search_space_sha256,
             "evaluation_map_file": map_file,
             "evaluation_map_sha256": observed_map_sha256,
         }

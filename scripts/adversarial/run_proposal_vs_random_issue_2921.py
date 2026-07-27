@@ -325,7 +325,18 @@ def build_archive_evaluation_provenance(
     if search_space_provenance is not None:
         provenance["search_space"] = search_space_provenance
     provenance["fit_archive_sha256"] = archive_sha256(split.fit_entries)
-    provenance["eval_archive_sha256"] = archive_sha256(split.eval_entries)
+    if frozen_contract is None:
+        provenance["eval_archive_sha256"] = archive_sha256(split.eval_entries)
+    else:
+        # These five rows are held-out-family *goal-planner* failures explicitly
+        # excluded from candidate selection and primary-result interpretation.
+        # Keep their hash as exclusion provenance, never as lineage for the new
+        # social_force candidate cohort materialized by the next slice.
+        provenance["eval_archive_sha256"] = None
+        provenance["excluded_held_out_archive_sha256"] = archive_sha256(split.eval_entries)
+        provenance["excluded_held_out_archive_role"] = (
+            "wrong_planner_records_excluded_from_primary_result_lineage"
+        )
     provenance["independent_outcome_evaluation"] = independent_evaluation.get(
         "status", "not_available_requires_planner_execution"
     )
@@ -397,6 +408,7 @@ def _check_fit_only_model(  # noqa: C901
     payload: Any,
     archive: dict[str, Any],
     *,
+    search_space: Any,
     fit_cfg: dict[str, Any],
     excl_cfg: dict[str, Any],
     planner_cfg: dict[str, Any],
@@ -452,6 +464,7 @@ def _check_fit_only_model(  # noqa: C901
 
     model = FailureArchiveProposalModel(
         payload.archive_payload,
+        search_space,
         fit_entry_ids=payload.entry_ids,
         feature_view="family_invariant",
     )
@@ -470,6 +483,23 @@ def _check_fit_only_model(  # noqa: C901
             "classic_group_crossing_medium" in str(aid) for aid in model_entry_ids
         ),
     )
+    from robot_sf.adversarial.disjoint_evaluation import family_invariant_features
+
+    spatial_names = (
+        "robot_start_x_space_fraction",
+        "robot_start_y_space_fraction",
+        "robot_goal_x_space_fraction",
+        "robot_goal_y_space_fraction",
+    )
+    spatial_vectors = {
+        tuple(
+            family_invariant_features(entry["candidate"], search_space)[name]
+            for name in spatial_names
+        )
+        for entry in model.entries
+    }
+    checks["distinct_fit_anchor_spatial_vector_count"] = len(spatial_vectors)
+    checks["fit_anchor_spatial_variation_preserved"] = len(spatial_vectors) == payload.count
     if model.state != "active":
         failures.append(f"model not active: state={model.state} reason={model.state_reason}")
     if model_entry_ids != fit_ids:
@@ -478,6 +508,8 @@ def _check_fit_only_model(  # noqa: C901
         failures.append("an excluded record entered the fit-only model")
     if not checks["no_held_out_family_in_model"]:
         failures.append("a held-out family record entered the fit-only model")
+    if not checks["fit_anchor_spatial_variation_preserved"]:
+        failures.append("family-invariant feature view collapsed distinct fit-anchor robot routes")
 
     neg_failures, neg_checks = _negative_regression_checks(
         payload, archive, fit_cfg=fit_cfg, excl_cfg=excl_cfg
@@ -496,7 +528,6 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
     influence scores or ranks. Executes no planner and writes nothing.
     """
     from robot_sf.adversarial.proposal_model import (
-        attach_robot_geometry,
         derive_fit_payload_from_recertification,
         load_issue_3275_contract,
         validate_fit_payload_integrity,
@@ -532,7 +563,7 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
     }
     failures: list[str] = []
     try:
-        _, search_space_provenance = _load_frozen_contract_search_space(
+        search_space, search_space_provenance = _load_frozen_contract_search_space(
             contract, repo_root=root, requested_search_space=None
         )
         checks.update(
@@ -586,7 +617,6 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
             expected_non_eligible_count=fit_cfg["excluded_from_nominal_fit_count"],
             expected_non_eligible_ids_sha256=fit_cfg["excluded_from_nominal_fit_entry_ids_sha256"],
         )
-        attach_robot_geometry(payload, recert)
         drift = validate_fit_payload_integrity(
             payload,
             expected_planner=planner_cfg["id"],
@@ -602,7 +632,13 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
         }
 
     model_failures, model_checks = _check_fit_only_model(
-        payload, archive, fit_cfg=fit_cfg, excl_cfg=excl_cfg, planner_cfg=planner_cfg, drift=drift
+        payload,
+        archive,
+        search_space=search_space,
+        fit_cfg=fit_cfg,
+        excl_cfg=excl_cfg,
+        planner_cfg=planner_cfg,
+        drift=drift,
     )
     checks.update(model_checks)
     failures.extend(model_failures)

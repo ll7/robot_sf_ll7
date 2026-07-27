@@ -147,7 +147,10 @@ def test_fit_only_model_uses_exactly_the_six_nominally_eligible_fit_ids() -> Non
     """The fit-only model excludes every corrected stress-only fit-family record."""
     contract, payload, _ = _load_contract_payload()
     model = FailureArchiveProposalModel(
-        payload.archive_payload, fit_entry_ids=payload.entry_ids, feature_view="family_invariant"
+        payload.archive_payload,
+        SearchSpaceConfig.from_file(_REPO_ROOT / contract["evaluation"]["search_space_path"]),
+        fit_entry_ids=payload.entry_ids,
+        feature_view="family_invariant",
     )
     assert model.state == "active"
     assert len(model.entries) == 6
@@ -163,6 +166,32 @@ def test_fit_only_model_uses_exactly_the_six_nominally_eligible_fit_ids() -> Non
     assert not any("classic_cross_trap_medium" in aid for aid in model_ids)
 
 
+def test_frozen_feature_view_preserves_fit_anchor_spatial_variation() -> None:
+    """The six robot-route anchors must not collapse to one spatial vector."""
+    from robot_sf.adversarial.disjoint_evaluation import family_invariant_features
+
+    model, _ = FailureArchiveProposalModel.from_frozen_contract(
+        _CONTRACT,
+        repo_root=_REPO_ROOT,
+    )
+    spatial_names = (
+        "robot_start_x_space_fraction",
+        "robot_start_y_space_fraction",
+        "robot_goal_x_space_fraction",
+        "robot_goal_y_space_fraction",
+    )
+    assert model.search_space is not None
+    spatial_vectors = {
+        tuple(
+            family_invariant_features(entry["candidate"], model.search_space)[name]
+            for name in spatial_names
+        )
+        for entry in model.entries
+    }
+
+    assert len(spatial_vectors) == len(model.entries) == 6
+
+
 def test_frozen_contract_factory_preserves_nominal_fit_and_exclusion_lineage() -> None:
     """The public factory enforces the six-anchor frozen contract end to end."""
     model, provenance = FailureArchiveProposalModel.from_frozen_contract(
@@ -171,13 +200,17 @@ def test_frozen_contract_factory_preserves_nominal_fit_and_exclusion_lineage() -
 
     assert model.state == "active"
     assert len(model.entries) == 6
-    assert all("robot" in entry for entry in model.entries)
+    assert model.search_space is not None
     assert provenance["fit_count"] == 6
     assert provenance["non_eligible_fit_count"] == 6
     assert provenance["excluded_count"] == 5
     assert provenance["fit_only_initialized"] is True
     assert provenance["model_entry_count"] == 6
     assert provenance["planner_drift"] == {}
+    assert (
+        provenance["search_space_sha256"]
+        == json.loads(_CONTRACT.read_text(encoding="utf-8"))["evaluation"]["search_space_sha256"]
+    )
 
 
 def test_frozen_contract_factory_rejects_recertification_artifact_hash_drift() -> None:
@@ -186,6 +219,15 @@ def test_frozen_contract_factory_rejects_recertification_artifact_hash_drift() -
     contract["source_lineage"]["corrected_recertification_artifact_sha256"] = "wrong-hash"
 
     with pytest.raises(ValueError, match="recertification artifact SHA-256 mismatch"):
+        FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
+
+
+def test_frozen_contract_factory_rejects_recertification_lineage_drift() -> None:
+    """The artifact's internal recertification identity must match the contract."""
+    contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    contract["source_lineage"]["corrected_recertification_sha256"] = "wrong-lineage"
+
+    with pytest.raises(ValueError, match="recertification_sha256 mismatch"):
         FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
 
 
@@ -198,14 +240,53 @@ def test_frozen_contract_factory_rejects_pre_correction_archive_hash_drift() -> 
         FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
 
 
-def test_frozen_contract_factory_rejects_evaluation_geometry_override() -> None:
-    """The frozen factory cannot score candidates with caller-selected geometry."""
-    with pytest.raises(ValueError, match="candidate_robot_start must match"):
+def test_frozen_contract_factory_rejects_search_space_hash_drift() -> None:
+    """The family-invariant feature ranges must match the pinned raw bytes."""
+    contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    contract["evaluation"]["search_space_sha256"] = "wrong-hash"
+
+    with pytest.raises(ValueError, match="search-space SHA-256 mismatch"):
+        FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
+
+
+def test_frozen_contract_factory_rejects_non_invariant_feature_view() -> None:
+    """The public factory cannot bypass the frozen cross-family representation."""
+    with pytest.raises(ValueError, match="requires.*family_invariant feature view"):
         FailureArchiveProposalModel.from_frozen_contract(
             _CONTRACT,
             repo_root=_REPO_ROOT,
-            candidate_robot_start=[3.5, 3.0],
+            feature_view="absolute",
         )
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "message"),
+    [
+        (
+            "source_lineage",
+            "corrected_recertification_artifact_sha256",
+            "",
+            "missing corrected recertification artifact SHA-256",
+        ),
+        ("evaluation", "search_space_path", "", "search_space_path.*non-empty string"),
+        ("evaluation", "search_space_sha256", "", "search_space_sha256.*non-empty string"),
+        ("evaluation", "map_file", "", "map_file.*non-empty string"),
+        ("evaluation", "map_file_sha256", "", "map_file_sha256.*non-empty string"),
+        ("evaluation", "map_file", "maps/svg_maps/missing.svg", "evaluation map is missing"),
+    ],
+)
+def test_frozen_contract_factory_rejects_missing_pinned_inputs(
+    section: str,
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    """Every file used by the frozen representation must remain explicitly pinned."""
+    contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    contract[section][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
 
 
 def test_negative_regression_excluded_records_cannot_change_scores_or_ranks() -> None:
@@ -671,6 +752,7 @@ def _v2_row(
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
         "execution_config_lineage": {"config": "eval.yaml"},
         "execution_mode": "native",
+        "primary_failure": "collision" if failure else "none",
         "termination_reason": "collision" if failure else "goal_reached",
         "independent_failure_outcome": failure,
         "scenario_certification_status": "passed",
@@ -882,8 +964,14 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
     )
     assert frozen_contract["model"]["model_entry_count"] == 6
     assert frozen_contract["model"]["feature_view"] == "family_invariant"
-    assert frozen_contract["model"]["evaluation_robot_start"] == [3.0, 3.0]
-    assert frozen_contract["model"]["evaluation_robot_goal"] == [17.0, 17.0]
+    assert (
+        frozen_contract["model"]["feature_semantics"]
+        == "robot_route_and_controls_normalized_by_shared_search_space"
+    )
+    assert (
+        frozen_contract["model"]["search_space_file"]
+        == "configs/adversarial/crossing_ttc_space.yaml"
+    )
     assert frozen_contract["search_space"] == {
         "path": "configs/adversarial/crossing_ttc_space.yaml",
         "raw_sha256": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",

@@ -232,8 +232,9 @@ under the dated, non-moving tag, `sha256`, `size_bytes`, and `benchmark_promotio
 legacy_non_track`. Each single-file `local_path` names the ignored `output/model_cache/` target that
 `resolve_model_path` hydrates from the release. GA3C retains its in-tree `.meta` path so resolution
 continues to provide the TensorFlow checkpoint prefix required by SA-CADRL; its release bundle is
-used for durable provenance verification. The `github_release` pointer records durable provenance
-and the checksum used for byte-identity verification.
+used for durable provenance verification. The validator first confirms that this GA3C registry path
+still resolves without a download, then verifies the separate bundle. The `github_release` pointer
+records durable provenance and the checksum used for byte-identity verification.
 
 For the multi-file GA3C triplet, `local_path` remains the existing in-tree `.meta` file. The release
 hydration proof downloads the `.tar.gz` bundle separately and verifies its archive digest and every
@@ -242,8 +243,9 @@ runtime use remains a Phase C concern.
 
 The default inventory byte-matches in-tree source files against recorded checksums without a
 download. The explicit release-hydration proof resolves each single-file checkpoint through
-`resolve_model_path` into an isolated cache, downloads the GA3C bundle separately to preserve its
-existing checkpoint-prefix resolver contract, and byte-matches the downloaded assets:
+`resolve_model_path` into an isolated cache, confirms that GA3C still resolves to its in-tree
+checkpoint path, downloads the GA3C bundle separately to preserve that resolver contract, and
+byte-matches the downloaded assets:
 
 ```bash
 uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py \

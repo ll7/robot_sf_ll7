@@ -298,6 +298,55 @@ def _validate_bundle_manifest(
     return "verified", "bundle manifest covers every declared checkpoint component"
 
 
+def _verify_multi_file_bundle_resolution(
+    checkpoint: DurableLegacyCheckpoint,
+    *,
+    entry: Mapping[str, Any],
+    repo_root: Path,
+    registry_path: Path,
+    cache_dir: Path | None,
+) -> tuple[str, str]:
+    """Verify that a multi-file checkpoint still resolves to its in-tree local path.
+
+    Phase A intentionally leaves GA3C-CADRL's TensorFlow ``.meta`` path in-tree: callers need
+    the adjacent ``.data`` and ``.index`` files, which an unextracted release archive cannot
+    provide. This check proves that the registry resolver preserves that contract before release
+    hydration verifies the archive itself.
+    """
+    raw_local_path = entry.get("local_path")
+    if not raw_local_path:
+        return "missing_local_path", "multi-file checkpoint has no registry local_path"
+
+    expected = Path(str(raw_local_path))
+    if not expected.is_absolute():
+        expected = repo_root / expected
+    expected = expected.resolve()
+    declared_sources = {(repo_root / source).resolve() for source in checkpoint.source_paths}
+    if expected not in declared_sources:
+        return (
+            "resolver_path_mismatch",
+            "registry local_path must name one declared multi-file checkpoint component",
+        )
+
+    try:
+        resolved = resolve_model_path(
+            checkpoint.model_id,
+            registry_path=registry_path,
+            allow_download=False,
+            cache_dir=cache_dir,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return "unresolved", f"registry resolution failed: {exc}"
+    if not resolved.exists():
+        return "unresolved", f"registry resolution returned a missing path: {resolved}"
+    if resolved.resolve() != expected:
+        return (
+            "resolver_path_mismatch",
+            f"resolver returned {resolved}, expected the in-tree checkpoint path {expected}",
+        )
+    return "verified", f"resolver returned the in-tree checkpoint path {resolved}"
+
+
 def _verify_hydrated_multi_file_bundle(
     entry: Mapping[str, Any], *, archive_path: Path
 ) -> tuple[str, str]:
@@ -359,6 +408,40 @@ def _archive_component_digests(
     return "", observed
 
 
+def _verify_durable_checkpoint_sources(
+    checkpoint: DurableLegacyCheckpoint,
+    *,
+    entry: Mapping[str, Any],
+    repo_root: Path,
+    registry_path: Path,
+    cache_dir: Path | None,
+) -> tuple[str, str]:
+    """Verify a durable checkpoint's in-tree bytes and resolver contract."""
+    if checkpoint.kind == "single_file":
+        return _verify_single_file(entry, resolved=repo_root / checkpoint.source_paths[0])
+    if checkpoint.kind != "multi_file_bundle":
+        return "unknown_kind", f"unsupported checkpoint kind: {checkpoint.kind}"
+
+    resolution_status, resolution_detail = _verify_multi_file_bundle_resolution(
+        checkpoint,
+        entry=entry,
+        repo_root=repo_root,
+        registry_path=registry_path,
+        cache_dir=cache_dir,
+    )
+    if resolution_status != "verified":
+        return resolution_status, resolution_detail
+    manifest_status, manifest_detail = _validate_bundle_manifest(
+        entry, expected_sources=checkpoint.source_paths
+    )
+    if manifest_status != "verified":
+        return manifest_status, manifest_detail
+    source_status, source_detail = _verify_multi_file_bundle_sources(entry, repo_root=repo_root)
+    if source_status != "verified":
+        return source_status, source_detail
+    return "verified", f"{resolution_detail}; {source_detail}"
+
+
 def _verify_durable_checkpoint(
     checkpoint: DurableLegacyCheckpoint,
     *,
@@ -374,19 +457,13 @@ def _verify_durable_checkpoint(
     ``"verified"`` when the in-tree source bytes match the recorded checksums,
     and when requested, the release-hydrated cache bytes match too.
     """
-    if checkpoint.kind == "single_file":
-        source_status, source_detail = _verify_single_file(
-            entry, resolved=repo_root / checkpoint.source_paths[0]
-        )
-    elif checkpoint.kind == "multi_file_bundle":
-        manifest_status, manifest_detail = _validate_bundle_manifest(
-            entry, expected_sources=checkpoint.source_paths
-        )
-        if manifest_status != "verified":
-            return manifest_status, manifest_detail
-        source_status, source_detail = _verify_multi_file_bundle_sources(entry, repo_root=repo_root)
-    else:
-        return "unknown_kind", f"unsupported checkpoint kind: {checkpoint.kind}"
+    source_status, source_detail = _verify_durable_checkpoint_sources(
+        checkpoint,
+        entry=entry,
+        repo_root=repo_root,
+        registry_path=registry_path,
+        cache_dir=cache_dir,
+    )
     if source_status != "verified" or not verify_release_hydration:
         return source_status, source_detail
 
@@ -414,7 +491,7 @@ def _verify_durable_checkpoint(
         status, detail = _verify_hydrated_multi_file_bundle(entry, archive_path=resolved)
     if status != "verified":
         return status, detail
-    return "verified", f"source verified; {detail}"
+    return "verified", f"source verified; {source_detail}; {detail}"
 
 
 def build_inventory(

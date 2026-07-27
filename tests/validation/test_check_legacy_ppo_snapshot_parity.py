@@ -296,6 +296,41 @@ def test_durable_ga3c_bundle_rejects_an_incomplete_manifest() -> None:
     assert "exactly match" in detail
 
 
+def test_durable_ga3c_bundle_resolves_its_in_tree_checkpoint_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The GA3C bundle must retain its usable TensorFlow checkpoint resolver path."""
+    repo_root = Path(__file__).resolve().parents[2]
+    registry_path = repo_root / "model" / "registry.yaml"
+    entry = load_registry(registry_path)["ga3c_cadrl_iros18"]
+    checkpoint = next(
+        item for item in checker.DURABLE_LEGACY_CHECKPOINTS if item.model_id == "ga3c_cadrl_iros18"
+    )
+    original_resolve = checker.resolve_model_path
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def tracked_resolve(*args: object, **kwargs: object) -> Path:
+        calls.append((args, kwargs))
+        return original_resolve(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(checker, "resolve_model_path", tracked_resolve)
+    status, detail = checker._verify_durable_checkpoint(
+        checkpoint,
+        entry=entry,
+        repo_root=repo_root,
+        registry_path=registry_path,
+    )
+
+    assert status == "verified", detail
+    assert "resolver returned the in-tree checkpoint path" in detail
+    assert calls == [
+        (
+            ("ga3c_cadrl_iros18",),
+            {"registry_path": registry_path, "allow_download": False, "cache_dir": None},
+        )
+    ]
+
+
 def test_unsupported_root_local_guard_still_classifies_synthetic_entries(
     tmp_path: Path,
 ) -> None:

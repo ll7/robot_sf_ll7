@@ -69,13 +69,27 @@ class TestExtractPedestrianPositions:
         assert result.size == 0
 
     @pytest.mark.parametrize(
-        "malformed_row",
-        [[1.0, 2.0, 3.0], [5.0], [1.0, 2.0, 3.0, 4.0]],
-        ids=["3d", "1d", "4d"],
+        "malformed_position",
+        [
+            [5.0],
+            [1.0, 2.0, 3.0],
+            [1.0, 2.0, 3.0, 4.0],
+            [[0.0, 1.0], [2.0, 3.0]],
+            np.zeros((2, 2, 2)),
+            np.array(1.0),
+        ],
+        ids=[
+            "one_coordinate",
+            "three_coordinates",
+            "four_coordinates",
+            "rank_2",
+            "rank_3",
+            "scalar",
+        ],
     )
-    def test_returns_empty_for_non_2d_positions(self, malformed_row):
-        """Any row that is not a 2D coordinate causes a controlled empty return."""
-        result = extract_pedestrian_positions([_state([malformed_row])])
+    def test_returns_empty_for_malformed_positions(self, malformed_position):
+        """Every shape other than a two-coordinate vector returns an empty array."""
+        result = extract_pedestrian_positions([_state([malformed_position])])
 
         assert isinstance(result, np.ndarray)
         assert result.shape == (0,)
@@ -94,6 +108,15 @@ class TestExtractPedestrianPositions:
         """A nested coordinate array is not a single two-dimensional point."""
         result = extract_pedestrian_positions(
             [_state([[[0.0, 1.0], [2.0, 3.0]]])],
+        )
+
+        assert result.shape == (0,)
+        assert result.size == 0
+
+    def test_ragged_coordinate_returns_controlled_empty_array(self):
+        """Ragged nested input is rejected without leaking NumPy shape errors."""
+        result = extract_pedestrian_positions(
+            [_state([[[0.0, 1.0], [2.0]]])],
         )
 
         assert result.shape == (0,)

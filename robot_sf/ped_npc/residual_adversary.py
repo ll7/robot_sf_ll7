@@ -57,8 +57,14 @@ class ResidualBoundConflictError(RuntimeError):
 
 
 def _require_finite(value: float, name: str, *, strict_positive: bool = False) -> None:
-    """Raise ``ValueError`` when a scalar config value is non-finite or out of range."""
-    if not isfinite(value):
+    """Validate a real-valued scalar config value, rejecting booleans explicitly."""
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be a finite real number, not bool")
+    try:
+        finite = isfinite(value)
+    except TypeError as exc:
+        raise TypeError(f"{name} must be a finite real number") from exc
+    if not finite:
         raise ValueError(f"{name} must be finite (got {value!r})")
     if strict_positive and value <= 0:
         raise ValueError(f"{name} must be > 0 (got {value!r})")

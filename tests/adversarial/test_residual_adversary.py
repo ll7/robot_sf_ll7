@@ -67,12 +67,13 @@ def test_config_rejects_non_positive_or_non_finite_bounds() -> None:
     "kwargs",
     [
         {"is_active": 1},
+        {"max_residual_accel_mps2": True},
         {"target_ped_idx": [0, "invalid"]},
         {"seed": "not-an-integer"},
     ],
 )
 def test_config_rejects_invalid_control_values(kwargs: dict[str, object]) -> None:
-    """Opt-in controls must be typed so malformed mappings cannot activate runtime behavior."""
+    """Malformed controls, including bool-as-number bounds, must fail closed."""
     with pytest.raises(TypeError):
         ResidualAdversaryConfig(**kwargs)  # type: ignore[arg-type]
 

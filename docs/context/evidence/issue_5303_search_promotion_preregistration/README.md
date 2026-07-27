@@ -13,7 +13,7 @@ future run is pre-declared **diagnostic/inconclusive** rather than having its th
 quietly relaxed.
 
 The evidence-grade promotion campaign is therefore **stopped before Step 3**. A separate,
-fully specified native search-stage diagnostic is allowed only to prove the runner,
+fully specified adapter-mode search-stage diagnostic is allowed only to prove the runner,
 provenance, and attempt-accounting handoff. It has a fixed `inconclusive` decision and
 cannot become a TPE-promotion result.
 
@@ -136,8 +136,8 @@ is weakened: the gate stays at ≥ 2 weak points, a 95% interval excluding zero,
 null tests at `p ≤ 0.05`. Claiming `promote` later requires **re-preregistration** with
 more search seeds.
 
-The separately justified command below is not that stopped promotion campaign. It is a
-native, search-stage accounting diagnostic with a predeclared `inconclusive` decision.
+The separately justified command below is not that stopped promotion campaign. It is an
+adapter-mode, search-stage accounting diagnostic with a predeclared `inconclusive` decision.
 It records every scheduled attempt but intentionally does not collect deterministic replay,
 five-seed target/reference confirmation, or a second execution context; it cannot admit a
 weak point or authorize a promotion/transfer claim.

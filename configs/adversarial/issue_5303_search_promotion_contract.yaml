@@ -104,7 +104,7 @@ input_provenance:
       sha256: a9d06feec11347ac1470401171da1998ed3635026798716be36e1c03616ceefa
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 2cb9c9f17ca86edaad41c4560b4777c7d3821c3c4065bcdb9a782a18a0da94a4
+      sha256: 8e10ba7e81ac49b7e8bf5f09769140aa437c2788ed4306d1805c5e2f7fd9d987
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
       sha256: b356187fb5321b7f49be03c542bc785af12f01cb2c101b14d3da499de3cc7ccb
@@ -425,7 +425,7 @@ future_run_declaration:
   separately_justified_diagnostic_search_run:
     authorized: true
     purpose: >
-      Validate the frozen native search-stage handoff, input provenance, and complete
+      Validate the frozen adapter-mode search-stage handoff, input provenance, and complete
       intention-to-search accounting without treating it as a promotion campaign.
     fixed_decision: inconclusive
     never_authorizes: [promote, transfer_claim, evidence_grade_comparison]

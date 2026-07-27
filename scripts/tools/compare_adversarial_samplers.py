@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+import shlex
 import subprocess
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -535,7 +536,7 @@ def build_issue_5303_search_outcome_rows(
                 # These are frozen command bindings, not fields inferred from an episode
                 # payload. The production episode schema does not promise to include them,
                 # and treating their absence as ``unknown`` made the declared handoff fail
-                # its own accounting check even for a native adapter execution.
+                # its own accounting check even for adapter execution.
                 "execution_mode": context.execution_mode,
                 "readiness_status": context.readiness_status,
                 "availability_status": context.availability_status,
@@ -1108,7 +1109,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         if args.manifest is not None:
             parser.error("--issue-5303-diagnostic-only cannot be combined with --manifest")
         if args.synthetic:
-            parser.error("--issue-5303-diagnostic-only requires native, not --synthetic, execution")
+            parser.error("--issue-5303-diagnostic-only requires non-synthetic execution")
         required = {
             "--algo-config": args.algo_config,
             "--reference-algo-config": args.reference_algo_config,
@@ -1139,6 +1140,89 @@ def _require_issue_5303_preflight_if_requested(
     if not preflight.ready:
         detail = "; ".join(preflight.blockers) or "unknown frozen-contract failure"
         raise RuntimeError(f"issue #5303 preflight failed before diagnostic execution: {detail}")
+    _require_issue_5303_frozen_bindings(args, repo_root=repo_root)
+
+
+def _resolve_issue_5303_diagnostic_path(value: Path | None, *, repo_root: Path) -> Path | None:
+    """Resolve a diagnostic CLI path for equivalence with the frozen command."""
+    if value is None:
+        return None
+    candidate = value if value.is_absolute() else repo_root / value
+    return candidate.resolve()
+
+
+def _frozen_issue_5303_diagnostic_args(*, repo_root: Path) -> argparse.Namespace:
+    """Parse the authoritative contract command without running a search."""
+    contract_path = repo_root / DEFAULT_CONTRACT_PATH
+    try:
+        contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise RuntimeError(
+            "issue #5303 frozen diagnostic command could not load the canonical contract"
+        ) from exc
+    step3 = contract.get("step3_execution") if isinstance(contract, dict) else None
+    command = step3.get("diagnostic_search_command") if isinstance(step3, dict) else None
+    if not isinstance(command, str) or not command.strip():
+        raise RuntimeError("issue #5303 frozen diagnostic command is missing from the contract")
+    try:
+        command_parts = shlex.split(command)
+        script_index = command_parts.index("scripts/tools/compare_adversarial_samplers.py")
+    except (ValueError, IndexError) as exc:
+        raise RuntimeError("issue #5303 frozen diagnostic command cannot be parsed") from exc
+    try:
+        return parse_args(command_parts[script_index + 1 :])
+    except SystemExit as exc:
+        raise RuntimeError("issue #5303 frozen diagnostic command is not runnable") from exc
+
+
+def _require_issue_5303_frozen_bindings(args: argparse.Namespace, *, repo_root: Path) -> None:
+    """Reject diagnostic invocation drift before it can generate new search outcomes."""
+    expected = _frozen_issue_5303_diagnostic_args(repo_root=repo_root)
+    mismatches: list[str] = []
+    for field_name in (
+        "policy",
+        "scenario_family",
+        "objectives",
+        "budget",
+        "seed",
+        "horizon",
+        "dt",
+        "require_certification",
+        "benchmark_profile",
+        "samplers",
+        "synthetic",
+        "empirical",
+        "package_b_budget_grid",
+        "execution_context_label",
+        "warm_start_record",
+    ):
+        if getattr(args, field_name) != getattr(expected, field_name):
+            mismatches.append(field_name)
+    for field_name in (
+        "repo_root",
+        "scenario_template",
+        "search_space",
+        "algo_config",
+        "reference_algo_config",
+        "contract",
+        "output_dir",
+        "manifest",
+        "out_json",
+        "out_md",
+        "outcomes_jsonl",
+        "warm_start_archive",
+    ):
+        actual = _resolve_issue_5303_diagnostic_path(getattr(args, field_name), repo_root=repo_root)
+        frozen = _resolve_issue_5303_diagnostic_path(
+            getattr(expected, field_name), repo_root=repo_root
+        )
+        if actual != frozen:
+            mismatches.append(field_name)
+    if mismatches:
+        raise RuntimeError(
+            "issue #5303 diagnostic execution has mismatched frozen bindings: "
+            + ", ".join(mismatches)
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

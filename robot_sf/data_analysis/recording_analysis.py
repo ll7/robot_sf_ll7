@@ -41,7 +41,7 @@ def extract_pedestrian_positions(states: list[VisualizableSimState]) -> np.ndarr
     if len(pedestrian_positions) == 0:
         logger.error("No pedestrian positions found in states")
         return np.array([])
-    if not all(len(pos) == 2 for pos in pedestrian_positions):
+    if not all(np.asarray(pos).shape == (2,) for pos in pedestrian_positions):
         logger.error("Invalid pedestrian positions found in states")
         return np.array([])
     logger.info(f"Extracted {len(pedestrian_positions)} pedestrian positions")

@@ -90,6 +90,15 @@ class TestExtractPedestrianPositions:
         assert result.shape == (0,)
         assert result.size == 0
 
+    def test_nested_coordinate_array_discards_all_positions(self):
+        """A nested coordinate array is not a single two-dimensional point."""
+        result = extract_pedestrian_positions(
+            [_state([[[0.0, 1.0], [2.0, 3.0]]])],
+        )
+
+        assert result.shape == (0,)
+        assert result.size == 0
+
 
 # --------------------------------------------------------------------------- #
 # kde_plot_grid_creation

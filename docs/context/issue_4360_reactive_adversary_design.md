@@ -107,8 +107,8 @@ calibrated pedestrian-behavior probability model we do not have).
   separation bounds still fire). If nominal state is already inside the
   controller's configured clearance margin, the controller suppresses its
   residual instead of attempting an unsafe partial repair.
-- Route-deviation references per-route polylines; the controller assigns
-  polylines by target slot, so precise per-pedestrian route attribution is left
-  to a later slice.
+- Route-deviation references each route-following pedestrian's assigned route
+  polyline. Pedestrians without a route assignment (for example, crowded-zone
+  or scripted pedestrians) intentionally have no route-deviation projection.
 - The bundled scripted policy is a placeholder baseline; adversarial strength
   is not claimed and not measured here.

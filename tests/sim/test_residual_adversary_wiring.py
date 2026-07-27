@@ -199,7 +199,10 @@ def test_collect_helpers_forward_geometry_from_map(monkeypatch) -> None:
     """
     sim = _build_simulator(residual_active=True)
     # Normal map: routes and obstacles (bounds) are present.
-    assert sim._collect_residual_route_polylines() is not None
+    route_polylines = sim._collect_residual_route_polylines()
+    assert route_polylines is not None
+    assert set(route_polylines).issubset(set(range(sim.pysf_state.num_peds)))
+    assert all(polyline.shape[1] == 2 for polyline in route_polylines.values())
     obstacle_segments = sim._collect_residual_obstacle_segments()
     assert obstacle_segments is not None
     # MapDefinition keeps fast-pysf's legacy [x1, x2, y1, y2] tuples. The
@@ -207,8 +210,10 @@ def test_collect_helpers_forward_geometry_from_map(monkeypatch) -> None:
     np.testing.assert_allclose(obstacle_segments[0], [0.0, 0.0, 20.0, 0.0])
     assert sim._collect_residual_map_bounds() is not None
 
-    # Map without pedestrian routes degrades the polyline source to None.
-    monkeypatch.setattr(sim.map_def, "ped_routes", [])
+    # No runtime route assignments degrades the polyline source to None.
+    for behavior in sim.peds_behaviors:
+        if hasattr(behavior, "route_assignments"):
+            monkeypatch.setattr(behavior, "route_assignments", {})
     assert sim._collect_residual_route_polylines() is None
 
     # Map without obstacle segments degrades the obstacle source to None.

@@ -156,6 +156,8 @@ class FollowRouteBehavior:
     obstacle_polygons: list["PreparedGeometry"] | None = None
     navigators: dict[int, RouteNavigator] = field(init=False)
     reset_at_start: bool = False
+    global_ped_offset: int = 0
+    """Offset from this route-only state view to the simulator pedestrian rows."""
 
     def __post_init__(self):
         """

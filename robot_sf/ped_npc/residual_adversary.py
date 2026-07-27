@@ -468,11 +468,53 @@ def _distance_to_polyline(point: np.ndarray, polyline: np.ndarray) -> float:
     return float(np.min(distances))
 
 
+def _route_polyline_for_target(
+    route_polylines: list[np.ndarray] | dict[int, np.ndarray],
+    local_slot: int,
+    ped_idx: int,
+) -> np.ndarray | None:
+    """Return the reference route for one target, if the caller supplied one."""
+    if isinstance(route_polylines, dict):
+        return route_polylines.get(ped_idx)
+    if local_slot >= len(route_polylines):
+        return None
+    return route_polylines[local_slot]
+
+
+def _bound_residual_to_route(
+    residual: np.ndarray,
+    position: np.ndarray,
+    polyline: np.ndarray,
+    dt_sq: float,
+    max_route_deviation_m: float,
+) -> np.ndarray:
+    """Return one residual row scaled to a reference-route corridor."""
+    validated_polyline = _validate_finite_array(polyline, "route_polylines entry")
+    if validated_polyline.ndim != 2 or validated_polyline.shape[1] != 2:
+        raise ValueError("each route polyline must have shape (K, 2)")
+    current_distance = _distance_to_polyline(position, validated_polyline)
+    displacement = residual * dt_sq
+    candidate_distance = _distance_to_polyline(position + displacement, validated_polyline)
+    if candidate_distance <= max_route_deviation_m:
+        return residual
+    if current_distance >= max_route_deviation_m:
+        return np.zeros(2, dtype=float)
+    lo, hi = 0.0, 1.0
+    for _ in range(24):
+        mid = 0.5 * (lo + hi)
+        test_distance = _distance_to_polyline(position + mid * displacement, validated_polyline)
+        if test_distance > max_route_deviation_m:
+            hi = mid
+        else:
+            lo = mid
+    return residual * lo
+
+
 def bound_route_deviation(
     residual: np.ndarray,
     positions: np.ndarray,
     dt_s: float,
-    route_polylines: list[np.ndarray] | None,
+    route_polylines: list[np.ndarray] | dict[int, np.ndarray] | None,
     target_indices: np.ndarray,
     max_route_deviation_m: float,
 ) -> np.ndarray:
@@ -480,8 +522,11 @@ def bound_route_deviation(
 
     For each targeted pedestrian with an assigned reference polyline, the residual
     displacement ``residual * dt_s^2`` is scaled back if it would move the pedestrian
-    beyond ``max_route_deviation_m`` of its polyline. Pedestrians without an assigned
-    polyline, or when ``route_polylines`` is ``None``, are unaffected.
+    beyond ``max_route_deviation_m`` of its polyline. A mapping is keyed by global
+    pedestrian index and is the runtime-safe form used by the simulator. A list keeps
+    the compact controller-only API, where entries correspond to target slots.
+    Pedestrians without an assigned polyline, or when ``route_polylines`` is ``None``,
+    are unaffected.
 
     Returns
     -------
@@ -501,33 +546,18 @@ def bound_route_deviation(
     result = residual_array.copy()
     dt_sq = float(dt_s) * float(dt_s)
     for local_slot, ped_idx in enumerate(target_indices):
-        if local_slot >= len(route_polylines) or ped_idx < 0 or ped_idx >= positions_array.shape[0]:
+        if ped_idx < 0 or ped_idx >= positions_array.shape[0]:
             continue
-        polyline = route_polylines[local_slot]
-        polyline = _validate_finite_array(polyline, "route_polylines entry")
-        if polyline.ndim != 2 or polyline.shape[1] != 2:
-            raise ValueError("each route polyline must have shape (K, 2)")
-        current_distance = _distance_to_polyline(positions_array[ped_idx], polyline)
-        displacement = residual_array[ped_idx] * dt_sq
-        candidate_position = positions_array[ped_idx] + displacement
-        candidate_distance = _distance_to_polyline(candidate_position, polyline)
-        if candidate_distance <= max_route_deviation_m:
+        polyline = _route_polyline_for_target(route_polylines, local_slot, int(ped_idx))
+        if polyline is None:
             continue
-        if current_distance >= max_route_deviation_m:
-            # Already at or beyond the corridor: zero the outward residual.
-            result[ped_idx] = 0.0
-            continue
-        # Binary-search-free linear scale: move along displacement until on the boundary.
-        lo, hi = 0.0, 1.0
-        for _ in range(24):
-            mid = 0.5 * (lo + hi)
-            test_position = positions_array[ped_idx] + mid * displacement
-            test_distance = _distance_to_polyline(test_position, polyline)
-            if test_distance > max_route_deviation_m:
-                hi = mid
-            else:
-                lo = mid
-        result[ped_idx] = residual_array[ped_idx] * lo
+        result[ped_idx] = _bound_residual_to_route(
+            residual_array[ped_idx],
+            positions_array[ped_idx],
+            polyline,
+            dt_sq,
+            max_route_deviation_m,
+        )
     return result
 
 
@@ -891,7 +921,9 @@ class BoundedResidualAdversary:
     num_peds:
         Number of pedestrians the adversary was sized for.
     route_polylines:
-        Optional per-target-slot reference route polylines (shape ``(K, 2)`` each).
+        Optional route polylines. Runtime callers provide a mapping from global
+        pedestrian index to a ``(K, 2)`` route; controller-only callers may provide
+        a compact list aligned with target slots.
     obstacle_segments:
         Optional ``(S, 4)`` or ``(S, 2, 2)`` obstacle segments for walkable projection.
     bounds:
@@ -904,7 +936,7 @@ class BoundedResidualAdversary:
     policy: ResidualAdversaryPolicy
     dt_s: float
     num_peds: int
-    route_polylines: list[np.ndarray] | None = None
+    route_polylines: list[np.ndarray] | dict[int, np.ndarray] | None = None
     obstacle_segments: np.ndarray | list[Line2D] | None = None
     bounds: tuple[tuple[float, float], tuple[float, float]] | None = None
     ped_radius: float = 0.4
@@ -1167,7 +1199,7 @@ def build_default_residual_adversary(
     dt_s: float,
     num_peds: int,
     *,
-    route_polylines: list[np.ndarray] | None = None,
+    route_polylines: list[np.ndarray] | dict[int, np.ndarray] | None = None,
     obstacle_segments: np.ndarray | list[Line2D] | None = None,
     bounds: tuple[tuple[float, float], tuple[float, float]] | None = None,
     ped_radius: float = 0.4,

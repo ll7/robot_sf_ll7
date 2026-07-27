@@ -53,7 +53,11 @@ from robot_sf.ped_npc.adversial_ped_force import (
     AdversarialPedForceConfig,
 )
 from robot_sf.ped_npc.ped_archetypes import assign_archetype_labels
-from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, SinglePedestrianBehavior
+from robot_sf.ped_npc.ped_behavior import (
+    FollowRouteBehavior,
+    PedestrianBehavior,
+    SinglePedestrianBehavior,
+)
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
@@ -400,16 +404,24 @@ class Simulator:
             ped_radius=float(self.config.ped_radius),
         )
 
-    def _collect_residual_route_polylines(self) -> list[np.ndarray] | None:
-        """Return reference pedestrian-route polylines when any routes exist.
+    def _collect_residual_route_polylines(self) -> dict[int, np.ndarray] | None:
+        """Return actual route polylines keyed by global pedestrian index.
 
-        Routes are forwarded per-slot to the route-deviation bound; maps without
-        pedestrian routes return ``None`` so that bound degrades to a no-op.
+        ``FollowRouteBehavior`` owns the group-to-route assignments and its
+        ``global_ped_offset`` identifies the corresponding simulator rows. This
+        avoids coupling the residual controller to route-population or target-mask
+        ordering. Pedestrians without a route assignment are intentionally absent,
+        so their route-deviation bound is a no-op.
         """
-        routes = getattr(self.map_def, "ped_routes", None) or []
-        if not routes:
-            return None
-        return [np.asarray(route.waypoints, dtype=float) for route in routes]
+        route_polylines: dict[int, np.ndarray] = {}
+        for behavior in self.peds_behaviors:
+            if not isinstance(behavior, FollowRouteBehavior):
+                continue
+            for group_id, route in behavior.route_assignments.items():
+                polyline = np.asarray(route.waypoints, dtype=float)
+                for local_ped_id in behavior.groups.groups.get(group_id, set()):
+                    route_polylines[behavior.global_ped_offset + local_ped_id] = polyline
+        return route_polylines or None
 
     def _collect_residual_obstacle_segments(self) -> np.ndarray | None:
         """Return standard ``[x1, y1, x2, y2]`` obstacle segments, or ``None``.

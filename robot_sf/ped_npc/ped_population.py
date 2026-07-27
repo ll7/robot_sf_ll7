@@ -1171,6 +1171,7 @@ def populate_simulation(  # noqa: C901,PLR0913
         initial_sections,
         obstacle_polygons=prepared_obstacles,
         reset_at_start=spawn_config.reset_follow_route_at_start,
+        global_ped_offset=route_offset,
     )
     ped_behaviors: list[PedestrianBehavior] = [crowd_behavior, route_behavior]
 

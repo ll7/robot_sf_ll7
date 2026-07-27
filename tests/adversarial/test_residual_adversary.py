@@ -202,6 +202,27 @@ def test_bound_route_deviation_zeroes_outward_when_already_outside() -> None:
     np.testing.assert_allclose(out[0], [0.0, 0.0], atol=1e-6)
 
 
+def test_bound_route_deviation_mapping_uses_global_pedestrian_indices() -> None:
+    """A runtime route mapping must not depend on the selected-target ordering."""
+    positions = np.array([[0.0, 2.0], [2.0, 0.0]], dtype=float)
+    residual = np.array([[0.0, 0.0], [0.0, 10.0]], dtype=float)
+    routes = {
+        0: np.array([[-1.0, 2.0], [1.0, 2.0]], dtype=float),
+        1: np.array([[2.0, -1.0], [2.0, 1.0]], dtype=float),
+    }
+    bounded = bound_route_deviation(
+        residual,
+        positions,
+        dt_s=1.0,
+        route_polylines=routes,
+        target_indices=np.array([1]),
+        max_route_deviation_m=0.1,
+    )
+    candidate = positions + bounded
+    assert abs(candidate[1, 0] - 2.0) <= 0.1 + 1e-9
+    assert candidate[1, 1] <= 1.1 + 1e-9
+
+
 def test_project_residual_displacement_walkable_pushes_out_of_obstacle() -> None:
     """A residual driving into a wall is redirected to the obstacle margin."""
     positions = np.array([[1.0, 1.0]], dtype=float)

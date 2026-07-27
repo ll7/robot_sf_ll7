@@ -363,7 +363,9 @@ def bound_speed(
 
     Rows whose resulting speed already satisfies the tighter of the two caps are
     left unchanged; over-speed rows are scaled toward zero (direction preserved)
-    until the resulting speed equals the cap. Fails closed on non-finite input.
+    until the resulting speed equals the cap. If no scaled prefix can satisfy the
+    cap, the helper fails closed with :class:`ResidualBoundConflictError`.
+    Fails closed on non-finite input.
 
     Returns
     -------
@@ -404,6 +406,11 @@ def bound_speed(
     scale_factor = np.clip(root, 0.0, 1.0)
     scaled = residual_array.copy()
     scaled[over] = residual_array[over] * scale_factor[:, None]
+    scaled_speed = np.linalg.norm(velocities_array + scaled * float(dt_s), axis=1)
+    if np.any(scaled_speed > speed_caps + EPSILON):
+        raise ResidualBoundConflictError(
+            "speed bound is infeasible for the proposed residual direction"
+        )
     return scaled
 
 

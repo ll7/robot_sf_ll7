@@ -144,6 +144,21 @@ def test_bound_speed_caps_speed_delta_component() -> None:
     assert forward_added <= delta + 1e-9
 
 
+def test_bound_speed_fails_closed_when_no_scaled_residual_can_reach_cap() -> None:
+    """An already over-speed row cannot silently return a still-invalid residual."""
+    velocity = np.array([[2.0, 0.0]], dtype=float)
+    residual = np.array([[1.0, 0.0]], dtype=float)
+
+    with pytest.raises(ResidualBoundConflictError, match="speed bound"):
+        bound_speed(
+            residual,
+            velocity,
+            np.array([1.0]),
+            dt_s=0.1,
+            max_speed_delta_mps=1.0,
+        )
+
+
 def test_bound_heading_change_caps_perpendicular_component() -> None:
     """A pure turning residual is capped so the exact angular change is bounded."""
     velocity = np.array([[1.0, 0.0]], dtype=float)

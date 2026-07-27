@@ -17,8 +17,13 @@ permissions:
   contents: read
 
 concurrency:
+  # Latest-main-wins (issue #6399): cancelling in-progress runs in the
+  # per-ref group lets the final aggregate SHA of a merge burst be validated
+  # without queueing behind superseded intermediate runs. Because the group is
+  # per-ref, a new main push only cancels superseded main runs, and a new pull
+  # request push still only cancels its own superseded run.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 env:
   PYTHONUNBUFFERED: "1"

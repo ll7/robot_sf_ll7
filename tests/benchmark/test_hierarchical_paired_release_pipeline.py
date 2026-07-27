@@ -399,6 +399,9 @@ def test_download_release_bundle_retries_transient_failures(
     assert sleeps == pytest.approx(expected_backoff)
     # gh targets the pinned release tag/asset and writes into the target dir.
     assert calls[0][:4] == ["gh", "release", "download", EXPECTED_RELEASE_TAG]
+    # A failed transfer can leave a partial asset behind.  Retried invocations
+    # must replace it rather than fail because the filename already exists.
+    assert "--clobber" in calls[0]
     assert calls[0][-2] == "--dir"
     assert calls[0][-1] == "/tmp"
 
@@ -448,5 +451,23 @@ def test_download_release_bundle_fails_fast_when_gh_missing(
     monkeypatch.setattr(script.time, "sleep", sleeps.append)
 
     with pytest.raises(ReleaseAnalysisPipelineError, match="gh not found on PATH"):
+        script._download_release_bundle(Path("/tmp/example.tar.gz"))
+    assert sleeps == []
+
+
+def test_download_release_bundle_fails_fast_when_gh_cannot_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-executable gh binary is not retryable and keeps the typed error contract."""
+    import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
+
+    def raise_gh_permission_error(*_args, **_kwargs):
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(script.subprocess, "run", raise_gh_permission_error)
+    sleeps: list[float] = []
+    monkeypatch.setattr(script.time, "sleep", sleeps.append)
+
+    with pytest.raises(ReleaseAnalysisPipelineError, match="Could not execute gh release download"):
         script._download_release_bundle(Path("/tmp/example.tar.gz"))
     assert sleeps == []

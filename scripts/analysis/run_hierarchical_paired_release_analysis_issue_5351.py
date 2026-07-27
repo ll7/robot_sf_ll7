@@ -224,6 +224,10 @@ def _download_release_bundle(target: Path) -> None:
         "ll7/robot_sf_ll7",
         "-p",
         "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+        # A failed transfer can leave a partial asset at the fixed cache path.
+        # Without this, a retry can fail immediately because gh refuses to
+        # replace the filename left by the previous attempt.
+        "--clobber",
         "--dir",
         str(target.parent),
     ]
@@ -240,6 +244,10 @@ def _download_release_bundle(target: Path) -> None:
             raise ReleaseAnalysisPipelineError(
                 f"gh not found on PATH; cannot download release {EXPECTED_RELEASE_TAG} "
                 f"bundle: {exc}"
+            ) from exc
+        except OSError as exc:
+            raise ReleaseAnalysisPipelineError(
+                f"Could not execute gh release download for {EXPECTED_RELEASE_TAG} bundle: {exc}"
             ) from exc
         except subprocess.CalledProcessError as exc:
             last_detail = (

@@ -295,6 +295,22 @@ def test_family_invariant_features_are_robot_path_relative() -> None:
     assert feats["pedestrian_speed_mps"] == pytest.approx(1.2)
 
 
+def test_family_invariant_features_keep_longitudinal_positions_outside_path() -> None:
+    """Longitudinal fractions retain before-start and beyond-goal positions."""
+    candidate = {
+        "start": {"x": -2.0, "y": 0.0},
+        "goal": {"x": 13.0, "y": 0.0},
+        "spawn_time_s": 1.0,
+        "pedestrian_speed_mps": 1.2,
+        "pedestrian_delay_s": 0.5,
+    }
+
+    feats = family_invariant_features(candidate, (0.0, 0.0), (10.0, 0.0))
+
+    assert feats["longitudinal_spawn_fraction"] == pytest.approx(-0.2)
+    assert feats["longitudinal_goal_fraction"] == pytest.approx(1.3)
+
+
 def test_family_invariant_features_coincident_robot_path_fails_closed() -> None:
     """A zero-length robot path has no family-invariant projection."""
     candidate = {

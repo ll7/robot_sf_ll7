@@ -154,7 +154,9 @@ There is no `revise` and no generic `blocked` in this contract.
 The frozen feature view is **family-invariant robot-path-relative**
 (`robot_sf.adversarial.disjoint_evaluation.family_invariant_features`): each
 pedestrian candidate is projected onto the robot's start-to-goal path, giving
-lateral/longitudinal spawn and goal features (normalized by path length) plus the
+lateral/longitudinal spawn and goal features (normalized by path length; a
+longitudinal value of 0 is at the robot start and 1 is at the goal, while values
+outside `[0,1]` retain before-start or beyond-goal placement) plus the
 three inherently family-invariant scalars (pedestrian speed, delay, spawn time).
 The per-feature semantic argument is recorded in the contract config: lateral and
 longitudinal features have identical operational meaning in

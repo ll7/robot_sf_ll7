@@ -122,9 +122,9 @@
     ],
     "per_feature_semantic_argument": {
       "lateral_spawn_m": "Signed perpendicular distance from the pedestrian spawn point to the robot's start-to-goal path segment, normalized by the path length. Identical operational meaning in group_crossing and cross_trap: how far off the robot corridor the pedestrian appears.",
-      "longitudinal_spawn_fraction": "Projection of the pedestrian spawn point onto the robot path as a fraction in [0,1] of path length. Identical meaning in both families: where along the robot route the pedestrian spawns.",
+      "longitudinal_spawn_fraction": "Projection of the pedestrian spawn point onto the robot path as a path-length fraction (0 at the start and 1 at the goal; values outside [0,1] retain before-start or beyond-goal placement). Identical meaning in both families: where along the robot route the pedestrian spawns.",
       "lateral_goal_m": "Signed perpendicular distance from the pedestrian goal to the robot path, normalized by path length. Same meaning in both families.",
-      "longitudinal_goal_fraction": "Projection of the pedestrian goal onto the robot path as a fraction of path length. Same meaning in both families.",
+      "longitudinal_goal_fraction": "Projection of the pedestrian goal onto the robot path as a path-length fraction (0 at the start and 1 at the goal; values outside [0,1] retain before-start or beyond-goal placement). Same meaning in both families.",
       "pedestrian_speed_mps": "Pedestrian speed. Inherently family-invariant scalar; identical units and operational meaning in both families.",
       "pedestrian_delay_s": "Pedestrian start delay. Inherently family-invariant scalar.",
       "spawn_time_s": "Pedestrian spawn time. Inherently family-invariant scalar."

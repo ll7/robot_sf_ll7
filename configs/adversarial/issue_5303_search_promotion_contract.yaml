@@ -72,7 +72,8 @@ neutral_reference_planner:
 # ---------------------------------------------------------------------------
 # Input provenance. These raw-file SHA-256 values are checked before any future
 # diagnostic execution. The list includes the target/reference configs, both
-# family sources, search space, certifier/objective, runner, and accounting
+# family sources, search space, certifier/objective, comparison and direct search
+# runners, and accounting
 # analysis surfaces needed to make the handoff executable and auditable.
 # ---------------------------------------------------------------------------
 input_provenance:
@@ -105,6 +106,9 @@ input_provenance:
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
       sha256: fc822454d71b4e1580c3c6c0b4b549a9a9a236643dd49d631bbdc3c565ae08ce
+    - id: adversarial_search_runner
+      path: robot_sf/adversarial/search.py
+      sha256: d448bfcba7c6e6ab551ba74f5a5ff3cba4a3dd9a4283644c933f78afc0139c17
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
       sha256: 8ba7d88e32d3060b46cc8d81fade55eef9b8ded9e1e633a8f0d2dba7b728d6b5

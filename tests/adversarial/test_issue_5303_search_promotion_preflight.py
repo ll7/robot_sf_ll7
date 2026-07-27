@@ -163,6 +163,9 @@ def test_frozen_design_fields() -> None:
     assert [m["name"] for m in contract["methods"]["entries"]] == ["optuna", "random"]
     assert contract["target_planner"]["name"] == "scenario_adaptive_hybrid_orca_v2_collision_guard"
     assert contract["neutral_reference_planner"]["name"] == "scenario_adaptive_orca_v1"
+    provenance_ids = {entry["id"] for entry in contract["input_provenance"]["required_inputs"]}
+    assert "diagnostic_runner" in provenance_ids
+    assert "adversarial_search_runner" in provenance_ids
     for check_name in (
         "candidate_budget_64_per_seed",
         "search_seeds_exactly_three",

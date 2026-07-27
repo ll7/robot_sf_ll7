@@ -103,6 +103,7 @@ EXPECTED_PROVENANCE_INPUT_IDS = frozenset(
         "certification_runner",
         "objective_registry",
         "diagnostic_runner",
+        "adversarial_search_runner",
         "promotion_analysis_module",
         "promotion_analysis_cli",
     }
@@ -121,6 +122,7 @@ EXPECTED_PROVENANCE_PATHS = {
     "certification_runner": "robot_sf/adversarial/certification.py",
     "objective_registry": "robot_sf/adversarial/objectives.py",
     "diagnostic_runner": "scripts/tools/compare_adversarial_samplers.py",
+    "adversarial_search_runner": "robot_sf/adversarial/search.py",
     "promotion_analysis_module": "robot_sf/benchmark/issue_5303_search_promotion_analysis.py",
     "promotion_analysis_cli": "scripts/tools/analyze_issue_5303_search_promotion.py",
 }

@@ -474,7 +474,13 @@ class Simulator:
         positions = np.asarray(self.pysf_state.ped_positions, dtype=float)
         velocities = np.asarray(self.pysf_state.ped_velocities, dtype=float)
         max_speeds = np.asarray(self.pysf_sim.peds.max_speeds, dtype=float)
-        robot_pose = self.robot_poses[0] if self.robot_poses else ((0.0, 0.0), 0.0)
+        robot_poses = self.robot_poses
+        if not robot_poses:
+            raise ValueError("active residual adversary requires at least one robot pose")
+        # The capability-only interface carries one robot pose. Multi-robot target
+        # selection is deliberately deferred; the first simulator robot is the
+        # reactive reference for this slice.
+        robot_pose = robot_poses[0]
         residual = adversary.step_residual(positions, velocities, max_speeds, robot_pose)
         return forces_array + residual
 

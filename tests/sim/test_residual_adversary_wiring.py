@@ -12,6 +12,7 @@ claim is made here.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.common.types import Line2D, Rect
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
@@ -186,6 +187,19 @@ def test_apply_residual_adversary_short_circuits_empty_crowd() -> None:
     out = sim._apply_residual_adversary(empty_forces)
     assert out.shape == (0, 2)
     assert sim._residual_adversary is None
+
+
+def test_active_adversary_rejects_missing_robot_pose() -> None:
+    """A reactive adversary must not invent a robot pose when none exists."""
+    sim = _build_simulator(residual_active=True)
+    sim.robots = []
+    ped_forces = np.zeros_like(sim.ped_pos)
+
+    with pytest.raises(
+        ValueError,
+        match="active residual adversary requires at least one robot pose",
+    ):
+        sim._apply_residual_adversary(ped_forces)
 
 
 def test_ped_simulator_excludes_controlled_ego_from_adversary_targets() -> None:

@@ -129,6 +129,9 @@ calibrated pedestrian-behavior probability model we do not have).
 - Route-deviation references each route-following pedestrian's assigned route
   polyline. Pedestrians without a route assignment (for example, crowded-zone
   or scripted pedestrians) intentionally have no route-deviation projection.
+- The policy observation carries one robot pose. In a multi-robot simulator,
+  this first capability slice uses the first simulator robot as its reactive
+  reference; explicit multi-robot target selection is deferred.
 - In pedestrian-centric simulations, the externally controlled ego-pedestrian
   row is never an adversary target. It remains visible to inter-agent separation
   checks so targeted non-player pedestrians cannot be nudged through it.

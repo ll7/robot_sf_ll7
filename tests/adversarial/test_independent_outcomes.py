@@ -29,10 +29,11 @@ def _sha256(label: str) -> str:
 
 def _replay() -> dict[str, Any]:
     """A passing deterministic-replay lineage block."""
+    signature = _sha256("replay-signature")
     return {
         "exact_signature_match": True,
-        "original_signature_sha256": "abc123",
-        "replay_signature_sha256": "abc123",
+        "original_signature_sha256": signature,
+        "replay_signature_sha256": signature,
     }
 
 
@@ -62,6 +63,7 @@ def _row(  # noqa: PLR0913
     scenario_cert: str = "passed",
     candidate_cert: str = "passed",
     replay: dict[str, Any] | None = None,
+    confirmation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one v2 outcome row with overridable admission-relevant fields."""
     default_pool_index = rank - 1 if arm == "proposal" else 10_000 + rank - 1
@@ -89,7 +91,7 @@ def _row(  # noqa: PLR0913
         "scenario_certification_status": scenario_cert,
         "candidate_certification_status": candidate_cert,
         "replay_lineage": replay if replay is not None else _replay(),
-        "confirmation_lineage": _confirmation(),
+        "confirmation_lineage": confirmation if confirmation is not None else _confirmation(),
         "record_sha256": record_sha256 or _sha256(f"record-{manifest_id}"),
         "admission_status": admission_status,
         "exclusion_reason": exclusion_reason,
@@ -126,6 +128,7 @@ def _balanced_packet(*, proposal_failures: int, random_failures: int, per_arm: i
                 failure=rank < proposal_failures,
                 scenario_seed=99_000 + rank * 10 + seed,
                 execution_seed=70_000 + rank * 10 + seed,
+                confirmation=_confirmation(confirmed=5 if rank < proposal_failures else 0),
             )
             for seed in range(5)
         )
@@ -139,6 +142,7 @@ def _balanced_packet(*, proposal_failures: int, random_failures: int, per_arm: i
                 failure=rank < random_failures,
                 scenario_seed=199_000 + rank * 10 + seed,
                 execution_seed=170_000 + rank * 10 + seed,
+                confirmation=_confirmation(confirmed=5 if rank < random_failures else 0),
             )
             for seed in range(5)
         )
@@ -189,6 +193,12 @@ def _spec_for_packet(  # noqa: C901
                 if isinstance(record_sha256, str) and record_sha256
                 else _sha256(f"record-{manifest_id}")
             )
+    for manifest_index, seed_values in enumerate(execution_seeds.values()):
+        next_seed = 900_000 + manifest_index * 10
+        while len(seed_values) < 5:
+            if next_seed not in seed_values:
+                seed_values.append(next_seed)
+            next_seed += 1
     for arm in ("proposal", "random"):
         padding_index = 0
         while len(ids_by_arm[arm]) < budget_per_arm:
@@ -197,7 +207,9 @@ def _spec_for_packet(  # noqa: C901
             if manifest_id in ids_by_arm[arm]:
                 continue
             ids_by_arm[arm].append(manifest_id)
-            execution_seeds[manifest_id] = [80000 + padding_index]
+            execution_seeds[manifest_id] = [
+                80_000 + padding_index * 10 + seed_offset for seed_offset in range(5)
+            ]
             candidate_pool_indices[manifest_id] = next_padding_pool_index
             next_padding_pool_index += 1
             record_hashes[manifest_id] = _sha256(f"record-{manifest_id}")
@@ -326,6 +338,25 @@ def test_missing_required_field_fails_closed() -> None:
     assert "record_sha256" in result["reason"]
 
 
+def test_malformed_execution_lineage_fields_fail_closed() -> None:
+    """Required row-level execution lineage must be well typed and non-empty."""
+    malformed_values = (
+        ("row_id", "", "row_id"),
+        ("execution_command", ["python", ""], "execution_command"),
+        ("execution_config_lineage", {}, "execution_config_lineage"),
+        ("scenario_seed", True, "scenario_seed"),
+        ("termination_reason", "", "termination_reason"),
+    )
+    for field_name, value, reason_fragment in malformed_values:
+        row = _row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)
+        row[field_name] = value
+
+        result = _evaluate(_packet([row]), budget_per_arm=1)
+
+        assert result["status"] == "blocked"
+        assert reason_fragment in result["reason"]
+
+
 def test_candidate_manifest_hash_requires_external_binding() -> None:
     """Rows cannot self-attest manifest lineage when no frozen binding is supplied."""
     packet = _packet([_row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)])
@@ -435,14 +466,76 @@ def test_replay_signature_mismatch_fails_closed() -> None:
     assert "signature" in result["reason"]
 
 
-def test_confirmation_below_threshold_fails_closed() -> None:
-    """A candidate confirmed by only 2 of 5 seeds fails the frozen 3-of-5 threshold."""
-    row = _row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)
-    row["confirmation_lineage"] = _confirmation(confirmed=2, attempts=5)
-    packet = _packet([row])
-    result = _evaluate(packet, budget_per_arm=4)
+def test_confirmation_below_threshold_is_a_valid_candidate_non_failure() -> None:
+    """Two confirmed failures out of five produce one valid candidate non-failure."""
+    rows = [
+        *[
+            _row(
+                row_id=f"p0_{seed}",
+                manifest_id="cp0",
+                arm="proposal",
+                rank=1,
+                failure=seed <= 2,
+                scenario_seed=seed,
+                execution_seed=seed,
+                confirmation=_confirmation(confirmed=2),
+            )
+            for seed in range(1, 6)
+        ],
+        *[
+            _row(
+                row_id=f"r0_{seed}",
+                manifest_id="cr0",
+                arm="random",
+                rank=1,
+                failure=False,
+                scenario_seed=100 + seed,
+                execution_seed=100 + seed,
+                confirmation=_confirmation(confirmed=0),
+            )
+            for seed in range(1, 6)
+        ],
+    ]
+
+    result = _evaluate(_packet(rows), budget_per_arm=1)
+
+    assert result["status"] == "complete"
+    assert result["proposal"]["outcomes"] == [False]
+    assert result["proposal_failure_yield"] == 0.0
+
+
+def test_execution_seed_binding_requires_all_five_confirmation_attempts() -> None:
+    """A 3-of-5 packet cannot bind and execute only the three confirming seeds."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    spec = _spec_for_packet(packet, budget_per_arm=1)
+    short_seed_binding = {
+        manifest_id: tuple(seed_values[:3])
+        for manifest_id, seed_values in (spec.expected_execution_seeds_by_manifest_id or {}).items()
+    }
+
+    result = build_independent_outcome_evaluation(
+        packet,
+        budget_per_arm=1,
+        minimally_important=0.20,
+        admission_spec=replace(
+            spec,
+            expected_execution_seeds_by_manifest_id=short_seed_binding,
+        ),
+    )
+
     assert result["status"] == "blocked"
-    assert "confirmation" in result["reason"]
+    assert "must contain exactly 5 seeds" in result["reason"]
+
+
+def test_confirmation_count_must_match_observed_seed_outcomes() -> None:
+    """Candidate-level confirmation metadata cannot disagree with its five rows."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    packet["rows"][0]["confirmation_lineage"]["confirmed_count"] = 4
+
+    result = _evaluate(packet, budget_per_arm=1)
+
+    assert result["status"] == "blocked"
+    assert "confirmation count mismatch" in result["reason"]
 
 
 def test_scenario_certification_not_passed_fails_closed() -> None:
@@ -480,7 +573,18 @@ def test_wrong_eval_family_fails_closed() -> None:
 def test_excluded_row_with_reason_blocks_an_incomplete_predeclared_arm() -> None:
     """An excluded candidate cannot silently shrink the frozen arm denominator."""
     rows = [
-        _row(row_id="p0", manifest_id="cp0", arm="proposal", rank=1, failure=True),
+        *[
+            _row(
+                row_id=f"p0_{seed}",
+                manifest_id="cp0",
+                arm="proposal",
+                rank=1,
+                failure=True,
+                execution_seed=seed,
+                confirmation=_confirmation(confirmed=5),
+            )
+            for seed in range(5)
+        ],
         _row(
             row_id="p1",
             manifest_id="cp1",
@@ -490,7 +594,18 @@ def test_excluded_row_with_reason_blocks_an_incomplete_predeclared_arm() -> None
             admission_status="excluded",
             exclusion_reason="candidate_pool_collision_disjoint_by_candidate",
         ),
-        _row(row_id="r0", manifest_id="cr0", arm="random", rank=1, failure=False),
+        *[
+            _row(
+                row_id=f"r0_{seed}",
+                manifest_id="cr0",
+                arm="random",
+                rank=1,
+                failure=False,
+                execution_seed=100 + seed,
+                confirmation=_confirmation(confirmed=0),
+            )
+            for seed in range(5)
+        ],
     ]
     packet = _packet(rows)
     result = _evaluate(packet, budget_per_arm=2)
@@ -522,6 +637,7 @@ def test_three_of_five_confirmation_counts_as_one_candidate_failure() -> None:
                 failure=False,
                 scenario_seed=100 + seed,
                 execution_seed=100 + seed,
+                confirmation=_confirmation(confirmed=0),
             )
             for seed in range(1, 6)
         ],
@@ -546,6 +662,7 @@ def test_different_confirming_termination_reasons_fail_closed() -> None:
                 failure=True,
                 scenario_seed=seed,
                 execution_seed=seed,
+                confirmation=_confirmation(confirmed=5),
             )
             for seed in range(1, 6)
         ],
@@ -558,6 +675,7 @@ def test_different_confirming_termination_reasons_fail_closed() -> None:
                 failure=False,
                 scenario_seed=100 + seed,
                 execution_seed=100 + seed,
+                confirmation=_confirmation(confirmed=0),
             )
             for seed in range(1, 6)
         ],
@@ -632,7 +750,7 @@ def test_execution_seed_must_match_the_external_manifest_lineage() -> None:
     spec = _spec_for_packet(packet, budget_per_arm=1)
     proposal_id = packet["rows"][0]["candidate_manifest_id"]
     expected_seeds = dict(spec.expected_execution_seeds_by_manifest_id or {})
-    expected_seeds[proposal_id] = (999999,)
+    expected_seeds[proposal_id] = tuple(range(999_999, 1_000_004))
     drifted_spec = replace(spec, expected_execution_seeds_by_manifest_id=expected_seeds)
 
     result = build_independent_outcome_evaluation(

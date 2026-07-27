@@ -262,6 +262,10 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
     expected_seeds = spec.expected_execution_seeds_by_manifest_id
     if not isinstance(expected_seeds, dict) or set(expected_seeds) != expected_ids:
         return "execution-seed lineage must cover exactly the predeclared arm manifest IDs"
+    threshold_rule = _CONFIRMATION_THRESHOLDS.get(spec.confirmation_threshold)
+    if threshold_rule is None:
+        return f"unsupported confirmation threshold: {spec.confirmation_threshold!r}"
+    expected_attempt_count = int(threshold_rule["attempt_count"])
     for manifest_id, raw_seeds in expected_seeds.items():
         if not isinstance(raw_seeds, (list, tuple)) or not raw_seeds:
             return f"execution-seed lineage for {manifest_id} must be a non-empty list or tuple"
@@ -269,6 +273,12 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
             return f"execution-seed lineage for {manifest_id} must contain integers"
         if len(set(raw_seeds)) != len(raw_seeds):
             return f"execution-seed lineage for {manifest_id} contains duplicate seeds"
+        if len(raw_seeds) != expected_attempt_count:
+            return (
+                f"execution-seed lineage for {manifest_id} must contain exactly "
+                f"{expected_attempt_count} seeds for confirmation threshold "
+                f"{spec.confirmation_threshold}"
+            )
     pool_seed = spec.expected_candidate_pool_seed
     if not isinstance(pool_seed, int) or isinstance(pool_seed, bool):
         return "expected candidate_pool_seed must be an integer"
@@ -280,7 +290,7 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
 
 
 def _confirmation_ok(confirmation_lineage: Any, *, threshold: str) -> tuple[bool, str]:
-    """Validate independent-seed confirmation lineage against the frozen threshold."""
+    """Validate the shape and bounds of independent-seed confirmation lineage."""
     if not isinstance(confirmation_lineage, dict):
         return False, "confirmation_lineage must be an object"
     rule = _CONFIRMATION_THRESHOLDS.get(threshold)
@@ -289,16 +299,20 @@ def _confirmation_ok(confirmation_lineage: Any, *, threshold: str) -> tuple[bool
     confirmed = confirmation_lineage.get("confirmed_count")
     attempts = confirmation_lineage.get("attempt_count")
     stable = confirmation_lineage.get("stable_attribution")
-    if not isinstance(confirmed, int) or not isinstance(attempts, int):
+    if (
+        not isinstance(confirmed, int)
+        or isinstance(confirmed, bool)
+        or not isinstance(attempts, int)
+        or isinstance(attempts, bool)
+    ):
         return False, "confirmation_lineage.confirmed_count/attempt_count must be integers"
     if attempts != rule["attempt_count"]:
         return False, f"confirmation attempt_count={attempts} != frozen {rule['attempt_count']}"
-    if confirmed < rule["min_confirmed"]:
-        return False, (
-            f"confirmation confirmed_count={confirmed} below frozen threshold "
-            f"{threshold} (min {rule['min_confirmed']})"
-        )
-    if stable is not True:
+    if confirmed < 0 or confirmed > attempts:
+        return False, "confirmation confirmed_count must be between zero and attempt_count"
+    if not isinstance(stable, bool):
+        return False, "confirmation_lineage.stable_attribution must be boolean"
+    if confirmed >= rule["min_confirmed"] and stable is not True:
         return False, "confirmation_lineage.stable_attribution must be true"
     return True, "ok"
 
@@ -311,20 +325,24 @@ def _replay_ok(replay_lineage: Any) -> tuple[bool, str]:
         return False, "replay_lineage.exact_signature_match must be true"
     replay_sig = replay_lineage.get("replay_signature_sha256")
     original_sig = replay_lineage.get("original_signature_sha256")
-    if not isinstance(replay_sig, str) or not replay_sig:
-        return False, "replay_lineage.replay_signature_sha256 missing"
-    if not isinstance(original_sig, str) or not original_sig:
-        return False, "replay_lineage.original_signature_sha256 missing"
+    if not _is_sha256_hex(replay_sig):
+        return False, "replay_lineage.replay_signature_sha256 must be SHA-256 hex"
+    if not _is_sha256_hex(original_sig):
+        return False, "replay_lineage.original_signature_sha256 must be SHA-256 hex"
     if replay_sig != original_sig:
         return False, "replay signature SHA-256 does not match original signature SHA-256"
     return True, "ok"
 
 
-def _row_missing_fields(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec) -> str | None:
+def _row_missing_fields(  # noqa: C901
+    row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec
+) -> str | None:
     """Check required-field presence and well-typedness for an admitted row."""
     for field_name in REQUIRED_ADMITTED_ROW_FIELDS:
         if field_name not in row:
             return f"missing required field {field_name!r}"
+    if not isinstance(row.get("row_id"), str) or not row["row_id"].strip():
+        return "row_id must be a non-empty string"
     if row.get("selection_arm") not in _ARMS:
         return f"invalid selection_arm {row.get('selection_arm')!r}"
     if not isinstance(row.get("independent_failure_outcome"), bool):
@@ -333,13 +351,24 @@ def _row_missing_fields(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec)
         "candidate_manifest_sha256"
     ):
         return "candidate_manifest_sha256 must be a non-empty string"
-    if not isinstance(row.get("execution_command"), list) or not row.get("execution_command"):
-        return "execution_command must be a non-empty list"
-    if not isinstance(row.get("execution_config_lineage"), dict):
-        return "execution_config_lineage must be an object"
+    execution_command = row.get("execution_command")
+    if (
+        not isinstance(execution_command, list)
+        or not execution_command
+        or any(not isinstance(part, str) or not part.strip() for part in execution_command)
+    ):
+        return "execution_command must be a non-empty list of non-empty strings"
+    execution_config_lineage = row.get("execution_config_lineage")
+    if not isinstance(execution_config_lineage, dict) or not execution_config_lineage:
+        return "execution_config_lineage must be a non-empty object"
+    scenario_seed = row.get("scenario_seed")
+    if not isinstance(scenario_seed, int) or isinstance(scenario_seed, bool):
+        return "scenario_seed must be an integer"
     execution_seed = row.get("execution_seed")
     if not isinstance(execution_seed, int) or isinstance(execution_seed, bool):
         return "execution_seed must be an integer"
+    if not isinstance(row.get("termination_reason"), str) or not row["termination_reason"].strip():
+        return "termination_reason must be a non-empty string"
     if not isinstance(row.get("record_sha256"), str) or not row.get("record_sha256"):
         return "record_sha256 missing"
     return None
@@ -537,7 +566,22 @@ def _candidate_outcome_from_seed_rows(
             f"observed={sorted(observed_seeds)} expected={sorted(expected_seeds)}"
         )
     confirming_rows = [row for row in seed_rows.values() if row["independent_failure_outcome"]]
-    if len(confirming_rows) < min_confirmed:
+    confirmed_count = len(confirming_rows)
+    for row in seed_rows.values():
+        confirmation_lineage = row["confirmation_lineage"]
+        if confirmation_lineage["confirmed_count"] != confirmed_count:
+            return None, (
+                f"confirmation count mismatch for candidate {manifest_id} in arm {arm}: "
+                f"row reports {confirmation_lineage['confirmed_count']} but observed "
+                f"{confirmed_count} confirming execution seeds"
+            )
+        if confirmation_lineage["attempt_count"] != len(expected_seeds):
+            return None, (
+                f"confirmation attempt count mismatch for candidate {manifest_id} in arm {arm}: "
+                f"row reports {confirmation_lineage['attempt_count']} but binding contains "
+                f"{len(expected_seeds)} execution seeds"
+            )
+    if confirmed_count < min_confirmed:
         return False, None
     termination_reasons = {str(row["termination_reason"]) for row in confirming_rows}
     if len(termination_reasons) != 1:

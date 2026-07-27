@@ -629,6 +629,7 @@ def _v2_row(
     seed_offset: int = 0,
 ) -> dict[str, Any]:
     """Build one admissible v2 outcome row."""
+    replay_signature = hashlib.sha256(f"replay-{manifest_id}".encode()).hexdigest()
     return {
         "row_id": row_id,
         "candidate_manifest_id": manifest_id,
@@ -652,11 +653,11 @@ def _v2_row(
         "candidate_certification_status": "passed",
         "replay_lineage": {
             "exact_signature_match": True,
-            "original_signature_sha256": "abc",
-            "replay_signature_sha256": "abc",
+            "original_signature_sha256": replay_signature,
+            "replay_signature_sha256": replay_signature,
         },
         "confirmation_lineage": {
-            "confirmed_count": 3,
+            "confirmed_count": 5 if failure else 0,
             "attempt_count": 5,
             "stable_attribution": True,
         },
@@ -738,6 +739,16 @@ def test_external_manifest_binding_requires_pool_index_and_record_hash(tmp_path:
     loaded, reason = load_expected_candidate_manifest_binding(binding_path)
     assert loaded is None
     assert "SHA-256 hex" in reason
+
+    short_seed_binding = json.loads(json.dumps(binding))
+    manifest_id = next(iter(short_seed_binding["execution_seeds_by_manifest_id"]))
+    short_seed_binding["execution_seeds_by_manifest_id"][manifest_id] = short_seed_binding[
+        "execution_seeds_by_manifest_id"
+    ][manifest_id][:3]
+    binding_path.write_text(json.dumps(short_seed_binding), encoding="utf-8")
+    loaded, reason = load_expected_candidate_manifest_binding(binding_path)
+    assert loaded is None
+    assert "must contain exactly 5 seeds" in reason
 
 
 def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(

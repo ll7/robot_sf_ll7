@@ -112,18 +112,18 @@
     "uses_excluded_cross_trap_goal_failures_for_tuning": false,
     "implementation": "robot_sf.adversarial.disjoint_evaluation.family_invariant_features",
     "retained_features": [
-      "lateral_spawn_m",
+      "lateral_spawn_path_fraction",
       "longitudinal_spawn_fraction",
-      "lateral_goal_m",
+      "lateral_goal_path_fraction",
       "longitudinal_goal_fraction",
       "pedestrian_speed_mps",
       "pedestrian_delay_s",
       "spawn_time_s"
     ],
     "per_feature_semantic_argument": {
-      "lateral_spawn_m": "Signed perpendicular distance from the pedestrian spawn point to the robot's start-to-goal path segment, normalized by the path length. Identical operational meaning in group_crossing and cross_trap: how far off the robot corridor the pedestrian appears.",
+      "lateral_spawn_path_fraction": "Dimensionless signed perpendicular offset from the pedestrian spawn point to the robot's start-to-goal path, divided by path length. Identical operational meaning in group_crossing and cross_trap: relative lateral displacement from the robot corridor.",
       "longitudinal_spawn_fraction": "Projection of the pedestrian spawn point onto the robot path as a path-length fraction (0 at the start and 1 at the goal; values outside [0,1] retain before-start or beyond-goal placement). Identical meaning in both families: where along the robot route the pedestrian spawns.",
-      "lateral_goal_m": "Signed perpendicular distance from the pedestrian goal to the robot path, normalized by path length. Same meaning in both families.",
+      "lateral_goal_path_fraction": "Dimensionless signed perpendicular offset from the pedestrian goal to the robot path, divided by path length. Same meaning in both families.",
       "longitudinal_goal_fraction": "Projection of the pedestrian goal onto the robot path as a path-length fraction (0 at the start and 1 at the goal; values outside [0,1] retain before-start or beyond-goal placement). Same meaning in both families.",
       "pedestrian_speed_mps": "Pedestrian speed. Inherently family-invariant scalar; identical units and operational meaning in both families.",
       "pedestrian_delay_s": "Pedestrian start delay. Inherently family-invariant scalar.",

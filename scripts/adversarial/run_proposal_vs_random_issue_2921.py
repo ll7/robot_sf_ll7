@@ -773,6 +773,11 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
             return None, f"execution seeds for {manifest_id} must be integers"
         if len(set(raw_seeds)) != len(raw_seeds):
             return None, f"execution seeds for {manifest_id} must be unique"
+        if len(raw_seeds) != 5:
+            return None, (
+                f"execution seeds for {manifest_id} must contain exactly 5 seeds "
+                "for the frozen 3_of_5 confirmation threshold"
+            )
         normalized_execution_seeds[manifest_id] = list(raw_seeds)
     candidate_pool_seed = payload.get("candidate_pool_seed")
     if not isinstance(candidate_pool_seed, int) or isinstance(candidate_pool_seed, bool):

@@ -291,7 +291,7 @@ def test_family_invariant_features_are_robot_path_relative() -> None:
     assert set(feats) == set(FAMILY_INVARIANT_FEATURE_NAMES)
     # Pedestrian spawns at (2,4): longitudinal fraction 0.2, lateral 4/10 = 0.4.
     assert feats["longitudinal_spawn_fraction"] == pytest.approx(0.2)
-    assert feats["lateral_spawn_m"] == pytest.approx(0.4)
+    assert feats["lateral_spawn_path_fraction"] == pytest.approx(0.4)
     assert feats["pedestrian_speed_mps"] == pytest.approx(1.2)
 
 
@@ -407,6 +407,14 @@ def test_assign_arms_disjoint_rejects_negative_budget() -> None:
     """Negative budgets are a contract violation."""
     with pytest.raises(ValueError, match="budget_per_arm"):
         assign_arms_disjoint_by_candidate(["a"], ["a"], budget_per_arm=-1, rng_seed=0)
+
+
+def test_assign_arms_disjoint_rejects_pool_too_small_for_both_arms() -> None:
+    """Arm assignment cannot silently return unequal candidate budgets."""
+    pool = ["pool_0", "pool_1", "pool_2"]
+
+    with pytest.raises(ValueError, match="two disjoint arm budgets"):
+        assign_arms_disjoint_by_candidate(pool, pool, budget_per_arm=2, rng_seed=0)
 
 
 def test_assign_arms_disjoint_rejects_non_pool_or_partial_rank_ids() -> None:

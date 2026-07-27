@@ -816,8 +816,9 @@ def _path_projection(
     """Project ``point`` onto the robot start->goal path.
 
     Returns:
-        ``(lateral_m, longitudinal_fraction)`` where ``lateral_m`` is the signed
-        perpendicular distance to the path normalized by path length, and
+        ``(lateral_path_fraction, longitudinal_fraction)`` where
+        ``lateral_path_fraction`` is the signed perpendicular distance to the path
+        divided by path length, and
         ``longitudinal_fraction`` is the projection onto the path as a fraction
         of path length (0 at the start, 1 at the goal; may fall outside [0, 1]).
     """
@@ -852,10 +853,10 @@ def family_invariant_features(
 
     Per-feature semantic argument:
 
-    * ``lateral_spawn_m`` / ``lateral_goal_m``: signed perpendicular distance of
-      the pedestrian spawn/goal from the robot corridor, normalized by path
-      length. Same meaning in both families (how far off the corridor the
-      pedestrian appears).
+    * ``lateral_spawn_path_fraction`` / ``lateral_goal_path_fraction``:
+      dimensionless signed perpendicular offset of pedestrian spawn/goal from the
+      robot corridor, divided by path length. Same meaning in both families:
+      relative lateral displacement from the robot corridor.
     * ``longitudinal_spawn_fraction`` / ``longitudinal_goal_fraction``:
       projection of spawn/goal onto the robot path as a fraction of path length.
       Same meaning in both families (where along the route the pedestrian is).
@@ -891,9 +892,9 @@ def family_invariant_features(
         return float(getattr(candidate, name))
 
     return {
-        "lateral_spawn_m": round(lat_start, 9),
+        "lateral_spawn_path_fraction": round(lat_start, 9),
         "longitudinal_spawn_fraction": round(lon_start, 9),
-        "lateral_goal_m": round(lat_goal, 9),
+        "lateral_goal_path_fraction": round(lat_goal, 9),
         "longitudinal_goal_fraction": round(lon_goal, 9),
         "pedestrian_speed_mps": _scalar("pedestrian_speed_mps"),
         "pedestrian_delay_s": _scalar("pedestrian_delay_s"),
@@ -903,9 +904,9 @@ def family_invariant_features(
 
 #: Feature names of the frozen family-invariant view, in canonical order.
 FAMILY_INVARIANT_FEATURE_NAMES = (
-    "lateral_spawn_m",
+    "lateral_spawn_path_fraction",
     "longitudinal_spawn_fraction",
-    "lateral_goal_m",
+    "lateral_goal_path_fraction",
     "longitudinal_goal_fraction",
     "pedestrian_speed_mps",
     "pedestrian_delay_s",
@@ -1054,6 +1055,8 @@ def assign_arms_disjoint_by_candidate(
     Returns:
         An :class:`ArmAssignment` whose ``overlap_ids`` is always empty.
     """
+    if not isinstance(budget_per_arm, int) or isinstance(budget_per_arm, bool):
+        raise ValueError("budget_per_arm must be an integer")
     if budget_per_arm < 0:
         raise ValueError("budget_per_arm must be >= 0")
     ranked = list(ranked_pool_ids)
@@ -1068,6 +1071,11 @@ def assign_arms_disjoint_by_candidate(
     missing_ranked_ids = sorted(set(pool) - set(ranked))
     if missing_ranked_ids:
         raise ValueError(f"ranked_pool_ids omits pool IDs: {missing_ranked_ids}")
+    if len(pool) < 2 * budget_per_arm:
+        raise ValueError(
+            "pool_ids must contain at least two disjoint arm budgets: "
+            f"pool={len(pool)} budget_per_arm={budget_per_arm}"
+        )
     proposal_ids = ranked[: min(budget_per_arm, len(ranked))]
     proposal_set = set(proposal_ids)
     remaining = [cid for cid in pool if cid not in proposal_set]

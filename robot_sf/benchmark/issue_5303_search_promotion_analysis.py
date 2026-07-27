@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,8 @@ from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
 SCHEMA_VERSION = "issue_5303_search_promotion_analysis.v1"
 OUTCOME_ROW_SCHEMA_VERSION = "issue_5303_search_promotion_outcome_row.v1"
 DEFAULT_CONTRACT_PATH = Path("configs/adversarial/issue_5303_search_promotion_contract.yaml")
+EXPECTED_EXECUTION_CONTEXT_LABEL = "diagnostic_adapter_context_a"
+DIAGNOSTIC_NOT_RUN = "not_run_diagnostic_only"
 
 
 @dataclass(frozen=True)
@@ -197,6 +201,7 @@ def _frozen_row_bindings(contract: dict[str, Any], blockers: list[str]) -> dict[
         )
     else:
         bindings["execution_mode"] = required_execution_mode
+    bindings["execution_context_label"] = EXPECTED_EXECUTION_CONTEXT_LABEL
     return bindings
 
 
@@ -282,7 +287,9 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     invalid_by_arm: dict[str, int] = dict.fromkeys(methods, 0)
     required_field_failures = 0
     immutable_hash_failures = 0
+    normalized_candidate_hash_failures = 0
     frozen_binding_failures: dict[str, int] = dict.fromkeys(frozen_row_bindings, 0)
+    execution_commits: set[str] = set()
 
     for row_number, row in enumerate(rows, start=1):
         missing = sorted(required_fields - set(row))
@@ -327,34 +334,111 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             immutable_hash_failures += 1
             blockers.append(f"row {row_number} immutable_record_sha256 does not match row content")
 
+        expected_row_id = f"{arm}:{search_seed}:{candidate_index:04d}:search"
+        if row.get("row_id") != expected_row_id:
+            blockers.append(f"row {row_number} row_id does not match its scheduled attempt")
+
         for binding_field, frozen_value in frozen_row_bindings.items():
             if row.get(binding_field) != frozen_value:
                 frozen_binding_failures[binding_field] += 1
 
+        candidate = row.get("candidate")
         normalized_hash = row.get("normalized_candidate_config_sha256")
-        if not isinstance(normalized_hash, str) or not normalized_hash:
-            blockers.append(f"row {row_number} lacks a normalized candidate hash")
-        elif normalized_hash in normalized_hashes[arm]:
-            duplicates_by_arm[arm] += 1
+        verified_candidate_hash: str | None = None
+        if not isinstance(candidate, dict):
+            normalized_candidate_hash_failures += 1
+            blockers.append(f"row {row_number} candidate must be an object")
         else:
-            normalized_hashes[arm].add(normalized_hash)
+            verified_candidate_hash = _canonical_sha256(candidate)
+            if normalized_hash != verified_candidate_hash:
+                normalized_candidate_hash_failures += 1
+                blockers.append(
+                    f"row {row_number} normalized candidate hash does not match candidate content"
+                )
+        if verified_candidate_hash in normalized_hashes[arm]:
+            duplicates_by_arm[arm] += 1
+        elif verified_candidate_hash is not None:
+            normalized_hashes[arm].add(verified_candidate_hash)
+
+        candidate_seed = candidate.get("scenario_seed") if isinstance(candidate, dict) else None
+        if (
+            isinstance(candidate_seed, bool)
+            or not isinstance(candidate_seed, int)
+            or row.get("execution_seed") != candidate_seed
+        ):
+            blockers.append(f"row {row_number} execution_seed must match candidate.scenario_seed")
+        seed_lineage = row.get("seed_lineage")
+        expected_seed_lineage = {
+            "search_seed": search_seed,
+            "candidate_scenario_seed": candidate_seed,
+            "deterministic_replay_seed": None,
+            "confirmation_seeds": [],
+            "second_context_seed": None,
+        }
+        if not isinstance(seed_lineage, dict) or any(
+            seed_lineage.get(key) != value for key, value in expected_seed_lineage.items()
+        ):
+            blockers.append(f"row {row_number} seed_lineage does not match the diagnostic attempt")
+
+        execution_commit = row.get("execution_commit")
+        if (
+            not isinstance(execution_commit, str)
+            or re.fullmatch(r"[0-9a-f]{40}", execution_commit) is None
+        ):
+            blockers.append(f"row {row_number} execution_commit must be a 40-character Git SHA")
+        else:
+            execution_commits.add(execution_commit)
 
         if row.get("admission_decision") != "not_admitted_diagnostic_only":
             blockers.append(f"row {row_number} must remain not admitted in diagnostic-only mode")
         if row.get("exclusion_reason") != "diagnostic_only_no_replay_reference_or_second_context":
             blockers.append(f"row {row_number} must record the diagnostic-only exclusion reason")
-        availability_status = row.get("availability_status")
-        if availability_status in {
+        for field_name in (
+            "deterministic_replay",
+            "confirmation_target",
+            "confirmation_reference",
+            "second_execution_context",
+        ):
+            if row.get(field_name) != DIAGNOSTIC_NOT_RUN:
+                blockers.append(f"row {row_number} {field_name} must remain {DIAGNOSTIC_NOT_RUN!r}")
+        if row.get("stable_attribution_evidence") != "not_collected_diagnostic_only":
+            blockers.append(
+                f"row {row_number} stable_attribution_evidence must remain diagnostic-only"
+            )
+        if row.get("recertification_lineage") != "issue_6139_frozen_input":
+            blockers.append(f"row {row_number} has invalid recertification lineage")
+
+        readiness_status = row.get("readiness_status")
+        if not isinstance(readiness_status, str) or readiness_status.strip().lower() in {
+            "",
+            "unknown",
             "fallback",
             "degraded",
             "unavailable",
             "not_available",
+            "failed",
         }:
+            blockers.append(f"row {row_number} has non-evidence readiness status")
+        availability_status = row.get("availability_status")
+        if availability_status != "available":
             attrition_by_arm[arm] += 1
             blockers.append(
                 f"row {row_number} has {availability_status!r} execution availability; it remains "
                 "in the primary denominator but cannot support a diagnostic readiness result"
             )
+        constraints_first_outcome = row.get("constraints_first_outcome")
+        if (
+            not isinstance(constraints_first_outcome, dict)
+            or constraints_first_outcome.get("status") != "observed"
+        ):
+            blockers.append(f"row {row_number} lacks an observed constraints-first outcome")
+        objective_value = row.get("objective_value")
+        if (
+            isinstance(objective_value, bool)
+            or not isinstance(objective_value, (int, float))
+            or not math.isfinite(float(objective_value))
+        ):
+            blockers.append(f"row {row_number} objective_value must be finite")
         certification = row.get("certification")
         certification_status = (
             certification.get("status") if isinstance(certification, dict) else None
@@ -376,6 +460,8 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
                 f"{failure_count} row(s) do not match frozen {binding_field!r} binding from "
                 "the contract"
             )
+    if len(execution_commits) > 1:
+        blockers.append("diagnostic rows must share one execution_commit")
 
     expected_attempts = len(seeds) * candidate_budget
     missing_attempts = {
@@ -406,6 +492,7 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
         "fully_admitted_yield": "not_estimated_diagnostic_only",
         "required_field_failure_count": required_field_failures,
         "immutable_hash_failure_count": immutable_hash_failures,
+        "normalized_candidate_hash_failure_count": normalized_candidate_hash_failures,
         "frozen_contract_sha256": frozen_preflight.metadata.get("contract_file_sha256"),
         "frozen_contract_preflight_ready": frozen_preflight.ready,
         "frozen_row_binding_failure_counts": frozen_binding_failures,

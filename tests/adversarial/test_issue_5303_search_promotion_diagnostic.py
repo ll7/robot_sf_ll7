@@ -38,14 +38,25 @@ def _frozen_input(input_id: str) -> tuple[str, str]:
     return path, digest
 
 
-def _immutable_sha256(row: dict[str, object]) -> str:
-    payload = dict(row)
-    payload.pop("immutable_record_sha256", None)
+def _canonical_sha256(payload: dict[str, object]) -> str:
+    """Return the canonical digest used for candidate and immutable-row hashes."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _diagnostic_row(*, arm: str, seed: int, index: int, candidate_hash: str) -> dict[str, object]:
+def _immutable_sha256(row: dict[str, object]) -> str:
+    payload = dict(row)
+    payload.pop("immutable_record_sha256", None)
+    return _canonical_sha256(payload)
+
+
+def _diagnostic_row(
+    *,
+    arm: str,
+    seed: int,
+    index: int,
+    candidate: dict[str, object] | None = None,
+) -> dict[str, object]:
     scenario_config_path, scenario_config_sha256 = _frozen_input("diagnostic_scenario_template")
     search_space_path, search_space_sha256 = _frozen_input("search_space")
     target_config_path, target_config_sha256 = _frozen_input("target_planner_config")
@@ -56,6 +67,11 @@ def _diagnostic_row(*, arm: str, seed: int, index: int, candidate_hash: str) -> 
     step3_execution = FROZEN_CONTRACT["step3_execution"]
     assert isinstance(family_split, dict)
     assert isinstance(step3_execution, dict)
+    candidate = candidate or {
+        "scenario_seed": seed + index,
+        "fixture_id": f"{arm}-{seed}-{index}",
+    }
+    candidate_seed = candidate["scenario_seed"]
     row: dict[str, object] = {
         "schema_version": OUTCOME_ROW_SCHEMA_VERSION,
         "row_id": f"{arm}:{seed}:{index:04d}:search",
@@ -63,8 +79,8 @@ def _diagnostic_row(*, arm: str, seed: int, index: int, candidate_hash: str) -> 
         "method": arm,
         "search_seed": seed,
         "candidate_index": index,
-        "normalized_candidate_config_sha256": candidate_hash,
-        "candidate": {"scenario_seed": seed + index},
+        "normalized_candidate_config_sha256": _canonical_sha256(candidate),
+        "candidate": candidate,
         "scenario_family": family_split["fresh_outcome_family"],
         "scenario_config_path": scenario_config_path,
         "scenario_config_sha256": scenario_config_sha256,
@@ -75,8 +91,14 @@ def _diagnostic_row(*, arm: str, seed: int, index: int, candidate_hash: str) -> 
         "neutral_reference_planner_config_path": reference_config_path,
         "neutral_reference_planner_config_sha256": reference_config_sha256,
         "execution_stage": "search",
-        "execution_seed": seed + index,
-        "seed_lineage": {"search_seed": seed},
+        "execution_seed": candidate_seed,
+        "seed_lineage": {
+            "search_seed": seed,
+            "candidate_scenario_seed": candidate_seed,
+            "deterministic_replay_seed": None,
+            "confirmation_seeds": [],
+            "second_context_seed": None,
+        },
         "execution_mode": step3_execution["required_execution_mode"],
         "readiness_status": "ready",
         "availability_status": "available",
@@ -91,8 +113,8 @@ def _diagnostic_row(*, arm: str, seed: int, index: int, candidate_hash: str) -> 
         "confirmation_target": "not_run_diagnostic_only",
         "confirmation_reference": "not_run_diagnostic_only",
         "second_execution_context": "not_run_diagnostic_only",
-        "execution_commit": "unit-test",
-        "execution_context_label": "diagnostic_native_context_a",
+        "execution_commit": "a" * 40,
+        "execution_context_label": "diagnostic_adapter_context_a",
         "admission_decision": "not_admitted_diagnostic_only",
         "exclusion_reason": "diagnostic_only_no_replay_reference_or_second_context",
     }
@@ -105,19 +127,22 @@ def _write_complete_outcomes(path: Path, *, duplicate_first_optuna_hash: bool = 
     for arm in ("optuna", "random"):
         for seed in (530301, 530302, 530303):
             for index in range(64):
-                candidate_hash = f"{arm}-{seed}-{index}"
+                candidate = None
                 if (
                     duplicate_first_optuna_hash
                     and arm == "optuna"
                     and seed == 530301
                     and index == 1
                 ):
-                    candidate_hash = "optuna-530301-0"
+                    candidate = {
+                        "scenario_seed": 530301,
+                        "fixture_id": "optuna-530301-0",
+                    }
                 row = _diagnostic_row(
                     arm=arm,
                     seed=seed,
                     index=index,
-                    candidate_hash=candidate_hash,
+                    candidate=candidate,
                 )
                 lines.append(json.dumps(row, sort_keys=True))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -203,6 +228,33 @@ def test_diagnostic_analysis_retains_duplicate_attempt_in_primary_denominator(
         == hashlib.sha256(CONTRACT_PATH.read_bytes()).hexdigest()
     )
     assert result.warnings
+
+
+def test_diagnostic_analysis_recomputes_candidate_hash_before_deduplication(
+    tmp_path: Path,
+) -> None:
+    """A self-consistent row cannot use a false candidate hash to evade deduplication."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["normalized_candidate_config_sha256"] = "0" * 64
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.accounting["normalized_candidate_hash_failure_count"] == 1
+    assert any(
+        "candidate hash does not match candidate content" in item for item in result.blockers
+    )
 
 
 def test_diagnostic_analysis_rejects_self_hashed_wrong_frozen_bindings(tmp_path: Path) -> None:
@@ -366,7 +418,9 @@ def test_diagnostic_analysis_fails_closed_on_invalid_record_content(tmp_path: Pa
     assert result.accounting["recorded_invalid_or_unevaluable_rows"]["optuna"] == 1
     assert any("unsupported schema_version" in blocker for blocker in result.blockers)
     assert any("method must match" in blocker for blocker in result.blockers)
-    assert any("lacks a normalized candidate hash" in blocker for blocker in result.blockers)
+    assert any(
+        "candidate hash does not match candidate content" in blocker for blocker in result.blockers
+    )
     assert any("must remain not admitted" in blocker for blocker in result.blockers)
     assert any("invalid or unevaluable" in blocker for blocker in result.blockers)
 
@@ -374,5 +428,5 @@ def test_diagnostic_analysis_fails_closed_on_invalid_record_content(tmp_path: Pa
 def test_contract_schema_matches_diagnostic_record_fixture() -> None:
     """The committed schema explicitly covers each per-attempt field emitted in tests."""
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
-    row = _diagnostic_row(arm="optuna", seed=530301, index=0, candidate_hash="candidate")
+    row = _diagnostic_row(arm="optuna", seed=530301, index=0)
     assert set(contract["outcome_row_schema"]["required_fields"]) == set(row)

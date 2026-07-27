@@ -107,7 +107,7 @@ input_provenance:
       sha256: 3a912b51169cdb5b669d8be972a715c773dba25f6016baa41ca5fa91f758d49c
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
-      sha256: cb008644ea4303d19e423762eac27451659a34b752da8f087a86c0c181767b5a
+      sha256: b356187fb5321b7f49be03c542bc785af12f01cb2c101b14d3da499de3cc7ccb
     - id: promotion_analysis_cli
       path: scripts/tools/analyze_issue_5303_search_promotion.py
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e

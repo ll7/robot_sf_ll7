@@ -25,12 +25,13 @@ if TYPE_CHECKING:
 
 
 # Scoped diagnostic-contract nodes. Each entry maps an exact pytest node id to a
-# short explanation. A node listed here is reported as ``"diagnostic"`` (an
-# accepted, self-budgeted contract) instead of as an unexplained ``"soft"``/
-# ``"hard"`` breach. This set is intentionally narrow: only tests that own a
-# separate, stricter budget (for example an inner ``assert elapsed < N`` cap)
-# belong here. Generic test slowness must keep flowing through the normal
-# envelope. See issue #6320.
+# short explanation. A node listed here is reported as ``"diagnostic"`` for an
+# expected ``"soft"`` breach, rather than as an unexplained ``"soft"`` breach.
+# The ``"hard"`` envelope is never exempted: a registered node at or above the
+# hard timeout remains a hard breach and therefore remains enforceable. This set
+# is intentionally narrow: only tests that own a separate, stricter budget (for
+# example an inner ``assert elapsed < N`` cap) belong here. Generic test
+# slowness must keep flowing through the normal envelope. See issue #6320.
 DIAGNOSTIC_NODES: dict[str, str] = {
     "tests/dev/test_base_sensitive_gate_contract.py::TestGateScript::test_subset_run_under_two_minutes": (
         "Base-sensitive gate subset subprocess contract. The outer test walls a "
@@ -111,11 +112,13 @@ def generate_report(
     top = ordered[: policy.report_count]
     records: list[SlowTestRecord] = []
     for s in top:
+        breach = policy.classify(s.duration_seconds)
         note = _diagnostic_note(s.test_identifier)
-        if note is not None:
+        if note is not None and breach == "soft":
             # Accepted, self-budgeted diagnostic contract: report it transparently
             # as ``"diagnostic"`` with an explanation instead of a generic soft
             # breach whose episode/horizon guidance does not apply (issue #6320).
+            # Do not bypass the hard boundary: that must remain enforceable.
             guidance = [f"Accepted diagnostic contract: {note}"]
             records.append(
                 SlowTestRecord(
@@ -126,7 +129,6 @@ def generate_report(
                 ),
             )
             continue
-        breach = policy.classify(s.duration_seconds)
         guidance = default_guidance(s.duration_seconds, breach)
         records.append(
             SlowTestRecord(

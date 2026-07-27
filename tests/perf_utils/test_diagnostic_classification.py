@@ -51,6 +51,22 @@ def test_gate_node_classified_as_diagnostic_not_soft() -> None:
     assert "horizon" not in joined
 
 
+def test_gate_node_at_hard_timeout_remains_a_hard_breach() -> None:
+    """The diagnostic exemption never weakens the 60s hard enforcement boundary."""
+    policy = PerformanceBudgetPolicy()  # soft=20.0, hard=60.0
+    samples = [
+        SlowTestSample(
+            test_identifier=GATE_NODE,
+            duration_seconds=policy.hard_timeout_seconds,
+        ),
+    ]
+    records = generate_report(samples, policy)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec.breach_type == "hard"
+    assert "diagnostic" not in " ".join(rec.guidance).lower()
+
+
 def test_generic_slow_node_still_classified_soft() -> None:
     """Non-diagnostic slow nodes keep the normal soft classification and guidance."""
     policy = PerformanceBudgetPolicy()

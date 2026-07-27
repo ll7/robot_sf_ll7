@@ -1,7 +1,18 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml",
-  "artifact_sha256": "89520a1dc5b875386693a2c54829a621c8ad18d814f63b34d737844b658f24fb",
-  "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "preserved_exact_bytes": true
+  "artifact_sha256": "84af86ca08b060132ed3d9f40d95254c8c73cc5096229623e173524d4ffe9177",
+  "preserved_exact_bytes": true,
+  "review_marker": "RE-VERIFIED 2026-07-26",
+  "schema_version": "evidence-review-marker.v1",
+  "verification_commands": [
+    "uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --metadata-only --json (exit 0)",
+    "uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json (exit 1, expected)",
+    "uv run python scripts/validation/check_issue_5592_cross_matrix_preregistration.py --json (exit 0)",
+    "verify issue_5034_control_action_latency_sweep/summary.json: fixed_scope_coverage.status=verified",
+    "verify issue_5305_certified_archive/acceptance_report.json: status=passed, ready=true",
+    "sha256sum -c SHA256SUMS (exit 0 for #5305 and #5034)"
+  ],
+  "outcome": "manifest_reverified",
+  "included": [5034, 5592, 5305],
+  "excluded": [4977, 5416, 5756]
 }

@@ -7,15 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.5] - 2026-07-24
-
 ### Added
 
-* **issue #6154 release 0.0.5 evidence bundle.** Assembled the draft release
-  evidence bundle from the three reverified frozen candidates (issue #6153):
-  #5034 control-action-latency metric evidence, #5305 certified adversarial
-  archive (17 entries), and #5592 cross-matrix preregistration. Candidate
-  #5416 is excluded because its current acceptance checker is blocked. The bundle
+* **Issue #6154 release 0.0.5 evidence bundle.** Assembled the draft release
+  evidence bundle from the three reverified frozen candidates (Issue #6153):
+  Issue #5034 control-action-latency metric evidence, Issue #5305 certified
+  adversarial archive (17 entries), and Issue #5592 cross-matrix preregistration.
+  Issue #5416 is excluded because its current acceptance checker is blocked. The bundle
   includes per-candidate reference manifests, SHA-256 checksums, release
   checksum manifest (`configs/releases/release_0_0_5_checksum_manifest.yaml`),
   preflight checklist (`configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml`),
@@ -23,8 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md` for
   plain-language summary and verification commands. It does not publish a tag,
   GitHub Release, or Zenodo version.
-
-### Added
 
 * **issue #6152 topology-parallel NMPC prototype (#5310 child).** New
   `robot_sf/planner/topology_parallel_nmpc.py` with

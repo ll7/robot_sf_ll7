@@ -521,6 +521,39 @@ class TestVerificationScript:
         assert report["overall_verdict"] == "error"
         assert report["errors"] == ["artifact_set.bundle_archive must be a mapping."]
 
+    def test_release_0_0_5_manifest_verifies_frozen_candidate_source_artifacts(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The repository-backed release must checksum source evidence, not only references."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        manifest_path = ROOT / "configs" / "releases" / "release_0_0_5_checksum_manifest.yaml"
+        manifest = _read_yaml(manifest_path)
+        entry_paths = {entry["path"] for entry in manifest["entries"]}
+        expected_source_paths = {
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/summary.json",
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/README.md",
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256",
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_analysis.json",
+            "docs/context/evidence/issue_5305_certified_archive/acceptance_report.json",
+            "docs/context/evidence/issue_5305_certified_archive/archive.json",
+            "docs/context/evidence/issue_5305_certified_archive/README.md",
+            "docs/context/evidence/issue_5305_certified_archive/SHA256SUMS",
+            "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml",
+            "configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml",
+        }
+
+        assert expected_source_paths <= entry_paths
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=ROOT,
+        )
+        assert report["overall_verdict"] == "pass"
+
     def test_verification_fails_closed_for_non_mapping_manifest(self, tmp_path: Path) -> None:
         from scripts.repro.verify_release_checksums import verify_release
 

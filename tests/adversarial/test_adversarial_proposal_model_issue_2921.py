@@ -433,9 +433,11 @@ def test_comparison_report_plumbing_only_shape(tmp_path: Path, monkeypatch) -> N
     assert report["benchmark_evidence"] is False
     assert report["planner_performance_claim"] is False
     assert report["decision_vocabulary"] == list(ISSUE_3275_DECISION_VOCABULARY)
-    assert (
-        report["comparison_interpretation"] == "plumbing_only_circular_archive_nearness_objective"
-    )
+    assert report["comparison_interpretation"] == "independent_outcomes_not_available"
+    assert report["comparison"] == {
+        "reason": "independent_planner_execution_outcomes_required",
+        "status": "not_available",
+    }
     # Archive-nearness lives under a diagnostic-only namespace.
     assert report["diagnostic_archive_nearness"]["comparison"]["namespace"] == (
         "archive_nearness_diagnostic_only_cannot_drive_verdict"
@@ -1088,4 +1090,6 @@ def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, m
     assert report["held_out_evidence"] is False
     assert report["independent_outcome_evaluation"]["status"] == "blocked"
     assert "circular" in report["independent_outcome_evaluation"]["reason"]
+    assert report["comparison_interpretation"] == "independent_outcomes_rejected_by_held_out_gate"
+    assert report["comparison"]["status"] == "not_available"
     assert report["issue_2921_stop_rule"]["status"] == "inconclusive"

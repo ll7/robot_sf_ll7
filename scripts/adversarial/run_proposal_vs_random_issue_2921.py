@@ -1150,12 +1150,19 @@ def _assemble_report(  # noqa: PLR0913
     if independent_available:
         comparison = independent_evaluation["comparison"]
         comparison_interpretation = "independent_planner_execution_outcomes"
-    elif independent_evaluation.get("status", "").startswith("blocked"):
-        comparison = diagnostic_comparison
-        comparison_interpretation = "independent_outcomes_rejected_by_held_out_gate"
     else:
-        comparison = diagnostic_comparison
-        comparison_interpretation = "plumbing_only_circular_archive_nearness_objective"
+        # Keep archive-nearness exclusively in ``diagnostic_archive_nearness``.
+        # Mirroring it into the top-level comparison would leave a circular
+        # metric available to consumers that correctly treat ``comparison`` as
+        # the authoritative proposal-vs-random result.
+        comparison = {
+            "status": "not_available",
+            "reason": "independent_planner_execution_outcomes_required",
+        }
+        if independent_evaluation.get("status", "").startswith("blocked"):
+            comparison_interpretation = "independent_outcomes_rejected_by_held_out_gate"
+        else:
+            comparison_interpretation = "independent_outcomes_not_available"
     held_out_evidence = provenance.get("held_out_evidence_status") == "eligible_held_out_diagnostic"
     return {
         "schema_version": "adversarial_proposal_comparison.v1",

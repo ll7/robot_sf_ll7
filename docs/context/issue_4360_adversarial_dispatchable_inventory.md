@@ -4,11 +4,13 @@ Issue: <https://github.com/ll7/robot_sf_ll7/issues/4360>
 
 ## Scope
 
-The accepted 2026-07-04 maintainer rescope split issue #4360. This note covers
+The accepted 2026-07-04 maintainer rescope split Issue #4360. This note covers
 only the dispatchable half: inventory existing adversarial pedestrian hooks,
 repeatable seeds and configs, runner assumptions, and how-to-run docs. The
-post-release half remains parked: bounded adversary policy-interface redesign
-and new stress-case metrics.
+post-release bounded policy-interface work now has a separate, capability-only
+first runtime implementation in
+[the reactive residual-adversary design note](issue_4360_reactive_adversary_design.md).
+New stress-case metrics remain deferred.
 
 ## Current Inventory
 
@@ -19,6 +21,11 @@ The reproducibility manifest is
 
 Existing owner surfaces are:
 
+- `robot_sf/ped_npc/residual_adversary.py` and
+  `robot_sf/sim/simulator.py` for the separate opt-in bounded residual-control
+  reactive-adversary capability. Its focused runtime smoke is documented in
+  `issue_4360_reactive_adversary_design.md`; it is not one of this dispatchable
+  manifest/search lanes and makes no benchmark or stress-strength claim.
 - `robot_sf/adversarial/scenario_manifest.py` and
   `scripts/tools/generate_adversarial_scenario_manifests.py` for generated-only
   `adversarial_scenario_manifest.v1` candidates.

@@ -163,6 +163,30 @@ def test_build_bundle_requires_result_provenance(tmp_path: Path) -> None:
         )
 
 
+def test_bottleneck_sidecar_uses_selected_arm_source_provenance(tmp_path: Path) -> None:
+    """A bottleneck sidecar cannot inherit doorway-only provenance statements."""
+    arm = adapter.BOTTLENECK_GOAL_ARM
+    row = _episode_row(arm, seed=118)
+    row["metrics"] = {"near_misses": 4}
+    row["result_provenance"].update({"campaign_id": "goal-source", "slurm_job_id": 13487})
+    episodes = tmp_path / "episodes.jsonl"
+    provenance_json = tmp_path / "butterfly_hinge_provenance.json"
+    _write_episode(episodes, row)
+    provenance_json.write_text("{}", encoding="utf-8")
+
+    payload = adapter.augment_provenance_sidecar(provenance_json, episodes, 118, arm=arm)[
+        "release_reexport_provenance"
+    ]
+
+    assert payload["source_arm"] == arm.key
+    assert payload["execution_commit"] == arm.execution_commit
+    assert payload["result_provenance"] == row["result_provenance"]
+    assert payload["seed_118_near_misses"]["rerun_execution"] == 4
+    assert "slurm_job" not in payload
+    assert "config" not in payload
+    assert "outcome_fidelity_vs_release" not in payload
+
+
 def test_build_bundle_rejects_empty_trace(tmp_path: Path) -> None:
     """Report an actionable error instead of failing later during minimum reduction."""
     row = copy.deepcopy(_episode_row())

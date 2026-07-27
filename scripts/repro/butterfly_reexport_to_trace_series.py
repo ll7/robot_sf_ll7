@@ -487,7 +487,11 @@ def build_bundle(
 
 
 def augment_provenance_sidecar(
-    provenance_json: Path, episodes_jsonl: Path, seed_b: int
+    provenance_json: Path,
+    episodes_jsonl: Path,
+    seed_b: int,
+    *,
+    arm: ReexportArmSpec = DOORWAY_ARM,
 ) -> dict[str, Any]:
     """Add the release-vs-rerun bounding context to an existing
     ``butterfly_hinge_provenance.json`` (written by
@@ -499,32 +503,48 @@ def augment_provenance_sidecar(
     """
     provenance = json.loads(provenance_json.read_text(encoding="utf-8"))
     row_b = _load_row(episodes_jsonl, seed_b)
+    result_provenance = _validate_source_row(row_b, arm)
     rerun_near_misses_b = row_b["metrics"]["near_misses"]
 
-    provenance["release_reexport_provenance"] = {
-        "execution_commit": EXEC_COMMIT,
-        "slurm_job": SLURM_JOB,
-        "config": CONFIG_PATH,
-        "seed_set": SEED_SET_NAME,
-        "bounding_statement_i": BOUNDING_STATEMENT_I,
-        "bounding_statement_ii": BOUNDING_STATEMENT_II,
-        "outcome_fidelity_vs_release": OUTCOME_FIDELITY,
-        "flipped_seeds_excluded_from_claim": list(FLIPPED_SEEDS),
+    sidecar_provenance: dict[str, Any] = {
+        "execution_commit": arm.execution_commit,
+        "source_arm": arm.key,
+        "result_provenance": result_provenance,
         f"seed_{seed_b}_near_misses": {
             "rerun_execution": rerun_near_misses_b,
             "rerun_source": str(episodes_jsonl),
-            "release_execution": RELEASE_SEED_114_NEAR_MISSES,
-            "release_source": RELEASE_SEED_114_NEAR_MISSES_SOURCE,
             "note": (
                 "any near-miss count shown or captioned for this seed must be the "
                 "rerun execution's number (matches the traces this figure is rendered "
                 "from), not the release row's number"
             ),
         },
-        "source_diff_doc": (
-            "output/benchmarks/doorway_butterfly_trace_reexport/job-13483/PER_SEED_DIFF.md"
-        ),
     }
+    # Keep the existing doorway-specific release comparison, but never attach its job,
+    # configuration, or 28/30 fidelity statement to either bottleneck arm. Those arms
+    # retain only their row-validated source provenance unless a separate source artifact
+    # supplies a comparable release-versus-rerun statement.
+    if arm == DOORWAY_ARM:
+        sidecar_provenance.update(
+            {
+                "slurm_job": SLURM_JOB,
+                "config": CONFIG_PATH,
+                "seed_set": SEED_SET_NAME,
+                "bounding_statement_i": BOUNDING_STATEMENT_I,
+                "bounding_statement_ii": BOUNDING_STATEMENT_II,
+                "outcome_fidelity_vs_release": OUTCOME_FIDELITY,
+                "flipped_seeds_excluded_from_claim": list(FLIPPED_SEEDS),
+                f"seed_{seed_b}_near_misses": {
+                    **sidecar_provenance[f"seed_{seed_b}_near_misses"],
+                    "release_execution": RELEASE_SEED_114_NEAR_MISSES,
+                    "release_source": RELEASE_SEED_114_NEAR_MISSES_SOURCE,
+                },
+                "source_diff_doc": (
+                    "output/benchmarks/doorway_butterfly_trace_reexport/job-13483/PER_SEED_DIFF.md"
+                ),
+            }
+        )
+    provenance["release_reexport_provenance"] = sidecar_provenance
     provenance_json.write_text(json.dumps(provenance, indent=2, default=str), encoding="utf-8")
     return provenance
 
@@ -560,6 +580,12 @@ def _build_parser() -> argparse.ArgumentParser:
     aug_p.add_argument(
         "--seed-b", type=int, required=True, help="Seed of the collision (B) episode."
     )
+    aug_p.add_argument(
+        "--arm",
+        choices=tuple(ARMS),
+        default=DOORWAY_ARM.key,
+        help="Pinned re-export arm whose row provenance the sidecar must preserve.",
+    )
     return parser
 
 
@@ -575,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(summary, indent=2))
     elif args.command == "augment-sidecar":
         provenance = augment_provenance_sidecar(
-            args.provenance_json, args.episodes_jsonl, args.seed_b
+            args.provenance_json, args.episodes_jsonl, args.seed_b, arm=ARMS[args.arm]
         )
         print(json.dumps(provenance["release_reexport_provenance"], indent=2))
     return 0

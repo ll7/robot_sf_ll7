@@ -723,6 +723,15 @@ def test_fail_closed_on_non_finite_rays_when_present() -> None:
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 
+def test_fail_closed_on_negative_rays_when_present() -> None:
+    """A ray range below the sensor's zero lower bound fails closed."""
+    observations = ({"robot": _full_robot_state(0), "pedestrians": [], "rays": [0.5, -0.01]},)
+    episode = _make_episode(step_count=1, observations=observations)
+
+    with pytest.raises(OpenDreamerAdapterError, match="non-negative"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
 @pytest.mark.parametrize(
     ("rays",),
     [([True, False],), (["0.5", "0.25"],)],

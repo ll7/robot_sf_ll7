@@ -53,8 +53,8 @@ Fail-closed contract
 The adapter fails closed (raises :class:`OpenDreamerAdapterError`) when:
 
 * a required field is missing (e.g. ``robot_states`` lacks ``position``/``heading``/``velocity``);
-* any produced output is non-finite (NaN/Inf in ``drive_state``, ``rays``, ``rewards``,
-  ``return_to_go``, or the mapped velocity);
+* any produced output is non-finite or physically invalid (NaN/Inf in ``drive_state``, ``rays``,
+  ``rewards``, ``return_to_go``, or the mapped velocity; negative range readings);
 * ray-like observations appear for only some episode steps, or their vector lengths differ across
   steps (the structured sequence view requires one fixed ray width when rays are available);
 * a stored action is not a finite 2D continuous ``(linear, angular)`` command, does not use the
@@ -729,7 +729,7 @@ def _extract_rays(observation: Any) -> tuple[np.ndarray, bool]:
 
     Raises:
         OpenDreamerAdapterError: If the observation exposes a ray-like key whose value is not a
-            finite numeric sequence.
+            finite, non-negative numeric sequence.
     """
     if not isinstance(observation, Mapping):
         raise OpenDreamerAdapterError(
@@ -738,33 +738,39 @@ def _extract_rays(observation: Any) -> tuple[np.ndarray, bool]:
     for key in RAY_OBSERVATION_KEYS:
         if key not in observation:
             continue
-        raw = observation[key]
-        try:
-            raw_array = np.asarray(raw)
-        except (TypeError, ValueError) as exc:
-            raise OpenDreamerAdapterError(
-                f"observation ray-like key {key!r} must be numeric"
-            ) from exc
-        if raw_array.ndim != 1:
-            raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be a 1D sequence")
-        if raw_array.size == 0:
-            raise OpenDreamerAdapterError(
-                f"observation ray-like key {key!r} must contain at least one range"
-            )
-        if any(isinstance(value, bool) or not isinstance(value, Real) for value in raw_array):
-            raise OpenDreamerAdapterError(
-                f"observation ray-like key {key!r} must contain finite real values"
-            )
-        try:
-            arr = raw_array.astype(float)
-        except (OverflowError, TypeError, ValueError) as exc:
-            raise OpenDreamerAdapterError(
-                f"observation ray-like key {key!r} must contain finite real values"
-            ) from exc
-        if not np.all(np.isfinite(arr)):
-            raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be finite")
-        return arr, True
+        return _coerce_ray_ranges(observation[key], key), True
     return np.asarray([], dtype=float), False
+
+
+def _coerce_ray_ranges(raw: Any, key: str) -> np.ndarray:
+    """Return one finite, non-negative ray-range vector from a recognized observation field."""
+    try:
+        raw_array = np.asarray(raw)
+    except (TypeError, ValueError) as exc:
+        raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be numeric") from exc
+    if raw_array.ndim != 1:
+        raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be a 1D sequence")
+    if raw_array.size == 0:
+        raise OpenDreamerAdapterError(
+            f"observation ray-like key {key!r} must contain at least one range"
+        )
+    if any(isinstance(value, bool) or not isinstance(value, Real) for value in raw_array):
+        raise OpenDreamerAdapterError(
+            f"observation ray-like key {key!r} must contain finite real values"
+        )
+    try:
+        arr = raw_array.astype(float)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise OpenDreamerAdapterError(
+            f"observation ray-like key {key!r} must contain finite real values"
+        ) from exc
+    if not np.all(np.isfinite(arr)):
+        raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be finite")
+    if np.any(arr < 0.0):
+        raise OpenDreamerAdapterError(
+            f"observation ray-like key {key!r} must contain non-negative ranges"
+        )
+    return arr
 
 
 def _validate_episode_ray_contract(steps: Sequence[StructuredObservationStep]) -> bool:

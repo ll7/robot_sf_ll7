@@ -135,7 +135,7 @@ class TestKdePlotGridCreation:
 
     def test_flattened_eval_points_span_bounds_by_axis(self):
         """Row 0 carries x coordinates and row 1 carries y coordinates."""
-        _, _, grid_points = kde_plot_grid_creation(
+        grid_xx, grid_yy, grid_points = kde_plot_grid_creation(
             0.0,
             4.0,
             -2.0,
@@ -143,6 +143,8 @@ class TestKdePlotGridCreation:
             number_of_grid_points=25,
         )
 
+        assert np.array_equal(grid_points[0], grid_xx.ravel())
+        assert np.array_equal(grid_points[1], grid_yy.ravel())
         assert np.isclose(grid_points[0].min(), 0.0)
         assert np.isclose(grid_points[0].max(), 4.0)
         assert np.isclose(grid_points[1].min(), -2.0)
@@ -164,8 +166,8 @@ def _run_visualize(positions, bounds, *, bw_method=None):
     map_def.get_map_bounds.return_value = bounds
 
     kde_instance = MagicMock(name="pedestrian_kde")
-    # Non-uniform flat density over the default 100x100 grid; the absolute
-    # values do not matter, only that normalization is verifiable.
+    # Non-uniform flat density over the default 100x100 grid so preservation and
+    # normalization are both verifiable.
     kde_instance.return_value = np.arange(1, 10001, dtype=float)
     kde_cls = MagicMock(name="gaussian_kde", return_value=kde_instance)
 
@@ -248,6 +250,9 @@ class TestVisualizeKdeOfPedestriansOnMap:
         kde_vals = np.asarray(kde_vals)
         assert kde_vals.shape == (100, 100)
         assert np.isclose(kde_vals.sum(), 1.0)
+        raw_density = np.arange(1, 10001, dtype=float)
+        expected_density = (raw_density / raw_density.sum()).reshape(100, 100)
+        assert np.allclose(kde_vals, expected_density)
 
     def test_map_bounds_applied_to_axes_and_obstacles_plotted(self):
         """Axes limits use the map bounds and obstacles are plotted on the axis."""

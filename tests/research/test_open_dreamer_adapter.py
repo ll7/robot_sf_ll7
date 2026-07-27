@@ -243,6 +243,27 @@ def test_structured_observation_step_rejects_non_boolean_ray_availability(
         )
 
 
+@pytest.mark.parametrize(
+    ("drive_state", "rays", "message"),
+    [
+        ([0.0] * len(DRIVE_STATE_LAYOUT), np.asarray([], dtype=float), "drive_state must"),
+        (np.zeros(len(DRIVE_STATE_LAYOUT), dtype=float), [], "rays must"),
+    ],
+)
+def test_structured_observation_step_rejects_non_array_groups_with_adapter_error(
+    drive_state: object,
+    rays: object,
+    message: str,
+) -> None:
+    """Malformed direct construction stays inside the adapter's public error boundary."""
+    with pytest.raises(OpenDreamerAdapterError, match=message):
+        StructuredObservationStep(
+            drive_state=drive_state,  # type: ignore[arg-type]
+            rays=rays,  # type: ignore[arg-type]
+            rays_available=False,
+        )
+
+
 def test_rays_group_is_populated_when_observation_carries_ray_key() -> None:
     """A recognized ray-like key populates the finite rays group and flips episode availability."""
     observations = tuple(_full_observation(step, with_rays=True) for step in range(2))
@@ -599,6 +620,23 @@ def test_action_bounds_and_mapping_wrap_overflowing_numeric_inputs() -> None:
         map_action_to_velocity([huge, 0.0], _DEFAULT_BOUNDS)
     with pytest.raises(OpenDreamerAdapterError, match="stored action must be finite"):
         StructuredActionStep(raw=(huge, 0.0))
+
+
+@pytest.mark.parametrize("raw", [None, 0.5])
+def test_structured_action_step_rejects_non_sequence_raw_with_adapter_error(raw: object) -> None:
+    """Malformed direct action construction does not leak built-in type errors."""
+    with pytest.raises(OpenDreamerAdapterError, match="stored action must be a sequence"):
+        StructuredActionStep(raw=raw)  # type: ignore[arg-type]
+
+
+def test_structured_action_step_normalizes_mutable_input_to_an_immutable_tuple() -> None:
+    """A direct action step cannot be mutated through the caller's original sequence."""
+    raw = [0.5, -0.25]
+    step = StructuredActionStep(raw=raw)  # type: ignore[arg-type]
+
+    raw[0] = float("nan")
+
+    assert step.raw == (0.5, -0.25)
 
 
 def test_stored_actions_must_lie_within_declared_physical_bounds() -> None:

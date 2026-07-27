@@ -232,6 +232,10 @@ class StructuredObservationStep:
             raise OpenDreamerAdapterError(
                 f"rays_available must be a boolean, got {self.rays_available!r}"
             )
+        if not isinstance(self.drive_state, np.ndarray):
+            raise OpenDreamerAdapterError("drive_state must be a 1D float ndarray")
+        if not isinstance(self.rays, np.ndarray):
+            raise OpenDreamerAdapterError("rays must be a 1D float ndarray")
         if self.drive_state.ndim != 1 or self.drive_state.shape[0] != len(DRIVE_STATE_LAYOUT):
             raise OpenDreamerAdapterError(
                 "drive_state must be a 1D vector of length "
@@ -272,13 +276,24 @@ class StructuredActionStep:
     raw: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        """Validate the stored action is a finite 2D continuous command."""
-        if len(self.raw) != EXPECTED_ACTION_DIM:
+        """Validate and freeze the stored action as a finite 2D continuous command."""
+        if isinstance(self.raw, str | bytes) or not isinstance(self.raw, Sequence | np.ndarray):
+            raise OpenDreamerAdapterError(
+                "stored action must be a sequence of two finite numeric values"
+            )
+        try:
+            raw_values = tuple(self.raw)
+        except TypeError as exc:
+            raise OpenDreamerAdapterError(
+                "stored action must be a sequence of two finite numeric values"
+            ) from exc
+        if len(raw_values) != EXPECTED_ACTION_DIM:
             raise OpenDreamerAdapterError(
                 f"stored action must be {EXPECTED_ACTION_DIM}D (linear, angular), "
-                f"got {len(self.raw)}D"
+                f"got {len(raw_values)}D"
             )
-        for value in self.raw:
+        normalized: list[float] = []
+        for value in raw_values:
             if isinstance(value, bool) or not isinstance(value, Real):
                 raise OpenDreamerAdapterError(f"stored action must be numeric, got {value!r}")
             try:
@@ -289,6 +304,8 @@ class StructuredActionStep:
                 ) from exc
             if not np.isfinite(numeric_value):
                 raise OpenDreamerAdapterError(f"stored action must be finite, got {value!r}")
+            normalized.append(numeric_value)
+        object.__setattr__(self, "raw", tuple(normalized))
 
 
 @dataclass(frozen=True, slots=True)

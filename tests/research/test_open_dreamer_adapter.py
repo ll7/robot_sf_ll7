@@ -427,6 +427,10 @@ def test_action_mapping_rejects_wrong_shape_nonfinite_and_far_out_of_domain() ->
         map_action_to_velocity([5.0, 0.0], bounds)
     with pytest.raises(OpenDreamerAdapterError, match="numeric length-2"):
         map_action_to_velocity(["not-a-number", 0.0], bounds)  # type: ignore[list-item]
+    with pytest.raises(OpenDreamerAdapterError, match="numeric length-2"):
+        map_action_to_velocity(["1.0", 0.0], bounds)  # type: ignore[list-item]
+    with pytest.raises(OpenDreamerAdapterError, match="numeric length-2"):
+        map_action_to_velocity([True, False], bounds)  # type: ignore[list-item]
 
 
 def test_action_bounds_validate_non_degenerate_envelope() -> None:

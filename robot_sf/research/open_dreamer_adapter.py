@@ -438,6 +438,8 @@ def map_action_to_velocity(
         raise OpenDreamerAdapterError(
             f"normalized action must have shape ({EXPECTED_ACTION_DIM},), got {arr.shape}"
         )
+    if any(isinstance(value, bool) or not isinstance(value, Real) for value in normalized):
+        raise OpenDreamerAdapterError("normalized action must be a numeric length-2 sequence")
     if not np.all(np.isfinite(arr)):
         raise OpenDreamerAdapterError("normalized action must be finite")
     if np.any(arr < -1.0 - 1e-9) or np.any(arr > 1.0 + 1e-9):

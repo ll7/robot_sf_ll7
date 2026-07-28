@@ -379,6 +379,66 @@ def test_preflight_detects_contract_field_tampering(tmp_path: Path) -> None:
     assert result.checks["candidate_budget_64_per_seed"] is False
 
 
+@pytest.mark.parametrize(
+    ("section", "field", "expected_blocker"),
+    (
+        ("family_split", "fit_family_eligible_records", "fit_family_eligible_records"),
+        (
+            "family_split",
+            "fresh_outcome_family_eligible_records",
+            "fresh_outcome_family_eligible_records",
+        ),
+        ("methods", "entries", "methods must be exactly"),
+        ("controls", "rejection_controls", "doorway rejection-control seeds"),
+        ("objective", "tiers", "objective tiers must be constraints-first"),
+        ("decision_rule", "outcomes", "decision_rule must retain"),
+    ),
+)
+def test_preflight_returns_blocked_for_malformed_contract_lists(
+    tmp_path: Path,
+    section: str,
+    field: str,
+    expected_blocker: str,
+) -> None:
+    """Malformed list-shaped contract fields fail closed instead of raising TypeError."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    nested = contract[section]
+    assert isinstance(nested, dict)
+    nested[field] = None
+    contract_path = tmp_path / f"malformed_{section}_{field}.yaml"
+    contract_path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(contract_path, repo_root=REPO_ROOT)
+
+    assert result.ready is False
+    assert any(expected_blocker in blocker for blocker in result.blockers)
+
+
+def test_preflight_returns_blocked_for_malformed_receipt_records(tmp_path: Path) -> None:
+    """A parseable receipt with malformed records is reported as blocked, not raised."""
+    receipt = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(receipt, dict)
+    receipt["records"] = None
+    receipt_path = tmp_path / "malformed_receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    entry_gate = contract["entry_gate"]
+    assert isinstance(entry_gate, dict)
+    entry_gate["recertification_receipt_path"] = str(receipt_path)
+    contract_path = tmp_path / "contract_with_malformed_receipt.yaml"
+    contract_path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(contract_path, repo_root=REPO_ROOT)
+
+    assert result.ready is False
+    assert any(
+        "receipt.records must be a list of mappings" in blocker for blocker in result.blockers
+    )
+
+
 def test_preflight_detects_threshold_weakening(tmp_path: Path) -> None:
     """Weakening the positive-gate threshold to make the gate 'testable' fails the preflight."""
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))

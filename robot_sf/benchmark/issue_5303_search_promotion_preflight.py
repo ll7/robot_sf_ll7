@@ -578,7 +578,12 @@ def _eligible_records_by_family(receipt: dict[str, Any]) -> dict[str, list[str]]
         the corrected #6139 recertification.
     """
     grouped: dict[str, list[str]] = {}
-    for record in receipt.get("records", []):
+    records = receipt.get("records", [])
+    if not isinstance(records, list):
+        return grouped
+    for record in records:
+        if not isinstance(record, dict):
+            continue
         after = record.get("after") if isinstance(record.get("after"), dict) else {}
         eligibility = after.get("benchmark_eligibility")
         if eligibility != "eligible":
@@ -764,7 +769,11 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     receipt: dict[str, Any] = {}
     if checks["receipt_exists"]:
         try:
-            receipt = json.loads(receipt_resolved.read_text(encoding="utf-8"))
+            receipt_payload = json.loads(receipt_resolved.read_text(encoding="utf-8"))
+            if isinstance(receipt_payload, dict):
+                receipt = receipt_payload
+            else:
+                blockers.append("receipt payload must be a mapping")
         except (OSError, ValueError) as exc:
             blockers.append(f"receipt JSON could not be parsed: {exc}")
             receipt = {}
@@ -793,6 +802,13 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             f"recertification receipt not found: {_repo_relative(receipt_resolved, root)}"
         )
+    receipt_records = receipt.get("records") if isinstance(receipt, dict) else None
+    checks["receipt_records_shape"] = isinstance(receipt_records, list) and all(
+        isinstance(record, dict) for record in receipt_records
+    )
+    if not checks["receipt_records_shape"]:
+        blockers.append("receipt.records must be a list of mappings")
+    normalized_receipt_records = receipt_records if checks["receipt_records_shape"] else []
     checks["archive_hash_consistent"] = receipt.get("archive_sha256") == entry_gate.get(
         "certified_archive_sha256"
     ) and certified_archive_file_hash == entry_gate.get("certified_archive_sha256")
@@ -805,7 +821,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     # ---- Entry-gate eligible counts ----------------------------------------------
     eligible_by_family = _eligible_records_by_family(receipt) if receipt else {}
     receipt_eligible_total = sum(len(ids) for ids in eligible_by_family.values())
-    receipt_record_count = len(receipt.get("records", [])) if receipt else 0
+    receipt_record_count = len(normalized_receipt_records)
     checks["entry_gate_record_count"] = receipt_record_count == EXPECTED_RECORD_COUNT
     if not checks["entry_gate_record_count"]:
         blockers.append(
@@ -900,17 +916,35 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "issue #3275 outcome exclusion"
         )
 
-    contract_fit_ids = sorted(family_split.get("fit_family_eligible_records", []))
-    contract_fresh_ids = sorted(family_split.get("fresh_outcome_family_eligible_records", []))
+    contract_fit_ids_raw = family_split.get("fit_family_eligible_records", [])
+    contract_fresh_ids_raw = family_split.get("fresh_outcome_family_eligible_records", [])
+    fit_ids_shape = isinstance(contract_fit_ids_raw, list) and all(
+        isinstance(record_id, str) for record_id in contract_fit_ids_raw
+    )
+    fresh_ids_shape = isinstance(contract_fresh_ids_raw, list) and all(
+        isinstance(record_id, str) for record_id in contract_fresh_ids_raw
+    )
+    fit_ids_values = contract_fit_ids_raw if isinstance(contract_fit_ids_raw, list) else []
+    fresh_ids_values = contract_fresh_ids_raw if isinstance(contract_fresh_ids_raw, list) else []
+    contract_fit_ids = sorted(
+        record_id for record_id in fit_ids_values if isinstance(record_id, str)
+    )
+    contract_fresh_ids = sorted(
+        record_id for record_id in fresh_ids_values if isinstance(record_id, str)
+    )
     receipt_fit_ids = eligible_by_family.get(EXPECTED_FIT_FAMILY, [])
     receipt_fresh_ids = eligible_by_family.get(EXPECTED_FRESH_FAMILY, [])
-    checks["fit_family_eligible_ids_match_receipt"] = contract_fit_ids == receipt_fit_ids
+    checks["fit_family_eligible_ids_match_receipt"] = fit_ids_shape and (
+        contract_fit_ids == receipt_fit_ids
+    )
     if not checks["fit_family_eligible_ids_match_receipt"]:
         blockers.append(
             "fit_family_eligible_records must match the receipt's eligible "
             f"classic_cross_trap_medium IDs (contract={contract_fit_ids}, receipt={receipt_fit_ids})"
         )
-    checks["fresh_family_eligible_ids_match_receipt"] = contract_fresh_ids == receipt_fresh_ids
+    checks["fresh_family_eligible_ids_match_receipt"] = fresh_ids_shape and (
+        contract_fresh_ids == receipt_fresh_ids
+    )
     if not checks["fresh_family_eligible_ids_match_receipt"]:
         blockers.append(
             "fresh_outcome_family_eligible_records must match the receipt's eligible "
@@ -920,9 +954,8 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     all_eligible_ids = set(contract_fit_ids) | set(contract_fresh_ids)
     receipt_excluded_ids = {
         record.get("archive_id")
-        for record in receipt.get("records", [])
-        if isinstance(record, dict)
-        and isinstance(record.get("after"), dict)
+        for record in normalized_receipt_records
+        if isinstance(record.get("after"), dict)
         and record.get("after", {}).get("benchmark_eligibility") != "eligible"
     }
     checks["no_excluded_ids_in_eligible_sets"] = all_eligible_ids.isdisjoint(receipt_excluded_ids)
@@ -952,6 +985,8 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     # ---- Controls ----------------------------------------------------------------
     controls = contract.get("controls") if isinstance(contract.get("controls"), dict) else {}
     rejection_controls = controls.get("rejection_controls", [])
+    if not isinstance(rejection_controls, list):
+        rejection_controls = []
     doorway_seed_sets = [
         tuple(_as_int_tuple(item.get("seeds")))
         for item in rejection_controls
@@ -973,9 +1008,12 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
 
     # ---- Methods, budget, simulator-time cap -------------------------------------
     methods = contract.get("methods") if isinstance(contract.get("methods"), dict) else {}
+    method_entries = methods.get("entries", [])
+    if not isinstance(method_entries, list):
+        method_entries = []
     method_names = tuple(
         entry.get("name")
-        for entry in methods.get("entries", [])
+        for entry in method_entries
         if isinstance(entry, dict) and isinstance(entry.get("name"), str)
     )
     checks["methods_exactly_optuna_and_random"] = method_names == EXPECTED_METHODS
@@ -1032,9 +1070,12 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
 
     # ---- Objective ordering -------------------------------------------------------
     objective = contract.get("objective") if isinstance(contract.get("objective"), dict) else {}
+    objective_tiers = objective.get("tiers", [])
+    if not isinstance(objective_tiers, list):
+        objective_tiers = []
     tier_names = [
         tier.get("name")
-        for tier in objective.get("tiers", [])
+        for tier in objective_tiers
         if isinstance(tier, dict) and isinstance(tier.get("name"), str)
     ]
     checks["objective_constraints_first"] = tier_names == [
@@ -1242,8 +1283,14 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     decision = (
         contract.get("decision_rule") if isinstance(contract.get("decision_rule"), dict) else {}
     )
+    decision_outcomes = decision.get("outcomes", [])
+    decision_outcomes_shape = isinstance(decision_outcomes, list) and all(
+        isinstance(outcome, str) for outcome in decision_outcomes
+    )
+    decision_outcome_values = decision_outcomes if decision_outcomes_shape else []
     checks["decision_rule_three_outcomes"] = (
-        sorted(decision.get("outcomes", []))
+        decision_outcomes_shape
+        and sorted(decision_outcome_values)
         == [
             "inconclusive",
             "promote",

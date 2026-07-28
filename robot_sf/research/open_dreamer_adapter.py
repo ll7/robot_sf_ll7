@@ -731,10 +731,11 @@ def adapt_episodes(
             splits or any episode fails the fail-closed contract in :func:`adapt_episode`.
     """
     action_bounds = _require_action_bounds(action_bounds)
-    episodes = _require_episode_sequence(episodes, field_name="episodes")
-    for episode in episodes:
-        _require_source_episode(episode)
-    leakage_report = validate_split_leakage(episodes)
+    checked_episodes = _require_episode_sequence(episodes, field_name="episodes")
+    source_episodes: list[RLTrajectoryEpisode] = []
+    for episode in checked_episodes:
+        source_episodes.append(_require_source_episode(episode))
+    leakage_report = validate_split_leakage(source_episodes)
     if not leakage_report.ok:
         leak_descriptions: list[str] = []
         if leakage_report.leaked_scenario_ids:
@@ -748,7 +749,7 @@ def adapt_episodes(
         raise OpenDreamerAdapterError(
             "split leakage detected across batch: " + "; ".join(leak_descriptions)
         )
-    return [adapt_episode(episode, action_bounds=action_bounds) for episode in episodes]
+    return [adapt_episode(episode, action_bounds=action_bounds) for episode in source_episodes]
 
 
 def _require_episode_sequence(

@@ -106,3 +106,26 @@ def test_constraints_first_objective_fails_closed_on_malformed_intrusion_metric(
     )
 
     assert constraints_first_lexicographic_v1(evaluation) is None
+
+
+def test_constraints_first_objective_accepts_canonical_boolean_success_metric(
+    tmp_path: Path,
+) -> None:
+    """The benchmark writer's boolean success metric remains valid evidence."""
+    evaluation = _evaluation(
+        tmp_path,
+        "boolean_success",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+    )
+
+    score = constraints_first_lexicographic_v1(evaluation)
+
+    assert score is not None
+    assert 0.0 <= score < 1.0

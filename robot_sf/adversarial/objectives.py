@@ -48,6 +48,18 @@ def worst_case_snqi(evaluation: CandidateEvaluation) -> float | None:
     return float(collision * 10.0 + timeout * 3.0 + near - success)
 
 
+def _valid_constraints_metric(name: str, value: Any) -> bool:
+    """Return whether one scalar metric can support the constraints-first projection."""
+    if value is None:
+        return True
+    if name == "success" and isinstance(value, bool):
+        return True
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    parsed = float(value)
+    return math.isfinite(parsed) and (name != "success" or parsed in {0.0, 1.0})
+
+
 def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, Any]:
     """Project one episode record into the strict constraints-first outcome vector.
 
@@ -88,11 +100,10 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
 
     for name in ("collisions", "success", "near_misses", "snqi", "path_efficiency"):
         value = metrics.get(name)
-        if value is not None and (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(float(value))
-        ):
+        # ``post_process_metrics`` emits the canonical success metric as a bool;
+        # the other scalar metrics must remain numeric so malformed records do
+        # not get coerced into a clean outcome.
+        if not _valid_constraints_metric(name, value):
             return _unavailable_constraints_first_outcome()
     for name in ("severe_intrusion", "severe_intrusion_event"):
         value = metrics.get(name)

@@ -102,7 +102,7 @@ input_provenance:
       sha256: e335b00366db1066ae751e6c437bde3700488aa5680fcbed05a5b614b005cf97
     - id: objective_registry
       path: robot_sf/adversarial/objectives.py
-      sha256: a7eb43d3c3a9678e060fa6c401e6b00575dbe33d67c94ea1de84dcdbd7aaa92c
+      sha256: ddeef6aec60c8af053f5fe3713a9f1548a82a0e19de4924f07e474fb37d22e36
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
       sha256: 4d4637e93355bb02dabe96f1794946cbda8b6d4f118bde93f76b62e40e704ab0

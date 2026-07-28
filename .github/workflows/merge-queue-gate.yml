@@ -26,7 +26,23 @@ name: Merge Queue Gate
 
 on:
   pull_request:
-    types: [labeled, reopened, synchronize, unlabeled]
+    # Each state change that can affect source-head admission must create a
+    # fresh required check. Otherwise an earlier pass could remain usable after
+    # a reviewer is requested or an actionable review is added.
+    types:
+      - opened
+      - labeled
+      - unlabeled
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+      - review_requested
+      - review_request_removed
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
   merge_group:
   workflow_dispatch:
     inputs:
@@ -65,7 +81,7 @@ jobs:
             merge_group)
               trusted_ref="$MERGE_GROUP_BASE_SHA"
               ;;
-            pull_request)
+            pull_request|pull_request_review|pull_request_review_comment)
               trusted_ref="$PULL_REQUEST_BASE_SHA"
               ;;
             workflow_dispatch)
@@ -124,8 +140,11 @@ jobs:
             --repo "${{ github.repository }}" \
             --json
 
-      - name: Run merge-queue gate (pull_request head)
-        if: github.event_name == 'pull_request' && steps.gate-source.outputs.available == 'true'
+      - name: Run merge-queue gate (source PR head)
+        if: >-
+          (github.event_name == 'pull_request' || github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment') &&
+          steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

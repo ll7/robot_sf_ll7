@@ -238,15 +238,29 @@ def test_fetch_pr_snapshot_fails_closed_on_non_green_ci_rollups(
 
 
 def test_workflow_uses_fail_closed_source_head_gate_and_safe_manual_input() -> None:
-    """Source-head and queue runs enforce the gate without shell interpolation."""
+    """Source-head state changes cannot retain an older passing required check."""
     workflow = Path(".github/workflows/merge-queue-gate.yml").read_text(encoding="utf-8")
 
     assert "PR_NUMBER: ${{ inputs.pr_number }}" in workflow
     assert '--pr "$PR_NUMBER"' in workflow
     assert '--pr "${{ inputs.pr_number }}"' not in workflow
     assert "pull_request:" in workflow
+    assert "pull_request_review:" in workflow
+    assert "pull_request_review_comment:" in workflow
+    for activity in (
+        "ready_for_review",
+        "converted_to_draft",
+        "review_requested",
+        "review_request_removed",
+        "submitted",
+        "dismissed",
+        "created",
+        "deleted",
+    ):
+        assert activity in workflow
+    assert "pull_request|pull_request_review|pull_request_review_comment)" in workflow
     assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in workflow
-    assert "Run merge-queue gate (pull_request head)" in workflow
+    assert "Run merge-queue gate (source PR head)" in workflow
     assert "PR-head evaluation is advisory; merge_group enforces the gate." not in workflow
     assert "status=0" not in workflow
     assert "exit 0" in workflow  # Bootstrap skip remains advisory before the gate exists on main.

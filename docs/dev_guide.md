@@ -429,14 +429,16 @@ before the queue auto-merges a PR:
 
 - **Workflow**: `.github/workflows/merge-queue-gate.yml` (checks out the gate implementation from
   the trusted base revision rather than the evaluated PR or synthetic merge-group tree, with
-  checkout credentials disabled; enforces the required check fail-closed on both source-head
-  `pull_request` label/synchronization events and queue-time `merge_group`, and supports
-  `workflow_dispatch` with a PR number for advisory evaluation). If a source-head base predates
-  this new gate file, the run records a notice and skips the evaluation so this bootstrap PR can
-  merge; a queue-time run fails closed when the trusted implementation is unavailable. Requiring
-  the source-head check as well prevents a direct path that still obeys branch protection from
-  treating an advisory success as approval. The queue-time invocation independently validates the
-  synthetic merge group.
+  checkout credentials disabled; enforces the required check fail-closed on source-head PR
+  lifecycle and review events, as well as queue-time `merge_group`, and supports
+  `workflow_dispatch` with a PR number for advisory evaluation). Source-head events include label,
+  draft-state, requested-reviewer, review, and review-comment changes, so a prior pass cannot stay
+  valid after one of those admission conditions changes. If a source-head base predates this new
+  gate file, the run records a notice and skips the evaluation so this bootstrap PR can merge; a
+  queue-time run fails closed when the trusted implementation is unavailable. Requiring the
+  source-head check as well prevents a direct path that still obeys branch protection from treating
+  an advisory success as approval. The queue-time invocation independently validates the synthetic
+  merge group.
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
   `gate-verdict: accepted @ <head_sha>` trailer (reuses

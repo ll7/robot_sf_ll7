@@ -54,10 +54,12 @@ The new system is **fully functional** and **backward compatible**:
 # Old pattern (still works)
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.env_config import EnvSettings
+
 env = RobotEnv(env_config=EnvSettings(), debug=True)
 
 # New pattern (recommended)
 from robot_sf.gym_env.environment_factory import make_robot_env
+
 env = make_robot_env(debug=True)
 ```
 
@@ -109,13 +111,13 @@ After migration period (1-2 months):
 ```python
 # All environments now follow the same pattern:
 robot_env = make_robot_env(debug=True)
-image_env = make_image_robot_env(debug=True)  
+image_env = make_image_robot_env(debug=True)
 ped_env = make_pedestrian_env(robot_model=model, debug=True)
 
 # All have the same interface:
-assert hasattr(robot_env, 'config')
-assert hasattr(image_env, 'config') 
-assert hasattr(ped_env, 'config')
+assert hasattr(robot_env, "config")
+assert hasattr(image_env, "config")
+assert hasattr(ped_env, "config")
 ```
 
 ### 2. **Reduced Code Duplication**
@@ -128,7 +130,7 @@ assert hasattr(ped_env, 'config')
 # Clear, hierarchical configuration
 base_config = BaseSimulationConfig()
 robot_config = RobotSimulationConfig()  # extends BaseSimulationConfig
-image_config = ImageRobotConfig()       # extends RobotSimulationConfig
+image_config = ImageRobotConfig()  # extends RobotSimulationConfig
 ped_config = PedestrianSimulationConfig()  # extends RobotSimulationConfig
 ```
 
@@ -144,14 +146,14 @@ ped_config = PedestrianSimulationConfig()  # extends RobotSimulationConfig
 ```python
 from robot_sf.gym_env.environment_factory import (
     make_robot_env,
-    make_image_robot_env, 
-    make_pedestrian_env
+    make_image_robot_env,
+    make_pedestrian_env,
 )
 
 # Basic robot environment
 env = make_robot_env(debug=True)
 
-# Robot with image observations  
+# Robot with image observations
 env = make_image_robot_env(debug=True)
 
 # Pedestrian environment for adversarial training

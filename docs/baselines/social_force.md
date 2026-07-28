@@ -17,16 +17,9 @@ planner = SocialForcePlanner({}, seed=42)
 # Create observation
 obs = Observation(
     dt=0.1,
-    robot={
-        "position": [0.0, 0.0],
-        "velocity": [0.0, 0.0], 
-        "goal": [5.0, 5.0],
-        "radius": 0.3
-    },
-    agents=[
-        {"position": [2.0, 1.0], "velocity": [0.5, 0.0], "radius": 0.35}
-    ],
-    obstacles=[]
+    robot={"position": [0.0, 0.0], "velocity": [0.0, 0.0], "goal": [5.0, 5.0], "radius": 0.3},
+    agents=[{"position": [2.0, 1.0], "velocity": [0.5, 0.0], "radius": 0.35}],
+    obstacles=[],
 )
 
 # Get action
@@ -63,23 +56,19 @@ from robot_sf.baselines.social_force import SFPlannerConfig
 config = SFPlannerConfig(
     # Action space: "velocity" for (vx, vy) or "unicycle" for (v, omega)
     action_space="velocity",
-    
     # Speed limits
-    v_max=2.0,           # Maximum linear velocity [m/s]
-    omega_max=1.0,       # Maximum angular velocity [rad/s]
-    
+    v_max=2.0,  # Maximum linear velocity [m/s]
+    omega_max=1.0,  # Maximum angular velocity [rad/s]
     # Goal behavior
-    desired_speed=1.0,   # Preferred speed toward goal [m/s]
-    tau=0.5,            # Acceleration time constant [s]
-    
+    desired_speed=1.0,  # Preferred speed toward goal [m/s]
+    tau=0.5,  # Acceleration time constant [s]
     # Social forces (agent repulsion)
-    A=5.1,              # Force amplitude [N]
-    B=0.35,             # Interaction range [m]
+    A=5.1,  # Force amplitude [N]
+    B=0.35,  # Interaction range [m]
     lambda_anisotropy=2.0,  # Forward vs backward strength
-    
     # Safety
-    safety_clamp=True,   # Enforce velocity limits
-    noise_std=0.0       # Force noise (0 = deterministic)
+    safety_clamp=True,  # Enforce velocity limits
+    noise_std=0.0,  # Force noise (0 = deterministic)
 )
 
 planner = SocialForcePlanner(config, seed=42)
@@ -203,11 +192,7 @@ action = {"v": 1.5, "omega": 0.2}  # [m/s, rad/s]
 
 ```python
 # Simple point-to-point navigation
-config = SFPlannerConfig(
-    action_space="velocity",
-    desired_speed=1.0,
-    v_max=1.5
-)
+config = SFPlannerConfig(action_space="velocity", desired_speed=1.0, v_max=1.5)
 
 planner = SocialForcePlanner(config, seed=42)
 # ... use with observations containing goal positions
@@ -218,10 +203,10 @@ planner = SocialForcePlanner(config, seed=42)
 ```python
 # More conservative parameters for crowded spaces
 config = SFPlannerConfig(
-    desired_speed=0.8,    # Slower in crowds
-    A=8.0,               # Stronger avoidance
-    B=0.4,               # Wider comfort zone
-    tau=0.3              # Quicker response
+    desired_speed=0.8,  # Slower in crowds
+    A=8.0,  # Stronger avoidance
+    B=0.4,  # Wider comfort zone
+    tau=0.3,  # Quicker response
 )
 
 planner = SocialForcePlanner(config, seed=42)
@@ -233,9 +218,9 @@ planner = SocialForcePlanner(config, seed=42)
 # Faster, more direct navigation (use with caution)
 config = SFPlannerConfig(
     desired_speed=1.5,
-    A=3.0,               # Weaker avoidance
-    B=0.2,               # Narrower personal space
-    lambda_anisotropy=3.0 # Focus on forward obstacles
+    A=3.0,  # Weaker avoidance
+    B=0.2,  # Narrower personal space
+    lambda_anisotropy=3.0,  # Focus on forward obstacles
 )
 
 planner = SocialForcePlanner(config, seed=42)
@@ -246,7 +231,7 @@ planner = SocialForcePlanner(config, seed=42)
 ```python
 # Add noise for more human-like behavior
 config = SFPlannerConfig(
-    noise_std=0.2,       # Small amount of noise
+    noise_std=0.2,  # Small amount of noise
     # ... other parameters
 )
 

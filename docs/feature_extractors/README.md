@@ -68,25 +68,18 @@ The configuration system provides a unified way to select and configure feature 
 from robot_sf.feature_extractors.config import (
     FeatureExtractorPresets,
     create_feature_extractor_config,
-    FeatureExtractorType
+    FeatureExtractorType,
 )
 
 # Use presets
 config = FeatureExtractorPresets.mlp_large()
 
 # Custom configuration
-config = create_feature_extractor_config(
-    "attention",
-    embed_dim=128,
-    num_heads=8,
-    num_layers=2
-)
+config = create_feature_extractor_config("attention", embed_dim=128, num_heads=8, num_layers=2)
 
 # With enum
 config = create_feature_extractor_config(
-    FeatureExtractorType.LIGHTWEIGHT_CNN,
-    num_filters=[64, 32, 16],
-    kernel_sizes=[7, 5, 3]
+    FeatureExtractorType.LIGHTWEIGHT_CNN, num_filters=[64, 32, 16], kernel_sizes=[7, 5, 3]
 )
 ```
 

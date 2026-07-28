@@ -347,6 +347,38 @@ def _constraints_first_outcome_errors(value: Any) -> list[str]:
     return errors
 
 
+def _constraints_first_objective_band_errors(
+    objective_value: Any, outcome: dict[str, Any]
+) -> list[str]:
+    """Validate that one objective value remains in its frozen outcome tier.
+
+    Returns:
+        Tier errors, or an empty list when the value is finite and in-band.
+    """
+    if (
+        isinstance(objective_value, bool)
+        or not isinstance(objective_value, (int, float))
+        or not math.isfinite(float(objective_value))
+    ):
+        return []
+    if outcome["collision_or_severe_intrusion"]:
+        lower_bound = 4.0
+        tier = "collision/severe-intrusion"
+    elif outcome["liveness_or_goal_completion"]:
+        lower_bound = 2.0
+        tier = "liveness"
+    else:
+        lower_bound = 0.0
+        tier = "comfort/efficiency"
+    score = float(objective_value)
+    if not lower_bound <= score < lower_bound + 1.0:
+        return [
+            f"objective_value {score} is outside the frozen {tier} tier "
+            f"[{lower_bound}, {lower_bound + 1})"
+        ]
+    return []
+
+
 def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     outcomes_path: Path,
     *,
@@ -600,6 +632,11 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             or not math.isfinite(float(objective_value))
         ):
             blockers.append(f"row {row_number} objective_value must be finite")
+        elif not outcome_errors:
+            objective_band_errors = _constraints_first_objective_band_errors(
+                objective_value, constraints_first_outcome
+            )
+            blockers.extend(f"row {row_number} {error}" for error in objective_band_errors)
         certification = row.get("certification")
         certification_status = (
             certification.get("status") if isinstance(certification, dict) else None

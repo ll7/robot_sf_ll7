@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import shlex
 import subprocess
 from dataclasses import asdict, dataclass, replace
@@ -24,6 +23,7 @@ from robot_sf.adversarial.config import (
     SearchConfig,
     WarmStartCandidate,
 )
+from robot_sf.adversarial.objectives import constraints_first_outcome_projection
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
 from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
@@ -412,46 +412,9 @@ def _load_archive_warm_starts(
     return tuple(warm_starts)
 
 
-def _metric_float(metrics: dict[str, Any], name: str) -> float:
-    """Return a finite metric scalar, preserving unavailable values as zero."""
-    try:
-        value = float(metrics.get(name, 0.0) or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
-    return value if math.isfinite(value) else 0.0
-
-
 def _constraints_first_outcome(record: dict[str, Any]) -> dict[str, Any]:
     """Project one search-stage episode into the frozen constraints-first outcome vector."""
-    outcome = record.get("outcome")
-    metrics = record.get("metrics")
-    if not record or not isinstance(outcome, dict) or not isinstance(metrics, dict):
-        return {
-            "status": "not_available",
-            "collision_or_severe_intrusion": None,
-            "liveness_or_goal_completion": None,
-            "comfort_and_efficiency": None,
-        }
-    collision_or_intrusion = bool(
-        outcome.get("collision")
-        or outcome.get("collision_event")
-        or outcome.get("severe_intrusion")
-        or metrics.get("severe_intrusion")
-        or metrics.get("severe_intrusion_event")
-        or _metric_float(metrics, "collisions") > 0.0
-    )
-    route_complete = bool(outcome.get("route_complete")) or _metric_float(metrics, "success") >= 1.0
-    timeout = bool(outcome.get("timeout") or outcome.get("timeout_event"))
-    return {
-        "status": "observed",
-        "collision_or_severe_intrusion": collision_or_intrusion,
-        "liveness_or_goal_completion": timeout or not route_complete,
-        "comfort_and_efficiency": {
-            "snqi": metrics.get("snqi"),
-            "near_misses": metrics.get("near_misses"),
-            "path_efficiency": metrics.get("path_efficiency"),
-        },
-    }
+    return constraints_first_outcome_projection(record)
 
 
 def _git_head() -> str:

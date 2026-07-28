@@ -61,3 +61,23 @@ def test_constraints_first_objective_is_registered_and_tiered(tmp_path: Path) ->
     assert liveness_score is not None and 2.0 <= liveness_score < 3.0
     assert soft_score is not None and 0.0 <= soft_score < 1.0
     assert collision_score > liveness_score > soft_score
+
+
+def test_constraints_first_objective_fails_closed_on_malformed_outcomes(tmp_path: Path) -> None:
+    """Missing or non-boolean outcome fields cannot become liveness failures."""
+    missing = _evaluation(tmp_path, "missing", {"status": "success"})
+    malformed = _evaluation(
+        tmp_path,
+        "malformed",
+        {
+            "outcome": {
+                "collision": "false",
+                "route_complete": True,
+                "timeout": False,
+            },
+            "metrics": {"snqi": 0.0},
+        },
+    )
+
+    assert constraints_first_lexicographic_v1(missing) is None
+    assert constraints_first_lexicographic_v1(malformed) is None

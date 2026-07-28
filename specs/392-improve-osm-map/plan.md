@@ -345,14 +345,17 @@ class OSMZonesEditor:
 @dataclass
 class OSMZonesConfig:
     """Zones and routes for OSM-derived map (YAML v1.0 schema)."""
+
     version: str = "1.0"
     metadata: dict[str, Any] = field(default_factory=dict)
     zones: dict[str, Zone] = field(default_factory=dict)
     routes: dict[str, Route] = field(default_factory=dict)
 
+
 def load_zones_yaml(yaml_file: str) -> OSMZonesConfig:
     """Load YAML file; validate schema; round-trip determinism guaranteed."""
-    
+
+
 def save_zones_yaml(config: OSMZonesConfig, yaml_file: str) -> None:
     """Save to YAML with deterministic ordering and precision (3 decimal places)."""
 ```

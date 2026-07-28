@@ -58,9 +58,11 @@ def _compute_ped_velocities(peds_pos: np.ndarray, dt: float) -> np.ndarray:
     """Compute pedestrian velocities from positions via finite difference."""
     # See research.md for implementation details
 
+
 def _compute_jerk(robot_acc: np.ndarray, dt: float) -> np.ndarray:
     """Compute jerk (acceleration derivative) via finite difference."""
     # See research.md for implementation details
+
 
 def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
     """Compute robot-pedestrian distance matrix (T, K)."""
@@ -220,13 +222,10 @@ def timeout(data: EpisodeData, *, horizon: int) -> float:
 
 ```python
 def failure_to_progress(
-    data: EpisodeData,
-    *,
-    distance_threshold: float = 0.1,
-    time_threshold: float = 5.0
+    data: EpisodeData, *, distance_threshold: float = 0.1, time_threshold: float = 5.0
 ) -> float:
     """Count failure-to-progress events.
-    
+
     Formula: Count intervals where robot doesn't reduce distance to goal
              by distance_threshold within time_threshold window
     Units: failure count [0,∞)
@@ -312,14 +311,9 @@ def path_length(data: EpisodeData) -> float:
 **Parallelizable**: No (depends on success_rate, path_length)
 
 ```python
-def success_path_length(
-    data: EpisodeData,
-    *,
-    horizon: int,
-    optimal_length: float
-) -> float:
+def success_path_length(data: EpisodeData, *, horizon: int, optimal_length: float) -> float:
     """Success weighted by path efficiency.
-    
+
     Formula: SPL = S * (optimal_length / max(actual_length, optimal_length))
     Units: ratio [0,1]
     """
@@ -345,8 +339,10 @@ Implement three functions:
 def velocity_min(data: EpisodeData) -> float:
     """Minimum linear velocity magnitude. Units: m/s [-∞,∞)"""
 
+
 def velocity_avg(data: EpisodeData) -> float:
     """Average linear velocity magnitude. Units: m/s [-∞,∞)"""
+
 
 def velocity_max(data: EpisodeData) -> float:
     """Maximum linear velocity magnitude. Units: m/s [-∞,∞)"""
@@ -370,8 +366,10 @@ Implement three functions:
 def acceleration_min(data: EpisodeData) -> float:
     """Minimum linear acceleration magnitude. Units: m/s² [-∞,∞)"""
 
+
 def acceleration_avg(data: EpisodeData) -> float:
     """Average linear acceleration magnitude. Units: m/s² [-∞,∞)"""
+
 
 def acceleration_max(data: EpisodeData) -> float:
     """Maximum linear acceleration magnitude. Units: m/s² [-∞,∞)"""
@@ -395,8 +393,10 @@ Implement three functions using _compute_jerk helper:
 def jerk_min(data: EpisodeData) -> float:
     """Minimum jerk magnitude. Units: m/s³ [-∞,∞)"""
 
+
 def jerk_avg(data: EpisodeData) -> float:
     """Average jerk magnitude. Units: m/s³ [-∞,∞)"""
+
 
 def jerk_max(data: EpisodeData) -> float:
     """Maximum jerk magnitude. Units: m/s³ [-∞,∞)"""
@@ -419,6 +419,7 @@ Implement two functions:
 ```python
 def clearing_distance_min(data: EpisodeData) -> float:
     """Minimum distance to obstacles. Units: meters [0,∞)"""
+
 
 def clearing_distance_avg(data: EpisodeData) -> float:
     """Average minimum distance to obstacles. Units: meters [0,∞)"""
@@ -506,13 +507,9 @@ def time_to_collision_min(data: EpisodeData) -> float:
 **Parallelizable**: Yes [P]
 
 ```python
-def aggregated_time(
-    data: EpisodeData,
-    *,
-    agent_goal_times: dict[int, int]
-) -> float:
+def aggregated_time(data: EpisodeData, *, agent_goal_times: dict[int, int]) -> float:
     """Time for cooperative agents to reach goals.
-    
+
     Formula: AT = max_j (goal_time[j]) for j in cooperative set
     Units: seconds [0,∞)
     """

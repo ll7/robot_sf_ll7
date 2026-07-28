@@ -86,7 +86,7 @@ env = make_robot_env(debug=True)
 # Robot with image observations
 env = make_image_robot_env(debug=True)
 
-# Pedestrian environment  
+# Pedestrian environment
 env = make_pedestrian_env(robot_model=model, debug=True)
 
 # Robot-free Social Force crowd simulation
@@ -98,7 +98,7 @@ env = make_crowd_sim_env(render_mode=None)
 from robot_sf.gym_env.unified_config import (
     RobotSimulationConfig,
     ImageRobotConfig,
-    PedestrianSimulationConfig
+    PedestrianSimulationConfig,
 )
 
 config = RobotSimulationConfig()

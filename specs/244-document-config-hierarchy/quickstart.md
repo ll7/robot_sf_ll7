@@ -46,10 +46,12 @@ Use RobotSimulationConfig from robot_sf.gym_env.unified_config instead.
 ```python
 # OLD (legacy - will be removed)
 from robot_sf.gym_env.env_config import EnvSettings
+
 config = EnvSettings()
 
 # NEW (canonical - recommended)
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
 config = RobotSimulationConfig()
 ```
 
@@ -71,18 +73,19 @@ config = RobotSimulationConfig()
 import warnings
 from dataclasses import dataclass, field
 
+
 @dataclass
 class EnvSettings:
     """Legacy config class - use RobotSimulationConfig instead."""
-    
+
     # ... existing fields ...
-    
+
     def __post_init__(self):
         warnings.warn(
             "EnvSettings is deprecated and will be removed in a future version. "
             "Use RobotSimulationConfig from robot_sf.gym_env.unified_config instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         # ... existing validation code ...
 ```
@@ -146,32 +149,37 @@ from robot_sf.gym_env.env_config import (
     PedEnvSettings,
 )
 
+
 def test_base_env_settings_deprecated():
     with pytest.warns(DeprecationWarning, match="BaseSimulationConfig"):
         config = BaseEnvSettings()
+
 
 def test_robot_env_settings_deprecated():
     with pytest.warns(DeprecationWarning, match="RobotSimulationConfig"):
         config = RobotEnvSettings()
 
+
 def test_env_settings_deprecated():
     with pytest.warns(DeprecationWarning, match="RobotSimulationConfig"):
         config = EnvSettings()
 
+
 def test_ped_env_settings_deprecated():
     with pytest.warns(DeprecationWarning, match="PedestrianSimulationConfig"):
         config = PedEnvSettings()
+
 
 def test_deprecation_message_content():
     """Verify warning message includes required information"""
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         config = EnvSettings()
-        
+
         assert len(w) == 1
         assert issubclass(w[0].category, DeprecationWarning)
         message = str(w[0].message)
-        
+
         assert "EnvSettings" in message
         assert "deprecated" in message.lower()
         assert "RobotSimulationConfig" in message
@@ -219,6 +227,7 @@ uv run pytest tests
 **Legacy**:
 ```python
 from robot_sf.gym_env.env_config import EnvSettings
+
 config = EnvSettings()
 # ... use config ...
 ```
@@ -226,6 +235,7 @@ config = EnvSettings()
 **Unified**:
 ```python
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
 config = RobotSimulationConfig()
 # ... use config ... (same API)
 ```
@@ -235,17 +245,15 @@ config = RobotSimulationConfig()
 **Legacy**:
 ```python
 from robot_sf.gym_env.env_config import PedEnvSettings
-config = PedEnvSettings(
-    ego_ped_config=my_ped_config
-)
+
+config = PedEnvSettings(ego_ped_config=my_ped_config)
 ```
 
 **Unified**:
 ```python
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
-config = PedestrianSimulationConfig(
-    ego_ped_config=my_ped_config
-)
+
+config = PedestrianSimulationConfig(ego_ped_config=my_ped_config)
 ```
 
 ### Scenario 3: Custom Simulation Settings
@@ -255,12 +263,7 @@ config = PedestrianSimulationConfig(
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
-config = EnvSettings(
-    sim_config=SimulationSettings(
-        sim_time_in_secs=100.0,
-        difficulty=2
-    )
-)
+config = EnvSettings(sim_config=SimulationSettings(sim_time_in_secs=100.0, difficulty=2))
 ```
 
 **Unified**:
@@ -268,12 +271,7 @@ config = EnvSettings(
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.sim.sim_config import SimulationSettings
 
-config = RobotSimulationConfig(
-    sim_config=SimulationSettings(
-        sim_time_in_secs=100.0,
-        difficulty=2
-    )
-)
+config = RobotSimulationConfig(sim_config=SimulationSettings(sim_time_in_secs=100.0, difficulty=2))
 ```
 
 **Note**: `SimulationSettings` is still canonical - it's used by both legacy and unified configs. Only the outer config class changes (`EnvSettings` → `RobotSimulationConfig`).
@@ -314,6 +312,7 @@ config = RobotSimulationConfig(
 **A**: Yes, but migration is recommended:
 ```python
 import warnings
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 ```
 

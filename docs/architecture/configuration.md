@@ -199,7 +199,7 @@ env = make_robot_env(config=config)
 # Pattern 2: Create from scratch
 config = RobotSimulationConfig(
     sim_config=SimulationSettings(difficulty=4),
-    robot_config=DifferentialDriveSettings(max_lin_vel=2.0)
+    robot_config=DifferentialDriveSettings(max_lin_vel=2.0),
 )
 env = make_robot_env(config=config)
 
@@ -487,6 +487,7 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig  # Unified
 ✅ **Do**: Use unified configs consistently, migrate legacy usage incrementally
 ```python
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
 config = RobotSimulationConfig()
 ```
 
@@ -536,18 +537,14 @@ config = RobotSimulationConfig()
 ```python
 from robot_sf.gym_env.env_config import PedEnvSettings
 
-config = PedEnvSettings(
-    ego_ped_config=my_ped_config
-)
+config = PedEnvSettings(ego_ped_config=my_ped_config)
 ```
 
 **Unified (recommended)**:
 ```python
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 
-config = PedestrianSimulationConfig(
-    ego_ped_config=my_ped_config
-)
+config = PedestrianSimulationConfig(ego_ped_config=my_ped_config)
 ```
 
 **Field Mapping**: Direct 1:1 equivalence
@@ -562,18 +559,14 @@ config = PedestrianSimulationConfig(
 ```python
 from robot_sf.gym_env.env_config import RobotEnvSettings
 
-config = RobotEnvSettings(
-    use_image_obs=True
-)
+config = RobotEnvSettings(use_image_obs=True)
 ```
 
 **Unified (recommended)**:
 ```python
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
-config = RobotSimulationConfig(
-    use_image_obs=True
-)
+config = RobotSimulationConfig(use_image_obs=True)
 ```
 
 **Field Mapping**: Direct 1:1 equivalence
@@ -610,12 +603,7 @@ env = make_robot_env(config=config)
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
-config = EnvSettings(
-    sim_config=SimulationSettings(
-        sim_time_in_secs=100.0,
-        difficulty=3
-    )
-)
+config = EnvSettings(sim_config=SimulationSettings(sim_time_in_secs=100.0, difficulty=3))
 ```
 
 **After**:
@@ -623,12 +611,7 @@ config = EnvSettings(
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.sim.sim_config import SimulationSettings
 
-config = RobotSimulationConfig(
-    sim_config=SimulationSettings(
-        sim_time_in_secs=100.0,
-        difficulty=3
-    )
-)
+config = RobotSimulationConfig(sim_config=SimulationSettings(sim_time_in_secs=100.0, difficulty=3))
 ```
 
 #### Scenario 3: Pedestrian Environment
@@ -638,9 +621,7 @@ config = RobotSimulationConfig(
 from robot_sf.gym_env.env_config import PedEnvSettings
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 
-config = PedEnvSettings(
-    ego_ped_config=UnicycleDriveSettings(max_lin_vel=2.0)
-)
+config = PedEnvSettings(ego_ped_config=UnicycleDriveSettings(max_lin_vel=2.0))
 ```
 
 **After**:
@@ -648,9 +629,7 @@ config = PedEnvSettings(
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
 from robot_sf.ped_ego.unicycle_drive import UnicycleDriveSettings
 
-config = PedestrianSimulationConfig(
-    ego_ped_config=UnicycleDriveSettings(max_lin_vel=2.0)
-)
+config = PedestrianSimulationConfig(ego_ped_config=UnicycleDriveSettings(max_lin_vel=2.0))
 ```
 
 ### Migration Checklist

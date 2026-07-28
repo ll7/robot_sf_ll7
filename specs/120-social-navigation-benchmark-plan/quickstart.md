@@ -290,9 +290,7 @@ episodes = read_jsonl("output/benchmarks/quickstart/my_experiment_episodes.jsonl
 
 # Custom aggregation
 summary = compute_aggregates_with_ci(
-    episodes,
-    group_by="scenario_params.ped_density",
-    bootstrap_samples=1000
+    episodes, group_by="scenario_params.ped_density", bootstrap_samples=1000
 )
 
 # Custom plotting
@@ -300,8 +298,14 @@ densities = list(summary.keys())
 snqi_means = [summary[d]["metrics.snqi"]["mean"] for d in densities]
 snqi_cis = [summary[d]["metrics.snqi"]["mean_ci"] for d in densities]
 
-plt.errorbar(densities, snqi_means, yerr=[[ci[1]-m for ci, m in zip(snqi_cis, snqi_means)], 
-                                          [m-ci[0] for ci, m in zip(snqi_cis, snqi_means)]])
+plt.errorbar(
+    densities,
+    snqi_means,
+    yerr=[
+        [ci[1] - m for ci, m in zip(snqi_cis, snqi_means)],
+        [m - ci[0] for ci, m in zip(snqi_cis, snqi_means)],
+    ],
+)
 plt.xlabel("Pedestrian Density")
 plt.ylabel("SNQI Score")
 plt.title("Social Navigation Performance vs Pedestrian Density")
@@ -312,6 +316,7 @@ plt.savefig("output/benchmarks/quickstart/figures/custom_analysis.png", dpi=300)
 There is no `extract-trajectories` CLI command yet. For custom trajectory extraction, use the programmatic API:
 ```python
 from robot_sf.benchmark.aggregate import read_jsonl
+
 episodes = read_jsonl("output/benchmarks/quickstart/my_experiment_episodes.jsonl")
 # Manually filter and process episodes with trajectory data
 ```

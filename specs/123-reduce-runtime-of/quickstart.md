@@ -16,7 +16,8 @@ cfg = {  # pseudo-config illustrating minimal fields
     "enable_plots": False,
 }
 
-out1 = Path("/tmp/repro_fast/run1"); out1.mkdir(parents=True, exist_ok=True)
+out1 = Path("/tmp/repro_fast/run1")
+out1.mkdir(parents=True, exist_ok=True)
 start = time.time()
 res1 = run_full_benchmark(output_dir=out1, **cfg)
 res2 = run_full_benchmark(output_dir=Path("/tmp/repro_fast/run2"), **cfg)

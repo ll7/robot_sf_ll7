@@ -184,7 +184,7 @@ exclude = [
 allow-direct-references = true
 
 [tool.ruff]
-required-version = "==0.15.22"
+required-version = "==0.16.0"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -290,6 +290,7 @@ unfixable = []
 ignore = [
     # Research/scientific computing patterns that are acceptable
     "PLR0911",  # Too many return statements
+    "PLR0917",  # Too many positional arguments (newly stable in ruff 0.16.0; defer per-site migration)
     "PLR2004",  # Magic value comparison
     # Explicit Ruff security (Bandit) baseline (issue #3477): instead of suppressing the
     # whole `S` category, list only the codes currently present in the tree, so any *new*
@@ -330,6 +331,7 @@ ignore = [
     "B008",     # Do not perform function call in argument defaults
     "B023",     # Function definition does not bind loop variable
     "ISC003",   # Explicitly concatenated string should be implicitly concatenated
+    "ISC004",   # Implicit string concatenation in collection literal (newly stable in ruff 0.16.0; mostly intentional line-spanning path/message strings; defer migration)
     "UP007",    # Use `X | Y` for type annotations
     "B007",     # Loop control variable not used within loop body
     "PLW0603",  # Using the global statement to update is discouraged

@@ -187,11 +187,15 @@ def toggle_grid_channel(enabled_channels: List[str]) -> None  # pygame visualiza
 # In unified_config.py or environment_factory.py:
 class GridObservation(dict):
     """Occupancy grid as gymnasium observation component"""
+
     grid: OccupancyGrid
     array: np.ndarray  # flattened for Box space
 
+
 # Usage:
-env = make_robot_env(config=RobotSimulationConfig(use_occupancy_grid=True, grid_config=GridConfig(...)))
+env = make_robot_env(
+    config=RobotSimulationConfig(use_occupancy_grid=True, grid_config=GridConfig(...))
+)
 obs = env.reset()  # obs["occupancy_grid"] is np.ndarray
 ```
 
@@ -204,7 +208,7 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig, GridConfig
 
 config = RobotSimulationConfig(
     use_occupancy_grid=True,
-    grid_config=GridConfig(size_m=10.0, resolution_m=0.1, frame="ego", include_pedestrians=True)
+    grid_config=GridConfig(size_m=10.0, resolution_m=0.1, frame="ego", include_pedestrians=True),
 )
 env = make_robot_env(config=config, debug=True)
 obs = env.reset(seed=42)

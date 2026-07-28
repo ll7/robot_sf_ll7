@@ -36,15 +36,15 @@ from robot_sf.benchmark.runner import run_episode, validate_and_write
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 
 scenario = {
-	"id": "smoke-uni-low-open",
-	"density": "low",
-	"flow": "uni",
-	"obstacle": "open",
-	"groups": 0.0,
-	"speed_var": "low",
-	"goal_topology": "point",
-	"robot_context": "embedded",
-	"repeats": 1,
+    "id": "smoke-uni-low-open",
+    "density": "low",
+    "flow": "uni",
+    "obstacle": "open",
+    "groups": 0.0,
+    "speed_var": "low",
+    "goal_topology": "point",
+    "robot_context": "embedded",
+    "repeats": 1,
 }
 record = run_episode(scenario, seed=123, horizon=15, dt=0.1, record_forces=False)
 
@@ -61,27 +61,27 @@ Batch run with repeats expanded and JSONL output:
 from robot_sf.benchmark.runner import run_batch
 
 scenarios = [
-	{
-		"id": "batch-uni-low-open",
-		"density": "low",
-		"flow": "uni",
-		"obstacle": "open",
-		"groups": 0.0,
-		"speed_var": "low",
-		"goal_topology": "point",
-		"robot_context": "embedded",
-		"repeats": 5,
-	}
+    {
+        "id": "batch-uni-low-open",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 5,
+    }
 ]
 summary = run_batch(
-	scenarios,
-	out_path="results/episodes.jsonl",
-	schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
-	base_seed=42,
-	horizon=50,
-	dt=0.1,
-	record_forces=False,
-	append=False,
+    scenarios,
+    out_path="results/episodes.jsonl",
+    schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
+    base_seed=42,
+    horizon=50,
+    dt=0.1,
+    record_forces=False,
+    append=False,
 )
 print(summary)
 ```
@@ -90,11 +90,12 @@ You can also pass a YAML scenario matrix instead of a list:
 
 ```python
 from robot_sf.benchmark.runner import run_batch
+
 summary = run_batch(
-	"docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml",
-	out_path="results/matrix_episodes.jsonl",
-	schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
-	base_seed=0,
+    "docs/dev/issues/social-navigation-benchmark/scenario_matrix.yaml",
+    out_path="results/matrix_episodes.jsonl",
+    schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
+    base_seed=0,
 )
 ```
 

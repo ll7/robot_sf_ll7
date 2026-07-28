@@ -25,6 +25,7 @@ Default constants: first scenario, MAX_EPISODES=1, recording disabled.
 
 ```python
 from examples.classic_interactions_pygame import run_demo
+
 run_demo(enable_recording=True, max_episodes=2)
 ```
 

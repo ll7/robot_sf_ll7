@@ -66,6 +66,7 @@ class ConfigurationError(Exception):
 - Typical use: 
   ```python
   from robot_sf.common.errors import raise_fatal_with_remedy
+
   if invalid_config:
       raise_fatal_with_remedy("Invalid value", "Set param to X")
   ```
@@ -97,6 +98,7 @@ def restore_random_state(state: dict[str, Any]) -> None
 - Typical use:
   ```python
   from robot_sf.common.seed import set_global_seed
+
   set_global_seed(42)  # Reproducible experiments
   ```
 
@@ -124,6 +126,7 @@ def wrap_gymnasium_env(env: gym.Env) -> gym.Env
 - Typical use:
   ```python
   from robot_sf.common.compat import get_gym_reset_info
+
   if get_gym_reset_info():
       obs, info = env.reset()  # Gymnasium style
   else:
@@ -262,10 +265,10 @@ uv run python -c "from robot_sf.common.seed import set_global_seed; set_global_s
 ```python
 # Guaranteed stable imports (for external users)
 from robot_sf.common import (
-    Vec2D,           # Type alias for np.ndarray
-    RobotPose,       # Type alias for robot state
-    Line2D,          # Type alias for line segments
-    set_global_seed, # Seed management function
+    Vec2D,  # Type alias for np.ndarray
+    RobotPose,  # Type alias for robot state
+    Line2D,  # Type alias for line segments
+    set_global_seed,  # Seed management function
     raise_fatal_with_remedy,  # Error helper
 )
 ```

@@ -11,6 +11,8 @@ Generic slow nodes must keep flowing through the normal soft/hard envelope.
 
 from __future__ import annotations
 
+import pytest
+
 from tests import conftest as root_conftest
 
 from .policy import PerformanceBudgetPolicy
@@ -177,3 +179,31 @@ def test_diagnostic_node_does_not_fail_terminal_enforce_mode(monkeypatch) -> Non
     assert "DIAGNOSTIC" in rendered
     assert "(enforce mode)" in rendered
     assert "Performance breach" not in rendered
+
+
+def test_diagnostic_node_hard_breach_fails_terminal_enforce_mode(monkeypatch) -> None:
+    """The registered node remains enforceable at the hard boundary."""
+
+    class CapturingReporter:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def write_line(self, line: str) -> None:
+            self.lines.append(line)
+
+    reporter = CapturingReporter()
+    policy = PerformanceBudgetPolicy()
+    monkeypatch.setattr(
+        root_conftest,
+        "_SLOW_SAMPLES",
+        [(GATE_NODE, policy.hard_timeout_seconds)],
+    )
+    monkeypatch.setenv("ROBOT_SF_PERF_ENFORCE", "1")
+    monkeypatch.delenv("ROBOT_SF_PERF_RELAX", raising=False)
+
+    with pytest.raises(pytest.exit.Exception, match="Performance breach"):
+        root_conftest.pytest_terminal_summary(reporter, exitstatus=0, config=None)
+
+    rendered = "\n".join(reporter.lines)
+    assert "HARD" in rendered
+    assert "DIAGNOSTIC" not in rendered

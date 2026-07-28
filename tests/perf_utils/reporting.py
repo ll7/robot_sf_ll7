@@ -5,10 +5,11 @@ with breach classification and guidance suggestions.
 
 A narrow, deliberately scoped set of *diagnostic contract* nodes (tests whose
 runtime is dominated by a deliberate subprocess/gate contract that carries its
-own budget) are classified as ``"diagnostic"`` instead of the generic
-``"soft"``/``"hard"`` envelope. They still appear in the report (nothing is
-hidden), but they are labelled and explained rather than emitted as unexplained
-``SOFT`` breaches whose generic "reduce episode count" guidance does not apply.
+own budget) are classified as ``"diagnostic"`` only for an expected ``"soft"``
+breach. They still appear in the report (nothing is hidden), but they are
+labelled and explained rather than emitted as unexplained ``SOFT`` breaches
+whose generic "reduce episode count" guidance does not apply. The normal
+``"hard"`` classification and enforcement remain unchanged.
 """
 
 from __future__ import annotations

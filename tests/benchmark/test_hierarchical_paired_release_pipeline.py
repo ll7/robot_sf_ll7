@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import shutil
+import subprocess
 import tarfile
 from pathlib import Path
 
@@ -359,3 +360,141 @@ def test_clean_checkout_hydration_and_execution_against_release_0_0_3_post1() ->
     assert len(protocol_conformance) == 8
     for item in protocol_conformance:
         assert item["status"] == "delivered_analysis_pending_human_review"
+
+
+def test_download_release_bundle_retries_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bounded retry + exponential backoff absorbs transient gh flakes.
+
+    Regression guard for the issue #6401 main-CI failure: a single transient
+    ``gh release download`` flake must not take the determinism test (and thus
+    main CI) red. Mirrors the ``scripts/dev/uv_sync_retry.sh`` convention.
+    """
+    import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **_kwargs):
+        calls.append(list(cmd))
+        if len(calls) < script.BUNDLE_DOWNLOAD_MAX_ATTEMPTS:
+            raise subprocess.CalledProcessError(
+                returncode=1, cmd=cmd, output="partial stdout", stderr="transient 503"
+            )
+        return subprocess.CompletedProcess(cmd, 0, stdout="downloaded", stderr="")
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(script.subprocess, "run", fake_run)
+    monkeypatch.setattr(script.time, "sleep", sleeps.append)
+
+    script._download_release_bundle(Path("/tmp/example.tar.gz"))
+
+    # All attempts ran, with one fewer backoff sleep than attempts.
+    assert len(calls) == script.BUNDLE_DOWNLOAD_MAX_ATTEMPTS
+    assert len(sleeps) == script.BUNDLE_DOWNLOAD_MAX_ATTEMPTS - 1
+    expected_backoff = [
+        script.BUNDLE_DOWNLOAD_BACKOFF_BASE * (2**i)
+        for i in range(script.BUNDLE_DOWNLOAD_MAX_ATTEMPTS - 1)
+    ]
+    assert sleeps == pytest.approx(expected_backoff)
+    # gh targets the pinned release tag/asset and writes into the target dir.
+    assert calls[0][:4] == ["gh", "release", "download", EXPECTED_RELEASE_TAG]
+    # A failed transfer can leave a partial asset behind.  Retried invocations
+    # must replace it rather than fail because the filename already exists.
+    assert "--clobber" in calls[0]
+    assert calls[0][-2] == "--dir"
+    assert calls[0][-1] == "/tmp"
+
+
+def test_download_release_bundle_surfaces_gh_output_after_exhausting_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A persistent failure raises with captured gh stdout/stderr for diagnosis.
+
+    The pre-fix error swallowed ``capture_output`` detail behind an opaque
+    ``non-zero exit status 1``; the surfaced output lets a future genuine
+    failure be debugged.
+    """
+    import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
+
+    def fake_run(cmd, **_kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=2, cmd=cmd, output="some stdout", stderr="rate limited"
+        )
+
+    monkeypatch.setattr(script.subprocess, "run", fake_run)
+    sleeps: list[float] = []
+    monkeypatch.setattr(script.time, "sleep", sleeps.append)
+
+    with pytest.raises(
+        ReleaseAnalysisPipelineError,
+        match=rf"after {script.BUNDLE_DOWNLOAD_MAX_ATTEMPTS} attempts",
+    ) as exc_info:
+        script._download_release_bundle(Path("/tmp/example.tar.gz"))
+    message = str(exc_info.value)
+    assert "exit status 2" in message
+    assert "some stdout" in message
+    assert "rate limited" in message
+
+
+def test_download_release_bundle_fails_fast_when_gh_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing gh binary is non-transient: fail without retry or backoff."""
+    import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
+
+    def raise_gh_missing(*_args, **_kwargs):
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr(script.subprocess, "run", raise_gh_missing)
+    sleeps: list[float] = []
+    monkeypatch.setattr(script.time, "sleep", sleeps.append)
+
+    with pytest.raises(ReleaseAnalysisPipelineError, match="gh not found on PATH"):
+        script._download_release_bundle(Path("/tmp/example.tar.gz"))
+    assert sleeps == []
+
+
+def test_download_release_bundle_fails_fast_when_gh_cannot_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-executable gh binary is not retryable and keeps the typed error contract."""
+    import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
+
+    def raise_gh_permission_error(*_args, **_kwargs):
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(script.subprocess, "run", raise_gh_permission_error)
+    sleeps: list[float] = []
+    monkeypatch.setattr(script.time, "sleep", sleeps.append)
+
+    with pytest.raises(ReleaseAnalysisPipelineError, match="Could not execute gh release download"):
+        script._download_release_bundle(Path("/tmp/example.tar.gz"))
+    assert sleeps == []
+
+
+def test_find_or_download_bundle_repairs_a_partial_implicit_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An interrupted implicit cache is repaired through the bounded download path."""
+    import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
+
+    target = tmp_path / script.BUNDLE_ASSET_NAME
+    target.write_bytes(b"partial")
+    download_calls: list[Path] = []
+
+    def fake_download(download_target: Path) -> None:
+        download_calls.append(download_target)
+        download_target.write_bytes(b"verified")
+
+    def fake_sha256(path: Path) -> str:
+        if path.read_bytes() == b"verified":
+            return script.EXPECTED_BUNDLE_SHA256
+        return "partial-cache-digest"
+
+    monkeypatch.setattr(script, "BUNDLE_DOWNLOAD_TARGET", target)
+    monkeypatch.setattr(script, "_download_release_bundle", fake_download)
+    monkeypatch.setattr(script, "sha256_file", fake_sha256)
+
+    assert script.find_or_download_bundle(None, repo_root=tmp_path) == target
+    assert download_calls == [target]

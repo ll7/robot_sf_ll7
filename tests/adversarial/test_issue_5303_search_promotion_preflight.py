@@ -33,6 +33,7 @@ from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
     DEFAULT_MANIFEST_PATH,
     DEFAULT_RECEIPT_PATH,
     SCHEMA_VERSION,
+    Issue5303PreflightResult,
     _min_permutation_p_values,
     _warm_start_space_errors,
     dump_preflight_payload,
@@ -97,6 +98,28 @@ def _set_nested_contract_value(
         target = target[int(key)] if isinstance(target, list) else target[key]
     final_key = path[-1]
     target[int(final_key) if isinstance(target, list) else final_key] = value
+
+
+def _preflight_rehashed_contract(
+    tmp_path: Path,
+    contract: dict[str, Any],
+    name: str,
+    *,
+    receipt_path: Path = RECEIPT_PATH,
+) -> Issue5303PreflightResult:
+    """Run preflight against a temporary contract whose manifest hash was refreshed."""
+    contract_path = tmp_path / f"{name}.yaml"
+    contract_path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest["contract_sha256"] = _sha256_file(contract_path)
+    manifest_path = tmp_path / f"{name}.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return preflight_issue_5303_contract(
+        contract_path,
+        receipt_path=receipt_path,
+        manifest_path=manifest_path,
+        repo_root=REPO_ROOT,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -485,6 +508,94 @@ def test_preflight_returns_blocked_for_malformed_receipt_records(tmp_path: Path)
     assert any(
         "receipt.records must be a list of mappings" in blocker for blocker in result.blockers
     )
+
+
+def test_preflight_fails_closed_for_malformed_receipt_archive_id(tmp_path: Path) -> None:
+    """An excluded receipt row with an unhashable archive ID must block without raising."""
+    receipt = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(receipt, dict)
+    records = receipt["records"]
+    assert isinstance(records, list)
+    excluded_record = next(
+        record for record in records if record["after"]["benchmark_eligibility"] != "eligible"
+    )
+    excluded_record["archive_id"] = ["not", "hashable"]
+    receipt_path = tmp_path / "receipt_with_unhashable_archive_id.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    entry_gate = contract["entry_gate"]
+    assert isinstance(entry_gate, dict)
+    entry_gate["recertification_receipt_path"] = str(receipt_path)
+    result = _preflight_rehashed_contract(
+        tmp_path,
+        contract,
+        "contract_with_unhashable_archive_id",
+        receipt_path=receipt_path,
+    )
+
+    assert result.ready is False
+    assert result.checks["receipt_record_archive_ids_shape"] is False
+    assert any("string archive_id" in blocker for blocker in result.blockers)
+
+
+def test_preflight_fails_closed_for_missing_diagnostic_runner(tmp_path: Path) -> None:
+    """A missing frozen runner path blocks the handoff instead of raising on source read."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    step3 = contract["step3_execution"]
+    assert isinstance(step3, dict)
+    step3["runner_ref"] = "scripts/tools/missing_issue_5303_runner.py"
+
+    result = _preflight_rehashed_contract(tmp_path, contract, "contract_with_missing_runner")
+
+    assert result.ready is False
+    assert result.checks["step3_runner_static_support"] is False
+    assert result.checks["step3_warm_start_wiring"] is False
+    assert any("frozen runner" in blocker for blocker in result.blockers)
+
+
+def test_preflight_fails_closed_for_unhashable_diagnostic_boundary(tmp_path: Path) -> None:
+    """A malformed non-promotion boundary blocks without passing through ``set``."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    future_run = contract["future_run_declaration"]
+    assert isinstance(future_run, dict)
+    diagnostic_run = future_run["separately_justified_diagnostic_search_run"]
+    assert isinstance(diagnostic_run, dict)
+    diagnostic_run["never_authorizes"] = [{"not": "hashable"}]
+
+    result = _preflight_rehashed_contract(
+        tmp_path, contract, "contract_with_unhashable_diagnostic_boundary"
+    )
+
+    assert result.ready is False
+    assert result.checks["diagnostic_run_separately_justified"] is False
+    assert any("separately justified diagnostic run" in blocker for blocker in result.blockers)
+
+
+@pytest.mark.parametrize(
+    ("path", "check_name"),
+    (
+        (("entry_gate", "entry_gate_satisfied"), "entry_gate_satisfied"),
+        (("counted_weak_point_gates", "fail_closed"), "gates_fail_closed"),
+    ),
+)
+def test_preflight_requires_literal_true_for_gate_flags(
+    tmp_path: Path,
+    path: tuple[str, ...],
+    check_name: str,
+) -> None:
+    """Truthy strings must not satisfy frozen boolean gate flags."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    _set_nested_contract_value(contract, path, "false")
+
+    result = _preflight_rehashed_contract(tmp_path, contract, f"contract_with_string_{check_name}")
+
+    assert result.ready is False
+    assert result.checks[check_name] is False
 
 
 def test_preflight_detects_threshold_weakening(tmp_path: Path) -> None:

@@ -935,6 +935,11 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     if not checks["receipt_records_shape"]:
         blockers.append("receipt.records must be a list of mappings")
     normalized_receipt_records = receipt_records if checks["receipt_records_shape"] else []
+    checks["receipt_record_archive_ids_shape"] = all(
+        isinstance(record.get("archive_id"), str) for record in normalized_receipt_records
+    )
+    if not checks["receipt_record_archive_ids_shape"]:
+        blockers.append("every receipt record must declare a string archive_id")
     checks["archive_hash_consistent"] = receipt.get("archive_sha256") == entry_gate.get(
         "certified_archive_sha256"
     ) and certified_archive_file_hash == entry_gate.get("certified_archive_sha256")
@@ -964,7 +969,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             "entry gate requires at least two eligible candidates; stop the promotion sequence"
         )
-    checks["entry_gate_satisfied"] = bool(entry_gate.get("entry_gate_satisfied")) and (
+    checks["entry_gate_satisfied"] = entry_gate.get("entry_gate_satisfied") is True and (
         receipt_eligible_total >= EXPECTED_ELIGIBLE_FLOOR
     )
     if not checks["entry_gate_satisfied"]:
@@ -1088,8 +1093,9 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
 
     all_eligible_ids = set(contract_fit_ids) | set(contract_fresh_ids)
     receipt_excluded_ids = {
-        record.get("archive_id")
+        record["archive_id"]
         for record in normalized_receipt_records
+        if isinstance(record.get("archive_id"), str)
         if isinstance(record.get("after"), dict)
         and record.get("after", {}).get("benchmark_eligibility") != "eligible"
     }
@@ -1340,7 +1346,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             f"counted_weak_point_gates must include all {EXPECTED_COUNTED_GATE_COUNT} gates, "
             f"got ids {gate_ids}"
         )
-    checks["gates_fail_closed"] = bool(gates_block.get("fail_closed"))
+    checks["gates_fail_closed"] = gates_block.get("fail_closed") is True
     if not checks["gates_fail_closed"]:
         blockers.append("counted_weak_point_gates.fail_closed must be true")
     confirmation = (
@@ -1667,15 +1673,18 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "the evidence-grade promotion campaign must be explicitly stopped before a "
             "three-seed diagnostic run is authorized"
         )
+    never_authorizes = (
+        diagnostic_run.get("never_authorizes") if isinstance(diagnostic_run, dict) else None
+    )
     checks["diagnostic_run_separately_justified"] = (
         isinstance(diagnostic_run, dict)
         and diagnostic_run.get("authorized") is True
         and diagnostic_run.get("fixed_decision") == "inconclusive"
         and diagnostic_run.get("required_exclusion_reason")
         == "diagnostic_only_no_replay_reference_or_second_context"
-        and isinstance(diagnostic_run.get("never_authorizes"), list)
-        and set(diagnostic_run["never_authorizes"])
-        == {"promote", "transfer_claim", "evidence_grade_comparison"}
+        and isinstance(never_authorizes, list)
+        and all(isinstance(item, str) for item in never_authorizes)
+        and set(never_authorizes) == {"promote", "transfer_claim", "evidence_grade_comparison"}
         and isinstance(diagnostic_run.get("stop_rule"), str)
         and bool(diagnostic_run["stop_rule"].strip())
     )
@@ -1857,10 +1866,14 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     # The command and parser checks above prove the frozen IDs reach the runner; this source
     # check makes the SearchConfig handoff explicit without importing execution surfaces.
-    if runner_path:
+    if runner_path and runner_path.is_file():
+        try:
+            runner_source = runner_path.read_text(encoding="utf-8")
+        except OSError:
+            runner_source = ""
         checks["step3_warm_start_wiring"] = checks["step3_warm_start_wiring"] or (
-            "_load_archive_warm_starts" in runner_path.read_text(encoding="utf-8")
-            and "warm_start=warm_starts" in runner_path.read_text(encoding="utf-8")
+            "_load_archive_warm_starts" in runner_source
+            and "warm_start=warm_starts" in runner_source
         )
     if not checks["step3_warm_start_wiring"]:
         blockers.append(

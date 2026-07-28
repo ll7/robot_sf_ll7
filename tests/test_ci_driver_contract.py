@@ -529,6 +529,9 @@ def test_action_ref_parser_handles_list_items_and_local_actions() -> None:
         _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache")
         == []
     )
+    assert _action_ref_failures_for_line(workflow_file, 3, "      - uses:") == [
+        ".github/workflows/ci.yml:3: malformed uses line"
+    ]
 
 
 def test_workflow_uses_scan_ignores_block_scalar_text(tmp_path: Path) -> None:
@@ -540,11 +543,12 @@ def test_workflow_uses_scan_ignores_block_scalar_text(tmp_path: Path) -> None:
         "    steps:\n"
         "      - run: |\n"
         "          printf 'uses: actions/checkout@mutable'\n"
-        "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n",
+        "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n"
+        "      - uses:\n",
         encoding="utf-8",
     )
 
-    assert _workflow_uses_line_numbers(workflow_file) == [6]
+    assert _workflow_uses_line_numbers(workflow_file) == [6, 7]
 
 
 def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:

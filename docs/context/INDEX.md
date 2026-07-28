@@ -1,6 +1,6 @@
 # Context Retrieval Index
 
-Issue #5303 step 2 frozen TPE-versus-random search-promotion preregistration (proposal/preflight only): the side-effect-free frozen contract, hash manifest, and check command for the adversarial v1 Optuna/TPE-vs-random promotion study on `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`; the evidence-grade promotion campaign is stopped because three search seeds cannot test the promote gate at p<=0.05, while a separately justified adapter-mode diagnostic handoff has a fixed inconclusive-only outcome:
+Issue #5303 step 2 frozen TPE-versus-random diagnostic preregistration (proposal/preflight only): the side-effect-free three-seed contract, hash manifest, and check command for `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`. The parent issue's 2026-07-28 domain ruling supersedes this design for promotion with a new six-seed preregistration; this historical packet remains an inconclusive-only diagnostic handoff and cannot authorize the #6145 campaign:
 [README.md](evidence/issue_5303_search_promotion_preregistration/README.md).
 Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
 upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the

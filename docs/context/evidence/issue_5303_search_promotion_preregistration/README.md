@@ -33,6 +33,15 @@ claim is made or implied.
 Parent: https://github.com/ll7/robot_sf_ll7/issues/5303 (step 2 of 6).
 This step is blocked by https://github.com/ll7/robot_sf_ll7/issues/6139, which is merged.
 
+## Supersession boundary
+
+The parent issue's 2026-07-28 domain ruling approved a new outcome-free design with
+**six independent search seeds per method** and explicitly superseded this three-seed
+design for any promotion-capable study. This frozen packet remains useful only as a
+historical, executable diagnostic/preflight handoff. It is **not** the approved six-seed
+preregistration and cannot authorize the #6145 campaign, a `promote` decision, or
+downstream transfer work.
+
 ## The claim under test (frozen, falsifiable)
 
 > Under a frozen, family-disjoint design and matched candidate (64 per search seed per

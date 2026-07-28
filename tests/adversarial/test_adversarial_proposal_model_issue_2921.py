@@ -79,6 +79,11 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["ok"] is True
     assert verdict["checks"]["fit_count"] == 6
     assert verdict["checks"]["model_entry_count"] == 6
+    assert verdict["checks"]["null_tests"] == {
+        "alpha_two_sided": 0.05,
+        "null_test_permutations": 1000,
+        "null_test_seed": 42,
+    }
     assert verdict["checks"]["fit_entry_ids_sha256_matches_contract"] is True
     assert verdict["checks"]["fit_entry_ids_match_contract"] is True
     assert verdict["checks"]["excluded_from_nominal_fit_count"] == 6
@@ -968,6 +973,13 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
     frozen_contract = provenance["frozen_contract"]
     assert frozen_contract["fit_entry_count"] == 6
     assert frozen_contract["candidate_pool_seed"] == 42
+    assert frozen_contract["null_tests"]["primary"] == {
+        "name": "fisher_exact_two_sided",
+        "alpha": 0.05,
+    }
+    assert (
+        frozen_contract["null_tests"]["diagnostic_permutation_procedures"]["n_permutations"] == 1000
+    )
     assert (
         frozen_contract["fit_entry_ids_sha256"]
         == load_issue_3275_contract(_CONTRACT)["fit"]["entry_ids_sha256"]
@@ -1045,6 +1057,9 @@ def test_contract_runner_binds_pool_index_and_record_hash_from_external_manifest
     evaluation = valid_report["independent_outcome_evaluation"]
     assert evaluation["status"] == "complete"
     assert evaluation["independent_outcomes_available"] is True
+    assert evaluation["null_tests"]["shuffled_outcome_label_permutation"]["seed"] == 42
+    assert evaluation["null_tests"]["ranking_permutation"]["seed"] == 42
+    assert evaluation["null_tests"]["ranking_permutation"]["selection_size"] == 12
     assert evaluation["candidate_manifest_binding"] == {
         "required": True,
         "available": True,
@@ -1182,6 +1197,28 @@ def test_contract_runner_rejects_a_non_frozen_candidate_pool_seed(
             _CONTRACT.as_posix(),
             "--seed",
             "43",
+            "--output",
+            (tmp_path / "report.json").as_posix(),
+        ],
+    )
+
+    assert script_main() == 2
+
+
+def test_contract_runner_rejects_a_non_frozen_permutation_count(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A contract run cannot post-hoc change its permutation procedure."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--null-test-permutations",
+            "99",
             "--output",
             (tmp_path / "report.json").as_posix(),
         ],

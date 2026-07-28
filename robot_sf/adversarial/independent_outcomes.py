@@ -39,6 +39,7 @@ from robot_sf.adversarial.disjoint_evaluation import (
     classify_issue_3275_decision,
     fisher_exact_two_sided_table,
     newcombe_wilson_difference_interval,
+    ranking_permutation_test,
     shuffled_outcome_null_test,
 )
 
@@ -818,6 +819,15 @@ def _summarize_admitted_rows(  # noqa: PLR0913
         n_permutations=n_permutations,
         seed=seed,
     )
+    ranking_null = ranking_permutation_test(
+        [
+            *[float(o) for o in proposal["outcomes"]],
+            *[float(o) for o in random_arm["outcomes"]],
+        ],
+        selection_size=proposal["count"],
+        n_permutations=n_permutations,
+        seed=seed,
+    )
     decision = classify_issue_3275_decision(
         proposal_yield=proposal_yield,
         random_yield=random_yield,
@@ -873,6 +883,13 @@ def _summarize_admitted_rows(  # noqa: PLR0913
             },
             "shuffled_outcome_label_permutation": {
                 **shuffled_null,
+                "seed": seed,
+                "required_for_held_out_claim": True,
+                "primary": False,
+            },
+            "ranking_permutation": {
+                **ranking_null,
+                "seed": seed,
                 "required_for_held_out_claim": True,
                 "primary": False,
             },

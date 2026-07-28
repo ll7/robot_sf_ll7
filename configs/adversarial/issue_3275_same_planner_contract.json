@@ -169,6 +169,25 @@
     "future_run_label_when_underpowered": "diagnostic_or_inconclusive",
     "decision_consequence": "When independent outcomes are available but the result is underpowered for the minimally important effect, or the null is not rejected, the decision is inconclusive (never continue/stop on an underpowered signal)."
   },
+  "null_tests": {
+    "primary": {
+      "name": "fisher_exact_two_sided",
+      "alpha": 0.05
+    },
+    "diagnostic_permutation_procedures": {
+      "n_permutations": 1000,
+      "seed": 42,
+      "shuffled_outcome_label_permutation": {
+        "alternative": "two_sided",
+        "statistic": "proposal_minus_random_candidate_level_failure_yield"
+      },
+      "ranking_permutation": {
+        "alternative": "greater",
+        "selection_size": "candidate_budget_per_arm",
+        "statistic": "proposal_arm_mean_candidate_level_failure_yield"
+      }
+    }
+  },
   "arm_overlap_policy": {
     "name": "disjoint_by_candidate",
     "deterministic": true,

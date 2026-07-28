@@ -787,6 +787,17 @@ def test_complete_packet_decision_follows_execution() -> None:
     assert lower <= result["comparison"]["yield_improvement"] <= upper
     assert result["comparison"]["null_rejected"] is True
     assert result["comparison"]["powered"] is False
+    shuffled_null = result["null_tests"]["shuffled_outcome_label_permutation"]
+    assert shuffled_null["n_permutations"] == 1000
+    assert shuffled_null["seed"] == 0
+    assert shuffled_null["test"] == "shuffled_outcome_label_permutation"
+    assert shuffled_null["required_for_held_out_claim"] is True
+    ranking_null = result["null_tests"]["ranking_permutation"]
+    assert ranking_null["n_permutations"] == 1000
+    assert ranking_null["seed"] == 0
+    assert ranking_null["selection_size"] == 4
+    assert ranking_null["test"] == "ranking_permutation"
+    assert ranking_null["required_for_held_out_claim"] is True
     assert result["decision"]["status"] == "inconclusive"
     assert result["decision"]["reason"] == "underpowered_for_minimally_important_effect"
 

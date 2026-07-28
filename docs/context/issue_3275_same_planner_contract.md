@@ -127,6 +127,14 @@ Uncertainty is reported as a 95% Newcombe unpooled Wilson score interval for
 the proposal-minus-random candidate-level yield difference. It quantifies the
 estimate; the frozen two-sided Fisher exact test remains the decision test.
 
+Null-test procedures are frozen in the contract config. The primary test is
+two-sided Fisher exact at alpha 0.05. Two diagnostic permutation checks each
+use 1,000 permutations and seed 42: a two-sided shuffled outcome-label test on
+the proposal-minus-random candidate-level yield difference, and a one-sided
+ranking-permutation test asking whether the proposal arm's top 12 candidates
+concentrate higher candidate-level failure yield than the compared random arm.
+The CLI rejects a different permutation count on a `--contract` run.
+
 Power/sensitivity (Fisher exact two-sided, alpha = 0.05): the boundary minimum
 detectable yield difference is ~0.50 at k = 10/arm, ~0.417 at k = 12/arm, and
 ~0.25 at k = 20/arm. After excluding the six `stress_only` fit anchors, the

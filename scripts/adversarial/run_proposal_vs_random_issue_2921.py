@@ -319,6 +319,7 @@ def build_archive_evaluation_provenance(
             "candidate_budget_per_arm": frozen_contract["budget"]["candidate_budget_per_arm"],
             "candidate_pool_size": frozen_contract["budget"]["candidate_pool_size"],
             "candidate_pool_seed": frozen_contract["budget"]["candidate_pool_seed"],
+            "null_tests": frozen_contract["null_tests"],
             "model": model_provenance or {},
             "search_space": search_space_provenance or {},
         }
@@ -534,6 +535,15 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
     )
 
     contract = load_issue_3275_contract(contract_path)
+    try:
+        null_test_params = _contract_null_test_params(contract)
+    except ValueError as exc:
+        return 1, {
+            "ok": False,
+            "checks": {},
+            "failures": [str(exc)],
+            "claim_boundary": contract["claim_boundary"]["label"],
+        }
     root = repo_root if repo_root is not None else Path.cwd()
     source = contract["source_lineage"]
     recertification_path = root / source["corrected_recertification_path"]
@@ -545,6 +555,7 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
     checks: dict[str, Any] = {
         "contract_schema_version": contract["schema_version"],
         "contract_path": str(contract_path),
+        "null_tests": null_test_params,
         "recertification_sha256_expected": source["corrected_recertification_sha256"],
         "recertification_sha256_observed": recert.get("recertification_sha256"),
         "recertification_artifact_sha256_expected": source.get(
@@ -856,6 +867,54 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
     }, "ok"
 
 
+def _contract_null_test_params(contract: dict[str, Any]) -> dict[str, Any]:
+    """Load and validate the frozen #3275 null-test procedures."""
+    null_tests = contract.get("null_tests")
+    if not isinstance(null_tests, dict):
+        raise ValueError("frozen contract null_tests must be an object")
+    primary = null_tests.get("primary")
+    if not isinstance(primary, dict) or primary.get("name") != "fisher_exact_two_sided":
+        raise ValueError("frozen contract primary null test must be fisher_exact_two_sided")
+    alpha = primary.get("alpha")
+    if not isinstance(alpha, (int, float)) or isinstance(alpha, bool) or not 0.0 < alpha < 1.0:
+        raise ValueError("frozen contract primary null-test alpha must be in (0, 1)")
+    if alpha != contract["power_sensitivity"]["alpha_two_sided"]:
+        raise ValueError("frozen null-test alpha does not match power-sensitivity alpha")
+
+    diagnostic = null_tests.get("diagnostic_permutation_procedures")
+    if not isinstance(diagnostic, dict):
+        raise ValueError("frozen contract diagnostic permutation procedures must be an object")
+    n_permutations = diagnostic.get("n_permutations")
+    seed = diagnostic.get("seed")
+    if (
+        not isinstance(n_permutations, int)
+        or isinstance(n_permutations, bool)
+        or n_permutations < 1
+    ):
+        raise ValueError("frozen diagnostic n_permutations must be a positive integer")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise ValueError("frozen diagnostic permutation seed must be an integer")
+
+    shuffled = diagnostic.get("shuffled_outcome_label_permutation")
+    if not isinstance(shuffled, dict) or shuffled != {
+        "alternative": "two_sided",
+        "statistic": "proposal_minus_random_candidate_level_failure_yield",
+    }:
+        raise ValueError("frozen shuffled-outcome permutation procedure is unsupported")
+    ranking = diagnostic.get("ranking_permutation")
+    if not isinstance(ranking, dict) or ranking != {
+        "alternative": "greater",
+        "selection_size": "candidate_budget_per_arm",
+        "statistic": "proposal_arm_mean_candidate_level_failure_yield",
+    }:
+        raise ValueError("frozen ranking-permutation procedure is unsupported")
+    return {
+        "alpha_two_sided": float(alpha),
+        "null_test_permutations": n_permutations,
+        "null_test_seed": seed,
+    }
+
+
 def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
     """Read optional frozen planner/family/minimally-important from a contract."""
     if args.contract is None:
@@ -870,10 +929,14 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
             "candidate_pool_size": max(args.budget * 5, 50),
             "candidate_pool_seed": args.seed,
             "expected_execution_commit": None,
+            "alpha_two_sided": 0.05,
+            "null_test_permutations": args.null_test_permutations,
+            "null_test_seed": args.seed,
         }
     from robot_sf.adversarial.proposal_model import load_issue_3275_contract
 
     contract = load_issue_3275_contract(args.contract)
+    null_test_params = _contract_null_test_params(contract)
     return {
         "expected_target_planner_id": contract["target_planner"]["id"],
         "expected_target_planner_config_sha256": contract["target_planner"]["config_sha256"],
@@ -889,6 +952,7 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
         "candidate_pool_size": contract["budget"]["candidate_pool_size"],
         "candidate_pool_seed": contract["budget"]["candidate_pool_seed"],
         "expected_execution_commit": contract["target_planner"]["execution_commit"],
+        **null_test_params,
     }
 
 
@@ -1136,6 +1200,31 @@ def _contract_configuration_error(reason: str) -> int:
         )
     )
     return 2
+
+
+def _contract_cli_override_error(args: argparse.Namespace, frozen: dict[str, Any]) -> str | None:
+    """Return why a CLI override violates the frozen contract."""
+    contract = frozen["contract"]
+    run_budget = frozen["candidate_budget_per_arm"]
+    candidate_pool_size = frozen["candidate_pool_size"]
+    if contract is not None and args.budget != run_budget:
+        return f"--budget {args.budget} does not match frozen candidate_budget_per_arm {run_budget}"
+    if contract is not None and args.seed != frozen["candidate_pool_seed"]:
+        return (
+            f"--seed {args.seed} does not match frozen candidate_pool_seed "
+            f"{frozen['candidate_pool_seed']}"
+        )
+    if contract is not None and args.null_test_permutations != frozen["null_test_permutations"]:
+        return (
+            f"--null-test-permutations {args.null_test_permutations} does not match "
+            f"frozen diagnostic permutation count {frozen['null_test_permutations']}"
+        )
+    if candidate_pool_size < 2 * run_budget:
+        return (
+            "candidate pool too small for two disjoint frozen arms: "
+            f"pool={candidate_pool_size} budget_per_arm={run_budget}"
+        )
+    return None
 
 
 def _resolve_run_state(
@@ -1394,25 +1483,16 @@ def main() -> int:
         print(json.dumps(verdict, indent=2, sort_keys=True))
         return exit_code
 
-    frozen = _contract_frozen_params(args)
+    try:
+        frozen = _contract_frozen_params(args)
+    except (KeyError, TypeError, ValueError) as exc:
+        return _contract_configuration_error(str(exc))
     contract = frozen["contract"]
     run_budget = frozen["candidate_budget_per_arm"]
     candidate_pool_size = frozen["candidate_pool_size"]
-    if contract is not None and args.budget != run_budget:
-        return _contract_configuration_error(
-            f"--budget {args.budget} does not match frozen candidate_budget_per_arm {run_budget}"
-        )
-    if contract is not None and args.seed != frozen["candidate_pool_seed"]:
-        return _contract_configuration_error(
-            f"--seed {args.seed} does not match frozen candidate_pool_seed "
-            f"{frozen['candidate_pool_seed']}"
-        )
-    if candidate_pool_size < 2 * run_budget:
-        return _contract_configuration_error(
-            "candidate pool is too small for two disjoint frozen arms: "
-            f"pool={candidate_pool_size} budget_per_arm={run_budget}"
-        )
-
+    override_error = _contract_cli_override_error(args, frozen)
+    if override_error is not None:
+        return _contract_configuration_error(override_error)
     from robot_sf.adversarial.independent_outcomes import (
         build_independent_outcome_evaluation,
         load_independent_outcomes,
@@ -1532,8 +1612,9 @@ def main() -> int:
         minimally_important=frozen["minimally_important"],
         admission_spec=_admission_spec_from_binding(frozen, binding_for_admission),
         expected_eval_archive_sha256=provenance.get("eval_archive_sha256"),
-        n_permutations=args.null_test_permutations,
-        seed=args.seed,
+        alpha=frozen["alpha_two_sided"],
+        n_permutations=frozen["null_test_permutations"],
+        seed=frozen["null_test_seed"],
     )
     if frozen_binding_reason is not None and outcome_data is not None:
         independent_evaluation["reason"] = frozen_binding_reason

@@ -94,18 +94,16 @@
    ```python
    # examples/demo_pedestrian.py
    from robot_sf.gym_env.environment_factory import make_pedestrian_env
-   
-   env = make_pedestrian_env(
-       robot_model=robot_model,
-       debug=True
-   )
+
+   env = make_pedestrian_env(robot_model=robot_model, debug=True)
    ```
 
 2. **Update Test Files**:
    ```python
    # tests/test_env.py
    from robot_sf.gym_env.environment_factory import make_robot_env
-   
+
+
    def test_can_create_env():
        env = make_robot_env()
        assert env is not None
@@ -121,12 +119,12 @@
 2. **Add Deprecation Warnings**:
    ```python
    import warnings
-   
+
+
    class EnvSettings(RobotSimulationConfig):
        def __post_init__(self):
            warnings.warn(
-               "EnvSettings is deprecated. Use RobotSimulationConfig instead.",
-               DeprecationWarning
+               "EnvSettings is deprecated. Use RobotSimulationConfig instead.", DeprecationWarning
            )
            super().__post_init__()
    ```

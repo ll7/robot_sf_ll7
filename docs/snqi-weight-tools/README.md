@@ -384,8 +384,9 @@ Validate programmatically using `jsonschema`:
 ```python
 import json, jsonschema
 from pathlib import Path
-schema = json.loads(Path('docs/snqi-weight-tools/snqi_output.schema.json').read_text())
-data = json.loads(Path('optimized_weights.json').read_text())
+
+schema = json.loads(Path("docs/snqi-weight-tools/snqi_output.schema.json").read_text())
+data = json.loads(Path("optimized_weights.json").read_text())
 jsonschema.Draft202012Validator(schema).validate(data)
 ```
 

@@ -3,10 +3,10 @@
 Diagnostic-only validation of the merged #6170 prototype (`robot_sf/planner/topology_parallel_nmpc.py`) for parent #5310. The prototype was executed **unchanged**; this validator only imports/calls it and reads back diagnostics.
 ## Verdict
 **`label_only_or_objective_drift`** — gate 2 (material distinctness) or gate 3 (objective invariance) failed.
-> ⚠️ **REAL-TIME BOUNDARY (prominent, independent of verdict):** the prototype's nominal `control_period_s` is **2.0 s (~20x the 100 ms real-time gate)**, so it is **offline-only and explicitly blocks downstream real-time use**. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. On this fixture, worst per-hypothesis solver p95 = 99.3 ms (under 100 ms, descriptive only; not a real-time qualification claim).
+> ⚠️ **REAL-TIME BOUNDARY (prominent, independent of verdict):** the prototype's nominal `control_period_s` is **2.0 s (~20x the 100 ms real-time gate)**, so it is **offline-only and explicitly blocks downstream real-time use**. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. On this fixture, worst per-hypothesis solver p95 = 97.5 ms (under 100 ms, descriptive only; not a real-time qualification claim).
 ## Provenance
-- Validated commit (`git rev-parse HEAD`): `7d12a6dfdee01b5e0bcd45dfaf1ea393d8d1866b`
-- Branch: `orchestrator/ll7-lease-6424-ee7cde15bd9f`
+- Validated commit (`git rev-parse HEAD`): `4468fa489b06932b56f34ba44a5287424b467b61`
+- Branch: `orchestrator/ll7-lease-6424-c87edc98627c`
 - Source PR: #6170 (merge commit `894bdfe71e9c2686ebe63e165f15c739d12f721c`)
 - Config: `configs/algos/issue_5310_topology_parallel_nmpc.yaml`
 ## Exact commands
@@ -35,12 +35,12 @@ uv run ruff check scripts/validation/ && uv run ruff format --check scripts/vali
 ## Per-hypothesis solve latency (descriptive)
 | hypothesis | p50 (ms) | p95 (ms) | max (ms) | n |
 | --- | --- | --- | --- | --- |
-| pass_left | 42.35 | 43.6 | 44.24 | 30 |
-| yield_straight | 13.4 | 13.85 | 13.98 | 30 |
-| pass_right | 86.6 | 99.25 | 102.6 | 30 |
+| pass_left | 42.35 | 55.81 | 56.29 | 30 |
+| yield_straight | 13.35 | 72.83 | 101.6 | 30 |
+| pass_right | 86.24 | 97.5 | 98.03 | 30 |
 
-End-to-end `plan()` wall-clock (measurement-safe deadline): p50=142.60676596313715 ms, p95=146.34122655261308 ms, max=158.04011817090213 ms (n=30).
-End-to-end `plan()` wall-clock (real 2.0s deadline): p50=141.78714901208878 ms, p95=142.47453551506624 ms, max=142.48515106737614 ms; deadline fired 0 of 8 calls.
+End-to-end `plan()` wall-clock (measurement-safe deadline): p50=142.50610815361142 ms, p95=145.56444520130754 ms, max=145.84596711210907 ms (n=30).
+End-to-end `plan()` wall-clock (real 2.0s deadline): p50=143.07345740962774 ms, p95=146.39219106175005 ms, max=147.21834403462708 ms; deadline fired 0 of 8 calls.
 
 _Descriptive only on an unpinned CPU; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged._
 ## Gate-by-gate evidence
@@ -685,49 +685,49 @@ builder_ok=True, guard_reject_missing=True, guard_reject_false=True, registry_ok
 }
 ```
 ### gate_7_latency — PASS
-per-hypothesis solver p95 (ms): pass_left=43.6, yield_straight=13.8, pass_right=99.3; worst p95=99.3 ms; exceeds_100ms=False.
+per-hypothesis solver p95 (ms): pass_left=55.8, yield_straight=72.8, pass_right=97.5; worst p95=97.5 ms; exceeds_100ms=False.
 ```json
 {
   "per_hypothesis_solver_runtime_ms": {
     "pass_left": {
-      "p50_ms": 42.34772454947233,
-      "p95_ms": 43.59577060677111,
-      "max_ms": 44.2372418474406,
+      "p50_ms": 42.34829964116216,
+      "p95_ms": 55.80558751244098,
+      "max_ms": 56.28745001740754,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 13.400418916717172,
-      "p95_ms": 13.84830818278715,
-      "max_ms": 13.977220980450511,
+      "p50_ms": 13.354070950299501,
+      "p95_ms": 72.83020900795219,
+      "max_ms": 101.64746618829668,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 86.60488144960254,
-      "p95_ms": 99.25162862055004,
-      "max_ms": 102.55289496853948,
+      "p50_ms": 86.23784792143852,
+      "p95_ms": 97.49898484442383,
+      "max_ms": 98.02801790647209,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 142.60676596313715,
-    "p95_ms": 146.34122655261308,
-    "max_ms": 158.04011817090213,
+    "p50_ms": 142.50610815361142,
+    "p95_ms": 145.56444520130754,
+    "max_ms": 145.84596711210907,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 141.78714901208878,
-    "p95_ms": 142.47453551506624,
-    "max_ms": 142.48515106737614,
+    "p50_ms": 143.07345740962774,
+    "p95_ms": 146.39219106175005,
+    "max_ms": 147.21834403462708,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 99.25162862055004,
+  "worst_hypothesis_p95_ms": 97.49898484442383,
   "latency_exceeds_100ms": false,
   "measurement_note": "Descriptive only on an unpinned CPU; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
 }
 ```
 ### gate_8_pr_audit — PASS
-PR #6170 @ 894bdfe71e9c: 11 files, +1238/-9 (net +1229); surfaces_match=True, totals_consistent=True.
+PR #6170 @ 894bdfe71e9c: 11 files, +1238/-9 (net +1229); surfaces_match=True, totals_consistent=True, source_audit_matches_declared=True, current_pr_preserves_prototype=True.
 ```json
 {
   "source_pr": 6170,
@@ -794,8 +794,68 @@ PR #6170 @ 894bdfe71e9c: 11 files, +1238/-9 (net +1229); surfaces_match=True, to
   "net_lines": 1229,
   "audited_paths_match_implementation_surfaces": true,
   "totals_consistent": true,
-  "prototype_present_at_head": true,
-  "head_post_merge_note": "At current HEAD the prototype module received only docstring additions (PR #6282/#6299) after the #6170 merge; the nmpc_social seam received a docstring-only +5 change. An unrelated algorithm_metadata.py +81 hunk (issue #6190 predictive-foresight fallback provenance) is not part of the topology-parallel NMPC mechanism. The validated mechanism is behaviorally identical to the audited merge commit."
+  "source_audit": [
+    {
+      "path": "CHANGELOG.md",
+      "additions": 15,
+      "deletions": 0
+    },
+    {
+      "path": "configs/algos/issue_5310_topology_parallel_nmpc.yaml",
+      "additions": 41,
+      "deletions": 0
+    },
+    {
+      "path": "docs/context/issue_5310_state.yaml",
+      "additions": 26,
+      "deletions": 0
+    },
+    {
+      "path": "robot_sf/benchmark/algorithm_metadata.py",
+      "additions": 15,
+      "deletions": 0
+    },
+    {
+      "path": "robot_sf/benchmark/algorithm_readiness.py",
+      "additions": 11,
+      "deletions": 0
+    },
+    {
+      "path": "robot_sf/benchmark/policy_builders.py",
+      "additions": 35,
+      "deletions": 0
+    },
+    {
+      "path": "robot_sf/planner/__init__.py",
+      "additions": 1,
+      "deletions": 0
+    },
+    {
+      "path": "robot_sf/planner/nmpc_social.py",
+      "additions": 183,
+      "deletions": 9
+    },
+    {
+      "path": "robot_sf/planner/topology_parallel_nmpc.py",
+      "additions": 447,
+      "deletions": 0
+    },
+    {
+      "path": "tests/planner/test_nmpc_social.py",
+      "additions": 50,
+      "deletions": 0
+    },
+    {
+      "path": "tests/planner/test_topology_parallel_nmpc.py",
+      "additions": 414,
+      "deletions": 0
+    }
+  ],
+  "source_audit_matches_declared": true,
+  "source_audit_parse_error": null,
+  "current_pr_protected_path_deltas": [],
+  "current_pr_preserves_prototype": true,
+  "head_post_merge_note": "The source merge's first-parent diff matches the declared implementation packet, and this PR does not change the protected prototype/config/registry/test surfaces relative to origin/main."
 }
 ```
 ## PR #6170 changed-file / net-line audit
@@ -815,7 +875,7 @@ Merge commit `894bdfe71e9c2686ebe63e165f15c739d12f721c`.
 | tests/planner/test_topology_parallel_nmpc.py | +414 | -0 | +414 |
 | **total** | **+1238** | **-9** | **+1229** |
 
-At current HEAD the prototype module received only docstring additions (PR #6282/#6299) after the #6170 merge; the nmpc_social seam received a docstring-only +5 change. An unrelated algorithm_metadata.py +81 hunk (issue #6190 predictive-foresight fallback provenance) is not part of the topology-parallel NMPC mechanism. The validated mechanism is behaviorally identical to the audited merge commit.
+The source merge's first-parent diff matches the declared implementation packet, and this PR does not change the protected prototype/config/registry/test surfaces relative to origin/main.
 
 ## Claim boundary
 No real-time-suitability, safety, benchmark-superiority, default-planner-promotion, or #5423/STKP-eligibility claim. Diagnostic-only offline mechanism evidence.
@@ -829,8 +889,8 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   "parent_issue": 5310,
   "source_pr": 6170,
   "source_merge_commit": "894bdfe71e9c2686ebe63e165f15c739d12f721c",
-  "validated_commit": "7d12a6dfdee01b5e0bcd45dfaf1ea393d8d1866b",
-  "branch": "orchestrator/ll7-lease-6424-ee7cde15bd9f",
+  "validated_commit": "4468fa489b06932b56f34ba44a5287424b467b61",
+  "branch": "orchestrator/ll7-lease-6424-c87edc98627c",
   "verdict": "label_only_or_objective_drift",
   "verdict_rationale": "gate 2 (material distinctness) or gate 3 (objective invariance) failed.",
   "config": "configs/algos/issue_5310_topology_parallel_nmpc.yaml",
@@ -852,38 +912,38 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   },
   "per_hypothesis_solver_latency_ms": {
     "pass_left": {
-      "p50_ms": 42.34772454947233,
-      "p95_ms": 43.59577060677111,
-      "max_ms": 44.2372418474406,
+      "p50_ms": 42.34829964116216,
+      "p95_ms": 55.80558751244098,
+      "max_ms": 56.28745001740754,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 13.400418916717172,
-      "p95_ms": 13.84830818278715,
-      "max_ms": 13.977220980450511,
+      "p50_ms": 13.354070950299501,
+      "p95_ms": 72.83020900795219,
+      "max_ms": 101.64746618829668,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 86.60488144960254,
-      "p95_ms": 99.25162862055004,
-      "max_ms": 102.55289496853948,
+      "p50_ms": 86.23784792143852,
+      "p95_ms": 97.49898484442383,
+      "max_ms": 98.02801790647209,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 142.60676596313715,
-    "p95_ms": 146.34122655261308,
-    "max_ms": 158.04011817090213,
+    "p50_ms": 142.50610815361142,
+    "p95_ms": 145.56444520130754,
+    "max_ms": 145.84596711210907,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 141.78714901208878,
-    "p95_ms": 142.47453551506624,
-    "max_ms": 142.48515106737614,
+    "p50_ms": 143.07345740962774,
+    "p95_ms": 146.39219106175005,
+    "max_ms": 147.21834403462708,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 99.25162862055004,
+  "worst_hypothesis_p95_ms": 97.49898484442383,
   "latency_exceeds_100ms": false,
   "control_period_s": 2.0,
   "real_time_blocking_notice": "NOT REAL-TIME QUALIFIED (prominent, independent of the per-solve number): the prototype's nominal control_period_s is 2.0 s, which is ~20x the 100 ms real-time gate, so the component is offline-only and explicitly blocks downstream real-time use. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. Per-hypothesis solver p95 was under 100 ms on this fixture, but this is descriptive only and does NOT establish real-time suitability.",
@@ -1538,42 +1598,42 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
     {
       "name": "gate_7_latency",
       "passed": true,
-      "detail": "per-hypothesis solver p95 (ms): pass_left=43.6, yield_straight=13.8, pass_right=99.3; worst p95=99.3 ms; exceeds_100ms=False.",
+      "detail": "per-hypothesis solver p95 (ms): pass_left=55.8, yield_straight=72.8, pass_right=97.5; worst p95=97.5 ms; exceeds_100ms=False.",
       "evidence": {
         "per_hypothesis_solver_runtime_ms": {
           "pass_left": {
-            "p50_ms": 42.34772454947233,
-            "p95_ms": 43.59577060677111,
-            "max_ms": 44.2372418474406,
+            "p50_ms": 42.34829964116216,
+            "p95_ms": 55.80558751244098,
+            "max_ms": 56.28745001740754,
             "n": 30
           },
           "yield_straight": {
-            "p50_ms": 13.400418916717172,
-            "p95_ms": 13.84830818278715,
-            "max_ms": 13.977220980450511,
+            "p50_ms": 13.354070950299501,
+            "p95_ms": 72.83020900795219,
+            "max_ms": 101.64746618829668,
             "n": 30
           },
           "pass_right": {
-            "p50_ms": 86.60488144960254,
-            "p95_ms": 99.25162862055004,
-            "max_ms": 102.55289496853948,
+            "p50_ms": 86.23784792143852,
+            "p95_ms": 97.49898484442383,
+            "max_ms": 98.02801790647209,
             "n": 30
           }
         },
         "plan_wall_clock_ms_measurement_safe_deadline": {
-          "p50_ms": 142.60676596313715,
-          "p95_ms": 146.34122655261308,
-          "max_ms": 158.04011817090213,
+          "p50_ms": 142.50610815361142,
+          "p95_ms": 145.56444520130754,
+          "max_ms": 145.84596711210907,
           "n": 30
         },
         "plan_wall_clock_ms_real_2s_deadline": {
-          "p50_ms": 141.78714901208878,
-          "p95_ms": 142.47453551506624,
-          "max_ms": 142.48515106737614,
+          "p50_ms": 143.07345740962774,
+          "p95_ms": 146.39219106175005,
+          "max_ms": 147.21834403462708,
           "n": 8
         },
         "real_deadline_fires_out_of_8": 0,
-        "worst_hypothesis_p95_ms": 99.25162862055004,
+        "worst_hypothesis_p95_ms": 97.49898484442383,
         "latency_exceeds_100ms": false,
         "measurement_note": "Descriptive only on an unpinned CPU; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
       }
@@ -1581,7 +1641,7 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
     {
       "name": "gate_8_pr_audit",
       "passed": true,
-      "detail": "PR #6170 @ 894bdfe71e9c: 11 files, +1238/-9 (net +1229); surfaces_match=True, totals_consistent=True.",
+      "detail": "PR #6170 @ 894bdfe71e9c: 11 files, +1238/-9 (net +1229); surfaces_match=True, totals_consistent=True, source_audit_matches_declared=True, current_pr_preserves_prototype=True.",
       "evidence": {
         "source_pr": 6170,
         "merge_commit": "894bdfe71e9c2686ebe63e165f15c739d12f721c",
@@ -1647,8 +1707,68 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
         "net_lines": 1229,
         "audited_paths_match_implementation_surfaces": true,
         "totals_consistent": true,
-        "prototype_present_at_head": true,
-        "head_post_merge_note": "At current HEAD the prototype module received only docstring additions (PR #6282/#6299) after the #6170 merge; the nmpc_social seam received a docstring-only +5 change. An unrelated algorithm_metadata.py +81 hunk (issue #6190 predictive-foresight fallback provenance) is not part of the topology-parallel NMPC mechanism. The validated mechanism is behaviorally identical to the audited merge commit."
+        "source_audit": [
+          {
+            "path": "CHANGELOG.md",
+            "additions": 15,
+            "deletions": 0
+          },
+          {
+            "path": "configs/algos/issue_5310_topology_parallel_nmpc.yaml",
+            "additions": 41,
+            "deletions": 0
+          },
+          {
+            "path": "docs/context/issue_5310_state.yaml",
+            "additions": 26,
+            "deletions": 0
+          },
+          {
+            "path": "robot_sf/benchmark/algorithm_metadata.py",
+            "additions": 15,
+            "deletions": 0
+          },
+          {
+            "path": "robot_sf/benchmark/algorithm_readiness.py",
+            "additions": 11,
+            "deletions": 0
+          },
+          {
+            "path": "robot_sf/benchmark/policy_builders.py",
+            "additions": 35,
+            "deletions": 0
+          },
+          {
+            "path": "robot_sf/planner/__init__.py",
+            "additions": 1,
+            "deletions": 0
+          },
+          {
+            "path": "robot_sf/planner/nmpc_social.py",
+            "additions": 183,
+            "deletions": 9
+          },
+          {
+            "path": "robot_sf/planner/topology_parallel_nmpc.py",
+            "additions": 447,
+            "deletions": 0
+          },
+          {
+            "path": "tests/planner/test_nmpc_social.py",
+            "additions": 50,
+            "deletions": 0
+          },
+          {
+            "path": "tests/planner/test_topology_parallel_nmpc.py",
+            "additions": 414,
+            "deletions": 0
+          }
+        ],
+        "source_audit_matches_declared": true,
+        "source_audit_parse_error": null,
+        "current_pr_protected_path_deltas": [],
+        "current_pr_preserves_prototype": true,
+        "head_post_merge_note": "The source merge's first-parent diff matches the declared implementation packet, and this PR does not change the protected prototype/config/registry/test surfaces relative to origin/main."
       }
     }
   ]

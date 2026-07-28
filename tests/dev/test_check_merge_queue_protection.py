@@ -241,15 +241,17 @@ def test_evaluate_protection_merge_group_runs_error_is_not_verifiable() -> None:
     assert "merge_group runs query failed" in audit.fetch_errors
 
 
-def test_evaluate_protection_records_partial_fetch_errors() -> None:
-    """Partial fetch errors are surfaced for diagnostics without changing the verdict."""
+def test_evaluate_protection_partial_ruleset_fetch_error_fails_closed() -> None:
+    """An incomplete ruleset inventory cannot establish activation."""
     audit = evaluate_protection(
         rulesets=[_configured_ruleset()],
         strategy=("ALLGREEN", None),
         merge_group_runs=1,
+        ruleset_fetch_error="ruleset 99 detail fetch failed",
         fetch_errors=["ruleset 99 detail fetch failed"],
     )
-    assert audit.passed is True
+    assert audit.passed is False
+    assert _dimension(audit, DIM_BYPASS).status == "not_verifiable"
     assert "ruleset 99 detail fetch failed" in audit.fetch_errors
 
 

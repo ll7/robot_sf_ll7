@@ -460,9 +460,10 @@ def fetch_active_branch_rulesets(
 
     Returns ``(rulesets, list_error, partial_errors)``. ``list_error`` is set
     when the ruleset listing itself failed (drives fail-closed dimensions).
-    ``partial_errors`` records individual ruleset-detail fetch failures; those
-    rulesets are skipped, which is fail-safe (fewer rules read cannot weaken a
-    dimension).
+    ``partial_errors`` records individual ruleset-detail fetch failures. The
+    caller must treat a non-empty list as an incomplete ruleset inventory and
+    fail closed: an unread active ruleset could carry a bypass actor or a
+    required protection rule that changes the activation verdict.
     """
     list_result = _gh(["api", f"repos/{repo}/rulesets"])
     if list_result.returncode != 0:
@@ -945,12 +946,17 @@ def main(argv: list[str] | None = None) -> int:
     else:
         strategy = (None, None)
 
+    ruleset_inventory_error = list_error
+    if partial_errors:
+        partial_error = "; ".join(partial_errors)
+        ruleset_inventory_error = f"{list_error}; {partial_error}" if list_error else partial_error
+
     audit = evaluate_protection(
         rulesets=rulesets,
         strategy=strategy,
         merge_group_runs=runs_total,
         merge_group_runs_error=runs_error,
-        ruleset_fetch_error=list_error,
+        ruleset_fetch_error=ruleset_inventory_error,
         fetch_errors=partial_errors,
     )
     audit = replace(audit, repo=repo, default_branch=branch, pr=pr_number)

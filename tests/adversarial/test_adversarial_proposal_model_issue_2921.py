@@ -802,6 +802,9 @@ def _contract_v2_outcome_packet(
                 row["candidate_pool_seed"] = candidate_pool_seed
                 row["candidate_pool_index"] = int(manifest_id.removeprefix("pool_"))
                 row["scenario_seed"] = scenario_seeds_by_id[manifest_id]
+                manifest_hashes = report.get("arm_manifest_sha256_by_id")
+                if manifest_hashes is not None:
+                    row["candidate_manifest_sha256"] = manifest_hashes[manifest_id]
                 rows.append(row)
     return {
         "schema_version": "adversarial_independent_outcomes.v2",
@@ -951,6 +954,13 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
     assert set(report["arm_manifest_ids_by_arm"]["proposal"]).isdisjoint(
         report["arm_manifest_ids_by_arm"]["random"]
     )
+    assert set(report["arm_manifest_sha256_by_id"]) == set(
+        report["arm_manifest_ids_by_arm"]["proposal"]
+    ) | set(report["arm_manifest_ids_by_arm"]["random"])
+    assert all(
+        len(manifest_sha256) == 64
+        for manifest_sha256 in report["arm_manifest_sha256_by_id"].values()
+    )
     provenance = report["archive_evaluation_provenance"]
     assert provenance["split_policy"] == "frozen_same_planner_held_out_family"
     assert provenance["fit_size"] == 6
@@ -1047,6 +1057,18 @@ def test_contract_runner_binds_pool_index_and_record_hash_from_external_manifest
         "execution_seed_lineage_required": True,
         "reason": "ok",
     }
+
+    manifest_hash_drift = json.loads(json.dumps(binding))
+    manifest_id = next(iter(manifest_hash_drift["candidate_manifest_sha256_by_id"]))
+    manifest_hash_drift["candidate_manifest_sha256_by_id"][manifest_id] = hashlib.sha256(
+        b"unrelated-manifest"
+    ).hexdigest()
+    binding_path.write_text(json.dumps(manifest_hash_drift), encoding="utf-8")
+    manifest_drift_report = run_with_outcomes(tmp_path / "manifest_drift_report.json")
+    assert manifest_drift_report["state"] == "blocked"
+    assert manifest_drift_report["independent_outcome_evaluation"]["status"] == "blocked"
+    assert "candidate_manifest_sha256 does not match" in manifest_drift_report["reason"]
+    binding_path.write_text(json.dumps(binding), encoding="utf-8")
 
     pool_index_drift = json.loads(json.dumps(packet))
     pool_index_drift["rows"][0]["candidate_pool_index"] = 99_999

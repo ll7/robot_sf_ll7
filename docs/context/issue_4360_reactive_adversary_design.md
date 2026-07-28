@@ -39,6 +39,10 @@ default and changes nothing about existing pedestrian models.
     `enforce_inter_agent_separation`.
 - `robot_sf/sim/sim_config.py`: `SimulationSettings.residual_adversary` field,
   normalized and validated in `__post_init__`.
+- `robot_sf/training/scenario_loader.py`: a scenario's
+  `simulation_config.residual_adversary` mapping is validated and applied to
+  `SimulationSettings`, so the opt-in parameters can be stored with a
+  reproducible scenario rather than only constructed in Python.
 - `robot_sf/sim/simulator.py`: lazy `_build_residual_adversary` +
   `_apply_residual_adversary`; the residual is added to the already-computed
   pedestrian forces in both `step_once` paths so the base law is preserved.
@@ -94,7 +98,9 @@ The test constructs the repository's `MapDefinition`, enables
 `init_simulators` path for 20 fixed-timestep steps. It proves only runtime
 wiring and finite-state behavior for the deterministic scripted policy; it is
 smoke evidence, not a benchmark, safety, or stress-strength result. The YAML
-example is a documented parameter template, not a runner input format.
+example is a documented parameter template: copy its `residual_adversary`
+mapping beneath a scenario's `simulation_config` key. The scenario loader
+validates that nested mapping before passing it to the runtime config.
 
 ## Claim boundary (what this slice does NOT do)
 

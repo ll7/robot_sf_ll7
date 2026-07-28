@@ -431,6 +431,7 @@ Exclude lines from coverage measurement:
 def debug_only_function():  # pragma: no cover
     print("This is only for debugging")
 
+
 # Option 2: Block exclusion
 if TYPE_CHECKING:  # Automatically excluded
     from typing import SomeType

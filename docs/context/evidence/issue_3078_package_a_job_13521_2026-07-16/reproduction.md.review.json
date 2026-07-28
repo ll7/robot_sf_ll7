@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/reproduction.md",
-  "artifact_sha256": "dd41746468d2096379f8296a7d99c394e88ea2718dac7d2a5e639e05a02be5ff",
+  "artifact_sha256": "03db50e407ea03dc12e9fe3182af613cc3718d4cdcfb58f58756410be79ead60",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "preserved_exact_bytes": true
 }

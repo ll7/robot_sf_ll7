@@ -13,9 +13,9 @@ files:
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/claim_card.yaml
   sha256: 0673eaef397a7d160e909f7a1e02713e2c1e3aedbd1c77c3ad91a2cbd10c95aa
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fig_seed_rank_stability.png
-  sha256: 1db6846cc196d633106cfc39812f6916117f8a8b72b09e27f2dc72fd08ff2c67
+  sha256: e9d33f80333a11fff4dd87de64c92084972d16e9b20fcfc2b29ef7b6fe964a71
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fig_transfer_delta.png
-  sha256: 0a54671079f8a8cea35ba9addbaccd5d23bc05dfccb314e01d231a16ba8cfd87
+  sha256: f9fdbcf0fede6e61c82ba1dfc506a591debfaa0b6460782edba22b4e6cece710
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fullpilot_plan.json
   sha256: c7c67dc8f46af5b0a598dc33133e725fe5865d89abdba9b6ce1e2e5c1bc8b0f0
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/heldout_family_table.csv
@@ -31,7 +31,7 @@ files:
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json
   sha256: 962c775496a34930696c3b5c735d4e0d5162e92ff09f14334b86e4bf9428a0db
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/reproduction.md
-  sha256: dd41746468d2096379f8296a7d99c394e88ea2718dac7d2a5e639e05a02be5ff
+  sha256: 03db50e407ea03dc12e9fe3182af613cc3718d4cdcfb58f58756410be79ead60
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/row_acceptance.json
   sha256: 9f18142fc8ab4b56c6984a231dd8b6bf4ba992f414aaba8b8d0bd0f5b17e02db
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/seed_rank_stability_diagnostic.json

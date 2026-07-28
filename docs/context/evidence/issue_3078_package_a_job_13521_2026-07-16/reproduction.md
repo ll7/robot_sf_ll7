@@ -24,6 +24,17 @@ Both diagnostics record `not_identifiable`: seed/rank-stability because there is
 a single evaluation seed (111), and held-out transfer-delta because no eligible
 comparator exists (#6150 / merged PR #6166).
 
+Rebuild the diagnostic JSON and both figures from those tracked compact inputs,
+then compare their exact bytes with the committed artifacts:
+
+```bash
+uv run python scripts/analysis/build_issue_3078_job_13521_diagnostic.py --check
+```
+
+The command does not read the private episode store or submit compute. To write
+the three generated outputs to a scratch directory for inspection, replace
+`--check` with `--output-dir /tmp/issue3078-job13521-diagnostic`.
+
 ## Core Package A transfer report (local-Path renderer)
 
 The renderer accepts local filesystem paths. First hydrate the registered
@@ -49,3 +60,12 @@ uv run python scripts/tools/build_package_a_transfer_report.py \
 The private campaign URI remains the durable provenance pointer; it is not passed
 directly to this local-`Path` CLI. This command renders compact evidence only. It
 does not run Package A campaigns.
+
+## Integrity check
+
+From the repository root, verify every primary bundle artifact against the
+tracked checksum manifest:
+
+```bash
+sha256sum -c docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/checksums.sha256
+```

@@ -218,6 +218,18 @@ def test_no_synthetic_bundle_reference_remains_in_regenerated_files() -> None:
         assert SYNTHETIC_BUNDLE not in content, name
 
 
+def test_reproduction_documents_diagnostic_rebuild_and_checksum_checks() -> None:
+    """The novel diagnostic artifacts have an executable exact-byte reproduction path."""
+    reproduction = (BUNDLE / "reproduction.md").read_text(encoding="utf-8")
+
+    assert "scripts/analysis/build_issue_3078_job_13521_diagnostic.py --check" in reproduction
+    assert (
+        "sha256sum -c "
+        "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/checksums.sha256"
+        in reproduction
+    )
+
+
 def test_deterministic_figures_present_and_checksummed() -> None:
     """Both deterministic diagnostic figures exist and are non-empty PNG artifacts."""
     for name in ("fig_seed_rank_stability.png", "fig_transfer_delta.png"):

@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/checksums.sha256",
-  "artifact_sha256": "ece6b7ba30cb8df491385e3340fd4c6dce714a6b83c632c3561c0f130e4fdd2d",
+  "artifact_sha256": "43e466fd4a90a7b420cb428232313b9728296ca0b98c34d1f26599944765ffeb",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "preserved_exact_bytes": true
 }

@@ -42,6 +42,7 @@ PHASE_PATTERN = re.compile(
     r"(?:^|\s)(?:\./)?scripts/dev/ci_driver\.sh(?P<args>(?:\s+--?[a-z0-9_-]+|\s+[a-z0-9_-]+)*)",
     re.MULTILINE,
 )
+ACTION_USES_PREFIX_PATTERN = re.compile(r"^\s*(?:-\s+)?uses:\s*")
 USES_PATTERN = re.compile(r"^\s*(?:-\s+)?uses:\s+(?P<value>\S+)(?:\s+#\s*(?P<comment>\S+))?\s*$")
 PINNED_ACTION_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 READABLE_ACTION_TAG_PATTERN = re.compile(r"^v[0-9][A-Za-z0-9_.-]*$")
@@ -484,7 +485,7 @@ def test_workflow_action_refs_are_pinned_with_readable_version_comments() -> Non
         for line_number, line in enumerate(
             workflow_file.read_text(encoding="utf-8").splitlines(), 1
         ):
-            if "uses:" not in line:
+            if not ACTION_USES_PREFIX_PATTERN.match(line):
                 continue
             failures.extend(_action_ref_failures_for_line(workflow_file, line_number, line))
 
@@ -508,6 +509,8 @@ def test_action_ref_parser_handles_list_items_and_local_actions() -> None:
         _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache")
         == []
     )
+    assert ACTION_USES_PREFIX_PATTERN.match("  statuses: read") is None
+    assert ACTION_USES_PREFIX_PATTERN.match("      - uses:") is not None
 
 
 def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:

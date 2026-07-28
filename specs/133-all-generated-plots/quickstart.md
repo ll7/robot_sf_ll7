@@ -77,15 +77,12 @@ from robot_sf.benchmark.visualization import generate_benchmark_plots, generate_
 plots = generate_benchmark_plots(
     episodes_path="results/episodes.jsonl",
     output_dir="results/",
-    scenario_filter="classic_interactions"
+    scenario_filter="classic_interactions",
 )
 
 # Generate videos with custom settings
 videos = generate_benchmark_videos(
-    episodes_path="results/episodes.jsonl",
-    output_dir="results/",
-    fps=24,
-    max_duration=15.0
+    episodes_path="results/episodes.jsonl", output_dir="results/", fps=24, max_duration=15.0
 )
 ```
 

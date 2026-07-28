@@ -28,10 +28,10 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig, GridConfig
 
 # Define grid configuration
 grid_config = GridConfig(
-    size_m=(10.0, 10.0),        # 10m x 10m grid
-    resolution_m=0.1,            # 0.1m per cell (100x100 grid)
-    frame="ego",                 # Robot-relative coordinates
-    occupancy_type="binary",     # Binary occupancy (0 or 1)
+    size_m=(10.0, 10.0),  # 10m x 10m grid
+    resolution_m=0.1,  # 0.1m per cell (100x100 grid)
+    frame="ego",  # Robot-relative coordinates
+    occupancy_type="binary",  # Binary occupancy (0 or 1)
     enabled_channels=["static_obstacles", "pedestrians"],
     include_static_obstacles=True,
     include_pedestrians=True,
@@ -155,6 +155,7 @@ def find_safe_spawn(grid, candidates, required_clearance_m):
             return (x, y)
     return None
 
+
 # Test with multiple candidates
 spawn_candidates = [
     (2.0, 2.0),
@@ -209,14 +210,17 @@ from stable_baselines3.common.policies import CnnPolicy
 from stable_baselines3.common.torch_layers import NatureCNN
 import torch.nn as nn
 
+
 class OccupancyGridFeatureExtractor(nn.Module):
     """Custom feature extractor for occupancy grids."""
-    
+
     def __init__(self, observation_space, features_dim=256):
         super().__init__()
         # Simple CNN: 3x3 conv → 3x3 conv → flatten
         self.net = nn.Sequential(
-            nn.Conv2d(2, 16, kernel_size=3, stride=1, padding=1),  # 2 channels (obstacles, pedestrians)
+            nn.Conv2d(
+                2, 16, kernel_size=3, stride=1, padding=1
+            ),  # 2 channels (obstacles, pedestrians)
             nn.ReLU(),
             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
@@ -225,9 +229,10 @@ class OccupancyGridFeatureExtractor(nn.Module):
             nn.Linear(32, features_dim),
             nn.ReLU(),
         )
-    
+
     def forward(self, observations):
         return self.net(observations)
+
 
 # Use with PPO (set in policy_kwargs)
 policy_kwargs = {
@@ -310,27 +315,29 @@ print("Recording saved to output/recordings/")
 
 ```python
 world_grid_config = GridConfig(
-    size_m=(20.0, 20.0),       # Larger world view
-    resolution_m=0.5,          # Coarser resolution (0.5m per cell)
-    frame="world",             # Global coordinates (not ego-rotated)
+    size_m=(20.0, 20.0),  # Larger world view
+    resolution_m=0.5,  # Coarser resolution (0.5m per cell)
+    frame="world",  # Global coordinates (not ego-rotated)
     occupancy_type="continuous",  # Soft occupancy
     enabled_channels=["static_obstacles"],  # Only static obstacles (faster)
     include_pedestrians=False,
 )
 
-env = make_robot_env(config=RobotSimulationConfig(
-    use_occupancy_grid=True,
-    grid_config=world_grid_config,
-))
+env = make_robot_env(
+    config=RobotSimulationConfig(
+        use_occupancy_grid=True,
+        grid_config=world_grid_config,
+    )
+)
 ```
 
 ### High-Resolution Ego-Frame (for Precise Local Planning)
 
 ```python
 high_res_grid_config = GridConfig(
-    size_m=(5.0, 5.0),         # Smaller local view
-    resolution_m=0.05,         # Very fine (5cm per cell) → 100x100 grid
-    frame="ego",               # Robot-relative
+    size_m=(5.0, 5.0),  # Smaller local view
+    resolution_m=0.05,  # Very fine (5cm per cell) → 100x100 grid
+    frame="ego",  # Robot-relative
     occupancy_type="continuous",
     enabled_channels=["static_obstacles", "pedestrians"],
 )
@@ -392,6 +399,7 @@ def grid_aware_reward(obs, grid_config):
     pedestrian_channel = obs["occupancy_grid"][1]
     crowding_penalty = -0.1 * pedestrian_channel.mean()  # Avg occupancy
     return crowding_penalty
+
 
 # Use in environment wrapper
 class GridAwareRewardWrapper(gym.Wrapper):

@@ -86,19 +86,21 @@ This creates confusion, maintenance burden, and technical debt accumulation.
 # In env_config.py
 import warnings
 
+
 class EnvSettings:
     """DEPRECATED: Use unified_config.RobotSimulationConfig instead.
-    
+
     This class will be removed in v3.0.
     See docs/architecture/configuration.md for migration guide.
     """
+
     def __init__(self, *args, **kwargs):
         warnings.warn(
             "EnvSettings is deprecated. Use RobotSimulationConfig from "
             "robot_sf.gym_env.unified_config instead. "
             "See docs/architecture/configuration.md for migration guide.",
             DeprecationWarning,
-            stacklevel=2  # Show caller location
+            stacklevel=2,  # Show caller location
         )
         # Original implementation continues...
 ```
@@ -171,15 +173,18 @@ def test_config_precedence_code_default():
     config = RobotSimulationConfig()
     assert config.some_param == DEFAULT_VALUE
 
+
 def test_config_precedence_yaml_override():
     """Verify YAML overrides code defaults."""
     config = load_config_from_yaml("test.yaml")
     assert config.some_param == YAML_VALUE
 
+
 def test_config_precedence_runtime_override():
     """Verify runtime kwargs override YAML and code defaults."""
     config = RobotSimulationConfig(some_param=RUNTIME_VALUE)
     assert config.some_param == RUNTIME_VALUE
+
 
 def test_deprecation_warning_env_settings():
     """Verify EnvSettings emits deprecation warning."""

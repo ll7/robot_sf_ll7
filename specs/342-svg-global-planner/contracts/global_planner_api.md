@@ -77,9 +77,7 @@ assert path[-1] == Vec2D(10, 5)
 
 # Path via POIs
 path = planner.plan(
-    start=Vec2D(0, 0),
-    goal=Vec2D(10, 5),
-    via_pois=["poi_corridor_1", "poi_junction"]
+    start=Vec2D(0, 0), goal=Vec2D(10, 5), via_pois=["poi_corridor_1", "poi_junction"]
 )
 ```
 
@@ -334,12 +332,11 @@ env = make_robot_env(config=config)  # Planner auto-initialized inside
 ```python
 import warnings
 
+
 def plan_legacy(self, start, goal):
     """Deprecated: Use plan() instead."""
     warnings.warn(
-        "plan_legacy() is deprecated, use plan() instead",
-        DeprecationWarning,
-        stacklevel=2
+        "plan_legacy() is deprecated, use plan() instead", DeprecationWarning, stacklevel=2
     )
     return self.plan(start, goal)
 ```

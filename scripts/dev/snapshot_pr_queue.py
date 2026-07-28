@@ -89,6 +89,7 @@ def _review_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
         {
             "state": str(review.get("state", "UNKNOWN")),
             "author": _author_login(review.get("author")),
+            "author_association": str(review.get("authorAssociation", "")),
             "submitted_at": str(review.get("submittedAt", "")),
             "body_excerpt": _shorten_text(review.get("body"), limit=COMMENT_BODY_LIMIT),
         }
@@ -112,6 +113,7 @@ def _comment_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
     latest = [
         {
             "author": _author_login(comment.get("author")),
+            "author_association": str(comment.get("authorAssociation", "")),
             "created_at": str(comment.get("createdAt", "")),
             "body_excerpt": _shorten_text(comment.get("body"), limit=COMMENT_BODY_LIMIT),
         }
@@ -403,12 +405,19 @@ def _parse_explicit_verdict(item: Any) -> str | None:
     return None
 
 
+_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+
+
 def _extract_trailers_from_bodies(items: Any) -> list[str]:
+    """Extract verdicts only from repository-trusted comment or review authors."""
     trailers: list[str] = []
     if not isinstance(items, list):
         return trailers
     for entry in items:
         if isinstance(entry, dict):
+            association = str(entry.get("authorAssociation", "")).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
             body = entry.get("body")
             if isinstance(body, str) and body:
                 for match in GATE_VERDICT_RE.finditer(body):
@@ -417,7 +426,7 @@ def _extract_trailers_from_bodies(items: Any) -> list[str]:
 
 
 def _extract_gate_verdicts(pr: dict[str, Any]) -> list[str]:
-    """Extract structured gate-verdict trailers from raw comment and review bodies."""
+    """Extract trusted structured gate-verdict trailers from raw comment and review bodies."""
     verdicts: list[str] = []
 
     existing_list = pr.get("gate_verdicts")

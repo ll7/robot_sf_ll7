@@ -20,7 +20,9 @@ def load_scenario_matrix(path: str) -> list[dict]:
 
 ### 2. plan_scenarios
 ```python
-def plan_scenarios(raw: list[dict], cfg: BenchmarkConfig, *, rng: random.Random) -> list[ScenarioDescriptor]:
+def plan_scenarios(
+    raw: list[dict], cfg: BenchmarkConfig, *, rng: random.Random
+) -> list[ScenarioDescriptor]:
     """Expand raw scenarios with planned seeds and computed hash fragments.
     Respects cfg.initial_episodes for seed planning; seeds deterministic via rng.
     Validation: map existence, required keys. Raises ValueError on issues."""
@@ -28,13 +30,17 @@ def plan_scenarios(raw: list[dict], cfg: BenchmarkConfig, *, rng: random.Random)
 
 ### 3. expand_episode_jobs
 ```python
-def expand_episode_jobs(scenarios: list[ScenarioDescriptor], cfg: BenchmarkConfig) -> list[EpisodeJob]:
+def expand_episode_jobs(
+    scenarios: list[ScenarioDescriptor], cfg: BenchmarkConfig
+) -> list[EpisodeJob]:
     """Create EpisodeJob list (initial plan). Horizon override applied if set."""
 ```
 
 ### 4. run_episode_jobs
 ```python
-def run_episode_jobs(jobs: list[EpisodeJob], cfg: BenchmarkConfig, manifest: BenchmarkManifest) -> Iterator[EpisodeRecord]:
+def run_episode_jobs(
+    jobs: list[EpisodeJob], cfg: BenchmarkConfig, manifest: BenchmarkManifest
+) -> Iterator[EpisodeRecord]:
     """Execute jobs (possibly in parallel). Yields EpisodeRecord as they complete.
     Resume: skip jobs whose episode_id already present in existing episodes file."""
 ```
@@ -47,31 +53,44 @@ def append_episode_record(path: str, record: EpisodeRecord) -> None:
 
 ### 6. aggregate_metrics
 ```python
-def aggregate_metrics(records: Iterable[EpisodeRecord], cfg: BenchmarkConfig) -> list[AggregateMetricsGroup]:
+def aggregate_metrics(
+    records: Iterable[EpisodeRecord], cfg: BenchmarkConfig
+) -> list[AggregateMetricsGroup]:
     """Compute grouped metrics + bootstrap CIs (group by archetype,density)."""
 ```
 
 ### 7. compute_effect_sizes
 ```python
-def compute_effect_sizes(groups: list[AggregateMetricsGroup], cfg: BenchmarkConfig) -> list[EffectSizeReport]:
+def compute_effect_sizes(
+    groups: list[AggregateMetricsGroup], cfg: BenchmarkConfig
+) -> list[EffectSizeReport]:
     """Produce effect size comparisons within each archetype across densities."""
 ```
 
 ### 8. evaluate_precision
 ```python
-def evaluate_precision(groups: list[AggregateMetricsGroup], cfg: BenchmarkConfig) -> StatisticalSufficiencyReport:
+def evaluate_precision(
+    groups: list[AggregateMetricsGroup], cfg: BenchmarkConfig
+) -> StatisticalSufficiencyReport:
     """Check CI half-width thresholds; include scaling efficiency if measured."""
 ```
 
 ### 9. generate_plots
 ```python
-def generate_plots(groups: list[AggregateMetricsGroup], records: list[EpisodeRecord], out_dir: str, cfg: BenchmarkConfig) -> list[PlotArtifact]:
+def generate_plots(
+    groups: list[AggregateMetricsGroup],
+    records: list[EpisodeRecord],
+    out_dir: str,
+    cfg: BenchmarkConfig,
+) -> list[PlotArtifact]:
     """Produce standard plot set; skip advanced plots in smoke mode."""
 ```
 
 ### 10. generate_videos
 ```python
-def generate_videos(records: list[EpisodeRecord], out_dir: str, cfg: BenchmarkConfig) -> list[VideoArtifact]:
+def generate_videos(
+    records: list[EpisodeRecord], out_dir: str, cfg: BenchmarkConfig
+) -> list[VideoArtifact]:
     """Create annotated representative videos per archetype unless smoke or missing deps."""
 ```
 
@@ -91,7 +110,12 @@ def run_full_benchmark(cfg: BenchmarkConfig) -> BenchmarkManifest:
 
 ### 13. adaptive_sampling_iteration
 ```python
-def adaptive_sampling_iteration(current_records: list[EpisodeRecord], cfg: BenchmarkConfig, scenarios: list[ScenarioDescriptor], manifest: BenchmarkManifest) -> tuple[bool, list[EpisodeJob]]:
+def adaptive_sampling_iteration(
+    current_records: list[EpisodeRecord],
+    cfg: BenchmarkConfig,
+    scenarios: list[ScenarioDescriptor],
+    manifest: BenchmarkManifest,
+) -> tuple[bool, list[EpisodeJob]]:
     """Decide whether additional episodes required. Returns (done_flag, new_jobs)."""
 ```
 

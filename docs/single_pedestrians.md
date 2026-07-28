@@ -247,24 +247,15 @@ For headless usage, set `MPLBACKEND=Agg` before running.
 from robot_sf.nav.map_config import SinglePedestrianDefinition
 
 # Goal-based pedestrian
-ped_goal = SinglePedestrianDefinition(
-    id="commuter_1",
-    start=(10.0, 10.0),
-    goal=(90.0, 90.0)
-)
+ped_goal = SinglePedestrianDefinition(id="commuter_1", start=(10.0, 10.0), goal=(90.0, 90.0))
 
 # Trajectory-based pedestrian
 ped_traj = SinglePedestrianDefinition(
-    id="tourist_1",
-    start=(20.0, 20.0),
-    trajectory=[(40.0, 40.0), (60.0, 60.0), (80.0, 80.0)]
+    id="tourist_1", start=(20.0, 20.0), trajectory=[(40.0, 40.0), (60.0, 60.0), (80.0, 80.0)]
 )
 
 # Static pedestrian
-ped_static = SinglePedestrianDefinition(
-    id="vendor_1",
-    start=(50.0, 50.0)
-)
+ped_static = SinglePedestrianDefinition(id="vendor_1", start=(50.0, 50.0))
 ```
 
 ### Adding to MapDefinition
@@ -287,7 +278,7 @@ map_def = MapDefinition(
     ped_goal_zones=[...],
     ped_crowded_zones=[...],
     ped_routes=[...],
-    single_pedestrians=[ped_goal, ped_traj, ped_static]
+    single_pedestrians=[ped_goal, ped_traj, ped_static],
 )
 
 # Create environment with custom map
@@ -326,7 +317,7 @@ The system automatically validates single pedestrian definitions:
 crossing_ped = SinglePedestrianDefinition(
     id="crossing_1",
     start=(10.0, 50.0),
-    goal=(90.0, 50.0)  # Crosses horizontally
+    goal=(90.0, 50.0),  # Crosses horizontally
 )
 ```
 
@@ -338,11 +329,11 @@ tourist = SinglePedestrianDefinition(
     id="tourist",
     start=(5.0, 5.0),
     trajectory=[
-        (20.0, 20.0),   # First landmark
-        (50.0, 30.0),   # Second landmark
-        (70.0, 60.0),   # Third landmark
-        (90.0, 90.0)    # Final destination
-    ]
+        (20.0, 20.0),  # First landmark
+        (50.0, 30.0),  # Second landmark
+        (70.0, 60.0),  # Third landmark
+        (90.0, 90.0),  # Final destination
+    ],
 )
 ```
 
@@ -353,17 +344,17 @@ pedestrians = [
     SinglePedestrianDefinition(
         id="ped_north",
         start=(50.0, 10.0),
-        goal=(50.0, 90.0)  # Moving north
+        goal=(50.0, 90.0),  # Moving north
     ),
     SinglePedestrianDefinition(
         id="ped_south",
         start=(50.0, 90.0),
-        goal=(50.0, 10.0)  # Moving south (opposite direction)
+        goal=(50.0, 10.0),  # Moving south (opposite direction)
     ),
     SinglePedestrianDefinition(
         id="vendor",
-        start=(30.0, 50.0)  # Static vendor
-    )
+        start=(30.0, 50.0),  # Static vendor
+    ),
 ]
 ```
 
@@ -390,26 +381,13 @@ ped = SinglePedestrianDefinition(id="ped1", start=(10, 10))
 **Solution**: Choose either goal-based OR trajectory-based navigation
 ```python
 # Wrong
-ped = SinglePedestrianDefinition(
-    id="ped1",
-    start=(10, 10),
-    goal=(50, 50),
-    trajectory=[(30, 30)]
-)
+ped = SinglePedestrianDefinition(id="ped1", start=(10, 10), goal=(50, 50), trajectory=[(30, 30)])
 
 # Correct (goal-based)
-ped = SinglePedestrianDefinition(
-    id="ped1",
-    start=(10, 10),
-    goal=(50, 50)
-)
+ped = SinglePedestrianDefinition(id="ped1", start=(10, 10), goal=(50, 50))
 
 # Correct (trajectory-based)
-ped = SinglePedestrianDefinition(
-    id="ped1",
-    start=(10, 10),
-    trajectory=[(30, 30), (50, 50)]
-)
+ped = SinglePedestrianDefinition(id="ped1", start=(10, 10), trajectory=[(30, 30), (50, 50)])
 ```
 
 ### Error: "Duplicate single pedestrian IDs found"
@@ -421,13 +399,13 @@ ped = SinglePedestrianDefinition(
 # Wrong
 peds = [
     SinglePedestrianDefinition(id="ped1", start=(10, 10)),
-    SinglePedestrianDefinition(id="ped1", start=(20, 20))  # Duplicate!
+    SinglePedestrianDefinition(id="ped1", start=(20, 20)),  # Duplicate!
 ]
 
 # Correct
 peds = [
     SinglePedestrianDefinition(id="ped1", start=(10, 10)),
-    SinglePedestrianDefinition(id="ped2", start=(20, 20))
+    SinglePedestrianDefinition(id="ped2", start=(20, 20)),
 ]
 ```
 
@@ -440,15 +418,11 @@ peds = [
 # Static pedestrian (intentional)
 vendor = SinglePedestrianDefinition(
     id="vendor",
-    start=(50, 50)  # Will remain here
+    start=(50, 50),  # Will remain here
 )
 
 # Add goal if movement is desired
-moving_ped = SinglePedestrianDefinition(
-    id="ped1",
-    start=(50, 50),
-    goal=(80, 80)
-)
+moving_ped = SinglePedestrianDefinition(id="ped1", start=(50, 50), goal=(80, 80))
 ```
 
 ### Warning: "Pedestrian start position outside map bounds"

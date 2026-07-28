@@ -46,6 +46,7 @@ from robot_sf.nav.obstacle import Obstacle
 DEFAULT_LINE_WIDTH_M = 3.0  # driveable line width
 DEFAULT_BUFFER_R_M = DEFAULT_LINE_WIDTH_M / 2  # r = w/2
 
+
 def _to_obstacles(polys: Iterable[Polygon]) -> list[Obstacle]:
     obs: list[Obstacle] = []
     for poly in polys:
@@ -61,6 +62,7 @@ def _to_obstacles(polys: Iterable[Polygon]) -> list[Obstacle]:
             vertices = vertices[:-1]
         obs.append(Obstacle(vertices))
     return obs
+
 
 def osm_to_map_definition(
     *,
@@ -85,20 +87,27 @@ def osm_to_map_definition(
         boundary_wgs84 = gdf.geometry.iloc[0]
     elif bbox:
         minx, miny, maxx, maxy = bbox
-        boundary_wgs84 = Polygon(
-            [(minx, miny), (maxx, miny), (maxx, maxy), (minx, maxy)]
-        )
+        boundary_wgs84 = Polygon([(minx, miny), (maxx, miny), (maxx, maxy), (minx, maxy)])
     else:
         raise ValueError("Provide either 'place' or 'bbox'.")
 
     # Project boundary and query footprints in a local meter-based CRS
-    boundary = gpd.GeoSeries([boundary_wgs84], crs="EPSG:4326").to_crs(ox.projection.project_gdf(
-        gpd.GeoDataFrame(geometry=[boundary_wgs84], crs="EPSG:4326")
-    ).crs).iloc[0]
+    boundary = (
+        gpd.GeoSeries([boundary_wgs84], crs="EPSG:4326")
+        .to_crs(
+            ox.projection.project_gdf(
+                gpd.GeoDataFrame(geometry=[boundary_wgs84], crs="EPSG:4326")
+            ).crs
+        )
+        .iloc[0]
+    )
 
     tags_lines = {
         "highway": [
-            "footway", "path", "cycleway", "bridleway",
+            "footway",
+            "path",
+            "cycleway",
+            "bridleway",
             # include shared paths; exclude steps later
         ],
     }
@@ -112,13 +121,19 @@ def osm_to_map_definition(
     if not lines.empty:
         lines = lines[~lines.get("highway", "").astype(str).str.contains("steps", na=False)]
         lines_proj = lines.to_crs(boundary.crs)
-        line_geoms = lines_proj.geometry.buffer(line_buffer_m, cap_style=2)  # square caps for corridors
+        line_geoms = lines_proj.geometry.buffer(
+            line_buffer_m, cap_style=2
+        )  # square caps for corridors
     else:
         line_geoms = gpd.GeoSeries([], crs=boundary.crs)
 
     # Polygons (explicit areas)
     areas = ox.geometries_from_polygon(boundary, tags_areas)
-    area_geoms = areas.to_crs(boundary.crs).geometry if not areas.empty else gpd.GeoSeries([], crs=boundary.crs)
+    area_geoms = (
+        areas.to_crs(boundary.crs).geometry
+        if not areas.empty
+        else gpd.GeoSeries([], crs=boundary.crs)
+    )
 
     walkable_union = unary_union([*line_geoms.geometry, *area_geoms])
     # Boundaries → polygon
@@ -170,6 +185,8 @@ def osm_to_map_definition(
         ped_routes=[],
         single_pedestrians=[],
     )
+
+
 # ...existing code...
 ````
 

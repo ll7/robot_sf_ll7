@@ -26,6 +26,7 @@ A feasibility spike was conducted in the project environment to verify package i
 3. **STRRTstar Binding Check:** We inspected the attributes of `ompl.geometric` and `ompl._ompl.geometric` to check if `STRRTstar` was exposed:
    ```python
    from ompl import geometric
+
    print(dir(geometric))
    ```
    *Result list:* `['AORRTC', 'BFMT', 'BITstar', 'BKPIECE1', 'Discretization', 'DiscretizationCellData', 'FMT', 'InformedRRTstar', 'KPIECE1', 'LBKPIECE1', 'PRM', 'PRMstar', 'PathGeometric', 'PathSimplifier', 'RRT', 'RRTConnect', 'RRTstar', 'SORRTstar', 'SimpleSetup', ...]`

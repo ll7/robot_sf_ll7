@@ -66,7 +66,7 @@ def test_visualization_error_handling(tmp_path):
         generate_benchmark_plots(episodes_path, tmp_path)
 
     # Given: Missing MoviePy
-    with patch.dict('sys.modules', {'moviepy': None}):
+    with patch.dict("sys.modules", {"moviepy": None}):
         with pytest.raises(DependencyError):
             generate_benchmark_videos("dummy.jsonl", tmp_path)
 ```
@@ -131,14 +131,14 @@ def sample_episodes_jsonl(tmp_path):
             "episode_id": "ep_001",
             "scenario_id": "classic_001",
             "metrics": {"collisions": 0, "success": True, "snqi": 0.95},
-            "trajectory_data": [[0.0, 0.0], [1.0, 1.0]]  # Simplified trajectory
+            "trajectory_data": [[0.0, 0.0], [1.0, 1.0]],  # Simplified trajectory
         }
     ]
 
     file_path = tmp_path / "episodes.jsonl"
-    with open(file_path, 'w') as f:
+    with open(file_path, "w") as f:
         for ep in episodes:
-            f.write(json.dumps(ep) + '\n')
+            f.write(json.dumps(ep) + "\n")
 
     return file_path
 ```
@@ -151,7 +151,7 @@ def benchmark_config():
     return {
         "scenarios": ["classic_interactions.yaml"],
         "baselines": ["socialforce", "random"],
-        "episodes_per_scenario": 5
+        "episodes_per_scenario": 5,
     }
 ```
 

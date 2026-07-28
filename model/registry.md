@@ -187,7 +187,7 @@ Root-local debug checkpoints such as `model/run_023.zip`, `model/run_043.zip`,
 `model/ppo_model_retrained_10m_2025-02-01.zip` were previously explicitly unsupported for
 durable compatibility because they lacked registry provenance and release checksums. **Phase A of
 issue #6268 (issue #6321) published them as durable registry artifacts** (see the next section), so
-they are now `supported` rows with GitHub release provenance, immutable SHA-256 checksums, and
+they are now `supported` rows with GitHub release provenance, recorded SHA-256 checksums, and
 `benchmark_promotion.claim_boundary: legacy_non_track`. The in-tree files are not deleted, moved,
 or renamed; single-file registry `local_path` values name ignored `output/model_cache/` release-cache
 targets, while GA3C keeps its existing in-tree `.meta` checkpoint path because SA-CADRL requires
@@ -197,13 +197,14 @@ this Phase-A slice.
 ### Durable legacy checkpoints (Phase A of #6268)
 
 Plain-language summary: the pre-registry legacy model binaries that already lived under `model/`
-now also have durable GitHub Release copies, immutable SHA-256 checksums, and registry entries, so
+now also have durable GitHub Release copies, recorded SHA-256 checksums, and registry entries, so
 they are reproducible from a public source instead of only from a fresh checkout.
 
 Every tracked legacy binary checkpoint under `model/` that previously had no durable
 registry/release provenance is now a durable registry entry with
-`benchmark_promotion.claim_boundary: legacy_non_track`. The durable assets live under the immutable
-GitHub release tag `artifact/legacy-models-2026-07-registry-v1`:
+`benchmark_promotion.claim_boundary: legacy_non_track`. The durable assets live under the dated
+GitHub release tag `artifact/legacy-models-2026-07-registry-v1`; the recorded SHA-256 checksums
+are the integrity guard if the tag or an asset is ever changed:
 
 <https://github.com/ll7/robot_sf_ll7/releases/tag/artifact/legacy-models-2026-07-registry-v1>
 
@@ -227,9 +228,10 @@ files)**. The parent issue text refers to "11 checkpoints / 10 zips"; the reposi
 legacy zips plus the 3-file ga3c triplet, so the implemented, verified set is the complete actual
 set (10 checkpoints). See the release `manifest.json` for the authoritative list.
 
-Each entry records a `github_release` pointer with `asset_name`, an immutable `version` pin (`v1`)
-under the dated, non-moving tag, `sha256`, `size_bytes`, and `benchmark_promotion.claim_boundary:
-legacy_non_track`. Each single-file `local_path` names the ignored `output/model_cache/` target that
+Each entry records a `github_release` pointer with `asset_name`, a registry `version` pin (`v1`),
+the dated release tag, `sha256`, `size_bytes`, and `benchmark_promotion.claim_boundary:
+legacy_non_track`. SHA-256 validation fails closed if release contents change. Each single-file
+`local_path` names the ignored `output/model_cache/` target that
 `resolve_model_path` hydrates from the release. GA3C retains its in-tree `.meta` path so resolution
 continues to provide the TensorFlow checkpoint prefix required by SA-CADRL; its release bundle is
 used for durable provenance verification. The validator first confirms that this GA3C registry path

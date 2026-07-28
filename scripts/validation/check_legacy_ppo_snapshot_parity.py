@@ -72,7 +72,7 @@ class DurableLegacyCheckpoint:
 
 # Phase A of issue #6268: legacy checkpoints now published as durable GitHub
 # release artifacts (tag artifact/legacy-models-2026-07-registry-v1) with
-# immutable SHA-256 checksums and registry entries. The four PPO debug/retrained
+# recorded SHA-256 checksums and registry entries. The four PPO debug/retrained
 # zips below previously lived in UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS; the
 # pedestrian zips and the ga3c_cadrl triplet had no durable classification.
 # Phase A flips all of them to supported/durable. Nothing is deleted, moved, or
@@ -281,6 +281,8 @@ def _verify_single_file(entry: Mapping[str, Any], *, resolved: Path) -> tuple[st
     expected = str(release.get("sha256") or "").strip().lower()
     if not expected:
         return "missing_sha256", "github_release.sha256 is empty"
+    if not resolved.is_file():
+        return "missing_component", f"durable checkpoint is not a regular file: {resolved}"
     observed = _sha256(resolved)
     if observed != expected:
         return (
@@ -306,8 +308,8 @@ def _verify_multi_file_bundle_sources(
     details: list[str] = []
     for rel in bundle_files:
         component = repo_root / str(rel)
-        if not component.exists():
-            return "missing_component", f"bundle component absent in-tree: {rel}"
+        if not component.is_file():
+            return "missing_component", f"bundle component is not a regular file in-tree: {rel}"
         key = Path(str(rel)).name
         expected = str(per_file.get(key) or "").strip().lower()
         if not expected:
@@ -391,10 +393,10 @@ def _verify_multi_file_bundle_resolution(
             allow_download=False,
             cache_dir=cache_dir,
         )
-    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         return "unresolved", f"registry resolution failed: {exc}"
-    if not resolved.exists():
-        return "unresolved", f"registry resolution returned a missing path: {resolved}"
+    if not resolved.is_file():
+        return "unresolved", f"registry resolution returned a non-file path: {resolved}"
     if resolved.resolve() != expected:
         return (
             "resolver_path_mismatch",
@@ -413,6 +415,8 @@ def _verify_hydrated_multi_file_bundle(
     expected_archive_sha = str(release.get("sha256") or "").strip().lower()
     if not expected_archive_sha:
         return "missing_sha256", "github_release.sha256 is empty"
+    if not archive_path.is_file():
+        return "missing_component", f"hydrated archive is not a regular file: {archive_path}"
     observed_archive_sha = _sha256(archive_path)
     if observed_archive_sha != expected_archive_sha:
         return (
@@ -539,7 +543,7 @@ def _verify_durable_checkpoint(
                 registry_path=registry_path,
                 cache_dir=cache_dir,
             )
-    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         return "unresolved", f"release resolution failed: {exc}"
     if checkpoint.kind == "single_file":
         status, detail = _verify_single_file(entry, resolved=resolved)

@@ -315,6 +315,31 @@ def test_verify_durable_checkpoint_detects_checksum_mismatch(tmp_path: Path) -> 
     assert wrong_sha in detail
 
 
+def test_inventory_reports_missing_durable_source_without_crashing(tmp_path: Path) -> None:
+    """A missing durable source should be a structured fail-closed inventory row."""
+    model_id = "legacy_ppo_synthetic_missing_source"
+    source = tmp_path / "source.zip"
+    source.write_bytes(b"checkpoint")
+    entry = _durable_entry(model_id, source, sha256=_sha256(source))
+    source.unlink()
+    registry_path = tmp_path / "registry.yaml"
+    _write_registry(registry_path, [entry])
+
+    rows = checker.build_inventory(
+        repo_root=tmp_path,
+        registry_path=registry_path,
+        supported_model_ids=(),
+        durable_checkpoints=(
+            checker.DurableLegacyCheckpoint(model_id, ("source.zip",), "single_file"),
+        ),
+    )
+
+    assert len(rows) == 1
+    assert rows[0].status == "unsupported_checksum_mismatch"
+    assert rows[0].checksum_status == "missing_component"
+    assert "not a regular file" in rows[0].checksum_detail
+
+
 def test_durable_ga3c_bundle_rejects_an_incomplete_manifest() -> None:
     """The GA3C release manifest cannot silently omit a declared checkpoint component."""
     repo_root = Path(__file__).resolve().parents[2]

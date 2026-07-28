@@ -15,8 +15,9 @@ The fix lives in ``pyproject.toml`` ``[tool.hatch.version.raw-options.scm.git]``
 
 * ``scm.git.describe_command`` restricts ``git describe`` to release-line tags,
   so an artifact tag without a dotted version is never selected;
-* ``tag_regex`` maps release (``X.Y.Z``), ``v``-prefixed (``vX.Y.Z``) and
-  release-candidate (``rcX.Y.Z``) tags to the numeric ``X.Y.Z``;
+* ``tag_regex`` maps release (``X.Y.Z``), ``v``-prefixed (``vX.Y.Z``),
+  camera-ready (``camera-ready-vX.Y.Z``), and release-candidate (``rcX.Y.Z``)
+  tags to the numeric ``X.Y.Z``;
 * ``fallback_version`` is reached only when *no* tag matches the glob, so a
   checkout whose sole reachable tag is an artifact tag still derives a valid
   PEP 440 non-release version and the editable build never breaks.
@@ -221,6 +222,7 @@ def test_pyproject_version_source_resists_non_release_artifact_tags() -> None:
     assert "[0-9]*.[0-9]*.[0-9]*" in globs, globs
     assert "v[0-9]*.[0-9]*.[0-9]*" in globs, globs
     assert "rc[0-9]*.[0-9]*.[0-9]*" in globs, globs
+    assert "camera-ready-v[0-9]*.[0-9]*.[0-9]*" in globs, globs
 
     # The tag regex must capture a named ``version`` group.
     assert "version" in _compiled_tag_regex().groupindex
@@ -355,6 +357,14 @@ def test_release_candidate_tag_derives_base_version(tmp_path: Path) -> None:
     _init_repo(repo)
     _tag_head(repo, "rc0.0.3")
     assert _derive_version(repo) == "0.0.3"
+
+
+def test_camera_ready_release_tag_derives_base_version(tmp_path: Path) -> None:
+    """A checkout tagged ``camera-ready-v0.0.1a`` derives package version ``0.0.1a``."""
+    repo = tmp_path / "camera-ready"
+    _init_repo(repo)
+    _tag_head(repo, "camera-ready-v0.0.1a")
+    assert _derive_version(repo) == "0.0.1a"
 
 
 def test_artifact_only_checkout_derives_valid_non_release_fallback(tmp_path: Path) -> None:

@@ -41,6 +41,7 @@ both ``--self-test`` and the live ``--check`` path so the contract is identical.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import subprocess
@@ -69,6 +70,7 @@ AUDIT_SCHEMA = "check_merge_queue_protection.v1"
 # file being modified here.
 GATE_CONTEXT = f"{GATE_WORKFLOW_NAME} / {GATE_JOB_NAME}"
 DEFAULT_BRANCH_REF = "~DEFAULT_BRANCH"
+ALL_BRANCH_REFS = "~ALL"
 DIM_MERGE_QUEUE = "merge_queue_required"
 DIM_GATE = "gate_required_status_check"
 DIM_STRATEGY = "strategy_allgreen"
@@ -382,6 +384,24 @@ def _parse_json(stdout: str) -> tuple[Any, str | None]:
         return None, f"Failed to parse JSON: {exc}"
 
 
+def _parse_json_records(stdout: str) -> tuple[list[Any], str | None]:
+    """Parse newline-delimited JSON records emitted by paginated ``gh api``."""
+    records: list[Any] = []
+    for line_number, line in enumerate(stdout.splitlines(), start=1):
+        if not line.strip():
+            continue
+        value, error = _parse_json(line)
+        if error:
+            return [], f"Failed to parse paginated JSON record {line_number}: {error}"
+        # Accept an array record as well so callers remain robust to a
+        # non-paginated fixture or a gh output-mode change.
+        if isinstance(value, list):
+            records.extend(value)
+        else:
+            records.append(value)
+    return records, None
+
+
 def _safe_int(value: Any) -> int | None:
     """Coerce a PR-number-like value to int, returning None when not parseable."""
     if value is None or value == "":
@@ -403,6 +423,23 @@ def _resolve_owner_repo(explicit: str) -> str | None:
     return repo if repo else None
 
 
+def _ref_condition_matches_branch(condition: Any, branch: str) -> bool:
+    """Return whether one GitHub ruleset ref condition matches ``branch``.
+
+    Ruleset conditions use fully qualified refs such as ``refs/heads/main`` and
+    fnmatch-style patterns, plus the ``~DEFAULT_BRANCH`` and ``~ALL`` special
+    values. ``branch`` is the repository's already-resolved default branch, so
+    ``~DEFAULT_BRANCH`` is a match here. Accepting the unqualified branch name
+    preserves compatibility with older fixtures and defensive API consumers.
+    """
+    if not isinstance(condition, str) or not condition:
+        return False
+    if condition in {DEFAULT_BRANCH_REF, ALL_BRANCH_REFS}:
+        return True
+    branch_ref = f"refs/heads/{branch}"
+    return condition == branch or fnmatch.fnmatchcase(branch_ref, condition)
+
+
 def _ruleset_applies_to_branch(ruleset: dict[str, Any], branch: str) -> bool:
     """Return whether an active branch ruleset's conditions match ``branch``."""
     if ruleset.get("target") != "branch":
@@ -417,12 +454,12 @@ def _ruleset_applies_to_branch(ruleset: dict[str, Any], branch: str) -> bool:
     include = ref_name.get("include")
     exclude = ref_name.get("exclude")
     exclude_list = exclude if isinstance(exclude, list) else []
-    if branch in exclude_list or "*" in exclude_list:
+    if any(_ref_condition_matches_branch(condition, branch) for condition in exclude_list):
         return False
     include_list = include if isinstance(include, list) else []
     if not include_list:
         return True
-    return branch in include_list or DEFAULT_BRANCH_REF in include_list or "*" in include_list
+    return any(_ref_condition_matches_branch(condition, branch) for condition in include_list)
 
 
 def fetch_default_branch(repo: str) -> tuple[str, str | None]:
@@ -431,7 +468,9 @@ def fetch_default_branch(repo: str) -> tuple[str, str | None]:
     if result.returncode != 0:
         return "", result.stderr.strip() or "default branch query failed"
     branch = result.stdout.strip()
-    return (branch or "main"), None
+    if not branch:
+        return "", "default branch query returned an empty value"
+    return branch, None
 
 
 def _load_ruleset_detail(repo: str, ruleset_id: Any) -> tuple[dict[str, Any] | None, str | None]:
@@ -465,12 +504,20 @@ def fetch_active_branch_rulesets(
     fail closed: an unread active ruleset could carry a bypass actor or a
     required protection rule that changes the activation verdict.
     """
-    list_result = _gh(["api", f"repos/{repo}/rulesets"])
+    list_result = _gh(
+        [
+            "api",
+            "--paginate",
+            f"repos/{repo}/rulesets?per_page=100",
+            "--jq",
+            ".[]",
+        ]
+    )
     if list_result.returncode != 0:
         return [], list_result.stderr.strip() or "rulesets list query failed", []
-    summaries, error = _parse_json(list_result.stdout)
-    if error or not isinstance(summaries, list):
-        return [], error or "rulesets list response is not a JSON array", []
+    summaries, error = _parse_json_records(list_result.stdout)
+    if error:
+        return [], error, []
 
     active_main: list[dict[str, Any]] = []
     partial_errors: list[str] = []

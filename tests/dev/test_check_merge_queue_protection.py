@@ -288,8 +288,12 @@ def test_evaluate_protection_legacy_conversation_field_name_is_recognized() -> N
     [
         (_ruleset(rules=[{"type": "deletion"}]), True),
         (_ruleset(rules=[{"type": "deletion"}], include=("main",)), True),
+        (_ruleset(rules=[{"type": "deletion"}], include=("refs/heads/main",)), True),
+        (_ruleset(rules=[{"type": "deletion"}], include=("refs/heads/*",)), True),
+        (_ruleset(rules=[{"type": "deletion"}], include=("~ALL",)), True),
         (_ruleset(rules=[{"type": "deletion"}], include=("*",)), True),
         (_ruleset(rules=[{"type": "deletion"}], include=("feature",)), False),
+        (_ruleset(rules=[{"type": "deletion"}], include=("refs/heads/release/*",)), False),
         (_ruleset(rules=[{"type": "deletion"}], target="tag"), False),
     ],
 )
@@ -298,6 +302,13 @@ def test_ruleset_applies_to_branch_respects_conditions(
 ) -> None:
     """Only active branch rulesets matching the default branch are inspected."""
     assert _ruleset_applies_to_branch(ruleset, "main") is applies
+
+
+def test_ruleset_applies_to_branch_respects_canonical_ref_exclusion() -> None:
+    """An explicit fully qualified default-branch exclusion wins over includes."""
+    ruleset = _ruleset(rules=[{"type": "deletion"}])
+    ruleset["conditions"]["ref_name"]["exclude"] = ["refs/heads/main"]
+    assert _ruleset_applies_to_branch(ruleset, "main") is False
 
 
 def test_fetch_default_branch_detects_branch() -> None:
@@ -309,6 +320,15 @@ def test_fetch_default_branch_detects_branch() -> None:
     assert mock_gh.call_args.args[0] == ["api", "repos/owner/repo", "--jq", ".default_branch"]
 
 
+def test_fetch_default_branch_empty_response_is_error() -> None:
+    """An empty metadata response cannot be treated as a verified default branch."""
+    with patch("scripts.dev.check_merge_queue_protection._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(stdout="")
+        branch, error = fetch_default_branch("owner/repo")
+    assert branch == ""
+    assert error == "default branch query returned an empty value"
+
+
 def test_fetch_active_branch_rulesets_filters_active_main_rulesets() -> None:
     """Only active branch rulesets applying to the default branch are returned."""
     summary_active = {"id": 1, "target": "branch", "enforcement": "active"}
@@ -317,13 +337,25 @@ def test_fetch_active_branch_rulesets_filters_active_main_rulesets() -> None:
     full = _ruleset(rules=[_merge_queue_rule()])
     with patch("scripts.dev.check_merge_queue_protection._gh") as mock_gh:
         mock_gh.side_effect = [
-            _gh_response(stdout=json.dumps([summary_active, summary_disabled, summary_tag])),
+            _gh_response(
+                stdout="\n".join(
+                    json.dumps(summary)
+                    for summary in (summary_active, summary_disabled, summary_tag)
+                )
+            ),
             _gh_response(stdout=json.dumps(full)),
         ]
         rulesets, list_error, partial = fetch_active_branch_rulesets("owner/repo", "main")
     assert list_error is None
     assert partial == []
     assert rulesets == [full]
+    assert mock_gh.call_args_list[0].args[0] == [
+        "api",
+        "--paginate",
+        "repos/owner/repo/rulesets?per_page=100",
+        "--jq",
+        ".[]",
+    ]
 
 
 def test_fetch_active_branch_rulesets_returns_list_error_on_failure() -> None:

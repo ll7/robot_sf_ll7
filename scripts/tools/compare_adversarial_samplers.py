@@ -423,9 +423,9 @@ def _metric_float(metrics: dict[str, Any], name: str) -> float:
 
 def _constraints_first_outcome(record: dict[str, Any]) -> dict[str, Any]:
     """Project one search-stage episode into the frozen constraints-first outcome vector."""
-    outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
-    metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
-    if not record:
+    outcome = record.get("outcome")
+    metrics = record.get("metrics")
+    if not record or not isinstance(outcome, dict) or not isinstance(metrics, dict):
         return {
             "status": "not_available",
             "collision_or_severe_intrusion": None,
@@ -441,10 +441,11 @@ def _constraints_first_outcome(record: dict[str, Any]) -> dict[str, Any]:
         or _metric_float(metrics, "collisions") > 0.0
     )
     route_complete = bool(outcome.get("route_complete")) or _metric_float(metrics, "success") >= 1.0
+    timeout = bool(outcome.get("timeout") or outcome.get("timeout_event"))
     return {
         "status": "observed",
         "collision_or_severe_intrusion": collision_or_intrusion,
-        "liveness_or_goal_completion": not route_complete,
+        "liveness_or_goal_completion": timeout or not route_complete,
         "comfort_and_efficiency": {
             "snqi": metrics.get("snqi"),
             "near_misses": metrics.get("near_misses"),

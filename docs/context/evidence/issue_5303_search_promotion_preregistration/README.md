@@ -168,9 +168,9 @@ uv run python scripts/tools/check_issue_5303_search_promotion_contract.py
 ```
 
 This recomputes the contract and #6139 receipt hashes, checks raw hashes for the target,
-reference, family, search-space, runner, analysis inputs, and certified archive. It statically
-verifies the registered objective/runner options/complete outcome schema, recomputes the
-permutation power math, and asserts the diagnostic-only stop rule. It imports no adversarial execution
+reference, family, search-space, runner, analysis, preflight, and checker inputs, and checks the
+certified archive. It statically verifies the registered objective/runner options/complete outcome
+schema, recomputes the permutation power math, and asserts the diagnostic-only stop rule. It imports no adversarial execution
 surface (`samplers`, `search`, `runtime`, `qd`, `warm_start`, `transfer_matrix`, or any
 campaign/replay/benchmark-runner module), no `subprocess`, and no network module; the focused test
 `tests/adversarial/test_issue_5303_search_promotion_preflight.py` AST-scans the preflight
@@ -204,8 +204,8 @@ cannot make a different input packet appear complete.
 
 - Frozen contract: [issue_5303_search_promotion_contract.yaml](../../../../configs/adversarial/issue_5303_search_promotion_contract.yaml)
 - Manifest (frozen hash): [contract_frozen.json](contract_frozen.json)
-- Preflight module: `robot_sf/benchmark/issue_5303_search_promotion_preflight.py`
-- Check command: `scripts/tools/check_issue_5303_search_promotion_contract.py`
+- Preflight module: `robot_sf/benchmark/issue_5303_search_promotion_preflight.py` (raw SHA-256 pinned in the contract)
+- Check command: `scripts/tools/check_issue_5303_search_promotion_contract.py` (raw SHA-256 pinned in the contract)
 - Diagnostic analysis: `robot_sf/benchmark/issue_5303_search_promotion_analysis.py`
 - Diagnostic analysis CLI: `scripts/tools/analyze_issue_5303_search_promotion.py`
 - Focused tests: `tests/adversarial/test_issue_5303_search_promotion_preflight.py`

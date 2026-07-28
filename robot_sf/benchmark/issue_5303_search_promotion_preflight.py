@@ -110,6 +110,8 @@ EXPECTED_PROVENANCE_INPUT_IDS = frozenset(
         "adversarial_search_runner",
         "promotion_analysis_module",
         "promotion_analysis_cli",
+        "preflight_module",
+        "contract_check_cli",
     }
 )
 EXPECTED_PROVENANCE_PATHS = {
@@ -129,7 +131,115 @@ EXPECTED_PROVENANCE_PATHS = {
     "adversarial_search_runner": "robot_sf/adversarial/search.py",
     "promotion_analysis_module": "robot_sf/benchmark/issue_5303_search_promotion_analysis.py",
     "promotion_analysis_cli": "scripts/tools/analyze_issue_5303_search_promotion.py",
+    "preflight_module": "robot_sf/benchmark/issue_5303_search_promotion_preflight.py",
+    "contract_check_cli": "scripts/tools/check_issue_5303_search_promotion_contract.py",
 }
+EXPECTED_ENTRY_GATE_BINDINGS = {
+    "blocking_issue": 6139,
+    "blocking_issue_state": "merged",
+    "recertification_receipt_path": DEFAULT_RECEIPT_PATH.as_posix(),
+    "certified_archive_path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
+    "record_count": EXPECTED_RECORD_COUNT,
+    "eligible_count": EXPECTED_ELIGIBLE_COUNT,
+    "eligible_floor": EXPECTED_ELIGIBLE_FLOOR,
+}
+EXPECTED_REJECTION_CONTROLS = [
+    {
+        "family": "doorway",
+        "config": "configs/scenarios/archetypes/classic_doorway.yaml",
+        "seeds": list(EXPECTED_DOORWAY_SEEDS),
+        "role": "must_not_yield_discoveries_counted_as_weak_points",
+    }
+]
+EXPECTED_NEGATIVE_CONTROL = {
+    "family": EXPECTED_NEGATIVE_CONTROL_FAMILY,
+    "config": "configs/scenarios/single/francis2023_blind_corner.yaml",
+    "map": "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
+    "role": "certifier_must_reject_never_a_candidate_or_denominator_row",
+}
+EXPECTED_METHOD_ENTRIES = [
+    {
+        "name": "optuna",
+        "role": "existing_tpe_tree_structured_parzen_estimator",
+        "sampler_class": "robot_sf.adversarial.samplers.OptunaCandidateSampler",
+        "builder": "robot_sf.adversarial.samplers.build_sampler",
+    },
+    {
+        "name": "random",
+        "role": "existing_dependency_light_random_search",
+        "sampler_class": "robot_sf.adversarial.samplers.RandomCandidateSampler",
+        "builder": "robot_sf.adversarial.samplers.build_sampler",
+    },
+]
+EXPECTED_FEASIBILITY_RULES = [
+    "corrected_swept_envelope_full_polyline_clearance",
+    "runtime_simulator_obstacle_collision",
+    "search_space_validation",
+]
+EXPECTED_OBJECTIVE_TIERS = [
+    {
+        "tier": 1,
+        "name": "collision_or_severe_intrusion",
+        "kind": "hard_constraint",
+        "veto": True,
+    },
+    {
+        "tier": 2,
+        "name": "liveness_or_goal_completion",
+        "kind": "liveness",
+        "no_soft_compensation_when_tier_1_fails": True,
+    },
+    {
+        "tier": 3,
+        "name": "comfort_and_efficiency",
+        "kind": "soft",
+        "compensates_hard_constraint_or_zero_goal_completion": False,
+    },
+]
+EXPECTED_COUNTED_GATE_ENTRIES = [
+    {
+        "id": 1,
+        "name": "corrected_scenario_path_certification",
+        "rule": "candidate passes corrected swept-envelope and runtime simulator-collision certification",
+    },
+    {
+        "id": 2,
+        "name": "deterministic_replay",
+        "rule": "exact deterministic-replay signature agreement",
+    },
+    {
+        "id": 3,
+        "name": "target_failure_in_at_least_4_of_5_seeds_no_retries",
+        "rule": "target planner fails in at least 4 of 5 fresh confirmation seeds with no retries",
+    },
+    {
+        "id": 4,
+        "name": "same_primary_mechanism_in_at_least_4_of_5_seeds",
+        "rule": "the same primary failure mechanism reproduces in at least 4 of 5 seeds",
+    },
+    {
+        "id": 5,
+        "name": "neutral_reference_planner_succeeds_in_at_least_4_of_5_seeds",
+        "rule": "the neutral reference planner succeeds in at least 4 of 5 of the same seeds",
+    },
+    {
+        "id": 6,
+        "name": "shortlist_passes_threshold_in_second_execution_context",
+        "rule": "the shortlist passes the same threshold in a second recorded execution context",
+    },
+    {
+        "id": 7,
+        "name": "no_excluded_row_class",
+        "rule": "no fallback, degraded, unavailable, geometry_artifact, knife_edge, stress_only, or duplicate classification",
+    },
+]
+EXPECTED_FORBIDDEN_ACTIONS = [
+    "planner_execution",
+    "adversarial_search_campaign",
+    "replay_or_confirmation_run",
+    "slurm_or_sbatch_or_srun_submission",
+    "evaluation_outcome_import_or_read",
+]
 EXPECTED_OUTCOME_ROW_FIELDS = frozenset(
     {
         "schema_version",
@@ -408,6 +518,17 @@ def _command_options(command: Any) -> tuple[dict[str, list[str | None]], str | N
     return options, None
 
 
+def _command_entrypoint_matches(command: Any, expected_script: str) -> bool:
+    """Return whether a frozen command invokes the expected script entry point."""
+    if not isinstance(command, str) or not command.strip():
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    return tokens[:4] == ["uv", "run", "python", expected_script]
+
+
 def _warm_start_space_errors(  # noqa: C901, PLR0912, PLR0915
     *, archive_path: Path, record_ids: tuple[str, ...], search_space_path: Path
 ) -> list[str]:
@@ -526,6 +647,11 @@ def _check_input_provenance(
     metadata: dict[str, Any],
 ) -> None:
     """Check every executable handoff input exists and matches its frozen raw hash."""
+    checks["input_provenance_algorithm"] = (
+        isinstance(provenance, dict) and provenance.get("algorithm") == "sha256_raw_file_bytes"
+    )
+    if not checks["input_provenance_algorithm"]:
+        blockers.append("input_provenance.algorithm must be sha256_raw_file_bytes")
     entries = provenance.get("required_inputs") if isinstance(provenance, dict) else None
     if not isinstance(entries, list):
         checks["input_provenance_complete"] = False
@@ -843,6 +969,15 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     if not checks["entry_gate_satisfied"]:
         blockers.append("entry_gate.entry_gate_satisfied must be true with >= 2 eligible records")
+    checks["entry_gate_bindings_frozen"] = all(
+        entry_gate.get(field) == expected
+        for field, expected in EXPECTED_ENTRY_GATE_BINDINGS.items()
+    )
+    if not checks["entry_gate_bindings_frozen"]:
+        blockers.append(
+            "entry_gate must retain the merged #6139 blocker, receipt/archive paths, and "
+            "the frozen 17-record/8-eligible/2-floor counts"
+        )
 
     # ---- Target and neutral reference planner configs exist ----------------------
     target = (
@@ -1005,6 +1140,15 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "certifier_negative_control must be francis2023_blind_corner "
             "(certifier negative control only, never a candidate/denominator)"
         )
+    checks["controls_frozen"] = (
+        rejection_controls == EXPECTED_REJECTION_CONTROLS
+        and negative_control == EXPECTED_NEGATIVE_CONTROL
+    )
+    if not checks["controls_frozen"]:
+        blockers.append(
+            "rejection and certifier-negative controls must retain their frozen config, map, "
+            "seed, and exclusion-role bindings"
+        )
 
     # ---- Methods, budget, simulator-time cap -------------------------------------
     methods = contract.get("methods") if isinstance(contract.get("methods"), dict) else {}
@@ -1032,6 +1176,12 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     if not checks["methods_and_warm_start_frozen"]:
         blockers.append("both frozen sampler arms must retain the same fit-family warm starts")
+    checks["method_entries_frozen"] = method_entries == EXPECTED_METHOD_ENTRIES
+    if not checks["method_entries_frozen"]:
+        blockers.append(
+            "method entries must retain the existing Optuna/TPE and random sampler classes "
+            "and shared builder"
+        )
 
     budget = contract.get("budget") if isinstance(contract.get("budget"), dict) else {}
     checks["candidate_budget_64_per_seed"] = (
@@ -1067,6 +1217,43 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     if not checks["simulator_time_cap_frozen"]:
         blockers.append("simulator_time_cap must be horizon=100, dt=0.1, simulator_time_cap_s=10.0")
+
+    # ---- Candidate space and feasibility ------------------------------------------
+    candidate_space = (
+        contract.get("candidate_space_and_feasibility")
+        if isinstance(contract.get("candidate_space_and_feasibility"), dict)
+        else {}
+    )
+    checks["candidate_space_and_feasibility_frozen"] = (
+        candidate_space.get("search_space_schema") == "adversarial-search-space.v1"
+        and candidate_space.get("candidate_space_structure_ref")
+        == EXPECTED_PROVENANCE_PATHS["search_space"]
+        and candidate_space.get("identical_for_both_methods") is True
+        and candidate_space.get("feasibility_rules") == EXPECTED_FEASIBILITY_RULES
+        and candidate_space.get("require_certification") is True
+        and candidate_space.get("certifier") == "corrected_scenario_cert_v1_from_merged_issue_6139"
+        and candidate_space.get("normalization")
+        == "canonical_json_sorted_key_sha256_per_candidate_before_accounting"
+        and candidate_space.get("duplicate_handling")
+        == "global_within_arm_normalized_config_hash_for_unique_candidate_endpoint"
+        and candidate_space.get(
+            "identical_candidate_space_feasibility_and_simulator_time_cap_for_both_methods"
+        )
+        is True
+        and candidate_space.get("duplicate_accounting")
+        == (
+            "Every scheduled attempt remains in its method's intention-to-search denominator. "
+            "Identical normalized configurations are collapsed only for the secondary "
+            "unique-candidate endpoint, globally within an arm across all three search seeds; "
+            "they are never silently removed from the primary denominator."
+            "\n"
+        )
+    )
+    if not checks["candidate_space_and_feasibility_frozen"]:
+        blockers.append(
+            "candidate_space_and_feasibility must retain the frozen search-space, certification, "
+            "normalization, duplicate, and matched-feasibility bindings"
+        )
 
     # ---- Objective ordering -------------------------------------------------------
     objective = contract.get("objective") if isinstance(contract.get("objective"), dict) else {}
@@ -1104,6 +1291,21 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             "objective must retain the constraints-first ordering, tier-1 hard veto, and "
             "no soft compensation for failed constraints or liveness"
+        )
+    checks["objective_definition_frozen"] = (
+        objective.get("name") == "constraints_first_lexicographic_v1"
+        and objective.get("ordering") == "constraints_first_lexicographic"
+        and objective.get("tiers") == EXPECTED_OBJECTIVE_TIERS
+        and objective.get("scalar_diagnostic_only") == "worst_case_snqi"
+        and objective.get("rule")
+        == (
+            "no_weighted_comfort_or_snqi_improvement_compensates_for_collision_or_zero_goal_completion"
+        )
+    )
+    if not checks["objective_definition_frozen"]:
+        blockers.append(
+            "the constraints-first objective name, tiers, scalar diagnostic, and "
+            "no-compensation rule must remain frozen"
         )
     objective_registry_path = root / EXPECTED_PROVENANCE_PATHS["objective_registry"]
     checks["objective_runner_registered"] = (
@@ -1156,6 +1358,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         isinstance(gates, list)
         and len(gates) == EXPECTED_COUNTED_GATE_COUNT
         and gate_names == EXPECTED_COUNTED_GATE_NAMES
+        and gate_entries == EXPECTED_COUNTED_GATE_ENTRIES
         and confirmation.get("fresh_confirmation_seeds") == 5
         and confirmation.get("seeds_distinct_from_search_seeds") is True
         and confirmation.get("mechanism_threshold_seeds") == "4_of_5"
@@ -1192,6 +1395,17 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "the primary estimand must retain all 192 scheduled attempts per arm and deduplicate "
             "normalized candidates globally within an arm only for the unique endpoint"
         )
+    checks["estimand_definition_frozen"] = (
+        estimand.get("primary")
+        == "tpe_minus_random_difference_in_unique_fully_admitted_weak_points"
+        and estimand.get("unit") == "unique_fully_admitted_weak_point"
+        and estimand.get("counted_only_when_all_seven_gates_pass") is True
+    )
+    if not checks["estimand_definition_frozen"]:
+        blockers.append(
+            "the estimand must retain its TPE-minus-random endpoint, unit, and all-seven-gates "
+            "admission rule"
+        )
 
     uncertainty = (
         contract.get("uncertainty") if isinstance(contract.get("uncertainty"), dict) else {}
@@ -1202,6 +1416,19 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     if not checks["uncertainty_seed_clustered"]:
         blockers.append("uncertainty must bootstrap over search-seed clusters (3 per method)")
+    checks["uncertainty_definition_frozen"] = (
+        uncertainty.get("method") == "nonparametric_bootstrap_over_seed_clusters"
+        and uncertainty.get("cluster_unit") == "search_seed"
+        and uncertainty.get("clusters_per_method") == EXPECTED_SEEDS_PER_METHOD
+        and uncertainty.get("interval") == "95_percent_percentile_bootstrap"
+        and _approx_equal(uncertainty.get("confidence_level"), 0.95)
+        and uncertainty.get("resamples") == 10000
+    )
+    if not checks["uncertainty_definition_frozen"]:
+        blockers.append(
+            "uncertainty must retain the 10,000-resample 95% percentile bootstrap over "
+            "three search-seed clusters"
+        )
 
     null_tests = contract.get("null_tests") if isinstance(contract.get("null_tests"), dict) else {}
     null_test_entries = null_tests.get("tests")
@@ -1233,6 +1460,9 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     ) == "two_sided" and _approx_equal(null_tests.get("threshold_p"), NULL_THRESHOLD)
     if not checks["null_tests_two_sided_threshold"]:
         blockers.append("null_tests must be two-sided at p <= 0.05")
+    checks["null_tests_both_required"] = null_tests.get("both_required") is True
+    if not checks["null_tests_both_required"]:
+        blockers.append("both preregistered seed-permutation null tests must be required")
 
     attrition = (
         contract.get("missing_invalid_attrition")
@@ -1249,6 +1479,16 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             "missing/invalid/attrition rows must remain in the primary intention-to-search "
             "denominator; complete-case analysis is sensitivity-only"
+        )
+    checks["missing_invalid_attrition_policy_frozen"] = (
+        attrition.get("reason_recorded") is True
+        and attrition.get("no_optional_seeds") is True
+        and attrition.get("no_outcome_dependent_replacement_or_exclusion") is True
+    )
+    if not checks["missing_invalid_attrition_policy_frozen"]:
+        blockers.append(
+            "missing/invalid attrition must record a reason and forbid optional seeds or "
+            "outcome-dependent replacement/exclusion"
         )
 
     outcome_schema = (
@@ -1361,6 +1601,19 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "power_analysis must record that the two-sided null cannot reject at p<=0.05 "
             f"(min two-sided p = {min_two_sided:.2f} > {NULL_THRESHOLD})"
         )
+    checks["power_declaration_frozen"] = (
+        power.get("n_seeds_per_method") == EXPECTED_SEEDS_PER_METHOD
+        and power.get("total_labeled_seeds") == 2 * EXPECTED_SEEDS_PER_METHOD
+        and _approx_equal(power.get("null_test_threshold"), NULL_THRESHOLD)
+        and power.get("one_sided_only_at_single_most_extreme_arrangement") is True
+        and power.get("bootstrap_ci_clusters_per_method") == EXPECTED_SEEDS_PER_METHOD
+        and power.get("ci_robustly_excludes_zero") is False
+    )
+    if not checks["power_declaration_frozen"]:
+        blockers.append(
+            "power_analysis must retain the six-seed permutation framing, 0.05 threshold, "
+            "three-cluster bootstrap, and non-robust CI declaration"
+        )
 
     # ---- The honest diagnostic declaration (the crux) ----------------------------
     checks["positive_gate_not_robustly_testable"] = (
@@ -1431,6 +1684,21 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "a separately justified diagnostic run must have an explicit inconclusive-only "
             "decision, exclusion reason, non-promotion boundary, and stop rule"
         )
+    checks["future_run_boundary_frozen"] = (
+        future_run.get("reason")
+        == "positive_gate_not_robustly_testable_under_exactly_three_search_seeds"
+        and future_run.get("thresholds_not_weakened") is True
+        and future_run.get("re_preregistration_required_to_claim_promote") is True
+        and future_run.get("declare_before_outcomes") is True
+        and future_run.get("promotion_sequence_status")
+        == "stopped_before_evidence_grade_promotion_campaign"
+        and future_run.get("evidence_grade_step3_authorized") is False
+    )
+    if not checks["future_run_boundary_frozen"]:
+        blockers.append(
+            "future_run_declaration must retain the pre-outcome diagnostic reason, stopped "
+            "promotion sequence, and re-preregistration boundary"
+        )
 
     # ---- Static executable diagnostic handoff ------------------------------------
     step3 = (
@@ -1497,6 +1765,14 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append("the frozen analysis module must expose the diagnostic accounting analyzer")
 
     command_options, command_error = _command_options(step3.get("diagnostic_search_command"))
+    checks["step3_diagnostic_command_entrypoint"] = _command_entrypoint_matches(
+        step3.get("diagnostic_search_command"), EXPECTED_PROVENANCE_PATHS["diagnostic_runner"]
+    )
+    if not checks["step3_diagnostic_command_entrypoint"]:
+        blockers.append(
+            "the frozen diagnostic command must invoke the pinned comparison runner through "
+            "uv run python"
+        )
     expected_artifacts = (
         step3.get("expected_artifacts") if isinstance(step3.get("expected_artifacts"), dict) else {}
     )
@@ -1543,6 +1819,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     checks["step3_command_parses"] = command_error is None
     checks["step3_execution_command_complete"] = (
         command_error is None
+        and checks["step3_diagnostic_command_entrypoint"]
         and command_values_match
         and command_matrix_match
         and artifact_paths_match
@@ -1591,8 +1868,16 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         )
 
     analysis_options, analysis_error = _command_options(step3.get("analysis_command"))
+    checks["step3_analysis_command_entrypoint"] = _command_entrypoint_matches(
+        step3.get("analysis_command"), EXPECTED_PROVENANCE_PATHS["promotion_analysis_cli"]
+    )
+    if not checks["step3_analysis_command_entrypoint"]:
+        blockers.append(
+            "the frozen analysis command must invoke the pinned analysis CLI through uv run python"
+        )
     checks["step3_analysis_command_complete"] = (
         analysis_error is None
+        and checks["step3_analysis_command_entrypoint"]
         and _single_command_value(analysis_options, "--contract")
         == DEFAULT_CONTRACT_PATH.as_posix()
         and _single_command_value(analysis_options, "--outcomes")
@@ -1608,12 +1893,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
 
     # ---- Forbidden actions declared ----------------------------------------------
     forbidden = contract.get("forbidden_in_this_step", [])
-    checks["forbidden_actions_declared"] = (
-        isinstance(forbidden, list)
-        and "planner_execution" in forbidden
-        and "evaluation_outcome_import_or_read" in forbidden
-        and "slurm_or_sbatch_or_srun_submission" in forbidden
-    )
+    checks["forbidden_actions_declared"] = forbidden == EXPECTED_FORBIDDEN_ACTIONS
     if not checks["forbidden_actions_declared"]:
         blockers.append("forbidden_in_this_step must declare planner/Slurm/outcome-read bans")
 

@@ -22,6 +22,7 @@ import json
 import math
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -59,9 +60,43 @@ FORBIDDEN_IMPORT_FRAGMENTS = (
 )
 FORBIDDEN_SOURCE_TOKENS = ("os.system", "os.popen", "popen", "__import__", "eval(", "exec(")
 
+SEMANTIC_DRIFT_MUTATIONS: dict[str, tuple[tuple[str, ...], object]] = {
+    "entry_gate_state": (("entry_gate", "blocking_issue_state"), "open"),
+    "control_role": (("controls", "rejection_controls", "0", "role"), "optional"),
+    "method_sampler": (
+        ("methods", "entries", "0", "sampler_class"),
+        "not_the_frozen_sampler",
+    ),
+    "candidate_space_certification": (
+        ("candidate_space_and_feasibility", "require_certification"),
+        False,
+    ),
+    "gate_rule": (("counted_weak_point_gates", "gates", "0", "rule"), "changed"),
+    "estimand_gate": (("estimand", "counted_only_when_all_seven_gates_pass"), False),
+    "uncertainty_resamples": (("uncertainty", "resamples"), 1),
+    "null_both_required": (("null_tests", "both_required"), False),
+    "attrition_reason": (("missing_invalid_attrition", "reason_recorded"), False),
+    "input_hash_algorithm": (("input_provenance", "algorithm"), "sha256"),
+    "diagnostic_entrypoint": (
+        ("step3_execution", "diagnostic_search_command"),
+        "uv run python scripts/tools/wrong_runner.py",
+    ),
+}
+
 
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _set_nested_contract_value(
+    contract: dict[str, Any], path: tuple[str, ...], value: object
+) -> None:
+    """Set one nested test mutation without duplicating branch-heavy setup code."""
+    target: Any = contract
+    for key in path[:-1]:
+        target = target[int(key)] if isinstance(target, list) else target[key]
+    final_key = path[-1]
+    target[int(final_key) if isinstance(target, list) else final_key] = value
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +298,7 @@ def test_frozen_design_fields() -> None:
     provenance_ids = {entry["id"] for entry in contract["input_provenance"]["required_inputs"]}
     assert "diagnostic_runner" in provenance_ids
     assert "adversarial_search_runner" in provenance_ids
+    assert {"preflight_module", "contract_check_cli"} <= provenance_ids
     for check_name in (
         "candidate_budget_64_per_seed",
         "search_seeds_exactly_three",
@@ -279,7 +315,19 @@ def test_frozen_design_fields() -> None:
         "counted_weak_point_gate_semantics_frozen",
         "gates_fail_closed",
         "input_provenance_complete",
+        "input_provenance_algorithm",
         "input_provenance_hashes",
+        "entry_gate_bindings_frozen",
+        "controls_frozen",
+        "method_entries_frozen",
+        "candidate_space_and_feasibility_frozen",
+        "objective_definition_frozen",
+        "estimand_definition_frozen",
+        "uncertainty_definition_frozen",
+        "null_tests_both_required",
+        "missing_invalid_attrition_policy_frozen",
+        "power_declaration_frozen",
+        "future_run_boundary_frozen",
         "intention_to_search_primary_denominator",
         "missing_invalid_stay_primary_denominator",
         "outcome_row_schema_complete",
@@ -584,6 +632,52 @@ def test_preflight_detects_incomplete_diagnostic_command(tmp_path: Path) -> None
     assert result.ready is False
     assert result.checks["contract_hash_matches_manifest"] is True
     assert result.checks["step3_execution_command_complete"] is False
+
+
+@pytest.mark.parametrize(
+    ("mutation", "check_name"),
+    [
+        ("entry_gate_state", "entry_gate_bindings_frozen"),
+        ("control_role", "controls_frozen"),
+        ("method_sampler", "method_entries_frozen"),
+        ("candidate_space_certification", "candidate_space_and_feasibility_frozen"),
+        ("gate_rule", "counted_weak_point_gate_semantics_frozen"),
+        ("estimand_gate", "estimand_definition_frozen"),
+        ("uncertainty_resamples", "uncertainty_definition_frozen"),
+        ("null_both_required", "null_tests_both_required"),
+        ("attrition_reason", "missing_invalid_attrition_policy_frozen"),
+        ("input_hash_algorithm", "input_provenance_algorithm"),
+        ("diagnostic_entrypoint", "step3_diagnostic_command_entrypoint"),
+    ],
+)
+def test_preflight_rejects_rehashed_contract_semantic_drift(
+    tmp_path: Path, mutation: str, check_name: str
+) -> None:
+    """Rehashing cannot hide drift in any machine-readable promotion binding."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    try:
+        path, value = SEMANTIC_DRIFT_MUTATIONS[mutation]
+    except KeyError as exc:  # pragma: no cover - the parametrization is exhaustive.
+        raise AssertionError(f"unknown mutation: {mutation}") from exc
+    _set_nested_contract_value(contract, path, value)
+
+    tampered_contract = tmp_path / f"rehashed_{mutation}.yaml"
+    tampered_contract.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest["contract_sha256"] = hashlib.sha256(tampered_contract.read_bytes()).hexdigest()
+    tampered_manifest = tmp_path / f"manifest_{mutation}.json"
+    tampered_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(
+        tampered_contract,
+        receipt_path=RECEIPT_PATH,
+        manifest_path=tampered_manifest,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.checks["contract_hash_matches_manifest"] is True
+    assert result.checks[check_name] is False
+    assert result.ready is False
 
 
 def test_preflight_fails_closed_for_missing_contract_and_writes_requested_payload(

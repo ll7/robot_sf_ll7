@@ -299,6 +299,21 @@ def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) ->
     assert row["availability_status"] == "not_available"
 
 
+def test_diagnostic_outcome_projection_matches_constraints_first_liveness() -> None:
+    """Timeouts remain liveness failures even when a record reports route completion."""
+    timeout = compare_adversarial_samplers._constraints_first_outcome(
+        {
+            "outcome": {"route_complete": True, "timeout": True},
+            "metrics": {"success": 1.0},
+        }
+    )
+    malformed = compare_adversarial_samplers._constraints_first_outcome({"status": "success"})
+
+    assert timeout["status"] == "observed"
+    assert timeout["liveness_or_goal_completion"] is True
+    assert malformed["status"] == "not_available"
+
+
 def test_diagnostic_runner_checks_preflight_before_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

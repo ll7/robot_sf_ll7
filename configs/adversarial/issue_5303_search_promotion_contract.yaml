@@ -73,8 +73,8 @@ neutral_reference_planner:
 # Input provenance. These raw-file SHA-256 values are checked before any future
 # diagnostic execution. The list includes the target/reference configs, both
 # family sources, search space, certifier/objective, comparison and direct search
-# runners, and accounting
-# analysis surfaces needed to make the handoff executable and auditable.
+# runners, accounting analysis surfaces, and the side-effect-free preflight/check CLI
+# needed to make the handoff executable and auditable.
 # ---------------------------------------------------------------------------
 input_provenance:
   algorithm: sha256_raw_file_bytes
@@ -105,7 +105,7 @@ input_provenance:
       sha256: a9d06feec11347ac1470401171da1998ed3635026798716be36e1c03616ceefa
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: fc822454d71b4e1580c3c6c0b4b549a9a9a236643dd49d631bbdc3c565ae08ce
+      sha256: c9b6ce74fdaf5c0465da94ab1d20cba3f94f05766a1f2f1a44270c8a3547a981
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       sha256: a67c54bff12737f97230d6f31d860b1a8f317cff383dc0c0c5662b89973df506
@@ -115,6 +115,12 @@ input_provenance:
     - id: promotion_analysis_cli
       path: scripts/tools/analyze_issue_5303_search_promotion.py
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
+    - id: preflight_module
+      path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
+      sha256: 97f0d8ed50776736aecd7ee977b818f42cb3e45e08fb09d2d023c41a910fb21a
+    - id: contract_check_cli
+      path: scripts/tools/check_issue_5303_search_promotion_contract.py
+      sha256: 0d7b214fed823a985141d3aff1e793586c50e3a181c656f789059a2cf6df0aaa
 
 # ---------------------------------------------------------------------------
 # Family split: fit/tuning disjoint from fresh outcomes. Eligible archive IDs are

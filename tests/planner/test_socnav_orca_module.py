@@ -1,6 +1,7 @@
 """Focused coverage for the extracted ORCA + HRVO planner-family module."""
 
 import numpy as np
+import pytest
 
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_orca as orca
@@ -38,6 +39,28 @@ def _observation(*, goal=(5.0, 0.0), heading=0.0, pedestrians=None) -> dict:
         "map": {"size": np.array([10.0, 10.0], dtype=np.float32)},
         "sim": {"timestep": np.array([0.1], dtype=np.float32)},
     }
+
+
+def _with_occupancy_grid(
+    observation: dict,
+    *,
+    obstacle_cells: tuple[tuple[int, int], ...] = (),
+) -> dict:
+    """Attach the minimal ego-frame occupancy-grid contract used by SocNav planners."""
+    grid = np.zeros((4, 4, 4), dtype=np.float32)
+    for row, column in obstacle_cells:
+        grid[0, row, column] = 1.0
+        grid[3, row, column] = 1.0
+    observation["occupancy_grid"] = grid
+    observation["occupancy_grid_meta_origin"] = np.array([-2.0, -2.0], dtype=np.float32)
+    observation["occupancy_grid_meta_resolution"] = np.array([1.0], dtype=np.float32)
+    observation["occupancy_grid_meta_size"] = np.array([4.0, 4.0], dtype=np.float32)
+    observation["occupancy_grid_meta_use_ego_frame"] = np.array([1.0], dtype=np.float32)
+    observation["occupancy_grid_meta_channel_indices"] = np.array(
+        [0.0, 1.0, 2.0, 3.0],
+        dtype=np.float32,
+    )
+    return observation
 
 
 def test_facade_wildcard_import_includes_lazy_public_exports() -> None:
@@ -116,3 +139,79 @@ def test_orca_heuristic_fallback_slows_for_head_on_pedestrian(monkeypatch) -> No
     )
     assert linear_blocked < linear_free
     assert np.isfinite(angular_blocked)
+
+
+def test_orca_missing_rvo2_fails_closed_without_explicit_fallback(monkeypatch) -> None:
+    """The extracted adapter preserves the benchmark-ready optional-dependency contract."""
+    monkeypatch.setattr(socnav, "rvo2", None)
+
+    with pytest.raises(RuntimeError, match="rvo2 is required"):
+        orca.ORCAPlannerAdapter().plan(_observation())
+
+
+@pytest.mark.parametrize(
+    "points, message",
+    [
+        ([1.0, 2.0, 3.0], "even number of coordinates"),
+        (np.zeros((1, 2, 2)), r"convertible to an \(N, 2\) array"),
+    ],
+)
+def test_bound_static_obstacle_points_reject_malformed_shapes(points, message) -> None:
+    """Malformed bound geometry continues to fail before planner state is mutated."""
+    adapter = orca.ORCAPlannerAdapter()
+
+    with pytest.raises(ValueError, match=message):
+        adapter.bind_static_obstacle_points(points, spacing=0.25)
+
+
+def test_bound_static_obstacles_replace_grid_and_reset_cached_rvo2_state() -> None:
+    """Exact bound geometry takes precedence and invalidates cached simulator state."""
+    adapter = orca.ORCAPlannerAdapter()
+    adapter._rvo2_sim = object()
+    adapter._rvo2_signature = ("cached",)
+    adapter._rvo2_robot_id = 7
+    adapter._rvo2_ped_ids = [8]
+
+    adapter.bind_static_obstacle_points([1.0, 0.0, 1.5, 0.0], spacing=0.5)
+
+    centers, radii = adapter._extract_obstacles_from_grid(
+        _with_occupancy_grid(_observation(), obstacle_cells=((0, 0),)),
+        np.zeros(2, dtype=float),
+        0.0,
+    )
+    assert centers.shape == (1, 2)
+    assert radii.shape == (1,)
+    assert centers[0, 0] > 0.0
+    assert adapter._rvo2_sim is None
+    assert adapter._rvo2_signature is None
+    assert adapter._rvo2_robot_id is None
+    assert adapter._rvo2_ped_ids == []
+
+    adapter.bind_static_obstacle_points([], spacing=0.5)
+    assert adapter._bound_static_obstacle_points.shape == (0, 2)
+    assert adapter._bound_static_obstacle_spacing == 0.0
+
+
+def test_ego_grid_obstacle_extraction_and_forward_probe_contract() -> None:
+    """The extracted module preserves ego-grid conversion and blocked-corridor probing."""
+    adapter = orca.ORCAPlannerAdapter()
+    observation = _with_occupancy_grid(_observation(), obstacle_cells=((2, 3),))
+    robot_position = np.zeros(2, dtype=float)
+    goal_direction = np.array([1.0, 0.0], dtype=float)
+
+    centers, radii = adapter._extract_obstacles_from_grid(
+        observation,
+        robot_position,
+        0.0,
+    )
+
+    assert centers.shape == (1, 2)
+    assert radii.shape == (1,)
+    assert np.all(np.isfinite(centers))
+    assert np.all(radii > 0.0)
+    assert adapter._direct_path_blocked(
+        robot_pos=robot_position,
+        robot_heading=0.0,
+        goal_direction_world=goal_direction,
+        observation=observation,
+    )

@@ -126,14 +126,13 @@ env = make_robot_env(config=config)
 # Missing required resource → RuntimeError with remediation
 # robot_sf/nav/svg_map_parser.py
 raise_fatal_with_remedy(
-    f"SVG map not found: {svg_path}",
-    "Check 'map_path' in config or provide valid SVG file"
+    f"SVG map not found: {svg_path}", "Check 'map_path' in config or provide valid SVG file"
 )
 
 # Optional component missing → WARNING and continue
 warn_soft_degrade(
     "PPO model not found, falling back to goal-directed planner",
-    "For RL behavior, provide valid model path in config"
+    "For RL behavior, provide valid model path in config",
 )
 ```
 
@@ -253,7 +252,7 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 config = RobotSimulationConfig()
 config.backend = "fast-pysf"  # explicit backend selection
-config.sensors = ["lidar"]    # sensor list from config
+config.sensors = ["lidar"]  # sensor list from config
 env = make_robot_env(config=config)
 ```
 
@@ -265,14 +264,14 @@ from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 if not os.path.exists(required_path):
     raise_fatal_with_remedy(
         f"Required file not found: {required_path}",
-        "Provide path via config or place file in expected location"
+        "Provide path via config or place file in expected location",
     )
 
 # Optional resource
 if not os.path.exists(optional_path):
     warn_soft_degrade(
         f"Optional file not found: {optional_path}",
-        "Feature will use fallback; provide file to enable full functionality"
+        "Feature will use fallback; provide file to enable full functionality",
     )
 ```
 

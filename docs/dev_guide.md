@@ -1011,12 +1011,16 @@ outcomes.
 **Always use factory functions** — never instantiate gymnasium environments directly:
 
 ```python
-from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
+from robot_sf.gym_env.environment_factory import (
+    make_robot_env,
+    make_image_robot_env,
+    make_pedestrian_env,
+)
 
 # Basic robot navigation
 env = make_robot_env(debug=True)
 
-# With image observations  
+# With image observations
 env = make_image_robot_env(debug=True)
 
 # Pedestrian environment (requires trained robot model)

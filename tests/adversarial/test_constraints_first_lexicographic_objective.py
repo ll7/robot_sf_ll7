@@ -149,3 +149,25 @@ def test_constraints_first_objective_rejects_success_metric_conflicting_with_out
     )
 
     assert constraints_first_lexicographic_v1(evaluation) is None
+
+
+def test_constraints_first_objective_rejects_out_of_domain_metrics(tmp_path: Path) -> None:
+    """Negative counts and out-of-range efficiency cannot become clean outcomes."""
+    base_record = {
+        "outcome": {"route_complete": True, "collision": False},
+        "metrics": {
+            "collisions": 0,
+            "near_misses": 0,
+            "path_efficiency": 1.0,
+            "snqi": 0.0,
+        },
+    }
+    for field_name, invalid_value in (
+        ("collisions", -1),
+        ("near_misses", -1),
+        ("path_efficiency", 1.1),
+    ):
+        record = {"outcome": dict(base_record["outcome"]), "metrics": dict(base_record["metrics"])}
+        record["metrics"][field_name] = invalid_value
+        evaluation = _evaluation(tmp_path, field_name, record)
+        assert constraints_first_lexicographic_v1(evaluation) is None

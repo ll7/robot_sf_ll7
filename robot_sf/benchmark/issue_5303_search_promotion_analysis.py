@@ -248,6 +248,23 @@ def _finite_number(value: Any, *, field_name: str, errors: list[str]) -> float |
     return parsed
 
 
+def _comfort_metric_errors(field_name: str, metric: Any) -> list[str]:
+    """Return validation errors for one optional comfort/efficiency metric."""
+    errors: list[str] = []
+    parsed = _finite_number(
+        metric,
+        field_name=f"comfort_and_efficiency.{field_name}",
+        errors=errors,
+    )
+    if parsed is None:
+        return errors
+    if field_name == "near_misses" and parsed < 0.0:
+        errors.append("comfort_and_efficiency.near_misses must be non-negative")
+    elif field_name == "path_efficiency" and not 0.0 <= parsed <= 1.0:
+        errors.append("comfort_and_efficiency.path_efficiency must be between 0 and 1")
+    return errors
+
+
 def _candidate_search_space_errors(  # noqa: C901
     candidate: dict[str, Any], search_space: SearchSpaceConfig
 ) -> list[str]:
@@ -372,11 +389,7 @@ def _constraints_first_outcome_errors(value: Any) -> list[str]:
         for field_name in _FROZEN_COMFORT_FIELDS:
             metric = comfort.get(field_name)
             if metric is not None:
-                _finite_number(
-                    metric,
-                    field_name=f"comfort_and_efficiency.{field_name}",
-                    errors=errors,
-                )
+                errors.extend(_comfort_metric_errors(field_name, metric))
     return errors
 
 

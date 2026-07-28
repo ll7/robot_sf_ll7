@@ -102,16 +102,16 @@ input_provenance:
       sha256: e335b00366db1066ae751e6c437bde3700488aa5680fcbed05a5b614b005cf97
     - id: objective_registry
       path: robot_sf/adversarial/objectives.py
-      sha256: 49bfaf828e8c2c19f941867101584e8b374333f4a1a7c23e656b7f8326cee5ec
+      sha256: 17573327ca6e30bff9ba188d7ef63c86a84da0e4c6189cdfe3e84e6d772eabe1
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
       sha256: 4d4637e93355bb02dabe96f1794946cbda8b6d4f118bde93f76b62e40e704ab0
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
-      sha256: a67c54bff12737f97230d6f31d860b1a8f317cff383dc0c0c5662b89973df506
+      sha256: 6b94ae5511775ea1ef1528fb520aa163c0756b18fec3ab02c7a26472b9a54f48
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
-      sha256: aaac54c8c6111d7bd20d8cb8056e739f117ae1baea30fe5bcf07a87bc4ddd2b6
+      sha256: e496a457063455b959ec79bea1b1177f2fc2e9fb9d58792899f07282782f96d4
     - id: promotion_analysis_cli
       path: scripts/tools/analyze_issue_5303_search_promotion.py
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e

@@ -33,7 +33,10 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
-from robot_sf.benchmark.fallback_policy import summarize_benchmark_availability
+from robot_sf.benchmark.fallback_policy import (
+    resolve_execution_mode,
+    summarize_benchmark_availability,
+)
 from robot_sf.benchmark.runner import run_batch
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
@@ -45,35 +48,44 @@ DEFAULT_SCHEMA_PATH = (
 )
 
 
-def _availability_summary(summary: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:
-    """Complete a batch summary with per-episode execution provenance.
+def _mark_missing_provenance(enriched: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Mark a run unavailable when its execution provenance is incomplete."""
+    preflight = enriched.get("preflight")
+    preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
+    preflight_status = str(preflight_payload.get("status", "")).strip().lower()
+    if preflight_status not in {"fallback", "skipped"}:
+        preflight_payload["status"] = "skipped"
+        preflight_payload.setdefault("compatibility_reason", reason)
+        enriched["preflight"] = preflight_payload
+    return enriched
 
-    The direct benchmark runner returns episode counts and failures but does not
-    include the algorithm metadata contract that the map runner places in its
-    summary. Use the written episode record as the authoritative fallback, and
-    surface non-``ok`` algorithm statuses as a preflight failure so fallback or
-    degraded execution cannot be reported as available.
-    """
-    enriched = dict(summary)
+
+def _validate_episode_provenance(
+    enriched: dict[str, Any], record: dict[str, Any] | None
+) -> str | None:
+    """Return a missing-provenance reason and enrich direct-runner summaries."""
     if not isinstance(record, dict) or not record:
-        preflight = enriched.get("preflight")
-        preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
-        preflight_status = str(preflight_payload.get("status", "")).strip().lower()
-        if preflight_status not in {"fallback", "skipped"}:
-            preflight_payload["status"] = "skipped"
-            preflight_payload.setdefault(
-                "compatibility_reason", "episode record was missing or malformed"
-            )
-            enriched["preflight"] = preflight_payload
-        return enriched
-    metadata = record.get("algorithm_metadata") if isinstance(record, dict) else None
+        return "episode record was missing or malformed"
+
+    metadata_present = "algorithm_metadata" in record
+    metadata = record.get("algorithm_metadata")
+    if metadata_present and (not isinstance(metadata, dict) or not metadata):
+        return "episode algorithm metadata was missing or malformed"
     if isinstance(metadata, dict) and not isinstance(
         enriched.get("algorithm_metadata_contract"), dict
     ):
         enriched["algorithm_metadata_contract"] = metadata
 
+    effective_metadata = enriched.get("algorithm_metadata_contract")
+    if not isinstance(effective_metadata, dict) or not effective_metadata:
+        return "episode algorithm metadata contract was missing"
+
     metadata_status = str(metadata.get("status", "")).strip().lower() if metadata else ""
-    if metadata_status and metadata_status != "ok":
+    effective_status = str(effective_metadata.get("status", "")).strip().lower()
+    metadata_status = metadata_status or effective_status
+    if not metadata_status:
+        return "episode algorithm metadata status was missing"
+    if metadata_status != "ok":
         preflight = enriched.get("preflight")
         preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
         preflight_status = str(preflight_payload.get("status", "")).strip().lower()
@@ -88,6 +100,24 @@ def _availability_summary(summary: dict[str, Any], record: dict[str, Any] | None
                 f"episode algorithm metadata status: {metadata_status}",
             )
             enriched["preflight"] = preflight_payload
+    elif resolve_execution_mode(effective_metadata) == "unknown":
+        return "episode algorithm metadata execution mode was missing or malformed"
+    return None
+
+
+def _availability_summary(summary: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:
+    """Complete a batch summary with per-episode execution provenance.
+
+    The direct benchmark runner returns episode counts and failures but does not
+    include the algorithm metadata contract that the map runner places in its
+    summary. Use the written episode record as the authoritative fallback, and
+    surface non-``ok`` algorithm statuses as a preflight failure so fallback or
+    degraded execution cannot be reported as available.
+    """
+    enriched = dict(summary)
+    reason = _validate_episode_provenance(enriched, record)
+    if reason:
+        return _mark_missing_provenance(enriched, reason)
     return enriched
 
 

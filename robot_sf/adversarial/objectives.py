@@ -57,7 +57,15 @@ def _valid_constraints_metric(name: str, value: Any) -> bool:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
     parsed = float(value)
-    return math.isfinite(parsed) and (name != "success" or parsed in {0.0, 1.0})
+    if not math.isfinite(parsed):
+        return False
+    if name == "success":
+        return parsed in {0.0, 1.0}
+    if name in {"collisions", "near_misses"}:
+        return parsed >= 0.0
+    if name == "path_efficiency":
+        return 0.0 <= parsed <= 1.0
+    return True
 
 
 def _success_metric_matches_route_complete(metrics: dict[str, Any], route_complete: bool) -> bool:

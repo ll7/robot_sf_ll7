@@ -2185,6 +2185,45 @@ def test_default_evaluator_fails_closed_when_episode_record_is_missing(
     assert evaluation.failure_attribution.details["availability_status"] == "not_available"
 
 
+@pytest.mark.parametrize(
+    "algorithm_metadata",
+    (None, [], {}, {"status": "ok"}),
+)
+def test_default_evaluator_fails_closed_when_algorithm_metadata_is_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    algorithm_metadata: object,
+) -> None:
+    """A written episode without a complete metadata contract is unavailable."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write an episode with incomplete execution provenance."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        record: dict[str, object] = {
+            "status": "success",
+            "outcome": {"collision": False, "route_complete": True},
+        }
+        record["algorithm_metadata"] = algorithm_metadata
+        out_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        return {"failures": [], "total_jobs": 1, "written": 1}
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "unknown"
+    assert evaluation.failure_attribution.details["readiness_status"] == "degraded"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+
+
 def test_failure_attribution_covers_primary_outcomes() -> None:
     """Failure attribution must distinguish collision, timeout, incomplete, and errors."""
     collision = attribution_from_episode_record(

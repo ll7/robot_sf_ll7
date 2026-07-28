@@ -546,6 +546,30 @@ def test_diagnostic_analysis_rejects_objective_outside_frozen_outcome_tier(
     assert any("outside the frozen comfort/efficiency tier" in item for item in result.blockers)
 
 
+def test_diagnostic_analysis_rejects_out_of_domain_soft_metrics(tmp_path: Path) -> None:
+    """Out-of-domain comfort metrics remain unavailable rather than observed evidence."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    comfort = rows[0]["constraints_first_outcome"]["comfort_and_efficiency"]
+    assert isinstance(comfort, dict)
+    comfort["near_misses"] = -1.0
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert any("near_misses must be non-negative" in item for item in result.blockers)
+
+
 def test_diagnostic_analysis_rejects_self_hashed_wrong_frozen_bindings(tmp_path: Path) -> None:
     """A self-hash cannot substitute for the frozen input and execution bindings."""
     outcomes = tmp_path / "outcomes.jsonl"

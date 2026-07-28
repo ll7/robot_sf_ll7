@@ -60,10 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the tested fixtures under the shared soft-penalty objective. Gates 1 (K=1 legacy parity,
   exact), 3 (objective
   invariance), 4 (deterministic ordering / feasible-first selection / two-tick
-  hysteresis), 5 (fail-closed on infeasible / deadline_exceeded / solver-error-status),
-  6 (registration guard + builder), 7 (per-hypothesis p50/p95/max latency), and 8
-  (PR #6170 +1238/-9, net +1229 audit) all pass. The prototype's `control_period_s` is
-  2.0 s (~20x the 100 ms real-time gate), so it is offline-only and blocks downstream
+  hysteresis), 6 (registration guard + builder), 7 (per-hypothesis p50/p95/max latency),
+  and 8 (PR #6170 +1238/-9, net +1229 audit) all pass. Gate 5 fails: infeasible,
+  deadline-exceeded, and solver error-status paths stop correctly, but a solver exception
+  propagates instead of returning the fail-closed stop command. The prototype's
+  `control_period_s` is 2.0 s (~20x the 100 ms real-time gate), so it is offline-only
+  and blocks downstream
   real-time use. Diagnostic-only: no real-time, safety, benchmark-superiority,
   default-planner-promotion, or #5423/STKP-eligibility claim. Parent #5310 state updated
   as an offline prototype. The prototype, config, registration, and tests are unchanged.

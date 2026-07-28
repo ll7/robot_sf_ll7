@@ -2,11 +2,11 @@
 # Issue #6158: topology-parallel NMPC offline verdict
 Diagnostic-only validation of the merged #6170 prototype (`robot_sf/planner/topology_parallel_nmpc.py`) for parent #5310. The prototype was executed **unchanged**; this validator only imports/calls it and reads back diagnostics.
 ## Verdict
-**`label_only_or_objective_drift`** — gate 2 (material distinctness) or gate 3 (objective invariance) failed.
+**`label_only_or_objective_drift`** — gate 2 (material distinctness) failed.
 > ⚠️ **REAL-TIME BOUNDARY (prominent, independent of verdict):** the prototype's nominal `control_period_s` is **2.0 s (~20x the 100 ms real-time gate)**, so it is **offline-only and explicitly blocks downstream real-time use**. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. On this fixture, worst per-hypothesis solver p95 = **136 ms** exceeded 100 ms, reinforcing the blocker.
 ## Provenance
-- Validated commit (`git rev-parse HEAD`): `ed11b93f8ea0d8c0805fb7c8a93b83aa9aa8ad5f`
-- Branch: `orchestrator/ll7-lease-6424-0c619700c392`
+- Validated commit (`git rev-parse HEAD`): `3fe0b844a476090b530019c9567fad1ecf2cf2e3`
+- Branch: `orchestrator/ll7-lease-6424-0b58be6f3672`
 - Source PR: #6170 (merge commit `894bdfe71e9c2686ebe63e165f15c739d12f721c`)
 - Config: `configs/algos/issue_5310_topology_parallel_nmpc.yaml`
 ## Exact commands
@@ -35,12 +35,12 @@ uv run ruff check scripts/validation/ && uv run ruff format --check scripts/vali
 ## Per-hypothesis solve latency (descriptive)
 | hypothesis | p50 (ms) | p95 (ms) | max (ms) | n |
 | --- | --- | --- | --- | --- |
-| pass_left | 91.98 | 98.06 | 99.58 | 30 |
-| yield_straight | 37.16 | 45.33 | 49.43 | 30 |
-| pass_right | 134.6 | 135.8 | 136.4 | 30 |
+| pass_left | 92.74 | 97.96 | 100.7 | 30 |
+| yield_straight | 37.49 | 45.55 | 45.58 | 30 |
+| pass_right | 135.5 | 136.5 | 137.5 | 30 |
 
-End-to-end `plan()` wall-clock (measurement-safe deadline): p50=142.93957443442196 ms, p95=143.5836213757284 ms, max=143.68441281840205 ms (n=30).
-End-to-end `plan()` wall-clock (real 2.0s deadline): p50=143.4026724891737 ms, p95=144.1999392118305 ms, max=144.5495979860425 ms; deadline fired 0 of 8 calls.
+End-to-end `plan()` wall-clock (measurement-safe deadline): p50=143.83232546970248 ms, p95=144.42738009383902 ms, max=144.51998588629067 ms (n=30).
+End-to-end `plan()` wall-clock (real 2.0s deadline): p50=145.08637005928904 ms, p95=145.84528709528968 ms, max=146.0169879719615 ms; deadline fired 0 of 8 calls.
 
 _Descriptive only on a single CPU-pinned fixture; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged._
 ## Gate-by-gate evidence
@@ -637,8 +637,8 @@ ordering=True, feasible_first/lowest_obj selection=True, hysteresis suppress(<2 
   }
 }
 ```
-### gate_5_fail_closed — PASS
-infeasible->stop=True, deadline_exceeded->stop=True, solver_error_status->stop=True; exception_propagates=True (supplementary diagnostic).
+### gate_5_fail_closed — FAIL
+infeasible->stop=True, deadline_exceeded->stop=True, solver_error_status->stop=True, solver_exception->stop=False.
 ```json
 {
   "infeasible_status_command": [
@@ -666,7 +666,7 @@ infeasible->stop=True, deadline_exceeded->stop=True, solver_error_status->stop=T
   "exception_probe": {
     "exception_propagates": true,
     "exception_repr": "ValueError: synthetic objective failure",
-    "note": "An exception inside the objective is NOT caught by the prototype; plan() propagates it. The prototype's documented fail-closed surfaces are deadline-overrun and infeasible/error-status (fallback_to_stop), both verified above. This is a robustness limitation, recorded transparently; it is not counted as a solver-error-status gate failure because scipy.optimize.minimize returns success=False on optimization errors rather than raising."
+    "note": "An exception inside the objective is NOT caught by the prototype; plan() propagates it instead of returning the fail-closed stop command. The #6158 gate requires fail-closed solver-error behavior, so this probe fails gate 5 even though deadline-overrun and infeasible/error-status fallbacks are correct."
   }
 }
 ```
@@ -685,7 +685,7 @@ builder_ok=True, guard_reject_missing=True, guard_reject_false=True, registry_ok
 }
 ```
 ### gate_7_latency — PASS
-per-hypothesis solver p95 (ms): pass_left=98.1, yield_straight=45.3, pass_right=136; worst p95=136 ms; exceeds_100ms=True; cpu_pinned=True.
+per-hypothesis solver p95 (ms): pass_left=98, yield_straight=45.6, pass_right=136; worst p95=136 ms; exceeds_100ms=True; cpu_pinned=True.
 ```json
 {
   "cpu_affinity_fixture": {
@@ -730,38 +730,38 @@ per-hypothesis solver p95 (ms): pass_left=98.1, yield_straight=45.3, pass_right=
   },
   "per_hypothesis_solver_runtime_ms": {
     "pass_left": {
-      "p50_ms": 91.98211692273617,
-      "p95_ms": 98.0617191409692,
-      "max_ms": 99.58353615365922,
+      "p50_ms": 92.74474752601236,
+      "p95_ms": 97.95753463404252,
+      "max_ms": 100.74486420489848,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 37.16412163339555,
-      "p95_ms": 45.32730811042711,
-      "max_ms": 49.42658077925444,
+      "p50_ms": 37.48691990040243,
+      "p95_ms": 45.55396210635081,
+      "max_ms": 45.57565809227526,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 134.62686247657984,
-      "p95_ms": 135.8194061438553,
-      "max_ms": 136.4071809221059,
+      "p50_ms": 135.53737150505185,
+      "p95_ms": 136.498734052293,
+      "max_ms": 137.46026786975563,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 142.93957443442196,
-    "p95_ms": 143.5836213757284,
-    "max_ms": 143.68441281840205,
+    "p50_ms": 143.83232546970248,
+    "p95_ms": 144.42738009383902,
+    "max_ms": 144.51998588629067,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 143.4026724891737,
-    "p95_ms": 144.1999392118305,
-    "max_ms": 144.5495979860425,
+    "p50_ms": 145.08637005928904,
+    "p95_ms": 145.84528709528968,
+    "max_ms": 146.0169879719615,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 135.8194061438553,
+  "worst_hypothesis_p95_ms": 136.498734052293,
   "latency_exceeds_100ms": true,
   "measurement_note": "Descriptive only on a single CPU-pinned fixture; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
 }
@@ -929,10 +929,10 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   "parent_issue": 5310,
   "source_pr": 6170,
   "source_merge_commit": "894bdfe71e9c2686ebe63e165f15c739d12f721c",
-  "validated_commit": "ed11b93f8ea0d8c0805fb7c8a93b83aa9aa8ad5f",
-  "branch": "orchestrator/ll7-lease-6424-0c619700c392",
+  "validated_commit": "3fe0b844a476090b530019c9567fad1ecf2cf2e3",
+  "branch": "orchestrator/ll7-lease-6424-0b58be6f3672",
   "verdict": "label_only_or_objective_drift",
-  "verdict_rationale": "gate 2 (material distinctness) or gate 3 (objective invariance) failed.",
+  "verdict_rationale": "gate 2 (material distinctness) failed.",
   "config": "configs/algos/issue_5310_topology_parallel_nmpc.yaml",
   "commands": [
     "uv run pytest tests/planner/test_topology_parallel_nmpc.py tests/planner/test_nmpc_social.py -v",
@@ -952,38 +952,38 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   },
   "per_hypothesis_solver_latency_ms": {
     "pass_left": {
-      "p50_ms": 91.98211692273617,
-      "p95_ms": 98.0617191409692,
-      "max_ms": 99.58353615365922,
+      "p50_ms": 92.74474752601236,
+      "p95_ms": 97.95753463404252,
+      "max_ms": 100.74486420489848,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 37.16412163339555,
-      "p95_ms": 45.32730811042711,
-      "max_ms": 49.42658077925444,
+      "p50_ms": 37.48691990040243,
+      "p95_ms": 45.55396210635081,
+      "max_ms": 45.57565809227526,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 134.62686247657984,
-      "p95_ms": 135.8194061438553,
-      "max_ms": 136.4071809221059,
+      "p50_ms": 135.53737150505185,
+      "p95_ms": 136.498734052293,
+      "max_ms": 137.46026786975563,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 142.93957443442196,
-    "p95_ms": 143.5836213757284,
-    "max_ms": 143.68441281840205,
+    "p50_ms": 143.83232546970248,
+    "p95_ms": 144.42738009383902,
+    "max_ms": 144.51998588629067,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 143.4026724891737,
-    "p95_ms": 144.1999392118305,
-    "max_ms": 144.5495979860425,
+    "p50_ms": 145.08637005928904,
+    "p95_ms": 145.84528709528968,
+    "max_ms": 146.0169879719615,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 135.8194061438553,
+  "worst_hypothesis_p95_ms": 136.498734052293,
   "latency_exceeds_100ms": true,
   "control_period_s": 2.0,
   "real_time_blocking_notice": "NOT REAL-TIME QUALIFIED (prominent, independent of the per-solve number): the prototype's nominal control_period_s is 2.0 s, which is ~20x the 100 ms real-time gate, so the component is offline-only and explicitly blocks downstream real-time use. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. Additionally, worst per-hypothesis solver p95 exceeded 100 ms on this fixture, reinforcing the real-time blocker.",
@@ -1588,8 +1588,8 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
     },
     {
       "name": "gate_5_fail_closed",
-      "passed": true,
-      "detail": "infeasible->stop=True, deadline_exceeded->stop=True, solver_error_status->stop=True; exception_propagates=True (supplementary diagnostic).",
+      "passed": false,
+      "detail": "infeasible->stop=True, deadline_exceeded->stop=True, solver_error_status->stop=True, solver_exception->stop=False.",
       "evidence": {
         "infeasible_status_command": [
           0.0,
@@ -1616,7 +1616,7 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
         "exception_probe": {
           "exception_propagates": true,
           "exception_repr": "ValueError: synthetic objective failure",
-          "note": "An exception inside the objective is NOT caught by the prototype; plan() propagates it. The prototype's documented fail-closed surfaces are deadline-overrun and infeasible/error-status (fallback_to_stop), both verified above. This is a robustness limitation, recorded transparently; it is not counted as a solver-error-status gate failure because scipy.optimize.minimize returns success=False on optimization errors rather than raising."
+          "note": "An exception inside the objective is NOT caught by the prototype; plan() propagates it instead of returning the fail-closed stop command. The #6158 gate requires fail-closed solver-error behavior, so this probe fails gate 5 even though deadline-overrun and infeasible/error-status fallbacks are correct."
         }
       }
     },
@@ -1638,7 +1638,7 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
     {
       "name": "gate_7_latency",
       "passed": true,
-      "detail": "per-hypothesis solver p95 (ms): pass_left=98.1, yield_straight=45.3, pass_right=136; worst p95=136 ms; exceeds_100ms=True; cpu_pinned=True.",
+      "detail": "per-hypothesis solver p95 (ms): pass_left=98, yield_straight=45.6, pass_right=136; worst p95=136 ms; exceeds_100ms=True; cpu_pinned=True.",
       "evidence": {
         "cpu_affinity_fixture": {
           "pinned": true,
@@ -1682,38 +1682,38 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
         },
         "per_hypothesis_solver_runtime_ms": {
           "pass_left": {
-            "p50_ms": 91.98211692273617,
-            "p95_ms": 98.0617191409692,
-            "max_ms": 99.58353615365922,
+            "p50_ms": 92.74474752601236,
+            "p95_ms": 97.95753463404252,
+            "max_ms": 100.74486420489848,
             "n": 30
           },
           "yield_straight": {
-            "p50_ms": 37.16412163339555,
-            "p95_ms": 45.32730811042711,
-            "max_ms": 49.42658077925444,
+            "p50_ms": 37.48691990040243,
+            "p95_ms": 45.55396210635081,
+            "max_ms": 45.57565809227526,
             "n": 30
           },
           "pass_right": {
-            "p50_ms": 134.62686247657984,
-            "p95_ms": 135.8194061438553,
-            "max_ms": 136.4071809221059,
+            "p50_ms": 135.53737150505185,
+            "p95_ms": 136.498734052293,
+            "max_ms": 137.46026786975563,
             "n": 30
           }
         },
         "plan_wall_clock_ms_measurement_safe_deadline": {
-          "p50_ms": 142.93957443442196,
-          "p95_ms": 143.5836213757284,
-          "max_ms": 143.68441281840205,
+          "p50_ms": 143.83232546970248,
+          "p95_ms": 144.42738009383902,
+          "max_ms": 144.51998588629067,
           "n": 30
         },
         "plan_wall_clock_ms_real_2s_deadline": {
-          "p50_ms": 143.4026724891737,
-          "p95_ms": 144.1999392118305,
-          "max_ms": 144.5495979860425,
+          "p50_ms": 145.08637005928904,
+          "p95_ms": 145.84528709528968,
+          "max_ms": 146.0169879719615,
           "n": 8
         },
         "real_deadline_fires_out_of_8": 0,
-        "worst_hypothesis_p95_ms": 135.8194061438553,
+        "worst_hypothesis_p95_ms": 136.498734052293,
         "latency_exceeds_100ms": true,
         "measurement_note": "Descriptive only on a single CPU-pinned fixture; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
       }

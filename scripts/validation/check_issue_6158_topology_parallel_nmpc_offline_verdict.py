@@ -663,9 +663,8 @@ def gate_5_fail_closed(nmpc_config: NMPCSocialConfig) -> GateResult:
     error_status_ok = cmd_err == (0.0, 0.0)
     evidence["solver_error_status_command"] = list(cmd_err)
 
-    # Supplementary diagnostic (NOT a gate failure by itself): an uncaught exception
-    # inside the objective is outside the prototype's documented fail-closed contract
-    # (deadline overrun + infeasible/error status) and is reported transparently.
+    # A solver exception must fail closed too. The approved #6158 contract says
+    # "solver-error behavior", not only solver error-status returns.
     planner_d = TopologyParallelNMPCPlannerAdapter(
         TopologyParallelNMPCConfig(
             max_hypotheses=2,
@@ -695,20 +694,19 @@ def gate_5_fail_closed(nmpc_config: NMPCSocialConfig) -> GateResult:
         "exception_repr": exc_repr,
         "note": (
             "An exception inside the objective is NOT caught by the prototype; "
-            "plan() propagates it. The prototype's documented fail-closed surfaces "
-            "are deadline-overrun and infeasible/error-status (fallback_to_stop), "
-            "both verified above. This is a robustness limitation, recorded "
-            "transparently; it is not counted as a solver-error-status gate failure "
-            "because scipy.optimize.minimize returns success=False on optimization "
-            "errors rather than raising."
+            "plan() propagates it instead of returning the fail-closed stop command. "
+            "The #6158 gate requires fail-closed solver-error behavior, so this probe "
+            "fails gate 5 even though deadline-overrun and infeasible/error-status "
+            "fallbacks are correct."
         ),
     }
 
-    passed = infeasible_ok and deadline_ok and error_status_ok
+    exception_fail_closed = not exception_propagates
+    passed = infeasible_ok and deadline_ok and error_status_ok and exception_fail_closed
     detail = (
         f"infeasible->stop={infeasible_ok}, deadline_exceeded->stop={deadline_ok}, "
-        f"solver_error_status->stop={error_status_ok}; "
-        f"exception_propagates={exception_propagates} (supplementary diagnostic)."
+        f"solver_error_status->stop={error_status_ok}, "
+        f"solver_exception->stop={exception_fail_closed}."
     )
     return GateResult(name="gate_5_fail_closed", passed=passed, detail=detail, evidence=evidence)
 
@@ -1028,13 +1026,18 @@ def _derive_verdict(gates: list[GateResult]) -> tuple[str, str]:
     by_name = {g.name: g for g in gates}
     if not by_name["gate_1_k1_legacy_parity"].passed:
         return "invalid_regression", "gate 1 (K=1 legacy parity) failed -> legacy/default drift."
-    if not (
-        by_name["gate_2_material_distinctness"].passed
-        and by_name["gate_3_objective_invariance"].passed
-    ):
+    identity_failures = [
+        label
+        for label, gate_name in (
+            ("gate 2 (material distinctness)", "gate_2_material_distinctness"),
+            ("gate 3 (objective invariance)", "gate_3_objective_invariance"),
+        )
+        if not by_name[gate_name].passed
+    ]
+    if identity_failures:
         return (
             "label_only_or_objective_drift",
-            "gate 2 (material distinctness) or gate 3 (objective invariance) failed.",
+            f"{' and '.join(identity_failures)} failed.",
         )
     for required in (
         "gate_4_selection_and_hysteresis",

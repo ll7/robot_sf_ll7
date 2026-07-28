@@ -35,13 +35,15 @@ offline_validation:
     establish global uniqueness. The topology-parallel mechanism is label-only under
     this configuration. Gates 1 (K=1 legacy parity, exact), 3 (objective invariance),
     4 (deterministic ordering / feasible-first selection / two-tick hysteresis),
-    5 (fail-closed on infeasible / deadline_exceeded / solver-error-status),
     6 (allow_testing_algorithms registration guard + builder), 7 (per-hypothesis latency),
-    and 8 (PR #6170 +1238/-9 net +1229 audit) all PASS. This is an OFFLINE PROTOTYPE
+    and 8 (PR #6170 +1238/-9 net +1229 audit) all PASS. Gate 5 FAILS: infeasible,
+    deadline-exceeded, and solver error-status paths stop correctly, but a solver exception
+    propagates instead of returning the fail-closed stop command. This is an OFFLINE PROTOTYPE
     verdict only; it does not promote, demote, or default-swap any planner.
 limitations:
   - "testing-only/experimental: not benchmark evidence"
   - "offline only: 2.0s control_period_s does not meet 100ms real-time gate"
+  - "solver exceptions propagate instead of returning the fail-closed stop command"
   - "no learned prediction, SIPP, DPCBF, or additional objective terms"
   - >-
     label-only topology mechanism (#6158 verdict): with objective_preferred_turn=0.0

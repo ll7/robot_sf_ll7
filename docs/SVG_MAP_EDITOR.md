@@ -202,6 +202,7 @@ route = create_route("main_path", waypoints=[(10, 10), (50, 50)])
 
 # Save to YAML (deterministic, versionable)
 from robot_sf.maps.osm_zones_yaml import save_zones_yaml
+
 config = create_config_with_zones_routes([spawn, goal], [route])
 save_zones_yaml(config, "scenario.yaml")
 ```

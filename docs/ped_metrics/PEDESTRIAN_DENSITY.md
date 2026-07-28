@@ -141,7 +141,7 @@ from robot_sf.sim.sim_config import SimulationSettings
 
 custom_settings = SimulationSettings(
     difficulty=1,  # will refer to 0.05 below
-    ped_density_by_difficulty=[0.02, 0.05, 0.08]
+    ped_density_by_difficulty=[0.02, 0.05, 0.08],
 )
 env = make_robot_env(sim_config=custom_settings)
 print(env.sim_config.peds_per_area_m2)  # 0.05

@@ -18,7 +18,7 @@ def generate_benchmark_plots(
     episodes_path: str,
     output_dir: str,
     scenario_filter: Optional[str] = None,
-    baseline_filter: Optional[str] = None
+    baseline_filter: Optional[str] = None,
 ) -> List[VisualArtifact]:
     """
     Generate comprehensive PDF plots from benchmark episode data.
@@ -60,7 +60,7 @@ def generate_benchmark_videos(
     scenario_filter: Optional[str] = None,
     baseline_filter: Optional[str] = None,
     fps: int = 30,
-    max_duration: float = 10.0
+    max_duration: float = 10.0,
 ) -> List[VisualArtifact]:
     """
     Generate MP4 videos by replaying benchmark episodes.

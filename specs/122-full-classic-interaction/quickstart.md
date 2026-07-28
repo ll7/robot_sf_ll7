@@ -64,7 +64,11 @@ Re-run the same command; previously completed episode ids are skipped. If scenar
 ## 7. Minimal Programmatic Use
 ```python
 from robot_sf.benchmark.full_classic import run_full_benchmark, BenchmarkConfig
-cfg = BenchmarkConfig(output_root="results/classic_prog", scenario_matrix_path="configs/scenarios/classic_interactions.yaml")
+
+cfg = BenchmarkConfig(
+    output_root="results/classic_prog",
+    scenario_matrix_path="configs/scenarios/classic_interactions.yaml",
+)
 run_full_benchmark(cfg)
 ```
 

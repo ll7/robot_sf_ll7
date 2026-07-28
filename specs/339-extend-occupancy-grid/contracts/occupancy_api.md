@@ -47,7 +47,7 @@ from robot_sf.nav.occupancy import create_occupancy_grid, GridConfig
 
 grid = create_occupancy_grid(
     robot_pose=(5.0, 5.0, 0.5),  # x, y, theta
-    config=GridConfig(width=10.0, height=10.0, resolution=0.1, use_ego_frame=True), 
+    config=GridConfig(width=10.0, height=10.0, resolution=0.1, use_ego_frame=True),
     obstacles=map_obstacles,
     pedestrians=sim_pedestrians,
 )
@@ -139,12 +139,7 @@ result = query_occupancy(grid, point_query)
 print(f"Safe to spawn: {result.safe_to_spawn}")
 
 # Check circular region
-circle_query = POIQuery(
-    query_type="circle", 
-    world_x=3.0, 
-    world_y=3.0, 
-    radius_m=1.0
-)
+circle_query = POIQuery(query_type="circle", world_x=3.0, world_y=3.0, radius_m=1.0)
 result = query_occupancy(grid, circle_query)
 if result.occupancy_fraction < 0.1:  # <10% blocked
     print("Region mostly free")

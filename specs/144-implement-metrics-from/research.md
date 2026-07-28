@@ -14,13 +14,13 @@
 ```python
 @dataclass
 class EpisodeData:
-    robot_pos: np.ndarray      # (T,2) robot positions
-    robot_vel: np.ndarray      # (T,2) robot velocities
-    robot_acc: np.ndarray      # (T,2) robot accelerations
-    peds_pos: np.ndarray       # (T,K,2) pedestrian positions
-    ped_forces: np.ndarray     # (T,K,2) social force per pedestrian
-    goal: np.ndarray           # (2,) target position
-    dt: float                  # timestep duration
+    robot_pos: np.ndarray  # (T,2) robot positions
+    robot_vel: np.ndarray  # (T,2) robot velocities
+    robot_acc: np.ndarray  # (T,2) robot accelerations
+    peds_pos: np.ndarray  # (T,K,2) pedestrian positions
+    ped_forces: np.ndarray  # (T,K,2) social force per pedestrian
+    goal: np.ndarray  # (2,) target position
+    dt: float  # timestep duration
     reached_goal_step: int | None  # first step reaching goal
     force_field_grid: dict[str, np.ndarray] | None  # optional force field
 ```

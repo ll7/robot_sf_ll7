@@ -95,26 +95,26 @@ from robot_sf.nav.map_config import MapDefinition
 
 # Initialize planner with map
 config = PlannerConfig(
-    clearance_margin=0.3,      # meters beyond robot radius
-    max_iterations=1000,       # for sampling/search
-    smoothing_enabled=True,    # reduce waypoint count
-    poi_density=0.5,           # POIs per square meter (for auto-sampling)
+    clearance_margin=0.3,  # meters beyond robot radius
+    max_iterations=1000,  # for sampling/search
+    smoothing_enabled=True,  # reduce waypoint count
+    poi_density=0.5,  # POIs per square meter (for auto-sampling)
 )
 planner = GlobalPlanner(map_def=map_definition, config=config)
 
 # Generate path from spawn to goal
 path = planner.plan(
-    start=spawn_position,      # Vec2D or sample from spawn zone
-    goal=goal_position,        # Vec2D or sample from goal zone
-    use_pois=True,             # route through map-defined POIs
+    start=spawn_position,  # Vec2D or sample from spawn zone
+    goal=goal_position,  # Vec2D or sample from goal zone
+    use_pois=True,  # route through map-defined POIs
 )
 # Returns: list[Vec2D] - waypoints from start to goal
 
 # Auto-generate POIs for a map (optional preprocessing)
 poi_positions = planner.sample_pois(
-    num_pois=10,               # or density-based
-    strategy="visibility",     # "random", "visibility", "medial_axis"
-    min_clearance=1.0,         # minimum obstacle distance
+    num_pois=10,  # or density-based
+    strategy="visibility",  # "random", "visibility", "medial_axis"
+    min_clearance=1.0,  # minimum obstacle distance
 )
 ```
 
@@ -224,8 +224,7 @@ next_target = navigator.current_waypoint
 **Decision**: Robot-radius-aware buffering via Shapely
 ```python
 inflated_obstacles = [
-    obstacle.buffer(robot_radius + clearance_margin) 
-    for obstacle in map_obstacles
+    obstacle.buffer(robot_radius + clearance_margin) for obstacle in map_obstacles
 ]
 ```
 - **Rationale**: Converts kinematic robot to point-robot problem
@@ -240,6 +239,7 @@ inflated_obstacles = [
 **Decision**: Lazy graph construction, cache per map hash
 ```python
 _graph_cache: dict[str, VisibilityGraph] = {}
+
 
 def _get_or_build_graph(map_def: MapDefinition) -> VisibilityGraph:
     map_hash = hashlib.md5(repr(map_def.obstacles).encode()).hexdigest()
@@ -283,12 +283,15 @@ def _get_or_build_graph(map_def: MapDefinition) -> VisibilityGraph:
 # tests/test_planner/test_global_planner.py
 def test_simple_corridor_path():
     """Path through straight corridor avoids walls."""
-    
+
+
 def test_obstacle_clearance_maintained():
     """All waypoints maintain minimum clearance."""
-    
+
+
 def test_no_path_raises_exception():
     """Surrounded goal raises PlanningFailedError."""
+
 
 def test_poi_routing():
     """Path passes through specified POIs in order."""
@@ -299,7 +302,8 @@ def test_poi_routing():
 # tests/test_planner/test_map_integration.py
 def test_all_example_maps_plannable():
     """Every map in maps/svg_maps/ generates valid paths."""
-    
+
+
 def test_route_navigator_compatibility():
     """Planner output works with RouteNavigator."""
 ```

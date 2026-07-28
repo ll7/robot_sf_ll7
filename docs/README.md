@@ -652,7 +652,7 @@ Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_m
 from robot_sf.gym_env.environment_factory import (
     make_robot_env,
     make_image_robot_env,
-    make_pedestrian_env
+    make_pedestrian_env,
 )
 
 # Create environments with consistent interface

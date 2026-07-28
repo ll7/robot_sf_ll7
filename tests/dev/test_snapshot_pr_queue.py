@@ -764,6 +764,7 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
             {
                 "state": "APPROVED",
                 "author": {"login": "reviewer"},
+                "authorAssociation": "OWNER",
                 "body": long_review_body,
                 "submittedAt": "2026-07-22T20:00:00Z",
             }

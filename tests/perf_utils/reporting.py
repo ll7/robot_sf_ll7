@@ -15,7 +15,7 @@ whose generic "reduce episode count" guidance does not apply. The normal
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from .guidance import default_guidance, format_guidance_lines
 
@@ -23,6 +23,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from .policy import PerformanceBudgetPolicy
+
+
+ReportClassification = Literal["none", "soft", "hard", "diagnostic"]
 
 
 # Scoped diagnostic-contract nodes. Each entry maps an exact pytest node id to a
@@ -75,11 +78,11 @@ class SlowTestSample:
 
 @dataclass(slots=True)
 class SlowTestRecord:
-    """TODO docstring. Document this class."""
+    """Represent one ranked test-duration result and its report classification."""
 
     test_identifier: str
     duration_seconds: float
-    breach_type: str
+    breach_type: ReportClassification
     guidance: list[str]
 
     def format_block(self) -> str:

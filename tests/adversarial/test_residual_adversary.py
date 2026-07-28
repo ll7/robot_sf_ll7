@@ -889,6 +889,55 @@ def test_residual_geometry_projection_preserves_route_bound() -> None:
     assert abs(candidate[0, 1]) <= 0.05 + 1e-9
 
 
+def test_separation_scaling_cannot_invalidate_nonconvex_route_bound() -> None:
+    """Separation scaling preserves the hard route endpoint corridor."""
+
+    @dataclass
+    class _AcrossRoutePolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            del observation
+            return np.array([[10.0, 0.0], [0.0, 0.0]])
+
+    route = np.array(
+        [
+            [0.0, 0.0],
+            [0.0, 10.0],
+            [10.0, 10.0],
+            [10.0, 0.0],
+        ]
+    )
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(
+            is_active=True,
+            macro_action_dt_s=1.0,
+            max_residual_accel_mps2=20.0,
+            max_jerk_mps3=20.0,
+            max_speed_delta_mps=20.0,
+            max_heading_change_per_macro_rad=3.0,
+            max_route_deviation_m=1.0,
+            min_separation_m=1.0,
+            target_ped_idx=[0],
+        ),
+        policy=_AcrossRoutePolicy(),
+        dt_s=1.0,
+        num_peds=2,
+        route_polylines={0: route},
+        ped_radius=0.0,
+    )
+    positions = np.array([[0.0, 0.0], [6.0, 0.0]])
+
+    residual = adversary.step_residual(
+        positions,
+        np.zeros((2, 2)),
+        np.full(2, 100.0),
+        ROBOT_POSE,
+    )
+    candidate = positions + residual_displacement_from_accel(residual, 1.0)
+
+    assert np.allclose(candidate[0], positions[0])
+    assert np.linalg.norm(candidate[0] - candidate[1]) >= 1.0
+
+
 @pytest.mark.parametrize(
     (
         "positions",

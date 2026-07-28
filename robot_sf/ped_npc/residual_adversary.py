@@ -595,6 +595,44 @@ def bound_route_deviation(
     return result
 
 
+def _route_endpoints_within_bound(
+    residual_displacement: np.ndarray,
+    positions: np.ndarray,
+    route_polylines: list[np.ndarray] | dict[int, np.ndarray] | None,
+    target_indices: np.ndarray,
+    max_route_deviation_m: float,
+) -> bool:
+    """Return whether residual endpoints preserve every applicable route bound."""
+    if route_polylines is None or target_indices.size == 0:
+        return True
+
+    for local_slot, ped_idx in enumerate(target_indices):
+        if ped_idx < 0 or ped_idx >= positions.shape[0]:
+            continue
+        polyline = _route_polyline_for_target(
+            route_polylines,
+            local_slot,
+            int(ped_idx),
+        )
+        if polyline is None:
+            continue
+        validated_polyline = _validate_finite_array(polyline, "route_polylines entry")
+        if validated_polyline.ndim != 2 or validated_polyline.shape[1] != 2:
+            raise ValueError("each polyline must have shape (K, 2)")
+
+        current_distance = _distance_to_polyline(positions[ped_idx], validated_polyline)
+        candidate_distance = _distance_to_polyline(
+            positions[ped_idx] + residual_displacement[ped_idx],
+            validated_polyline,
+        )
+        if current_distance <= max_route_deviation_m + EPSILON:
+            if candidate_distance > max_route_deviation_m + EPSILON:
+                return False
+        elif candidate_distance > current_distance + EPSILON:
+            return False
+    return True
+
+
 def _project_point_against_segment(
     point: np.ndarray,
     segment: np.ndarray,
@@ -1251,6 +1289,17 @@ class BoundedResidualAdversary:
             self._target_mask,
             self.config.min_separation_m,
         )
+        if not _route_endpoints_within_bound(
+            residual_displacement,
+            positions,
+            self.route_polylines,
+            self._target_indices,
+            self.config.max_route_deviation_m,
+        ):
+            # Pairwise separation can shorten a route-safe displacement to an
+            # unsafe point inside a non-convex route corridor. Suppress the
+            # targeted residual atomically so pairwise guarantees remain valid.
+            residual_displacement[self._target_mask] = 0.0
         if np.any(self._target_mask):
             target_candidates = (
                 positions[self._target_mask] + residual_displacement[self._target_mask]

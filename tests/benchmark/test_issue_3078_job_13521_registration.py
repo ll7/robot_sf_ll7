@@ -8,6 +8,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = REPO_ROOT / "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16"
 SYNTHETIC_BUNDLE = "docs/context/evidence/issue_3078_package_a_2026-07-08"
@@ -22,6 +24,17 @@ def _load_json(name: str) -> dict:
     payload = json.loads((BUNDLE / name).read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _parse_checksums(lines: list[str]) -> dict[str, str]:
+    """Parse checksum lines while rejecting malformed or duplicate paths."""
+    recorded: dict[str, str] = {}
+    for line in lines:
+        digest, separator, rel_path = line.partition("  ")
+        assert separator == "  " and rel_path, line
+        assert rel_path not in recorded, f"duplicate checksum entry: {rel_path}"
+        recorded[rel_path] = digest
+    return recorded
 
 
 def test_fullpilot_has_exact_predeclared_identity_scope() -> None:
@@ -136,12 +149,14 @@ def test_real_data_seed_rank_stability_diagnostic_records_not_identifiable() -> 
     assert headline["promotion_allowed"] is False
     assert headline["seed_count"] == 1
     assert "single" in headline["reason"].lower()
+    assert headline["claim_status"] == "not_identifiable_single_seed"
 
     transfer = diagnostic["heldout_transfer_delta_classification"]
     assert transfer["label"] == "not_identifiable"
     assert transfer["claim_eligible"] is False
     assert transfer["baseline_table_empty"] is True
     assert transfer["transfer_delta_snqi_empty"] is True
+    assert transfer["claim_status"] == "not_identifiable_no_eligible_comparator"
 
     rows = diagnostic["planner_rank_stability"]
     assert {row["planner"] for row in rows} == {"goal", "social_force", "orca"}
@@ -215,10 +230,7 @@ def test_deterministic_figures_present_and_checksummed() -> None:
 def test_checksums_cover_every_primary_bundle_file() -> None:
     """checksums.sha256 lists and correctly hashes every primary bundle artifact."""
     lines = (BUNDLE / "checksums.sha256").read_text(encoding="utf-8").strip().splitlines()
-    recorded: dict[str, str] = {}
-    for line in lines:
-        digest, _, rel_path = line.partition("  ")
-        recorded[rel_path] = digest
+    recorded = _parse_checksums(lines)
 
     # Every non-sidecar, non-checksum file under the bundle must be covered.
     expected = {
@@ -247,3 +259,11 @@ def test_checksums_cover_every_primary_bundle_file() -> None:
         "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fig_transfer_delta.png"
         in recorded
     )
+
+
+def test_checksum_parser_rejects_duplicate_paths() -> None:
+    """A duplicate path cannot hide an earlier checksum entry."""
+    lines = (BUNDLE / "checksums.sha256").read_text(encoding="utf-8").strip().splitlines()
+
+    with pytest.raises(AssertionError, match="duplicate checksum entry"):
+        _parse_checksums([*lines, lines[0]])

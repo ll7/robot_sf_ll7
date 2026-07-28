@@ -51,6 +51,18 @@ def _immutable_sha256(row: dict[str, object]) -> str:
     return _canonical_sha256(payload)
 
 
+def _fixture_candidate(*, seed: int, index: int) -> dict[str, object]:
+    """Build a valid candidate-shaped fixture in the frozen issue search space."""
+    return {
+        "start": {"x": 2.0, "y": 3.0, "theta": 0.0},
+        "goal": {"x": 8.0, "y": 3.0, "theta": 0.0},
+        "spawn_time_s": 1.0,
+        "pedestrian_speed_mps": 1.0,
+        "pedestrian_delay_s": 0.5,
+        "scenario_seed": 1000 + (seed - 530301) * 64 + index,
+    }
+
+
 def _diagnostic_row(
     *,
     arm: str,
@@ -68,10 +80,7 @@ def _diagnostic_row(
     step3_execution = FROZEN_CONTRACT["step3_execution"]
     assert isinstance(family_split, dict)
     assert isinstance(step3_execution, dict)
-    candidate = candidate or {
-        "scenario_seed": seed + index,
-        "fixture_id": f"{arm}-{seed}-{index}",
-    }
+    candidate = candidate or _fixture_candidate(seed=seed, index=index)
     candidate_seed = candidate["scenario_seed"]
     row: dict[str, object] = {
         "schema_version": OUTCOME_ROW_SCHEMA_VERSION,
@@ -103,7 +112,16 @@ def _diagnostic_row(
         "execution_mode": step3_execution["required_execution_mode"],
         "readiness_status": "adapter",
         "availability_status": "available",
-        "constraints_first_outcome": {"status": "observed"},
+        "constraints_first_outcome": {
+            "status": "observed",
+            "collision_or_severe_intrusion": False,
+            "liveness_or_goal_completion": False,
+            "comfort_and_efficiency": {
+                "snqi": 0.0,
+                "near_misses": 0.0,
+                "path_efficiency": 1.0,
+            },
+        },
         "objective": step3_execution["diagnostic_objective"],
         "objective_value": 0.0,
         "primary_failure_mechanism": None,
@@ -135,10 +153,7 @@ def _write_complete_outcomes(path: Path, *, duplicate_first_optuna_hash: bool = 
                     and seed == 530301
                     and index == 1
                 ):
-                    candidate = {
-                        "scenario_seed": 530301,
-                        "fixture_id": "optuna-530301-0",
-                    }
+                    candidate = _fixture_candidate(seed=530301, index=0)
                 row = _diagnostic_row(
                     arm=arm,
                     seed=seed,
@@ -386,6 +401,66 @@ def test_diagnostic_analysis_recomputes_candidate_hash_before_deduplication(
     assert any(
         "candidate hash does not match candidate content" in item for item in result.blockers
     )
+
+
+def test_diagnostic_analysis_rejects_candidate_outside_frozen_search_space(tmp_path: Path) -> None:
+    """A self-hashed arbitrary candidate cannot enter the diagnostic accounting."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["candidate"] = {"scenario_seed": 530301, "fixture_id": "not-a-candidate"}
+    rows[0]["normalized_candidate_config_sha256"] = _canonical_sha256(rows[0]["candidate"])
+    rows[0]["execution_seed"] = 530301
+    rows[0]["seed_lineage"]["candidate_scenario_seed"] = 530301
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.accounting["candidate_schema_failure_count"] == 1
+    assert any("does not match the frozen search space" in item for item in result.blockers)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_text"),
+    (
+        ("readiness_status", "native", "readiness_status must match"),
+        ("constraints_first_outcome", {"status": "observed"}, "incomplete constraints-first"),
+    ),
+)
+def test_diagnostic_analysis_rejects_incomplete_execution_provenance(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    expected_text: str,
+) -> None:
+    """Rows must carry frozen adapter status and complete observed outcome vectors."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    rows[0][field] = value
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert any(expected_text in item for item in result.blockers)
 
 
 def test_diagnostic_analysis_rejects_self_hashed_wrong_frozen_bindings(tmp_path: Path) -> None:

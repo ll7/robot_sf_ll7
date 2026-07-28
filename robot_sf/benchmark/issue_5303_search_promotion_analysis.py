@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.adversarial.config import CandidateSpec, Pose2D, SearchSpaceConfig
 from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
     DEFAULT_MANIFEST_PATH,
     preflight_issue_5303_contract,
@@ -28,6 +29,26 @@ OUTCOME_ROW_SCHEMA_VERSION = "issue_5303_search_promotion_outcome_row.v1"
 DEFAULT_CONTRACT_PATH = Path("configs/adversarial/issue_5303_search_promotion_contract.yaml")
 EXPECTED_EXECUTION_CONTEXT_LABEL = "diagnostic_adapter_context_a"
 DIAGNOSTIC_NOT_RUN = "not_run_diagnostic_only"
+_FROZEN_CANDIDATE_FIELDS = frozenset(
+    {
+        "start",
+        "goal",
+        "spawn_time_s",
+        "pedestrian_speed_mps",
+        "pedestrian_delay_s",
+        "scenario_seed",
+    }
+)
+_FROZEN_POSE_FIELDS = frozenset({"x", "y", "theta"})
+_FROZEN_CONSTRAINTS_FIRST_FIELDS = frozenset(
+    {
+        "status",
+        "collision_or_severe_intrusion",
+        "liveness_or_goal_completion",
+        "comfort_and_efficiency",
+    }
+)
+_FROZEN_COMFORT_FIELDS = frozenset({"snqi", "near_misses", "path_efficiency"})
 
 
 @dataclass(frozen=True)
@@ -205,6 +226,127 @@ def _frozen_row_bindings(contract: dict[str, Any], blockers: list[str]) -> dict[
     return bindings
 
 
+def _finite_number(value: Any, *, field_name: str, errors: list[str]) -> float | None:
+    """Parse one finite JSON number for a frozen candidate field.
+
+    Returns:
+        Parsed finite value, or ``None`` after recording an error.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        errors.append(f"{field_name} must be a finite number")
+        return None
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        errors.append(f"{field_name} must be a finite number")
+        return None
+    return parsed
+
+
+def _candidate_search_space_errors(  # noqa: C901
+    candidate: dict[str, Any], search_space: SearchSpaceConfig
+) -> list[str]:
+    """Validate a serialized candidate against the frozen search-space contract.
+
+    Returns:
+        Validation errors; an empty list means the candidate is in the frozen space.
+    """
+    errors: list[str] = []
+    missing = sorted(_FROZEN_CANDIDATE_FIELDS - set(candidate))
+    unexpected = sorted(set(candidate) - _FROZEN_CANDIDATE_FIELDS)
+    if missing:
+        errors.append(f"missing candidate fields: {missing}")
+    if unexpected:
+        errors.append(f"unexpected candidate fields: {unexpected}")
+    if errors:
+        return errors
+
+    pose_values: dict[str, dict[str, float]] = {}
+    for pose_name in ("start", "goal"):
+        raw_pose = candidate.get(pose_name)
+        if not isinstance(raw_pose, dict):
+            errors.append(f"{pose_name} must be an object")
+            continue
+        pose_missing = sorted(_FROZEN_POSE_FIELDS - set(raw_pose))
+        pose_unexpected = sorted(set(raw_pose) - _FROZEN_POSE_FIELDS)
+        if pose_missing:
+            errors.append(f"{pose_name} is missing fields: {pose_missing}")
+        if pose_unexpected:
+            errors.append(f"{pose_name} has unexpected fields: {pose_unexpected}")
+        if pose_missing or pose_unexpected:
+            continue
+        values: dict[str, float] = {}
+        for field_name in sorted(_FROZEN_POSE_FIELDS):
+            parsed = _finite_number(
+                raw_pose.get(field_name),
+                field_name=f"{pose_name}.{field_name}",
+                errors=errors,
+            )
+            if parsed is not None:
+                values[field_name] = parsed
+        if len(values) == len(_FROZEN_POSE_FIELDS):
+            pose_values[pose_name] = values
+
+    scalar_values: dict[str, float] = {}
+    for field_name in (
+        "spawn_time_s",
+        "pedestrian_speed_mps",
+        "pedestrian_delay_s",
+    ):
+        parsed = _finite_number(candidate.get(field_name), field_name=field_name, errors=errors)
+        if parsed is not None:
+            scalar_values[field_name] = parsed
+    scenario_seed = candidate.get("scenario_seed")
+    if isinstance(scenario_seed, bool) or not isinstance(scenario_seed, int):
+        errors.append("scenario_seed must be an integer")
+
+    if errors:
+        return errors
+    candidate_spec = CandidateSpec(
+        start=Pose2D(**pose_values["start"]),
+        goal=Pose2D(**pose_values["goal"]),
+        spawn_time_s=scalar_values["spawn_time_s"],
+        pedestrian_speed_mps=scalar_values["pedestrian_speed_mps"],
+        pedestrian_delay_s=scalar_values["pedestrian_delay_s"],
+        scenario_seed=int(scenario_seed),
+    )
+    return search_space.validate_candidate(candidate_spec)
+
+
+def _constraints_first_outcome_errors(value: Any) -> list[str]:
+    """Validate the complete observed constraints-first outcome projection.
+
+    Returns:
+        Validation errors; an empty list means the outcome is complete.
+    """
+    if not isinstance(value, dict):
+        return ["must be an object"]
+    errors: list[str] = []
+    missing = sorted(_FROZEN_CONSTRAINTS_FIRST_FIELDS - set(value))
+    if missing:
+        errors.append(f"missing fields: {missing}")
+    if value.get("status") != "observed":
+        errors.append("status must be 'observed'")
+    for field_name in ("collision_or_severe_intrusion", "liveness_or_goal_completion"):
+        if not isinstance(value.get(field_name), bool):
+            errors.append(f"{field_name} must be boolean")
+    comfort = value.get("comfort_and_efficiency")
+    if not isinstance(comfort, dict):
+        errors.append("comfort_and_efficiency must be an object")
+    else:
+        comfort_missing = sorted(_FROZEN_COMFORT_FIELDS - set(comfort))
+        if comfort_missing:
+            errors.append(f"comfort_and_efficiency is missing fields: {comfort_missing}")
+        for field_name in _FROZEN_COMFORT_FIELDS:
+            metric = comfort.get(field_name)
+            if metric is not None:
+                _finite_number(
+                    metric,
+                    field_name=f"comfort_and_efficiency.{field_name}",
+                    errors=errors,
+                )
+    return errors
+
+
 def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     outcomes_path: Path,
     *,
@@ -257,6 +399,15 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
 
     required_fields = _required_contract_fields(contract, blockers)
     frozen_row_bindings = _frozen_row_bindings(contract, blockers)
+    frozen_search_space: SearchSpaceConfig | None = None
+    frozen_search_space_path = frozen_row_bindings.get("search_space_path")
+    if frozen_search_space_path:
+        try:
+            frozen_search_space = SearchSpaceConfig.from_file(
+                _resolve(root, Path(frozen_search_space_path))
+            )
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            blockers.append(f"frozen search space could not be loaded: {exc}")
     methods_block = contract.get("methods") if isinstance(contract.get("methods"), dict) else {}
     methods = tuple(
         str(entry.get("name"))
@@ -288,6 +439,7 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     required_field_failures = 0
     immutable_hash_failures = 0
     normalized_candidate_hash_failures = 0
+    candidate_schema_failures = 0
     frozen_binding_failures: dict[str, int] = dict.fromkeys(frozen_row_bindings, 0)
     execution_commits: set[str] = set()
 
@@ -346,6 +498,7 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
         normalized_hash = row.get("normalized_candidate_config_sha256")
         verified_candidate_hash: str | None = None
         if not isinstance(candidate, dict):
+            candidate_schema_failures += 1
             normalized_candidate_hash_failures += 1
             blockers.append(f"row {row_number} candidate must be an object")
         else:
@@ -355,6 +508,14 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
                 blockers.append(
                     f"row {row_number} normalized candidate hash does not match candidate content"
                 )
+            if frozen_search_space is not None:
+                candidate_errors = _candidate_search_space_errors(candidate, frozen_search_space)
+                if candidate_errors:
+                    candidate_schema_failures += 1
+                    blockers.append(
+                        f"row {row_number} candidate does not match the frozen search space: "
+                        + "; ".join(candidate_errors)
+                    )
         if verified_candidate_hash in normalized_hashes[arm]:
             duplicates_by_arm[arm] += 1
         elif verified_candidate_hash is not None:
@@ -409,11 +570,15 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             blockers.append(f"row {row_number} has invalid recertification lineage")
 
         readiness_status = row.get("readiness_status")
-        if not isinstance(readiness_status, str) or readiness_status.strip().lower() not in {
-            "native",
-            "adapter",
-        }:
-            blockers.append(f"row {row_number} has non-evidence readiness status")
+        required_readiness = frozen_row_bindings.get("execution_mode", "").strip().lower()
+        if (
+            not isinstance(readiness_status, str)
+            or readiness_status.strip().lower() != required_readiness
+        ):
+            blockers.append(
+                f"row {row_number} readiness_status must match frozen execution mode "
+                f"{required_readiness!r}"
+            )
         availability_status = row.get("availability_status")
         if availability_status != "available":
             attrition_by_arm[arm] += 1
@@ -422,11 +587,12 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
                 "in the primary denominator but cannot support a diagnostic readiness result"
             )
         constraints_first_outcome = row.get("constraints_first_outcome")
-        if (
-            not isinstance(constraints_first_outcome, dict)
-            or constraints_first_outcome.get("status") != "observed"
-        ):
-            blockers.append(f"row {row_number} lacks an observed constraints-first outcome")
+        outcome_errors = _constraints_first_outcome_errors(constraints_first_outcome)
+        if outcome_errors:
+            blockers.append(
+                f"row {row_number} has an incomplete constraints-first outcome: "
+                + "; ".join(outcome_errors)
+            )
         objective_value = row.get("objective_value")
         if (
             isinstance(objective_value, bool)
@@ -488,6 +654,7 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
         "required_field_failure_count": required_field_failures,
         "immutable_hash_failure_count": immutable_hash_failures,
         "normalized_candidate_hash_failure_count": normalized_candidate_hash_failures,
+        "candidate_schema_failure_count": candidate_schema_failures,
         "frozen_contract_sha256": frozen_preflight.metadata.get("contract_file_sha256"),
         "frozen_contract_preflight_ready": frozen_preflight.ready,
         "frozen_row_binding_failure_counts": frozen_binding_failures,

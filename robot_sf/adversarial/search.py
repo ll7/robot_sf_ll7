@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from robot_sf.adversarial.attribution import (
     FailureAttribution,
@@ -44,6 +45,52 @@ DEFAULT_SCHEMA_PATH = (
 )
 
 
+def _availability_summary(summary: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:
+    """Complete a batch summary with per-episode execution provenance.
+
+    The direct benchmark runner returns episode counts and failures but does not
+    include the algorithm metadata contract that the map runner places in its
+    summary. Use the written episode record as the authoritative fallback, and
+    surface non-``ok`` algorithm statuses as a preflight failure so fallback or
+    degraded execution cannot be reported as available.
+    """
+    enriched = dict(summary)
+    if not isinstance(record, dict) or not record:
+        preflight = enriched.get("preflight")
+        preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
+        preflight_status = str(preflight_payload.get("status", "")).strip().lower()
+        if preflight_status not in {"fallback", "skipped"}:
+            preflight_payload["status"] = "skipped"
+            preflight_payload.setdefault(
+                "compatibility_reason", "episode record was missing or malformed"
+            )
+            enriched["preflight"] = preflight_payload
+        return enriched
+    metadata = record.get("algorithm_metadata") if isinstance(record, dict) else None
+    if isinstance(metadata, dict) and not isinstance(
+        enriched.get("algorithm_metadata_contract"), dict
+    ):
+        enriched["algorithm_metadata_contract"] = metadata
+
+    metadata_status = str(metadata.get("status", "")).strip().lower() if metadata else ""
+    if metadata_status and metadata_status != "ok":
+        preflight = enriched.get("preflight")
+        preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
+        preflight_status = str(preflight_payload.get("status", "")).strip().lower()
+        if preflight_status in {"", "unknown", "ok", "partial"}:
+            preflight_payload["status"] = (
+                "fallback"
+                if "fallback" in metadata_status or "unavailable" in metadata_status
+                else "skipped"
+            )
+            preflight_payload.setdefault(
+                "compatibility_reason",
+                f"episode algorithm metadata status: {metadata_status}",
+            )
+            enriched["preflight"] = preflight_payload
+    return enriched
+
+
 def _default_evaluator(
     config: SearchConfig,
     candidate: CandidateSpec,
@@ -74,7 +121,7 @@ def _default_evaluator(
     record = read_first_jsonl_record(episode_path)
     trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
     attribution = attribution_from_episode_record(record or {})
-    availability = summarize_benchmark_availability(summary)
+    availability = summarize_benchmark_availability(_availability_summary(summary, record))
     attribution = replace(
         attribution,
         details={

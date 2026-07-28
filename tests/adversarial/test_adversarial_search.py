@@ -2108,6 +2108,83 @@ def test_default_evaluator_records_fail_closed_benchmark_availability(
     assert written["details"]["availability_status"] == "not_available"
 
 
+@pytest.mark.parametrize(
+    ("metadata_status", "expected_readiness", "expected_availability"),
+    (
+        ("ok", "adapter", "available"),
+        ("policy_step_timeout_fallback", "fallback", "not_available"),
+    ),
+)
+def test_default_evaluator_uses_episode_metadata_when_batch_summary_omits_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    metadata_status: str,
+    expected_readiness: str,
+    expected_availability: str,
+) -> None:
+    """Direct batch summaries cannot erase the episode's execution provenance."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write a production-shaped episode and a direct-runner summary."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                    "algorithm_metadata": {
+                        "status": metadata_status,
+                        "planner_kinematics": {"execution_mode": "adapter"},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {"failures": [], "total_jobs": 1, "written": 1}
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "adapter"
+    assert evaluation.failure_attribution.details["readiness_status"] == expected_readiness
+    assert evaluation.failure_attribution.details["availability_status"] == expected_availability
+
+
+def test_default_evaluator_fails_closed_when_episode_record_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A positive batch count cannot substitute for a missing episode record."""
+    config = _config(tmp_path)
+
+    monkeypatch.setattr(
+        search,
+        "run_batch",
+        lambda *_args, **_kwargs: {"failures": [], "total_jobs": 1, "written": 1},
+    )
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "unknown"
+    assert evaluation.failure_attribution.details["readiness_status"] == "degraded"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+
+
 def test_failure_attribution_covers_primary_outcomes() -> None:
     """Failure attribution must distinguish collision, timeout, incomplete, and errors."""
     collision = attribution_from_episode_record(

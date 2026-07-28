@@ -26,7 +26,7 @@ import hashlib
 import json
 import random
 from dataclasses import dataclass, field
-from math import comb
+from math import comb, sqrt
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -1084,6 +1084,38 @@ def fisher_exact_two_sided_table(a: int, b: int, c: int, d: int) -> float:
     hi = min(row1, col1)
     total = sum(_prob(aa) for aa in range(lo, hi + 1) if _prob(aa) <= p_obs + _EPS)
     return min(1.0, total)
+
+
+def wilson_score_interval(
+    successes: int, trials: int, *, z: float = 1.959963984540054
+) -> tuple[float, float]:
+    """Return a two-sided Wilson score interval for a binomial proportion."""
+    if not isinstance(successes, int) or not isinstance(trials, int):
+        raise ValueError("successes and trials must be integers")
+    if trials <= 0 or successes < 0 or successes > trials:
+        raise ValueError("successes must be in [0, trials] and trials must be positive")
+    proportion = successes / trials
+    z_squared = z * z
+    denominator = 1.0 + z_squared / trials
+    centre = (proportion + z_squared / (2.0 * trials)) / denominator
+    radius = (
+        z
+        * sqrt((proportion * (1.0 - proportion) + z_squared / (4.0 * trials)) / trials)
+        / denominator
+    )
+    return max(0.0, centre - radius), min(1.0, centre + radius)
+
+
+def newcombe_wilson_difference_interval(
+    proposal_failures: int,
+    proposal_count: int,
+    random_failures: int,
+    random_count: int,
+) -> tuple[float, float]:
+    """Return Newcombe's unpooled Wilson interval for proposal minus random."""
+    proposal_lower, proposal_upper = wilson_score_interval(proposal_failures, proposal_count)
+    random_lower, random_upper = wilson_score_interval(random_failures, random_count)
+    return proposal_lower - random_upper, proposal_upper - random_lower
 
 
 def binary_yield_min_detectable_difference(k_per_arm: int, alpha: float = 0.05) -> float:

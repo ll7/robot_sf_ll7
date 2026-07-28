@@ -123,6 +123,10 @@ after predeclared deterministic replay (exact signature match), independent-seed
 confirmation (at least **3 of 5** predeclared seeds; **4 of 5 is not required**),
 and stable attribution.
 
+Uncertainty is reported as a 95% Newcombe unpooled Wilson score interval for
+the proposal-minus-random candidate-level yield difference. It quantifies the
+estimate; the frozen two-sided Fisher exact test remains the decision test.
+
 Power/sensitivity (Fisher exact two-sided, alpha = 0.05): the boundary minimum
 detectable yield difference is ~0.50 at k = 10/arm, ~0.417 at k = 12/arm, and
 ~0.25 at k = 20/arm. After excluding the six `stress_only` fit anchors, the

@@ -38,6 +38,7 @@ from robot_sf.adversarial.disjoint_evaluation import (
     binary_yield_min_detectable_difference,
     classify_issue_3275_decision,
     fisher_exact_two_sided_table,
+    newcombe_wilson_difference_interval,
     shuffled_outcome_null_test,
 )
 
@@ -804,6 +805,9 @@ def _summarize_admitted_rows(  # noqa: PLR0913
         random_arm["failures"],
         random_arm["count"] - random_arm["failures"],
     )
+    yield_interval = newcombe_wilson_difference_interval(
+        proposal["failures"], proposal["count"], random_arm["failures"], random_arm["count"]
+    )
     null_rejected = bool(fisher_p <= alpha)
     binding_k = budget_per_arm
     min_detectable = binary_yield_min_detectable_difference(binding_k, alpha=alpha)
@@ -846,6 +850,11 @@ def _summarize_admitted_rows(  # noqa: PLR0913
         "comparison": {
             "estimand": "proposal_minus_random_candidate_level_certified_failure_yield",
             "yield_improvement": round(proposal_yield - random_yield, 6),
+            "yield_improvement_95pct_ci": [
+                round(yield_interval[0], 6),
+                round(yield_interval[1], 6),
+            ],
+            "yield_improvement_ci_method": "newcombe_unpooled_wilson_95pct",
             "fisher_exact_two_sided_p_value": round(fisher_p, 6),
             "alpha_two_sided": alpha,
             "null_rejected": null_rejected,

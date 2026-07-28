@@ -276,6 +276,7 @@ from robot_sf.adversarial.disjoint_evaluation import (  # noqa: E402
     fisher_exact_two_sided,
     fisher_exact_two_sided_table,
     frozen_held_out_family_split,
+    newcombe_wilson_difference_interval,
 )
 
 
@@ -457,6 +458,14 @@ def test_fisher_exact_extremes_and_symmetry() -> None:
     assert fisher_exact_two_sided_table(3, 1, 0, 4) == pytest.approx(
         fisher_exact_two_sided_table(0, 4, 3, 1)
     )
+
+
+def test_newcombe_wilson_difference_interval_is_ordered_and_signed() -> None:
+    """The frozen yield interval covers the observed proposal-minus-random difference."""
+    lower, upper = newcombe_wilson_difference_interval(4, 4, 0, 4)
+    assert lower <= 1.0 <= upper
+    assert lower >= -1.0
+    assert upper <= 1.0
 
 
 def test_binary_yield_min_detectable_matches_recorded_power_table() -> None:

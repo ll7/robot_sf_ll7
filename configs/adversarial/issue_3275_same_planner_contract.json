@@ -136,7 +136,8 @@
     "definition": "proposal-minus-random difference in candidate-level certified failure yield under identical candidate budget.",
     "candidate_level": true,
     "failure_yield_definition": "A candidate counts as a failure only after the predeclared deterministic replay, independent-seed confirmation, and stable-attribution rule all pass for that candidate's execution.",
-    "proposal_minus_random": true
+    "proposal_minus_random": true,
+    "uncertainty_interval": "95% Newcombe unpooled Wilson score interval for proposal-minus-random candidate-level certified failure yield. It quantifies estimate uncertainty; the frozen two-sided Fisher exact test remains the decision test."
   },
   "failure_admission": {
     "deterministic_replay": "exact signature match (replay signature SHA-256 equals original signature SHA-256)",

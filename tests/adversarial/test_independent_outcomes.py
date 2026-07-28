@@ -782,6 +782,9 @@ def test_complete_packet_decision_follows_execution() -> None:
     assert result["proposal_failure_yield"] == 1.0
     assert result["random_failure_yield"] == 0.0
     assert result["comparison"]["yield_improvement"] == 1.0
+    assert result["comparison"]["yield_improvement_ci_method"] == "newcombe_unpooled_wilson_95pct"
+    lower, upper = result["comparison"]["yield_improvement_95pct_ci"]
+    assert lower <= result["comparison"]["yield_improvement"] <= upper
     assert result["comparison"]["null_rejected"] is True
     assert result["comparison"]["powered"] is False
     assert result["decision"]["status"] == "inconclusive"

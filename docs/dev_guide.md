@@ -463,13 +463,16 @@ before the queue auto-merges a PR:
 
 **Required maintainer toggle (cannot be done from a worktree).** The gate fails closed only after
 a maintainer adds the status check **`Merge Queue Gate / merge-queue-gate`** to the merge queue's
-required status checks and enables **Only merge non-failing pull requests** (`ALLGREEN`) in the
-branch protection rules for `main` (Settings → Branches → `main` → merge queue). The workflow
-verifies `ALLGREEN` at runtime and fails closed if the queue is configured as `HEADGREEN`. Until
-these toggles are applied, the workflow does not provide the queue-side contract; the in-repo
-`gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge queue
-itself also requires maintainer approval to toggle branch-protection settings, consistent with the
-gate-side rationale above.
+required status checks, enables **Only merge non-failing pull requests** (`ALLGREEN`), and enables
+**Require conversation resolution before merging** in the branch-protection rules for `main`
+(Settings → Branches → `main` → merge queue). The workflow verifies `ALLGREEN` at runtime and
+fails closed if the queue is configured as `HEADGREEN`. GitHub does not reliably create a fresh
+source-head Actions check when a reviewer resolves or reopens a thread; requiring conversation
+resolution therefore makes the gate's no-unresolved-threads condition binding at merge time.
+Until these toggles are applied, the workflow does not provide the queue-side contract; the
+in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
+queue itself also requires maintainer approval to toggle branch-protection settings, consistent
+with the gate-side rationale above.
 
 **Relationship to the gate-side staleness check.** The staleness preflight (step 6 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for

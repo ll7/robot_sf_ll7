@@ -17,10 +17,14 @@ name: Merge Queue Gate
 #
 # To activate fail-closed behavior, add this job's status check
 # ("Merge Queue Gate / merge-queue-gate") to the merge queue's required status
-# checks and enable "Only merge non-failing pull requests" in the branch
-# protection rules for `main`. Both the source-PR and `merge_group` runs
-# enforce the same fail-closed contract. The workflow does not locate or
-# control direct merge dispatchers that can bypass GitHub branch protection.
+# checks, enable "Only merge non-failing pull requests", and enable "Require
+# conversation resolution before merging" in the branch-protection rules for
+# `main`. Review-thread resolution changes do not reliably create a fresh
+# source-head Actions check, so GitHub's native conversation-resolution rule
+# makes this gate's thread condition binding at merge time. Both the source-PR
+# and `merge_group` runs enforce the same fail-closed contract. The workflow
+# does not locate or control direct merge dispatchers that can bypass GitHub
+# branch protection.
 # See docs/dev_guide.md ("Merge queue gate") for the exact configuration and
 # residual issue #6274 acceptance proof.
 

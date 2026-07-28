@@ -272,6 +272,7 @@ def test_workflow_uses_fail_closed_source_head_gate_and_safe_manual_input() -> N
     assert "persist-credentials: false" in workflow
     assert "statuses: read" in workflow
     assert "Trusted base does not contain scripts/dev/merge_queue_gate.py" in workflow
+    assert "conversation resolution before merging" in workflow
     assert "exit 0" in workflow
 
 

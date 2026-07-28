@@ -646,7 +646,7 @@ def gate_5_fail_closed(nmpc_config: NMPCSocialConfig) -> GateResult:
     exc_repr = ""
     try:
         planner_d.plan(obs)
-    except Exception as exc:  # noqa: BLE001 - intentionally broad for the probe
+    except ValueError as exc:
         exception_propagates = True
         exc_repr = f"{type(exc).__name__}: {exc}"
     finally:
@@ -946,7 +946,7 @@ def _hardware_context() -> dict[str, Any]:
             check=False,
             timeout=2,
         ).stdout.strip()
-    except Exception:  # noqa: BLE001
+    except (OSError, subprocess.SubprocessError):
         freq_mhz = ""
     return {
         "platform_processor": platform.processor() or "unknown",
@@ -988,6 +988,7 @@ def _write_evidence_doc(
 
     summary = {
         "schema": "issue_6158_topology_parallel_nmpc_offline_verdict.v1",
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "issue": ISSUE_NUMBER,
         "parent_issue": PARENT_ISSUE,
         "source_pr": SOURCE_PR,
@@ -1047,7 +1048,7 @@ def _write_evidence_doc(
     )
     plan_ms = latency_gate.evidence.get("plan_wall_clock_ms_measurement_safe_deadline", {})
     plan_real = latency_gate.evidence.get("plan_wall_clock_ms_real_2s_deadline", {})
-    md = []
+    md = ["<!-- AI-GENERATED (robot_sf#6158) - NEEDS-REVIEW -->\n\n"]
     md.append(f"# Issue #{ISSUE_NUMBER}: topology-parallel NMPC offline verdict\n")
     md.append(
         f"Diagnostic-only validation of the merged #{SOURCE_PR} prototype "
@@ -1125,6 +1126,7 @@ def _write_evidence_doc(
     md.append(summary["claim_boundary"] + "\n")
     md.append("\n## Machine-readable summary\n")
     md.append("```json\n" + json.dumps(summary, indent=2, default=str) + "\n```\n")
+    md.append("<!-- /AI-GENERATED -->\n")
     EVIDENCE_DOC.write_text("".join(md))
     return summary
 

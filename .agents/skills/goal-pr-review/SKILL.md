@@ -174,8 +174,12 @@ helper is route evidence only and does not perform GitHub-visible writes.
    when moving draft PRs to ready or when bot reviewers were previously pending or skipped.
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
-8. After the full proof bar closes, post an exact-head review-evidence comment naming the reviewed
-   SHA, validation, findings disposition, and any single-account waiver; then update `merge-ready`.
+8. After the full proof bar closes, post an exact-head review-evidence comment by submitting a GitHub
+   COMMENTED review (`gh pr review --comment --body-file <path>`) naming the reviewed SHA,
+   validation, findings disposition, and any single-account waiver; then update `merge-ready`. The
+   review event refreshes the source-head queue gate after the verdict. A top-level PR comment alone
+   does not; if review submission is unavailable, remove and reapply `merge-ready` after posting the
+   comment or record the gate-refresh blocker.
 9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use compact,
    bounded one-shot polling in non-TTY agent sessions instead of `gh pr checks --watch`:
    `uv run python scripts/dev/watch_pr_ci_status.py <number> --once --json --expected-head-sha <sha>`.

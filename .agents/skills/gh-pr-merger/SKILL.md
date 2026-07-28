@@ -31,7 +31,9 @@ status check (`.github/workflows/merge-queue-gate.yml`, backed by
 `scripts/dev/merge_queue_gate.py`), so the GitHub native merge queue and any
 external/parallel auto-merge dispatcher that routes through it cannot bypass
 `merge-ready`, the exact-head `gate-verdict: accepted` trailer, unresolved
-threads, or an explicitly requested reviewer. The queue gate also fails closed
+threads, or an explicitly requested reviewer. Comment or review verdict trailers count only when
+GitHub reports the author as a repository owner, member, or collaborator; an untrusted contributor
+cannot self-approve a new head under a retained label. The queue gate also fails closed
 unless the live queue uses GitHub's `ALLGREEN` ("Only merge non-failing pull
 requests") strategy, which prevents a
 passing tail entry from carrying an earlier ungated entry through a grouped

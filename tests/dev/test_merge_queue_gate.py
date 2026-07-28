@@ -24,7 +24,12 @@ def _gh_response(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> 
     return MagicMock(stdout=stdout, stderr=stderr, returncode=returncode)
 
 
-def _raw_pr(*, body: str = "", carrier: str = "comments") -> dict[str, object]:
+def _raw_pr(
+    *,
+    body: str = "",
+    carrier: str = "comments",
+    author_association: str = "OWNER",
+) -> dict[str, object]:
     """Build raw ``gh pr view`` data with an optional comment/review body."""
     payload: dict[str, object] = {
         "number": 42,
@@ -37,7 +42,7 @@ def _raw_pr(*, body: str = "", carrier: str = "comments") -> dict[str, object]:
         "reviewRequests": [],
     }
     if body:
-        payload[carrier] = [{"body": body}]
+        payload[carrier] = [{"body": body, "authorAssociation": author_association}]
     return payload
 
 
@@ -294,6 +299,28 @@ def test_fetch_pr_snapshot_preserves_long_gate_verdict_trailers(carrier: str) ->
     assert snapshot["gate_verdicts"] == [trailer]
     audit = evaluate_merge_gate(snapshot, main_sha=FULL_SHA, threads_resolved=True)
     assert audit.passed is True
+
+
+@pytest.mark.parametrize("carrier", ["comments", "reviews"])
+def test_fetch_pr_snapshot_ignores_untrusted_gate_verdict_authors(carrier: str) -> None:
+    """A contributor cannot self-approve a retained merge-ready label after pushing."""
+    raw_pr = _raw_pr(
+        body=f"gate-verdict: accepted @ {FULL_SHA}",
+        carrier=carrier,
+        author_association="CONTRIBUTOR",
+    )
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["gate_verdicts"] == []
+    audit = evaluate_merge_gate(snapshot, main_sha=FULL_SHA, threads_resolved=True)
+    assert audit.passed is False
+    assert "missing_exact_head_gate_verdict" in audit.reasons
 
 
 def test_fetch_threads_resolved_rejects_incomplete_connection() -> None:

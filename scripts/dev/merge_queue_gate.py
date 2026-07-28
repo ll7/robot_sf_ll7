@@ -529,7 +529,12 @@ def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
             continue
         body = str(entry.get("body") or "")
         if body:
-            latest.append({"body_excerpt": body[:limit]})
+            latest.append(
+                {
+                    "author_association": str(entry.get("authorAssociation", "")),
+                    "body_excerpt": body[:limit],
+                }
+            )
     return {"latest": latest}
 
 
@@ -597,6 +602,7 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
         "base_sha": base_sha,
         "labels": _normalize_labels(payload.get("labels")),
         "checks": {"overall": _rollup_overall(payload.get("statusCheckRollup") or [])},
+        # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
@@ -1099,7 +1105,12 @@ def _self_test() -> int:
             "checks": {"overall": "success"},
             "reviewers_requested": False,
             "comment_snapshot": {
-                "latest": [{"body_excerpt": f"lgtm\n\ngate-verdict: accepted @ {full_sha}"}]
+                "latest": [
+                    {
+                        "author_association": "OWNER",
+                        "body_excerpt": f"lgtm\n\ngate-verdict: accepted @ {full_sha}",
+                    }
+                ]
             },
         },
         threads_resolved=True,

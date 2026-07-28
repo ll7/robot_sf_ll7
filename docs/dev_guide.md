@@ -442,8 +442,10 @@ before the queue auto-merges a PR:
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
   `gate-verdict: accepted @ <head_sha>` trailer (reuses
-  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`), no unresolved actionable review
-  threads, and no outstanding explicitly requested reviewers. The current source-head CI rollup
+  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`) authored by a repository owner,
+  member, or collaborator; verdict-like text from an untrusted contributor is ignored. The gate
+  also requires no unresolved actionable review threads and no outstanding explicitly requested
+  reviewers. The current source-head CI rollup
   must also remain green; superseded check runs are discarded with the same helper used by the
   guarded merger preflight, and the gate excludes its own in-progress source-head check to avoid
   waiting on itself. The exact-head trailer binds that CI and review evidence to the source head,
@@ -469,6 +471,10 @@ required status checks, enables **Only merge non-failing pull requests** (`ALLGR
 fails closed if the queue is configured as `HEADGREEN`. GitHub does not reliably create a fresh
 source-head Actions check when a reviewer resolves or reopens a thread; requiring conversation
 resolution therefore makes the gate's no-unresolved-threads condition binding at merge time.
+Exact-head review evidence should be submitted as a COMMENTED GitHub review so the
+`pull_request_review` event refreshes the required source-head gate. A top-level PR comment does
+not refresh that check; workflows unable to submit a review must remove and reapply `merge-ready`
+after publishing the comment.
 Until these toggles are applied, the workflow does not provide the queue-side contract; the
 in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent

@@ -194,6 +194,9 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
     return texts
 
 
+_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+
+
 def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
     """Return comment/review body excerpts that may carry a gate-verdict trailer."""
     texts: list[str] = []
@@ -205,7 +208,14 @@ def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
         if not isinstance(latest, list):
             continue
         for entry in latest:
-            if isinstance(entry, dict) and isinstance(entry.get("body_excerpt"), str):
+            if not isinstance(entry, dict):
+                continue
+            association = str(
+                entry.get("author_association") or entry.get("authorAssociation") or ""
+            ).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            if isinstance(entry.get("body_excerpt"), str):
                 texts.append(entry["body_excerpt"])
     return texts
 

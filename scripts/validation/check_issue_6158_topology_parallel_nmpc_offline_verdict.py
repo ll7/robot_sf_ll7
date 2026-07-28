@@ -43,7 +43,7 @@ import platform
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -370,27 +370,56 @@ def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
 
 
 def gate_3_objective_invariance(nmpc_config: NMPCSocialConfig) -> GateResult:
-    """objective_preferred_turn must be 0.0 for every hypothesis (shared objective)."""
+    """Verify identical objective, solver, bounds, constraints, and options per hypothesis."""
+    import robot_sf.planner.nmpc_social as nmpc_mod
+
     obs = _build_obs(goal=(3.0, 0.0), ped_positions=[(1.2, 0.0)])
+    labels = ("pass_left", "yield_straight", "pass_right")
     topo_cfg = TopologyParallelNMPCConfig(
         max_hypotheses=3,
-        hypothesis_labels=("pass_left", "yield_straight", "pass_right"),
+        hypothesis_labels=labels,
         nmpc_config=nmpc_config,
         switch_hysteresis_ticks=0,
         max_runtime_s=300.0,
         control_period_s=300.0,
     )
     topo = TopologyParallelNMPCPlannerAdapter(topo_cfg)
-    topo.plan(obs)
+    solver_invocations: list[dict[str, Any]] = []
+    original_minimize = nmpc_mod.minimize
+
+    def _capture_minimize(*args: Any, **kwargs: Any) -> Any:
+        """Record the solver contract while delegating to SciPy unchanged."""
+        bounds = kwargs.get("bounds")
+        constraints = kwargs.get("constraints", ())
+        if not isinstance(constraints, tuple):
+            constraints = tuple(constraints)
+        solver_invocations.append(
+            {
+                "method": kwargs.get("method"),
+                "bounds_lower": np.asarray(getattr(bounds, "lb", []), dtype=float).tolist(),
+                "bounds_upper": np.asarray(getattr(bounds, "ub", []), dtype=float).tolist(),
+                "constraints": [
+                    {
+                        "type": type(constraint).__name__,
+                        "lower": np.asarray(getattr(constraint, "lb", []), dtype=float).tolist(),
+                        "upper": np.asarray(getattr(constraint, "ub", []), dtype=float).tolist(),
+                    }
+                    for constraint in constraints
+                ],
+                "options": dict(kwargs.get("options", {})),
+            }
+        )
+        return original_minimize(*args, **kwargs)
+
+    nmpc_mod.minimize = _capture_minimize
+    try:
+        topo.plan(obs)
+    finally:
+        nmpc_mod.minimize = original_minimize
     diag = topo._last_hypothesis_diagnostics
     per_label: dict[str, Any] = {}
-    all_zero = bool(diag)
-    shared_cfg_fields = {
-        "horizon_steps": int(nmpc_config.horizon_steps),
-        "solver_max_iterations": int(nmpc_config.solver_max_iterations),
-        "solver_ftol": float(nmpc_config.solver_ftol),
-        "warm_start": bool(nmpc_config.warm_start),
-    }
+    all_zero = len(diag) == len(labels)
+    shared_cfg_fields = asdict(nmpc_config)
     for d in diag:
         sig = d.initialization_signature
         opt_turn = sig.get("objective_preferred_turn")
@@ -400,17 +429,25 @@ def gate_3_objective_invariance(nmpc_config: NMPCSocialConfig) -> GateResult:
             "solver_status": d.solver_status,
         }
         all_zero = all_zero and (opt_turn == 0.0)
+    solver_configurations_identical = (
+        len(solver_invocations) == len(labels)
+        and len({json.dumps(call, sort_keys=True) for call in solver_invocations}) == 1
+    )
     return GateResult(
         name="gate_3_objective_invariance",
-        passed=all_zero,
+        passed=all_zero and solver_configurations_identical,
         detail=(
             "objective_preferred_turn == 0.0 for every hypothesis; "
+            f"solver/bounds/constraints/options identical={solver_configurations_identical}; "
             f"shared config={shared_cfg_fields}."
         ),
         evidence={
             "per_hypothesis": per_label,
             "shared_nmpc_config": shared_cfg_fields,
             "all_objective_preferred_turn_zero": all_zero,
+            "solver_invocations": solver_invocations,
+            "solver_invocation_count": len(solver_invocations),
+            "solver_configurations_identical": solver_configurations_identical,
         },
     )
 

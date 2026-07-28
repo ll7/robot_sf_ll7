@@ -103,7 +103,13 @@ def _apply_gate_verdict(result: dict[str, object], gate_verdict: object) -> None
         result["review_snapshot"] = {
             "total": 1,
             "latest": [
-                {"state": "APPROVED", "author": "bot", "submitted_at": "", "body_excerpt": trailer}
+                {
+                    "state": "APPROVED",
+                    "author": "bot",
+                    "author_association": "OWNER",
+                    "submitted_at": "",
+                    "body_excerpt": trailer,
+                }
             ],
         }
     elif carrier == "explicit":
@@ -113,7 +119,14 @@ def _apply_gate_verdict(result: dict[str, object], gate_verdict: object) -> None
     else:
         result["comment_snapshot"] = {
             "total": 1,
-            "latest": [{"author": "bot", "created_at": "", "body_excerpt": trailer}],
+            "latest": [
+                {
+                    "author": "bot",
+                    "author_association": "OWNER",
+                    "created_at": "",
+                    "body_excerpt": trailer,
+                }
+            ],
         }
 
 
@@ -431,6 +444,7 @@ def test_classify_green_merge_ready_empty_head_rejected() -> None:
             "latest": [
                 {
                     "author": "bot",
+                    "author_association": "OWNER",
                     "created_at": "",
                     "body_excerpt": f"gate-verdict: accepted @ {FULL_SHA}",
                 }
@@ -1268,6 +1282,7 @@ def test_evaluate_queue_reviews_dict_approved_continue() -> None:
                 "latest": [
                     {
                         "author": "bot",
+                        "author_association": "OWNER",
                         "created_at": "",
                         "body_excerpt": f"gate-verdict: accepted @ {FULL_SHA}",
                     }
@@ -1398,6 +1413,7 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
             {
                 "state": "APPROVED",
                 "author": {"login": "reviewer"},
+                "authorAssociation": "OWNER",
                 "body": long_review_body,
                 "submittedAt": "2026-07-22T20:00:00Z",
             }

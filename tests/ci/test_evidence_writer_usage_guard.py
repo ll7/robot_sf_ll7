@@ -263,6 +263,98 @@ output_path.write_text('{}', encoding='utf-8')
     assert "robot_sf.evidence.writers" in blockers[0]
 
 
+def test_cli_arg_short_and_long_options_use_argparse_destination(tmp_path: Path) -> None:
+    """The first long option determines argparse's implicit destination name."""
+    path = _write_fixture(
+        tmp_path,
+        """
+import argparse
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '-o',
+    '--output',
+    type=Path,
+    default=Path('docs/context/evidence/example/out.json'),
+)
+args = parser.parse_args()
+args.output.write_text('{}', encoding='utf-8')
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
+
+
+def test_cli_positional_arg_with_evidence_default_is_caught(tmp_path: Path) -> None:
+    """A positional argparse destination can also default to evidence output."""
+    path = _write_fixture(
+        tmp_path,
+        """
+import argparse
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    'output',
+    nargs='?',
+    type=Path,
+    default=Path('docs/context/evidence/example/out.json'),
+)
+args = parser.parse_args()
+args.output.write_text('{}', encoding='utf-8')
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
+
+
+def test_path_built_from_separate_literal_components_is_caught(tmp_path: Path) -> None:
+    """Split ``Path`` components cannot hide the evidence-tree destination."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+OUTPUT = Path('docs') / 'context' / 'evidence' / 'example' / 'out.json'
+OUTPUT.write_text('{}', encoding='utf-8')
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
+
+
+def test_keyword_only_private_helper_bypass_is_caught(tmp_path: Path) -> None:
+    """A raw writer forwarded through a keyword-only path parameter is blocked."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+OUTPUT = Path('docs/context/evidence/example/out.json')
+
+def _write(*, target, text):
+    target.write_text(text, encoding='utf-8')
+
+_write(target=OUTPUT, text='{}')
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert any("_write()" in blocker and "evidence-tree" in blocker for blocker in blockers)
+    assert any("defines _write()" in blocker for blocker in blockers)
+
+
 def test_interprocedural_helper_bypass_is_caught(tmp_path: Path) -> None:
     """A helper fed an evidence path through a keyword-only param is caught.
 

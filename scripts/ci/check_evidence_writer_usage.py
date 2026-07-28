@@ -18,6 +18,17 @@ WRITE_METHODS = frozenset({"write_bytes", "write_text"})
 # its own definitions would be circular (those wrappers exist so other modules can
 # adopt them). The guard enforces adoption everywhere else.
 _SHARED_WRITER_PACKAGE = ("robot_sf", "evidence")
+_ForwardingHelper = tuple[str, int | None]
+
+
+def _string_literal_parts(expr: ast.AST) -> list[str]:
+    """Return string literal parts from ``expr`` in AST source order."""
+    parts: list[str] = []
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        parts.append(expr.value)
+    for child in ast.iter_child_nodes(expr):
+        parts.extend(_string_literal_parts(child))
+    return parts
 
 
 def _has_write_mode(call: ast.Call) -> bool:
@@ -49,6 +60,9 @@ def _expr_mentions_evidence(
     """
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         return EVIDENCE_PATH_FRAGMENT in expr.value
+    literal_path = "/".join(part.strip("/\\") for part in _string_literal_parts(expr))
+    if EVIDENCE_PATH_FRAGMENT in literal_path:
+        return True
     if isinstance(expr, ast.Name):
         return expr.id in evidence_names
     if isinstance(expr, ast.Attribute) and expr.attr in evidence_arg_dests:
@@ -87,14 +101,18 @@ def _evidence_argparse_dests(
         ):
             continue
         dest: str | None = None
-        if node.args:
-            first = node.args[0]
-            if (
-                isinstance(first, ast.Constant)
-                and isinstance(first.value, str)
-                and first.value.startswith("-")
-            ):
-                dest = first.value.lstrip("-").replace("-", "_")
+        argument_names = [
+            argument.value
+            for argument in node.args
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+        ]
+        option_strings = [name for name in argument_names if name.startswith("-")]
+        if option_strings:
+            long_options = [option for option in option_strings if option.startswith("--")]
+            selected_option = (long_options or option_strings)[0]
+            dest = selected_option.lstrip("-").replace("-", "_")
+        elif argument_names:
+            dest = argument_names[0]
         explicit_dest = next(
             (
                 kw.value
@@ -182,39 +200,45 @@ def _write_path_exprs(node: ast.Call) -> list[ast.AST]:
     return []
 
 
-def _forward_path_index(func_def: ast.FunctionDef) -> int | None:
-    """Return the positional index of the parameter a helper forwards to a write.
+def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | None:
+    """Return the parameter a helper forwards to a write.
 
     A module-level helper like ``_write(path, text)`` that calls
     ``path.write_text(...)`` forwards its ``path`` parameter to a raw write the
     direct-write visitor cannot see (the parameter is not bound to an evidence
-    literal at the definition site). This returns the smallest positional index of
-    any parameter that appears in a write-primitive target expression, or ``None``
-    when the function does not forward a parameter to a write primitive.
+    literal at the definition site). Positional-only, positional-or-keyword, and
+    keyword-only parameters are supported. The result carries the parameter name
+    and its positional call index (``None`` for keyword-only parameters).
     """
-    params = [arg.arg for arg in func_def.args.args]
+    positional_params = [arg.arg for arg in (*func_def.args.posonlyargs, *func_def.args.args)]
+    keyword_only_params = [arg.arg for arg in func_def.args.kwonlyargs]
+    params = [*positional_params, *keyword_only_params]
     param_set = set(params)
-    forwarded: set[int] = set()
+    forwarded: set[str] = set()
     for node in ast.walk(func_def):
         if not isinstance(node, ast.Call):
             continue
         for expr in _write_path_exprs(node):
             for child in ast.walk(expr):
                 if isinstance(child, ast.Name) and child.id in param_set:
-                    forwarded.add(params.index(child.id))
+                    forwarded.add(child.id)
     if not forwarded:
         return None
-    return min(forwarded)
+    parameter_name = min(forwarded, key=params.index)
+    positional_index = (
+        positional_params.index(parameter_name) if parameter_name in positional_params else None
+    )
+    return parameter_name, positional_index
 
 
-def _forwarding_helpers(tree: ast.AST) -> dict[str, int]:
-    """Map module-level helper names to the parameter index they forward to a write."""
-    helpers: dict[str, int] = {}
+def _forwarding_helpers(tree: ast.AST) -> dict[str, _ForwardingHelper]:
+    """Map module-level helpers to the parameters they forward to raw writes."""
+    helpers: dict[str, _ForwardingHelper] = {}
     for node in tree.body:
         if isinstance(node, ast.FunctionDef):
-            index = _forward_path_index(node)
-            if index is not None:
-                helpers[node.name] = index
+            parameter = _forward_path_parameter(node)
+            if parameter is not None:
+                helpers[node.name] = parameter
     return helpers
 
 
@@ -232,7 +256,7 @@ class _DirectWriterVisitor(ast.NodeVisitor):
         self,
         evidence_names: set[str],
         evidence_arg_dests: set[str],
-        forwarding_helpers: dict[str, int],
+        forwarding_helpers: dict[str, _ForwardingHelper],
     ) -> None:
         self.violations: list[tuple[int, str, str]] = []
         self.evidence_names = evidence_names
@@ -277,8 +301,13 @@ class _DirectWriterVisitor(ast.NodeVisitor):
         ):
             self._record(node, "open(..., write mode)", "direct")
         elif function.id in self.forwarding_helpers:
-            index = self.forwarding_helpers[function.id]
-            if index < len(node.args) and self._mentions(node.args[index]):
+            parameter_name, positional_index = self.forwarding_helpers[function.id]
+            path_arguments = [
+                keyword.value for keyword in node.keywords if keyword.arg == parameter_name
+            ]
+            if positional_index is not None and positional_index < len(node.args):
+                path_arguments.append(node.args[positional_index])
+            if any(self._mentions(argument) for argument in path_arguments):
                 operation = (
                     f"{function.id}() with an evidence-tree path "
                     "(forwards to a raw write that bypasses the shared writer)"
@@ -287,7 +316,9 @@ class _DirectWriterVisitor(ast.NodeVisitor):
 
 
 def _structural_helper_violations(
-    forwarding_helpers: dict[str, int], tree: ast.AST, has_evidence_output: bool
+    forwarding_helpers: dict[str, _ForwardingHelper],
+    tree: ast.AST,
+    has_evidence_output: bool,
 ) -> list[tuple[int, str, str]]:
     """Flag module-level forwarding helpers in modules that produce evidence.
 

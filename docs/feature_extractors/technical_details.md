@@ -33,12 +33,12 @@ All extractors work with the same observation format:
 
 ```python
 observation = {
-    'rays': torch.Tensor,      # Shape: (batch, timesteps, num_rays)
-    'drive_state': torch.Tensor # Shape: (batch, timesteps, state_dim)
+    "rays": torch.Tensor,  # Shape: (batch, timesteps, num_rays)
+    "drive_state": torch.Tensor,  # Shape: (batch, timesteps, state_dim)
 }
 
 # Typical dimensions:
-# rays: (batch, 5, 64) - 5 timesteps, 64 LiDAR rays  
+# rays: (batch, 5, 64) - 5 timesteps, 64 LiDAR rays
 # drive_state: (batch, 5, 5) - 5 timesteps, 5 state variables
 ```
 
@@ -90,15 +90,15 @@ ray_embedding = Linear(timesteps=5, embed_dim=64)
 for layer in attention_layers:
     # Q, K, V projections
     Q = query_proj(rays)  # (batch, num_rays, embed_dim)
-    K = key_proj(rays)    # (batch, num_rays, embed_dim)  
+    K = key_proj(rays)  # (batch, num_rays, embed_dim)
     V = value_proj(rays)  # (batch, num_rays, embed_dim)
-    
+
     # Attention weights: softmax(QK^T / sqrt(d_k))
     attention_weights = softmax(Q @ K.T / sqrt(embed_dim))
-    
+
     # Attended features: attention_weights @ V
     attended = attention_weights @ V
-    
+
     # Residual connection and layer norm
     rays = layer_norm(rays + attended)
 
@@ -133,13 +133,17 @@ ray_features = global_average_pool(attended_rays)
 
 conv_layers = [
     Conv1d(in_channels=5, out_channels=32, kernel_size=5, padding=2),
-    BatchNorm1d(32), ReLU(), MaxPool1d(2), Dropout(0.1),
-    
-    Conv1d(in_channels=32, out_channels=16, kernel_size=3, padding=1), 
-    BatchNorm1d(16), ReLU(), MaxPool1d(2), Dropout(0.1),
-    
+    BatchNorm1d(32),
+    ReLU(),
+    MaxPool1d(2),
+    Dropout(0.1),
+    Conv1d(in_channels=32, out_channels=16, kernel_size=3, padding=1),
+    BatchNorm1d(16),
+    ReLU(),
+    MaxPool1d(2),
+    Dropout(0.1),
     AdaptiveAvgPool1d(output_size=16),  # Ensure consistent output size
-    Flatten()  # (batch, 16 * 16) = (batch, 256)
+    Flatten(),  # (batch, 16 * 16) = (batch, 256)
 ]
 ```
 
@@ -175,13 +179,13 @@ conv_layers = [
 ```python
 # Typical parameter counts for default configurations:
 {
-    'dynamics_conv': 5296,
-    'dynamics_flatten': 0, 
-    'mlp_small': 54760,
-    'mlp_large': 253936,
-    'attention_small': 35408,
-    'attention_large': ~200000,
-    'lightweight_cnn': 3840
+    "dynamics_conv": 5296,
+    "dynamics_flatten": 0,
+    "mlp_small": 54760,
+    "mlp_large": 253936,
+    "attention_small": 35408,
+    "attention_large": ~200000,
+    "lightweight_cnn": 3840,
 }
 ```
 
@@ -190,12 +194,12 @@ conv_layers = [
 ```python
 # Output feature dimensions:
 {
-    'dynamics_conv': 287,      # Variable based on convolution output
-    'dynamics_flatten': 831,   # Flattened input size + drive state
-    'mlp_small': 40,          # ray_dim + drive_dim
-    'mlp_large': 80,          # ray_dim + drive_dim
-    'attention_small': 80,     # embed_dim + drive_dim  
-    'lightweight_cnn': 272    # conv_output + drive_dim
+    "dynamics_conv": 287,  # Variable based on convolution output
+    "dynamics_flatten": 831,  # Flattened input size + drive state
+    "mlp_small": 40,  # ray_dim + drive_dim
+    "mlp_large": 80,  # ray_dim + drive_dim
+    "attention_small": 80,  # embed_dim + drive_dim
+    "lightweight_cnn": 272,  # conv_output + drive_dim
 }
 ```
 
@@ -247,13 +251,13 @@ policy = ActorCriticPolicy(
     observation_space=env.observation_space,
     action_space=env.action_space,
     features_extractor_class=FeatureExtractor,
-    features_extractor_kwargs=extractor_config.params
+    features_extractor_kwargs=extractor_config.params,
 )
 
 # Training loop:
 features = policy.features_extractor(observations)  # Extract features
-actions = policy.actor(features)                   # Generate actions  
-values = policy.critic(features)                   # Estimate values
+actions = policy.actor(features)  # Generate actions
+values = policy.critic(features)  # Estimate values
 ```
 
 ### Gradient Flow

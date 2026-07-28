@@ -41,15 +41,10 @@ from robot_sf.gym_env.environment_factory import EnvironmentFactory
 from robot_sf.gym_env.unified_config import RobotSimulationConfig, PedestrianSimulationConfig
 
 # Using factory for consistent interface
-robot_env = EnvironmentFactory.create_robot_env(
-    config=RobotSimulationConfig(),
-    debug=True
-)
+robot_env = EnvironmentFactory.create_robot_env(config=RobotSimulationConfig(), debug=True)
 
 ped_env = EnvironmentFactory.create_pedestrian_env(
-    config=PedestrianSimulationConfig(),
-    robot_model=model,
-    debug=True
+    config=PedestrianSimulationConfig(), robot_model=model, debug=True
 )
 
 # Or use convenience functions
@@ -73,9 +68,9 @@ ped_config = PedEnvSettings(ego_ped_config=UnicycleDriveSettings())
 #### New Configuration:
 ```python
 from robot_sf.gym_env.unified_config import (
-    RobotSimulationConfig, 
-    ImageRobotConfig, 
-    PedestrianSimulationConfig
+    RobotSimulationConfig,
+    ImageRobotConfig,
+    PedestrianSimulationConfig,
 )
 
 # Clear, hierarchical configuration
@@ -91,19 +86,20 @@ ped_config = PedestrianSimulationConfig()
 from gymnasium import Env
 from robot_sf.gym_env.env_config import EnvSettings
 
+
 class CustomRobotEnv(Env):
     def __init__(self, env_config=EnvSettings(), debug=False):
         # Duplicate initialization code
         self.env_config = env_config
         self.debug = debug
         # ... lots of boilerplate
-        
+
     def render(self):
         # Duplicate rendering logic
         pass
-        
+
     def exit(self):
-        # Duplicate cleanup logic  
+        # Duplicate cleanup logic
         pass
 ```
 
@@ -112,17 +108,18 @@ class CustomRobotEnv(Env):
 from robot_sf.gym_env.abstract_envs import SingleAgentEnv
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
+
 class CustomRobotEnv(SingleAgentEnv):
     def __init__(self, config=None, **kwargs):
         if config is None:
             config = RobotSimulationConfig()
         super().__init__(config=config, **kwargs)
-        
+
     def _setup_environment(self):
         # Only implement environment-specific setup
         self.map_def = self.config.map_pool.choose_random_map()
         # ... custom logic
-        
+
     def _create_spaces(self):
         # Only implement space creation
         return action_space, observation_space
@@ -135,7 +132,8 @@ class CustomRobotEnv(SingleAgentEnv):
 def test_env_creation():
     env = RobotEnv()
     assert env is not None
-    
+
+
 def test_ped_env():
     env = PedestrianEnv(robot_model=model)
     assert env is not None
@@ -146,11 +144,13 @@ def test_ped_env():
 def test_env_creation():
     env = make_robot_env()
     assert env is not None
-    
+
+
 def test_ped_env():
     env = make_pedestrian_env(robot_model=model)
     assert env is not None
-    
+
+
 def test_factory_consistency():
     # All environments follow same interface
     envs = [
@@ -159,10 +159,10 @@ def test_factory_consistency():
         make_pedestrian_env(robot_model=model),
     ]
     for env in envs:
-        assert hasattr(env, 'step')
-        assert hasattr(env, 'reset')
-        assert hasattr(env, 'render')
-        assert hasattr(env, 'exit')
+        assert hasattr(env, "step")
+        assert hasattr(env, "reset")
+        assert hasattr(env, "render")
+        assert hasattr(env, "exit")
 ```
 
 ## File-by-File Migration Plan
@@ -204,14 +204,16 @@ def test_factory_consistency():
 import warnings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
-@dataclass  
+
+@dataclass
 class EnvSettings(RobotSimulationConfig):
     """Deprecated: Use RobotSimulationConfig instead."""
+
     def __post_init__(self):
         warnings.warn(
             "EnvSettings is deprecated. Use RobotSimulationConfig instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         super().__post_init__()
 ```
@@ -262,7 +264,7 @@ def test_new_interface():
     # New interface should work better
     env = make_robot_env()
     assert env is not None
-    assert hasattr(env, 'config')
+    assert hasattr(env, "config")
     assert isinstance(env.config, RobotSimulationConfig)
 ```
 

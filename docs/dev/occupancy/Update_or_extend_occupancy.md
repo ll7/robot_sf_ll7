@@ -115,6 +115,7 @@ print("Per-channel:", {ch.value: v for ch, v in result.per_channel_results.items
 
 ```python
 import os, pygame
+
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 pygame.init()
 scale = 4  # pixels per cell

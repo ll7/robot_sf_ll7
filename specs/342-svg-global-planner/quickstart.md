@@ -54,11 +54,7 @@ from robot_sf.nav.svg_map_parser import convert_map
 map_def = convert_map("maps/svg_maps/simple_corridor.svg")
 
 # Configure planner
-config = PlannerConfig(
-    robot_radius=0.4,
-    min_safe_clearance=0.3,
-    enable_smoothing=True
-)
+config = PlannerConfig(robot_radius=0.4, min_safe_clearance=0.3, enable_smoothing=True)
 
 # Create planner
 planner = GlobalPlanner(map_def, config)
@@ -168,9 +164,7 @@ planner = GlobalPlanner(map_def)
 
 # Plan path through specific POIs
 path = planner.plan(
-    start=Vec2D(1.0, 2.0),
-    goal=Vec2D(18.0, 8.0),
-    via_pois=["poi_corridor_mid", "poi_junction"]
+    start=Vec2D(1.0, 2.0), goal=Vec2D(18.0, 8.0), via_pois=["poi_corridor_mid", "poi_junction"]
 )
 
 print(f"Path visits {len(path)} waypoints (including 2 POIs)")
@@ -210,11 +204,7 @@ goals = [
 ]
 
 # Plan optimized tour (nearest-neighbor heuristic)
-path = planner.plan_multi_goal(
-    start=Vec2D(2.0, 3.0),
-    goals=goals,
-    optimize_order=True
-)
+path = planner.plan_multi_goal(start=Vec2D(2.0, 3.0), goals=goals, optimize_order=True)
 
 print(f"Tour visits {len(goals)} goals in {len(path)} waypoints")
 ```
@@ -223,11 +213,7 @@ print(f"Tour visits {len(goals)} goals in {len(path)} waypoints")
 
 ```python
 # Visit goals in exact order (no optimization)
-path = planner.plan_multi_goal(
-    start=Vec2D(2.0, 3.0),
-    goals=goals,
-    optimize_order=False
-)
+path = planner.plan_multi_goal(start=Vec2D(2.0, 3.0), goals=goals, optimize_order=False)
 
 # Verify order: path visits goals[0] before goals[1] before goals[2]
 ```
@@ -281,6 +267,7 @@ planner = GlobalPlanner(map_def, config)
 
 # First call: ~400ms (builds graph)
 import time
+
 start_time = time.perf_counter()
 path1 = planner.plan(Vec2D(1, 2), Vec2D(18, 8))
 print(f"Cold cache: {(time.perf_counter() - start_time) * 1000:.1f}ms")
@@ -297,7 +284,7 @@ print(f"Warm cache: {(time.perf_counter() - start_time) * 1000:.1f}ms")
 # More aggressive smoothing (fewer waypoints, slightly longer paths)
 config = PlannerConfig(
     enable_smoothing=True,
-    smoothing_epsilon=0.3  # Default: 0.1
+    smoothing_epsilon=0.3,  # Default: 0.1
 )
 planner = GlobalPlanner(map_def, config)
 
@@ -311,14 +298,14 @@ print(f"Smoothed path: {len(path)} waypoints")  # ~30% fewer than unsmoothed
 # Tighter clearance (allows narrow passages)
 config = PlannerConfig(
     robot_radius=0.4,
-    min_safe_clearance=0.1  # Reduced from 0.3
+    min_safe_clearance=0.1,  # Reduced from 0.3
 )
 planner = GlobalPlanner(map_def, config)
 
 # Safer clearance (avoids tight spaces)
 config = PlannerConfig(
     robot_radius=0.4,
-    min_safe_clearance=0.5  # Increased from 0.3
+    min_safe_clearance=0.5,  # Increased from 0.3
 )
 planner = GlobalPlanner(map_def, config)
 ```
@@ -348,6 +335,7 @@ print(path_json)
 def path_to_svg(path: list[Vec2D]) -> str:
     points = " ".join(f"{p.x},{p.y}" for p in path)
     return f'<polyline points="{points}" stroke="blue" stroke-width="0.2" fill="none" />'
+
 
 svg_overlay = path_to_svg(path)
 print(svg_overlay)
@@ -418,14 +406,12 @@ sampler = POISampler(map_def, seed=42)
 scenarios = []
 for i in range(50):
     # Random start/goal
-    start = Vec2D(np.random.uniform(0, map_def.width), 
-                  np.random.uniform(0, map_def.height))
-    goal = Vec2D(np.random.uniform(0, map_def.width), 
-                 np.random.uniform(0, map_def.height))
-    
+    start = Vec2D(np.random.uniform(0, map_def.width), np.random.uniform(0, map_def.height))
+    goal = Vec2D(np.random.uniform(0, map_def.width), np.random.uniform(0, map_def.height))
+
     # Optional: route via POIs
     via_pois = sampler.sample(count=2, strategy="random")
-    
+
     path = planner.plan(start, goal)
     scenarios.append({"start": start, "goal": goal, "path": path})
 

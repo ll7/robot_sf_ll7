@@ -106,12 +106,13 @@ grep "configuration" docs/dev_guide.md
 ```python
 import warnings
 
+
 def __post_init__(self):
     warnings.warn(
         "{LegacyClass} is deprecated and will be removed in a future version. "
         "Use {CanonicalClass} from robot_sf.gym_env.unified_config instead.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     # ... existing validation code ...
 ```

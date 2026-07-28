@@ -203,3 +203,162 @@ OUTPUT.joinpath('report.md').write_text('# report', encoding='utf-8')
 
     blockers, _, _ = run_all_checks("", "", [str(path)], "ll7/robot_sf_ll7", "origin/main", None)
     assert any("evidence-writer" in blocker for blocker in blockers)
+
+
+def test_private_helper_bypass_is_caught(tmp_path: Path) -> None:
+    """A module-level ``_write`` helper called with an evidence path is caught.
+
+    The private-helper bypass pattern forwards a path parameter to ``write_text`` /
+    ``open`` / ``json.dump`` so the direct-write visitor cannot see the evidence
+    target at the call site. The guard flags both the call (the evidence path is
+    visible there) and the helper definition (the structural signal that the
+    module wraps a raw write while producing evidence).
+    """
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+OUTPUT = Path('docs/context/evidence/example')
+
+
+def _write(target, text):
+    target.write_text(text)
+
+
+_write(OUTPUT / 'report.md', '# report')
+""",
+    )
+    blockers = check_file(path)
+    assert blockers, "private helper bypass must be caught"
+    assert any("_write()" in blocker and "evidence-tree" in blocker for blocker in blockers)
+    assert any("defines _write()" in blocker for blocker in blockers)
+    assert all("robot_sf.evidence.writers" in blocker for blocker in blockers)
+
+
+def test_cli_arg_bypass_is_caught(tmp_path: Path) -> None:
+    """An ``args.output.write_text`` whose argparse default is evidence is caught.
+
+    The CLI-arg bypass hides the evidence target behind an argparse destination
+    whose default points at the evidence tree. The guard resolves the destination
+    from ``add_argument(default=...)`` and treats ``args.output`` (and names
+    derived from it) as evidence-mentioning.
+    """
+    path = _write_fixture(
+        tmp_path,
+        """
+import argparse
+from pathlib import Path
+
+DEFAULT_OUTPUT = Path('docs/context/evidence/example/out.json')
+parser = argparse.ArgumentParser()
+parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT)
+args = parser.parse_args()
+output_path = Path(args.output)
+output_path.write_text('{}', encoding='utf-8')
+""",
+    )
+    blockers = check_file(path)
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
+    assert "robot_sf.evidence.writers" in blockers[0]
+
+
+def test_interprocedural_helper_bypass_is_caught(tmp_path: Path) -> None:
+    """A helper fed an evidence path through a keyword-only param is caught.
+
+    Mirrors the canonical #4232 builder: the evidence path enters via a CLI dest,
+    flows through a keyword-only ``output_dir`` parameter, and reaches a private
+    ``_write`` helper whose call-site argument is the parameter (not a visible
+    evidence literal). Only the structural helper-definition signal can catch
+    this interprocedural bypass.
+    """
+    path = _write_fixture(
+        tmp_path,
+        """
+import argparse
+from pathlib import Path
+
+DEFAULT_OUTPUT_DIR = Path('docs/context/evidence/example')
+
+
+def _write(target, text):
+    target.write_text(text)
+
+
+def _emit(*, output_dir):
+    _write(output_dir / 'report.md', '# report')
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--output-dir', default=str(DEFAULT_OUTPUT_DIR))
+    args = parser.parse_args()
+    _emit(output_dir=Path(args.output_dir))
+""",
+    )
+    blockers = check_file(path)
+    assert any("defines _write()" in blocker for blocker in blockers), (
+        "interprocedural helper bypass must be caught by the structural signal"
+    )
+
+
+def test_shared_writer_routed_through_local_helper_passes(tmp_path: Path) -> None:
+    """A helper that delegates to the shared writer is not a bypass."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+from robot_sf.evidence.writers import write_json
+
+OUTPUT = Path('docs/context/evidence/example')
+
+
+def emit_report(target, payload):
+    write_json(target, payload)
+
+
+emit_report(OUTPUT / 'report.json', {'status': 'diagnostic-only'})
+""",
+    )
+    assert check_file(path) == []
+
+
+def test_non_evidence_module_with_tmp_helper_is_not_flagged(tmp_path: Path) -> None:
+    """A private write helper for a non-evidence path is not a bypass.
+
+    The structural helper-definition check only fires when the module produces
+    evidence output. A helper writing a temporary debug file in a module with no
+    evidence reference must stay clean so the guard does not over-flag ordinary
+    code.
+    """
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+
+def _write_debug(target, text):
+    target.write_text(text)
+
+
+_write_debug(Path('/tmp/debug.log'), 'debug')
+""",
+    )
+    assert check_file(path) == []
+
+
+def test_argparse_dest_with_non_evidence_default_is_not_evidence(tmp_path: Path) -> None:
+    """A CLI output whose default is not evidence is not flagged."""
+    path = _write_fixture(
+        tmp_path,
+        """
+import argparse
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--output', type=Path, default=Path('/tmp/out.json'))
+args = parser.parse_args()
+args.output.write_text('{}', encoding='utf-8')
+""",
+    )
+    assert check_file(path) == []

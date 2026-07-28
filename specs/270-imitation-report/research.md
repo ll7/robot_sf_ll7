@@ -51,15 +51,17 @@ This document consolidates research findings and technical decisions for the aut
 **Configuration**:
 ```python
 # Align with dev_guide.md figure guidelines
-matplotlib.rcParams.update({
-    'savefig.bbox': 'tight',
-    'pdf.fonttype': 42,  # TrueType fonts for LaTeX compatibility
-    'font.size': 9,      # Labels
-    'xtick.labelsize': 8,
-    'ytick.labelsize': 8,
-    'legend.fontsize': 8,
-    'lines.linewidth': 1.4,
-})
+matplotlib.rcParams.update(
+    {
+        "savefig.bbox": "tight",
+        "pdf.fonttype": 42,  # TrueType fonts for LaTeX compatibility
+        "font.size": 9,  # Labels
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "legend.fontsize": 8,
+        "lines.linewidth": 1.4,
+    }
+)
 ```
 
 ---
@@ -90,6 +92,7 @@ report_md = f"""
 
 # Complex case: Jinja2 for loops/conditionals
 from jinja2 import Template
+
 template = Template(REPORT_TEMPLATE)
 rendered = template.render(metrics=data, hypothesis=result)
 ```
@@ -120,7 +123,7 @@ aggregated = compute_aggregates_with_ci(
     group_by="policy_type",
     bootstrap_samples=1000,
     bootstrap_confidence=0.95,
-    bootstrap_seed=42
+    bootstrap_seed=42,
 )
 ```
 
@@ -241,9 +244,9 @@ ablation_results = {
         "improvement_pct": 32.1,
         "hypothesis_pass": False,
         "ci": [28.3, 36.5],
-        "seeds_completed": 3
+        "seeds_completed": 3,
     },
-    "bc10_ds200": { ... },
+    "bc10_ds200": {...},
     # ...
 }
 ```

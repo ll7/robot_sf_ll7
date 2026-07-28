@@ -5,7 +5,11 @@
 ```python
 from robot_sf.gym_env.environment_factory import make_robot_env
 
-env = make_robot_env(debug=True, enable_telemetry_panel=True, telemetry_metrics=["fps", "reward", "collisions", "min_ped_distance", "action_norm"])
+env = make_robot_env(
+    debug=True,
+    enable_telemetry_panel=True,
+    telemetry_metrics=["fps", "reward", "collisions", "min_ped_distance", "action_norm"],
+)
 obs, info = env.reset()
 for _ in range(200):
     action = env.action_space.sample()

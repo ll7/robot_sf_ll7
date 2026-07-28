@@ -466,11 +466,7 @@ uv run pytest tests --cov=robot_sf.benchmark
 ### Programmatic access
 
 ```python
-from robot_sf.coverage_tools.baseline_comparator import (
-    CoverageSnapshot,
-    compare,
-    generate_warning
-)
+from robot_sf.coverage_tools.baseline_comparator import CoverageSnapshot, compare, generate_warning
 
 # Load current coverage
 current = CoverageSnapshot.from_coverage_json("output/coverage/coverage.json")

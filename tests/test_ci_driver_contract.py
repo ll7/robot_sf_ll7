@@ -42,7 +42,6 @@ PHASE_PATTERN = re.compile(
     r"(?:^|\s)(?:\./)?scripts/dev/ci_driver\.sh(?P<args>(?:\s+--?[a-z0-9_-]+|\s+[a-z0-9_-]+)*)",
     re.MULTILINE,
 )
-ACTION_USES_PREFIX_PATTERN = re.compile(r"^\s*(?:-\s+)?uses:\s*")
 USES_PATTERN = re.compile(r"^\s*(?:-\s+)?uses:\s+(?P<value>\S+)(?:\s+#\s*(?P<comment>\S+))?\s*$")
 PINNED_ACTION_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 READABLE_ACTION_TAG_PATTERN = re.compile(r"^v[0-9][A-Za-z0-9_.-]*$")
@@ -168,6 +167,28 @@ def _action_ref_failures_for_line(workflow_file: Path, line_number: int, line: s
             f"{workflow_file.relative_to(ROOT)}:{line_number}: missing readable version comment"
         )
     return failures
+
+
+def _workflow_uses_line_numbers(workflow_file: Path) -> list[int]:
+    """Return source lines for structural ``uses`` keys in one workflow."""
+    root = yaml.compose(workflow_file.read_text(encoding="utf-8"))
+    if root is None:
+        return []
+
+    line_numbers: list[int] = []
+
+    def visit(node: yaml.Node) -> None:
+        if isinstance(node, yaml.MappingNode):
+            for key_node, value_node in node.value:
+                if isinstance(key_node, yaml.ScalarNode) and key_node.value == "uses":
+                    line_numbers.append(key_node.start_mark.line + 1)
+                visit(value_node)
+        elif isinstance(node, yaml.SequenceNode):
+            for child_node in node.value:
+                visit(child_node)
+
+    visit(root)
+    return line_numbers
 
 
 def _workflow_jobs() -> dict[str, Any]:
@@ -482,12 +503,11 @@ def test_workflow_action_refs_are_pinned_with_readable_version_comments() -> Non
     failures: list[str] = []
 
     for workflow_file in _workflow_files():
-        for line_number, line in enumerate(
-            workflow_file.read_text(encoding="utf-8").splitlines(), 1
-        ):
-            if not ACTION_USES_PREFIX_PATTERN.match(line):
-                continue
-            failures.extend(_action_ref_failures_for_line(workflow_file, line_number, line))
+        lines = workflow_file.read_text(encoding="utf-8").splitlines()
+        for line_number in _workflow_uses_line_numbers(workflow_file):
+            failures.extend(
+                _action_ref_failures_for_line(workflow_file, line_number, lines[line_number - 1])
+            )
 
     assert not failures, "\n".join(failures)
 
@@ -509,8 +529,22 @@ def test_action_ref_parser_handles_list_items_and_local_actions() -> None:
         _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache")
         == []
     )
-    assert ACTION_USES_PREFIX_PATTERN.match("  statuses: read") is None
-    assert ACTION_USES_PREFIX_PATTERN.match("      - uses:") is not None
+
+
+def test_workflow_uses_scan_ignores_block_scalar_text(tmp_path: Path) -> None:
+    """Select structural action directives without matching block-scalar text."""
+    workflow_file = tmp_path / "workflow.yml"
+    workflow_file.write_text(
+        "jobs:\n"
+        "  verify:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          printf 'uses: actions/checkout@mutable'\n"
+        "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n",
+        encoding="utf-8",
+    )
+
+    assert _workflow_uses_line_numbers(workflow_file) == [6]
 
 
 def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:

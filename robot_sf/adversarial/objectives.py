@@ -74,11 +74,15 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
     timeout_names = ("timeout", "timeout_event")
     collision_or_intrusion = _flag(*collision_names)
     timeout = _flag(*timeout_names)
+    metric_collision_names = ("collisions", "severe_intrusion", "severe_intrusion_event")
     if (
         route_complete is None
         or (collision_or_intrusion is None and any(name in outcome for name in collision_names))
         or (timeout is None and any(name in outcome for name in timeout_names))
-        or (collision_or_intrusion is None and timeout is None)
+        or (
+            collision_or_intrusion is None
+            and not any(metrics.get(name) is not None for name in metric_collision_names)
+        )
     ):
         return _unavailable_constraints_first_outcome()
 
@@ -89,6 +93,10 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
             or not isinstance(value, (int, float))
             or not math.isfinite(float(value))
         ):
+            return _unavailable_constraints_first_outcome()
+    for name in ("severe_intrusion", "severe_intrusion_event"):
+        value = metrics.get(name)
+        if value is not None and not isinstance(value, bool):
             return _unavailable_constraints_first_outcome()
 
     collision_or_intrusion = bool(

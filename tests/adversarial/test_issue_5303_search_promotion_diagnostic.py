@@ -320,7 +320,7 @@ def test_diagnostic_outcome_projection_matches_constraints_first_liveness() -> N
     """Timeouts remain liveness failures even when a record reports route completion."""
     timeout = compare_adversarial_samplers._constraints_first_outcome(
         {
-            "outcome": {"route_complete": True, "timeout": True},
+            "outcome": {"route_complete": True, "collision": False, "timeout": True},
             "metrics": {"success": 1.0},
         }
     )

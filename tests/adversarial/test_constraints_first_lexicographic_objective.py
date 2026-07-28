@@ -66,6 +66,14 @@ def test_constraints_first_objective_is_registered_and_tiered(tmp_path: Path) ->
 def test_constraints_first_objective_fails_closed_on_malformed_outcomes(tmp_path: Path) -> None:
     """Missing or non-boolean outcome fields cannot become liveness failures."""
     missing = _evaluation(tmp_path, "missing", {"status": "success"})
+    missing_collision_evidence = _evaluation(
+        tmp_path,
+        "missing_collision_evidence",
+        {
+            "outcome": {"route_complete": True, "timeout": False},
+            "metrics": {"snqi": 0.0},
+        },
+    )
     malformed = _evaluation(
         tmp_path,
         "malformed",
@@ -80,4 +88,21 @@ def test_constraints_first_objective_fails_closed_on_malformed_outcomes(tmp_path
     )
 
     assert constraints_first_lexicographic_v1(missing) is None
+    assert constraints_first_lexicographic_v1(missing_collision_evidence) is None
     assert constraints_first_lexicographic_v1(malformed) is None
+
+
+def test_constraints_first_objective_fails_closed_on_malformed_intrusion_metric(
+    tmp_path: Path,
+) -> None:
+    """A non-boolean intrusion metric cannot be treated as a clean episode."""
+    evaluation = _evaluation(
+        tmp_path,
+        "malformed_intrusion_metric",
+        {
+            "outcome": {"route_complete": True, "collision": False},
+            "metrics": {"severe_intrusion": "false", "snqi": 0.0},
+        },
+    )
+
+    assert constraints_first_lexicographic_v1(evaluation) is None

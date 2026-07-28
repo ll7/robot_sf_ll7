@@ -356,9 +356,10 @@ def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
                 "objective_preferred_turn == 0.0 for every hypothesis (gate 3), so the "
                 "shared objective is identical; the only per-hypothesis difference is the "
                 "initial-guess preferred_turn bias (+/-0.5 -> +/-0.1 rad/s w-seed via "
-                "symmetry_break_bias=0.2). SLSQP converges to the unique optimum of the "
-                "shared soft-penalty objective from every seed, so the rollouts collapse. "
-                "The 'topology-parallel' mechanism is label-only under this configuration."
+                "symmetry_break_bias=0.2). Across the tested seeds and fixtures, SLSQP "
+                "produced indistinguishable rollouts under the shared soft-penalty objective; "
+                "this diagnostic does not establish global uniqueness. The "
+                "'topology-parallel' mechanism is label-only under this configuration."
             ),
         },
     )

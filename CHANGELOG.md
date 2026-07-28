@@ -56,8 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rollouts) failed: across a diverse suite of controlled conflict fixtures the feasible
   hypotheses collapsed to a single rollout (best min pairwise separation ~1.9e-4 m vs
   epsilon 1e-3 m), because `objective_preferred_turn == 0.0` is shared across hypotheses
-  (gate 3 PASS) and only a weak +/-0.1 rad/s initial-guess bias cannot split basins under
-  the shared soft-penalty objective. Gates 1 (K=1 legacy parity, exact), 3 (objective
+  (gate 3 PASS) and only a weak +/-0.1 rad/s initial-guess bias did not split basins on
+  the tested fixtures under the shared soft-penalty objective. Gates 1 (K=1 legacy parity,
+  exact), 3 (objective
   invariance), 4 (deterministic ordering / feasible-first selection / two-tick
   hysteresis), 5 (fail-closed on infeasible / deadline_exceeded / solver-error-status),
   6 (registration guard + builder), 7 (per-hypothesis p50/p95/max latency), and 8

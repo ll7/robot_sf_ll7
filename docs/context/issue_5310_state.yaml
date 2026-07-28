@@ -30,9 +30,10 @@ offline_validation:
     a diverse suite of controlled conflict fixtures the feasible hypotheses collapsed to
     a single rollout (best min pairwise separation 1.9e-4 m vs epsilon 1e-3 m). Root cause:
     objective_preferred_turn == 0.0 for every hypothesis (shared objective; gate 3 PASS)
-    and only a weak +/-0.1 rad/s initial-guess bias, so SLSQP converges to the unique
-    optimum from every seed. The topology-parallel mechanism is label-only under this
-    configuration. Gates 1 (K=1 legacy parity, exact), 3 (objective invariance),
+    and only a weak +/-0.1 rad/s initial-guess bias. Across the tested seeds and
+    fixtures, SLSQP produced indistinguishable rollouts; this diagnostic does not
+    establish global uniqueness. The topology-parallel mechanism is label-only under
+    this configuration. Gates 1 (K=1 legacy parity, exact), 3 (objective invariance),
     4 (deterministic ordering / feasible-first selection / two-tick hysteresis),
     5 (fail-closed on infeasible / deadline_exceeded / solver-error-status),
     6 (allow_testing_algorithms registration guard + builder), 7 (per-hypothesis latency),

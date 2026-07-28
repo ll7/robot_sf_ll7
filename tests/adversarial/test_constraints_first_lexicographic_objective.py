@@ -129,3 +129,23 @@ def test_constraints_first_objective_accepts_canonical_boolean_success_metric(
 
     assert score is not None
     assert 0.0 <= score < 1.0
+
+
+def test_constraints_first_objective_rejects_success_metric_conflicting_with_outcome(
+    tmp_path: Path,
+) -> None:
+    """A contradictory success metric cannot override an incomplete route outcome."""
+    evaluation = _evaluation(
+        tmp_path,
+        "conflicting_success",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+    )
+
+    assert constraints_first_lexicographic_v1(evaluation) is None

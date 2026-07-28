@@ -60,6 +60,12 @@ def _valid_constraints_metric(name: str, value: Any) -> bool:
     return math.isfinite(parsed) and (name != "success" or parsed in {0.0, 1.0})
 
 
+def _success_metric_matches_route_complete(metrics: dict[str, Any], route_complete: bool) -> bool:
+    """Return whether an optional canonical success metric agrees with the outcome flag."""
+    metric_success = metrics.get("success")
+    return metric_success is None or bool(metric_success) == route_complete
+
+
 def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, Any]:
     """Project one episode record into the strict constraints-first outcome vector.
 
@@ -95,6 +101,7 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
             collision_or_intrusion is None
             and not any(metrics.get(name) is not None for name in metric_collision_names)
         )
+        or not _success_metric_matches_route_complete(metrics, route_complete)
     ):
         return _unavailable_constraints_first_outcome()
 
@@ -116,7 +123,7 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
         or metrics.get("severe_intrusion_event") is True
         or _metric(metrics, "collisions") > 0.0
     )
-    goal_complete = bool(route_complete) or _metric(metrics, "success") >= 1.0
+    goal_complete = route_complete
     liveness_failure = bool(timeout) or not goal_complete
     return {
         "status": "observed",

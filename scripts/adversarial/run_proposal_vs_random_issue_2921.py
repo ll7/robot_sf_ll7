@@ -319,6 +319,7 @@ def build_archive_evaluation_provenance(
             "candidate_budget_per_arm": frozen_contract["budget"]["candidate_budget_per_arm"],
             "candidate_pool_size": frozen_contract["budget"]["candidate_pool_size"],
             "candidate_pool_seed": frozen_contract["budget"]["candidate_pool_seed"],
+            "outcome_contract": frozen_contract["outcome_contract"],
             "null_tests": frozen_contract["null_tests"],
             "model": model_provenance or {},
             "search_space": search_space_provenance or {},
@@ -536,6 +537,7 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
 
     contract = load_issue_3275_contract(contract_path)
     try:
+        outcome_metadata = _contract_outcome_metadata(contract)
         null_test_params = _contract_null_test_params(contract)
     except ValueError as exc:
         return 1, {
@@ -555,6 +557,7 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
     checks: dict[str, Any] = {
         "contract_schema_version": contract["schema_version"],
         "contract_path": str(contract_path),
+        "outcome_contract": outcome_metadata,
         "null_tests": null_test_params,
         "recertification_sha256_expected": source["corrected_recertification_sha256"],
         "recertification_sha256_observed": recert.get("recertification_sha256"),
@@ -915,6 +918,26 @@ def _contract_null_test_params(contract: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _contract_outcome_metadata(contract: dict[str, Any]) -> dict[str, str]:
+    """Validate the frozen outcome schema and certified-failure objective."""
+    from robot_sf.adversarial.independent_outcomes import (
+        OUTCOME_OBJECTIVE,
+        OUTCOME_SCHEMA_VERSION,
+    )
+
+    outcome_contract = contract.get("outcome_contract")
+    if not isinstance(outcome_contract, dict):
+        raise ValueError("frozen contract outcome_contract must be an object")
+    if outcome_contract.get("schema") != OUTCOME_SCHEMA_VERSION:
+        raise ValueError(f"frozen outcome schema must be {OUTCOME_SCHEMA_VERSION!r}")
+    if outcome_contract.get("objective") != OUTCOME_OBJECTIVE:
+        raise ValueError(f"frozen outcome objective must be {OUTCOME_OBJECTIVE!r}")
+    return {
+        "schema": OUTCOME_SCHEMA_VERSION,
+        "objective": OUTCOME_OBJECTIVE,
+    }
+
+
 def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
     """Read optional frozen planner/family/minimally-important from a contract."""
     if args.contract is None:
@@ -936,6 +959,7 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
     from robot_sf.adversarial.proposal_model import load_issue_3275_contract
 
     contract = load_issue_3275_contract(args.contract)
+    outcome_metadata = _contract_outcome_metadata(contract)
     null_test_params = _contract_null_test_params(contract)
     return {
         "expected_target_planner_id": contract["target_planner"]["id"],
@@ -952,6 +976,7 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
         "candidate_pool_size": contract["budget"]["candidate_pool_size"],
         "candidate_pool_seed": contract["budget"]["candidate_pool_seed"],
         "expected_execution_commit": contract["target_planner"]["execution_commit"],
+        "outcome_metadata": outcome_metadata,
         **null_test_params,
     }
 

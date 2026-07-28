@@ -19,6 +19,7 @@ from robot_sf.adversarial.proposal_model import (
 from robot_sf.adversarial.scenario_manifest import AdversarialScenarioManifest
 from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
     ISSUE_3275_DECISION_VOCABULARY,
+    _contract_outcome_metadata,
     _rank_pool_ids_by_candidate_identity,
     classify_issue_2921_stop_rule,
     create_synthetic_archive,
@@ -84,6 +85,10 @@ def test_check_contract_validates_frozen_contract() -> None:
         "null_test_permutations": 1000,
         "null_test_seed": 42,
     }
+    assert verdict["checks"]["outcome_contract"] == {
+        "schema": "adversarial_independent_outcomes.v2",
+        "objective": "certified_failure_outcome",
+    }
     assert verdict["checks"]["fit_entry_ids_sha256_matches_contract"] is True
     assert verdict["checks"]["fit_entry_ids_match_contract"] is True
     assert verdict["checks"]["excluded_from_nominal_fit_count"] == 6
@@ -105,6 +110,29 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["checks"]["no_held_out_family_in_model"] is True
     assert verdict["checks"]["human_review_gate_open"] is True
     assert verdict["failures"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema", "adversarial_independent_outcomes.v1"),
+        ("objective", None),
+        ("objective", "archive_nearness"),
+    ],
+)
+def test_contract_metadata_rejects_unfrozen_outcome_semantics(
+    field: str,
+    value: Any,
+) -> None:
+    """Machine-readable contract cannot drift from the v2 failure objective."""
+    contract = load_issue_3275_contract(_CONTRACT)
+    contract["outcome_contract"] = {
+        **contract["outcome_contract"],
+        field: value,
+    }
+
+    with pytest.raises(ValueError, match="frozen outcome"):
+        _contract_outcome_metadata(contract)
 
 
 def test_check_contract_rejects_pre_correction_archive_hash_drift(tmp_path: Path) -> None:
@@ -973,6 +1001,7 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
     frozen_contract = provenance["frozen_contract"]
     assert frozen_contract["fit_entry_count"] == 6
     assert frozen_contract["candidate_pool_seed"] == 42
+    assert frozen_contract["outcome_contract"]["objective"] == "certified_failure_outcome"
     assert frozen_contract["null_tests"]["primary"] == {
         "name": "fisher_exact_two_sided",
         "alpha": 0.05,
@@ -1409,7 +1438,7 @@ def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, m
     report = json.loads(output_json.read_text("utf-8"))
     assert report["held_out_evidence"] is False
     assert report["independent_outcome_evaluation"]["status"] == "blocked"
-    assert "circular" in report["independent_outcome_evaluation"]["reason"]
+    assert "objective must be" in report["independent_outcome_evaluation"]["reason"]
     assert report["comparison_interpretation"] == "independent_outcomes_rejected_by_held_out_gate"
     assert report["comparison"]["status"] == "not_available"
     assert report["issue_2921_stop_rule"]["status"] == "inconclusive"

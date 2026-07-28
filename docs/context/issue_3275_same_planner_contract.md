@@ -82,6 +82,10 @@ non-fit records (six `stress_only` plus five held-out) are reported as dropped.
 
 ## Independent outcomes are authoritative (issue #6103 gap 2)
 
+Packet metadata must declare the exact `certified_failure_outcome` objective
+and the same frozen Social Force planner/configuration identity as every
+admitted row; missing or contradictory metadata fails closed.
+
 The `adversarial_independent_outcomes.v2` row-level contract is authoritative.
 When valid v2 rows are available, the top-level proposal/random metrics, the
 comparison, and the #2921 stop rule are computed exclusively from those rows.

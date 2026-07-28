@@ -196,6 +196,7 @@
   },
   "outcome_contract": {
     "schema": "adversarial_independent_outcomes.v2",
+    "objective": "certified_failure_outcome",
     "row_level": true,
     "one_row_per": "candidate x execution seed",
     "admitted_row_fields": [

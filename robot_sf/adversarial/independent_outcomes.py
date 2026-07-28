@@ -46,6 +46,9 @@ from robot_sf.adversarial.disjoint_evaluation import (
 #: Frozen row-level outcome schema for the #3275 contract.
 OUTCOME_SCHEMA_VERSION = "adversarial_independent_outcomes.v2"
 
+#: Frozen objective represented by each admitted candidate-level outcome.
+OUTCOME_OBJECTIVE = "certified_failure_outcome"
+
 #: Selection arms admitted by the contract.
 _ARMS = ("proposal", "random")
 
@@ -89,6 +92,7 @@ REQUIRED_ADMITTED_ROW_FIELDS = (
     "confirmation_lineage",
     "record_sha256",
     "admission_status",
+    "exclusion_reason",
 )
 
 #: Confirmation thresholds accepted by the contract and their numeric rule.
@@ -176,13 +180,19 @@ def _validate_packet_metadata(payload: dict[str, Any], spec: AdmissionSpec) -> s
         )
     if payload.get("outcome_source") != "planner_execution":
         return "outcome_source must be planner_execution"
-    if payload.get("objective") in {"archive_nearness", "objective_distance", "nearest_archive"}:
-        return "archive-nearness outcomes are circular for issue #3275"
+    if payload.get("objective") != OUTCOME_OBJECTIVE:
+        return f"objective must be {OUTCOME_OBJECTIVE!r}; got {payload.get('objective')!r}"
     if payload.get("target_planner_id") != spec.expected_target_planner_id:
         return (
             f"target_planner_id mismatch: packet={payload.get('target_planner_id')!r} "
             f"expected={spec.expected_target_planner_id!r}"
         )
+    if (
+        spec.expected_target_planner_config_sha256 is not None
+        and payload.get("target_planner_config_sha256")
+        != spec.expected_target_planner_config_sha256
+    ):
+        return "target_planner_config_sha256 mismatch in packet metadata"
     return None
 
 
@@ -562,8 +572,18 @@ def _row_predeclared_selection_drift(
     return None
 
 
+def _row_exclusion_state_drift(
+    row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec
+) -> str | None:
+    """Reject an admitted row that simultaneously declares an exclusion."""
+    if row.get("exclusion_reason") is not None:
+        return "admitted row exclusion_reason must be null"
+    return None
+
+
 _ROW_CHECKERS = (
     _row_missing_fields,
+    _row_exclusion_state_drift,
     _row_planner_family_drift,
     _row_execution_drift,
     _row_certification_drift,
@@ -574,6 +594,21 @@ _ROW_CHECKERS = (
     _row_record_hash_drift,
     _row_predeclared_selection_drift,
 )
+
+
+def _excluded_row_error(row: dict[str, Any], row_id: Any) -> str | None:
+    """Validate the compact provenance required for a non-executed row."""
+    if not isinstance(row_id, str) or not row_id.strip():
+        return "excluded row_id must be a non-empty string"
+    candidate_manifest_id = row.get("candidate_manifest_id")
+    if not isinstance(candidate_manifest_id, str) or not candidate_manifest_id.strip():
+        return "excluded candidate_manifest_id must be a non-empty string"
+    exclusion_reason = row.get("exclusion_reason")
+    if not isinstance(exclusion_reason, str) or not exclusion_reason.strip():
+        return "excluded row missing non-empty exclusion_reason"
+    if row.get("selection_arm") not in _ARMS:
+        return "excluded row has invalid selection_arm"
+    return None
 
 
 def _admit_row(
@@ -591,11 +626,9 @@ def _admit_row(
         return None, prefix + "missing required field 'admission_status'"
     admission_status = row["admission_status"]
     if admission_status == "excluded":
-        exclusion_reason = row.get("exclusion_reason")
-        if not isinstance(exclusion_reason, str) or not exclusion_reason.strip():
-            return None, prefix + "excluded row missing non-empty exclusion_reason"
-        if row.get("selection_arm") not in _ARMS:
-            return None, prefix + "excluded row has invalid selection_arm"
+        excluded_error = _excluded_row_error(row, row_id)
+        if excluded_error is not None:
+            return None, prefix + excluded_error
         return {"_excluded": True, "row_id": row_id}, None
     if admission_status != "admitted":
         return None, prefix + f"unsupported admission_status {admission_status!r}"

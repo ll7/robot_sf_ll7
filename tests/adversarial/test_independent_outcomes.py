@@ -312,7 +312,16 @@ def test_archive_nearness_objective_is_circular_and_blocked() -> None:
     packet = _packet([], objective="archive_nearness")
     result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
-    assert "circular" in result["reason"]
+    assert "objective must be" in result["reason"]
+
+
+@pytest.mark.parametrize("objective", [None, "", "success", 1])
+def test_non_frozen_objective_fails_closed(objective: Any) -> None:
+    """Only the preregistered certified-failure objective may drive a decision."""
+    packet = _packet([], objective=objective)
+    result = _evaluate(packet, budget_per_arm=4)
+    assert result["status"] == "blocked"
+    assert "objective must be" in result["reason"]
 
 
 def test_target_planner_mismatch_blocks() -> None:
@@ -321,6 +330,17 @@ def test_target_planner_mismatch_blocks() -> None:
     result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "target_planner_id mismatch" in result["reason"]
+
+
+@pytest.mark.parametrize("planner_config_sha256", [None, "", "0" * 64])
+def test_packet_planner_config_metadata_mismatch_blocks(
+    planner_config_sha256: str | None,
+) -> None:
+    """Packet-level planner provenance must agree with the frozen row binding."""
+    packet = _packet([], target_planner_config_sha256=planner_config_sha256)
+    result = _evaluate(packet, budget_per_arm=4)
+    assert result["status"] == "blocked"
+    assert "target_planner_config_sha256 mismatch" in result["reason"]
 
 
 def test_fallback_execution_mode_row_fails_closed() -> None:
@@ -362,6 +382,21 @@ def test_missing_admission_status_fails_closed() -> None:
 
     assert result["status"] == "blocked"
     assert "admission_status" in result["reason"]
+
+
+def test_admitted_row_with_exclusion_reason_fails_closed() -> None:
+    """An admitted row cannot simultaneously claim an exclusion."""
+    row = _row(
+        row_id="r0",
+        manifest_id="c0",
+        arm="proposal",
+        rank=1,
+        failure=True,
+        exclusion_reason="fallback",
+    )
+    result = _evaluate(_packet([row]), budget_per_arm=1)
+    assert result["status"] == "blocked"
+    assert "admitted row exclusion_reason must be null" in result["reason"]
 
 
 def test_malformed_execution_lineage_fields_fail_closed() -> None:
@@ -673,6 +708,39 @@ def test_excluded_row_with_reason_blocks_an_incomplete_predeclared_arm() -> None
     result = _evaluate(packet, budget_per_arm=2)
     assert result["status"] == "blocked"
     assert "complete predeclared manifest set" in result["reason"]
+
+
+@pytest.mark.parametrize("field", ["row_id", "candidate_manifest_id"])
+@pytest.mark.parametrize("invalid_value", [None, "", 1])
+def test_excluded_row_requires_non_empty_string_identifiers(
+    field: str,
+    invalid_value: Any,
+) -> None:
+    """Excluded-row provenance still requires stable row and candidate identifiers."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    spec = _spec_for_packet(packet, budget_per_arm=1)
+    excluded = _row(
+        row_id="excluded-row",
+        manifest_id="excluded-candidate",
+        arm="proposal",
+        rank=2,
+        failure=False,
+        admission_status="excluded",
+        exclusion_reason="predeclared exclusion",
+    )
+    excluded[field] = invalid_value
+    packet["rows"].append(excluded)
+
+    result = build_independent_outcome_evaluation(
+        packet,
+        budget_per_arm=1,
+        minimally_important=0.20,
+        admission_spec=spec,
+        n_permutations=10,
+    )
+
+    assert result["status"] == "blocked"
+    assert field in result["reason"]
 
 
 def test_three_of_five_confirmation_counts_as_one_candidate_failure() -> None:

@@ -2,9 +2,9 @@
 Diagnostic-only validation of the merged #6170 prototype (`robot_sf/planner/topology_parallel_nmpc.py`) for parent #5310. The prototype was executed **unchanged**; this validator only imports/calls it and reads back diagnostics.
 ## Verdict
 **`label_only_or_objective_drift`** — gate 2 (material distinctness) or gate 3 (objective invariance) failed.
-> ⚠️ **REAL-TIME BOUNDARY (prominent, independent of verdict):** the prototype's nominal `control_period_s` is **2.0 s (~20x the 100 ms real-time gate)**, so it is **offline-only and explicitly blocks downstream real-time use**. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. On this fixture, worst per-hypothesis solver p95 = 40.9 ms (under 100 ms, descriptive only; not a real-time qualification claim).
+> ⚠️ **REAL-TIME BOUNDARY (prominent, independent of verdict):** the prototype's nominal `control_period_s` is **2.0 s (~20x the 100 ms real-time gate)**, so it is **offline-only and explicitly blocks downstream real-time use**. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. On this fixture, worst per-hypothesis solver p95 = 46.9 ms (under 100 ms, descriptive only; not a real-time qualification claim).
 ## Provenance
-- Validated commit (`git rev-parse HEAD`): `b8b521220dff94bc427ff1260f378678055c8d34`
+- Validated commit (`git rev-parse HEAD`): `decc6d404cc2999d758034f1ca79552596f6a4d9`
 - Branch: `orchestrator/ll7-lease-6158-8860de392d30`
 - Source PR: #6170 (merge commit `894bdfe71e9c2686ebe63e165f15c739d12f721c`)
 - Config: `configs/algos/issue_5310_topology_parallel_nmpc.yaml`
@@ -34,12 +34,12 @@ uv run ruff check scripts/validation/ && uv run ruff format --check scripts/vali
 ## Per-hypothesis solve latency (descriptive)
 | hypothesis | p50 (ms) | p95 (ms) | max (ms) | n |
 | --- | --- | --- | --- | --- |
-| pass_left | 18.93 | 33.94 | 36.39 | 30 |
-| yield_straight | 5.689 | 20.05 | 39.37 | 30 |
-| pass_right | 35.73 | 40.91 | 43.28 | 30 |
+| pass_left | 19.33 | 46.93 | 70.83 | 30 |
+| yield_straight | 5.718 | 39.69 | 71.85 | 30 |
+| pass_right | 35.84 | 43.96 | 44.62 | 30 |
 
-End-to-end `plan()` wall-clock (measurement-safe deadline): p50=61.70633446890861 ms, p95=73.87282060226426 ms, max=74.85407800413668 ms (n=30).
-End-to-end `plan()` wall-clock (real 2.0s deadline): p50=61.46642949897796 ms, p95=64.48990108910948 ms, max=65.69037795998156 ms; deadline fired 0 of 8 calls.
+End-to-end `plan()` wall-clock (measurement-safe deadline): p50=62.6773830736056 ms, p95=83.89357832493259 ms, max=85.48095193691552 ms (n=30).
+End-to-end `plan()` wall-clock (real 2.0s deadline): p50=61.25535746105015 ms, p95=66.38581494335085 ms, max=67.48101394623518 ms; deadline fired 0 of 8 calls.
 
 _Descriptive only on an unpinned CPU; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged._
 ## Gate-by-gate evidence
@@ -540,43 +540,43 @@ builder_ok=True, guard_reject_missing=True, guard_reject_false=True, registry_ok
 }
 ```
 ### gate_7_latency — PASS
-per-hypothesis solver p95 (ms): pass_left=33.9, yield_straight=20.1, pass_right=40.9; worst p95=40.9 ms; exceeds_100ms=False.
+per-hypothesis solver p95 (ms): pass_left=46.9, yield_straight=39.7, pass_right=44; worst p95=46.9 ms; exceeds_100ms=False.
 ```json
 {
   "per_hypothesis_solver_runtime_ms": {
     "pass_left": {
-      "p50_ms": 18.934933468699455,
-      "p95_ms": 33.942097087856375,
-      "max_ms": 36.38691082596779,
+      "p50_ms": 19.3274769699201,
+      "p95_ms": 46.93046497413887,
+      "max_ms": 70.83176798187196,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 5.6890781270340085,
-      "p95_ms": 20.052773295901677,
-      "max_ms": 39.37021689489484,
+      "p50_ms": 5.71818498428911,
+      "p95_ms": 39.68629097798825,
+      "max_ms": 71.8503671232611,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 35.72503791656345,
-      "p95_ms": 40.90983369387685,
-      "max_ms": 43.27670601196587,
+      "p50_ms": 35.83645145408809,
+      "p95_ms": 43.96347018191591,
+      "max_ms": 44.6188859641552,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 61.70633446890861,
-    "p95_ms": 73.87282060226426,
-    "max_ms": 74.85407800413668,
+    "p50_ms": 62.6773830736056,
+    "p95_ms": 83.89357832493259,
+    "max_ms": 85.48095193691552,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 61.46642949897796,
-    "p95_ms": 64.48990108910948,
-    "max_ms": 65.69037795998156,
+    "p50_ms": 61.25535746105015,
+    "p95_ms": 66.38581494335085,
+    "max_ms": 67.48101394623518,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 40.90983369387685,
+  "worst_hypothesis_p95_ms": 46.93046497413887,
   "latency_exceeds_100ms": false,
   "measurement_note": "Descriptive only on an unpinned CPU; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
 }
@@ -683,7 +683,7 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   "parent_issue": 5310,
   "source_pr": 6170,
   "source_merge_commit": "894bdfe71e9c2686ebe63e165f15c739d12f721c",
-  "validated_commit": "b8b521220dff94bc427ff1260f378678055c8d34",
+  "validated_commit": "decc6d404cc2999d758034f1ca79552596f6a4d9",
   "branch": "orchestrator/ll7-lease-6158-8860de392d30",
   "verdict": "label_only_or_objective_drift",
   "verdict_rationale": "gate 2 (material distinctness) or gate 3 (objective invariance) failed.",
@@ -706,38 +706,38 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   },
   "per_hypothesis_solver_latency_ms": {
     "pass_left": {
-      "p50_ms": 18.934933468699455,
-      "p95_ms": 33.942097087856375,
-      "max_ms": 36.38691082596779,
+      "p50_ms": 19.3274769699201,
+      "p95_ms": 46.93046497413887,
+      "max_ms": 70.83176798187196,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 5.6890781270340085,
-      "p95_ms": 20.052773295901677,
-      "max_ms": 39.37021689489484,
+      "p50_ms": 5.71818498428911,
+      "p95_ms": 39.68629097798825,
+      "max_ms": 71.8503671232611,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 35.72503791656345,
-      "p95_ms": 40.90983369387685,
-      "max_ms": 43.27670601196587,
+      "p50_ms": 35.83645145408809,
+      "p95_ms": 43.96347018191591,
+      "max_ms": 44.6188859641552,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 61.70633446890861,
-    "p95_ms": 73.87282060226426,
-    "max_ms": 74.85407800413668,
+    "p50_ms": 62.6773830736056,
+    "p95_ms": 83.89357832493259,
+    "max_ms": 85.48095193691552,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 61.46642949897796,
-    "p95_ms": 64.48990108910948,
-    "max_ms": 65.69037795998156,
+    "p50_ms": 61.25535746105015,
+    "p95_ms": 66.38581494335085,
+    "max_ms": 67.48101394623518,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 40.90983369387685,
+  "worst_hypothesis_p95_ms": 46.93046497413887,
   "latency_exceeds_100ms": false,
   "control_period_s": 2.0,
   "real_time_blocking_notice": "NOT REAL-TIME QUALIFIED (prominent, independent of the per-solve number): the prototype's nominal control_period_s is 2.0 s, which is ~20x the 100 ms real-time gate, so the component is offline-only and explicitly blocks downstream real-time use. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. Per-hypothesis solver p95 was under 100 ms on this fixture, but this is descriptive only and does NOT establish real-time suitability.",
@@ -1248,42 +1248,42 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
     {
       "name": "gate_7_latency",
       "passed": true,
-      "detail": "per-hypothesis solver p95 (ms): pass_left=33.9, yield_straight=20.1, pass_right=40.9; worst p95=40.9 ms; exceeds_100ms=False.",
+      "detail": "per-hypothesis solver p95 (ms): pass_left=46.9, yield_straight=39.7, pass_right=44; worst p95=46.9 ms; exceeds_100ms=False.",
       "evidence": {
         "per_hypothesis_solver_runtime_ms": {
           "pass_left": {
-            "p50_ms": 18.934933468699455,
-            "p95_ms": 33.942097087856375,
-            "max_ms": 36.38691082596779,
+            "p50_ms": 19.3274769699201,
+            "p95_ms": 46.93046497413887,
+            "max_ms": 70.83176798187196,
             "n": 30
           },
           "yield_straight": {
-            "p50_ms": 5.6890781270340085,
-            "p95_ms": 20.052773295901677,
-            "max_ms": 39.37021689489484,
+            "p50_ms": 5.71818498428911,
+            "p95_ms": 39.68629097798825,
+            "max_ms": 71.8503671232611,
             "n": 30
           },
           "pass_right": {
-            "p50_ms": 35.72503791656345,
-            "p95_ms": 40.90983369387685,
-            "max_ms": 43.27670601196587,
+            "p50_ms": 35.83645145408809,
+            "p95_ms": 43.96347018191591,
+            "max_ms": 44.6188859641552,
             "n": 30
           }
         },
         "plan_wall_clock_ms_measurement_safe_deadline": {
-          "p50_ms": 61.70633446890861,
-          "p95_ms": 73.87282060226426,
-          "max_ms": 74.85407800413668,
+          "p50_ms": 62.6773830736056,
+          "p95_ms": 83.89357832493259,
+          "max_ms": 85.48095193691552,
           "n": 30
         },
         "plan_wall_clock_ms_real_2s_deadline": {
-          "p50_ms": 61.46642949897796,
-          "p95_ms": 64.48990108910948,
-          "max_ms": 65.69037795998156,
+          "p50_ms": 61.25535746105015,
+          "p95_ms": 66.38581494335085,
+          "max_ms": 67.48101394623518,
           "n": 8
         },
         "real_deadline_fires_out_of_8": 0,
-        "worst_hypothesis_p95_ms": 40.90983369387685,
+        "worst_hypothesis_p95_ms": 46.93046497413887,
         "latency_exceeds_100ms": false,
         "measurement_note": "Descriptive only on an unpinned CPU; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
       }

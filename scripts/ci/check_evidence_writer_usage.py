@@ -200,6 +200,37 @@ def _write_path_exprs(node: ast.Call) -> list[ast.AST]:
     return []
 
 
+def _local_path_origins(func_def: ast.FunctionDef, params: list[str]) -> dict[str, set[str]]:
+    """Map helper-local path aliases back to the parameters they derive from."""
+    path_origins = {parameter: {parameter} for parameter in params}
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(func_def):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if node.value is None:
+                continue
+            origins = {
+                origin
+                for child in ast.walk(node.value)
+                if isinstance(child, ast.Name)
+                for origin in path_origins.get(child.id, ())
+            }
+            for target in targets:
+                if not origins or not isinstance(target, ast.Name):
+                    continue
+                previous = path_origins.setdefault(target.id, set())
+                if origins - previous:
+                    previous.update(origins)
+                    changed = True
+    return path_origins
+
+
 def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | None:
     """Return the parameter a helper forwards to a write.
 
@@ -213,15 +244,15 @@ def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | No
     positional_params = [arg.arg for arg in (*func_def.args.posonlyargs, *func_def.args.args)]
     keyword_only_params = [arg.arg for arg in func_def.args.kwonlyargs]
     params = [*positional_params, *keyword_only_params]
-    param_set = set(params)
+    path_origins = _local_path_origins(func_def, params)
     forwarded: set[str] = set()
     for node in ast.walk(func_def):
         if not isinstance(node, ast.Call):
             continue
         for expr in _write_path_exprs(node):
             for child in ast.walk(expr):
-                if isinstance(child, ast.Name) and child.id in param_set:
-                    forwarded.add(child.id)
+                if isinstance(child, ast.Name):
+                    forwarded.update(path_origins.get(child.id, ()))
     if not forwarded:
         return None
     parameter_name = min(forwarded, key=params.index)

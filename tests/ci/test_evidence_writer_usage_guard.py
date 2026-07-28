@@ -261,6 +261,30 @@ _write(OUTPUT / 'report.md', '# report')
     assert all("robot_sf.evidence.writers" in blocker for blocker in blockers)
 
 
+def test_private_helper_path_alias_bypass_is_caught(tmp_path: Path) -> None:
+    """A helper cannot hide its forwarded path behind a local alias."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+OUTPUT = Path('docs/context/evidence/example')
+
+
+def _write(target, text):
+    resolved_target = target.resolve()
+    resolved_target.write_text(text)
+
+
+_write(OUTPUT / 'report.md', '# report')
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert any("_write()" in blocker and "evidence-tree" in blocker for blocker in blockers)
+    assert any("defines _write()" in blocker for blocker in blockers)
+
+
 def test_cli_arg_bypass_is_caught(tmp_path: Path) -> None:
     """An ``args.output.write_text`` whose argparse default is evidence is caught.
 

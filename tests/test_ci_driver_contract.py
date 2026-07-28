@@ -43,6 +43,7 @@ PHASE_PATTERN = re.compile(
     re.MULTILINE,
 )
 USES_PATTERN = re.compile(r"^\s*(?:-\s+)?uses:\s+(?P<value>\S+)(?:\s+#\s*(?P<comment>\S+))?\s*$")
+USES_DIRECTIVE_PATTERN = re.compile(r"^\s*(?:-\s+)?uses\s*:")
 PINNED_ACTION_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 READABLE_ACTION_TAG_PATTERN = re.compile(r"^v[0-9][A-Za-z0-9_.-]*$")
 
@@ -167,6 +168,11 @@ def _action_ref_failures_for_line(workflow_file: Path, line_number: int, line: s
             f"{workflow_file.relative_to(ROOT)}:{line_number}: missing readable version comment"
         )
     return failures
+
+
+def _is_uses_directive(line: str) -> bool:
+    """Return whether a YAML line starts a GitHub Actions ``uses`` directive."""
+    return USES_DIRECTIVE_PATTERN.match(line) is not None
 
 
 def _workflow_jobs() -> dict[str, Any]:
@@ -484,7 +490,7 @@ def test_workflow_action_refs_are_pinned_with_readable_version_comments() -> Non
         for line_number, line in enumerate(
             workflow_file.read_text(encoding="utf-8").splitlines(), 1
         ):
-            if "uses:" not in line:
+            if not _is_uses_directive(line):
                 continue
             failures.extend(_action_ref_failures_for_line(workflow_file, line_number, line))
 
@@ -508,6 +514,12 @@ def test_action_ref_parser_handles_list_items_and_local_actions() -> None:
         _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache")
         == []
     )
+
+
+def test_action_ref_scan_ignores_permission_names_containing_uses() -> None:
+    """Permission keys such as ``statuses`` are not action directives."""
+    assert not _is_uses_directive("  statuses: read")
+    assert _is_uses_directive("      - uses: actions/checkout@deadbeef")
 
 
 def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:

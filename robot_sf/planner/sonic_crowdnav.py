@@ -222,6 +222,13 @@ def _sonic_import_context(repo_root: Path) -> Iterator[None]:
     original_modules = dict(sys.modules)
     sys.path.insert(0, repo_str)
     try:
+        # Evict stale upstream packages so importlib resolves against repo_root
+        # rather than a cached __path__ left by an earlier test or adapter load.
+        for key in list(sys.modules):
+            if key == "rl" or key.startswith("rl."):
+                sys.modules.pop(key, None)
+            elif key == "trained_models" or key.startswith("trained_models."):
+                sys.modules.pop(key, None)
         sys.modules["gym"] = gymnasium
         fake_envs = types.ModuleType("rl.networks.envs")
 

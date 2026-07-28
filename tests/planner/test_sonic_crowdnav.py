@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import importlib
 import math
+import sys
+import types
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 
-from robot_sf.planner.sonic_crowdnav import SonicCrowdNavAdapter, build_sonic_crowdnav_config
+from robot_sf.planner.sonic_crowdnav import (
+    SonicCrowdNavAdapter,
+    _sonic_import_context,
+    build_sonic_crowdnav_config,
+)
 
 
 def _write(path: Path, text: str) -> None:
@@ -128,6 +135,89 @@ class Policy(nn.Module):
     checkpoint_path = repo_root / "trained_models" / "SoNIC_GST" / "checkpoints" / "05207.pt"
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"weights": torch.tensor([1.0])}, checkpoint_path)
+
+
+def test_sonic_import_context_evicts_and_restores_stale_upstream_modules(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The temporary checkout wins over stale upstream modules and leaves no import-state leak."""
+    repo_root = tmp_path / "repo"
+    _write_fake_upstream_repo(repo_root)
+    stale_package_names = {
+        "rl",
+        "rl.networks",
+        "trained_models",
+        "trained_models.SoNIC_GST",
+        "trained_models.SoNIC_GST.configs",
+    }
+    stale_module_names = (
+        "rl",
+        "rl.networks",
+        "rl.networks.envs",
+        "rl.networks.model",
+        "trained_models",
+        "trained_models.SoNIC_GST",
+        "trained_models.SoNIC_GST.arguments",
+        "trained_models.SoNIC_GST.configs",
+        "trained_models.SoNIC_GST.configs.config",
+    )
+    stale_root = tmp_path / "stale"
+    stale_modules: dict[str, types.ModuleType] = {}
+    for name in stale_module_names:
+        module = types.ModuleType(name)
+        if name in stale_package_names:
+            module.__path__ = [str(stale_root / name.replace(".", "/"))]
+        stale_modules[name] = module
+        monkeypatch.setitem(sys.modules, name, module)
+
+    original_modules = dict(sys.modules)
+    original_path = list(sys.path)
+    with _sonic_import_context(repo_root):
+        imported_modules = {
+            name: importlib.import_module(name)
+            for name in (
+                "rl",
+                "rl.networks",
+                "rl.networks.model",
+                "trained_models",
+                "trained_models.SoNIC_GST",
+                "trained_models.SoNIC_GST.arguments",
+                "trained_models.SoNIC_GST.configs",
+                "trained_models.SoNIC_GST.configs.config",
+            )
+        }
+
+        for name, module in imported_modules.items():
+            assert module is not stale_modules[name]
+            assert Path(module.__file__).resolve().is_relative_to(repo_root.resolve())
+        assert sys.modules["rl.networks.envs"] is not stale_modules["rl.networks.envs"]
+
+    assert dict(sys.modules) == original_modules
+    assert sys.path == original_path
+
+
+def test_sonic_import_context_restores_stale_modules_after_import_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed upstream import must still restore cached packages and the import path."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    stale_modules = {name: types.ModuleType(name) for name in ("rl", "trained_models")}
+    for name, module in stale_modules.items():
+        module.__path__ = [str(tmp_path / "stale" / name)]
+        monkeypatch.setitem(sys.modules, name, module)
+
+    original_modules = dict(sys.modules)
+    original_path = list(sys.path)
+    with pytest.raises(ModuleNotFoundError, match="trained_models"):
+        with _sonic_import_context(repo_root):
+            assert all(
+                sys.modules.get(name) is not module for name, module in stale_modules.items()
+            )
+            importlib.import_module("trained_models.missing")
+
+    assert dict(sys.modules) == original_modules
+    assert sys.path == original_path
 
 
 def test_adapter_translates_nested_robot_sf_observation_and_projects_action(tmp_path: Path) -> None:

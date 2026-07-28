@@ -23,6 +23,25 @@ bounded guarded-merge run.
 This skill is intentionally restricted: it never force-pushes, never rewrites
 history, and stops on any auth/permission/CI failure.
 
+## Merge Queue Gate Parity (issue #6274)
+
+The fail-closed preflight below governs guarded merges this skill performs. The
+same preflight is enforced **queue-side** by the `Merge Queue Gate` required
+status check (`.github/workflows/merge-queue-gate.yml`, backed by
+`scripts/dev/merge_queue_gate.py`), so the GitHub native merge queue and any
+external/parallel auto-merge dispatcher that routes through it cannot bypass
+`merge-ready`, the exact-head `gate-verdict: accepted` trailer, unresolved
+threads, or an explicitly requested reviewer. Comment or review verdict trailers count only when
+GitHub reports the author as a repository owner, member, or collaborator; an untrusted contributor
+cannot self-approve a new head under a retained label. The queue gate also fails closed
+unless the live queue uses GitHub's `ALLGREEN` ("Only merge non-failing pull
+requests") strategy, which prevents a
+passing tail entry from carrying an earlier ungated entry through a grouped
+merge. That workflow is the merge-queue entry point for this contract; this
+skill remains the binding authority for guarded merges it executes directly.
+See `docs/dev_guide.md` ("Merge queue gate") for the required-check toggle and
+the audit record shape (`merge_queue_gate.v1`).
+
 ## Trigger Boundary
 
 Use this skill when the user asks to merge approved, `merge-ready` PRs.
@@ -39,6 +58,9 @@ Do not use it for:
 - `AGENTS.md`
 - `.agents/skills/goal-pr-review/SKILL.md`
 - `docs/code_review.md`
+- `docs/dev_guide.md` ("Merge queue gate", issue #6274)
+- `.github/workflows/merge-queue-gate.yml`
+- `scripts/dev/merge_queue_gate.py`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 
 ## Preflight

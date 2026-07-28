@@ -13,6 +13,7 @@ from scripts.ci.check_evidence_writer_usage import check_changed_files, check_fi
 def _write_fixture(tmp_path: Path, source: str, name: str = "fixture.py") -> Path:
     """Write a synthetic changed Python file for guard tests."""
     path = tmp_path / name
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding="utf-8")
     return path
 
@@ -45,6 +46,31 @@ write_json(OUTPUT / 'report.json', {'status': 'diagnostic-only'})
 """,
     )
     assert check_file(path) == []
+
+
+def test_only_canonical_shared_writer_module_is_exempt(tmp_path: Path) -> None:
+    """A sibling module under ``robot_sf.evidence`` cannot bypass the guard."""
+    source = """
+from pathlib import Path
+
+OUTPUT = Path('docs/context/evidence/example/report.md')
+OUTPUT.write_text('# report', encoding='utf-8')
+"""
+    canonical_writer = _write_fixture(
+        tmp_path,
+        source,
+        name="robot_sf/evidence/writers.py",
+    )
+    sibling_module = _write_fixture(
+        tmp_path,
+        source,
+        name="robot_sf/evidence/unchecked_writer.py",
+    )
+
+    assert check_file(canonical_writer) == []
+    blockers = check_file(sibling_module)
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
 
 
 def test_exemption_text_in_string_does_not_bypass_guard(tmp_path: Path) -> None:

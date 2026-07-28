@@ -17,7 +17,7 @@ WRITE_METHODS = frozenset({"write_bytes", "write_text"})
 # The shared evidence-writer package owns the canonical raw-write wrappers; flagging
 # its own definitions would be circular (those wrappers exist so other modules can
 # adopt them). The guard enforces adoption everywhere else.
-_SHARED_WRITER_PACKAGE = ("robot_sf", "evidence")
+_SHARED_WRITER_MODULE_SUFFIX = ("robot_sf", "evidence", "writers.py")
 _ForwardingHelper = tuple[str, int | None]
 
 
@@ -362,12 +362,10 @@ def _format_blocker(source_path: Path, line: int, operation: str, kind: str) -> 
 
 
 def _is_shared_writer_module(source_path: Path) -> bool:
-    """Return whether ``source_path`` lives under the shared evidence-writer package."""
+    """Return whether ``source_path`` is the canonical shared writer module."""
     resolved = source_path.resolve()
-    return any(
-        parent.name == _SHARED_WRITER_PACKAGE[1] and parent.parent.name == _SHARED_WRITER_PACKAGE[0]
-        for parent in resolved.parents
-    )
+    suffix_length = len(_SHARED_WRITER_MODULE_SUFFIX)
+    return resolved.parts[-suffix_length:] == _SHARED_WRITER_MODULE_SUFFIX
 
 
 def _exemption(source: str) -> tuple[bool, str | None]:

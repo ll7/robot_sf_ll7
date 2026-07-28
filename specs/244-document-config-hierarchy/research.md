@@ -71,6 +71,7 @@ This model is consistent with established patterns in Python configuration libra
 ```python
 import warnings
 
+
 @dataclass
 class EnvSettings:
     def __post_init__(self):
@@ -78,7 +79,7 @@ class EnvSettings:
             "EnvSettings is deprecated and will be removed in a future version. "
             "Use RobotSimulationConfig from robot_sf.gym_env.unified_config instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         # ... existing validation code ...
 ```
@@ -139,9 +140,11 @@ class EnvSettings:
 import warnings
 import pytest
 
+
 def test_env_settings_deprecated():
     with pytest.warns(DeprecationWarning, match="RobotSimulationConfig"):
         from robot_sf.gym_env.env_config import EnvSettings
+
         EnvSettings()
 ```
 

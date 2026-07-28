@@ -31,8 +31,15 @@ from robot_sf.benchmark.scenario_thumbnails import save_scenario_thumbnails, sav
 from robot_sf.benchmark.runner import load_scenario_matrix
 
 scenarios = load_scenario_matrix("configs/baselines/example_matrix.yaml")
-metas = save_scenario_thumbnails(scenarios, out_dir="docs/figures/scenarios", base_seed=0, out_pdf=True)
-_ = save_montage(metas, out_png="docs/figures/scenarios/montage.png", cols=3, out_pdf="docs/figures/scenarios/montage.pdf")
+metas = save_scenario_thumbnails(
+    scenarios, out_dir="docs/figures/scenarios", base_seed=0, out_pdf=True
+)
+_ = save_montage(
+    metas,
+    out_png="docs/figures/scenarios/montage.png",
+    cols=3,
+    out_pdf="docs/figures/scenarios/montage.pdf",
+)
 ```
 
 ## Notes

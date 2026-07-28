@@ -66,19 +66,15 @@ class SocialForcePlanner(BasePolicy):
 {
     "dt": float,  # Integration timestep [s]
     "robot": {
-        "position": [x, y],      # Robot position [m]
-        "velocity": [vx, vy],    # Robot velocity [m/s]
-        "goal": [gx, gy],        # Goal position [m]
-        "radius": float          # Robot radius [m]
+        "position": [x, y],  # Robot position [m]
+        "velocity": [vx, vy],  # Robot velocity [m/s]
+        "goal": [gx, gy],  # Goal position [m]
+        "radius": float,  # Robot radius [m]
     },
     "agents": [  # List of pedestrians/agents
-        {
-            "position": [x, y],
-            "velocity": [vx, vy],
-            "radius": float
-        }
+        {"position": [x, y], "velocity": [vx, vy], "radius": float}
     ],
-    "obstacles": []  # Optional: list of static obstacles
+    "obstacles": [],  # Optional: list of static obstacles
 }
 ```
 

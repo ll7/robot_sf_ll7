@@ -134,11 +134,7 @@ from robot_sf.maps.osm_zones_editor import OSMZonesEditor
 config = load_zones_yaml("zones.yaml")
 
 # Launch editor for modifications
-editor = OSMZonesEditor(
-    png_path="map.png",
-    output_yaml="zones.yaml",
-    initial_config=config
-)
+editor = OSMZonesEditor(png_path="map.png", output_yaml="zones.yaml", initial_config=config)
 editor.run()
 ```
 

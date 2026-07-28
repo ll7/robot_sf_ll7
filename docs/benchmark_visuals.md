@@ -74,7 +74,7 @@ from robot_sf.benchmark.full_classic.visuals import generate_visual_artifacts
 artifacts = generate_visual_artifacts(
     output_dir,
     cfg,
-    groups,   # aggregated metrics groups from aggregation.py
+    groups,  # aggregated metrics groups from aggregation.py
     records,  # raw episode records
 )
 # artifacts["plots"], artifacts["videos"], artifacts["performance"] are also written
@@ -222,14 +222,16 @@ Modes via `cfg.video_renderer`:
 
 Decision pseudocode (simplified):
 ```python
-if mode == 'synthetic':
+if mode == "synthetic":
     synthetic()
-elif mode == 'sim-view':
+elif mode == "sim-view":
     attempt = simulation_view()
-    if not attempt: skipped(reason=sim_view_or_moviepy_note)
+    if not attempt:
+        skipped(reason=sim_view_or_moviepy_note)
 else:  # auto
     attempt = simulation_view()
-    if attempt: return attempt
+    if attempt:
+        return attempt
     synthetic = synthetic()
     maybe_reclassify_insufficient_replay(synthetic)
 ```

@@ -27,6 +27,7 @@
 #     --gate-worktree-path      registered gate worktree path; a vanished worktree
 #                               fails closed before any branch-switch/conflict op
 #     --json                    emit machine-readable JSON (default behavior)
+#     -h, --help                print this help and exit 0
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

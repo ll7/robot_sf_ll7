@@ -251,22 +251,22 @@ fi
 RC=0
 OUT="$(bash "$SCRIPT" --help 2>&1)" || RC=$?
 assert_ok "--help exits 0" "$RC"
-if echo "$OUT" | grep -q 'Usage:'; then
-  echo "PASS: --help prints usage text"
+if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
+  echo "PASS: --help prints usage and option text"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: --help did not print usage text"
+  echo "FAIL: --help did not print usage and option text"
   FAIL=$((FAIL + 1))
 fi
 
 RC=0
 OUT="$(bash "$SCRIPT" -h 2>&1)" || RC=$?
 assert_ok "-h exits 0" "$RC"
-if echo "$OUT" | grep -q 'Usage:'; then
-  echo "PASS: -h prints usage text"
+if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
+  echo "PASS: -h prints usage and option text"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: -h did not print usage text"
+  echo "FAIL: -h did not print usage and option text"
   FAIL=$((FAIL + 1))
 fi
 

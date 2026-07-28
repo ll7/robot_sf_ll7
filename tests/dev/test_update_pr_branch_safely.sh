@@ -247,7 +247,29 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 6. --help / bad flag rejected.
+# 6. -h / --help print usage and exit 0; unknown flags are still rejected.
+RC=0
+OUT="$(bash "$SCRIPT" --help 2>&1)" || RC=$?
+assert_ok "--help exits 0" "$RC"
+if echo "$OUT" | grep -q 'Usage:'; then
+  echo "PASS: --help prints usage text"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: --help did not print usage text"
+  FAIL=$((FAIL + 1))
+fi
+
+RC=0
+OUT="$(bash "$SCRIPT" -h 2>&1)" || RC=$?
+assert_ok "-h exits 0" "$RC"
+if echo "$OUT" | grep -q 'Usage:'; then
+  echo "PASS: -h prints usage text"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: -h did not print usage text"
+  FAIL=$((FAIL + 1))
+fi
+
 RC=0
 bash "$SCRIPT" --bogus 2>/dev/null || RC=$?
 assert_fail "unknown flag rejected" "$RC"

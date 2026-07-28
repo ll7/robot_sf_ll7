@@ -50,6 +50,28 @@ usage() {
   exit 2
 }
 
+print_help() {
+  cat <<'HELP'
+Usage: scripts/dev/update_pr_branch_safely.sh <pr> \
+    --expected-head-sha <sha> [--repo OWNER/REPO] [options]
+
+Guarded PR branch updater with a lease-protected local fallback.
+
+Options:
+    --pr <n>                  PR number (positional also accepted)
+    --repo OWNER/REPO         owner/repo (default: detect from gh)
+    --expected-head-sha <sha> required guard; no mutation if the live head moved
+    --base <branch>           base branch to rebase onto (default: PR base ref)
+    --remote <name>           remote to fetch/push (default: origin)
+    --no-local-fallback       fail instead of falling back to local rebase/push
+    --dry-run                 verify and print the plan without mutating
+    --gate-worktree-path <p>  registered gate worktree path; a vanished worktree
+                              fails closed before any branch-switch/conflict op
+    --json                    emit machine-readable JSON (default behavior)
+    -h, --help                print this help and exit 0
+HELP
+}
+
 # --- argument parsing ---------------------------------------------------------
 POS_PR=""
 while [[ $# -gt 0 ]]; do
@@ -94,6 +116,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --json)
       shift
+      ;;
+    -h|--help)
+      print_help
+      exit 0
       ;;
     -*)
       echo "Unexpected option: $1" >&2

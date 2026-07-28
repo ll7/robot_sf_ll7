@@ -20,7 +20,32 @@ children:
       - tests/planner/test_topology_parallel_nmpc.py
       - CHANGELOG.md
       - docs/context/issue_5310_state.yaml
+offline_validation:
+  issue: 6158
+  verdict: label_only_or_objective_drift
+  evidence: docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md
+  summary: >-
+    Diagnostic-only offline validation (#6158) of the merged #6152 prototype exercised
+    the eight required gates. Gate 2 (materially distinct x-y-t rollouts) FAILED: across
+    a diverse suite of controlled conflict fixtures the feasible hypotheses collapsed to
+    a single rollout (best min pairwise separation 1.9e-4 m vs epsilon 1e-3 m). Root cause:
+    objective_preferred_turn == 0.0 for every hypothesis (shared objective; gate 3 PASS)
+    and only a weak +/-0.1 rad/s initial-guess bias, so SLSQP converges to the unique
+    optimum from every seed. The topology-parallel mechanism is label-only under this
+    configuration. Gates 1 (K=1 legacy parity, exact), 3 (objective invariance),
+    4 (deterministic ordering / feasible-first selection / two-tick hysteresis),
+    5 (fail-closed on infeasible / deadline_exceeded / solver-error-status),
+    6 (allow_testing_algorithms registration guard + builder), 7 (per-hypothesis latency),
+    and 8 (PR #6170 +1238/-9 net +1229 audit) all PASS. This is an OFFLINE PROTOTYPE
+    verdict only; it does not promote, demote, or default-swap any planner.
 limitations:
   - "testing-only/experimental: not benchmark evidence"
   - "offline only: 2.0s control_period_s does not meet 100ms real-time gate"
   - "no learned prediction, SIPP, DPCBF, or additional objective terms"
+  - >-
+    label-only topology mechanism (#6158 verdict): with objective_preferred_turn=0.0
+    shared across hypotheses, the +/-0.1 rad/s initialization bias does not produce
+    materially distinct x-y-t rollouts on tested conflict fixtures. A genuine
+    topology-parallel mechanism would need per-hypothesis objective/initialization
+    divergence strong enough to split basins; that is separate future work and is NOT
+    a real-time, safety, benchmark-superiority, or #5423/STKP-eligibility claim.

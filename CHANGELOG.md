@@ -46,6 +46,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bypassed). Byte-identity was verified by downloading each published asset and confirming its
   SHA-256 equals the in-tree blob SHA-256. These are non-benchmark legacy checkpoints retained for
   traceability and local debugging; they are **not benchmark evidence**.
+* **issue #6158 topology-parallel NMPC offline verdict (#5310 analysis child).** New
+  `scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py`
+  diagnostic validator that exercises the merged #6152 prototype
+  (`robot_sf/planner/topology_parallel_nmpc.py`, executed unchanged) against the eight
+  required gates and records exactly one of the four issue verdicts to
+  `docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md`.
+  Recorded verdict: `label_only_or_objective_drift`. Gate 2 (materially distinct x-y-t
+  rollouts) failed: across a diverse suite of controlled conflict fixtures the feasible
+  hypotheses collapsed to a single rollout (best min pairwise separation ~1.9e-4 m vs
+  epsilon 1e-3 m), because `objective_preferred_turn == 0.0` is shared across hypotheses
+  (gate 3 PASS) and only a weak +/-0.1 rad/s initial-guess bias cannot split basins under
+  the shared soft-penalty objective. Gates 1 (K=1 legacy parity, exact), 3 (objective
+  invariance), 4 (deterministic ordering / feasible-first selection / two-tick
+  hysteresis), 5 (fail-closed on infeasible / deadline_exceeded / solver-error-status),
+  6 (registration guard + builder), 7 (per-hypothesis p50/p95/max latency), and 8
+  (PR #6170 +1238/-9, net +1229 audit) all pass. The prototype's `control_period_s` is
+  2.0 s (~20x the 100 ms real-time gate), so it is offline-only and blocks downstream
+  real-time use. Diagnostic-only: no real-time, safety, benchmark-superiority,
+  default-planner-promotion, or #5423/STKP-eligibility claim. Parent #5310 state updated
+  as an offline prototype. The prototype, config, registration, and tests are unchanged.
 
 * **issue #6152 topology-parallel NMPC prototype (#5310 child).** New
   `robot_sf/planner/topology_parallel_nmpc.py` with

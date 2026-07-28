@@ -906,18 +906,55 @@ def gate_8_pr_audit() -> GateResult:
     }
     surfaces_match = audited_paths == expected_implementation_surfaces
     totals_consistent = total_add == 1238 and total_del == 9 and net == 1229
-    # Verify the audited prototype file still resolves at HEAD and that any HEAD-vs-merge
-    # delta on the prototype is docstring/non-behavioral (recorded, not assumed).
-    prototype_present = (REPO_ROOT / "robot_sf/planner/topology_parallel_nmpc.py").exists()
-    head_post_merge_note = (
-        "At current HEAD the prototype module received only docstring additions "
-        "(PR #6282/#6299) after the #6170 merge; the nmpc_social seam received a "
-        "docstring-only +5 change. An unrelated algorithm_metadata.py +81 hunk "
-        "(issue #6190 predictive-foresight fallback provenance) is not part of the "
-        "topology-parallel NMPC mechanism. The validated mechanism is behaviorally "
-        "identical to the audited merge commit."
+    source_diff = subprocess.run(
+        ["git", "diff", "--numstat", f"{SOURCE_MERGE_COMMIT}^1", SOURCE_MERGE_COMMIT],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
     )
-    passed = surfaces_match and totals_consistent and prototype_present
+    source_audit: list[dict[str, Any]] = []
+    source_audit_parse_error = ""
+    if source_diff.returncode == 0:
+        try:
+            for line in source_diff.stdout.splitlines():
+                additions, deletions, path = line.split("\t", maxsplit=2)
+                source_audit.append(
+                    {"path": path, "additions": int(additions), "deletions": int(deletions)}
+                )
+        except ValueError as exc:
+            source_audit_parse_error = f"could not parse git --numstat output: {exc}"
+    else:
+        source_audit_parse_error = source_diff.stderr.strip() or "git diff --numstat failed"
+    source_audit_matches_declared = source_audit == PR_6170_AUDIT
+
+    protected_paths = expected_implementation_surfaces - {
+        "CHANGELOG.md",
+        "docs/context/issue_5310_state.yaml",
+    }
+    current_pr_diff = subprocess.run(
+        ["git", "diff", "--name-only", "origin/main...HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+    )
+    current_pr_changed_paths = (
+        set(current_pr_diff.stdout.splitlines()) if current_pr_diff.returncode == 0 else set()
+    )
+    protected_path_deltas = sorted(current_pr_changed_paths & protected_paths)
+    current_pr_preserves_prototype = current_pr_diff.returncode == 0 and not protected_path_deltas
+    head_post_merge_note = (
+        "The source merge's first-parent diff matches the declared implementation packet, "
+        "and this PR does not change the protected prototype/config/registry/test surfaces "
+        "relative to origin/main."
+    )
+    passed = (
+        surfaces_match
+        and totals_consistent
+        and source_audit_matches_declared
+        and current_pr_preserves_prototype
+    )
     evidence = {
         "source_pr": SOURCE_PR,
         "merge_commit": SOURCE_MERGE_COMMIT,
@@ -927,7 +964,11 @@ def gate_8_pr_audit() -> GateResult:
         "net_lines": net,
         "audited_paths_match_implementation_surfaces": surfaces_match,
         "totals_consistent": totals_consistent,
-        "prototype_present_at_head": prototype_present,
+        "source_audit": source_audit,
+        "source_audit_matches_declared": source_audit_matches_declared,
+        "source_audit_parse_error": source_audit_parse_error or None,
+        "current_pr_protected_path_deltas": protected_path_deltas,
+        "current_pr_preserves_prototype": current_pr_preserves_prototype,
         "head_post_merge_note": head_post_merge_note,
     }
     return GateResult(
@@ -936,7 +977,9 @@ def gate_8_pr_audit() -> GateResult:
         detail=(
             f"PR #{SOURCE_PR} @ {SOURCE_MERGE_COMMIT[:12]}: {len(PR_6170_AUDIT)} files, "
             f"+{total_add}/-{total_del} (net {net:+d}); surfaces_match={surfaces_match}, "
-            f"totals_consistent={totals_consistent}."
+            f"totals_consistent={totals_consistent}, "
+            f"source_audit_matches_declared={source_audit_matches_declared}, "
+            f"current_pr_preserves_prototype={current_pr_preserves_prototype}."
         ),
         evidence=evidence,
     )

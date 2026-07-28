@@ -11,6 +11,8 @@ Generic slow nodes must keep flowing through the normal soft/hard envelope.
 
 from __future__ import annotations
 
+from tests import conftest as root_conftest
+
 from .policy import PerformanceBudgetPolicy
 from .reporting import DIAGNOSTIC_NODES, SlowTestSample, format_report, generate_report
 
@@ -152,3 +154,26 @@ def test_diagnostic_matcher_is_path_separator_robust() -> None:
     # Unrelated nodes are never matched.
     assert _diagnostic_note("dummy::test_example") is None
     assert _diagnostic_note("") is None
+
+
+def test_diagnostic_node_does_not_fail_terminal_enforce_mode(monkeypatch) -> None:
+    """The real terminal-summary hook reports, but does not enforce, this diagnostic node."""
+
+    class CapturingReporter:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def write_line(self, line: str) -> None:
+            self.lines.append(line)
+
+    reporter = CapturingReporter()
+    monkeypatch.setattr(root_conftest, "_SLOW_SAMPLES", [(GATE_NODE, 38.0)])
+    monkeypatch.setenv("ROBOT_SF_PERF_ENFORCE", "1")
+    monkeypatch.delenv("ROBOT_SF_PERF_RELAX", raising=False)
+
+    root_conftest.pytest_terminal_summary(reporter, exitstatus=0, config=None)
+
+    rendered = "\n".join(reporter.lines)
+    assert "DIAGNOSTIC" in rendered
+    assert "(enforce mode)" in rendered
+    assert "Performance breach" not in rendered

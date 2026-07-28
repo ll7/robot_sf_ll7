@@ -677,6 +677,14 @@ def test_action_mapping_absorbs_float_roundoff_within_tolerance() -> None:
     assert -bounds.max_angular_speed <= angular <= bounds.max_angular_speed
 
 
+def test_action_mapping_clamps_asymmetric_envelope_endpoint_roundoff() -> None:
+    """A valid asymmetric envelope keeps the normalized endpoints inside its exact bounds."""
+    bounds = ActionBounds(max_linear_speed=0.2, max_angular_speed=0.3, min_linear_speed=-0.1)
+
+    assert map_action_to_velocity([1.0, 1.0], bounds) == (0.2, 0.3)
+    assert map_action_to_velocity([-1.0, -1.0], bounds) == (-0.1, -0.3)
+
+
 def test_action_mapping_rejects_wrong_shape_nonfinite_and_far_out_of_domain() -> None:
     """The mapping fails closed on wrong-dimensionality, non-finite, or far-out-of-domain inputs."""
     bounds = ActionBounds(max_linear_speed=2.0, max_angular_speed=1.0)

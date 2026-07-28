@@ -515,8 +515,16 @@ def map_action_to_velocity(
     linear_range = bounds.max_linear_speed - bounds.min_linear_speed
     linear_velocity = bounds.min_linear_speed + (arr[0] + 1.0) * 0.5 * linear_range
     angular_velocity = arr[1] * bounds.max_angular_speed
-    linear_velocity = float(linear_velocity)
-    angular_velocity = float(angular_velocity)
+    # The endpoints are mathematically exact, but a valid asymmetric envelope can accumulate a
+    # one-ULP overshoot (for example, ``[-0.1, 0.2]`` at normalized ``+1``).  Clamp only that
+    # arithmetic roundoff back into the already-validated physical envelope; the normalized input
+    # itself was validated and clipped above.
+    linear_velocity = float(
+        np.clip(linear_velocity, bounds.min_linear_speed, bounds.max_linear_speed)
+    )
+    angular_velocity = float(
+        np.clip(angular_velocity, -bounds.max_angular_speed, bounds.max_angular_speed)
+    )
     if not (np.isfinite(linear_velocity) and np.isfinite(angular_velocity)):
         raise OpenDreamerAdapterError("mapped velocity must be finite")
     if not (

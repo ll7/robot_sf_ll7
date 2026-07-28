@@ -137,17 +137,10 @@ effect_size = (mean1 - mean2) / pooled_std
 ```python
 from itertools import product
 
-params = {
-    "bc_epochs": [5, 10, 20],
-    "dataset_size": [100, 200, 300]
-}
+params = {"bc_epochs": [5, 10, 20], "dataset_size": [100, 200, 300]}
 
 variants = [
-    AblationConfig(
-        variant_id=f"bc{bc}_ds{ds}",
-        bc_epochs=bc,
-        dataset_size=ds
-    )
+    AblationConfig(variant_id=f"bc{bc}_ds{ds}", bc_epochs=bc, dataset_size=ds)
     for bc, ds in product(params["bc_epochs"], params["dataset_size"])
 ]
 ```
@@ -182,12 +175,10 @@ variants = [
 **Evaluation Logic**:
 ```python
 def evaluate_hypothesis(
-    baseline_metric: float,
-    pretrained_metric: float,
-    threshold: float
+    baseline_metric: float, pretrained_metric: float, threshold: float
 ) -> HypothesisDefinition:
     improvement_pct = 100 * (baseline_metric - pretrained_metric) / baseline_metric
-    
+
     if improvement_pct >= threshold:
         decision = "PASS"
     elif improvement_pct < 0:
@@ -196,7 +187,7 @@ def evaluate_hypothesis(
     else:
         decision = "FAIL"
         note = f"Improvement {improvement_pct:.1f}% < threshold {threshold}%"
-    
+
     return HypothesisDefinition(
         description=f"Pre-training reduces timesteps by ≥{threshold}%",
         metric="timesteps_to_convergence",
@@ -204,7 +195,7 @@ def evaluate_hypothesis(
         threshold_type="min",
         decision=decision,
         measured_value=improvement_pct,
-        note=note
+        note=note,
     )
 ```
 
@@ -264,8 +255,7 @@ GENERATING → COMPLETED → ARCHIVED (optional)
 **Collection Implementation**:
 ```python
 def collect_reproducibility_metadata(
-    seeds: list[int],
-    configs: dict[str, dict]
+    seeds: list[int], configs: dict[str, dict]
 ) -> ReproducibilityMetadata:
     return ReproducibilityMetadata(
         git_commit=subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip(),
@@ -276,7 +266,7 @@ def collect_reproducibility_metadata(
         hardware=collect_hardware_profile(),
         seeds=seeds,
         configs=configs,
-        timestamp=datetime.now(UTC)
+        timestamp=datetime.now(UTC),
     )
 ```
 
@@ -307,13 +297,14 @@ def collect_reproducibility_metadata(
 import psutil
 import platform
 
+
 def collect_hardware_profile() -> HardwareProfile:
     return HardwareProfile(
         cpu_model=platform.processor(),
         cpu_cores=psutil.cpu_count(logical=True),
         memory_gb=round(psutil.virtual_memory().total / (1024**3)),
         gpu_model=get_gpu_model(),  # via nvidia-smi or None
-        gpu_memory_gb=get_gpu_memory() if get_gpu_model() else None
+        gpu_memory_gb=get_gpu_memory() if get_gpu_model() else None,
     )
 ```
 

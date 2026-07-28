@@ -106,7 +106,7 @@ metrics_pretrained = aggregator.aggregate(episodes_pretrained, group_by="seed")
 analyzer = StatisticalAnalyzer()
 comparison = analyzer.paired_t_test(
     baseline=metrics_baseline["timesteps_to_convergence"],
-    treatment=metrics_pretrained["timesteps_to_convergence"]
+    treatment=metrics_pretrained["timesteps_to_convergence"],
 )
 effect_size = analyzer.cohen_d(metrics_baseline, metrics_pretrained)
 
@@ -115,12 +115,12 @@ hypothesis_result = analyzer.evaluate_hypothesis(
     baseline_mean=metrics_baseline["mean"],
     treatment_mean=metrics_pretrained["mean"],
     threshold=40.0,
-    metric_name="timesteps_to_convergence"
+    metric_name="timesteps_to_convergence",
 )
 
 # 5. Generate figures
 fig_gen = FigureGenerator(output_dir=Path("output/research_reports/manual/figures"))
-fig_gen.learning_curve(episodes_baseline, episodes_pretrained, seeds=[42,43,44])
+fig_gen.learning_curve(episodes_baseline, episodes_pretrained, seeds=[42, 43, 44])
 fig_gen.sample_efficiency_bar(metrics_baseline, metrics_pretrained)
 
 # 6. Render report
@@ -130,7 +130,7 @@ report_md = renderer.render(
     metrics={"baseline": metrics_baseline, "pretrained": metrics_pretrained},
     hypothesis=hypothesis_result,
     statistical_tests=comparison,
-    figures=fig_gen.get_artifact_list()
+    figures=fig_gen.get_artifact_list(),
 )
 
 # Save

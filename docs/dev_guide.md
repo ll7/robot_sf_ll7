@@ -410,6 +410,81 @@ The gate-side rule remains useful as a safety net for non-GitHub CI providers.
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`
 and its tests can be deleted at that point.
 
+### Merge queue gate (issue #6274)
+
+**Problem.** An external or parallel auto-merge path merged several PRs without the `merge-ready`
+label and without a current exact-head `gate-verdict: accepted` trailer (issue #6274). The in-repo
+`gh-pr-merger` contract is fail-closed, but it only governs merges it performs itself; any
+dispatcher that routes through the GitHub native merge queue (or auto-merge) bypassed those gates,
+so review notes could not fail closed.
+
+**Scope: a native-queue gate, not a complete #6274 closure.** This workflow can protect only native
+`merge_group` events after a maintainer activates it as a required check. It does not locate, change,
+or prove coverage of the direct/parallel merge dispatcher observed in #6274. Keep #6274 open until
+that dispatcher and the active `main` protection configuration have both been verified.
+
+**Decision: required merge-queue status-check gate.** We add a dedicated status-check workflow that
+runs inside the native merge queue and enforces the same fail-closed preflight as `gh-pr-merger`
+before the queue auto-merges a PR:
+
+- **Workflow**: `.github/workflows/merge-queue-gate.yml` (checks out the gate implementation from
+  the trusted base revision rather than the evaluated PR or synthetic merge-group tree, with
+  checkout credentials disabled; enforces the required check fail-closed on source-head PR
+  lifecycle and review events, as well as queue-time `merge_group`, and supports
+  `workflow_dispatch` with a PR number for advisory evaluation). Source-head events include label,
+  draft-state, requested-reviewer, review, and review-comment changes, so a prior pass cannot stay
+  valid after one of those admission conditions changes. If a source-head base predates this new
+  gate file, the run records a notice and skips the evaluation so this bootstrap PR can merge; a
+  queue-time run fails closed when the trusted implementation is unavailable. Requiring the
+  source-head check as well prevents a direct path that still obeys branch protection from treating
+  an advisory success as approval. The queue-time invocation independently validates the synthetic
+  merge group.
+- **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
+- **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
+  `gate-verdict: accepted @ <head_sha>` trailer (reuses
+  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`) authored by a repository owner,
+  member, or collaborator; verdict-like text from an untrusted contributor is ignored. The gate
+  also requires no unresolved actionable review threads and no outstanding explicitly requested
+  reviewers. The current source-head CI rollup
+  must also remain green; superseded check runs are discarded with the same helper used by the
+  guarded merger preflight, and the gate excludes its own in-progress source-head check to avoid
+  waiting on itself. The exact-head trailer binds that CI and review evidence to the source head,
+  while the merge queue independently runs its required checks on the synthetic queue head. The
+  live queue must use GitHub's `ALLGREEN`
+  strategy ("Only merge non-failing pull requests"), so every earlier entry represented by a
+  grouped synthetic head must pass its own gate; `HEADGREEN` fails closed because it can merge a
+  failing earlier entry with a passing tail entry. Staleness is fresh by construction inside the
+  queue (the queue base SHA equals current `main`).
+- **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
+  source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
+  SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread
+  resolution plus requested-reviewer status, so every merge decision is inspectable and
+  reproducible.
+- **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
+  fail-closed contract deterministically (the issue #6274 validation scenarios).
+
+**Required maintainer toggle (cannot be done from a worktree).** The gate fails closed only after
+a maintainer adds the status check **`Merge Queue Gate / merge-queue-gate`** to the merge queue's
+required status checks, enables **Only merge non-failing pull requests** (`ALLGREEN`), and enables
+**Require conversation resolution before merging** in the branch-protection rules for `main`
+(Settings → Branches → `main` → merge queue). The workflow verifies `ALLGREEN` at runtime and
+fails closed if the queue is configured as `HEADGREEN`. GitHub does not reliably create a fresh
+source-head Actions check when a reviewer resolves or reopens a thread; requiring conversation
+resolution therefore makes the gate's no-unresolved-threads condition binding at merge time.
+Exact-head review evidence should be submitted as a COMMENTED GitHub review so the
+`pull_request_review` event refreshes the required source-head gate. A top-level PR comment does
+not refresh that check; workflows unable to submit a review must remove and reapply `merge-ready`
+after publishing the comment.
+Until these toggles are applied, the workflow does not provide the queue-side contract; the
+in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
+queue itself also requires maintainer approval to toggle branch-protection settings, consistent
+with the gate-side rationale above.
+
+**Relationship to the gate-side staleness check.** The staleness preflight (step 6 of
+`gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
+non-queue CI providers. Inside the native merge queue, staleness is inherently fresh, so the
+merge-queue gate records the staleness verdict for audit purposes but does not block on it.
+
 ### Reusable dev scripts
 
 Prefer calling shared scripts from `scripts/dev/` so VS Code tasks, local shells, and Codex
@@ -942,12 +1017,16 @@ outcomes.
 **Always use factory functions** — never instantiate gymnasium environments directly:
 
 ```python
-from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
+from robot_sf.gym_env.environment_factory import (
+    make_robot_env,
+    make_image_robot_env,
+    make_pedestrian_env,
+)
 
 # Basic robot navigation
 env = make_robot_env(debug=True)
 
-# With image observations  
+# With image observations
 env = make_image_robot_env(debug=True)
 
 # Pedestrian environment (requires trained robot model)

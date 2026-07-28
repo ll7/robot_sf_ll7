@@ -118,8 +118,8 @@ from robot_sf.benchmark.actuator_feasibility import (
 
 # 1 m/s straight approach; 0.5 m of geometric clearance ahead.
 report = evaluate_actuator_feasibility(
-    robot_positions=robot_positions,   # shape (T, 2)
-    robot_velocities=robot_velocities, # shape (T, 2)
+    robot_positions=robot_positions,  # shape (T, 2)
+    robot_velocities=robot_velocities,  # shape (T, 2)
     dt_s=0.1,
     hazard_clearance_m=0.5,
     config=ActuatorLimitsConfig(),  # provisional defaults

@@ -43,18 +43,18 @@ from robot_sf.feature_extractors.config import create_feature_extractor_config
 # Custom MLP with specific architecture
 mlp_config = create_feature_extractor_config(
     "mlp",
-    ray_hidden_dims=[512, 256, 128],    # Larger ray processing
-    drive_hidden_dims=[128, 64],        # Larger drive state processing
-    dropout_rate=0.2                    # Higher regularization
+    ray_hidden_dims=[512, 256, 128],  # Larger ray processing
+    drive_hidden_dims=[128, 64],  # Larger drive state processing
+    dropout_rate=0.2,  # Higher regularization
 )
 
 # Custom attention with more heads
 attention_config = create_feature_extractor_config(
     "attention",
-    embed_dim=128,      # Larger embedding
-    num_heads=16,       # More attention heads
-    num_layers=3,       # Deeper network
-    dropout_rate=0.1
+    embed_dim=128,  # Larger embedding
+    num_heads=16,  # More attention heads
+    num_layers=3,  # Deeper network
+    dropout_rate=0.1,
 )
 
 # Use in training
@@ -67,25 +67,25 @@ model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs)
 ```python
 # Define different configurations
 extractors = {
-    'baseline': FeatureExtractorPresets.dynamics_original(),
-    'fast': FeatureExtractorPresets.mlp_small(), 
-    'powerful': FeatureExtractorPresets.mlp_large(),
-    'interpretable': FeatureExtractorPresets.attention_small()
+    "baseline": FeatureExtractorPresets.dynamics_original(),
+    "fast": FeatureExtractorPresets.mlp_small(),
+    "powerful": FeatureExtractorPresets.mlp_large(),
+    "interpretable": FeatureExtractorPresets.attention_small(),
 }
 
 # Train with different extractors
 results = {}
 for name, config in extractors.items():
     print(f"Training with {name} extractor...")
-    
+
     policy_kwargs = config.get_policy_kwargs()
     model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs)
     model.learn(total_timesteps=50_000)
-    
+
     # Evaluate performance
     mean_reward = evaluate_policy(model, env, n_eval_episodes=10)[0]
     results[name] = mean_reward
-    
+
 print("Results:", results)
 ```
 
@@ -103,9 +103,9 @@ config = FeatureExtractorPresets.lightweight_cnn()
 
 # Short training with few environments
 env = make_vec_env(lambda: make_robot_env(), n_envs=4)
-model = PPO("MultiInputPolicy", env, 
-           policy_kwargs=config.get_policy_kwargs(),
-           n_steps=128)  # Smaller batch size
+model = PPO(
+    "MultiInputPolicy", env, policy_kwargs=config.get_policy_kwargs(), n_steps=128
+)  # Smaller batch size
 model.learn(total_timesteps=50_000)
 ```
 
@@ -121,10 +121,13 @@ config = FeatureExtractorPresets.attention_large()
 
 # More environments and longer training
 env = make_vec_env(lambda: make_robot_env(), n_envs=16)
-model = PPO("MultiInputPolicy", env,
-           policy_kwargs=config.get_policy_kwargs(),
-           n_steps=2048,  # Larger batch size
-           learning_rate=3e-4)
+model = PPO(
+    "MultiInputPolicy",
+    env,
+    policy_kwargs=config.get_policy_kwargs(),
+    n_steps=2048,  # Larger batch size
+    learning_rate=3e-4,
+)
 model.learn(total_timesteps=2_000_000)
 ```
 
@@ -211,7 +214,7 @@ config = {
     ],
 }
 
-config_path = Path("configs/scenarios/custom_multi_extractor.yaml")
+config_path = Path("configs/scenarios/<custom_multi_extractor>.yaml")
 config_path.parent.mkdir(parents=True, exist_ok=True)
 config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
 
@@ -243,6 +246,7 @@ import yaml  # type: ignore
 study_root = Path("output/training/feature_extractors/ablation_studies")
 study_root.mkdir(parents=True, exist_ok=True)
 
+
 def run_ablation(run_label: str, extractor_names: list[str]) -> None:
     config = {
         "run": {
@@ -256,8 +260,7 @@ def run_ablation(run_label: str, extractor_names: list[str]) -> None:
             "device": "cuda",
         },
         "extractors": [
-            {"name": name, "preset": name, "expected_resources": "gpu"}
-            for name in extractor_names
+            {"name": name, "preset": name, "expected_resources": "gpu"} for name in extractor_names
         ],
     }
 
@@ -277,6 +280,7 @@ def run_ablation(run_label: str, extractor_names: list[str]) -> None:
         ]
     )
 
+
 run_ablation("mlp_depth", ["mlp_small", "mlp_large"])
 run_ablation("attention_heads", ["attention_small", "attention_large"])
 ```
@@ -289,32 +293,32 @@ run_ablation("attention_heads", ["attention_small", "attention_large"])
 import optuna
 from optuna.integration import ChainedTrial
 
+
 def objective(trial):
     # Sample hyperparameters
-    ray_dims = [trial.suggest_categorical(f'ray_dim_{i}', [32, 64, 128, 256]) 
-                for i in range(trial.suggest_int('n_ray_layers', 1, 3))]
-    dropout = trial.suggest_float('dropout_rate', 0.0, 0.3)
-    
+    ray_dims = [
+        trial.suggest_categorical(f"ray_dim_{i}", [32, 64, 128, 256])
+        for i in range(trial.suggest_int("n_ray_layers", 1, 3))
+    ]
+    dropout = trial.suggest_float("dropout_rate", 0.0, 0.3)
+
     # Create config
-    config = create_feature_extractor_config(
-        "mlp",
-        ray_hidden_dims=ray_dims,
-        dropout_rate=dropout
-    )
-    
+    config = create_feature_extractor_config("mlp", ray_hidden_dims=ray_dims, dropout_rate=dropout)
+
     # Train model
     env = make_vec_env(lambda: make_robot_env(), n_envs=4)
     model = PPO("MultiInputPolicy", env, policy_kwargs=config.get_policy_kwargs())
     model.learn(total_timesteps=100_000)
-    
+
     # Evaluate
     mean_reward = evaluate_policy(model, env, n_eval_episodes=5)[0]
     env.close()
-    
+
     return mean_reward
 
+
 # Run optimization
-study = optuna.create_study(direction='maximize')
+study = optuna.create_study(direction="maximize")
 study.optimize(objective, n_trials=50)
 print("Best params:", study.best_params)
 ```
@@ -332,15 +336,17 @@ for name in extractors:
     model.learn(total_timesteps=200_000)
     models[name] = model
 
+
 # Ensemble prediction
 def ensemble_predict(obs):
     predictions = []
     for model in models.values():
         action, _ = model.predict(obs, deterministic=True)
         predictions.append(action)
-    
+
     # Simple averaging (or use more sophisticated combination)
     return np.mean(predictions, axis=0)
+
 
 # Use ensemble for evaluation
 obs = env.reset()
@@ -356,7 +362,7 @@ base_model = PPO("MultiInputPolicy", env, policy_kwargs=base_config.get_policy_k
 base_model.learn(total_timesteps=1_000_000)
 
 # Fine-tune with different extractor
-finetune_config = FeatureExtractorPresets.attention_small() 
+finetune_config = FeatureExtractorPresets.attention_small()
 finetune_model = PPO("MultiInputPolicy", env, policy_kwargs=finetune_config.get_policy_kwargs())
 
 # Initialize policy network from base model (feature extractor will be different)
@@ -444,9 +450,9 @@ sbatch my_extractor_job.slurm
        config = create_feature_extractor_config("mlp", invalid_param=True)
    except Exception as e:
        print(f"Config error: {e}")
-   
+
    # Check available presets
-   available = [attr for attr in dir(FeatureExtractorPresets) if not attr.startswith('_')]
+   available = [attr for attr in dir(FeatureExtractorPresets) if not attr.startswith("_")]
    print("Available presets:", available)
    ```
 

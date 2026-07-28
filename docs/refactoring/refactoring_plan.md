@@ -33,24 +33,31 @@ prototype rather than completed.
 @dataclass
 class BaseSimulationConfig:
     """Core simulation configuration shared by all environments"""
+
     sim_config: SimulationSettings
     map_pool: MapDefinitionPool
     lidar_config: LidarScannerSettings
-    
-@dataclass  
+
+
+@dataclass
 class RobotConfig(BaseSimulationConfig):
     """Robot-specific configuration"""
+
     robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings]
-    
+
+
 @dataclass
 class ImageRobotConfig(RobotConfig):
     """Robot configuration with image observations"""
-    image_config: ImageSensorSettings 
+
+    image_config: ImageSensorSettings
     use_image_obs: bool = True
-    
+
+
 @dataclass
 class PedestrianConfig(RobotConfig):
     """Configuration for pedestrian environments"""
+
     ego_ped_config: UnicycleDriveSettings
 ```
 
@@ -100,11 +107,11 @@ class EnvironmentFactory:
         if config.use_image_obs:
             return RobotEnvWithImage(config, **kwargs)
         return RobotEnv(config, **kwargs)
-    
-    @staticmethod  
+
+    @staticmethod
     def create_pedestrian_env(config: PedestrianConfig, **kwargs) -> SingleAgentEnv:
         return PedestrianEnv(config, **kwargs)
-        
+
     @staticmethod
     def create_multi_robot_env(config: RobotConfig, num_robots: int, **kwargs) -> MultiAgentEnv:
         return MultiRobotEnv(config, num_robots, **kwargs)

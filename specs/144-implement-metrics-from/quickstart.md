@@ -171,11 +171,13 @@ Some metrics require additional data not present in all scenarios:
 from robot_sf.benchmark.metrics import EpisodeData
 
 # Provide obstacle positions
-obstacles = np.array([
-    [5.0, 5.0],   # Wall point 1
-    [5.0, 15.0],  # Wall point 2
-    # ... more obstacle points
-])
+obstacles = np.array(
+    [
+        [5.0, 5.0],  # Wall point 1
+        [5.0, 15.0],  # Wall point 2
+        # ... more obstacle points
+    ]
+)
 
 episode_data = EpisodeData(
     # ... standard fields ...
@@ -209,7 +211,7 @@ If optional fields are not provided, metrics return safe defaults:
 # Without obstacles
 data_no_obstacles = EpisodeData(...)  # obstacles=None (default)
 
-metrics.wall_collisions(data_no_obstacles)       # Returns 0.0
+metrics.wall_collisions(data_no_obstacles)  # Returns 0.0
 metrics.clearing_distance_min(data_no_obstacles)  # Returns NaN
 ```
 
@@ -271,12 +273,11 @@ with open("metrics_output.json", "w") as f:
 ```python
 import math
 
+
 def filter_valid_metrics(metrics_dict):
     """Remove NaN values from metrics dictionary."""
-    return {
-        k: v for k, v in metrics_dict.items()
-        if not (isinstance(v, float) and math.isnan(v))
-    }
+    return {k: v for k, v in metrics_dict.items() if not (isinstance(v, float) and math.isnan(v))}
+
 
 valid_metrics = filter_valid_metrics(all_metrics)
 ```
@@ -291,16 +292,18 @@ import numpy as np
 algo_metrics = defaultdict(list)
 
 for episode in episodes:
-    algo_metrics[episode.algorithm].append({
-        "success": metrics.success_rate(episode.data, horizon=100),
-        "velocity_avg": metrics.velocity_avg(episode.data),
-    })
+    algo_metrics[episode.algorithm].append(
+        {
+            "success": metrics.success_rate(episode.data, horizon=100),
+            "velocity_avg": metrics.velocity_avg(episode.data),
+        }
+    )
 
 # Compute means
 for algo, episodes_metrics in algo_metrics.items():
     success_rates = [m["success"] for m in episodes_metrics]
     velocities = [m["velocity_avg"] for m in episodes_metrics]
-    
+
     print(f"{algo}:")
     print(f"  Success: {np.mean(success_rates):.2%}")
     print(f"  Avg Velocity: {np.mean(velocities):.2f} m/s")

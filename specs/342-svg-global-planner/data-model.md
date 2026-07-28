@@ -20,34 +20,37 @@ from typing import Optional
 from robot_sf.common.types import Vec2D
 from robot_sf.nav.map_config import MapDefinition
 
+
 @dataclass
 class PlannerConfig:
     """Configuration for global path planner."""
-    
+
     robot_radius: float = 0.4
     """Robot body radius in meters (for obstacle inflation)."""
-    
+
     min_safe_clearance: float = 0.3
     """Minimum clearance margin beyond robot radius (meters)."""
-    
+
     enable_smoothing: bool = True
     """Apply Douglas-Peucker simplification to reduce waypoints."""
-    
+
     smoothing_epsilon: float = 0.1
     """Douglas-Peucker tolerance parameter (meters)."""
-    
+
     cache_graphs: bool = True
     """Enable in-memory caching of visibility graphs."""
-    
+
     fallback_on_failure: bool = True
     """Return straight-line path when planning fails (with warning)."""
-    
+
     def __post_init__(self):
         """Validate configuration constraints."""
         if self.robot_radius <= 0:
             raise ValueError(f"robot_radius must be positive, got {self.robot_radius}")
         if self.min_safe_clearance < 0:
-            raise ValueError(f"min_safe_clearance cannot be negative, got {self.min_safe_clearance}")
+            raise ValueError(
+                f"min_safe_clearance cannot be negative, got {self.min_safe_clearance}"
+            )
         if self.smoothing_epsilon <= 0 and self.enable_smoothing:
             raise ValueError(f"smoothing_epsilon must be positive when smoothing enabled")
 
@@ -55,88 +58,76 @@ class PlannerConfig:
 class GlobalPlanner:
     """
     Visibility-graph-based path planner for 2D environments with polygonal obstacles.
-    
+
     Generates collision-free paths between arbitrary start/goal positions using
     pyvisgraph library. Caches visibility graphs per map for efficiency.
-    
+
     Example:
         >>> planner = GlobalPlanner(map_definition, config)
         >>> path = planner.plan(start=Vec2D(0, 0), goal=Vec2D(10, 5))
         >>> print(f"Path has {len(path)} waypoints")
     """
-    
-    def __init__(
-        self,
-        map_definition: MapDefinition,
-        config: Optional[PlannerConfig] = None
-    ):
+
+    def __init__(self, map_definition: MapDefinition, config: Optional[PlannerConfig] = None):
         """
         Initialize planner with map and configuration.
-        
+
         Args:
             map_definition: Contains obstacles and POIs
             config: Planner configuration (uses defaults if None)
-        
+
         Raises:
             ValueError: If map has zero boundaries or invalid obstacles
         """
         self.map_def = map_definition
         self.config = config or PlannerConfig()
         self._graph = None  # Lazy-built visibility graph
-        
+
     def plan(
-        self,
-        start: Vec2D,
-        goal: Vec2D,
-        *,
-        via_pois: Optional[list[str]] = None
+        self, start: Vec2D, goal: Vec2D, *, via_pois: Optional[list[str]] = None
     ) -> list[Vec2D]:
         """
         Compute collision-free path from start to goal.
-        
+
         Args:
             start: Starting position (meters)
             goal: Goal position (meters)
             via_pois: Optional POI IDs to route through (ordered)
-        
+
         Returns:
             List of waypoints forming collision-free path.
             Includes start and goal as first/last elements.
-        
+
         Raises:
             PlanningFailedError: No valid path exists and fallback disabled
-            
+
         Performance:
             First call: 200-500ms (graph build + query)
             Cached: <100ms (query only)
         """
         ...
-        
+
     def plan_multi_goal(
-        self,
-        start: Vec2D,
-        goals: list[Vec2D],
-        *,
-        optimize_order: bool = True
+        self, start: Vec2D, goals: list[Vec2D], *, optimize_order: bool = True
     ) -> list[Vec2D]:
         """
         Plan path visiting multiple goals (travelling salesman).
-        
+
         Args:
             start: Starting position
             goals: List of goal positions to visit
             optimize_order: If True, reorder goals to minimize total path length
-        
+
         Returns:
             Path visiting all goals, starting from start.
             Order respects optimize_order parameter.
-            
+
         Note:
             Uses nearest-neighbor heuristic when optimize_order=True.
             Exact TSP solution deferred to Phase 3 (NP-hard).
         """
         ...
-        
+
     def invalidate_cache(self) -> None:
         """Clear cached visibility graph (e.g., after map changes)."""
         self._graph = None
@@ -157,26 +148,21 @@ class GlobalPlanner:
 from typing import Protocol
 from shapely.geometry import Polygon
 
+
 class VisibilityGraph(Protocol):
     """
     Internal visibility graph abstraction (implementation detail).
-    
+
     Note: This is a protocol matching pyvisgraph.VisGraph interface.
           Not directly exposed to users.
     """
-    
-    def build(
-        self,
-        polygons: list[Polygon],
-        workers: int = 1
-    ) -> None:
+
+    def build(self, polygons: list[Polygon], workers: int = 1) -> None:
         """Construct visibility graph from polygons."""
         ...
-        
+
     def shortest_path(
-        self,
-        start: tuple[float, float],
-        goal: tuple[float, float]
+        self, start: tuple[float, float], goal: tuple[float, float]
     ) -> list[tuple[float, float]]:
         """Query shortest path between two points."""
         ...
@@ -211,32 +197,33 @@ Final Path (list[Vec2D])
 from dataclasses import dataclass, field
 from robot_sf.common.types import Vec2D
 
+
 @dataclass
 class MapDefinition:
     """
     Extended with POI positions for global planner integration.
-    
+
     BACKWARD COMPATIBLE: Existing code without POIs continues to work.
     """
-    
+
     # ... existing fields (width, height, obstacles, robot_spawn_zones, goals) ...
-    
+
     poi_positions: list[Vec2D] = field(default_factory=list)
     """Point-of-interest waypoints parsed from SVG <circle class='poi'>."""
-    
+
     poi_labels: dict[str, str] = field(default_factory=dict)
     """Mapping from POI ID to human-readable label."""
-    
+
     def get_poi_by_label(self, label: str) -> Vec2D:
         """
         Retrieve POI position by label.
-        
+
         Args:
             label: POI label (e.g., "corridor_junction")
-            
+
         Returns:
             POI position as Vec2D
-            
+
         Raises:
             KeyError: If label not found in map
         """
@@ -262,16 +249,17 @@ class MapDefinition:
 ```python
 from robot_sf.common.types import Vec2D
 
+
 class PlanningFailedError(Exception):
     """
     Raised when no valid path exists between start and goal.
-    
+
     Attributes:
         start: Starting position that was requested
         goal: Goal position that was requested
         reason: Human-readable explanation (e.g., "goal inside obstacle")
     """
-    
+
     def __init__(self, start: Vec2D, goal: Vec2D, reason: str):
         self.start = start
         self.goal = goal
@@ -309,22 +297,23 @@ except PlanningFailedError as e:
 ```python
 from typing import Literal
 
+
 class POISampler:
     """
     Utility for sampling POI-based waypoints.
-    
+
     Used to create varied navigation scenarios by randomly selecting
     intermediate waypoints from map POIs.
     """
-    
+
     def __init__(self, map_definition: MapDefinition, seed: Optional[int] = None):
         """
         Initialize sampler with map POIs.
-        
+
         Args:
             map_definition: Must contain at least one POI
             seed: Random seed for reproducibility (None = non-deterministic)
-            
+
         Raises:
             ValueError: If map has no POIs defined
         """
@@ -332,22 +321,20 @@ class POISampler:
             raise ValueError("Cannot sample POIs from map without POIs")
         self.pois = map_definition.poi_positions
         self.rng = np.random.default_rng(seed)
-        
+
     def sample(
-        self,
-        count: int,
-        strategy: Literal["random", "nearest", "farthest"] = "random"
+        self, count: int, strategy: Literal["random", "nearest", "farthest"] = "random"
     ) -> list[Vec2D]:
         """
         Sample intermediate POIs for path planning.
-        
+
         Args:
             count: Number of POIs to sample (clamped to available POIs)
             strategy: Selection strategy
                 - "random": Uniform sampling without replacement
                 - "nearest": Select closest POIs to start (requires start param)
                 - "farthest": Select farthest POIs from start
-        
+
         Returns:
             List of POI positions (length min(count, len(pois)))
         """
@@ -441,7 +428,9 @@ POIID: TypeAlias = str
 def path_to_json(path: list[Vec2D]) -> str:
     """Serialize path for debugging/logging."""
     import json
+
     return json.dumps([{"x": p.x, "y": p.y} for p in path])
+
 
 # Example output:
 # [{"x": 0.0, "y": 0.0}, {"x": 5.2, "y": 3.1}, {"x": 10.0, "y": 5.0}]

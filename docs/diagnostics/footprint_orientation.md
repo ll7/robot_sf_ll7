@@ -86,9 +86,7 @@ from robot_sf.nav.footprint_diagnostic import (
     build_diagnostic_report,
 )
 
-payload = load_footprint_orientation_config(
-    "configs/diagnostics/footprint_orientation_v1.yaml"
-)
+payload = load_footprint_orientation_config("configs/diagnostics/footprint_orientation_v1.yaml")
 footprints = parse_footprints(payload)
 params = parse_diagnostic_parameters(payload)
 scenarios = build_diagnostic_scenarios()

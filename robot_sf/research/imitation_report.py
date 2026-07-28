@@ -152,7 +152,7 @@ def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
     return (mean_val - delta, mean_val + delta)
 
 
-def _fmt_stat(value: float | None | str) -> str:
+def _fmt_stat(value: float | str | None) -> str:
     """Format a statistic value for display.
 
     Args:

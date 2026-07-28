@@ -87,7 +87,7 @@ To add a new test map fixture:
 3. **Add test case** in `fast-pysf/tests/test_map_loader.py`:
    ```python
    def test_my_new_map():
-       map_file = str(MAPS_DIR / 'map_my_feature.json')
+       map_file = str(MAPS_DIR / "map_my_feature.json")
        map_definition = load_map(map_file)
        # Add assertions
    ```
@@ -165,10 +165,10 @@ These fixtures are used by `test_map_loader.py` which uses dynamic path resoluti
 from pathlib import Path
 
 TEST_DIR = Path(__file__).parent
-MAPS_DIR = TEST_DIR / 'test_maps'
+MAPS_DIR = TEST_DIR / "test_maps"
 
 # Load fixture
-map_file = str(MAPS_DIR / 'map_regular.json')
+map_file = str(MAPS_DIR / "map_regular.json")
 map_definition = load_map(map_file)
 ```
 

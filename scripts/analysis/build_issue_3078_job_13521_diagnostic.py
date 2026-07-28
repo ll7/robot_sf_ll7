@@ -71,6 +71,11 @@ def _build_payload(bundle_dir: Path) -> dict[str, Any]:
         "comparator receipt must remain no_eligible_comparator",
     )
 
+    transfer_planners = [row["planner"] for row in transfer_rows]
+    _require(
+        len(transfer_planners) == len(set(transfer_planners)),
+        "transfer table planner identities must be unique",
+    )
     transfer_by_planner = {row["planner"]: row for row in transfer_rows}
     _require(
         set(transfer_by_planner) == set(PLANNER_ORDER),
@@ -131,8 +136,21 @@ def _build_payload(bundle_dir: Path) -> dict[str, Any]:
         dict(observed_status_counts) == acceptance["row_status_counts"],
         "held-out table adapter/native counts differ from row acceptance",
     )
+    _require(
+        acceptance.get("fallback_degraded_rows") == 0,
+        "unexpected fallback/degraded rows in accepted evidence",
+    )
+    _require(
+        acceptance.get("synthetic_fixture_used") is False,
+        "synthetic fixture usage must remain false",
+    )
 
     source_store = registration["source_episode_store"]
+    resolved_bundle = bundle_dir.resolve()
+    try:
+        generated_for = resolved_bundle.relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        generated_for = str(resolved_bundle)
     return {
         "claim_boundary": (
             "Preliminary diagnostic evidence only. Seed/rank-stability and held-out "
@@ -149,7 +167,7 @@ def _build_payload(bundle_dir: Path) -> dict[str, Any]:
             "paper_claim_edits": False,
             "ranking_claim_promotion": False,
         },
-        "generated_for": ("docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16"),
+        "generated_for": generated_for,
         "headline_rank_stability_contract": {
             "caveats": [
                 "Single evaluation seed (111); planner-rank stability cannot be estimated.",
@@ -313,8 +331,10 @@ def build_outputs(bundle_dir: Path, output_dir: Path) -> tuple[Path, ...]:
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    _write_seed_figure(output_dir / OUTPUT_NAMES[1], payload["planner_rank_stability"])
-    _write_transfer_figure(output_dir / OUTPUT_NAMES[2], payload["planner_rank_stability"])
+    with matplotlib.rc_context():
+        matplotlib.rcdefaults()
+        _write_seed_figure(output_dir / OUTPUT_NAMES[1], payload["planner_rank_stability"])
+        _write_transfer_figure(output_dir / OUTPUT_NAMES[2], payload["planner_rank_stability"])
     return tuple(output_dir / name for name in OUTPUT_NAMES)
 
 

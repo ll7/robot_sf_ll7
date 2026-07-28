@@ -249,8 +249,11 @@ fi
 
 # 6. -h / --help print usage and exit 0; unknown flags are still rejected.
 RC=0
-OUT="$(bash "$SCRIPT" --help 2>&1)" || RC=$?
+HELP_STDOUT="${MOCK_DIR}/help.stdout"
+HELP_STDERR="${MOCK_DIR}/help.stderr"
+bash "$SCRIPT" --help >"$HELP_STDOUT" 2>"$HELP_STDERR" || RC=$?
 assert_ok "--help exits 0" "$RC"
+OUT="$(<"$HELP_STDOUT")"
 if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
   echo "PASS: --help prints usage and option text"
   PASS=$((PASS + 1))
@@ -258,15 +261,32 @@ else
   echo "FAIL: --help did not print usage and option text"
   FAIL=$((FAIL + 1))
 fi
+if [[ ! -s "$HELP_STDERR" ]]; then
+  echo "PASS: --help writes help text to stdout"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: --help unexpectedly writes to stderr"
+  FAIL=$((FAIL + 1))
+fi
 
 RC=0
-OUT="$(bash "$SCRIPT" -h 2>&1)" || RC=$?
+HELP_STDOUT="${MOCK_DIR}/short-help.stdout"
+HELP_STDERR="${MOCK_DIR}/short-help.stderr"
+bash "$SCRIPT" -h >"$HELP_STDOUT" 2>"$HELP_STDERR" || RC=$?
 assert_ok "-h exits 0" "$RC"
+OUT="$(<"$HELP_STDOUT")"
 if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
   echo "PASS: -h prints usage and option text"
   PASS=$((PASS + 1))
 else
   echo "FAIL: -h did not print usage and option text"
+  FAIL=$((FAIL + 1))
+fi
+if [[ ! -s "$HELP_STDERR" ]]; then
+  echo "PASS: -h writes help text to stdout"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: -h unexpectedly writes to stderr"
   FAIL=$((FAIL + 1))
 fi
 

@@ -37,8 +37,9 @@ DIAGNOSTIC_NODES: dict[str, str] = {
         "Base-sensitive gate subset subprocess contract. The outer test walls a "
         "`pytest -m base_sensitive` subprocess whose runtime is dominated by full "
         "suite collection (~tens of seconds, by design); the test carries its own "
-        "120s hard cap (`assert elapsed < 120`). Its expected 20s soft breach is "
-        "therefore diagnostic, while the report's 60s hard threshold still applies."
+        "120s hard cap (`assert elapsed < 120`). Its expected soft-threshold breach "
+        "is therefore diagnostic, while the report's configured hard threshold "
+        "still applies."
     ),
 }
 
@@ -120,7 +121,14 @@ def generate_report(
             # as ``"diagnostic"`` with an explanation instead of a generic soft
             # breach whose episode/horizon guidance does not apply (issue #6320).
             # Do not bypass the hard boundary: that must remain enforceable.
-            guidance = [f"Accepted diagnostic contract: {note}"]
+            guidance = [
+                f"Accepted diagnostic contract: {note}",
+                (
+                    "Configured performance envelope remains active: "
+                    f"soft<{policy.soft_threshold_seconds:g}s, "
+                    f"hard={policy.hard_timeout_seconds:g}s."
+                ),
+            ]
             records.append(
                 SlowTestRecord(
                     test_identifier=s.test_identifier,

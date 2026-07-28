@@ -25,8 +25,8 @@ def test_gate_node_is_registered_diagnostic() -> None:
     assert GATE_NODE in DIAGNOSTIC_NODES
     note = DIAGNOSTIC_NODES[GATE_NODE]
     assert note, "diagnostic note must be non-empty"
-    assert "20s soft breach" in note
-    assert "60s hard threshold still applies" in note
+    assert "soft-threshold breach" in note
+    assert "configured hard threshold still applies" in note
 
 
 def test_diagnostic_set_is_scoped_to_gate_node_only() -> None:
@@ -107,11 +107,26 @@ def test_diagnostic_node_does_not_shadow_slower_generic_node() -> None:
         SlowTestSample(test_identifier="dummy::test_slower", duration_seconds=70.0),
     ]
     records = generate_report(samples, policy)
+    assert [record.test_identifier for record in records] == [
+        "dummy::test_slower",
+        GATE_NODE,
+    ]
     by_id = {r.test_identifier: r for r in records}
     assert by_id[GATE_NODE].breach_type == "diagnostic"
     # 70s >= hard_timeout (60s) so the generic node is a hard breach, unaffected by
     # the diagnostic classification scoped to the gate node.
     assert by_id["dummy::test_slower"].breach_type == "hard"
+
+
+def test_diagnostic_guidance_uses_configured_envelope() -> None:
+    """Diagnostic text must not claim the default thresholds under an override."""
+    policy = PerformanceBudgetPolicy(soft_threshold_seconds=10.0, hard_timeout_seconds=30.0)
+    samples = [SlowTestSample(test_identifier=GATE_NODE, duration_seconds=20.0)]
+    records = generate_report(samples, policy)
+    assert records[0].breach_type == "diagnostic"
+    joined = " ".join(records[0].guidance)
+    assert "soft<10s" in joined
+    assert "hard=30s" in joined
 
 
 def test_format_report_labels_diagnostic_clearly() -> None:

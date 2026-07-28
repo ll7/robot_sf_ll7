@@ -16,12 +16,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from typing import Any
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 API_PREFIX = "https://api.github.com/"
+# Safety guard for the rel="next" pagination loop; a single GitHub check run
+# exposes at most 50 annotations, so this should never bind in practice.
+MAX_ANNOTATION_PAGES = 100
 
 
 def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -59,26 +63,101 @@ def _parse_json(result: subprocess.CompletedProcess[str], *, source: str) -> dic
     return payload
 
 
-def _parse_annotation_pages(
-    result: subprocess.CompletedProcess[str],
-) -> list[dict[str, Any]] | None:
-    """Flatten ``gh api --paginate --slurp`` annotations or reject an empty response."""
+def _split_include_output(stdout: str) -> tuple[str, str]:
+    """Split ``gh api --include`` stdout into ``(headers block, body)``.
+
+    ``gh api --include`` prints the HTTP status line and headers, a blank line,
+    then the JSON body. Header lines use CRLF; the separator is also accepted as
+    a bare LF so the parser stays robust across GitHub CLI versions.
+    """
+    for sep in ("\r\n\r\n", "\n\n"):
+        index = stdout.find(sep)
+        if index != -1:
+            return stdout[:index], stdout[index + len(sep) :]
+    return "", stdout
+
+
+def _header_value(headers_block: str, name: str) -> str | None:
+    """Return the joined values of a named header from a ``--include`` block."""
+    wanted = name.lower()
+    values: list[str] = []
+    for line in headers_block.splitlines():
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        if key.strip().lower() == wanted:
+            values.append(value.strip())
+    return ", ".join(values) if values else None
+
+
+def _next_link(headers_block: str) -> str | None:
+    """Return the ``rel="next"`` URL from a ``gh api --include`` headers block."""
+    link_value = _header_value(headers_block, "Link")
+    if link_value is None:
+        return None
+    for entry in link_value.split(","):
+        match = re.search(r"<([^>]+)>", entry)
+        if match and 'rel="next"' in entry:
+            return match.group(1)
+    return None
+
+
+def _fetch_annotation_page(
+    request_path: str,
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Fetch one annotation page via ``gh api --include``.
+
+    Returns ``(annotations, next_url)``: ``annotations`` is the page's JSON array
+    (possibly empty), and ``next_url`` is the ``rel="next"`` Link URL or
+    ``None``. On any ``gh`` failure or unparseable response, ``annotations`` is
+    ``None`` after a concise error is printed to stderr.
+    """
+    result = _gh(["api", "--include", request_path])
     if result.returncode != 0:
         detail = result.stderr.strip() or f"gh exited with code {result.returncode}"
         print(f"Could not recover check-run annotations: {detail}", file=sys.stderr)
-        return None
+        return None, None
+    headers_block, body = _split_include_output(result.stdout)
     try:
-        pages = json.loads(result.stdout)
+        page = json.loads(body)
     except json.JSONDecodeError as exc:
         print(f"Could not parse check-run annotations JSON: {exc}", file=sys.stderr)
-        return None
-    if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
+        return None, None
+    if not isinstance(page, list):
         print(
-            "Could not recover check-run annotations: expected paginated JSON lists",
+            "Could not recover check-run annotations: expected a JSON array per page",
+            file=sys.stderr,
+        )
+        return None, None
+    return page, _next_link(headers_block)
+
+
+def _collect_annotations(initial_path: str) -> list[dict[str, Any]] | None:
+    """Concatenate check-run annotations across ``rel="next"`` pages.
+
+    Follows the REST pagination chain exposed by ``gh api --include`` so the
+    helper works across GitHub CLI versions (including those that reject the
+    multi-page aggregation flag): each request returns one JSON array of
+    annotations, and the ``rel="next"`` Link URL is requested until the chain
+    ends. Returns ``None`` (after a stderr error) when any page fails, the
+    response is malformed, or no annotations are returned.
+    """
+    annotations: list[dict[str, Any]] = []
+    request_path: str | None = initial_path
+    for _ in range(MAX_ANNOTATION_PAGES):
+        if request_path is None:
+            break
+        page, next_url = _fetch_annotation_page(request_path)
+        if page is None:
+            return None
+        annotations.extend(page)
+        request_path = next_url
+    else:
+        print(
+            "Could not recover check-run annotations: pagination exceeded the page guard",
             file=sys.stderr,
         )
         return None
-    annotations = [item for page in pages for item in page]
     if not annotations:
         print(
             "Could not recover check-run annotations: the endpoint returned no annotations",
@@ -142,8 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print("Falling back to check-run annotations.", file=sys.stderr)
-    annotations_result = _gh(["api", "--paginate", "--slurp", annotations_path])
-    annotations = _parse_annotation_pages(annotations_result)
+    annotations = _collect_annotations(annotations_path)
     if annotations is None:
         return 1
     print(json.dumps(annotations))

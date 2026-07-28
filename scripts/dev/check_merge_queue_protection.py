@@ -946,10 +946,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         strategy = (None, None)
 
-    ruleset_inventory_error = list_error
-    if partial_errors:
-        partial_error = "; ".join(partial_errors)
-        ruleset_inventory_error = f"{list_error}; {partial_error}" if list_error else partial_error
+    # The activation contract applies to the repository's *actual* default
+    # branch.  Falling back to ``main`` lets diagnostics continue after a
+    # failed metadata lookup, but it cannot establish that the inspected
+    # rulesets protect the real default branch.  Carry that failure into the
+    # ruleset inventory verdict so this path cannot report activation as
+    # complete merely because a branch named ``main`` happens to be protected.
+    ruleset_inventory_errors = [error for error in (branch_error, list_error) if error]
+    ruleset_inventory_errors.extend(partial_errors)
+    ruleset_inventory_error = "; ".join(ruleset_inventory_errors) or None
 
     audit = evaluate_protection(
         rulesets=rulesets,

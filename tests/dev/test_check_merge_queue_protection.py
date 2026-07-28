@@ -442,6 +442,34 @@ def test_main_check_probes_strategy_with_pr() -> None:
     mock_strategy.assert_called_once_with(42, repo="owner/repo")
 
 
+def test_main_check_default_branch_query_failure_fails_closed(capsys) -> None:
+    """An unknown default branch cannot produce an active-protection verdict."""
+    full = _configured_ruleset()
+    summary = {"id": 18917814, "target": "branch", "enforcement": "active"}
+    with (
+        patch("scripts.dev.check_merge_queue_protection._gh") as mock_gh,
+        patch(
+            "scripts.dev.check_merge_queue_protection.fetch_merge_queue_strategy"
+        ) as mock_strategy,
+    ):
+        mock_gh.side_effect = [
+            _gh_response(returncode=1, stderr="metadata unavailable"),
+            _gh_response(stdout=json.dumps([summary])),
+            _gh_response(stdout=json.dumps(full)),
+            _gh_response(stdout=json.dumps({"total_count": 1})),
+        ]
+        mock_strategy.return_value = ("ALLGREEN", None)
+        exit_code = main(["--check", "--repo", "owner/repo", "--pr", "42"])
+    audit = json.loads(capsys.readouterr().out)
+    dimensions = {dimension["key"]: dimension for dimension in audit["dimensions"]}
+    assert exit_code == 1
+    assert audit["passed"] is False
+    assert "metadata unavailable" in audit["fetch_errors"]
+    assert dimensions[DIM_MERGE_QUEUE]["status"] == "not_verifiable"
+    assert dimensions[DIM_BYPASS]["status"] == "not_verifiable"
+    mock_strategy.assert_called_once_with(42, repo="owner/repo")
+
+
 def test_main_self_test_exits_zero() -> None:
     """``--self-test`` runs the offline assertions and exits 0."""
     with patch("scripts.dev.check_merge_queue_protection._gh") as mock_gh:

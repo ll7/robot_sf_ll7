@@ -142,11 +142,20 @@ def _workflow_files() -> list[Path]:
     return sorted(WORKFLOWS_DIR.glob("*.yml"))
 
 
+def _workflow_display_path(workflow_file: Path) -> Path:
+    """Return a repository-relative workflow path when available."""
+    try:
+        return workflow_file.relative_to(ROOT)
+    except ValueError:
+        return workflow_file
+
+
 def _action_ref_failures_for_line(workflow_file: Path, line_number: int, line: str) -> list[str]:
     """Return action-ref pinning failures for one workflow line."""
+    display_path = _workflow_display_path(workflow_file)
     match = USES_PATTERN.match(line)
     if not match:
-        return [f"{workflow_file.relative_to(ROOT)}:{line_number}: malformed uses line"]
+        return [f"{display_path}:{line_number}: malformed uses line"]
 
     value = match.group("value")
     if value.startswith("./"):
@@ -155,17 +164,13 @@ def _action_ref_failures_for_line(workflow_file: Path, line_number: int, line: s
     failures: list[str] = []
     action, separator, ref = value.partition("@")
     if not separator:
-        return [f"{workflow_file.relative_to(ROOT)}:{line_number}: missing action ref"]
+        return [f"{display_path}:{line_number}: missing action ref"]
     if not PINNED_ACTION_SHA_PATTERN.fullmatch(ref):
-        failures.append(
-            f"{workflow_file.relative_to(ROOT)}:{line_number}: {action}@{ref} is not pinned"
-        )
+        failures.append(f"{display_path}:{line_number}: {action}@{ref} is not pinned")
 
     comment = match.group("comment")
     if comment is None or not READABLE_ACTION_TAG_PATTERN.fullmatch(comment):
-        failures.append(
-            f"{workflow_file.relative_to(ROOT)}:{line_number}: missing readable version comment"
-        )
+        failures.append(f"{display_path}:{line_number}: missing readable version comment")
     return failures
 
 
@@ -189,6 +194,17 @@ def _workflow_uses_line_numbers(workflow_file: Path) -> list[int]:
 
     visit(root)
     return line_numbers
+
+
+def _workflow_action_ref_failures(workflow_file: Path) -> list[str]:
+    """Return action-pin failures for structural ``uses`` keys in one workflow."""
+    lines = workflow_file.read_text(encoding="utf-8").splitlines()
+    failures: list[str] = []
+    for line_number in _workflow_uses_line_numbers(workflow_file):
+        failures.extend(
+            _action_ref_failures_for_line(workflow_file, line_number, lines[line_number - 1])
+        )
+    return failures
 
 
 def _workflow_jobs() -> dict[str, Any]:
@@ -503,11 +519,7 @@ def test_workflow_action_refs_are_pinned_with_readable_version_comments() -> Non
     failures: list[str] = []
 
     for workflow_file in _workflow_files():
-        lines = workflow_file.read_text(encoding="utf-8").splitlines()
-        for line_number in _workflow_uses_line_numbers(workflow_file):
-            failures.extend(
-                _action_ref_failures_for_line(workflow_file, line_number, lines[line_number - 1])
-            )
+        failures.extend(_workflow_action_ref_failures(workflow_file))
 
     assert not failures, "\n".join(failures)
 
@@ -548,7 +560,9 @@ def test_workflow_uses_scan_ignores_block_scalar_text(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    assert _workflow_uses_line_numbers(workflow_file) == [6, 7]
+    assert _workflow_action_ref_failures(workflow_file) == [
+        f"{workflow_file}:7: malformed uses line"
+    ]
 
 
 def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:

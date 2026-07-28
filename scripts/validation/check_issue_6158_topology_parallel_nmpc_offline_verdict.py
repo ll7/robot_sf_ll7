@@ -55,6 +55,7 @@ from robot_sf.benchmark.policy_builders import (
     AdapterPolicySpec,
     build_registered_adapter_policy_spec,
 )
+from robot_sf.evidence.writers import write_review_sidecar, write_text
 from robot_sf.planner.nmpc_social import NMPCSocialConfig, NMPCSocialPlannerAdapter
 from robot_sf.planner.topology_parallel_nmpc import (
     HypothesisDiagnostics,
@@ -1048,7 +1049,7 @@ def _write_evidence_doc(
     )
     plan_ms = latency_gate.evidence.get("plan_wall_clock_ms_measurement_safe_deadline", {})
     plan_real = latency_gate.evidence.get("plan_wall_clock_ms_real_2s_deadline", {})
-    md = ["<!-- AI-GENERATED (robot_sf#6158) - NEEDS-REVIEW -->\n\n"]
+    md = []
     md.append(f"# Issue #{ISSUE_NUMBER}: topology-parallel NMPC offline verdict\n")
     md.append(
         f"Diagnostic-only validation of the merged #{SOURCE_PR} prototype "
@@ -1126,8 +1127,8 @@ def _write_evidence_doc(
     md.append(summary["claim_boundary"] + "\n")
     md.append("\n## Machine-readable summary\n")
     md.append("```json\n" + json.dumps(summary, indent=2, default=str) + "\n```\n")
-    md.append("<!-- /AI-GENERATED -->\n")
-    EVIDENCE_DOC.write_text("".join(md))
+    write_text(EVIDENCE_DOC, "".join(md), issue_ref=f"robot_sf#{ISSUE_NUMBER}")
+    write_review_sidecar(EVIDENCE_DOC, repo_root=REPO_ROOT)
     return summary
 
 

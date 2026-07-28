@@ -4792,3 +4792,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

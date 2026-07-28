@@ -1,5 +1,8 @@
 """Focused coverage for the extracted ORCA + HRVO planner-family module."""
 
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
@@ -63,31 +66,47 @@ def _with_occupancy_grid(
     return observation
 
 
-def test_facade_wildcard_import_includes_lazy_public_exports() -> None:
-    """Lazy ORCA/HRVO symbols stay visible through facade introspection and wildcard import."""
+def test_facade_wildcard_import_resolves_lazy_public_exports() -> None:
+    """The facade stays lazy until wildcard import resolves the ORCA/HRVO exports."""
     expected = {"ORCAPlannerAdapter", "HRVOPlannerAdapter", "make_orca_policy", "make_hrvo_policy"}
     assert expected <= set(dir(socnav))
     assert expected <= set(socnav.__all__)
     assert expected <= socnav._ORCA_LAZY_EXPORTS
-    assert socnav.ORCAPlannerAdapter is orca.ORCAPlannerAdapter
-    assert socnav.HRVOPlannerAdapter is orca.HRVOPlannerAdapter
-    assert socnav.make_orca_policy is orca.make_orca_policy
-    assert socnav.make_hrvo_policy is orca.make_hrvo_policy
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys\n"
+                "from robot_sf.planner import socnav\n"
+                "assert 'robot_sf.planner.socnav_orca' not in sys.modules\n"
+                "from robot_sf.planner.socnav import *\n"
+                "assert 'robot_sf.planner.socnav_orca' in sys.modules\n"
+                "from robot_sf.planner import socnav_orca\n"
+                "assert ORCAPlannerAdapter is socnav_orca.ORCAPlannerAdapter\n"
+                "assert HRVOPlannerAdapter is socnav_orca.HRVOPlannerAdapter\n"
+                "assert make_orca_policy is socnav_orca.make_orca_policy\n"
+                "assert make_hrvo_policy is socnav_orca.make_hrvo_policy\n"
+            ),
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
-def test_lazy_resolution_caches_into_facade_globals() -> None:
+def test_lazy_resolution_caches_into_facade_globals(monkeypatch) -> None:
     """Accessing a lazy name binds it into the facade module globals after first resolution."""
-    # Touch the lazy attributes through the facade to trigger __getattr__ resolution.
-    _ = socnav.ORCAPlannerAdapter
-    _ = socnav.HRVOPlannerAdapter
-    _ = socnav.make_orca_policy
-    _ = socnav.make_hrvo_policy
-    for name in (
-        "ORCAPlannerAdapter",
-        "HRVOPlannerAdapter",
-        "make_orca_policy",
-        "make_hrvo_policy",
-    ):
+    expected = {
+        "ORCAPlannerAdapter": orca.ORCAPlannerAdapter,
+        "HRVOPlannerAdapter": orca.HRVOPlannerAdapter,
+        "make_orca_policy": orca.make_orca_policy,
+        "make_hrvo_policy": orca.make_hrvo_policy,
+    }
+    for name, value in expected.items():
+        monkeypatch.delitem(socnav.__dict__, name, raising=False)
+        assert getattr(socnav, name) is value
         assert name in socnav.__dict__
 
 

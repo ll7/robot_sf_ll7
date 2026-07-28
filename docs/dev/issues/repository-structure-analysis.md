@@ -251,7 +251,7 @@ tmp/                      # Transient (fully .gitignored)
 1. Create `/output/` directory with subdirectories
 2. Update scripts to write to new locations (search for hardcoded paths)
 3. Update `.gitignore` to ignore `/output/`
-4. Add migration script: `scripts/migrate_outputs.sh`
+4. Add migration script under `scripts/` (e.g. `migrate_outputs.sh`)
 5. Update documentation references
 6. Add `output/.gitkeep` for empty subdirs
 
@@ -495,7 +495,7 @@ tests/
 
 **Script:**
 ```python
-# scripts/extract_todos.py
+# Proposed helper: extract_todos.py (under scripts/)
 import re
 from pathlib import Path
 

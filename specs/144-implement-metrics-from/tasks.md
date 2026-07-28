@@ -801,7 +801,7 @@ Document JSON export format for new metrics:
 **Goal**: Performance validation, final documentation, changelog
 
 #### T033: [Polish] Add performance benchmark
-**File**: `scripts/validation/performance_paper_metrics.py`
+**Proposed file**: `performance_paper_metrics.py` (under `scripts/validation/`)
 **Dependencies**: T003-T021
 **Parallelizable**: Yes [P]
 

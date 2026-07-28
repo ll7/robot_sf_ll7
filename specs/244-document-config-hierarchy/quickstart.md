@@ -27,7 +27,7 @@ Code Defaults < YAML Files < Runtime Parameters
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.sim.sim_config import SimulationSettings
 
-# YAML can override to 150.0 (in configs/scenarios/my_scenario.yaml)
+# YAML can override to 150.0 (in configs/scenarios/<my_scenario>.yaml)
 # Runtime override wins:
 config = RobotSimulationConfig(
     sim_config=SimulationSettings(sim_time_in_secs=100.0)  # This value is used
@@ -121,7 +121,7 @@ class EnvSettings:
 ```markdown
 ## Architecture
 
-- [Configuration Hierarchy](architecture/configuration.md) - Configuration precedence, unified vs legacy configs, migration guide
+- [Configuration Hierarchy](../../docs/architecture/configuration.md) - Configuration precedence, unified vs legacy configs, migration guide
 ```
 
 **Modify**: `docs/dev_guide.md`
@@ -131,7 +131,7 @@ class EnvSettings:
 ### Configuration hierarchy (CRITICAL)
 **Always use factory functions** — never instantiate gym environments directly.
 
-For details on configuration precedence and unified config classes, see [Configuration Architecture](./architecture/configuration.md).
+For details on configuration precedence and unified config classes, see [Configuration Architecture](../../docs/architecture/configuration.md).
 ```
 
 ### Step 4: Create Deprecation Tests

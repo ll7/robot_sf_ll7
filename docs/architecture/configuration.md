@@ -52,7 +52,7 @@ config = RobotSimulationConfig()
 
 Scenario and baseline configuration files in `configs/scenarios/` and `configs/baselines/` can override code defaults.
 
-**Example YAML** (`configs/scenarios/my_scenario.yaml`):
+**Example YAML** (`configs/scenarios/<my_scenario>.yaml`):
 ```yaml
 sim_config:
   sim_time_in_secs: 150.0
@@ -146,7 +146,7 @@ class RobotSimulationConfig(BaseSimulationConfig):
 
 **Example YAML structure**:
 ```yaml
-# configs/scenarios/crowded_corridor.yaml
+# Example: configs/scenarios/<crowded_corridor>.yaml
 sim_config:
   sim_time_in_secs: 200.0
   difficulty: 3
@@ -383,7 +383,7 @@ import yaml
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 # Load YAML (simplified - actual implementation may vary)
-with open("configs/scenarios/my_scenario.yaml") as f:
+with open("configs/scenarios/<my_scenario>.yaml") as f:
     config_dict = yaml.safe_load(f)
 
 # Create config from dict (simplified)
@@ -679,4 +679,4 @@ If you encounter any behavioral differences during migration, please report as a
 - **Unified Configs**: `robot_sf/gym_env/unified_config.py` - Canonical config classes
 - **Legacy Configs**: `robot_sf/gym_env/env_config.py` - Deprecated classes (with warnings)
 - **Simulation Settings**: `robot_sf/sim/sim_config.py` - Core simulation parameters
-- **fast-pysf Wrapper**: [docs/fast_pysf_wrapper.md](./fast_pysf_wrapper.md) - Pedestrian backend integration
+- **fast-pysf Wrapper**: [docs/fast_pysf_wrapper.md](../fast_pysf_wrapper.md) - Pedestrian backend integration

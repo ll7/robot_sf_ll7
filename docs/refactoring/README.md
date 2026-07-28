@@ -123,9 +123,9 @@ The refactoring created these new core files:
 | Tool | Purpose |
 |------|---------|
 | [`utilities/migrate_environments.py`](../../utilities/migrate_environments.py) | Automated migration script |
-| [`examples/demo_refactored_environments.py`](../../examples/demo_refactored_environments.py) | Working demonstration |
+| `examples/demo_refactored_environments.py` | Working demonstration (removed) |
 | [`tests/test_pedestrian_env_compat.py`](../../tests/test_pedestrian_env_compat.py) | Pedestrian env compatibility tests |
-| [`examples/demo_pedestrian_updated.py`](../../examples/demo_pedestrian_updated.py) | Migration example |
+| `examples/demo_pedestrian_updated.py` | Migration example (removed) |
 
 ## 🎯 Key Benefits Achieved
 

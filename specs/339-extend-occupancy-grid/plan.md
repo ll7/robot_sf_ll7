@@ -1,6 +1,6 @@
 # Implementation Plan: Extended Occupancy Grid with Multi-Channel Support
 
-**Branch**: `339-extend-occupancy-grid` | **Date**: 2025-12-04 | **Spec**: [specs/339-extend-occupancy-grid/spec.md](../spec.md)  
+**Branch**: `339-extend-occupancy-grid` | **Date**: 2025-12-04 | **Spec**: [specs/339-extend-occupancy-grid/spec.md](./spec.md)  
 **Input**: Feature specification from `/specs/339-extend-occupancy-grid/spec.md`
 
 ## Summary

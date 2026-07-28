@@ -214,7 +214,7 @@ config = {
     ],
 }
 
-config_path = Path("configs/scenarios/custom_multi_extractor.yaml")
+config_path = Path("configs/scenarios/<custom_multi_extractor>.yaml")
 config_path.parent.mkdir(parents=True, exist_ok=True)
 config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
 

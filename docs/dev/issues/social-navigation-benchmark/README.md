@@ -208,7 +208,7 @@ SNQI = w1*Success - w2*NormTime - w3*CollisionRate - w4*ComfortExposure - w5*For
 ```
 robot_sf_bench run --suite core --algo SFPlanner --episodes 100 --out results/core_sf.jsonl
 robot_sf_bench aggregate --in results/core_*.jsonl --out summary/core.csv
-robot_sf_bench figures --config figures/config.yaml
+robot_sf_bench figures --config <figures-config.yaml>
 ```
 
 ## 9. Reproducibility Pillars

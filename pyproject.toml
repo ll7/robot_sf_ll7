@@ -215,6 +215,10 @@ exclude = [
     "site-packages",
     "venv",
     "third_party",
+    # spec 145 quickstart is a draft runbook for proposed (not-yet-implemented)
+    # coverage helper scripts; ruff 0.16.0 markdown formatting churns it and
+    # surfaces un-fixable cited-path failures. Excluded to keep it stable.
+    "specs/145-add-pytest-cov/quickstart.md",
 ]
 
 # Same as Black.

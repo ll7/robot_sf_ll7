@@ -96,7 +96,7 @@ Expected output: All commands complete without errors, files generated in `/tmp/
 Create or modify scenario matrix files. The simplest format is a flat list:
 
 ```yaml
-# Example: configs/scenarios/my_experiment.yaml
+# Example: configs/scenarios/<my_experiment>.yaml
 - id: basic_navigation
   density: low
   flow: uni
@@ -125,7 +125,7 @@ The `baseline` command runs a batch of episodes from a matrix and writes both th
 
 ```bash
 uv run robot_sf_bench baseline \
-  --matrix configs/scenarios/my_experiment.yaml \
+  --matrix configs/scenarios/<my_experiment>.yaml \
   --out output/benchmarks/quickstart/my_experiment_baseline.json \
   --jsonl output/benchmarks/quickstart/my_experiment_episodes.jsonl \
   --workers 4
@@ -138,7 +138,7 @@ When you need to run episodes without baseline computation (e.g., for a custom a
 
 ```bash
 uv run robot_sf_bench run \
-  --matrix configs/scenarios/my_experiment.yaml \
+  --matrix configs/scenarios/<my_experiment>.yaml \
   --out output/benchmarks/quickstart/my_experiment_episodes.jsonl \
   --workers 4
 ```
@@ -161,13 +161,13 @@ uv run robot_sf_bench aggregate \
 ## Advanced Experiment Execution
 
 ### Multi-Baseline Comparison
-First create `configs/scenarios/comparison_study.yaml` using the Step 1 matrix format.
+First create `configs/scenarios/<comparison_study>.yaml` using the Step 1 matrix format.
 
 ```bash
 # Run multiple algorithms on the same scenarios
 for ALGO in "simple_policy" "baseline_sf" "random"; do
   uv run robot_sf_bench run \
-    --matrix configs/scenarios/comparison_study.yaml \
+    --matrix configs/scenarios/<comparison_study>.yaml \
     --out output/benchmarks/quickstart/episodes_${ALGO}.jsonl \
     --algo $ALGO \
     --workers 4
@@ -214,7 +214,7 @@ uv run robot_sf_bench snqi optimize \
 For sweeps, create the matrix YAML manually — there is no generate-scenarios CLI command yet. Use a small script or hand-craft the file with your parameter ranges:
 
 ```yaml
-# Example: configs/scenarios/full_sweep.yaml (user-created)
+# Example: configs/scenarios/<full_sweep>.yaml (user-created)
 - id: sweep_low_slow
   density: low
   flow: uni
@@ -231,7 +231,7 @@ Then execute with high parallelism:
 
 ```bash
 uv run robot_sf_bench run \
-  --matrix configs/scenarios/full_sweep.yaml \
+  --matrix configs/scenarios/<full_sweep>.yaml \
   --out output/benchmarks/quickstart/parameter_sweep_episodes.jsonl \
   --workers 8
 ```
@@ -458,11 +458,11 @@ echo "✓ Results in output/benchmarks/quickstart/policy_summary.json and output
 ```bash
 # 1. Create scenario matrix manually (5 minutes)
 # See configs/baselines/example_matrix.yaml for format.
-# Edit configs/scenarios/comprehensive_study.yaml with your parameter combinations.
+# Edit configs/scenarios/<comprehensive_study>.yaml with your parameter combinations.
 
 # 2. Execute full study (2-3 hours, can run overnight)
 uv run robot_sf_bench run \
-  --matrix configs/scenarios/comprehensive_study.yaml \
+  --matrix configs/scenarios/<comprehensive_study>.yaml \
   --out output/benchmarks/quickstart/comprehensive_episodes.jsonl \
   --workers 8
 

@@ -803,6 +803,28 @@ def _percentiles(values: list[float]) -> dict[str, float]:
 def gate_7_latency(nmpc_config: NMPCSocialConfig) -> GateResult:
     """Per-hypothesis p50/p95/max solve latency on a fixed CPU fixture (descriptive)."""
     labels = ("pass_left", "yield_straight", "pass_right")
+    affinity_evidence: dict[str, Any] = {
+        "pinned": False,
+        "measurement_cpu": None,
+        "original_cpu_set": None,
+        "restored": False,
+        "error": None,
+    }
+    original_affinity: set[int] | None = None
+    try:
+        original_affinity = set(os.sched_getaffinity(0))
+        measurement_cpu = min(original_affinity)
+        os.sched_setaffinity(0, {measurement_cpu})
+        affinity_evidence.update(
+            {
+                "pinned": True,
+                "measurement_cpu": measurement_cpu,
+                "original_cpu_set": sorted(original_affinity),
+            }
+        )
+    except (AttributeError, OSError) as exc:
+        affinity_evidence["error"] = f"{type(exc).__name__}: {exc}"
+
     # Measurement-safe deadline so the runtime gate never truncates a solve; the shared
     # NMPC config (horizon/iterations/weights) is unchanged.
     topo_cfg = TopologyParallelNMPCConfig(
@@ -813,43 +835,51 @@ def gate_7_latency(nmpc_config: NMPCSocialConfig) -> GateResult:
         max_runtime_s=300.0,
         control_period_s=300.0,
     )
-    topo = TopologyParallelNMPCPlannerAdapter(topo_cfg)
-    obs = _build_obs(goal=(3.0, 0.0), ped_positions=[(1.2, 0.0)])
+    try:
+        topo = TopologyParallelNMPCPlannerAdapter(topo_cfg)
+        obs = _build_obs(goal=(3.0, 0.0), ped_positions=[(1.2, 0.0)])
 
-    warmup = 3
-    measured = 30
-    for _ in range(warmup):
-        topo.plan(obs)
-    per_hypothesis: dict[str, list[float]] = {label: [] for label in labels}
-    plan_wall_ms: list[float] = []
-    for _ in range(measured):
-        t0 = time.perf_counter()
-        topo.plan(obs)
-        plan_wall_ms.append((time.perf_counter() - t0) * 1000.0)
-        for d in topo._last_hypothesis_diagnostics:
-            if d.label in per_hypothesis:
-                per_hypothesis[d.label].append(d.solver_runtime * 1000.0)
+        warmup = 3
+        measured = 30
+        for _ in range(warmup):
+            topo.plan(obs)
+        per_hypothesis: dict[str, list[float]] = {label: [] for label in labels}
+        plan_wall_ms: list[float] = []
+        for _ in range(measured):
+            t0 = time.perf_counter()
+            topo.plan(obs)
+            plan_wall_ms.append((time.perf_counter() - t0) * 1000.0)
+            for d in topo._last_hypothesis_diagnostics:
+                if d.label in per_hypothesis:
+                    per_hypothesis[d.label].append(d.solver_runtime * 1000.0)
 
-    per_hypothesis_stats = {label: _percentiles(per_hypothesis[label]) for label in labels}
-    plan_wall_stats = _percentiles(plan_wall_ms)
-    # End-to-end with the file's real 2.0s deadline (smaller sample) for real-time context.
-    real_cfg = TopologyParallelNMPCConfig(
-        max_hypotheses=3,
-        hypothesis_labels=labels,
-        nmpc_config=nmpc_config,
-        switch_hysteresis_ticks=0,
-        max_runtime_s=2.0,
-        control_period_s=2.0,
-    )
-    real_planner = TopologyParallelNMPCPlannerAdapter(real_cfg)
-    real_wall_ms: list[float] = []
-    real_deadline_fires = 0
-    for _ in range(8):
-        t0 = time.perf_counter()
-        real_planner.plan(obs)
-        real_wall_ms.append((time.perf_counter() - t0) * 1000.0)
-        if real_planner._deadline_exceeded_this_call:
-            real_deadline_fires += 1
+        per_hypothesis_stats = {label: _percentiles(per_hypothesis[label]) for label in labels}
+        plan_wall_stats = _percentiles(plan_wall_ms)
+        # End-to-end with the file's real 2.0s deadline (smaller sample) for real-time context.
+        real_cfg = TopologyParallelNMPCConfig(
+            max_hypotheses=3,
+            hypothesis_labels=labels,
+            nmpc_config=nmpc_config,
+            switch_hysteresis_ticks=0,
+            max_runtime_s=2.0,
+            control_period_s=2.0,
+        )
+        real_planner = TopologyParallelNMPCPlannerAdapter(real_cfg)
+        real_wall_ms: list[float] = []
+        real_deadline_fires = 0
+        for _ in range(8):
+            t0 = time.perf_counter()
+            real_planner.plan(obs)
+            real_wall_ms.append((time.perf_counter() - t0) * 1000.0)
+            if real_planner._deadline_exceeded_this_call:
+                real_deadline_fires += 1
+    finally:
+        if original_affinity is not None:
+            try:
+                os.sched_setaffinity(0, original_affinity)
+                affinity_evidence["restored"] = True
+            except OSError as exc:
+                affinity_evidence["error"] = f"{type(exc).__name__}: {exc}"
     real_wall_stats = _percentiles(real_wall_ms)
 
     all_p95 = [s["p95_ms"] for s in per_hypothesis_stats.values() if s["p95_ms"] is not None]
@@ -857,6 +887,7 @@ def gate_7_latency(nmpc_config: NMPCSocialConfig) -> GateResult:
     latency_exceeds_100ms = worst_p95 > 100.0
 
     evidence = {
+        "cpu_affinity_fixture": affinity_evidence,
         "per_hypothesis_solver_runtime_ms": per_hypothesis_stats,
         "plan_wall_clock_ms_measurement_safe_deadline": plan_wall_stats,
         "plan_wall_clock_ms_real_2s_deadline": real_wall_stats,
@@ -864,7 +895,7 @@ def gate_7_latency(nmpc_config: NMPCSocialConfig) -> GateResult:
         "worst_hypothesis_p95_ms": worst_p95,
         "latency_exceeds_100ms": latency_exceeds_100ms,
         "measurement_note": (
-            "Descriptive only on an unpinned CPU; not a controlled benchmark. "
+            "Descriptive only on a single CPU-pinned fixture; not a controlled benchmark. "
             "max_runtime_s/control_period_s were raised to 300s during measurement so the "
             "runtime gate never truncates a solve; the shared NMPC config is unchanged."
         ),
@@ -872,11 +903,12 @@ def gate_7_latency(nmpc_config: NMPCSocialConfig) -> GateResult:
     detail = (
         "per-hypothesis solver p95 (ms): "
         + ", ".join(f"{lbl}={per_hypothesis_stats[lbl]['p95_ms']:.3g}" for lbl in labels)
-        + f"; worst p95={worst_p95:.3g} ms; exceeds_100ms={latency_exceeds_100ms}."
+        + f"; worst p95={worst_p95:.3g} ms; exceeds_100ms={latency_exceeds_100ms}; "
+        + f"cpu_pinned={affinity_evidence['pinned']}."
     )
     # Latency never fails this gate (it is descriptive); the only failure mode is an
     # inability to collect the sample.
-    passed = all(s["n"] > 0 for s in per_hypothesis_stats.values())
+    passed = affinity_evidence["pinned"] and all(s["n"] > 0 for s in per_hypothesis_stats.values())
     return GateResult(name="gate_7_latency", passed=passed, detail=detail, evidence=evidence)
 
 
@@ -1017,7 +1049,7 @@ def _derive_verdict(gates: list[GateResult]) -> tuple[str, str]:
     return "accepted_offline_prototype", "all eight mechanism/integrity gates passed."
 
 
-def _hardware_context() -> dict[str, Any]:
+def _hardware_context(cpu_affinity_fixture: dict[str, Any]) -> dict[str, Any]:
     """Capture fixed-CPU descriptive context for the latency fixture."""
     try:
         freq_mhz = subprocess.run(
@@ -1038,7 +1070,13 @@ def _hardware_context() -> dict[str, Any]:
         "python_version": sys.version.split()[0],
         "numpy_version": np.__version__,
         "scipy_version": scipy.__version__,
-        "cpu_pinning": "none (unpinned; descriptive only, not a controlled benchmark)",
+        "cpu_pinning": (
+            f"CPU {cpu_affinity_fixture['measurement_cpu']} pinned for latency sampling; "
+            f"original affinity restored={cpu_affinity_fixture['restored']}."
+            if cpu_affinity_fixture.get("pinned")
+            else "unavailable; latency gate is incomplete: "
+            f"{cpu_affinity_fixture.get('error') or 'affinity pinning failed'}"
+        ),
     }
 
 
@@ -1258,7 +1296,7 @@ def main() -> int:
         check=True,
         cwd=REPO_ROOT,
     ).stdout.strip()
-    hardware = _hardware_context()
+    hardware = _hardware_context(gates[6].evidence["cpu_affinity_fixture"])
 
     summary = _write_evidence_doc(
         verdict=verdict,

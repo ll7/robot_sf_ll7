@@ -49,6 +49,12 @@ _FROZEN_CONSTRAINTS_FIRST_FIELDS = frozenset(
     }
 )
 _FROZEN_COMFORT_FIELDS = frozenset({"snqi", "near_misses", "path_efficiency"})
+_FROZEN_CERTIFICATION_FIELDS = frozenset({"schema_version", "status", "reason", "details"})
+_FROZEN_CERTIFICATION_SCHEMA_VERSION = "scenario_cert.v1"
+_FROZEN_CERTIFICATION_STATUSES = frozenset({"passed", "failed", "not_available"})
+_FROZEN_PRIMARY_FAILURE_MECHANISMS = frozenset(
+    {"collision", "timeout", "incomplete", "success", "invalid_candidate", "evaluation_error"}
+)
 
 
 @dataclass(frozen=True)
@@ -312,6 +318,33 @@ def _candidate_search_space_errors(  # noqa: C901
     return search_space.validate_candidate(candidate_spec)
 
 
+def _normalized_candidate_payload(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Return the canonical numeric representation of a valid frozen candidate.
+
+    JSON permits equivalent integers and floats (for example, ``2`` and ``2.0``),
+    but their serialized digests differ. Candidate identity must follow the
+    validated representation so numeric spelling cannot evade deduplication.
+
+    Returns:
+        Candidate payload with continuous fields serialized as floats and the
+        scenario seed serialized as an integer.
+    """
+    return {
+        "start": {
+            field_name: float(candidate["start"][field_name])
+            for field_name in sorted(_FROZEN_POSE_FIELDS)
+        },
+        "goal": {
+            field_name: float(candidate["goal"][field_name])
+            for field_name in sorted(_FROZEN_POSE_FIELDS)
+        },
+        "spawn_time_s": float(candidate["spawn_time_s"]),
+        "pedestrian_speed_mps": float(candidate["pedestrian_speed_mps"]),
+        "pedestrian_delay_s": float(candidate["pedestrian_delay_s"]),
+        "scenario_seed": int(candidate["scenario_seed"]),
+    }
+
+
 def _constraints_first_outcome_errors(value: Any) -> list[str]:
     """Validate the complete observed constraints-first outcome projection.
 
@@ -344,6 +377,33 @@ def _constraints_first_outcome_errors(value: Any) -> list[str]:
                     field_name=f"comfort_and_efficiency.{field_name}",
                     errors=errors,
                 )
+    return errors
+
+
+def _certification_errors(value: Any) -> list[str]:
+    """Validate the complete ``scenario_cert.v1`` status carried by a row.
+
+    Returns:
+        Validation errors; an empty list means the certification payload is complete.
+    """
+    if not isinstance(value, dict):
+        return ["must be an object"]
+    errors: list[str] = []
+    missing = sorted(_FROZEN_CERTIFICATION_FIELDS - set(value))
+    unexpected = sorted(set(value) - _FROZEN_CERTIFICATION_FIELDS)
+    if missing:
+        errors.append(f"missing fields: {missing}")
+    if unexpected:
+        errors.append(f"unexpected fields: {unexpected}")
+    if value.get("schema_version") != _FROZEN_CERTIFICATION_SCHEMA_VERSION:
+        errors.append(f"schema_version must be {_FROZEN_CERTIFICATION_SCHEMA_VERSION!r}")
+    if value.get("status") not in _FROZEN_CERTIFICATION_STATUSES:
+        errors.append(f"status must be one of {sorted(_FROZEN_CERTIFICATION_STATUSES)!r}")
+    reason = value.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        errors.append("reason must be a non-empty string")
+    if not isinstance(value.get("details"), dict):
+        errors.append("details must be an object")
     return errors
 
 
@@ -534,12 +594,7 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             normalized_candidate_hash_failures += 1
             blockers.append(f"row {row_number} candidate must be an object")
         else:
-            verified_candidate_hash = _canonical_sha256(candidate)
-            if normalized_hash != verified_candidate_hash:
-                normalized_candidate_hash_failures += 1
-                blockers.append(
-                    f"row {row_number} normalized candidate hash does not match candidate content"
-                )
+            candidate_errors: list[str] = []
             if frozen_search_space is not None:
                 candidate_errors = _candidate_search_space_errors(candidate, frozen_search_space)
                 if candidate_errors:
@@ -548,6 +603,17 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
                         f"row {row_number} candidate does not match the frozen search space: "
                         + "; ".join(candidate_errors)
                     )
+            if not candidate_errors and frozen_search_space is not None:
+                verified_candidate_hash = _canonical_sha256(
+                    _normalized_candidate_payload(candidate)
+                )
+            else:
+                verified_candidate_hash = _canonical_sha256(candidate)
+            if normalized_hash != verified_candidate_hash:
+                normalized_candidate_hash_failures += 1
+                blockers.append(
+                    f"row {row_number} normalized candidate hash does not match candidate content"
+                )
         if verified_candidate_hash in normalized_hashes[arm]:
             duplicates_by_arm[arm] += 1
         elif verified_candidate_hash is not None:
@@ -638,14 +704,31 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             )
             blockers.extend(f"row {row_number} {error}" for error in objective_band_errors)
         certification = row.get("certification")
+        certification_errors = _certification_errors(certification)
+        if certification_errors:
+            blockers.append(
+                f"row {row_number} has an incomplete certification payload: "
+                + "; ".join(certification_errors)
+            )
         certification_status = (
             certification.get("status") if isinstance(certification, dict) else None
         )
         primary_failure = row.get("primary_failure_mechanism")
-        if certification_status != "passed" or primary_failure in {
-            "invalid_candidate",
-            "evaluation_error",
-        }:
+        primary_failure_is_known = (
+            isinstance(primary_failure, str)
+            and primary_failure in _FROZEN_PRIMARY_FAILURE_MECHANISMS
+        )
+        if not primary_failure_is_known:
+            blockers.append(
+                f"row {row_number} primary_failure_mechanism must be one of "
+                f"{sorted(_FROZEN_PRIMARY_FAILURE_MECHANISMS)!r}"
+            )
+        if (
+            certification_errors
+            or certification_status != "passed"
+            or not primary_failure_is_known
+            or primary_failure in {"invalid_candidate", "evaluation_error"}
+        ):
             invalid_by_arm[arm] += 1
             blockers.append(
                 f"row {row_number} is invalid or unevaluable; it remains in the primary "

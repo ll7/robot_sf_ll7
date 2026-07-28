@@ -124,9 +124,14 @@ def _diagnostic_row(
         },
         "objective": step3_execution["diagnostic_objective"],
         "objective_value": 0.0,
-        "primary_failure_mechanism": None,
+        "primary_failure_mechanism": "success",
         "stable_attribution_evidence": "not_collected_diagnostic_only",
-        "certification": {"status": "passed"},
+        "certification": {
+            "schema_version": "scenario_cert.v1",
+            "status": "passed",
+            "reason": "fixture certification",
+            "details": {},
+        },
         "recertification_lineage": "issue_6139_frozen_input",
         "deterministic_replay": "not_run_diagnostic_only",
         "confirmation_target": "not_run_diagnostic_only",
@@ -249,7 +254,16 @@ def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) ->
                                 "availability_status": "not_available",
                             }
                         },
-                    }
+                    },
+                    {
+                        "candidate": {"scenario_seed": 2},
+                        "failure_attribution": {
+                            "details": {
+                                "readiness_status": "adapter",
+                                "availability_status": "available",
+                            }
+                        },
+                    },
                 ],
             }
         ),
@@ -264,8 +278,8 @@ def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) ->
         best_bundle_path=None,
         best_objective_value=None,
         best_valid_objective=None,
-        num_candidates=1,
-        num_valid_candidates=1,
+        num_candidates=2,
+        num_valid_candidates=2,
         num_invalid_candidates=0,
         num_failed_evaluations=0,
         invalid_candidate_rate=0.0,
@@ -290,13 +304,16 @@ def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) ->
         execution_commit="a" * 40,
     )
 
-    row = compare_adversarial_samplers.build_issue_5303_search_outcome_rows(
+    rows = compare_adversarial_samplers.build_issue_5303_search_outcome_rows(
         rows=[comparison_row], context=context
-    )[0]
+    )
 
-    assert row["execution_mode"] == "adapter"
-    assert row["readiness_status"] == "fallback"
-    assert row["availability_status"] == "not_available"
+    assert rows[0]["execution_mode"] == "adapter"
+    assert rows[0]["readiness_status"] == "fallback"
+    assert rows[0]["availability_status"] == "not_available"
+    assert rows[1]["execution_mode"] == "unknown"
+    assert rows[1]["readiness_status"] == "adapter"
+    assert rows[1]["availability_status"] == "available"
 
 
 def test_diagnostic_outcome_projection_matches_constraints_first_liveness() -> None:
@@ -418,6 +435,31 @@ def test_diagnostic_analysis_recomputes_candidate_hash_before_deduplication(
     )
 
 
+def test_diagnostic_analysis_normalizes_numeric_candidate_hashes(tmp_path: Path) -> None:
+    """Equivalent integer/float spellings retain one validated candidate identity."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    rows[1]["candidate"]["start"]["x"] = 2
+    normalized_candidate = json.loads(json.dumps(rows[1]["candidate"]))
+    normalized_candidate["start"]["x"] = 2.0
+    rows[1]["normalized_candidate_config_sha256"] = _canonical_sha256(normalized_candidate)
+    rows[1]["immutable_record_sha256"] = _immutable_sha256(rows[1])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready, result.blockers
+    assert result.accounting["normalized_candidate_hash_failure_count"] == 0
+
+
 def test_diagnostic_analysis_rejects_candidate_outside_frozen_search_space(tmp_path: Path) -> None:
     """A self-hashed arbitrary candidate cannot enter the diagnostic accounting."""
     outcomes = tmp_path / "outcomes.jsonl"
@@ -449,6 +491,8 @@ def test_diagnostic_analysis_rejects_candidate_outside_frozen_search_space(tmp_p
     (
         ("readiness_status", "native", "readiness_status must match"),
         ("constraints_first_outcome", {"status": "observed"}, "incomplete constraints-first"),
+        ("primary_failure_mechanism", None, "primary_failure_mechanism must be one of"),
+        ("certification", {"status": "passed"}, "incomplete certification payload"),
     ),
 )
 def test_diagnostic_analysis_rejects_incomplete_execution_provenance(

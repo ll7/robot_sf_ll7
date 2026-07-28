@@ -507,14 +507,10 @@ def build_issue_5303_search_outcome_rows(
                     "confirmation_seeds": [],
                     "second_context_seed": None,
                 },
-                # The command fixes adapter mode, but availability/readiness are observed per
-                # attempt. Missing or degraded status must remain visible and fail closed in the
+                # Availability, readiness, and execution mode are all observed per attempt.
+                # Missing or degraded status must remain visible and fail closed in the
                 # accounting analyzer rather than being replaced by a command-level success tag.
-                "execution_mode": (
-                    observed_execution_mode
-                    if observed_execution_mode != "unknown"
-                    else context.execution_mode
-                ),
+                "execution_mode": observed_execution_mode,
                 "readiness_status": readiness_status,
                 "availability_status": availability_status,
                 "constraints_first_outcome": _constraints_first_outcome(record),

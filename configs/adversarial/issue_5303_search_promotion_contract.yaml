@@ -105,13 +105,13 @@ input_provenance:
       sha256: 6c05bcffced555b6474b5b463a27c3b0dfac5b068ae8ad8206064f3b9e98b091
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 10b32eb6325398e34b300d3d6320303c1709a9d543665c2c942324b146bdb2dc
+      sha256: 4d4637e93355bb02dabe96f1794946cbda8b6d4f118bde93f76b62e40e704ab0
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       sha256: a67c54bff12737f97230d6f31d860b1a8f317cff383dc0c0c5662b89973df506
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
-      sha256: 8c42650180bba2a1c4370bcfc2292299bdd365c0a9a498b6290e088e16766fec
+      sha256: aaac54c8c6111d7bd20d8cb8056e739f117ae1baea30fe5bcf07a87bc4ddd2b6
     - id: promotion_analysis_cli
       path: scripts/tools/analyze_issue_5303_search_promotion.py
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e

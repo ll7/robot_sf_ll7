@@ -161,6 +161,7 @@ fi
 make_gh
 : > "${MOCK_DIR}/gh_calls"
 : > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/lease_calls"
 # A dry-run should not need any local Git operation after the remote metadata
 # guard. Fail if the helper reaches this stub.
 cat > "${MOCK_DIR}/git" <<'EOF'
@@ -170,8 +171,34 @@ echo "git stub: refusing dry-run op $*" >&2
 exit 1
 EOF
 chmod +x "${MOCK_DIR}/git"
+DRY_RUN_LEASE_HELPER="${MOCK_DIR}/dry_run_lease.py"
+cat > "$DRY_RUN_LEASE_HELPER" <<'EOF'
+#!/usr/bin/env python3
+import os
+import sys
+
+with open(os.path.join(os.environ["MOCK_DIR"], "lease_calls"), "a") as call_log:
+    call_log.write(" ".join(sys.argv[1:]) + "\n")
+EOF
+chmod +x "$DRY_RUN_LEASE_HELPER"
+# The helper resolves its lease helper relative to itself. Use a copied wrapper
+# so this regression can fail if dry-run reaches either lease action.
+DRY_RUN_SCRIPT="${MOCK_DIR}/update_pr_branch_safely_dry_run.sh"
+cp "$SCRIPT" "$DRY_RUN_SCRIPT"
+python3 - "$DRY_RUN_SCRIPT" "$DRY_RUN_LEASE_HELPER" <<'PY'
+import sys
+
+script_path, lease_helper = sys.argv[1:]
+source = open(script_path).read()
+source = source.replace(
+    'LEASE_HELPER="${SCRIPT_DIR}/pr_gate_lease.py"',
+    f'LEASE_HELPER="{lease_helper}"',
+)
+open(script_path, "w").write(source)
+PY
+chmod +x "$DRY_RUN_SCRIPT"
 RC=0
-OUT="$(MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" 1 --repo owner/repo \
+OUT="$(MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$DRY_RUN_SCRIPT" 1 --repo owner/repo \
   --expected-head-sha headsha --remote custom --dry-run 2>/dev/null)" || RC=$?
 assert_json "dry-run output is valid JSON" "$OUT"
 if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "dry_run" and d["updated"] is False' <<<"$OUT"; then
@@ -200,6 +227,13 @@ if [[ -s "${MOCK_DIR}/git_calls" ]]; then
   FAIL=$((FAIL + 1))
 else
   echo "PASS: dry-run skipped local Git"
+  PASS=$((PASS + 1))
+fi
+if [[ -s "${MOCK_DIR}/lease_calls" ]]; then
+  echo "FAIL: dry-run invoked the PR-gate lease helper"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: dry-run skipped the PR-gate lease helper"
   PASS=$((PASS + 1))
 fi
 assert_ok "dry-run exits 0" "$RC"

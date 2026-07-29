@@ -199,6 +199,17 @@ if [[ "$LIVE_HEAD" != "$EXPECTED" ]]; then
   exit 1
 fi
 
+# The update-branch endpoint is itself a write, so dry-run must exit before
+# probing it. The metadata read and exact-head guard above remain intentional.
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  printf 'dry-run: would request GitHub update-branch for %s#%s at %s; ' \
+    "$REPO" "$PR" "$EXPECTED" >&2
+  printf 'if unavailable, would use the guarded local fallback via %s\n' \
+    "$REMOTE" >&2
+  emit_result "dry_run" "false" "" "gh_rest_update_branch"
+  exit 0
+fi
+
 # --- attempt the supported remote branch-update path --------------------------
 set +e
 REST_STDERR="$(gh api "repos/${REPO}/pulls/${PR}/update-branch" \
@@ -290,12 +301,6 @@ LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
 if [[ "$LOCAL_HEAD" != "$EXPECTED" ]]; then
   emit_result "head_mismatch" "false" "local HEAD (${LOCAL_HEAD}) differs from expected SHA" "local_fallback"
   exit 1
-fi
-
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "dry-run: would fetch ${REMOTE} ${BASE_REF} ${HEAD_REF}, rebase onto ${REMOTE}/${BASE_REF}, then push --force-with-lease to ${REMOTE}/${HEAD_REF}" >&2
-  emit_result "dry_run" "false" "" "local_fallback"
-  exit 0
 fi
 
 if [[ ! -f "$LEASE_HELPER" ]]; then

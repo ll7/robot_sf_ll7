@@ -31,7 +31,9 @@ planners. No paper, dissertation, benchmark-wide, cross-planner, minimax, or por
 claim is made or implied.
 
 Parent: https://github.com/ll7/robot_sf_ll7/issues/5303 (step 2 of 6).
-This step is blocked by https://github.com/ll7/robot_sf_ll7/issues/6139, which is merged.
+The entry gate is satisfied by the merged recertification in
+https://github.com/ll7/robot_sf_ll7/issues/6139; this historical packet is not a campaign
+authorization.
 
 ## Supersession boundary
 

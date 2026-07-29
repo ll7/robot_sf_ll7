@@ -19,6 +19,10 @@ The companion test ``tests/adversarial/test_issue_5303_search_promotion_prefligh
 AST-scans this module's source to prove the side-effect-free contract holds.
 """
 
+# evidence-writer-exempt: dump_preflight_payload writes only an optional caller-selected
+# diagnostic path; the frozen preflight and default checker remain read-only and never
+# target the tracked evidence tree.
+
 from __future__ import annotations
 
 import ast

@@ -117,7 +117,7 @@ input_provenance:
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
     - id: preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
-      sha256: cbc689c2ea37d96db334a0c396368d990fd424177a7a83d28a40f3d1cf8355cc
+      sha256: f697c1c636f2314005f82b5a08599f7d1cacb6d82eb2515548910314a31070cb
     - id: contract_check_cli
       path: scripts/tools/check_issue_5303_search_promotion_contract.py
       sha256: 0d7b214fed823a985141d3aff1e793586c50e3a181c656f789059a2cf6df0aaa

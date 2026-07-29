@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.evidence.writers import write_json
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
@@ -617,11 +619,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stderr.write(f"{Path(__file__).name}: error: {exc}\n")
         return 2
 
-    output = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if args.output_json is not None and not args.dry_run:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        args.output_json.write_text(output, encoding="utf-8")
-    sys.stdout.write(output)
+        write_json(args.output_json, payload)
+    if args.output_json is not None or args.dry_run:
+        output = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        sys.stdout.write(output)
     return 0 if payload["status"] == "valid" else 2
 
 

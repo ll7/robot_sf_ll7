@@ -53,7 +53,15 @@ _FROZEN_CERTIFICATION_FIELDS = frozenset({"schema_version", "status", "reason", 
 _FROZEN_CERTIFICATION_SCHEMA_VERSION = "scenario_cert.v1"
 _FROZEN_CERTIFICATION_STATUSES = frozenset({"passed", "failed", "not_available"})
 _FROZEN_PRIMARY_FAILURE_MECHANISMS = frozenset(
-    {"collision", "timeout", "incomplete", "success", "invalid_candidate", "evaluation_error"}
+    {
+        "collision",
+        "severe_intrusion",
+        "timeout",
+        "incomplete",
+        "success",
+        "invalid_candidate",
+        "evaluation_error",
+    }
 )
 
 
@@ -362,7 +370,7 @@ def _normalized_candidate_payload(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _constraints_first_outcome_errors(value: Any) -> list[str]:
+def _constraints_first_outcome_errors(value: Any) -> list[str]:  # noqa: C901
     """Validate the complete observed constraints-first outcome projection.
 
     Returns:
@@ -372,8 +380,11 @@ def _constraints_first_outcome_errors(value: Any) -> list[str]:
         return ["must be an object"]
     errors: list[str] = []
     missing = sorted(_FROZEN_CONSTRAINTS_FIRST_FIELDS - set(value))
+    unexpected = sorted(set(value) - _FROZEN_CONSTRAINTS_FIRST_FIELDS)
     if missing:
         errors.append(f"missing fields: {missing}")
+    if unexpected:
+        errors.append(f"unexpected fields: {unexpected}")
     if value.get("status") != "observed":
         errors.append("status must be 'observed'")
     for field_name in ("collision_or_severe_intrusion", "liveness_or_goal_completion"):
@@ -384,8 +395,11 @@ def _constraints_first_outcome_errors(value: Any) -> list[str]:
         errors.append("comfort_and_efficiency must be an object")
     else:
         comfort_missing = sorted(_FROZEN_COMFORT_FIELDS - set(comfort))
+        comfort_unexpected = sorted(set(comfort) - _FROZEN_COMFORT_FIELDS)
         if comfort_missing:
             errors.append(f"comfort_and_efficiency is missing fields: {comfort_missing}")
+        if comfort_unexpected:
+            errors.append(f"comfort_and_efficiency has unexpected fields: {comfort_unexpected}")
         for field_name in _FROZEN_COMFORT_FIELDS:
             metric = comfort.get(field_name)
             if metric is not None:
@@ -448,6 +462,33 @@ def _constraints_first_objective_band_errors(
         return [
             f"objective_value {score} is outside the frozen {tier} tier "
             f"[{lower_bound}, {lower_bound + 1})"
+        ]
+    return []
+
+
+def _primary_failure_mechanism_errors(primary_failure: Any, outcome: dict[str, Any]) -> list[str]:
+    """Validate attribution against the observed constraints-first outcome tier.
+
+    Returns:
+        Validation errors; an empty list means the mechanism matches the outcome tier.
+    """
+    if not isinstance(primary_failure, str):
+        return []
+    if primary_failure in {"invalid_candidate", "evaluation_error"}:
+        return []
+    if outcome["collision_or_severe_intrusion"]:
+        expected = {"collision", "severe_intrusion"}
+        tier = "collision/severe-intrusion"
+    elif outcome["liveness_or_goal_completion"]:
+        expected = {"timeout", "incomplete"}
+        tier = "liveness"
+    else:
+        expected = {"success"}
+        tier = "successful completion"
+    if primary_failure not in expected:
+        return [
+            f"primary_failure_mechanism {primary_failure!r} contradicts the observed {tier} "
+            f"tier; expected one of {sorted(expected)!r}"
         ]
     return []
 
@@ -736,10 +777,17 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
                 f"row {row_number} primary_failure_mechanism must be one of "
                 f"{sorted(_FROZEN_PRIMARY_FAILURE_MECHANISMS)!r}"
             )
+        primary_failure_errors = (
+            _primary_failure_mechanism_errors(primary_failure, constraints_first_outcome)
+            if primary_failure_is_known and not outcome_errors
+            else []
+        )
+        blockers.extend(f"row {row_number} {error}" for error in primary_failure_errors)
         if (
             certification_errors
             or certification_status != "passed"
             or not primary_failure_is_known
+            or primary_failure_errors
             or primary_failure in {"invalid_candidate", "evaluation_error"}
         ):
             invalid_by_arm[arm] += 1

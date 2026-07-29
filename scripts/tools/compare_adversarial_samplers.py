@@ -238,6 +238,7 @@ def _is_certified_valid_failure(item: Any) -> bool:
         return False
     return attribution.get("primary_failure") in {
         "collision",
+        "severe_intrusion",
         "timeout",
         "near_miss",
         "comfort_violation",

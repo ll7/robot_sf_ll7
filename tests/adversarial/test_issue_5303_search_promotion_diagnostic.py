@@ -589,6 +589,57 @@ def test_diagnostic_analysis_rejects_out_of_domain_soft_metrics(tmp_path: Path) 
     assert any("near_misses must be non-negative" in item for item in result.blockers)
 
 
+def test_diagnostic_analysis_rejects_unexpected_nested_outcome_fields(tmp_path: Path) -> None:
+    """Nested outcome objects must remain exact frozen projections, not open-ended metadata."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    outcome = rows[0]["constraints_first_outcome"]
+    assert isinstance(outcome, dict)
+    outcome["unfrozen_field"] = True
+    comfort = outcome["comfort_and_efficiency"]
+    assert isinstance(comfort, dict)
+    comfort["unfrozen_metric"] = 1.0
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert any("unexpected fields" in item for item in result.blockers)
+
+
+def test_diagnostic_analysis_rejects_inconsistent_primary_failure_mechanism(
+    tmp_path: Path,
+) -> None:
+    """A self-hashed row cannot contradict its observed constraints-first tier."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["primary_failure_mechanism"] = "collision"
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert any("contradicts the observed" in item for item in result.blockers)
+
+
 def test_diagnostic_analysis_rejects_self_hashed_wrong_frozen_bindings(tmp_path: Path) -> None:
     """A self-hash cannot substitute for the frozen input and execution bindings."""
     outcomes = tmp_path / "outcomes.jsonl"

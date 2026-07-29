@@ -2225,7 +2225,7 @@ def test_default_evaluator_fails_closed_when_algorithm_metadata_is_incomplete(
 
 
 def test_failure_attribution_covers_primary_outcomes() -> None:
-    """Failure attribution must distinguish collision, timeout, incomplete, and errors."""
+    """Failure attribution must distinguish safety, liveness, and evaluation outcomes."""
     collision = attribution_from_episode_record(
         {"status": "done", "outcome": {"collision": True, "route_complete": False}}
     )
@@ -2235,6 +2235,13 @@ def test_failure_attribution_covers_primary_outcomes() -> None:
     timeout = attribution_from_episode_record(
         {"status": "done", "outcome": {"timeout_event": True, "route_complete": False}}
     )
+    severe_intrusion = attribution_from_episode_record(
+        {
+            "status": "done",
+            "outcome": {"route_complete": False},
+            "metrics": {"severe_intrusion": True},
+        }
+    )
     incomplete = attribution_from_episode_record(
         {"status": "done", "outcome": {"route_complete": False}}
     )
@@ -2242,6 +2249,7 @@ def test_failure_attribution_covers_primary_outcomes() -> None:
 
     assert collision.primary_failure == "collision"
     assert legacy_collision.primary_failure == "collision"
+    assert severe_intrusion.primary_failure == "severe_intrusion"
     assert timeout.primary_failure == "timeout"
     assert incomplete.primary_failure == "incomplete"
     assert error.to_json()["status"] == "evaluation_failed"

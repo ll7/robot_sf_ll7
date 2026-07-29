@@ -1,5 +1,7 @@
 """Focused coverage for the extracted SocNav base/config module."""
 
+from types import SimpleNamespace
+
 import numpy as np
 
 from robot_sf.planner import socnav
@@ -85,6 +87,76 @@ def test_trivial_and_sampling_adapter_instantiation() -> None:
     linear_s, angular_s = sampling.plan(_observation())
     assert -sampling.config.max_linear_speed <= linear_s <= sampling.config.max_linear_speed
     assert -sampling.config.max_angular_speed <= angular_s <= sampling.config.max_angular_speed
+
+
+def test_base_adapter_lifecycle_and_goal_distance_objective() -> None:
+    """Moved lifecycle hooks and goal-distance objective preserve their contracts."""
+    adapter = base.TrivialReferencePlannerAdapter()
+    adapter.plan(_observation())
+    assert adapter.diagnostics()["steps"] == 1
+    adapter.reset(seed=7)
+    assert adapter.diagnostics()["steps"] == 0
+
+    config = base.SocNavPlannerConfig(max_linear_speed=1.5)
+    adapter.configure(config)
+    assert adapter.config is config
+
+    class _Trajectory:
+        def __init__(self, positions: np.ndarray, valid_horizons: np.ndarray | None = None) -> None:
+            self._positions = positions
+            self.valid_horizons_n1 = valid_horizons
+
+        def position_nk2(self) -> np.ndarray:
+            return self._positions
+
+    objective = base.SamplingPlannerAdapter._GoalDistanceObjective()
+    assert objective.evaluate_function(_Trajectory(np.empty((0, 0, 2)))).size == 0
+
+    objective.set_goal(np.array([1.0, 0.0]))
+    positions = np.array(
+        [
+            [[0.0, 0.0], [1.0, 0.0]],
+            [[0.0, 0.0], [2.0, 0.0]],
+        ]
+    )
+    np.testing.assert_allclose(objective.evaluate_function(_Trajectory(positions)), [0.0, 1.0])
+    np.testing.assert_allclose(
+        objective.evaluate_function(_Trajectory(positions, np.array([[1], [2]]))),
+        [1.0, 1.0],
+    )
+
+
+def test_sampling_adapter_repulsion_and_upstream_root_fallbacks(tmp_path, monkeypatch) -> None:
+    """Moved fallback helpers retain pedestrian avoidance and fail-closed root handling."""
+    adapter = base.SamplingPlannerAdapter()
+    linear, angular = adapter.plan(_observation(pedestrians=[(0.0, 1.0)]))
+    assert linear > 0.0
+    assert angular < 0.0
+
+    missing_root = tmp_path / "missing-socnavbench"
+    assert adapter._load_upstream_planner(missing_root) is None
+
+    untrusted_root = tmp_path / "untrusted-socnavbench"
+    untrusted_root.mkdir()
+    monkeypatch.delenv("ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT", raising=False)
+    assert adapter._load_upstream_planner(untrusted_root) is None
+
+    monkeypatch.setenv("ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT", "yes")
+    assert base.SamplingPlannerAdapter._allow_untrusted_socnav_root()
+
+
+def test_sampling_adapter_timestep_helpers_preserve_defaults_and_params() -> None:
+    """The extracted upstream-timestep helpers retain default and configured values."""
+    adapter = base.SamplingPlannerAdapter()
+    assert adapter._resolve_robot_dt(object()) == 0.1
+    assert adapter._resolve_camera_dt(object()) == 0.1
+
+    params = SimpleNamespace(
+        robot_dynamics_params=SimpleNamespace(dt=0.25),
+        camera_params=SimpleNamespace(dt=0.05),
+    )
+    assert adapter._resolve_robot_dt(params) == 0.25
+    assert adapter._resolve_camera_dt(params) == 0.05
 
 
 def test_complex_policy_uses_deferred_facade_adapter() -> None:

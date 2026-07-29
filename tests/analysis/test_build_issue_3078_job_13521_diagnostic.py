@@ -29,8 +29,9 @@ def test_builder_is_byte_deterministic(tmp_path: Path, diagnostic_builder: Modul
     second_paths = diagnostic_builder.build_outputs(diagnostic_builder.DEFAULT_BUNDLE, second)
 
     assert [path.name for path in first_paths] == list(diagnostic_builder.OUTPUT_NAMES)
-    assert [path.read_bytes() for path in first_paths] == [
-        path.read_bytes() for path in second_paths
+    assert [path.name for path in second_paths] == list(diagnostic_builder.OUTPUT_NAMES)
+    assert [(path.name, path.read_bytes()) for path in first_paths] == [
+        (path.name, path.read_bytes()) for path in second_paths
     ]
 
 

@@ -60,6 +60,18 @@ def _mark_missing_provenance(enriched: dict[str, Any], reason: str) -> dict[str,
     return enriched
 
 
+def _validate_preflight_status(enriched: dict[str, Any]) -> str | None:
+    """Reject explicit non-terminal preflight statuses before availability scoring."""
+    preflight = enriched.get("preflight")
+    if "preflight" in enriched and not isinstance(preflight, dict):
+        return "episode preflight metadata was missing or malformed"
+    if isinstance(preflight, dict):
+        preflight_status = str(preflight.get("status", "")).strip().lower()
+        if preflight_status not in {"ok", "fallback", "skipped"}:
+            return f"episode preflight status was non-terminal: {preflight_status or 'missing'}"
+    return None
+
+
 def _validate_episode_provenance(
     enriched: dict[str, Any], record: dict[str, Any] | None
 ) -> str | None:
@@ -106,7 +118,13 @@ def _validate_episode_provenance(
             enriched["preflight"] = preflight_payload
     elif resolve_execution_mode(effective_metadata) == "unknown":
         return "episode algorithm metadata execution mode was missing or malformed"
-    return None
+
+    # A direct runner may omit the preflight block entirely, in which case the
+    # validated episode metadata is the authoritative provenance source.  When
+    # a preflight block is present, only terminal statuses are safe to carry
+    # forward; failed/partial/unknown states cannot become available because an
+    # episode was written.
+    return _validate_preflight_status(enriched)
 
 
 def _availability_summary(summary: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:

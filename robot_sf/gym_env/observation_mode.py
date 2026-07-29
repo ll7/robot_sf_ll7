@@ -8,3 +8,4 @@ class ObservationMode(StrEnum):
 
     DEFAULT_GYM = "default_gym"
     SOCNAV_STRUCT = "socnav_struct"
+    SOCIAL_GRAPH = "social_graph"

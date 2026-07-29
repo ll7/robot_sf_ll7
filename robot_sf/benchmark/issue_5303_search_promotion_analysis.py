@@ -590,10 +590,15 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     execution_commits: set[str] = set()
 
     for row_number, row in enumerate(rows, start=1):
-        missing = sorted(required_fields - set(row))
-        if missing:
+        row_fields = set(row)
+        missing = sorted(required_fields - row_fields)
+        unexpected = sorted(row_fields - required_fields)
+        if missing or unexpected:
             required_field_failures += 1
-            blockers.append(f"row {row_number} is missing required fields: {missing}")
+            if missing:
+                blockers.append(f"row {row_number} is missing required fields: {missing}")
+            if unexpected:
+                blockers.append(f"row {row_number} has unexpected fields: {unexpected}")
             continue
         if row.get("schema_version") != OUTCOME_ROW_SCHEMA_VERSION:
             blockers.append(f"row {row_number} has an unsupported schema_version")

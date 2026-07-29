@@ -616,6 +616,28 @@ def test_diagnostic_analysis_rejects_unexpected_nested_outcome_fields(tmp_path: 
     assert any("unexpected fields" in item for item in result.blockers)
 
 
+def test_diagnostic_analysis_rejects_unexpected_top_level_fields(tmp_path: Path) -> None:
+    """Top-level outcome rows must remain an exact frozen schema projection."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["unfrozen_top_level"] = "must be rejected"
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert any("unexpected fields" in item for item in result.blockers)
+
+
 def test_diagnostic_analysis_rejects_inconsistent_primary_failure_mechanism(
     tmp_path: Path,
 ) -> None:

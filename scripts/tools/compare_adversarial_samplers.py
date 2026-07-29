@@ -331,38 +331,85 @@ def _episode_execution_status(
 ) -> tuple[str, str, str]:
     """Extract conservative execution status fields from an episode or attribution payload."""
     details = attribution.get("details") if isinstance(attribution.get("details"), dict) else {}
-    algorithm = (
-        record.get("algorithm_metadata")
-        if isinstance(record.get("algorithm_metadata"), dict)
-        else record.get("algorithm")
-        if isinstance(record.get("algorithm"), dict)
-        else {}
-    )
+    metadata_declared = "algorithm_metadata" in record or "algorithm" in record
+    if "algorithm_metadata" in record:
+        raw_algorithm = record.get("algorithm_metadata")
+    else:
+        raw_algorithm = record.get("algorithm")
+    algorithm = raw_algorithm if isinstance(raw_algorithm, dict) else {}
     planner_kinematics = (
         algorithm.get("planner_kinematics")
         if isinstance(algorithm.get("planner_kinematics"), dict)
         else {}
     )
-    execution_mode = str(
-        details.get("execution_mode")
-        or record.get("execution_mode")
-        or algorithm.get("execution_mode")
-        or planner_kinematics.get("execution_mode")
-        or "unknown"
+
+    def _status_value(payload: dict[str, Any], key: str) -> str | None:
+        """Return one normalized status value without coercing missing values."""
+        value = payload.get(key)
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        return normalized or None
+
+    # The episode's algorithm metadata is authoritative when present. Do not let
+    # malformed or status-less metadata fall back to derived manifest attribution.
+    if metadata_declared:
+        execution_mode = next(
+            (
+                value
+                for payload, key in (
+                    (algorithm, "execution_mode"),
+                    (planner_kinematics, "execution_mode"),
+                )
+                if (value := _status_value(payload, key)) is not None
+            ),
+            "unknown",
+        )
+        metadata_status = _status_value(algorithm, "status")
+        if metadata_status is None:
+            return execution_mode, "degraded", "not_available"
+        if metadata_status != "ok":
+            readiness_status = "fallback" if "fallback" in metadata_status else "degraded"
+            return execution_mode, readiness_status, "not_available"
+        if execution_mode not in {"native", "adapter", "mixed"}:
+            return execution_mode, "degraded", "not_available"
+        readiness_status = _status_value(algorithm, "readiness_status") or execution_mode
+        availability_status = _status_value(algorithm, "availability_status") or "available"
+        return execution_mode, readiness_status, availability_status
+
+    execution_mode = next(
+        (
+            value
+            for payload, key in (
+                (record, "execution_mode"),
+                (details, "execution_mode"),
+            )
+            if (value := _status_value(payload, key)) is not None
+        ),
+        "unknown",
     )
-    readiness_status = str(
-        details.get("readiness_status")
-        or record.get("readiness_status")
-        or algorithm.get("readiness_status")
-        or "unknown"
+
+    readiness_status = next(
+        (
+            value
+            for payload in (record, algorithm, details)
+            if (value := _status_value(payload, "readiness_status")) is not None
+        ),
+        None,
     )
-    availability_status = str(
-        details.get("availability_status")
-        or record.get("availability_status")
-        or algorithm.get("availability_status")
-        or "unknown"
+    availability_status = next(
+        (
+            value
+            for payload in (record, algorithm, details)
+            if (value := _status_value(payload, "availability_status")) is not None
+        ),
+        None,
     )
-    return execution_mode, readiness_status, availability_status
+    if readiness_status is None and execution_mode in {"native", "adapter", "mixed"}:
+        readiness_status = execution_mode
+    if availability_status is None and readiness_status in {"native", "adapter", "mixed"}:
+        availability_status = "available"
+    return execution_mode, readiness_status or "unknown", availability_status or "unknown"
 
 
 def _load_archive_warm_starts(

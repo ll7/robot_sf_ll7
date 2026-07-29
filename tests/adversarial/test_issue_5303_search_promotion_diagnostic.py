@@ -316,6 +316,80 @@ def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) ->
     assert rows[1]["availability_status"] == "available"
 
 
+def test_diagnostic_rows_do_not_override_non_ok_episode_metadata() -> None:
+    """Manifest attribution cannot turn a fallback episode into available evidence."""
+    record = {
+        "algorithm_metadata": {
+            "status": "policy_step_timeout_fallback",
+            "planner_kinematics": {"execution_mode": "adapter"},
+        }
+    }
+    attribution = {
+        "details": {
+            "execution_mode": "adapter",
+            "readiness_status": "adapter",
+            "availability_status": "available",
+        }
+    }
+
+    assert compare_adversarial_samplers._episode_execution_status(record, attribution) == (
+        "adapter",
+        "fallback",
+        "not_available",
+    )
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    (
+        (None, ("unknown", "degraded", "not_available")),
+        ({}, ("unknown", "degraded", "not_available")),
+        (
+            {"planner_kinematics": {"execution_mode": "adapter"}},
+            ("adapter", "degraded", "not_available"),
+        ),
+    ),
+)
+def test_diagnostic_rows_reject_malformed_episode_metadata(
+    metadata: object,
+    expected: tuple[str, str, str],
+) -> None:
+    """Malformed or status-less episode metadata cannot inherit optimistic attribution."""
+    record = {"algorithm_metadata": metadata}
+    attribution = {
+        "details": {
+            "execution_mode": "adapter",
+            "readiness_status": "adapter",
+            "availability_status": "available",
+        }
+    }
+
+    assert compare_adversarial_samplers._episode_execution_status(record, attribution) == expected
+
+
+def test_diagnostic_rows_prefer_ok_episode_metadata_over_attribution() -> None:
+    """Valid episode metadata remains authoritative over stale derived details."""
+    record = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "adapter"},
+        }
+    }
+    attribution = {
+        "details": {
+            "execution_mode": "adapter",
+            "readiness_status": "fallback",
+            "availability_status": "not_available",
+        }
+    }
+
+    assert compare_adversarial_samplers._episode_execution_status(record, attribution) == (
+        "adapter",
+        "adapter",
+        "available",
+    )
+
+
 def test_diagnostic_outcome_projection_matches_constraints_first_liveness() -> None:
     """Timeouts remain liveness failures even when a record reports route completion."""
     timeout = compare_adversarial_samplers._constraints_first_outcome(

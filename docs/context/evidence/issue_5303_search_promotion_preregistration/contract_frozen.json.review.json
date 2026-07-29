@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_5303_search_promotion_preregistration/contract_frozen.json",
-  "artifact_sha256": "990e11ddd2aec079d1420af0589696475ef7df9957d4b997f96f8d580a3a3f09",
+  "artifact_sha256": "b5c061c0d347d59bb6044a4ff67a34cc33a0856ba65ddc69571022d587617ce0",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

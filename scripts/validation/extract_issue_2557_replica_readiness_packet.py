@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 SCHEMA_VERSION = "issue-2557-replica-readiness-packet.v1"
 DEFAULT_SUMMARY = Path(
     "docs/context/evidence/issue_2557_reward_curriculum_partial_2026-06-08/seed_summary.json"
@@ -288,10 +290,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.write_json:
         args.write_json.parent.mkdir(parents=True, exist_ok=True)
-        args.write_json.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n")
+        write_json(args.write_json, packet)
     if args.write_markdown:
         args.write_markdown.parent.mkdir(parents=True, exist_ok=True)
-        args.write_markdown.write_text(render_markdown(packet), encoding="utf-8")
+        write_text(args.write_markdown, render_markdown(packet), issue_ref="robot_sf#2557")
     if args.markdown:
         print(render_markdown(packet), end="")
     else:

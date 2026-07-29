@@ -375,7 +375,7 @@ def test_frozen_design_fields() -> None:
         "missing_invalid_stay_primary_denominator",
         "outcome_row_schema_complete",
         "promotion_campaign_stopped",
-        "diagnostic_run_separately_justified",
+        "diagnostic_run_requires_separate_authorization",
         "step3_execution_declared_diagnostic_only",
         "step3_runner_static_support",
         "step3_runner_outcome_writer_support",
@@ -591,8 +591,29 @@ def test_preflight_fails_closed_for_unhashable_diagnostic_boundary(tmp_path: Pat
     )
 
     assert result.ready is False
-    assert result.checks["diagnostic_run_separately_justified"] is False
-    assert any("separately justified diagnostic run" in blocker for blocker in result.blockers)
+    assert result.checks["diagnostic_run_requires_separate_authorization"] is False
+    assert any("diagnostic binding" in blocker for blocker in result.blockers)
+
+
+def test_preflight_rejects_diagnostic_execution_authorization(tmp_path: Path) -> None:
+    """The historical command binding cannot authorize a diagnostic run."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    future_run = contract["future_run_declaration"]
+    assert isinstance(future_run, dict)
+    diagnostic_run = future_run["separately_justified_diagnostic_search_run"]
+    assert isinstance(diagnostic_run, dict)
+    diagnostic_run["authorized"] = True
+
+    result = _preflight_rehashed_contract(
+        tmp_path,
+        contract,
+        "contract_with_unauthorized_diagnostic_flip",
+    )
+
+    assert result.ready is False
+    assert result.checks["diagnostic_run_requires_separate_authorization"] is False
+    assert any("pending separate review" in blocker for blocker in result.blockers)
 
 
 @pytest.mark.parametrize(

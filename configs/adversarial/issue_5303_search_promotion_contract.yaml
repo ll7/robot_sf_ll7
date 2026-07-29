@@ -105,7 +105,7 @@ input_provenance:
       sha256: 1aef306501472c9e10e0b614f48abc01c2e675da1042017ca62ec7a74596c069
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 83cf8610fa0fef96b7688383ab83ef765a619b067c76039dfc2d459d4a0b4122
+      sha256: fe72d7384608f3d1e9e3c94ee08b27e9a367c4dfb4379a31d036fa2ac7b1b46f
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       sha256: 6b94ae5511775ea1ef1528fb520aa163c0756b18fec3ab02c7a26472b9a54f48
@@ -117,7 +117,7 @@ input_provenance:
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
     - id: preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
-      sha256: 28a2170e761922730b285c615af5922c8d2eb6c84f5ca8b7f0c27de48ecf9d91
+      sha256: 223b568fe8e831980da37758af9736cf0e7d9d9acb98d0db8fe2ba71af31e1b7
     - id: contract_check_cli
       path: scripts/tools/check_issue_5303_search_promotion_contract.py
       sha256: 8d71644f0eafabe3cbe749507ec83d77287c6b98ed241489bfd8ec53de037451
@@ -433,7 +433,7 @@ future_run_declaration:
   promotion_sequence_status: stopped_before_evidence_grade_promotion_campaign
   evidence_grade_step3_authorized: false
   separately_justified_diagnostic_search_run:
-    authorized: true
+    authorized: false
     purpose: >
       Validate the frozen adapter-mode search-stage handoff, input provenance, and complete
       intention-to-search accounting without treating it as a promotion campaign.
@@ -455,8 +455,10 @@ forbidden_in_this_step:
   - evaluation_outcome_import_or_read
 
 # ---------------------------------------------------------------------------
-# Step-3 execution command and expected artifact locations (authoritative for #6145).
-# Output paths are future artifacts; they are not read in this step.
+# Historical Step-3 command bindings and expected artifact locations retained
+# for the command/schema proof required by #6144. They do not authorize #6145
+# or any diagnostic execution. The output paths are future artifacts; they are
+# not read in this step.
 # ---------------------------------------------------------------------------
 step3_execution:
   campaign_issue: 6145
@@ -467,11 +469,14 @@ step3_execution:
   diagnostic_objective: constraints_first_lexicographic_v1
   required_execution_mode: adapter
   runner_note: >
-    This command is executable only as a diagnostic search-stage handoff. It registers
-    constraints_first_lexicographic_v1, uses the corrected certifier from merged #6139,
-    pins the held-out classic_group_crossing_medium template and target planner config,
-    and records every scheduled attempt. It does not execute replay, target/reference
-    confirmation, or a second execution context and therefore cannot promote.
+    This command is retained only as the diagnostic search-stage handoff binding
+    required by #6144; this contract does not authorize invoking it. If a future
+    reviewed decision separately authorizes the diagnostic, it registers
+    constraints_first_lexicographic_v1, uses the corrected certifier from merged
+    #6139, pins the held-out classic_group_crossing_medium template and target
+    planner config, and records every scheduled attempt. It does not execute
+    replay, target/reference confirmation, or a second execution context and
+    therefore cannot promote.
   diagnostic_search_command: >
     uv run python scripts/tools/compare_adversarial_samplers.py
     --contract configs/adversarial/issue_5303_search_promotion_contract.yaml

@@ -1676,16 +1676,13 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         and future_run.get("evidence_grade_step3_authorized") is False
     )
     if not checks["promotion_campaign_stopped"]:
-        blockers.append(
-            "the evidence-grade promotion campaign must be explicitly stopped before a "
-            "three-seed diagnostic run is authorized"
-        )
+        blockers.append("the evidence-grade promotion campaign must be explicitly stopped")
     never_authorizes = (
         diagnostic_run.get("never_authorizes") if isinstance(diagnostic_run, dict) else None
     )
-    checks["diagnostic_run_separately_justified"] = (
+    checks["diagnostic_run_requires_separate_authorization"] = (
         isinstance(diagnostic_run, dict)
-        and diagnostic_run.get("authorized") is True
+        and diagnostic_run.get("authorized") is False
         and diagnostic_run.get("fixed_decision") == "inconclusive"
         and diagnostic_run.get("required_exclusion_reason")
         == "diagnostic_only_no_replay_reference_or_second_context"
@@ -1695,10 +1692,11 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         and isinstance(diagnostic_run.get("stop_rule"), str)
         and bool(diagnostic_run["stop_rule"].strip())
     )
-    if not checks["diagnostic_run_separately_justified"]:
+    if not checks["diagnostic_run_requires_separate_authorization"]:
         blockers.append(
-            "a separately justified diagnostic run must have an explicit inconclusive-only "
-            "decision, exclusion reason, non-promotion boundary, and stop rule"
+            "the diagnostic binding must remain unauthorized pending separate review, "
+            "fixed inconclusive, and unable to authorize promotion, transfer, or "
+            "evidence-grade comparison"
         )
     checks["future_run_boundary_frozen"] = (
         future_run.get("reason")

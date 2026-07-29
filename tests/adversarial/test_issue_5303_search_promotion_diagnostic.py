@@ -359,6 +359,25 @@ def test_diagnostic_runner_checks_preflight_before_search(
         compare_adversarial_samplers.main(command_parts[4:])
 
 
+def test_diagnostic_runner_rejects_unapproved_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The frozen command binding cannot itself authorize planner execution."""
+    step3_execution = FROZEN_CONTRACT["step3_execution"]
+    assert isinstance(step3_execution, dict)
+    command = step3_execution["diagnostic_search_command"]
+    assert isinstance(command, str)
+    command_parts = shlex.split(command)
+    monkeypatch.setattr(
+        compare_adversarial_samplers,
+        "run_sampler_comparison",
+        lambda **_kwargs: pytest.fail("search must not run without separate authorization"),
+    )
+
+    with pytest.raises(RuntimeError, match="diagnostic execution is not authorized"):
+        compare_adversarial_samplers.main(command_parts[4:])
+
+
 def test_diagnostic_runner_rejects_argument_drift_before_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

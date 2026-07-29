@@ -1118,6 +1118,23 @@ def _require_issue_5303_preflight_if_requested(
         detail = "; ".join(preflight.blockers) or "unknown frozen-contract failure"
         raise RuntimeError(f"issue #5303 preflight failed before diagnostic execution: {detail}")
     _require_issue_5303_frozen_bindings(args, repo_root=repo_root)
+    contract_path = _resolve_issue_5303_diagnostic_path(args.contract, repo_root=repo_root)
+    assert contract_path is not None
+    try:
+        contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise RuntimeError("issue #5303 diagnostic authorization could not be verified") from exc
+    future_run = contract.get("future_run_declaration") if isinstance(contract, dict) else None
+    diagnostic_run = (
+        future_run.get("separately_justified_diagnostic_search_run")
+        if isinstance(future_run, dict)
+        else None
+    )
+    if not isinstance(diagnostic_run, dict) or diagnostic_run.get("authorized") is not True:
+        raise RuntimeError(
+            "issue #5303 diagnostic execution is not authorized; the frozen command "
+            "is retained for preflight binding proof only"
+        )
 
 
 def _resolve_issue_5303_diagnostic_path(value: Path | None, *, repo_root: Path) -> Path | None:

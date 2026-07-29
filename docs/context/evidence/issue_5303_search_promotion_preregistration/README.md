@@ -12,10 +12,12 @@ three-seed budget **cannot robustly test** the proposed "promote TPE" threshold,
 future run is pre-declared **diagnostic/inconclusive** rather than having its thresholds
 quietly relaxed.
 
-The evidence-grade promotion campaign is therefore **stopped before Step 3**. A separate,
-fully specified adapter-mode search-stage diagnostic is allowed only to prove the runner,
-provenance, and attempt-accounting handoff. It has a fixed `inconclusive` decision and
-cannot become a TPE-promotion result.
+The evidence-grade promotion campaign is therefore **stopped before Step 3**. A
+separate adapter-mode search-stage diagnostic binding is fully specified to prove
+the runner, provenance, and attempt-accounting handoff, but this packet does
+**not** authorize running it. If a future reviewed decision separately authorizes
+that diagnostic, its fixed `inconclusive` decision cannot become a TPE-promotion
+result.
 
 Nothing here runs a planner, launches a search, replays a scenario, submits a cluster
 job, or reads any evaluation outcome. It only freezes the design and reproduces its hash.
@@ -167,10 +169,11 @@ cannot test the positive gate (it cannot); a row can enter without complete
 candidate/seed/execution/certification/mechanism lineage; or any threshold or metric
 remains discretionary after execution starts.
 
-The separate diagnostic command may run only with the frozen command and hashes below.
-Its stop rule is coherent and fail-closed: every missing, invalid, fallback, degraded,
-unavailable, or provenance-mismatched attempt remains recorded in the 192-attempt arm
-denominator and yields `inconclusive`; it is never retried, replaced, or deleted.
+If a future reviewed decision separately authorizes the diagnostic, it must use
+the frozen command and hashes below. Its stop rule is coherent and fail-closed:
+every missing, invalid, fallback, degraded, unavailable, or provenance-mismatched
+attempt remains recorded in the 192-attempt arm denominator and yields
+`inconclusive`; it is never retried, replaced, or deleted.
 
 ## Reproduce the frozen contract hash (side-effect-free)
 
@@ -187,9 +190,9 @@ campaign/replay/benchmark-runner module), no `subprocess`, and no network module
 `tests/adversarial/test_issue_5303_search_promotion_preflight.py` AST-scans the preflight
 source to prove this.
 
-## Separately justified diagnostic execution (not the stopped promotion campaign)
+## Predeclared diagnostic binding (not authorized by this packet)
 
-The authoritative complete adapter-mode command is
+The complete adapter-mode command binding is
 `step3_execution.diagnostic_search_command` in the
 [frozen contract](../../../../configs/adversarial/issue_5303_search_promotion_contract.yaml).
 It binds the target algorithm config, records the neutral reference config for later
@@ -197,8 +200,8 @@ confirmation, pins the held-out `classic_group_crossing_medium` template/search 
 requires the corrected certifier, reruns the side-effect-free preflight before any search
 attempt, and writes all declared files. The paired
 `step3_execution.analysis_command` validates the complete row matrix and writes the
-fixed analysis result. Do not run either command as a substitute for the stopped
-evidence-grade campaign.
+fixed analysis result. Do not run either command without a separate reviewed
+authorization, or as a substitute for the stopped evidence-grade campaign.
 
 The contract's `expected_artifacts` mapping names the worktree-local post-run files.
 They are not durable evidence pointers. The analysis retains the matched 192-attempt

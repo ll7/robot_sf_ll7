@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import math
 import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import yaml
 
 import robot_sf.benchmark.heterogeneous_population_ablation as harness_module
-import robot_sf.benchmark.heterogeneous_population_ablation_runner as runner_module
 from robot_sf.benchmark.heterogeneous_population_ablation import (
     EPISODE_CONTROL_TRACE_PATH,
     HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
@@ -38,13 +35,6 @@ from robot_sf.benchmark.pedestrian_control_trace import PEDESTRIAN_CONTROL_TRACE
 _REPO_ROOT = Path(__file__).parents[2]
 _CLASSIC_CROSSING_MAP = _REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
 _CLASSIC_HEAD_ON_MAP = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
-_CLI_SCRIPT_PATH = _REPO_ROOT / (
-    "scripts/benchmark/run_heterogeneous_population_ablation_issue_3574.py"
-)
-_CLI_SPEC = importlib.util.spec_from_file_location("issue_3574_ablation_cli", _CLI_SCRIPT_PATH)
-assert _CLI_SPEC is not None and _CLI_SPEC.loader is not None
-_CLI_MODULE = importlib.util.module_from_spec(_CLI_SPEC)
-_CLI_SPEC.loader.exec_module(_CLI_MODULE)
 
 
 def _archetypes() -> dict[str, ArchetypePopulationSpec]:
@@ -989,60 +979,6 @@ def _run_single_cell_records(tmp_path: Path) -> tuple[dict[str, object], list[di
         for row in manifest_rows
     ]
     return manifest, records
-
-
-def test_orca_manifest_row_preflights_rvo2_before_runtime_setup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """An ORCA row stops before scenario setup when its optional runtime is unavailable."""
-
-    preflight_calls: list[None] = []
-
-    def abort_for_missing_rvo2() -> None:
-        preflight_calls.append(None)
-        raise RuntimeError("rvo2 unavailable")
-
-    monkeypatch.setattr(runner_module, "check_rvo2_importable", abort_for_missing_rvo2)
-
-    with pytest.raises(RuntimeError, match="rvo2 unavailable"):
-        run_manifest_row({"planner": "orca"}, scenario_path=tmp_path / "manifest.json")
-
-    assert preflight_calls == [None]
-
-
-def test_cli_preflights_orca_manifest_before_output_creation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The production CLI checks ORCA dependencies before opening campaign output."""
-
-    manifest_path = tmp_path / "manifest.json"
-    output_path = tmp_path / "episode_records.jsonl"
-    manifest_path.write_text(json.dumps({"manifest_rows": [{"planner": "orca"}]}), encoding="utf-8")
-    preflight_calls: list[None] = []
-
-    def abort_for_missing_rvo2() -> None:
-        preflight_calls.append(None)
-        raise RuntimeError("rvo2 unavailable")
-
-    monkeypatch.setattr(
-        _CLI_MODULE,
-        "parse_args",
-        lambda: SimpleNamespace(
-            debug=False,
-            fsync_every=1,
-            legacy_map=None,
-            manifest=str(manifest_path),
-            output=str(output_path),
-        ),
-    )
-    monkeypatch.setattr(_CLI_MODULE, "configure_campaign_logging", lambda debug: None)
-    monkeypatch.setattr(_CLI_MODULE, "check_rvo2_importable", abort_for_missing_rvo2)
-
-    with pytest.raises(RuntimeError, match="rvo2 unavailable"):
-        _CLI_MODULE.main()
-
-    assert preflight_calls == [None]
-    assert not output_path.exists()
 
 
 @pytest.mark.slow

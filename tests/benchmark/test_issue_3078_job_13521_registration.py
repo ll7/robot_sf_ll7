@@ -148,7 +148,7 @@ def test_real_data_seed_rank_stability_diagnostic_records_not_identifiable() -> 
     assert headline["label"] == "not_identifiable"
     assert headline["promotion_allowed"] is False
     assert headline["seed_count"] == 1
-    assert "single" in headline["reason"].lower()
+    assert "single evaluation seed (111)" in headline["reason"].lower()
     assert headline["claim_status"] == "not_identifiable_single_seed"
 
     transfer = diagnostic["heldout_transfer_delta_classification"]
@@ -156,6 +156,7 @@ def test_real_data_seed_rank_stability_diagnostic_records_not_identifiable() -> 
     assert transfer["claim_eligible"] is False
     assert transfer["baseline_table_empty"] is True
     assert transfer["transfer_delta_snqi_empty"] is True
+    assert "no eligible benchmark-set comparator" in transfer["reason"].lower()
     assert transfer["claim_status"] == "not_identifiable_no_eligible_comparator"
 
     rows = diagnostic["planner_rank_stability"]

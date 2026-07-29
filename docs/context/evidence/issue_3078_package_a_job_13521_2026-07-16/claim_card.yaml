@@ -1,7 +1,8 @@
 schema_version: package-a-transfer-claim-card.v1
 issue: 3078
-claim_status: not_reviewed
-classification: diagnostic_review_ready
+claim_status: reviewed
+classification: diagnostic
+transfer_sub_classification: no_eligible_comparator
 claim_boundary: Diagnostic transfer report only; no paper-facing or benchmark-strength
   claim is promoted by this renderer.
 eligible_row_statuses:

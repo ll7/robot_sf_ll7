@@ -1,11 +1,11 @@
-<!-- AI-GENERATED (robot_sf#3078, 2026-07-16) - NEEDS-REVIEW -->
+<!-- AI-GENERATED (robot_sf#3078, 2026-07-16) - REVIEWED: DOMAIN-APPROVED (2026-07-29) -->
 
 # Issue #3078 real held-out-family full pilot
 
 Plain-language summary: job 13521 supplied the complete 18-row held-out-family pilot to the
 Package A transfer-report path. All six declared held-out cells are represented once for each of
 `goal`, `social_force`, and `orca`. The resulting classification is
-`diagnostic_review_ready`; no synthetic fixture is used.
+`diagnostic` with `transfer_sub_classification: no_eligible_comparator`; no synthetic fixture is used.
 
 This run supersedes underscaled job 13506. Job 13506 produced only two rows per planner because it
 did not expand the two source scenarios into the partition manifest's six cells. It remains smoke
@@ -37,7 +37,9 @@ The existing Package A synthetic held-out classification is replaced for the hel
 criterion by these real accepted rows:
 
 - readiness: `ready`;
-- decision-packet classification: `diagnostic_review_ready`;
+- claim-status: `reviewed`;
+- decision-packet classification: `diagnostic`;
+- transfer sub-classification: `no_eligible_comparator`;
 - issue-result classification: `diagnostic`;
 - all four decision-packet criteria: satisfied;
 - held-out table episode count: 18;
@@ -45,8 +47,9 @@ criterion by these real accepted rows:
 
 This does not promote a benchmark claim. The report has no benchmark-set baseline rows for these
 held-out-only inputs, so `transfer_delta_snqi` remains empty and `claim_eligible=false`. Claim-card
-review and an eligible comparator remain necessary before any transfer, ranking, or paper-facing
-claim.
+review is complete; no eligible comparator exists for
+transfer-delta computation, so rank stability and transfer-delta claims remain
+non-promotable.
 
 ## Files
 

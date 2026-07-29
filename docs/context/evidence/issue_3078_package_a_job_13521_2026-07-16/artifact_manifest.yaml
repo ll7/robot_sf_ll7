@@ -7,11 +7,11 @@ source_episode_store:
   committed: false
 files:
 - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/README.md
-  sha256: 9861273a845e3f53fdb0939984566b0fd200e3c32a413e1c4c12f6d93dce1c1a
+  sha256: 1fa5886f0e97aa24ddfb741c7449a262de388a2f34a96abf86f037767770650e
 - path: baseline_table.csv
   sha256: 7838bb2e893843f1bc65a272939cc108dfa6d6f33c9a5d56b3dcc3ae81be2d6c
 - path: claim_card.yaml
-  sha256: 4cb971986cf736fbdfedb03733288375837920915f5bbcf3ce73e6e183e44e40
+  sha256: 10c51dd1917b56c4edb6bbf4e3fbd134128c756d6c2ac54422e1a19cd25d52c2
 - path: fullpilot_plan.json
   sha256: c7c67dc8f46af5b0a598dc33133e725fe5865d89abdba9b6ce1e2e5c1bc8b0f0
 - path: heldout_family_table.csv
@@ -19,7 +19,7 @@ files:
 - path: leakage_audit.md
   sha256: bed248399764372c9c1ccdad99c978bec1882e1a2017dff5763dec6b196e872a
 - path: package_a_decision_packet.json
-  sha256: dc83fe1757e04ab5d578c2ac68e234290f0ed19b79a07309660fbe6b13ea3280
+  sha256: acccd614ffd45cd3e8b72a8a2c82f389ee5b6f7e26408ff377c6b6a76bc6f37a
 - path: postrun_acceptance.json
   sha256: c14071a5180eeccdd6727c41156a646a97cd21d662c825367281ffbd008b565b
 - path: registration.json

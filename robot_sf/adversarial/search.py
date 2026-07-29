@@ -80,16 +80,20 @@ def _validate_episode_provenance(
     if not isinstance(effective_metadata, dict) or not effective_metadata:
         return "episode algorithm metadata contract was missing"
 
-    metadata_status = str(metadata.get("status", "")).strip().lower() if metadata else ""
-    effective_status = str(effective_metadata.get("status", "")).strip().lower()
-    metadata_status = metadata_status or effective_status
-    if not metadata_status:
+    metadata_statuses = [
+        str(payload.get("status", "")).strip().lower()
+        for payload in (metadata, effective_metadata)
+        if isinstance(payload, dict) and str(payload.get("status", "")).strip()
+    ]
+    if not metadata_statuses:
         return "episode algorithm metadata status was missing"
-    if metadata_status != "ok":
+    non_ok_statuses = [status for status in metadata_statuses if status != "ok"]
+    if non_ok_statuses:
+        metadata_status = non_ok_statuses[0]
         preflight = enriched.get("preflight")
         preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
         preflight_status = str(preflight_payload.get("status", "")).strip().lower()
-        if preflight_status in {"", "unknown", "ok", "partial"}:
+        if preflight_status not in {"fallback", "skipped"}:
             preflight_payload["status"] = (
                 "fallback"
                 if "fallback" in metadata_status or "unavailable" in metadata_status

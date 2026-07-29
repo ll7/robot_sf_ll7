@@ -2108,6 +2108,53 @@ def test_default_evaluator_records_fail_closed_benchmark_availability(
     assert written["details"]["availability_status"] == "not_available"
 
 
+def test_default_evaluator_overrides_failed_preflight_for_non_ok_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Non-ok episode metadata cannot be reported as available by a failed preflight label."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write a degraded episode and a misleadingly non-terminal preflight summary."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                    "algorithm_metadata": {
+                        "status": "policy_step_timeout_fallback",
+                        "planner_kinematics": {"execution_mode": "adapter"},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "failures": [],
+            "total_jobs": 1,
+            "written": 1,
+            "preflight": {"status": "failed"},
+        }
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "adapter"
+    assert evaluation.failure_attribution.details["readiness_status"] == "fallback"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+
+
 @pytest.mark.parametrize(
     ("metadata_status", "expected_readiness", "expected_availability"),
     (

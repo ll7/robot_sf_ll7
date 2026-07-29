@@ -108,7 +108,7 @@ input_provenance:
       sha256: 6799429ef630e33aa369adb7c575ef26a4c100f3416f8348c4abdc813f2ff3ef
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
-      sha256: 6b94ae5511775ea1ef1528fb520aa163c0756b18fec3ab02c7a26472b9a54f48
+      sha256: ab220d19f01f318169bdc50fd5c76f38ffca6556916928060c51fcfdbc7fdfcc
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
       sha256: 559bff8289de0082dc2599ce82eca5e1a7aa1565c212a2a77033c9f1d1b14fc6

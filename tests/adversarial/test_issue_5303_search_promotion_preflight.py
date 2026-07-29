@@ -786,6 +786,26 @@ def test_preflight_detects_incomplete_diagnostic_command(tmp_path: Path) -> None
     assert result.checks["step3_execution_command_complete"] is False
 
 
+@pytest.mark.parametrize("suffix", (" unexpected", " --unknown-option value"))
+def test_preflight_rejects_extra_or_unknown_diagnostic_command_tokens(
+    tmp_path: Path, suffix: str
+) -> None:
+    """Static command parsing must agree with the actual diagnostic CLI parser."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert isinstance(contract, dict)
+    step3 = contract["step3_execution"]
+    assert isinstance(step3, dict)
+    command = step3["diagnostic_search_command"]
+    assert isinstance(command, str)
+    step3["diagnostic_search_command"] = command + suffix
+
+    result = _preflight_rehashed_contract(tmp_path, contract, "command_with_extra_tokens")
+
+    assert result.ready is False
+    assert result.checks["step3_command_parses"] is False
+    assert result.checks["step3_execution_command_complete"] is False
+
+
 @pytest.mark.parametrize(
     ("mutation", "check_name"),
     [

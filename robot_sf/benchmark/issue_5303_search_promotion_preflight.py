@@ -314,6 +314,7 @@ REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS = frozenset(
         "--warm-start-record",
     }
 )
+REQUIRED_ANALYSIS_OPTIONS = frozenset({"--contract", "--outcomes", "--output"})
 
 
 @dataclass(frozen=True)
@@ -490,7 +491,9 @@ def _function_row_keys(path: Path, *, function_name: str) -> set[str]:
     return set()
 
 
-def _command_options(command: Any) -> tuple[dict[str, list[str | None]], str | None]:
+def _command_options(
+    command: Any, *, allowed_options: frozenset[str] | None = None
+) -> tuple[dict[str, list[str | None]], str | None]:
     """Parse a frozen command without executing it, preserving repeated options.
 
     Returns:
@@ -504,13 +507,16 @@ def _command_options(command: Any) -> tuple[dict[str, list[str | None]], str | N
         return {}, f"command cannot be parsed: {exc}"
     if not tokens:
         return {}, "command must not be empty"
+    if tokens[:3] != ["uv", "run", "python"] or len(tokens) < 4:
+        return {}, "command must start with 'uv run python <script>'"
     options: dict[str, list[str | None]] = {}
-    index = 0
+    index = 4
     while index < len(tokens):
         token = tokens[index]
         if not token.startswith("--"):
-            index += 1
-            continue
+            return options, f"unexpected positional command token: {token!r}"
+        if allowed_options is not None and token not in allowed_options:
+            return options, f"unsupported command option: {token!r}"
         if token in {"--require-certification", "--issue-5303-diagnostic-only"}:
             options.setdefault(token, []).append(None)
             index += 1
@@ -1778,7 +1784,10 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     if not checks["step3_analysis_static_support"]:
         blockers.append("the frozen analysis module must expose the diagnostic accounting analyzer")
 
-    command_options, command_error = _command_options(step3.get("diagnostic_search_command"))
+    command_options, command_error = _command_options(
+        step3.get("diagnostic_search_command"),
+        allowed_options=REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS,
+    )
     checks["step3_diagnostic_command_entrypoint"] = _command_entrypoint_matches(
         step3.get("diagnostic_search_command"), EXPECTED_PROVENANCE_PATHS["diagnostic_runner"]
     )
@@ -1885,7 +1894,9 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "the frozen fit-family warm-start archive IDs must be wired into SearchConfig"
         )
 
-    analysis_options, analysis_error = _command_options(step3.get("analysis_command"))
+    analysis_options, analysis_error = _command_options(
+        step3.get("analysis_command"), allowed_options=REQUIRED_ANALYSIS_OPTIONS
+    )
     checks["step3_analysis_command_entrypoint"] = _command_entrypoint_matches(
         step3.get("analysis_command"), EXPECTED_PROVENANCE_PATHS["promotion_analysis_cli"]
     )

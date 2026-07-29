@@ -36,7 +36,7 @@
       "status": "satisfied"
     }
   ],
-  "classification": "diagnostic_review_ready",
+  "classification": "diagnostic",
   "forbidden_actions_confirmed": {
     "benchmark_campaign_run": false,
     "compute_submit": false,

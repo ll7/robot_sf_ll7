@@ -11,15 +11,16 @@ import pytest
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from types import ModuleType
 
 
-def _copy_bundle(tmp_path: Path, diagnostic_builder) -> Path:
+def _copy_bundle(tmp_path: Path, diagnostic_builder: ModuleType) -> Path:
     bundle = tmp_path / "bundle"
     shutil.copytree(diagnostic_builder.DEFAULT_BUNDLE, bundle)
     return bundle
 
 
-def test_builder_is_byte_deterministic(tmp_path: Path, diagnostic_builder) -> None:
+def test_builder_is_byte_deterministic(tmp_path: Path, diagnostic_builder: ModuleType) -> None:
     """Two builds from tracked compact inputs produce identical bytes."""
     first = tmp_path / "first"
     second = tmp_path / "second"
@@ -33,7 +34,9 @@ def test_builder_is_byte_deterministic(tmp_path: Path, diagnostic_builder) -> No
     ]
 
 
-def test_builder_preserves_diagnostic_claim_boundary(tmp_path: Path, diagnostic_builder) -> None:
+def test_builder_preserves_diagnostic_claim_boundary(
+    tmp_path: Path, diagnostic_builder: ModuleType
+) -> None:
     """Generated evidence stays fail-closed and preserves adapter labeling."""
     output_dir = tmp_path / "diagnostic"
     diagnostic_builder.build_outputs(diagnostic_builder.DEFAULT_BUNDLE, output_dir)
@@ -52,14 +55,14 @@ def test_builder_preserves_diagnostic_claim_boundary(tmp_path: Path, diagnostic_
     }
 
 
-def test_checked_in_outputs_match_fresh_build(diagnostic_builder) -> None:
+def test_checked_in_outputs_match_fresh_build(diagnostic_builder: ModuleType) -> None:
     """The committed JSON and PNG bytes match the documented builder."""
     assert diagnostic_builder.check_outputs(diagnostic_builder.DEFAULT_BUNDLE) == []
 
 
 def test_builder_rejects_duplicate_transfer_planners(
     tmp_path: Path,
-    diagnostic_builder,
+    diagnostic_builder: ModuleType,
 ) -> None:
     """Duplicate planner identities cannot be silently overwritten."""
     bundle = _copy_bundle(tmp_path, diagnostic_builder)
@@ -73,7 +76,7 @@ def test_builder_rejects_duplicate_transfer_planners(
 
 def test_builder_records_non_default_bundle_source(
     tmp_path: Path,
-    diagnostic_builder,
+    diagnostic_builder: ModuleType,
 ) -> None:
     """A bundle override is recorded instead of the default source path."""
     bundle = _copy_bundle(tmp_path, diagnostic_builder)
@@ -83,7 +86,9 @@ def test_builder_records_non_default_bundle_source(
     assert payload["generated_for"] == str(bundle.resolve())
 
 
-def test_builder_ignores_ambient_matplotlib_style(monkeypatch, diagnostic_builder) -> None:
+def test_builder_ignores_ambient_matplotlib_style(
+    monkeypatch: pytest.MonkeyPatch, diagnostic_builder: ModuleType
+) -> None:
     """Figure bytes do not depend on plotting state leaked by another caller."""
     monkeypatch.setitem(mpl.rcParams, "font.size", 17)
     monkeypatch.setitem(mpl.rcParams, "axes.titlesize", 19)
@@ -100,7 +105,7 @@ def test_builder_ignores_ambient_matplotlib_style(monkeypatch, diagnostic_builde
 )
 def test_builder_rejects_invalid_acceptance_provenance(
     tmp_path: Path,
-    diagnostic_builder,
+    diagnostic_builder: ModuleType,
     field: str,
     value: object,
     message: str,

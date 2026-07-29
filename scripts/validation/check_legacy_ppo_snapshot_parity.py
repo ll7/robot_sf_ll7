@@ -5,8 +5,9 @@ The default mode is intentionally cheap: it verifies that legacy PPO checkpoints
 that should remain supported are represented by durable registry entries, it
 records root-local debug snapshots as explicitly unsupported, and byte-matches
 the in-tree source files against their recorded SHA-256 values. Pass
-``--verify-release-hydration`` to resolve every durable legacy checkpoint from
-its GitHub Release into an isolated cache and verify the hydrated bytes. Pass
+``--verify-release-hydration`` with a new or empty ``--cache-dir`` to resolve
+every durable legacy checkpoint from its GitHub Release into an isolated cache
+and verify the hydrated bytes. Pass
 ``--smoke-model-id`` for a hydrated/downloadable checkpoint smoke that loads the
 model, predicts one action, and executes one current ``make_robot_env`` step.
 """
@@ -756,12 +757,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--verify-release-hydration",
         action="store_true",
-        help="Download each durable legacy release asset into --cache-dir and verify its bytes.",
+        help="Download each durable legacy release asset into a new or empty --cache-dir.",
     )
     parser.add_argument(
         "--cache-dir",
         type=Path,
-        help="Ignored model-cache root used by --verify-release-hydration.",
+        help="New or empty ignored model-cache root required by --verify-release-hydration.",
     )
     parser.add_argument("--seed", type=int, default=3469)
     parser.add_argument("--json", action="store_true")
@@ -770,12 +771,22 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the inventory and optional smoke checks."""
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
     registry_path = args.registry_path
     if not registry_path.is_absolute():
         registry_path = repo_root / registry_path
     cache_dir = args.cache_dir.resolve() if args.cache_dir is not None else None
+    if args.verify_release_hydration:
+        if cache_dir is None:
+            parser.error("--verify-release-hydration requires --cache-dir")
+        if cache_dir.exists() and not cache_dir.is_dir():
+            parser.error(f"--cache-dir must be a directory: {cache_dir}")
+        if cache_dir.exists() and any(cache_dir.iterdir()):
+            parser.error(
+                f"--cache-dir must be new or empty for release-hydration proof: {cache_dir}"
+            )
 
     inventory = build_inventory(
         repo_root=repo_root,

@@ -62,15 +62,16 @@ uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py --json
 Fresh-cache release hydration and byte-identity check:
 
 ```bash
+cache_dir="$(mktemp -d)"
 uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py \
-  --verify-release-hydration --cache-dir /tmp/legacy-model-cache --json
+  --verify-release-hydration --cache-dir "$cache_dir" --json
 ```
 
 The default inventory checks the in-tree source bytes without downloading. The explicit hydration
-mode downloads each single-file release asset into the requested isolated cache, verifies the
-GA3C archive and all three component checksums, and confirms that GA3C still resolves to its
-existing in-tree checkpoint path. Fresh-cache hydration is provenance proof only; it does not
-promote these checkpoints to a benchmark track.
+mode requires a new or empty cache directory, downloads each single-file release asset into that
+isolated cache, verifies the GA3C archive and all three component checksums, and confirms that
+GA3C still resolves to its existing in-tree checkpoint path. Fresh-cache hydration is provenance
+proof only; it does not promote these checkpoints to a benchmark track.
 
 Opt-in hydrated-checkpoint smoke:
 

@@ -466,6 +466,57 @@ def test_cli_json_inventory_reports_ok_for_repo_registry(
     assert all(row["durable_uri"].startswith("https://github.com/") for row in durable_rows)
 
 
+def test_cli_release_hydration_requires_an_empty_isolated_cache(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Hydration proof must not reuse an existing worktree or prior release cache."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    with pytest.raises(SystemExit) as missing_cache:
+        checker.main(["--repo-root", str(repo_root), "--verify-release-hydration"])
+    assert missing_cache.value.code == 2
+
+    nonempty_cache = tmp_path / "nonempty-cache"
+    nonempty_cache.mkdir()
+    (nonempty_cache / "already-hydrated.zip").write_bytes(b"cached")
+    with pytest.raises(SystemExit) as reused_cache:
+        checker.main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--verify-release-hydration",
+                "--cache-dir",
+                str(nonempty_cache),
+            ]
+        )
+    assert reused_cache.value.code == 2
+
+    empty_cache = tmp_path / "empty-cache"
+    captured: dict[str, object] = {}
+
+    def fake_build_inventory(**kwargs: object) -> tuple[checker.SnapshotRow, ...]:
+        captured.update(kwargs)
+        return ()
+
+    monkeypatch.setattr(checker, "build_inventory", fake_build_inventory)
+    assert (
+        checker.main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--verify-release-hydration",
+                "--cache-dir",
+                str(empty_cache),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    assert captured["verify_release_hydration"] is True
+    assert captured["cache_dir"] == empty_cache.resolve()
+
+
 def test_cli_inventory_honors_explicit_repo_root_outside_checkout(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

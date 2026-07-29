@@ -244,14 +244,15 @@ component checksum without extracting it. Multi-file TensorFlow-checkpoint unpac
 runtime use remains a Phase C concern.
 
 The default inventory byte-matches in-tree source files against recorded checksums without a
-download. The explicit release-hydration proof resolves each single-file checkpoint through
-`resolve_model_path` into an isolated cache, confirms that GA3C still resolves to its in-tree
-checkpoint path, downloads the GA3C bundle separately to preserve that resolver contract, and
-byte-matches the downloaded assets:
+download. The explicit release-hydration proof requires a new or empty cache directory, resolves
+each single-file checkpoint through `resolve_model_path` into that isolated cache, confirms that
+GA3C still resolves to its in-tree checkpoint path, downloads the GA3C bundle separately to
+preserve that resolver contract, and byte-matches the downloaded assets:
 
 ```bash
+cache_dir="$(mktemp -d)"
 uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py \
-  --verify-release-hydration --cache-dir /tmp/legacy-model-cache --json
+  --verify-release-hydration --cache-dir "$cache_dir" --json
 ```
 
 Byte-identity is established by publishing byte copies of the in-tree files and verifying that each

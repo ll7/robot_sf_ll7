@@ -187,3 +187,82 @@ def test_issue_4232_evidence_builder_rejects_forbidden_claim_language(tmp_path: 
     """Fixture summaries cannot smuggle conformal or safety claims into readiness output."""
     with pytest.raises(_MODULE.EvidenceBuildError, match="forbidden claim language"):
         _build(tmp_path, _happy_rows(), claim_text="This proves a conformal coverage guarantee.")
+
+
+def test_issue_4232_evidence_carries_review_markers(tmp_path: Path) -> None:
+    """Migrated shared writers add the required AI-GENERATED markers to every artifact."""
+    _build(tmp_path, _happy_rows())
+    evidence_dir = tmp_path / "evidence"
+
+    metadata = json.loads((evidence_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+
+    csv_names = (
+        "alpha_arm_metric_table.csv",
+        "paired_alpha_delta_table.csv",
+        "row_status_audit.csv",
+        "runtime_cost_report.csv",
+    )
+    for csv_name in csv_names:
+        first_line = (evidence_dir / csv_name).read_text(encoding="utf-8").splitlines()[0]
+        assert first_line == "# AI-GENERATED NEEDS-REVIEW", csv_name
+
+    md_names = (
+        "README.md",
+        "claim_boundary.md",
+        "claim_readiness.md",
+        "envelope_activation_diagnostics.md",
+    )
+    for md_name in md_names:
+        first_line = (evidence_dir / md_name).read_text(encoding="utf-8").splitlines()[0]
+        assert first_line == "<!-- AI-GENERATED (robot_sf#4232) - NEEDS-REVIEW -->", md_name
+
+    assert (evidence_dir / "SHA256SUMS").read_text(encoding="utf-8").splitlines()[0] == (
+        "# AI-GENERATED NEEDS-REVIEW"
+    )
+
+
+def test_issue_4232_evidence_is_byte_deterministic(tmp_path: Path) -> None:
+    """Re-running the fixture-driven builder with the same rows yields identical bytes."""
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for output_dir in (first, second):
+        _MODULE.build_evidence(
+            packet_path=PACKET,
+            results_path=_write_rows(tmp_path, _happy_rows()),
+            output_dir=output_dir,
+        )
+    names = {p.name for p in first.iterdir()}
+    assert names == {p.name for p in second.iterdir()}
+    for name in sorted(names):
+        assert (first / name).read_bytes() == (second / name).read_bytes(), name
+
+
+def test_issue_4232_csv_marker_is_skippable_by_dictreader(tmp_path: Path) -> None:
+    """The shared CSV marker line must not corrupt DictReader-based consumers."""
+    import csv as _csv
+
+    _build(tmp_path, _happy_rows())
+    evidence_dir = tmp_path / "evidence"
+    with (evidence_dir / "alpha_arm_metric_table.csv").open(encoding="utf-8", newline="") as handle:
+        assert handle.readline().strip() == "# AI-GENERATED NEEDS-REVIEW"
+        rows = list(_csv.DictReader(handle))
+    assert rows, "data rows must remain readable after skipping the marker"
+    assert {row["alpha_arm_key"] for row in rows} == {
+        "envelope_off_alpha_0",
+        "envelope_on_alpha_0",
+        "envelope_on_alpha_0p10",
+    }
+
+
+def test_issue_4232_sha256sums_manifest_is_skippable(tmp_path: Path) -> None:
+    """The SHA256SUMS marker line must not corrupt manifest-line consumers."""
+    _build(tmp_path, _happy_rows())
+    lines = (tmp_path / "evidence" / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "# AI-GENERATED NEEDS-REVIEW"
+    digest_lines = lines[1:]
+    assert digest_lines, "checksum entries must remain after skipping the marker"
+    for line in digest_lines:
+        digest = line.split("  ", 1)[0]
+        assert len(digest) == 64
+        assert all(character in "0123456789abcdef" for character in digest)

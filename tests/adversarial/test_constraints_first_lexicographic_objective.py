@@ -151,6 +151,83 @@ def test_constraints_first_objective_rejects_success_metric_conflicting_with_out
     assert constraints_first_lexicographic_v1(evaluation) is None
 
 
+def test_constraints_first_objective_rejects_conflicting_collision_aliases(
+    tmp_path: Path,
+) -> None:
+    """Contradictory canonical collision aliases cannot be combined with boolean OR."""
+    evaluation = _evaluation(
+        tmp_path,
+        "conflicting_collision_aliases",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision": False,
+                "collision_event": True,
+            },
+            "metrics": {"success": False, "near_misses": 0},
+        },
+    )
+
+    assert constraints_first_lexicographic_v1(evaluation) is None
+
+
+def test_constraints_first_objective_rejects_collision_metric_conflicting_with_outcome(
+    tmp_path: Path,
+) -> None:
+    """Canonical collision flags and metrics must agree when both are present."""
+    for name, route_complete, collision_event, collisions in (
+        ("metric_reports_collision", True, False, 1),
+        ("outcome_reports_collision", False, True, 0),
+    ):
+        evaluation = _evaluation(
+            tmp_path,
+            name,
+            {
+                "outcome": {
+                    "route_complete": route_complete,
+                    "collision_event": collision_event,
+                    "timeout_event": False,
+                },
+                "metrics": {
+                    "success": route_complete,
+                    "collisions": collisions,
+                    "near_misses": 0,
+                },
+            },
+        )
+
+        assert constraints_first_lexicographic_v1(evaluation) is None
+
+
+def test_constraints_first_objective_combines_distinct_collision_and_intrusion_evidence(
+    tmp_path: Path,
+) -> None:
+    """A severe intrusion remains a safety failure when collision evidence is clean."""
+    evaluation = _evaluation(
+        tmp_path,
+        "severe_intrusion_without_collision",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "severe_intrusion": True,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": False,
+                "collisions": 0,
+                "severe_intrusion": True,
+                "near_misses": 1,
+            },
+        },
+    )
+
+    score = constraints_first_lexicographic_v1(evaluation)
+
+    assert score is not None
+    assert 4.0 <= score < 5.0
+
+
 def test_constraints_first_objective_rejects_out_of_domain_metrics(tmp_path: Path) -> None:
     """Negative counts and out-of-range efficiency cannot become clean outcomes."""
     base_record = {

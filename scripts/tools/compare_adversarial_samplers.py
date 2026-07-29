@@ -367,11 +367,8 @@ def _episode_execution_status(
 def _load_archive_warm_starts(
     archive_path: Path,
     record_ids: Sequence[str],
-    *,
-    scenario: str,
-    planner: str,
 ) -> tuple[WarmStartCandidate, ...]:
-    """Load explicitly selected certified archive candidates as matched warm starts."""
+    """Load selected archive candidates while preserving their source provenance."""
     payload = json.loads(archive_path.read_text(encoding="utf-8"))
     entries = payload.get("entries") if isinstance(payload, dict) else None
     if not isinstance(entries, list):
@@ -395,6 +392,13 @@ def _load_archive_warm_starts(
         goal = candidate.get("goal")
         if not isinstance(start, dict) or not isinstance(goal, dict):
             raise ValueError(f"warm-start record has invalid poses: {record_id}")
+        scenario = entry.get("scenario_family")
+        provenance = entry.get("provenance")
+        planner = provenance.get("target_planner") if isinstance(provenance, dict) else None
+        if not isinstance(scenario, str) or not scenario.strip():
+            raise ValueError(f"warm-start record has no source scenario family: {record_id}")
+        if not isinstance(planner, str) or not planner.strip():
+            raise ValueError(f"warm-start record has no source planner: {record_id}")
         warm_starts.append(
             WarmStartCandidate(
                 candidate=CandidateSpec(
@@ -1226,8 +1230,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             warm_starts = _load_archive_warm_starts(
                 args.warm_start_archive,
                 tuple(args.warm_start_record),
-                scenario=str(args.scenario_family or ""),
-                planner=str(args.policy),
             )
         config = SearchConfig.from_files(
             policy=args.policy,

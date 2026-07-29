@@ -102,10 +102,10 @@ input_provenance:
       sha256: e335b00366db1066ae751e6c437bde3700488aa5680fcbed05a5b614b005cf97
     - id: objective_registry
       path: robot_sf/adversarial/objectives.py
-      sha256: 17573327ca6e30bff9ba188d7ef63c86a84da0e4c6189cdfe3e84e6d772eabe1
+      sha256: 1aef306501472c9e10e0b614f48abc01c2e675da1042017ca62ec7a74596c069
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 4d4637e93355bb02dabe96f1794946cbda8b6d4f118bde93f76b62e40e704ab0
+      sha256: 83cf8610fa0fef96b7688383ab83ef765a619b067c76039dfc2d459d4a0b4122
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       sha256: 6b94ae5511775ea1ef1528fb520aa163c0756b18fec3ab02c7a26472b9a54f48
@@ -117,10 +117,10 @@ input_provenance:
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
     - id: preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
-      sha256: f697c1c636f2314005f82b5a08599f7d1cacb6d82eb2515548910314a31070cb
+      sha256: 28a2170e761922730b285c615af5922c8d2eb6c84f5ca8b7f0c27de48ecf9d91
     - id: contract_check_cli
       path: scripts/tools/check_issue_5303_search_promotion_contract.py
-      sha256: 0d7b214fed823a985141d3aff1e793586c50e3a181c656f789059a2cf6df0aaa
+      sha256: 8d71644f0eafabe3cbe749507ec83d77287c6b98ed241489bfd8ec53de037451
 
 # ---------------------------------------------------------------------------
 # Family split: fit/tuning disjoint from fresh outcomes. Eligible archive IDs are

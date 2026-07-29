@@ -764,7 +764,7 @@ def _min_permutation_p_values(seeds_per_method: int) -> tuple[int, float, float]
 def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     contract_path: Path = DEFAULT_CONTRACT_PATH,
     *,
-    receipt_path: Path = DEFAULT_RECEIPT_PATH,
+    receipt_path: Path | None = None,
     manifest_path: Path = DEFAULT_MANIFEST_PATH,
     repo_root: Path | None = None,
 ) -> Issue5303PreflightResult:
@@ -775,7 +775,8 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     """
     root = (repo_root or Path.cwd()).resolve()
     contract_path = contract_path if contract_path.is_absolute() else root / contract_path
-    receipt_path = receipt_path if receipt_path.is_absolute() else root / receipt_path
+    if receipt_path is not None and not receipt_path.is_absolute():
+        receipt_path = root / receipt_path
     manifest_path = manifest_path if manifest_path.is_absolute() else root / manifest_path
 
     checks: dict[str, bool] = {}
@@ -867,7 +868,9 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     # ---- Receipt and archive hashes (contract <-> entry-gate tamper-evidence) -----
     entry_gate = contract.get("entry_gate") if isinstance(contract.get("entry_gate"), dict) else {}
     receipt_resolved = (
-        _resolve(root, entry_gate.get("recertification_receipt_path")) or receipt_path
+        receipt_path
+        or _resolve(root, entry_gate.get("recertification_receipt_path"))
+        or root / DEFAULT_RECEIPT_PATH
     )
     certified_archive_resolved = _resolve(root, entry_gate.get("certified_archive_path"))
     checks["certified_archive_exists"] = bool(

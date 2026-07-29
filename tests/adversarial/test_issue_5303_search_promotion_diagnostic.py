@@ -209,9 +209,9 @@ def test_frozen_diagnostic_search_config_accepts_selected_warm_starts() -> None:
     warm_starts = compare_adversarial_samplers._load_archive_warm_starts(
         REPO_ROOT / args.warm_start_archive,
         tuple(args.warm_start_record),
-        scenario=args.scenario_family,
-        planner=args.policy,
     )
+    assert {warm_start.scenario for warm_start in warm_starts} == {"classic_cross_trap_medium"}
+    assert {warm_start.planner for warm_start in warm_starts} == {"goal"}
     config = SearchConfig.from_files(
         policy=args.policy,
         scenario_template=REPO_ROOT / args.scenario_template,

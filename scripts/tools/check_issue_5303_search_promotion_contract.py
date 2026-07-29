@@ -18,7 +18,6 @@ from pathlib import Path
 from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
     DEFAULT_CONTRACT_PATH,
     DEFAULT_MANIFEST_PATH,
-    DEFAULT_RECEIPT_PATH,
     dump_preflight_payload,
     preflight_issue_5303_contract,
 )
@@ -42,8 +41,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--receipt",
         type=Path,
-        default=DEFAULT_RECEIPT_PATH,
-        help="Issue #6139 corrected recertification receipt JSON.",
+        default=None,
+        help=("Override the contract-declared issue #6139 corrected recertification receipt JSON."),
     )
     parser.add_argument(
         "--manifest",

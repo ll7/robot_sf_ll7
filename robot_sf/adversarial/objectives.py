@@ -74,6 +74,50 @@ def _success_metric_matches_route_complete(metrics: dict[str, Any], route_comple
     return metric_success is None or bool(metric_success) == route_complete
 
 
+def _consistent_boolean_alias(outcome: dict[str, Any], *names: str) -> bool | None:
+    """Read aliases only when all present values are booleans with one value."""
+    present = [outcome[name] for name in names if name in outcome]
+    if (
+        not present
+        or not all(isinstance(value, bool) for value in present)
+        or any(value != present[0] for value in present[1:])
+    ):
+        return None
+    return present[0]
+
+
+def _safety_evidence(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
+    """Combine collision and intrusion evidence without hiding contradictions."""
+    collision_names = ("collision", "collision_event")
+    intrusion_names = ("severe_intrusion", "severe_intrusion_event")
+    collision = _consistent_boolean_alias(outcome, *collision_names)
+    intrusion = _consistent_boolean_alias(outcome, *intrusion_names)
+    if (collision is None and any(name in outcome for name in collision_names)) or (
+        intrusion is None and any(name in outcome for name in intrusion_names)
+    ):
+        return None
+
+    metric_collision = metrics["collisions"] > 0 if metrics.get("collisions") is not None else None
+    metric_intrusion_values = [
+        metrics[name]
+        for name in ("severe_intrusion", "severe_intrusion_event")
+        if metrics.get(name) is not None
+    ]
+    if metric_intrusion_values and any(
+        value != metric_intrusion_values[0] for value in metric_intrusion_values[1:]
+    ):
+        return None
+    metric_intrusion = metric_intrusion_values[0] if metric_intrusion_values else None
+    if (
+        collision is not None and metric_collision is not None and collision != metric_collision
+    ) or (intrusion is not None and metric_intrusion is not None and intrusion != metric_intrusion):
+        return None
+
+    evidence = (collision, intrusion, metric_collision, metric_intrusion)
+    present = [value for value in evidence if value is not None]
+    return any(present) if present else None
+
+
 def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, Any]:
     """Project one episode record into the strict constraints-first outcome vector.
 
@@ -88,27 +132,12 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
     if not isinstance(outcome, dict) or not isinstance(metrics, dict):
         return _unavailable_constraints_first_outcome()
 
-    def _flag(*names: str) -> bool | None:
-        """Read one required boolean flag, accepting the canonical aliases."""
-        present = [outcome[name] for name in names if name in outcome]
-        if not present or not all(isinstance(value, bool) for value in present):
-            return None
-        return any(present)
-
-    route_complete = _flag("route_complete")
-    collision_names = ("collision", "collision_event", "severe_intrusion")
+    route_complete = _consistent_boolean_alias(outcome, "route_complete")
     timeout_names = ("timeout", "timeout_event")
-    collision_or_intrusion = _flag(*collision_names)
-    timeout = _flag(*timeout_names)
-    metric_collision_names = ("collisions", "severe_intrusion", "severe_intrusion_event")
+    timeout = _consistent_boolean_alias(outcome, *timeout_names)
     if (
         route_complete is None
-        or (collision_or_intrusion is None and any(name in outcome for name in collision_names))
         or (timeout is None and any(name in outcome for name in timeout_names))
-        or (
-            collision_or_intrusion is None
-            and not any(metrics.get(name) is not None for name in metric_collision_names)
-        )
         or not _success_metric_matches_route_complete(metrics, route_complete)
     ):
         return _unavailable_constraints_first_outcome()
@@ -125,12 +154,10 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
         if value is not None and not isinstance(value, bool):
             return _unavailable_constraints_first_outcome()
 
-    collision_or_intrusion = bool(
-        collision_or_intrusion
-        or metrics.get("severe_intrusion") is True
-        or metrics.get("severe_intrusion_event") is True
-        or _metric(metrics, "collisions") > 0.0
-    )
+    collision_or_intrusion = _safety_evidence(outcome, metrics)
+    if collision_or_intrusion is None:
+        return _unavailable_constraints_first_outcome()
+
     goal_complete = route_complete
     liveness_failure = bool(timeout) or not goal_complete
     return {

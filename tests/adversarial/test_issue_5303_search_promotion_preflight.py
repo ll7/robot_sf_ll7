@@ -277,6 +277,26 @@ def test_receipt_hashes_cross_check() -> None:
     assert result.checks["archive_hash_consistent"]
 
 
+def test_explicit_receipt_override_is_checked_instead_of_contract_path(tmp_path: Path) -> None:
+    """The public receipt override must select the supplied file and fail closed on drift."""
+    overridden_receipt = tmp_path / "overridden_receipt.json"
+    receipt = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
+    receipt["recertification_sha256"] = "0" * 64
+    overridden_receipt.write_text(json.dumps(receipt), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(
+        CONTRACT_PATH,
+        receipt_path=overridden_receipt,
+        manifest_path=MANIFEST_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.metadata["receipt_file_sha256"] == _sha256_file(overridden_receipt)
+    assert result.checks["receipt_file_hash_matches_contract"] is False
+    assert result.checks["receipt_self_declared_hash_matches_contract"] is False
+
+
 def test_eligible_records_match_receipt_family_split() -> None:
     """The contract's eligible IDs match the receipt's corrected eligible records exactly."""
     receipt = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))

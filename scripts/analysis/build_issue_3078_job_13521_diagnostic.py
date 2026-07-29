@@ -22,6 +22,8 @@ matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
 
+from robot_sf.evidence.writers import write_json
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BUNDLE = REPO_ROOT / "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16"
 OUTPUT_NAMES = (
@@ -327,10 +329,7 @@ def build_outputs(bundle_dir: Path, output_dir: Path) -> tuple[Path, ...]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     diagnostic_path = output_dir / OUTPUT_NAMES[0]
-    diagnostic_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_json(diagnostic_path, payload)
     with matplotlib.rc_context():
         matplotlib.rcdefaults()
         _write_seed_figure(output_dir / OUTPUT_NAMES[1], payload["planner_rank_stability"])

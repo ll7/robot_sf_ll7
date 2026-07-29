@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -71,3 +72,38 @@ def test_markdown_summary_preserves_boundary_and_checks() -> None:
     assert "`oracle_future`" in markdown
     assert "does not run paired seeds" in markdown
     assert "| `schema_version` | PASS |" in markdown
+
+
+def test_issue_3215_write_path_emits_review_markers(tmp_path: Path) -> None:
+    """The migrated shared-writer path adds the required AI-GENERATED markers."""
+    from scripts.validation import build_issue_3215_scenario_family_oracle_packet as builder
+
+    out_json = tmp_path / "packet.json"
+    out_md = tmp_path / "README.md"
+    rc = builder.main(["--output-json", str(out_json), "--output-md", str(out_md)])
+    assert rc == 0
+    payload = json.loads(out_json.read_text(encoding="utf-8"))
+    assert payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert out_md.read_text(encoding="utf-8").splitlines()[0] == (
+        "<!-- AI-GENERATED (robot_sf#3215) - NEEDS-REVIEW -->"
+    )
+
+
+def test_issue_3215_write_path_is_byte_deterministic(tmp_path: Path) -> None:
+    """Re-running the deterministic packet writer yields identical evidence bytes."""
+    from scripts.validation import build_issue_3215_scenario_family_oracle_packet as builder
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for out_dir in (first, second):
+        rc = builder.main(
+            [
+                "--output-json",
+                str(out_dir / "packet.json"),
+                "--output-md",
+                str(out_dir / "README.md"),
+            ]
+        )
+        assert rc == 0
+    assert (first / "packet.json").read_bytes() == (second / "packet.json").read_bytes()
+    assert (first / "README.md").read_bytes() == (second / "README.md").read_bytes()

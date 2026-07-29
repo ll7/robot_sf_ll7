@@ -5,7 +5,7 @@ if [[ $# -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
   echo "Usage: scripts/dev/ci_step_timer.sh <label> <command> [args...]"
   echo "Optional environment variables:"
   echo "  CI_STEP_TIMEOUT_SECONDS  Run the command under a timeout of this many seconds."
-  echo "                           Uses GNU timeout(1) or a portable Python fallback."
+  echo "                           Uses GNU timeout(1); must be installed when set."
   exit 0
 fi
 
@@ -24,22 +24,12 @@ echo "ci_step_timer step_start label=\"${label}\" started_at=${started_at}"
 
 set +e
 if [[ -n "${CI_STEP_TIMEOUT_SECONDS:-}" ]]; then
-  if command -v timeout >/dev/null 2>&1; then
+  if ! command -v timeout >/dev/null 2>&1; then
+    echo "::error::CI_STEP_TIMEOUT_SECONDS is set but GNU timeout(1) is not available" >&2
+    status=127
+  else
     timeout "${CI_STEP_TIMEOUT_SECONDS}" "$@"
     status=$?
-  elif command -v python3 >/dev/null 2>&1; then
-    script_path="${BASH_SOURCE[0]}"
-    if [[ "$script_path" == */* ]]; then
-      script_dir="$(cd -- "${script_path%/*}" && pwd)"
-    else
-      script_dir="$PWD"
-    fi
-    echo "ci_step_timer: GNU timeout unavailable; using portable Python timeout fallback" >&2
-    python3 "$script_dir/run_with_timeout.py" "${CI_STEP_TIMEOUT_SECONDS}" -- "$@"
-    status=$?
-  else
-    echo "::error::CI_STEP_TIMEOUT_SECONDS requires GNU timeout(1) or python3" >&2
-    status=127
   fi
 else
   "$@"

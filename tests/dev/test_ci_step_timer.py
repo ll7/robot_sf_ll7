@@ -132,21 +132,17 @@ def test_ci_step_timer_timeout_kills_long_command() -> None:
     assert "::endgroup::" in result.stdout
 
 
-def test_ci_step_timer_timeout_uses_python_fallback_without_gnu_timeout(
-    tmp_path: Path,
-) -> None:
-    """Use the portable Python timeout path when GNU timeout(1) is unavailable."""
+def test_ci_step_timer_timeout_requires_gnu_timeout(tmp_path: Path) -> None:
+    """If CI_STEP_TIMEOUT_SECONDS is set but timeout(1) is missing, fail clearly."""
     script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"
     bash_path = shutil.which("bash")
     date_path = shutil.which("date")
-    python_path = shutil.which("python3")
     true_path = shutil.which("true")
-    assert bash_path and date_path and python_path and true_path, "required binaries missing"
+    assert bash_path and date_path and true_path, "required system binaries missing"
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     os.symlink(date_path, fake_bin / "date")
-    os.symlink(python_path, fake_bin / "python3")
     os.symlink(true_path, fake_bin / "true")
 
     env = os.environ.copy()
@@ -159,39 +155,7 @@ def test_ci_step_timer_timeout_uses_python_fallback_without_gnu_timeout(
         check=False,
         env=env,
     )
-    assert result.returncode == 0
-    assert "portable Python timeout fallback" in result.stderr
-    assert "ci_step_timer step_end" in result.stdout
-    assert "::endgroup::" in result.stdout
-
-
-def test_ci_step_timer_python_fallback_kills_long_command(tmp_path: Path) -> None:
-    """The portable fallback must stop a hung command with timeout status 124."""
-    script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"
-    bash_path = shutil.which("bash")
-    date_path = shutil.which("date")
-    python_path = shutil.which("python3")
-    sleep_path = shutil.which("sleep")
-    assert bash_path and date_path and python_path and sleep_path, "required binaries missing"
-
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    os.symlink(date_path, fake_bin / "date")
-    os.symlink(python_path, fake_bin / "python3")
-    os.symlink(sleep_path, fake_bin / "sleep")
-
-    env = os.environ.copy()
-    env["CI_STEP_TIMEOUT_SECONDS"] = "0.1"
-    env["PATH"] = str(fake_bin)
-    result = subprocess.run(
-        [bash_path, str(script), "fallback-timeout", sleep_path, "10"],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    assert result.returncode == 124
-    assert "portable Python timeout fallback" in result.stderr
-    assert "command timed out after 0.1 seconds" in result.stderr
+    assert result.returncode == 127
+    assert "GNU timeout" in result.stderr
     assert "ci_step_timer step_end" in result.stdout
     assert "::endgroup::" in result.stdout

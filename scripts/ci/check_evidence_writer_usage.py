@@ -14,6 +14,21 @@ from pathlib import Path
 EVIDENCE_PATH_FRAGMENT = "docs/context/evidence"
 EXEMPTION_PATTERN = re.compile(r"#\s*evidence-writer-exempt:\s*(.*)$", re.IGNORECASE)
 WRITE_METHODS = frozenset({"write_bytes", "write_text"})
+# The shared evidence-writer package owns the canonical raw-write wrappers; flagging
+# its own definitions would be circular (those wrappers exist so other modules can
+# adopt them). The guard enforces adoption everywhere else.
+_SHARED_WRITER_MODULE_SUFFIX = ("robot_sf", "evidence", "writers.py")
+_ForwardingHelper = tuple[str, int | None]
+
+
+def _string_literal_parts(expr: ast.AST) -> list[str]:
+    """Return string literal parts from ``expr`` in AST source order."""
+    parts: list[str] = []
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        parts.append(expr.value)
+    for child in ast.iter_child_nodes(expr):
+        parts.extend(_string_literal_parts(child))
+    return parts
 
 
 def _has_write_mode(call: ast.Call) -> bool:
@@ -30,18 +45,92 @@ def _has_write_mode(call: ast.Call) -> bool:
     return False
 
 
-def _expr_mentions_evidence(expr: ast.AST, evidence_names: set[str]) -> bool:
-    """Return whether an expression resolves to an evidence-tree path."""
+def _expr_mentions_evidence(
+    expr: ast.AST, evidence_names: set[str], evidence_arg_dests: set[str]
+) -> bool:
+    """Return whether an expression resolves to an evidence-tree path.
+
+    Three resolution forms are recognized:
+
+    - a string literal containing the evidence path fragment;
+    - a name previously assigned from an evidence-mentioning expression; or
+    - an ``args.<dest>`` attribute access whose argparse ``add_argument`` default
+      points at the evidence tree (the indirect CLI-arg bypass pattern, e.g.
+      ``args.output.write_text(...)``).
+    """
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         return EVIDENCE_PATH_FRAGMENT in expr.value
+    literal_path = "/".join(part.strip("/\\") for part in _string_literal_parts(expr))
+    if EVIDENCE_PATH_FRAGMENT in literal_path:
+        return True
     if isinstance(expr, ast.Name):
         return expr.id in evidence_names
+    if isinstance(expr, ast.Attribute) and expr.attr in evidence_arg_dests:
+        return True
     return any(
-        _expr_mentions_evidence(child, evidence_names) for child in ast.iter_child_nodes(expr)
+        _expr_mentions_evidence(child, evidence_names, evidence_arg_dests)
+        for child in ast.iter_child_nodes(expr)
     )
 
 
-def _evidence_path_names(tree: ast.AST) -> set[str]:
+def _evidence_argparse_dests(
+    tree: ast.AST, evidence_names: set[str], evidence_arg_dests: set[str]
+) -> set[str]:
+    """Collect argparse destinations whose ``add_argument`` default is evidence.
+
+    Flags the indirect CLI-arg bypass pattern: a writer does
+    ``args.output.write_text(...)`` where ``--output`` defaults to
+    ``docs/context/evidence/...``. The destination name (``--output-dir`` ->
+    ``output_dir``) is returned only when its default literal or a name it resolves
+    to mentions the evidence tree, so ordinary CLI outputs are not classified as
+    evidence.
+    """
+    dests: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        if not (isinstance(function, ast.Attribute) and function.attr == "add_argument"):
+            continue
+        default = next(
+            (kw.value for kw in node.keywords if kw.arg == "default" and kw.value is not None),
+            None,
+        )
+        if default is None or not _expr_mentions_evidence(
+            default, evidence_names, evidence_arg_dests
+        ):
+            continue
+        dest: str | None = None
+        argument_names = [
+            argument.value
+            for argument in node.args
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+        ]
+        option_strings = [name for name in argument_names if name.startswith("-")]
+        if option_strings:
+            long_options = [option for option in option_strings if option.startswith("--")]
+            selected_option = (long_options or option_strings)[0]
+            dest = selected_option.lstrip("-").replace("-", "_")
+        elif argument_names:
+            dest = argument_names[0]
+        explicit_dest = next(
+            (
+                kw.value
+                for kw in node.keywords
+                if kw.arg == "dest"
+                and isinstance(kw.value, ast.Constant)
+                and isinstance(kw.value.value, str)
+            ),
+            None,
+        )
+        if explicit_dest is not None:
+            dest = explicit_dest.value
+        if dest:
+            dests.add(dest)
+    return dests
+
+
+def _evidence_path_names(tree: ast.AST, evidence_arg_dests: set[str]) -> set[str]:
     """Collect simple names assigned from expressions containing the evidence path."""
     evidence_names: set[str] = set()
     changed = True
@@ -54,7 +143,9 @@ def _evidence_path_names(tree: ast.AST) -> set[str]:
                 targets = [node.target]
             else:
                 continue
-            if node.value is None or not _expr_mentions_evidence(node.value, evidence_names):
+            if node.value is None or not _expr_mentions_evidence(
+                node.value, evidence_names, evidence_arg_dests
+            ):
                 continue
             for target in targets:
                 if isinstance(target, ast.Name) and target.id not in evidence_names:
@@ -63,55 +154,249 @@ def _evidence_path_names(tree: ast.AST) -> set[str]:
     return evidence_names
 
 
+def _evidence_name_sets(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Resolve evidence names and argparse dests jointly to a fixed point.
+
+    A destination whose default is a module constant (``default=DEFAULT_OUTPUT``)
+    is only recognizable once that constant has been classified as evidence, and a
+    name assigned from ``args.<dest>`` is only recognizable once the dest is known,
+    so the two sets are propagated together.
+    """
+    evidence_names: set[str] = set()
+    evidence_arg_dests: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        names = _evidence_path_names(tree, evidence_arg_dests)
+        if names - evidence_names:
+            evidence_names |= names
+            changed = True
+        dests = _evidence_argparse_dests(tree, evidence_names, evidence_arg_dests)
+        if dests - evidence_arg_dests:
+            evidence_arg_dests |= dests
+            changed = True
+    return evidence_names, evidence_arg_dests
+
+
+def _write_path_exprs(node: ast.Call) -> list[ast.AST]:
+    """Return the path expressions a write-primitive call targets.
+
+    Used by indirect-helper detection to decide whether a private helper forwards
+    one of its parameters to a raw evidence write.
+    """
+    function = node.func
+    if isinstance(function, ast.Attribute):
+        if function.attr in WRITE_METHODS:
+            return [function.value]
+        if function.attr == "open" and _has_write_mode(node):
+            return [function.value]
+        if function.attr == "dump" and len(node.args) >= 2:
+            return [node.args[1]]
+        if function.attr == "DictWriter" and node.args:
+            return [node.args[0]]
+    elif isinstance(function, ast.Name) and function.id == "open":
+        if _has_write_mode(node) and node.args:
+            return [node.args[0]]
+    return []
+
+
+def _local_path_origins(func_def: ast.FunctionDef, params: list[str]) -> dict[str, set[str]]:
+    """Map helper-local path aliases back to the parameters they derive from."""
+    path_origins = {parameter: {parameter} for parameter in params}
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(func_def):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if node.value is None:
+                continue
+            origins = {
+                origin
+                for child in ast.walk(node.value)
+                if isinstance(child, ast.Name)
+                for origin in path_origins.get(child.id, ())
+            }
+            for target in targets:
+                if not origins or not isinstance(target, ast.Name):
+                    continue
+                previous = path_origins.setdefault(target.id, set())
+                if origins - previous:
+                    previous.update(origins)
+                    changed = True
+    return path_origins
+
+
+def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | None:
+    """Return the parameter a helper forwards to a write.
+
+    A module-level helper like ``_write(path, text)`` that calls
+    ``path.write_text(...)`` forwards its ``path`` parameter to a raw write the
+    direct-write visitor cannot see (the parameter is not bound to an evidence
+    literal at the definition site). Positional-only, positional-or-keyword, and
+    keyword-only parameters are supported. The result carries the parameter name
+    and its positional call index (``None`` for keyword-only parameters).
+    """
+    positional_params = [arg.arg for arg in (*func_def.args.posonlyargs, *func_def.args.args)]
+    keyword_only_params = [arg.arg for arg in func_def.args.kwonlyargs]
+    params = [*positional_params, *keyword_only_params]
+    path_origins = _local_path_origins(func_def, params)
+    forwarded: set[str] = set()
+    for node in ast.walk(func_def):
+        if not isinstance(node, ast.Call):
+            continue
+        for expr in _write_path_exprs(node):
+            for child in ast.walk(expr):
+                if isinstance(child, ast.Name):
+                    forwarded.update(path_origins.get(child.id, ()))
+    if not forwarded:
+        return None
+    parameter_name = min(forwarded, key=params.index)
+    positional_index = (
+        positional_params.index(parameter_name) if parameter_name in positional_params else None
+    )
+    return parameter_name, positional_index
+
+
+def _forwarding_helpers(tree: ast.AST) -> dict[str, _ForwardingHelper]:
+    """Map module-level helpers to the parameters they forward to raw writes."""
+    helpers: dict[str, _ForwardingHelper] = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            parameter = _forward_path_parameter(node)
+            if parameter is not None:
+                helpers[node.name] = parameter
+    return helpers
+
+
 class _DirectWriterVisitor(ast.NodeVisitor):
-    """Find direct writes whose target resolves to the evidence tree."""
+    """Find writes whose target resolves to the evidence tree.
 
-    def __init__(self, evidence_names: set[str]) -> None:
-        self.violations: list[tuple[int, str]] = []
+    Detects direct writes (``path.write_text()`` where ``path`` is an evidence
+    literal, derived name, or evidence CLI dest) and indirect bypasses: private
+    helpers that forward a parameter to a raw write (``_write(path, ...)``) called
+    with an evidence path, and CLI-arg writes (``args.output.write_text()``) where
+    the argparse default points at the evidence tree.
+    """
+
+    def __init__(
+        self,
+        evidence_names: set[str],
+        evidence_arg_dests: set[str],
+        forwarding_helpers: dict[str, _ForwardingHelper],
+    ) -> None:
+        self.violations: list[tuple[int, str, str]] = []
         self.evidence_names = evidence_names
+        self.evidence_arg_dests = evidence_arg_dests
+        self.forwarding_helpers = forwarding_helpers
 
-    def _record(self, node: ast.Call, operation: str) -> None:
-        self.violations.append((node.lineno, operation))
+    def _mentions(self, expr: ast.AST) -> bool:
+        return _expr_mentions_evidence(expr, self.evidence_names, self.evidence_arg_dests)
+
+    def _record(self, node: ast.Call, operation: str, kind: str) -> None:
+        self.violations.append((node.lineno, operation, kind))
 
     def visit_Call(self, node: ast.Call) -> None:
         function = node.func
         if isinstance(function, ast.Attribute):
-            if function.attr in WRITE_METHODS and _expr_mentions_evidence(
-                function.value, self.evidence_names
-            ):
-                self._record(node, f".{function.attr}()")
-            elif (
-                function.attr == "open"
-                and _has_write_mode(node)
-                and _expr_mentions_evidence(function.value, self.evidence_names)
-            ):
-                self._record(node, ".open(..., write mode)")
-            elif (
-                function.attr == "DictWriter"
-                and node.args
-                and _expr_mentions_evidence(node.args[0], self.evidence_names)
-            ):
-                self._record(node, "csv.DictWriter()")
-            elif (
-                function.attr == "dump"
-                and len(node.args) >= 2
-                and _expr_mentions_evidence(node.args[1], self.evidence_names)
-            ):
-                self._record(node, "json.dump()")
-            elif function.attr in {"_write_sha256sums", "write_sha256sums"} and any(
-                _expr_mentions_evidence(argument, self.evidence_names) for argument in node.args
-            ):
-                if not (isinstance(function.value, ast.Name) and function.value.id == "writers"):
-                    self._record(node, f"{function.attr}()")
-        elif (
-            isinstance(function, ast.Name)
-            and function.id == "open"
+            self._check_attribute_call(node, function)
+        elif isinstance(function, ast.Name):
+            self._check_name_call(node, function)
+        self.generic_visit(node)
+
+    def _check_attribute_call(self, node: ast.Call, function: ast.Attribute) -> None:
+        if function.attr in WRITE_METHODS and self._mentions(function.value):
+            self._record(node, f".{function.attr}()", "direct")
+        elif function.attr == "open" and _has_write_mode(node) and self._mentions(function.value):
+            self._record(node, ".open(..., write mode)", "direct")
+        elif function.attr == "DictWriter" and node.args and self._mentions(node.args[0]):
+            self._record(node, "csv.DictWriter()", "direct")
+        elif function.attr == "dump" and len(node.args) >= 2 and self._mentions(node.args[1]):
+            self._record(node, "json.dump()", "direct")
+        elif function.attr in {"_write_sha256sums", "write_sha256sums"} and any(
+            self._mentions(argument) for argument in node.args
+        ):
+            if not (isinstance(function.value, ast.Name) and function.value.id == "writers"):
+                self._record(node, f"{function.attr}()", "direct")
+
+    def _check_name_call(self, node: ast.Call, function: ast.Name) -> None:
+        if (
+            function.id == "open"
             and _has_write_mode(node)
             and node.args
-            and _expr_mentions_evidence(node.args[0], self.evidence_names)
+            and self._mentions(node.args[0])
         ):
-            self._record(node, "open(..., write mode)")
-        self.generic_visit(node)
+            self._record(node, "open(..., write mode)", "direct")
+        elif function.id in self.forwarding_helpers:
+            parameter_name, positional_index = self.forwarding_helpers[function.id]
+            path_arguments = [
+                keyword.value for keyword in node.keywords if keyword.arg == parameter_name
+            ]
+            if positional_index is not None and positional_index < len(node.args):
+                path_arguments.append(node.args[positional_index])
+            if any(self._mentions(argument) for argument in path_arguments):
+                operation = (
+                    f"{function.id}() with an evidence-tree path "
+                    "(forwards to a raw write that bypasses the shared writer)"
+                )
+                self._record(node, operation, "call")
+
+
+def _structural_helper_violations(
+    forwarding_helpers: dict[str, _ForwardingHelper],
+    tree: ast.AST,
+    has_evidence_output: bool,
+) -> list[tuple[int, str, str]]:
+    """Flag module-level forwarding helpers in modules that produce evidence.
+
+    Some writers route evidence through an interprocedural or keyword-only parameter
+    chain (e.g. ``def _write_outputs(*, output_dir, ...): _write(output_dir / ...)``)
+    so the evidence path is invisible at every call site. Rather than fail to detect
+    that bypass, the guard treats a module that both produces evidence and defines a
+    private write-forwarding helper as an adoption gap: the helper exists to wrap a
+    raw write, which is exactly what the shared writers replace. Genuine non-evidence
+    helpers resolve with a justified ``# evidence-writer-exempt`` comment.
+    """
+    if not has_evidence_output or not forwarding_helpers:
+        return []
+    helper_lines = {
+        node.name: node.lineno
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in forwarding_helpers
+    }
+    return [
+        (
+            line,
+            f"{name}() (forwards a path parameter to a raw write)",
+            "definition",
+        )
+        for name, line in helper_lines.items()
+    ]
+
+
+def _format_blocker(source_path: Path, line: int, operation: str, kind: str) -> str:
+    """Format a guard blocker with an actionable remediation hint."""
+    lead = {
+        "direct": f"directly uses {operation}",
+        "call": f"calls {operation}",
+        "definition": f"defines {operation}",
+    }[kind]
+    return (
+        f"BLOCKER: '{source_path}:{line}' {lead} in a file that writes generated evidence. "
+        "Use robot_sf.evidence.writers.write_json/write_csv/write_text/write_sha256sums, "
+        "or add a justified '# evidence-writer-exempt: <reason>' comment."
+    )
+
+
+def _is_shared_writer_module(source_path: Path) -> bool:
+    """Return whether ``source_path`` is the canonical shared writer module."""
+    resolved = source_path.resolve()
+    suffix_length = len(_SHARED_WRITER_MODULE_SUFFIX)
+    return resolved.parts[-suffix_length:] == _SHARED_WRITER_MODULE_SUFFIX
 
 
 def _exemption(source: str) -> tuple[bool, str | None]:
@@ -140,6 +425,10 @@ def check_file(path: str | Path) -> list[str]:
     source_path = Path(path)
     if source_path.suffix != ".py" or not source_path.is_file():
         return []
+    if _is_shared_writer_module(source_path):
+        # The shared evidence-writer package owns the canonical raw-write wrappers;
+        # flagging its own definitions would be circular.
+        return []
     try:
         source = source_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -155,13 +444,16 @@ def check_file(path: str | Path) -> list[str]:
     except SyntaxError as exc:
         return [f"BLOCKER: cannot parse changed Python file '{source_path}': {exc}"]
 
-    visitor = _DirectWriterVisitor(_evidence_path_names(tree))
+    evidence_names, evidence_arg_dests = _evidence_name_sets(tree)
+    forwarding_helpers = _forwarding_helpers(tree)
+    has_evidence_output = bool(evidence_names) or bool(evidence_arg_dests)
+
+    visitor = _DirectWriterVisitor(evidence_names, evidence_arg_dests, forwarding_helpers)
     visitor.visit(tree)
+    violations = visitor.violations
+    violations.extend(_structural_helper_violations(forwarding_helpers, tree, has_evidence_output))
     return [
-        f"BLOCKER: '{source_path}:{line}' directly uses {operation} in a file that writes "
-        "generated evidence. Use robot_sf.evidence.writers.write_json/write_csv/write_text/"
-        "write_sha256sums, or add a justified '# evidence-writer-exempt: <reason>' comment."
-        for line, operation in visitor.violations
+        _format_blocker(source_path, line, operation, kind) for line, operation, kind in violations
     ]
 
 

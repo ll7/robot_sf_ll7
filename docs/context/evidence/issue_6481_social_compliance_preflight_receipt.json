@@ -1,4 +1,5 @@
 {
+  "all_benchmark_capable_execution": true,
   "all_execution_modes_recorded": true,
   "all_families_present": true,
   "all_native": false,
@@ -8,7 +9,7 @@
   "campaign_result_status": "completed",
   "campaign_returncode": 0,
   "claim_class": "diagnostic_proxy",
-  "config_sha256": "8611b4f6ad9eea7134cfe189f319f7bb8afcedf8a657ea6c291666b5d548bbab",
+  "config_sha256": "50f305473b7d9b5752b04d0c7b0233e6d8f75ca68e97588c003ff8bf88de83e1",
   "evidence_tier": "smoke_preflight",
   "execution_modes": {
     "goal": [
@@ -124,7 +125,7 @@
     ]
   ],
   "observed_row_count": 9,
-  "passed": false,
+  "passed": true,
   "planner_summary_ok": true,
   "receipt_schema": "issue_6481_preflight_receipt.v1",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
@@ -565,5 +566,5 @@
   ],
   "scenario_matrix_sha256": "d403aba974aacb67de41c96d41bc809d88460c87517ae788224830991e747faf",
   "social_compliance_schema_version": "social-compliance-metric-contract.v1",
-  "source_sha": "269d383b65077e31325968949fe0685b31f9ad2d"
+  "source_sha": "9f8b3a3333cf62754e825c803e165c53865c25c6"
 }

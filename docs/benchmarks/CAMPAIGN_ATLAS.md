@@ -1,4 +1,4 @@
-<!-- AI-GENERATED (robot_sf campaign atlas) - DO NOT EDIT; regenerate with
+<!-- AI-GENERATED (robot_sf campaign atlas) - NEEDS-REVIEW; DO NOT EDIT; regenerate with
      uv run python scripts/tools/generate_campaign_atlas.py
      and commit the result. Deterministic: sorted rows, no timestamps. -->
 

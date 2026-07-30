@@ -17,6 +17,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.evidence.writers import write_json, write_text
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PACKET = Path("configs/benchmarks/predictive_scenario_family_oracle_arm_issue_3215.yaml")
 DEFAULT_OUTPUT_JSON = Path(
@@ -297,11 +299,9 @@ def main(argv: list[str] | None = None) -> int:
     manifest = build_manifest(args.packet, payload)
 
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
-    args.output_json.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    write_json(args.output_json, manifest)
     args.output_md.parent.mkdir(parents=True, exist_ok=True)
-    args.output_md.write_text(render_markdown(manifest), encoding="utf-8")
+    write_text(args.output_md, render_markdown(manifest), issue_ref="robot_sf#3215")
 
     if args.json:
         print(json.dumps(manifest, indent=2, sort_keys=True))

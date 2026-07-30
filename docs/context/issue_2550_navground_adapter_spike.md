@@ -174,7 +174,7 @@ harness demonstrates non-redundant behavior and an adapter boundary worth mainta
 ## Related Surfaces
 
 - [#2442 assessment](issue_2442_navground_assessment.md): canonical upstream probe evidence
-- [Planner zoo external framework anchors](../../planner_zoo/index.md): Navground row in the external
+- [Planner zoo external framework anchors](../planner_zoo/index.md): Navground row in the external
   framework assessment table
-- [Benchmark planner family coverage](../../benchmark_planner_family_coverage.md): Navground row in
+- [Benchmark planner family coverage](../benchmark_planner_family_coverage.md): Navground row in
   the external family anchors section

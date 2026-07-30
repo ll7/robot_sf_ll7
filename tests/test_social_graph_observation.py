@@ -9,7 +9,9 @@ from robot_sf.sensor.social_graph_observation import (
     PEDESTRIAN_FEATURE_NAMES,
     SocialGraphObservationAdapter,
     SocialGraphObservationConfig,
+    SocialGraphObservationFusion,
     build_social_graph_observation,
+    social_graph_observation_space,
 )
 
 
@@ -247,6 +249,15 @@ def test_future_like_deployment_fields_fail_closed() -> None:
         build_social_graph_observation(obs)
 
 
+def test_critic_privileged_fields_fail_closed() -> None:
+    """Critic-only state must not enter a deployment graph observation."""
+    obs = _nested_obs(ped_positions=[[1.0, 0.0]])
+    obs["critic_privileged_state"] = np.array([1.0], dtype=np.float32)
+
+    with pytest.raises(ValueError, match="critic_privileged_state"):
+        build_social_graph_observation(obs)
+
+
 def test_history_return_not_mutated_by_later_build_calls() -> None:
     """Returned pedestrian_history must be isolated from subsequent adapter writes."""
     adapter = SocialGraphObservationAdapter(
@@ -265,3 +276,56 @@ def test_history_return_not_mutated_by_later_build_calls() -> None:
 
     fourth = adapter.build(_nested_obs(ped_positions=[[4.0, 0.0]]))
     np.testing.assert_allclose(fourth["pedestrian_history"][:, 0, 0], [2.0, 3.0, 4.0])
+
+
+def test_fusion_pads_edges_and_clears_history_on_reset() -> None:
+    """Runtime fusion should satisfy its fixed space and reset delegated history."""
+
+    class Source:
+        def __init__(self) -> None:
+            self.observations = [
+                _nested_obs(),
+                _nested_obs(ped_positions=[[1.0, 0.0]]),
+                _nested_obs(
+                    ped_positions=[[3.0, 0.0], [1.0, 0.0], [2.0, 0.0]],
+                ),
+            ]
+            self.index = 0
+            self.reset_calls = 0
+
+        def next_obs(self) -> dict:
+            observation = self.observations[min(self.index, len(self.observations) - 1)]
+            self.index += 1
+            return observation
+
+        def reset_cache(self) -> None:
+            self.index = 0
+            self.reset_calls += 1
+
+    config = SocialGraphObservationConfig(max_pedestrians=2, history_steps=2)
+    source = Source()
+    fusion = SocialGraphObservationFusion(source, config)
+
+    first = fusion.next_obs()
+    second = fusion.next_obs()
+    capped = fusion.next_obs()
+    space = social_graph_observation_space(config)
+
+    assert space.contains(first)
+    assert space.contains(second)
+    assert space.contains(capped)
+    assert np.all(space["edge_index"].high == 2)
+    assert first["edge_index"].shape == (2, 2)
+    assert first["edge_type"].shape == (2,)
+    assert first["edge_mask"].tolist() == [False, False]
+    assert second["edge_mask"].tolist() == [True, False]
+    assert capped["edge_mask"].tolist() == [True, True]
+    assert capped["pedestrian_count"].tolist() == [2]
+    np.testing.assert_allclose(capped["pedestrian_features"][:, 0], [1.0, 2.0])
+    np.testing.assert_allclose(second["pedestrian_history"][:, 0, 0], [0.0, 1.0])
+
+    fusion.reset_cache()
+    after_reset = fusion.next_obs()
+
+    assert source.reset_calls == 1
+    np.testing.assert_allclose(after_reset["pedestrian_history"][:, 0, 0], [0.0, 0.0])

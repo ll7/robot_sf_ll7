@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.orca_residual_lane_readiness import assess_lane_readiness
+from robot_sf.evidence.writers import write_json
 from scripts.validation.build_issue_1475_acceptance_audit import build_audit as build_1475_audit
 
 SCHEMA_VERSION = "issue-1358-acceptance-audit.v1"
@@ -314,12 +315,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.write:
         output = args.output if args.output.is_absolute() else repo_root / args.output
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(payload, encoding="utf-8")
+        write_json(output, report)
     else:
+        payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
         print(payload, end="")
     return 0
 

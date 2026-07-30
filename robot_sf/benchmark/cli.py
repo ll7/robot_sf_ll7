@@ -2913,36 +2913,282 @@ def configure_logging(quiet: bool, level: str) -> None:
     _configure_logging(quiet, level)
 
 
-def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: PLR0915
-    """Attach core benchmark CLI subcommands."""
-    subparsers = parser.add_subparsers(dest="cmd")
-    _add_baseline_subparser(subparsers)
-    _add_run_subparser(subparsers)
-    _add_summary_subparser(subparsers)
-    _add_aggregate_subparser(subparsers)
-    _add_metric_layers_subparser(subparsers)
-    _add_stress_coverage_report_subparser(subparsers)
-    _add_classify_failure_mechanisms_subparser(subparsers)
-    _add_collision_scenario_similarity_subparser(subparsers)
-    _add_claim_subparser(subparsers)
-    _add_validate_row_claims_subparser(subparsers)
-    _add_export_parquet_subparser(subparsers)
-    _add_seed_variance_subparser(subparsers)
-    _add_flakiness_audit_subparser(subparsers)
-    _add_extract_failures_subparser(subparsers)
-    _add_snqi_ablate_subparser(subparsers)
-    _add_rank_subparser(subparsers)
-    _add_table_subparser(subparsers)
-    _add_export_canonical_table_subparser(subparsers)
-    _add_debug_seeds_subparser(subparsers)
-    _add_plot_pareto_subparser(subparsers)
-    _add_plot_distributions_subparser(subparsers)
-    _add_plot_planner_tradeoff_subparser(subparsers)
-    _add_plot_scenarios_subparser(subparsers)
-    _add_list_subparser(subparsers)
-    _add_planner_inclusion_subparser(subparsers)
-    _add_doctor_subparser(subparsers)
-    _add_mapf_oracle_subparser(subparsers)
+def _add_snqi_optimize(
+    sp: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the SNQI optimize subcommand parser."""
+    p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
+    p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
+    p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
+    p.add_argument("--output", type=Path, required=True, help="Output JSON file")
+    p.add_argument(
+        "--method",
+        choices=["grid", "evolution", "both"],
+        default="both",
+        help="Optimization method",
+    )
+    p.add_argument("--grid-resolution", type=int, default=5)
+    p.add_argument(
+        "--maxiter",
+        type=int,
+        default=30,
+        help="Differential evolution max iterations",
+    )
+    p.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis")
+    p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--validate", action="store_true", help="Validate output schema")
+    p.add_argument(
+        "--max-grid-combinations",
+        type=int,
+        default=20000,
+        help="Guard threshold for total grid combinations",
+    )
+    p.add_argument(
+        "--initial-weights-file",
+        type=Path,
+        default=None,
+        help="JSON file containing initial weight mapping",
+    )
+    p.add_argument("--progress", action="store_true", help="Show progress bars (tqdm)")
+    p.add_argument(
+        "--missing-metric-max-list",
+        type=int,
+        default=5,
+        help="Max example episode IDs per missing baseline metric",
+    )
+    p.add_argument("--fail-on-missing-metric", action="store_true")
+    p.add_argument(
+        "--decision-preflight",
+        action="store_true",
+        help="Enable fail-closed preflight for missing or invalid normalized inputs.",
+    )
+    p.add_argument(
+        "--sample",
+        type=int,
+        default=None,
+        help="Deterministically sample N episodes",
+    )
+    p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
+    p.add_argument(
+        "--early-stop-patience",
+        type=int,
+        default=0,
+        help="Early stopping patience (0 disables)",
+    )
+    p.add_argument(
+        "--early-stop-min-delta",
+        type=float,
+        default=1e-4,
+        help="Minimum improvement to reset early stopping",
+    )
+    p.add_argument(
+        "--ci-placeholder",
+        action="store_true",
+        help="Include CI placeholder scaffold",
+    )
+    p.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=0,
+        help="Number of bootstrap resamples for stability/CI estimation (0 disables)",
+    )
+    p.add_argument(
+        "--bootstrap-confidence",
+        type=float,
+        default=0.95,
+        help="Confidence level for bootstrap intervals (e.g., 0.95)",
+    )
+    p.add_argument(
+        "--small-dataset-threshold",
+        type=int,
+        default=20,
+        help=(
+            "Warn when the number of episodes used is below this threshold "
+            "(stability and CIs may be unreliable)."
+        ),
+    )
+    p.set_defaults(cmd="snqi", snqi_cmd="optimize")
+
+
+def _add_snqi_recompute(
+    sp: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the SNQI recompute subcommand parser."""
+    p = sp.add_parser(
+        "recompute",
+        help="Recompute SNQI weights via predefined strategies",
+        conflict_handler="resolve",
+    )
+    p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
+    p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
+    p.add_argument(
+        "--strategy",
+        choices=[
+            "default",
+            "balanced",
+            "safety_focused",
+            "efficiency_focused",
+            "pareto",
+        ],
+        default="default",
+    )
+    p.add_argument("--output", type=Path, required=True, help="Output JSON file")
+    p.add_argument("--compare-normalization", action="store_true")
+    p.add_argument("--compare-strategies", action="store_true")
+    p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--validate", action="store_true")
+    p.add_argument(
+        "--external-weights-file",
+        type=Path,
+        default=None,
+        help="Evaluate external weights JSON mapping",
+    )
+    p.add_argument(
+        "--export-pareto-front",
+        action="store_true",
+        help="Export sampled Pareto frontier when strategy pareto is active.",
+    )
+    p.add_argument(
+        "--pareto-front-samples",
+        type=int,
+        default=600,
+        help="Number of Pareto frontier samples to draw when export is enabled.",
+    )
+    p.add_argument(
+        "--missing-metric-max-list",
+        type=int,
+        default=5,
+        help="Max example episode IDs per missing baseline metric",
+    )
+    p.add_argument("--fail-on-missing-metric", action="store_true")
+    p.add_argument(
+        "--decision-preflight",
+        action="store_true",
+        help="Enable fail-closed preflight for missing or invalid normalized inputs.",
+    )
+    p.add_argument(
+        "--sample",
+        type=int,
+        default=None,
+        help="Deterministically sample N episodes",
+    )
+    p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
+    p.add_argument(
+        "--bootstrap-samples",
+        type=int,
+        default=0,
+        help="Number of bootstrap resamples for stability/CI estimation (0 disables)",
+    )
+    p.add_argument(
+        "--bootstrap-confidence",
+        type=float,
+        default=0.95,
+        help="Confidence level for bootstrap intervals (e.g., 0.95)",
+    )
+    p.add_argument(
+        "--small-dataset-threshold",
+        type=int,
+        default=20,
+        help=(
+            "Warn when the number of episodes used is below this threshold "
+            "(stability and CIs may be unreliable)."
+        ),
+    )
+    p.add_argument(
+        "--export-pareto-front",
+        action="store_true",
+        help="Export sampled Pareto frontier when strategy pareto is active.",
+    )
+    p.add_argument(
+        "--pareto-front-samples",
+        type=int,
+        default=600,
+        help="Number Pareto frontier samples draw when export enabled.",
+    )
+    p.add_argument(
+        "--decision-preflight",
+        action="store_true",
+        help="Enable fail-closed preflight missing/invalid normalized inputs.",
+    )
+    p.add_argument(
+        "--decision-reversal-threshold",
+        type=float,
+        default=0.0,
+        help="If >0 compare-strategies, flag correlation pairs below value.",
+    )
+    p.set_defaults(cmd="snqi", snqi_cmd="recompute")
+
+
+def _load_script(rel: str, name: str):
+    """Dynamically load a script module by relative path.
+
+    Uses importlib spec APIs so module metadata (__spec__, __file__) is set.
+
+    Returns:
+        The loaded module object.
+    """
+    # Defensive: if a prior failed import left a None placeholder, remove it
+    existing = sys.modules.get(name)
+    if existing is None:
+        sys.modules.pop(name, None)
+
+    path = Path(__file__).resolve().parents[2] / rel
+    if not path.exists():  # pragma: no cover - defensive
+        raise FileNotFoundError(f"SNQI script not found: {path}")
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise ImportError(f"Unable to load spec for {path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod  # allow relative imports inside script if any
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _get_opt_run(mod):  # type: ignore[no-untyped-def]
+    """Return the optimize script run() function.
+
+    Returns:
+        Callable run function from the optimize module.
+    """
+    return mod.run
+
+
+def _get_recompute_run(mod):  # type: ignore[no-untyped-def]
+    """Return the recompute script run() function.
+
+    Returns:
+        Callable run function from the recompute module.
+    """
+    return mod.run
+
+
+def _ensure_snqi_opt_defaults(args: argparse.Namespace) -> None:
+    """Ensure optional flags expected by the optimize script exist on args.
+
+    This guards against AttributeError when constructing Namespace instances
+    programmatically (e.g., in tests) without all optional flags present.
+    """
+    defaults = {
+        "progress": False,
+        "simplex": False,
+        "max_grid_combinations": 20000,
+        "grid_resolution": 5,
+        "maxiter": 30,
+        "sensitivity": False,
+        "bootstrap_samples": 0,
+        "bootstrap_confidence": 0.95,
+        "small_dataset_threshold": 20,
+    }
+    for name, value in defaults.items():
+        if not hasattr(args, name):
+            setattr(args, name, value)
+
+
+def _add_snqi_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+    parser: argparse.ArgumentParser,
+) -> None:
+    """Register the SNQI subcommand group and its dynamic script loaders."""
     snqi_parser = subparsers.add_parser(
         "snqi",
         help="SNQI weight tooling (optimize / recompute)",
@@ -2952,278 +3198,12 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
 
     # We replicate the script arguments (kept minimal & aligned with parse_args in scripts) to avoid code duplication.
     # Dynamic loading is used so we don't need to refactor the existing scripts immediately.
-
-    def _add_snqi_optimize(
-        sp: argparse._SubParsersAction[argparse.ArgumentParser],
-    ) -> None:
-        """Register the SNQI optimize subcommand parser."""
-        p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
-        p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
-        p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
-        p.add_argument("--output", type=Path, required=True, help="Output JSON file")
-        p.add_argument(
-            "--method",
-            choices=["grid", "evolution", "both"],
-            default="both",
-            help="Optimization method",
-        )
-        p.add_argument("--grid-resolution", type=int, default=5)
-        p.add_argument(
-            "--maxiter",
-            type=int,
-            default=30,
-            help="Differential evolution max iterations",
-        )
-        p.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis")
-        p.add_argument("--seed", type=int, default=None)
-        p.add_argument("--validate", action="store_true", help="Validate output schema")
-        p.add_argument(
-            "--max-grid-combinations",
-            type=int,
-            default=20000,
-            help="Guard threshold for total grid combinations",
-        )
-        p.add_argument(
-            "--initial-weights-file",
-            type=Path,
-            default=None,
-            help="JSON file containing initial weight mapping",
-        )
-        p.add_argument("--progress", action="store_true", help="Show progress bars (tqdm)")
-        p.add_argument(
-            "--missing-metric-max-list",
-            type=int,
-            default=5,
-            help="Max example episode IDs per missing baseline metric",
-        )
-        p.add_argument("--fail-on-missing-metric", action="store_true")
-        p.add_argument(
-            "--decision-preflight",
-            action="store_true",
-            help="Enable fail-closed preflight for missing or invalid normalized inputs.",
-        )
-        p.add_argument(
-            "--sample",
-            type=int,
-            default=None,
-            help="Deterministically sample N episodes",
-        )
-        p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
-        p.add_argument(
-            "--early-stop-patience",
-            type=int,
-            default=0,
-            help="Early stopping patience (0 disables)",
-        )
-        p.add_argument(
-            "--early-stop-min-delta",
-            type=float,
-            default=1e-4,
-            help="Minimum improvement to reset early stopping",
-        )
-        p.add_argument(
-            "--ci-placeholder",
-            action="store_true",
-            help="Include CI placeholder scaffold",
-        )
-        p.add_argument(
-            "--bootstrap-samples",
-            type=int,
-            default=0,
-            help="Number of bootstrap resamples for stability/CI estimation (0 disables)",
-        )
-        p.add_argument(
-            "--bootstrap-confidence",
-            type=float,
-            default=0.95,
-            help="Confidence level for bootstrap intervals (e.g., 0.95)",
-        )
-        p.add_argument(
-            "--small-dataset-threshold",
-            type=int,
-            default=20,
-            help=(
-                "Warn when the number of episodes used is below this threshold "
-                "(stability and CIs may be unreliable)."
-            ),
-        )
-        p.set_defaults(cmd="snqi", snqi_cmd="optimize")
-
-    def _add_snqi_recompute(
-        sp: argparse._SubParsersAction[argparse.ArgumentParser],
-    ) -> None:
-        """Register the SNQI recompute subcommand parser."""
-        p = sp.add_parser(
-            "recompute",
-            help="Recompute SNQI weights via predefined strategies",
-            conflict_handler="resolve",
-        )
-        p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
-        p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
-        p.add_argument(
-            "--strategy",
-            choices=[
-                "default",
-                "balanced",
-                "safety_focused",
-                "efficiency_focused",
-                "pareto",
-            ],
-            default="default",
-        )
-        p.add_argument("--output", type=Path, required=True, help="Output JSON file")
-        p.add_argument("--compare-normalization", action="store_true")
-        p.add_argument("--compare-strategies", action="store_true")
-        p.add_argument("--seed", type=int, default=None)
-        p.add_argument("--validate", action="store_true")
-        p.add_argument(
-            "--external-weights-file",
-            type=Path,
-            default=None,
-            help="Evaluate external weights JSON mapping",
-        )
-        p.add_argument(
-            "--export-pareto-front",
-            action="store_true",
-            help="Export sampled Pareto frontier when strategy pareto is active.",
-        )
-        p.add_argument(
-            "--pareto-front-samples",
-            type=int,
-            default=600,
-            help="Number of Pareto frontier samples to draw when export is enabled.",
-        )
-        p.add_argument(
-            "--missing-metric-max-list",
-            type=int,
-            default=5,
-            help="Max example episode IDs per missing baseline metric",
-        )
-        p.add_argument("--fail-on-missing-metric", action="store_true")
-        p.add_argument(
-            "--decision-preflight",
-            action="store_true",
-            help="Enable fail-closed preflight for missing or invalid normalized inputs.",
-        )
-        p.add_argument(
-            "--sample",
-            type=int,
-            default=None,
-            help="Deterministically sample N episodes",
-        )
-        p.add_argument("--simplex", action="store_true", help="Project weights onto simplex")
-        p.add_argument(
-            "--bootstrap-samples",
-            type=int,
-            default=0,
-            help="Number of bootstrap resamples for stability/CI estimation (0 disables)",
-        )
-        p.add_argument(
-            "--bootstrap-confidence",
-            type=float,
-            default=0.95,
-            help="Confidence level for bootstrap intervals (e.g., 0.95)",
-        )
-        p.add_argument(
-            "--small-dataset-threshold",
-            type=int,
-            default=20,
-            help=(
-                "Warn when the number of episodes used is below this threshold "
-                "(stability and CIs may be unreliable)."
-            ),
-        )
-        p.add_argument(
-            "--export-pareto-front",
-            action="store_true",
-            help="Export sampled Pareto frontier when strategy pareto is active.",
-        )
-        p.add_argument(
-            "--pareto-front-samples",
-            type=int,
-            default=600,
-            help="Number Pareto frontier samples draw when export enabled.",
-        )
-        p.add_argument(
-            "--decision-preflight",
-            action="store_true",
-            help="Enable fail-closed preflight missing/invalid normalized inputs.",
-        )
-        p.add_argument(
-            "--decision-reversal-threshold",
-            type=float,
-            default=0.0,
-            help="If >0 compare-strategies, flag correlation pairs below value.",
-        )
-        p.set_defaults(cmd="snqi", snqi_cmd="recompute")
-
     _add_snqi_optimize(snqi_sub)
     _add_snqi_recompute(snqi_sub)
 
     # ---- dynamic script module loaders ----
     _OPT_MOD = None  # cache
     _RECOMP_MOD = None
-
-    def _load_script(rel: str, name: str):
-        """Dynamically load a script module by relative path.
-
-        Uses importlib spec APIs so module metadata (__spec__, __file__) is set.
-
-        Returns:
-            The loaded module object.
-        """
-        # Defensive: if a prior failed import left a None placeholder, remove it
-        existing = sys.modules.get(name)
-        if existing is None:
-            sys.modules.pop(name, None)
-
-        path = Path(__file__).resolve().parents[2] / rel
-        if not path.exists():  # pragma: no cover - defensive
-            raise FileNotFoundError(f"SNQI script not found: {path}")
-        spec = importlib.util.spec_from_file_location(name, path)
-        if spec is None or spec.loader is None:  # pragma: no cover - defensive
-            raise ImportError(f"Unable to load spec for {path}")
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[name] = mod  # allow relative imports inside script if any
-        spec.loader.exec_module(mod)
-        return mod
-
-    def _get_opt_run(mod):  # type: ignore[no-untyped-def]
-        """Return the optimize script run() function.
-
-        Returns:
-            Callable run function from the optimize module.
-        """
-        return mod.run
-
-    def _get_recompute_run(mod):  # type: ignore[no-untyped-def]
-        """Return the recompute script run() function.
-
-        Returns:
-            Callable run function from the recompute module.
-        """
-        return mod.run
-
-    def _ensure_snqi_opt_defaults(args: argparse.Namespace) -> None:
-        """Ensure optional flags expected by the optimize script exist on args.
-
-        This guards against AttributeError when constructing Namespace instances
-        programmatically (e.g., in tests) without all optional flags present.
-        """
-        defaults = {
-            "progress": False,
-            "simplex": False,
-            "max_grid_combinations": 20000,
-            "grid_resolution": 5,
-            "maxiter": 30,
-            "sensitivity": False,
-            "bootstrap_samples": 0,
-            "bootstrap_confidence": 0.95,
-            "small_dataset_threshold": 20,
-        }
-        for name, value in defaults.items():
-            if not hasattr(args, name):
-                setattr(args, name, value)
 
     def _load_optimize_run_fn():  # type: ignore[no-untyped-def]
         """Load and return the optimize script's run(args) function or None on error.
@@ -3283,6 +3263,39 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         "invoke_optimize": _invoke_snqi_opt,
         "invoke_recompute": _invoke_snqi_recompute,
     }
+
+
+def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
+    """Attach core benchmark CLI subcommands."""
+    subparsers = parser.add_subparsers(dest="cmd")
+    _add_baseline_subparser(subparsers)
+    _add_run_subparser(subparsers)
+    _add_summary_subparser(subparsers)
+    _add_aggregate_subparser(subparsers)
+    _add_metric_layers_subparser(subparsers)
+    _add_stress_coverage_report_subparser(subparsers)
+    _add_classify_failure_mechanisms_subparser(subparsers)
+    _add_collision_scenario_similarity_subparser(subparsers)
+    _add_claim_subparser(subparsers)
+    _add_validate_row_claims_subparser(subparsers)
+    _add_export_parquet_subparser(subparsers)
+    _add_seed_variance_subparser(subparsers)
+    _add_flakiness_audit_subparser(subparsers)
+    _add_extract_failures_subparser(subparsers)
+    _add_snqi_ablate_subparser(subparsers)
+    _add_rank_subparser(subparsers)
+    _add_table_subparser(subparsers)
+    _add_export_canonical_table_subparser(subparsers)
+    _add_debug_seeds_subparser(subparsers)
+    _add_plot_pareto_subparser(subparsers)
+    _add_plot_distributions_subparser(subparsers)
+    _add_plot_planner_tradeoff_subparser(subparsers)
+    _add_plot_scenarios_subparser(subparsers)
+    _add_list_subparser(subparsers)
+    _add_planner_inclusion_subparser(subparsers)
+    _add_doctor_subparser(subparsers)
+    _add_mapf_oracle_subparser(subparsers)
+    _add_snqi_subparser(subparsers, parser)
 
 
 def _configure_parser() -> argparse.ArgumentParser:

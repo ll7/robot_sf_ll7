@@ -113,6 +113,35 @@ runs, or GitHub releases. A merge command, cleanup option, or stale local cache 
 approval. Store merger/review control-plane artifacts outside git worktrees, and never commit
 `RESULT.md` or `REVIEW.json`.
 
+## Label And Comment Helpers (REST-backed)
+
+On affected GitHub CLI versions, `gh pr edit <number> --add-label` and
+`gh pr view <number> --comments` fail inside the GraphQL client with the retired
+Projects Classic field (`repository.pullRequest.projectCards`) and can even
+exit `0` while emitting the error and no usable content (issue #6496). Neither
+operation needs Projects Classic data. When this merger updates labels or reads
+conversation comments, use the REST-only helpers instead of the broad `gh pr`
+commands:
+
+```bash
+# add/remove a label (verify-on-write, pure REST issues-labels endpoint)
+uv run python scripts/dev/gh_pr_label_rest.py add <number> \
+    --label <label> --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
+    --label <label> --repo ll7/robot_sf_ll7
+
+# PR conversation comments, drop-in for `gh pr view <number> --comments`
+# (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
+uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7
+```
+
+This skill verifies the `merge-ready` label rather than applying it, but any
+post-merge status-label cleanup or preflight/outcome comment context that needs
+the conversation thread must go through these REST paths. Read-only PR header
+fields still use `gh pr view <number> --json ...`; only the label-edit and
+`--comments` paths hit the deprecated field. Both helpers fail closed on auth,
+malformed, or truncated payloads.
+
 ## Merge Workflow
 
 1. List open PRs with `merge-ready` label:

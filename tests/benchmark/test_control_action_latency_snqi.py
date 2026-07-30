@@ -7,6 +7,8 @@ packet under the reproducibility tolerance contract, and CSV / raw-row inputs
 round-trip consistently.
 """
 
+# evidence-writer-exempt: negative tests intentionally write malformed tmp_path fixtures.
+
 from __future__ import annotations
 
 import json

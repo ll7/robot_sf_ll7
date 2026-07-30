@@ -160,6 +160,52 @@ def collect_stale_issues(
     return stale
 
 
+def reconcile_stale_issues(
+    *,
+    repo: str,
+    candidates: list[StaleIssue],
+    watched_labels: tuple[str, ...] = LIVE_STATE_LABELS,
+    fetch_issue: Any = None,
+) -> list[StaleIssue]:
+    """Confirm search-discovered candidates against current REST issue records.
+
+    GitHub search results can temporarily retain a removed label while the search index catches up.
+    Treat search rows only as candidate discovery and use the current REST labels and state as the
+    authority for the final report.
+    """
+    if fetch_issue is None:
+        from scripts.dev.gh_issue_rest import fetch_issue as fetch_issue_rest
+
+        fetch_issue = fetch_issue_rest
+
+    watched = set(watched_labels)
+    stale: list[StaleIssue] = []
+    for candidate in candidates:
+        payload = fetch_issue(candidate.number, repo=repo)
+        if payload.get("status") != "ok":
+            error = payload.get("error", "unknown error")
+            raise RuntimeError(f"Failed to read issue {candidate.number}: {error}")
+        if _is_pull_request_url(payload.get("url")):
+            continue
+        if str(payload.get("state", "")).lower() != "closed":
+            continue
+
+        matching_labels = _label_names(payload.get("labels")) & watched
+        if not matching_labels:
+            continue
+
+        stale.append(
+            StaleIssue(
+                number=candidate.number,
+                title=str(payload.get("title", candidate.title)),
+                url=str(payload.get("url", candidate.url)),
+                state=str(payload.get("state", candidate.state)),
+                stale_labels=tuple(sorted(matching_labels)),
+            )
+        )
+    return stale
+
+
 def build_view_command(*, repo: str, number: int) -> list[str]:
     """Build the read-only GitHub CLI command that confirms one issue's state.
 
@@ -396,7 +442,12 @@ def main(argv: list[str] | None = None) -> int:
             labels=labels,
             limit=args.limit,
         )
-        stale_issues = collect_stale_issues(rows_by_label, watched_labels=labels)
+        candidates = collect_stale_issues(rows_by_label, watched_labels=labels)
+        stale_issues = reconcile_stale_issues(
+            repo=args.repo,
+            candidates=candidates,
+            watched_labels=labels,
+        )
         truncations = build_label_truncations(rows_by_label, limit=args.limit)
         report = build_report(
             repo=args.repo,

@@ -155,11 +155,24 @@ def _baseline_candidate(space: SearchSpaceConfig) -> CandidateSpec:
     )
 
 
-def _first_single_pedestrian(scenario: dict[str, Any]) -> dict[str, Any] | None:
-    """Return the first ``single_pedestrians`` mapping entry, if any."""
+def _single_pedestrian_by_id(
+    scenario: dict[str, Any], pedestrian_id: str | None
+) -> dict[str, Any] | None:
+    """Return the ``single_pedestrians`` entry bound to ``pedestrian_id``, if any.
+
+    The entry is looked up by identity rather than list position so a template that already
+    defines other pedestrians (listed before the candidate pedestrian) cannot cause the probe
+    to inspect the wrong entry. Only the candidate pedestrian is probed, because that is the
+    pedestrian the frozen timing dimensions are bound to.
+    """
+    if not pedestrian_id:
+        return None
     entries = scenario.get("single_pedestrians")
-    if isinstance(entries, list) and entries and isinstance(entries[0], dict):
-        return entries[0]
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if isinstance(entry, dict) and str(entry.get("id")) == pedestrian_id:
+            return entry
     return None
 
 
@@ -171,14 +184,19 @@ def _first_ped_route(route_payload: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _extract_bound_value(scenario: dict[str, Any], name: str) -> float | None:
+def _extract_bound_value(
+    scenario: dict[str, Any], name: str, *, pedestrian_id: str | None
+) -> float | None:
     """Extract the runtime field a timing dimension must bind to from a materialized scenario.
+
+    The lookup targets the candidate pedestrian (``pedestrian_id``) so a template that already
+    defines other pedestrians cannot cause the wrong entry to be inspected.
 
     Returns:
         float | None: The bound runtime value, or ``None`` when the scenario does not bind the
-        dimension to a pedestrian.
+        dimension to the candidate pedestrian.
     """
-    entry = _first_single_pedestrian(scenario)
+    entry = _single_pedestrian_by_id(scenario, pedestrian_id)
     if entry is None:
         return None
     if name == "spawn_time_s":
@@ -241,7 +259,7 @@ def _probe_dimension(
     )
     perturbed_hash = compute_effective_scenario_hash(perturbed_scenario, perturbed_route)
     hash_changed = perturbed_hash != baseline_hash
-    bound_value = _extract_bound_value(perturbed_scenario, name)
+    bound_value = _extract_bound_value(perturbed_scenario, name, pedestrian_id=pedestrian_id)
     bound_to_pedestrian = bound_value is not None and math.isclose(
         bound_value, perturbed_value, rel_tol=0.0, abs_tol=1e-9
     )
@@ -300,9 +318,9 @@ def evaluate_preflight(
     )
     baseline_hash = compute_effective_scenario_hash(baseline_scenario, baseline_route)
 
-    first_ped = _first_single_pedestrian(baseline_scenario)
+    bound_ped = _single_pedestrian_by_id(baseline_scenario, resolved_id)
     first_route = _first_ped_route(baseline_route)
-    materialized_id = str(first_ped["id"]) if first_ped and first_ped.get("id") else None
+    materialized_id = str(bound_ped["id"]) if bound_ped and bound_ped.get("id") else None
     single_pedestrian_populated = bool(resolved_id) and materialized_id == resolved_id
     pedestrian_route_populated = (
         bool(resolved_id) and bool(first_route) and first_route.get("id") == resolved_id

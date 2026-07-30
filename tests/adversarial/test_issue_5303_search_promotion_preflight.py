@@ -102,6 +102,36 @@ def test_preflight_explicit_pedestrian_override_binds_concrete_pedestrian() -> N
     assert result.materialized_pedestrian_id == "override_probe"
 
 
+def test_preflight_inspects_candidate_pedestrian_among_preexisting_entries() -> None:
+    """A template with other pedestrians must not cause probing the wrong pedestrian.
+
+    The candidate pedestrian is appended after a pre-existing entry; the probe must inspect
+    the candidate pedestrian (by identity), not the first list entry, so a non-inert search
+    space is not falsely reported as blocked.
+    """
+    template = _template()
+    template["single_pedestrians"] = [
+        {
+            "id": "aaa_preexisting",
+            "start": [0.0, 0.0],
+            "goal": [1.0, 1.0],
+            "speed_m_s": 1.0,
+            "start_delay_s": 99.0,
+            "wait_at": [{"waypoint_index": 0, "wait_s": 99.0}],
+        }
+    ]
+
+    result = evaluate_preflight(search_space=_space(), template_scenario=template)
+
+    assert result.status == "promotion_timing_ready"
+    assert result.materialized_pedestrian_id == "crossing_probe"
+    assert result.single_pedestrian_populated is True
+    for probe in result.dimensions:
+        assert probe.status == "effective"
+        assert probe.bound_to_pedestrian is True
+        assert probe.bound_value != pytest.approx(99.0)
+
+
 def test_preflight_rejects_metadata_only_timing_dimensions(monkeypatch: pytest.MonkeyPatch) -> None:
     """Timing dimensions that survive only in metadata must be rejected as inert."""
     real_builder = preflight_mod.build_candidate_payload

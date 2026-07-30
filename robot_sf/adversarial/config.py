@@ -388,6 +388,14 @@ class SearchSpaceConfig:
     scenario_seed: RangeConfig = field(default_factory=lambda: RangeConfig(1.0, 1.0))
     min_start_goal_distance_m: float = 0.25
     pedestrian_id: str | None = None
+    # ``None`` denotes a programmatic config, where the dataclass fields are the source of
+    # truth. ``from_mapping`` records the actual YAML keys so a defaulted timing range cannot
+    # be mistaken for a declared frozen promotion dimension by the readiness preflight.
+    _declared_variables: frozenset[str] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     @classmethod
     def from_file(cls, path: str | Path) -> SearchSpaceConfig:
@@ -444,6 +452,7 @@ class SearchSpaceConfig:
             scenario_seed=_range("scenario_seed", (1.0, 1.0)),
             min_start_goal_distance_m=float(constraints.get("min_start_goal_distance_m", 0.25)),
             pedestrian_id=pedestrian_id,
+            _declared_variables=frozenset(variables),
         )
         if not config.scenario_seed.min.is_integer() or not config.scenario_seed.max.is_integer():
             raise ValueError("search-space scenario_seed bounds must be integers")
@@ -518,6 +527,8 @@ class SearchSpaceConfig:
             recognized promotion timing dimension so callers can fail closed on missing
             dimensions.
         """
+        if self._declared_variables is not None and name not in self._declared_variables:
+            return None
         if name == "spawn_time_s":
             return self.spawn_time_s
         if name == "pedestrian_delay_s":

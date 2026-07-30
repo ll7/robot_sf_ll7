@@ -52,6 +52,15 @@ CONTRACT_TEMPLATE_SCENARIO: dict = {
     "simulation_config": {"max_episode_steps": 30, "ped_density": 0.0},
     "metadata": {"archetype": "promotion_preflight_probe"},
     "seeds": [7],
+    "single_pedestrians": [
+        {
+            "id": CONTRACT_PEDESTRIAN_ID,
+            "start": [0.0, 0.0],
+            "goal": None,
+            "trajectory": [[0.0, 0.0], [1.0, 1.0]],
+            "speed_m_s": 1.0,
+        }
+    ],
 }
 
 

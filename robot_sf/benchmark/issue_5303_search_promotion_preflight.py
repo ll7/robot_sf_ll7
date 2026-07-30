@@ -23,9 +23,9 @@ search, and it does not authorize #6145.
 
 Status semantics (fail-closed on any structural gap):
 
-- ``blocked_no_pedestrian`` -- the search space declares no ``pedestrian.id``, so the timing
-  dimensions target no concrete pedestrian and the materialized scenario has no populated
-  pedestrian route or ``single_pedestrians`` entry.
+- ``blocked_no_pedestrian`` -- the search space declares no ``pedestrian.id``, the scenario
+  template does not expose the declared pedestrian identity, or the materialized payload lacks
+  a concrete pedestrian route or ``single_pedestrians`` entry.
 - ``blocked_missing_dimension`` -- a frozen promotion timing dimension is not declared in the
   search space.
 - ``blocked_inert_dimensions`` -- at least one timing dimension is metadata-only: perturbing it
@@ -61,9 +61,8 @@ from robot_sf.errors import RobotSfError
 #: Output-contract schema for this readiness surface.
 SCHEMA_VERSION = "issue-5303-search-promotion-preflight.v1"
 
-#: Fixed perturbation applied to one timing dimension at a time. The probe perturbs the
-#: candidate control directly (not via range sampling) to prove the materialization binds the
-#: value; it deliberately does not assert the perturbed value stays inside the declared range.
+#: Maximum perturbation applied to one timing dimension at a time. The probe clamps it to the
+#: declared range so readiness cannot be proven using a value the search space would never sample.
 PERTURBATION_DELTA_S = 1.0
 
 #: Per-dimension runtime field the materialized ``single_pedestrians`` entry must bind the
@@ -155,6 +154,18 @@ def _baseline_candidate(space: SearchSpaceConfig) -> CandidateSpec:
     )
 
 
+def _bounded_perturbed_value(value: float, lower: float, upper: float) -> float:
+    """Return a distinct in-range probe value when the declared range permits one."""
+    value = float(value)
+    lower = float(lower)
+    upper = float(upper)
+    if value < upper:
+        return min(upper, value + PERTURBATION_DELTA_S)
+    if value > lower:
+        return max(lower, value - PERTURBATION_DELTA_S)
+    return value
+
+
 def _single_pedestrian_by_id(
     scenario: dict[str, Any], pedestrian_id: str | None
 ) -> dict[str, Any] | None:
@@ -182,6 +193,68 @@ def _first_ped_route(route_payload: dict[str, Any]) -> dict[str, Any] | None:
     if isinstance(entries, list) and entries and isinstance(entries[0], dict):
         return entries[0]
     return None
+
+
+def _materialized_binding_status(
+    *,
+    template: dict[str, Any],
+    scenario: dict[str, Any],
+    route_payload: dict[str, Any],
+    pedestrian_id: str | None,
+) -> tuple[str | None, bool, bool, bool, list[str]]:
+    """Check that the materialized candidate has loader-bound pedestrian surfaces.
+
+    Returns:
+        tuple[str | None, bool, bool, bool, list[str]]: Materialized id, single-pedestrian
+        status, route status, template-binding status, and surfaced blockers.
+    """
+    template_bound_ped = _single_pedestrian_by_id(template, pedestrian_id)
+    bound_ped = _single_pedestrian_by_id(scenario, pedestrian_id)
+    first_route = _first_ped_route(route_payload)
+    materialized_id = (
+        str(bound_ped["id"]).strip()
+        if template_bound_ped and bound_ped and bound_ped.get("id")
+        else None
+    )
+    single_pedestrian_populated = (
+        bool(template_bound_ped) and bool(pedestrian_id) and materialized_id == pedestrian_id
+    )
+    pedestrian_route_populated = (
+        bool(template_bound_ped)
+        and bool(pedestrian_id)
+        and bool(first_route)
+        and str(first_route.get("id") or "").strip() == pedestrian_id
+    )
+
+    blockers: list[str] = []
+    if not pedestrian_id:
+        blockers.append(
+            "search space declares no pedestrian.id; the frozen timing dimensions target no "
+            "concrete pedestrian and the materialized scenario has no populated pedestrian "
+            "route or single_pedestrians entry"
+        )
+    elif template_bound_ped is None:
+        blockers.append(
+            f"scenario template has no single_pedestrians entry for pedestrian.id={pedestrian_id!r}; "
+            "the side-effect-free preflight does not load a map to infer an override target"
+        )
+    if pedestrian_id and not single_pedestrian_populated:
+        blockers.append(
+            "materialized scenario does not contain a loader-bound single_pedestrians entry "
+            f"for pedestrian.id={pedestrian_id!r}"
+        )
+    if pedestrian_id and not pedestrian_route_populated:
+        blockers.append(
+            "materialized route payload does not contain a pedestrian route bound to "
+            f"pedestrian.id={pedestrian_id!r}"
+        )
+    return (
+        materialized_id,
+        single_pedestrian_populated,
+        pedestrian_route_populated,
+        template_bound_ped is not None,
+        blockers,
+    )
 
 
 def _extract_bound_value(
@@ -248,8 +321,30 @@ def _probe_dimension(
             status="missing",
         )
 
+    timing_range = space.timing_dimension_range(name)
+    if timing_range is None:
+        # Keep this defensive branch aligned with the declared check above if the registry or
+        # config implementation changes between the two lookups.
+        return TimingDimensionProbe(
+            name=name,
+            bound_field=bound_field,
+            declared=False,
+            baseline_value=0.0,
+            perturbed_value=0.0,
+            baseline_hash=baseline_hash,
+            perturbed_hash=baseline_hash,
+            hash_changed=False,
+            bound_value=None,
+            bound_to_pedestrian=False,
+            status="missing",
+        )
+
     baseline_value = float(getattr(baseline, name))
-    perturbed_value = baseline_value + PERTURBATION_DELTA_S
+    perturbed_value = _bounded_perturbed_value(
+        baseline_value,
+        timing_range.min,
+        timing_range.max,
+    )
     perturbed = replace(baseline, **{name: perturbed_value})
     perturbed_scenario, perturbed_route = build_candidate_payload(
         perturbed,
@@ -307,7 +402,9 @@ def evaluate_preflight(
     Returns:
         Aggregate preflight with a fail-closed status and surfaced blockers.
     """
-    resolved_id = search_space.pedestrian_id if pedestrian_id is None else pedestrian_id
+    raw_resolved_id = search_space.pedestrian_id if pedestrian_id is None else pedestrian_id
+    resolved_id = str(raw_resolved_id).strip() if raw_resolved_id is not None else None
+    resolved_id = resolved_id or None
     template = dict(template_scenario)
     baseline = _baseline_candidate(search_space)
     baseline_scenario, baseline_route = build_candidate_payload(
@@ -317,22 +414,20 @@ def evaluate_preflight(
         pedestrian_id=resolved_id,
     )
     baseline_hash = compute_effective_scenario_hash(baseline_scenario, baseline_route)
-
-    bound_ped = _single_pedestrian_by_id(baseline_scenario, resolved_id)
-    first_route = _first_ped_route(baseline_route)
-    materialized_id = str(bound_ped["id"]) if bound_ped and bound_ped.get("id") else None
-    single_pedestrian_populated = bool(resolved_id) and materialized_id == resolved_id
-    pedestrian_route_populated = (
-        bool(resolved_id) and bool(first_route) and first_route.get("id") == resolved_id
+    (
+        materialized_id,
+        single_pedestrian_populated,
+        pedestrian_route_populated,
+        template_has_pedestrian,
+        blockers,
+    ) = _materialized_binding_status(
+        template=template,
+        scenario=baseline_scenario,
+        route_payload=baseline_route,
+        pedestrian_id=resolved_id,
     )
 
-    blockers: list[str] = []
-    if not resolved_id:
-        blockers.append(
-            "search space declares no pedestrian.id; the frozen timing dimensions target no "
-            "concrete pedestrian and the materialized scenario has no populated pedestrian "
-            "route or single_pedestrians entry"
-        )
+    probe_pedestrian_id = resolved_id if template_has_pedestrian else None
 
     dimensions = tuple(
         _probe_dimension(
@@ -341,7 +436,7 @@ def evaluate_preflight(
             baseline=baseline,
             baseline_hash=baseline_hash,
             template_scenario=template,
-            pedestrian_id=resolved_id,
+            pedestrian_id=probe_pedestrian_id,
             index=index,
         )
         for name in PROMOTION_TIMING_DIMENSIONS
@@ -360,11 +455,15 @@ def evaluate_preflight(
                 f"bound_to_pedestrian={probe.bound_to_pedestrian})"
             )
 
-    if not resolved_id:
+    if not resolved_id or not template_has_pedestrian:
         status = "blocked_no_pedestrian"
     elif any(probe.status == "missing" for probe in dimensions):
         status = "blocked_missing_dimension"
-    elif any(probe.status == "inert_metadata_only" for probe in dimensions):
+    elif (
+        any(probe.status == "inert_metadata_only" for probe in dimensions)
+        or not single_pedestrian_populated
+        or not pedestrian_route_populated
+    ):
         status = "blocked_inert_dimensions"
     else:
         status = "promotion_timing_ready"
@@ -396,9 +495,9 @@ def load_template_scenario(path: str | Path) -> dict[str, Any]:
         raise SearchPromotionPreflightError(f"scenario template not found: {template_path}")
     try:
         payload = yaml.safe_load(template_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
         raise SearchPromotionPreflightError(
-            f"scenario template is not valid YAML: {template_path}"
+            f"could not load scenario template {template_path}: {exc}"
         ) from exc
     if not isinstance(payload, dict):
         raise SearchPromotionPreflightError(f"scenario template must be a mapping: {template_path}")
@@ -427,7 +526,7 @@ def evaluate_preflight_from_files(
     """
     try:
         search_space = SearchSpaceConfig.from_file(search_space_path)
-    except (OSError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as exc:
         raise SearchPromotionPreflightError(
             f"could not load search space {search_space_path}: {exc}"
         ) from exc

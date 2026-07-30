@@ -734,7 +734,8 @@ def test_bundle_materializes_pedestrian_route_and_single_pedestrian_when_id_decl
     pedestrian = scenario["single_pedestrians"][0]
     assert pedestrian["id"] == "crossing_probe"
     assert pedestrian["start"] == [1.0, 2.0]
-    assert pedestrian["goal"] == [5.0, 2.0]
+    assert pedestrian["goal"] is None
+    assert pedestrian["trajectory"] == [[1.0, 2.0], [5.0, 2.0]]
     assert pedestrian["start_delay_s"] == pytest.approx(candidate.spawn_time_s)
     assert pedestrian["wait_at"][0]["wait_s"] == pytest.approx(candidate.pedestrian_delay_s)
 
@@ -813,6 +814,17 @@ def test_write_candidate_inputs_materializes_pedestrian_when_id_declared(tmp_pat
     template = tmp_path / "template.yaml"
     search_space = tmp_path / "space.yaml"
     _write_template(template)
+    template_payload = yaml.safe_load(template.read_text(encoding="utf-8"))
+    template_payload["scenarios"][0]["single_pedestrians"] = [
+        {
+            "id": "crossing_probe",
+            "start": [0.0, 0.0],
+            "goal": None,
+            "trajectory": [[0.0, 0.0], [1.0, 1.0]],
+            "speed_m_s": 1.0,
+        }
+    ]
+    template.write_text(yaml.safe_dump(template_payload, sort_keys=False), encoding="utf-8")
     search_space.write_text(
         yaml.safe_dump(
             {

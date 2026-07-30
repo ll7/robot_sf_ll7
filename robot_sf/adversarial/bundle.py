@@ -116,14 +116,25 @@ def _apply_candidate_to_scenario(
         replacement = {
             "id": pedestrian_id,
             "start": candidate.start.as_waypoint(),
-            "goal": candidate.goal.as_waypoint(),
+            # ``wait_at`` is a trajectory-only runtime control. Keep the generated override
+            # loader-valid even when the template entry previously used a goal-only behavior.
+            "goal": None,
+            "trajectory": [
+                candidate.start.as_waypoint(),
+                candidate.goal.as_waypoint(),
+            ],
             "speed_m_s": float(candidate.pedestrian_speed_mps),
             "start_delay_s": float(candidate.spawn_time_s),
             "wait_at": [{"waypoint_index": 0, "wait_s": float(candidate.pedestrian_delay_s)}],
         }
         for entry_index, entry in enumerate(entries):
-            if isinstance(entry, dict) and entry.get("id") == pedestrian_id:
+            if isinstance(entry, dict) and str(entry.get("id") or "").strip() == pedestrian_id:
                 merged = dict(entry)
+                # A template may carry a POI-based goal or trajectory. The generated candidate
+                # supplies explicit coordinates, so stale mutually-exclusive keys must not
+                # survive the merge and make the scenario loader reject the override.
+                merged.pop("goal_poi", None)
+                merged.pop("trajectory_poi", None)
                 merged.update(replacement)
                 entries[entry_index] = merged
                 break
@@ -207,15 +218,28 @@ def write_candidate_inputs(
     index: int,
 ) -> tuple[Path, Path]:
     """Write replayable scenario and route-override files for a candidate."""
+    template = _load_template(config.scenario_template)
+    pedestrian_id = config.search_space.pedestrian_id
+    if pedestrian_id:
+        template_entries = template["scenarios"][0].get("single_pedestrians")
+        has_target = isinstance(template_entries, list) and any(
+            isinstance(entry, Mapping) and str(entry.get("id") or "").strip() == pedestrian_id
+            for entry in template_entries
+        )
+        if not has_target:
+            raise ValueError(
+                f"search-space pedestrian.id={pedestrian_id!r} has no matching "
+                "single_pedestrians entry in the scenario template"
+            )
+
     candidate_dir.mkdir(parents=True, exist_ok=True)
     route_path = candidate_dir / "route_overrides.yaml"
     scenario_path = candidate_dir / "scenario.yaml"
-    template = _load_template(config.scenario_template)
     scenario, route_payload = build_candidate_payload(
         candidate,
         index=index,
         template_scenario=template["scenarios"][0],
-        pedestrian_id=config.search_space.pedestrian_id,
+        pedestrian_id=pedestrian_id,
         route_file_name=route_path.name,
     )
     route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")

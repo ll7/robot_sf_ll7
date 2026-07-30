@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -44,6 +45,33 @@ _MINIMAL_CATALOG = (
     "  freshness: maintained\n"
     "  area: workflow_evidence\n"
 )
+
+
+def test_evidence_package_reexports_shared_writer_api() -> None:
+    """The public evidence package exposes the shared writer API it advertises."""
+    from robot_sf import evidence
+    from robot_sf.evidence import writers
+
+    evidence = importlib.reload(evidence)
+    writer_exports = (
+        "REVIEW_SIDECAR_SCHEMA_VERSION",
+        "extract_marker_date",
+        "register_evidence",
+        "review_marker",
+        "review_marker_comment",
+        "review_marker_json",
+        "sha256_file",
+        "write_csv",
+        "write_distance_series_csv",
+        "write_json",
+        "write_review_sidecar",
+        "write_sha256sums",
+        "write_text",
+    )
+
+    for name in writer_exports:
+        assert getattr(evidence, name) is getattr(writers, name)
+        assert name in evidence.__all__
 
 
 def _init_fake_repo(tmp_path: Path) -> Path:

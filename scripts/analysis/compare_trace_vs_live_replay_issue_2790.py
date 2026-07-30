@@ -14,6 +14,8 @@ import pathlib
 import sys
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_TRACE_SUMMARY = (
     REPO_ROOT
@@ -338,15 +340,13 @@ def main() -> int:
 
     # Write summary.json
     summary_path = output_dir / "summary.json"
-    with open(summary_path, "w", encoding="utf-8") as fh:
-        json.dump(report, fh, indent=2)
+    write_json(summary_path, report)
     print(f"Wrote summary JSON: {summary_path}")
 
     # Write README.md
     markdown_report = render_markdown_report(report)
     readme_path = output_dir / "README.md"
-    with open(readme_path, "w", encoding="utf-8") as fh:
-        fh.write(markdown_report)
+    write_text(readme_path, markdown_report, issue_ref="robot_sf#2790")
     print(f"Wrote Markdown report: {readme_path}")
 
     return 0

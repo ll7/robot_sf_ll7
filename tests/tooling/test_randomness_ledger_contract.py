@@ -56,6 +56,9 @@ def test_schema_declares_stable_prototype_identifier(schema: dict) -> None:
 
     assert schema["$schema"] == PROTOTYPE_DRAFT
     assert schema["$id"] == PROTOTYPE_SCHEMA_ID
+    jsonschema.Draft7Validator.check_schema(schema)
+    assert "definitions" in schema
+    assert "$defs" not in schema
     schema_version = schema["properties"]["schema_version"]
     assert schema_version.get("const") == PROTOTYPE_SCHEMA_VERSION
 
@@ -65,7 +68,7 @@ def test_checked_in_fixture_is_valid(schema: dict, valid_ledger: dict) -> None:
 
     assert valid_ledger["schema_version"] == PROTOTYPE_SCHEMA_VERSION
     # Raises jsonschema.ValidationError on any contract violation; that is the proof.
-    jsonschema.validate(instance=valid_ledger, schema=schema)
+    jsonschema.Draft7Validator(schema).validate(valid_ledger)
 
 
 def test_fixture_directory_is_populated() -> None:
@@ -114,7 +117,7 @@ def test_required_malformed_ledgers_are_rejected(
     malform(invalid)
 
     with pytest.raises(jsonschema.ValidationError) as exc_info:
-        jsonschema.validate(instance=invalid, schema=schema)
+        jsonschema.Draft7Validator(schema).validate(invalid)
 
     detail = f"{exc_info.value.json_path}: {exc_info.value.message}"
     assert expected_field in detail, (

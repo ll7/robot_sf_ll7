@@ -24,16 +24,16 @@
             "description": "Discriminator marking this artifact as one episode randomness-ledger prototype sidecar."
         },
         "episode": {
-            "$ref": "#/$defs/episodeProvenance"
+            "$ref": "#/definitions/episodeProvenance"
         },
         "seed": {
-            "$ref": "#/$defs/seedProvenance"
+            "$ref": "#/definitions/seedProvenance"
         },
         "factors": {
             "type": "array",
             "minItems": 1,
             "items": {
-                "$ref": "#/$defs/factorEntry"
+                "$ref": "#/definitions/factorEntry"
             },
             "description": "One entry per named stochastic factor consumed during the episode. Ordering is producer-defined and not semantically meaningful for this prototype."
         },
@@ -45,7 +45,7 @@
             "description": "Optional free-form caveats or producer hints. Must not be used to smuggle causal claims."
         }
     },
-    "$defs": {
+    "definitions": {
         "episodeProvenance": {
             "type": "object",
             "additionalProperties": false,
@@ -111,7 +111,7 @@
                     "description": "Human-stable name of the stochastic factor (e.g. 'pedestrian_spawn_positions', 'robot_initial_pose', 'goal_choice')."
                 },
                 "stream_identity": {
-                    "$ref": "#/$defs/streamIdentity"
+                    "$ref": "#/definitions/streamIdentity"
                 },
                 "draw_count": {
                     "type": "integer",
@@ -121,7 +121,7 @@
                 "state_checkpoints": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/$defs/stateCheckpoint"
+                        "$ref": "#/definitions/stateCheckpoint"
                     },
                     "description": "Optional opaque stream-state checkpoints. Replay semantics are out of scope for this prototype."
                 }

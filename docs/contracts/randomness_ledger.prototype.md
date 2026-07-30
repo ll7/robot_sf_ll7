@@ -18,7 +18,8 @@ entry to episode and seed provenance.
 - Schema: [`randomness_ledger.prototype.schema.json`](randomness_ledger.prototype.schema.json)
   (JSON Schema draft-07), stable prototype identifier
   `https://robot-sf.dev/contracts/randomness_ledger.prototype.v1.json`, version string
-  `randomness_ledger.prototype.v1`.
+  `randomness_ledger.prototype.v1`. Reusable subschemas use the draft-07 `definitions`
+  keyword rather than the later `$defs` keyword for compatibility with draft-07 tooling.
 - Valid fixture: `tests/data/randomness_ledger/episode_seed_23.prototype.ledger.json`.
 - Contract tests: `tests/tooling/test_randomness_ledger_contract.py`.
 

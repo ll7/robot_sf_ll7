@@ -19,9 +19,14 @@ from datetime import (
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import multiprocessing as mp
     from collections.abc import Callable, Mapping
+    from pathlib import Path
+
+    import numpy as np
 
     from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile
+    from robot_sf.benchmark.observation_noise import ObservationNoiseState
 
 
 @dataclass(slots=True)
@@ -180,8 +185,8 @@ class NoiseConfig:
     """
 
     spec: dict[str, Any]
-    rng: Any | None = None
-    state: Any | None = None
+    rng: np.random.Generator | None = None
+    state: ObservationNoiseState | None = None
     stats: dict[str, int] | None = None
 
 
@@ -190,11 +195,12 @@ class MapBatchConfig:
     """Consolidated keyword arguments for ``run_map_batch``.
 
     Mirrors the keyword-only parameters of ``run_map_batch`` (excluding
-    ``batch_config`` itself and the ``scenario_path`` I/O argument), so a caller
-    can bundle and validate the batch configuration in one typed object before
-    passing it to the runner via ``run_map_batch(..., batch_config=cfg)``.
+    ``batch_config`` itself), so a caller can bundle and validate the batch
+    configuration in one typed object before passing it to the runner via
+    ``run_map_batch(..., batch_config=cfg)``.
     """
 
+    scenario_path: str | Path | None = None
     horizon: int | None = None
     dt: float | None = None
     record_forces: bool = True
@@ -220,7 +226,7 @@ class MapBatchConfig:
     cbf_safety_filter: dict[str, Any] | None = None
     record_planner_decision_trace: bool = False
     record_simulation_step_trace: bool = False
-    multiprocessing_context: Any | None = None
+    multiprocessing_context: mp.context.BaseContext | None = None
     workers: int = 1
     resume: bool = True
     circuit_breaker_threshold: int | None = None

@@ -25,6 +25,7 @@ except ModuleNotFoundError:  # pragma: no cover - local lightweight validation p
     sys.modules["torch"] = _torch_stub
 
 from robot_sf.benchmark import map_runner
+from robot_sf.benchmark.types import MapBatchConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -70,6 +71,28 @@ def test_baseline_safe_blocks_experimental_algo(tmp_path: Path, monkeypatch) -> 
             benchmark_profile="baseline-safe",
             resume=False,
         )
+
+
+def test_batch_config_forwards_scenario_path(tmp_path: Path, monkeypatch) -> None:
+    """The grouped batch config must carry every existing keyword-only input."""
+    _patch_lightweight_batch(monkeypatch)
+    scenario_path = tmp_path / "scenario-matrix.yaml"
+    observed_paths: list[Path] = []
+    monkeypatch.setattr(
+        map_runner,
+        "_suite_key",
+        lambda path: observed_paths.append(path) or "suite-config-test",
+    )
+
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        tmp_path / "episodes.jsonl",
+        schema_path=SCHEMA_PATH,
+        batch_config=MapBatchConfig(scenario_path=scenario_path, resume=False),
+    )
+
+    assert summary["written"] == 1
+    assert observed_paths == [scenario_path]
 
 
 def test_paper_baseline_requires_ppo_paper_gate(tmp_path: Path, monkeypatch) -> None:

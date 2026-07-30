@@ -2824,6 +2824,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         Summary payload with counts and failure details.
     """
     if batch_config is not None:
+        scenario_path = batch_config.scenario_path
         horizon = batch_config.horizon
         dt = batch_config.dt
         record_forces = batch_config.record_forces

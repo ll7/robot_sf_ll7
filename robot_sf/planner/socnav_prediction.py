@@ -348,6 +348,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
     def _raise_cached_error(self) -> None:
         """Re-raise cached predictive-model initialization error."""
+        # Load error must be cached before re-raise
         assert self._load_error is not None
         raise self._load_error
 
@@ -553,7 +554,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             self._record_foresight_constant_velocity_used()
             return self._constant_velocity_prediction(state, mask)
         runtime_torch = _socnav.torch
-        assert runtime_torch is not None
+        if runtime_torch is None:
+            raise RuntimeError(
+                "PyTorch is required for predictive model inference but is not available",
+            )
         with runtime_torch.no_grad():
             state_t = runtime_torch.from_numpy(state[None]).to(self._device)
             mask_t = runtime_torch.from_numpy(mask[None]).to(self._device)
@@ -571,6 +575,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             np.ndarray: Predicted trajectories ``(N, T, 2)`` in robot frame.
         """
+        # Baseline predictor must be initialized before prediction
         assert self._baseline_predictor is not None
         steps = max(1, int(self.config.predictive_horizon_steps))
         valid_indices = np.flatnonzero(mask > 0.5)

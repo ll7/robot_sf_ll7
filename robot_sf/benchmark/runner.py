@@ -1410,10 +1410,12 @@ def _create_baseline_planner_policy(
     metadata["config_hash"] = _config_hash(algo_config)
     metadata.setdefault("status", "ok")
     metadata["policy_step_timeout"] = timeout_metadata
-    metadata = enrich_algorithm_metadata(
-        algo=algo,
-        metadata=metadata,
-        execution_mode="native",
+    metadata.update(
+        enrich_algorithm_metadata(
+            algo=algo,
+            metadata=metadata,
+            execution_mode="native",
+        )
     )
 
     return policy_fn, metadata

@@ -1,0 +1,45 @@
+{
+    "schema_version": "randomness_ledger.prototype.v1",
+    "ledger_kind": "episode_randomness_sidecar",
+    "episode": {
+        "episode_id": "ep_seed_23_map_03_run_0",
+        "scenario_id": "map_03/crowded",
+        "recorded_at": "2026-07-30T12:00:00Z"
+    },
+    "seed": {
+        "master_seed": 23,
+        "seed_scheme": "numpy.default_rng",
+        "host": "imech036"
+    },
+    "factors": [
+        {
+            "factor_name": "pedestrian_spawn_positions",
+            "stream_identity": {
+                "stream_id": "rng/pedestrian/spawn",
+                "generator_kind": "numpy.default_rng",
+                "stream_seed": 23,
+                "offset": 0
+            },
+            "draw_count": 18
+        },
+        {
+            "factor_name": "robot_initial_pose",
+            "stream_identity": {
+                "stream_id": "rng/robot/initial_pose",
+                "generator_kind": "numpy.default_rng",
+                "stream_seed": 24,
+                "offset": 0
+            },
+            "draw_count": 3,
+            "state_checkpoints": [
+                {
+                    "at_step": 0,
+                    "state_token": "opaque-state-digest-0000"
+                }
+            ]
+        }
+    ],
+    "notes": [
+        "Prototype sidecar. Records seed-sensitivity provenance only; it is not causal-seed evidence. See parent design-gap issue #5617."
+    ]
+}

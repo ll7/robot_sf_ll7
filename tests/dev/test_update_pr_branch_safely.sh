@@ -332,7 +332,58 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 6. --help / bad flag rejected.
+# 6. -h / --help print usage and exit 0 without touching GitHub; unknown flags
+# are still rejected. A deliberately failing stub keeps these checks offline and
+# proves the help branch exits before repository resolution.
+cat > "${MOCK_DIR}/gh" <<'EOF'
+#!/usr/bin/env bash
+echo "gh mock: help must not invoke gh ($*)" >&2
+exit 99
+EOF
+chmod +x "${MOCK_DIR}/gh"
+
+RC=0
+HELP_STDOUT="${MOCK_DIR}/help.stdout"
+HELP_STDERR="${MOCK_DIR}/help.stderr"
+PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --help >"$HELP_STDOUT" 2>"$HELP_STDERR" || RC=$?
+assert_ok "--help exits 0" "$RC"
+OUT="$(<"$HELP_STDOUT")"
+if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
+  echo "PASS: --help prints usage and option text"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: --help did not print usage and option text"
+  FAIL=$((FAIL + 1))
+fi
+if [[ ! -s "$HELP_STDERR" ]]; then
+  echo "PASS: --help writes help text to stdout"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: --help unexpectedly writes to stderr"
+  FAIL=$((FAIL + 1))
+fi
+
+RC=0
+HELP_STDOUT="${MOCK_DIR}/short-help.stdout"
+HELP_STDERR="${MOCK_DIR}/short-help.stderr"
+PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" -h >"$HELP_STDOUT" 2>"$HELP_STDERR" || RC=$?
+assert_ok "-h exits 0" "$RC"
+OUT="$(<"$HELP_STDOUT")"
+if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
+  echo "PASS: -h prints usage and option text"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: -h did not print usage and option text"
+  FAIL=$((FAIL + 1))
+fi
+if [[ ! -s "$HELP_STDERR" ]]; then
+  echo "PASS: -h writes help text to stdout"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: -h unexpectedly writes to stderr"
+  FAIL=$((FAIL + 1))
+fi
+
 RC=0
 bash "$SCRIPT" --bogus 2>/dev/null || RC=$?
 assert_fail "unknown flag rejected" "$RC"

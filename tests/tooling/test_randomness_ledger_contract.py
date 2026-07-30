@@ -29,6 +29,7 @@ FIXTURE_PATH = FIXTURE_DIR / "episode_seed_23.prototype.ledger.json"
 PROTOTYPE_SCHEMA_VERSION = "randomness_ledger.prototype.v1"
 PROTOTYPE_SCHEMA_ID = "https://robot-sf.dev/contracts/randomness_ledger.prototype.v1.json"
 PROTOTYPE_DRAFT = "http://json-schema.org/draft-07/schema#"
+FORMAT_CHECKER = jsonschema.FormatChecker()
 
 
 def _load_json(path: Path) -> dict:
@@ -51,6 +52,13 @@ def valid_ledger() -> dict:
     return _load_json(FIXTURE_PATH)
 
 
+@pytest.fixture(scope="module")
+def validator(schema: dict) -> jsonschema.Draft7Validator:
+    """Build the draft-07 validator with format assertions enabled."""
+
+    return jsonschema.Draft7Validator(schema, format_checker=FORMAT_CHECKER)
+
+
 def test_schema_declares_stable_prototype_identifier(schema: dict) -> None:
     """The prototype must declare a stable, versioned draft-07 identifier."""
 
@@ -63,12 +71,20 @@ def test_schema_declares_stable_prototype_identifier(schema: dict) -> None:
     assert schema_version.get("const") == PROTOTYPE_SCHEMA_VERSION
 
 
-def test_checked_in_fixture_is_valid(schema: dict, valid_ledger: dict) -> None:
-    """The checked-in fixture must validate against the prototype schema and self-identify."""
+def test_checked_in_fixture_is_valid(
+    validator: jsonschema.Draft7Validator,
+    valid_ledger: dict,
+) -> None:
+    """The fixture must validate, self-identify, and enforce its timestamp format."""
 
     assert valid_ledger["schema_version"] == PROTOTYPE_SCHEMA_VERSION
     # Raises jsonschema.ValidationError on any contract violation; that is the proof.
-    jsonschema.Draft7Validator(schema).validate(valid_ledger)
+    validator.validate(valid_ledger)
+
+    invalid_timestamp = copy.deepcopy(valid_ledger)
+    invalid_timestamp["episode"]["recorded_at"] = "not-an-iso-8601-timestamp"
+    with pytest.raises(jsonschema.ValidationError, match="is not a 'date-time'"):
+        validator.validate(invalid_timestamp)
 
 
 def test_fixture_directory_is_populated() -> None:
@@ -101,7 +117,7 @@ def test_fixture_directory_is_populated() -> None:
     ],
 )
 def test_required_malformed_ledgers_are_rejected(
-    schema: dict,
+    validator: jsonschema.Draft7Validator,
     valid_ledger: dict,
     malform: Callable[[dict], object],
     expected_field: str,
@@ -117,7 +133,7 @@ def test_required_malformed_ledgers_are_rejected(
     malform(invalid)
 
     with pytest.raises(jsonschema.ValidationError) as exc_info:
-        jsonschema.Draft7Validator(schema).validate(invalid)
+        validator.validate(invalid)
 
     detail = f"{exc_info.value.json_path}: {exc_info.value.message}"
     assert expected_field in detail, (

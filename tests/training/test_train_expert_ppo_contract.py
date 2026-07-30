@@ -691,8 +691,8 @@ def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path
     assert progress_messages[-1].startswith("PPO evaluation progress step=60000 episode=12/12")
 
 
-def test_dry_run_manifest_records_config_sha256(tmp_path, monkeypatch) -> None:
-    """Dry-run manifest notes should include config_sha256 for integrity checking."""
+def test_main_dry_run_manifest_records_config_sha256(tmp_path, monkeypatch) -> None:
+    """The CLI should hash the config bytes and persist that hash in dry-run notes."""
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
 
     scenario_file = tmp_path / "scenarios.yaml"
@@ -734,14 +734,49 @@ def test_dry_run_manifest_records_config_sha256(tmp_path, monkeypatch) -> None:
     config_file.write_text("policy_id: ppo_config_sha256_test\n", encoding="utf-8")
     expected_hash = hashlib.sha256(config_file.read_bytes()).hexdigest()
 
-    result = train_ppo.run_expert_training(
-        config,
-        config_path=config_file,
-        config_sha256=expected_hash,
-        dry_run=True,
+    loaded_paths: list[Path] = []
+
+    def _load_config(path: Path) -> ExpertTrainingConfig:
+        loaded_paths.append(path)
+        return config
+
+    manifest_paths: list[Path] = []
+    write_manifest = train_ppo.write_training_run_manifest
+
+    def _write_manifest(artifact) -> Path:
+        path = write_manifest(artifact)
+        manifest_paths.append(path)
+        return path
+
+    log_calls: list[tuple[str, tuple[object, ...]]] = []
+    logger_info = train_ppo.logger.info
+
+    def _capture_info(message: str, *args: object, **kwargs: object) -> None:
+        if message == "Resolved config SHA-256: {}":
+            log_calls.append((message, args))
+        logger_info(message, *args, **kwargs)
+
+    monkeypatch.setattr(train_ppo, "load_expert_training_config", _load_config)
+    monkeypatch.setattr(train_ppo, "write_training_run_manifest", _write_manifest)
+    monkeypatch.setattr(train_ppo.logger, "info", _capture_info)
+
+    assert (
+        train_ppo.main(
+            [
+                "--config",
+                str(config_file),
+                "--dry-run",
+                "--log-level",
+                "INFO",
+            ]
+        )
+        == 0
     )
 
-    run_manifest = json.loads(result.training_run_manifest_path.read_text(encoding="utf-8"))
+    assert loaded_paths == [config_file.resolve()]
+    assert log_calls == [("Resolved config SHA-256: {}", (expected_hash,))]
+    assert len(manifest_paths) == 1
+    run_manifest = json.loads(manifest_paths[0].read_text(encoding="utf-8"))
     run_notes = run_manifest.get("notes", [])
     assert f"config_sha256={expected_hash}" in run_notes, (
         f"Expected config_sha256 in run manifest notes, got: {run_notes}"

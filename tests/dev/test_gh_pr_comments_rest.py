@@ -69,6 +69,26 @@ def test_fetch_pr_header_uses_rest_issues_endpoint_and_normalizes() -> None:
     assert mock_api.call_args.args[0] == "repos/ll7/robot_sf_ll7/issues/6454"
 
 
+def test_fetch_pr_header_rejects_an_issue_payload() -> None:
+    """The PR reader must not silently read comments from a non-PR issue."""
+    raw_header = _raw_pr_header()
+    raw_header.pop("pull_request")
+    with patch("scripts.dev.gh_pr_comments_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(raw_header))
+        result = fetch_pr_header(6454)
+    assert result["status"] == "error"
+    assert "not a pull request" in result["error"]
+
+
+def test_fetch_pr_header_rejects_non_positive_number() -> None:
+    """Invalid PR numbers must fail before making a REST request."""
+    with patch("scripts.dev.gh_pr_comments_rest._gh_api") as mock_api:
+        result = fetch_pr_header(0)
+    assert result["status"] == "error"
+    assert "must be positive" in result["error"]
+    mock_api.assert_not_called()
+
+
 def test_fetch_pr_comments_uses_rest_issues_comments_endpoint() -> None:
     """Comments read must use ``repos/{repo}/issues/{n}/comments`` for PRs."""
     with patch("scripts.dev.gh_pr_comments_rest._gh_api") as mock_api:
@@ -169,7 +189,7 @@ def test_fetch_pr_with_comments_propagates_comments_error() -> None:
 
 def test_fetch_pr_comments_paginates_until_short_page() -> None:
     """Comments should paginate by page size and stop on a short final page."""
-    full_page = [_raw_comment(cid=i) for i in range(COMMENTS_PAGE_SIZE)]
+    full_page = [_raw_comment(cid=i) for i in range(1, COMMENTS_PAGE_SIZE + 1)]
     short_page = [_raw_comment(cid=COMMENTS_PAGE_SIZE + 1)]
     with patch("scripts.dev.gh_pr_comments_rest._gh_api") as mock_api:
         mock_api.side_effect = [
@@ -185,7 +205,7 @@ def test_fetch_pr_comments_paginates_until_short_page() -> None:
 
 def test_fetch_pr_comments_fails_closed_when_page_budget_exceeded() -> None:
     """A full last page must fail closed rather than silently truncate."""
-    full_page = [_raw_comment(cid=i) for i in range(COMMENTS_PAGE_SIZE)]
+    full_page = [_raw_comment(cid=i) for i in range(1, COMMENTS_PAGE_SIZE + 1)]
     with patch("scripts.dev.gh_pr_comments_rest._gh_api") as mock_api:
         mock_api.return_value = _proc(stdout=json.dumps(full_page))
         result = fetch_pr_comments(6454, max_pages=1)
@@ -221,6 +241,15 @@ def test_fetch_pr_comments_fails_closed_on_non_list_payload() -> None:
         result = fetch_pr_comments(6454)
     assert result["status"] == "error"
     assert "was not a list" in result["error"]
+
+
+def test_fetch_pr_comments_fails_closed_on_malformed_entry() -> None:
+    """A malformed comment entry must not be silently dropped from the thread."""
+    with patch("scripts.dev.gh_pr_comments_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps([{"id": "not-a-number"}]))
+        result = fetch_pr_comments(6454)
+    assert result["status"] == "error"
+    assert "is malformed" in result["error"]
 
 
 def test_fetch_pr_comments_rejects_non_positive_number() -> None:

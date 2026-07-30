@@ -15,6 +15,7 @@ Usage:
 Notes:
   - If --body-file is omitted, comment body is read from stdin.
   - Prefer heredoc stdin for multiline comments to avoid literal "\n" escapes.
+  - PR comments use the REST issues-comments endpoint; no GraphQL PR comment lookup is required.
 EOF
 }
 
@@ -91,11 +92,21 @@ if [ "$target_type" = "issue" ] && [ "$use_current_pr" = true ]; then
 fi
 
 if [ "$use_current_pr" = true ]; then
-  repo_flag=()
-  if [ -n "$repo_arg" ]; then
-    repo_flag=(--repo "$repo_arg")
+  branch_name="$(git branch --show-current)"
+  if [ -z "$branch_name" ]; then
+    echo "Error: could not resolve the current branch for --current." >&2
+    exit 1
   fi
-  target_id="$(gh pr view "${repo_flag[@]}" --json number --jq .number)"
+  api_repo="{owner}/{repo}"
+  head_owner="{owner}"
+  if [ -n "$repo_arg" ]; then
+    api_repo="$repo_arg"
+    head_owner="${repo_arg%%/*}"
+  fi
+  if ! target_id="$(gh api "repos/$api_repo/pulls?state=open&head=$head_owner:$branch_name&per_page=100" --jq '.[0].number // empty')"; then
+    echo "Error: could not resolve an open PR for branch '$branch_name'." >&2
+    exit 1
+  fi
 fi
 
 if [ -z "$target_id" ]; then
@@ -120,13 +131,21 @@ if [ ! -s "$body_file" ]; then
   exit 2
 fi
 
-repo_flag=()
-if [ -n "$repo_arg" ]; then
-  repo_flag=(--repo "$repo_arg")
-fi
-
 if [ "$target_type" = "pr" ]; then
-  gh pr comment "$target_id" "${repo_flag[@]}" --body-file "$body_file"
+  api_repo="{owner}/{repo}"
+  if [ -n "$repo_arg" ]; then
+    api_repo="$repo_arg"
+  fi
+  if ! gh api "repos/$api_repo/pulls/$target_id" --silent; then
+    echo "Error: PR '$target_id' could not be resolved through the REST API." >&2
+    exit 1
+  fi
+  gh api --method POST "repos/$api_repo/issues/$target_id/comments" \
+    -F "body=@$body_file"
 else
+  repo_flag=()
+  if [ -n "$repo_arg" ]; then
+    repo_flag=(--repo "$repo_arg")
+  fi
   gh issue comment "$target_id" "${repo_flag[@]}" --body-file "$body_file"
 fi

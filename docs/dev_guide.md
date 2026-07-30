@@ -704,7 +704,7 @@ For GitHub issue batches and Project #5 updates, follow the batch-first workflow
   remote branch deletion reporting a missing ref after merge as a cleanup caveat to record, not as
   evidence that the merge failed; verify the merged PR or base branch SHA instead.
 
-#### PR labels and conversation comments (REST-backed)
+#### PR labels, conversation comments, and publication (REST-backed)
 
 On affected GitHub CLI versions, `gh pr edit <number> --add-label <label>` and
 `gh pr view <number> --comments` fail inside the GraphQL client with the retired
@@ -724,6 +724,10 @@ uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
 # (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
 uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7
 uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7 --plain
+
+# publish a PR conversation comment without the GraphQL `gh pr comment` path
+scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
+scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
 ```
 
 The label helper covers `merge-ready` add/remove (and any PR or issue label)
@@ -732,13 +736,17 @@ label endpoint. The comment helper reads the conversation thread through
 `repos/{repo}/issues/{number}/comments` (GitHub treats PR numbers as issue
 numbers), returning the PR header plus the same conversation-level comments
 `gh pr view --comments` would show. Inline review comments
-(`pulls/{number}/comments`) are intentionally out of scope. Read-only PR header
-fields still use `gh pr view <number> --json ...`; only the label-edit and
-`--comments` paths hit the deprecated field. The PR-review and guarded-merger
-skills (`goal-pr-review`, `gh-pr-merger`) reference these helpers for label and
-comment operations, and both fail closed on auth, malformed, or truncated
-payloads. Focused offline tests live in
-`tests/dev/test_gh_pr_label_rest.py` and `tests/dev/test_gh_pr_comments_rest.py`.
+(`pulls/{number}/comments`) are intentionally out of scope. The existing
+`gh_comment.sh pr` wrapper resolves an explicit or current PR through REST and
+posts the body file to `issues/{number}/comments`, so it does not require a
+GraphQL PR-comment lookup. Read-only PR header fields still use `gh pr view
+<number> --json ...`; only the label-edit and `--comments` paths hit the
+deprecated field. The PR-review and guarded-merger skills (`goal-pr-review`,
+`gh-pr-merger`) reference these helpers for label, read, and publication
+operations, and the REST reads fail closed on auth, malformed, or truncated
+payloads. Focused offline tests live in `tests/dev/test_gh_pr_label_rest.py`
+and `tests/dev/test_gh_pr_comments_rest.py`; the production comment wrapper is
+covered by `tests/test_ci_script_contract.py`.
 
 ### REST-first publication snippets for low-GraphQL autopilot
 

@@ -95,10 +95,25 @@ def _as_str(raw: Any) -> str:
 
 def _normalize_comment(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalize a raw REST comment payload to the stable output shape."""
+    if not isinstance(raw, dict):
+        raise ValueError("comment payload entry was not an object")
+    raw_id = raw.get("id")
+    if isinstance(raw_id, bool) or raw_id is None:
+        raise ValueError("comment payload entry has no numeric id")
+    try:
+        comment_id = int(raw_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"comment payload entry has invalid id {raw_id!r}") from exc
+    if comment_id < 1:
+        raise ValueError(f"comment payload entry has invalid id {comment_id}")
+    if not isinstance(raw.get("body"), str):
+        raise ValueError("comment payload entry has no string body")
     user = raw.get("user") or {}
+    if not isinstance(user, dict):
+        raise ValueError("comment payload entry has an invalid user object")
     return {
-        "id": int(raw.get("id", 0)),
-        "user": _as_str(user.get("login") if isinstance(user, dict) else ""),
+        "id": comment_id,
+        "user": _as_str(user.get("login")),
         "author_association": _as_str(raw.get("author_association")),
         "created_at": _as_str(raw.get("created_at")),
         "updated_at": _as_str(raw.get("updated_at")),
@@ -109,10 +124,18 @@ def _normalize_comment(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_pr_header(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalize the issue-shaped PR header to a compact title/state/url view."""
+    if not isinstance(raw.get("pull_request"), dict):
+        raise ValueError("REST payload was not a pull request")
+    if not isinstance(raw.get("title"), str) or not raw["title"]:
+        raise ValueError("PR header payload has no title")
+    if not isinstance(raw.get("state"), str) or not raw["state"]:
+        raise ValueError("PR header payload has no state")
+    if not isinstance(raw.get("html_url"), str) or not raw["html_url"]:
+        raise ValueError("PR header payload has no html_url")
     return {
-        "title": _as_str(raw.get("title")),
-        "state": _as_str(raw.get("state")).upper(),
-        "url": _as_str(raw.get("html_url", raw.get("url", ""))),
+        "title": raw["title"],
+        "state": raw["state"].upper(),
+        "url": raw["html_url"],
     }
 
 
@@ -123,6 +146,8 @@ def fetch_pr_header(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     treats a PR number as an issue number. Returns ``{"status": "ok", ...}`` on
     success or ``{"status": "error", "error": ...}`` on failure.
     """
+    if number < 1:
+        return {"status": "error", "error": f"PR number must be positive, got {number}"}
     result = _gh_api(f"repos/{repo}/issues/{number}")
     data, error = _parse_json(result, what=f"PR {number} header")
     if error:
@@ -132,7 +157,10 @@ def fetch_pr_header(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
             "status": "error",
             "error": f"PR {number} header payload was not an object",
         }
-    payload = _normalize_pr_header(data)
+    try:
+        payload = _normalize_pr_header(data)
+    except ValueError as exc:
+        return {"status": "error", "error": f"PR {number} header payload is malformed: {exc}"}
     payload["status"] = "ok"
     return payload
 
@@ -168,7 +196,13 @@ def fetch_pr_comments(
                 "status": "error",
                 "error": f"comments payload for PR {number} page {page} was not a list",
             }
-        page_items = [_normalize_comment(item) for item in data if isinstance(item, dict)]
+        try:
+            page_items = [_normalize_comment(item) for item in data]
+        except ValueError as exc:
+            return {
+                "status": "error",
+                "error": f"comments payload for PR {number} page {page} is malformed: {exc}",
+            }
         comments.extend(page_items)
         if len(page_items) < COMMENTS_PAGE_SIZE:
             return {"status": "ok", "comments": comments}

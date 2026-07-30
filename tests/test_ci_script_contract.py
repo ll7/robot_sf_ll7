@@ -1398,6 +1398,103 @@ def test_gh_comment_invalid_target_exits_2() -> None:
     assert "Usage:" in result.stdout
 
 
+def test_gh_comment_pr_uses_rest_api(tmp_path: Path) -> None:
+    """PR comment publication must use REST validation and issue comments, not ``gh pr comment``."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        "printf '%s\\n' '{\"id\": 1, \"number\": 6529}'\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST comment body\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "pr",
+            "6529",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert call_lines[0].startswith("api repos/ll7/robot_sf_ll7/pulls/6529")
+    assert "api --method POST repos/ll7/robot_sf_ll7/issues/6529/comments" in call_lines[1]
+    assert "-F body=@" in call_lines[1]
+    assert all("pr comment" not in call for call in call_lines)
+
+
+def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
+    """``--current`` must find the branch PR through REST instead of ``gh pr view``."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        'if [[ "$*" == *state=open* ]]; then\n'
+        "  printf '%s\\n' '6529'\n"
+        "else\n"
+        "  printf '%s\\n' '{\"id\": 1, \"number\": 6529}'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST current comment\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "pr",
+            "--current",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert len(call_lines) == 3
+    assert "pulls?state=open&head=ll7:" in call_lines[0]
+    assert "pulls/6529" in call_lines[1]
+    assert "issues/6529/comments" in call_lines[2]
+    assert all("gh pr" not in call for call in call_lines)
+
+
 # Help-behaviour contract tests.
 
 HELP_COVERED_SCRIPTS = [

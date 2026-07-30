@@ -140,6 +140,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             float: Minimum obstacle distance in meters, ``0.0`` when occupied.
         """
         if grid_payload is None:
+            # Observation required when grid_payload not provided
             assert observation is not None
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:

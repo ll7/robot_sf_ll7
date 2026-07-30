@@ -14,6 +14,10 @@ import numpy as np
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
+_DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
+_DEFAULT_MAX_ANGULAR_SPEED = 1.2
+_DEFAULT_MAX_LINEAR_SPEED = 1.2
+
 
 def _wrap_angle_batch(angle: np.ndarray) -> np.ndarray:
     """Batched angle wrapping to ``[-pi, pi)`` (numpy equivalent of ``_wrap_angle``).
@@ -29,8 +33,8 @@ class MPPISocialConfig:
     """Configuration for :class:`MPPISocialPlannerAdapter`."""
 
     random_seed: int = 42
-    max_linear_speed: float = 1.2
-    max_angular_speed: float = 1.2
+    max_linear_speed: float = _DEFAULT_MAX_LINEAR_SPEED
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
 
     horizon_steps: int = 10
     rollout_dt: float = 0.2
@@ -48,7 +52,7 @@ class MPPISocialConfig:
     near_field_speed_cap: float = 0.55
     density_norm_count: float = 8.0
 
-    goal_progress_weight: float = 4.0
+    goal_progress_weight: float = _DEFAULT_GOAL_PROGRESS_WEIGHT
     heading_weight: float = 1.0
     clearance_weight: float = 2.0
     obstacle_weight: float = 1.4
@@ -147,6 +151,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             float: Approximate obstacle clearance in meters, ``inf`` when unknown.
         """
         if grid_payload is None:
+            # Observation required when grid_payload not provided
             assert observation is not None
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:
@@ -470,8 +475,8 @@ def build_mppi_social_config(cfg: dict[str, Any] | None) -> MPPISocialConfig:
         return MPPISocialConfig()
     return MPPISocialConfig(
         random_seed=int(cfg.get("random_seed", 42)),
-        max_linear_speed=float(cfg.get("max_linear_speed", 1.2)),
-        max_angular_speed=float(cfg.get("max_angular_speed", 1.2)),
+        max_linear_speed=float(cfg.get("max_linear_speed", _DEFAULT_MAX_LINEAR_SPEED)),
+        max_angular_speed=float(cfg.get("max_angular_speed", _DEFAULT_MAX_ANGULAR_SPEED)),
         horizon_steps=int(cfg.get("horizon_steps", 10)),
         rollout_dt=float(cfg.get("rollout_dt", 0.2)),
         sample_count=int(cfg.get("sample_count", 96)),
@@ -485,7 +490,7 @@ def build_mppi_social_config(cfg: dict[str, Any] | None) -> MPPISocialConfig:
         near_field_distance=float(cfg.get("near_field_distance", 2.5)),
         near_field_speed_cap=float(cfg.get("near_field_speed_cap", 0.55)),
         density_norm_count=float(cfg.get("density_norm_count", 8.0)),
-        goal_progress_weight=float(cfg.get("goal_progress_weight", 4.0)),
+        goal_progress_weight=float(cfg.get("goal_progress_weight", _DEFAULT_GOAL_PROGRESS_WEIGHT)),
         heading_weight=float(cfg.get("heading_weight", 1.0)),
         clearance_weight=float(cfg.get("clearance_weight", 2.0)),
         obstacle_weight=float(cfg.get("obstacle_weight", 1.4)),

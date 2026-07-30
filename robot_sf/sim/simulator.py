@@ -38,6 +38,8 @@ from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
     from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
     from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
@@ -250,6 +252,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
     config: SimulationSettings,
     map_def: MapDefinition,
     robots: list[Robot],
+    robot_pose_provider: Callable[[], list[RobotPose]],
     peds_have_obstacle_forces: bool,
     add_ego_state: bool = False,
     include_response_law_multipliers: bool = True,
@@ -293,6 +296,10 @@ def _build_pysf_simulation(  # noqa: PLR0913
         config: Simulation settings (timestep, density, forces, response-law knobs).
         map_def: Map definition with obstacles, spawn zones, and routes.
         robots: Active robots used for interaction forces and reserved-zone sizing.
+        robot_pose_provider: Dynamic provider for the caller's current robot poses.
+            Keeping this callback separate from ``robots`` preserves the original
+            ``lambda: self.robot_poses`` behavior if the public robot collection is
+            replaced after construction.
         peds_have_obstacle_forces: Resolved flag controlling whether pedestrians
             experience obstacle collision forces. Callers must run the
             ``None``-warning guard (:class:`Simulator`) before calling.
@@ -348,7 +355,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
     )
     for behavior in peds_behaviors:
         if isinstance(behavior, SinglePedestrianBehavior):
-            behavior.set_robot_pose_provider(lambda: [robot.pose for robot in robots])
+            behavior.set_robot_pose_provider(robot_pose_provider)
 
     if include_response_law_multipliers:
         num_peds = pysf_state.pysf_states().shape[0]
@@ -450,6 +457,7 @@ class Simulator:
             config=self.config,
             map_def=self.map_def,
             robots=self.robots,
+            robot_pose_provider=lambda: self.robot_poses,
             peds_have_obstacle_forces=self.peds_have_obstacle_forces,
             add_ego_state=False,
             include_response_law_multipliers=True,
@@ -873,6 +881,7 @@ class PedSimulator(Simulator):
             config=self.config,
             map_def=self.map_def,
             robots=self.robots,
+            robot_pose_provider=lambda: self.robot_poses,
             peds_have_obstacle_forces=self.peds_have_obstacle_forces,
             add_ego_state=True,
             include_response_law_multipliers=False,

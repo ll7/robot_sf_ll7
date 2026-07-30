@@ -15,7 +15,12 @@ import numpy as np
 from robot_sf.common.types import Line2D, Rect
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
+from robot_sf.nav.map_config import (
+    MapDefinition,
+    MapDefinitionPool,
+    SinglePedestrianDefinition,
+)
+from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import (
     _compute_pedestrian_response_multipliers,
@@ -105,7 +110,9 @@ def test_control_trace_labels_take_precedence_over_composition() -> None:
     np.testing.assert_allclose(multipliers, [1.0, 0.75, 1.0])
 
 
-def _minimal_map() -> MapDefinition:
+def _minimal_map(
+    *, single_pedestrians: list[SinglePedestrianDefinition] | None = None
+) -> MapDefinition:
     """Build a compact map with one deterministic robot route (mirrors sim tests)."""
     width = 10.0
     height = 10.0
@@ -136,7 +143,7 @@ def _minimal_map() -> MapDefinition:
         ped_goal_zones=[goal_zone],
         ped_crowded_zones=[],
         ped_routes=[route],
-        single_pedestrians=[],
+        single_pedestrians=single_pedestrians or [],
     )
 
 
@@ -176,6 +183,36 @@ def test_ped_simulator_keeps_none_response_multipliers() -> None:
     )[0]
 
     assert simulator.pedestrian_response_multipliers is None
+
+
+def test_single_pedestrian_provider_tracks_replaced_robot_collection() -> None:
+    """The extracted factory must preserve the dynamic ``self.robot_poses`` callback."""
+    map_def = _minimal_map(
+        single_pedestrians=[
+            SinglePedestrianDefinition(
+                id="scripted",
+                start=(3.0, 3.0),
+                trajectory=[(4.0, 3.0)],
+            )
+        ]
+    )
+    simulator = init_simulators(
+        _zero_ped_sim_config(map_def),
+        map_def,
+        num_robots=1,
+        random_start_pos=False,
+        peds_have_obstacle_forces=True,
+    )[0]
+    behavior = next(
+        behavior
+        for behavior in simulator.peds_behaviors
+        if isinstance(behavior, SinglePedestrianBehavior)
+    )
+    replacement_pose = ((7.0, 8.0), 1.25)
+    simulator.robots = [SimpleNamespace(pose=replacement_pose)]  # type: ignore[list-item]
+
+    assert behavior.robot_pose_provider is not None
+    assert behavior.robot_pose_provider() == [replacement_pose]
 
 
 def test_simulator_defaults_obstacle_forces_to_false_when_unset() -> None:

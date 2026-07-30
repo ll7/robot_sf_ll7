@@ -1,5 +1,8 @@
 """Tests for the release evidence snapshot gate."""
 
+# evidence-writer-exempt: tests intentionally write malformed, checksum-mismatched,
+# and unmarked files inside throwaway tmp_path repositories to prove fail-closed validation.
+
 from __future__ import annotations
 
 import hashlib

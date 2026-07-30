@@ -1297,29 +1297,6 @@ def _build_baseline_policy_fn(
     return policy_fn
 
 
-def _finalize_baseline_policy_metadata(
-    *,
-    algo: str,
-    metadata: dict[str, Any],
-    algo_config: dict[str, Any],
-    timeout_metadata: dict[str, Any],
-) -> None:
-    """Finalize baseline metadata while preserving the policy closure's live mapping."""
-    metadata.setdefault("algorithm", algo)
-    metadata["config"] = algo_config
-    metadata["config_hash"] = _config_hash(algo_config)
-    metadata.setdefault("status", "ok")
-    metadata["policy_step_timeout"] = timeout_metadata
-    # Keep the original mapping so step-time fallback updates remain observable.
-    metadata.update(
-        enrich_algorithm_metadata(
-            algo=algo,
-            metadata=metadata,
-            execution_mode="native",
-        )
-    )
-
-
 def _create_simple_policy(algo: str):
     """Create a simple goal-directed policy.
 
@@ -1428,11 +1405,18 @@ def _create_baseline_planner_policy(
     # diagnostics must be read from the IPC relay instead.
     if step_runner is not None and callable(getattr(planner, "foresight_diagnostics", None)):
         policy_fn.foresight_diagnostics = step_runner.foresight_diagnostics  # type: ignore[attr-defined]
-    _finalize_baseline_policy_metadata(
-        algo=algo,
-        metadata=metadata,
-        algo_config=algo_config,
-        timeout_metadata=timeout_metadata,
+    metadata.setdefault("algorithm", algo)
+    metadata["config"] = algo_config
+    metadata["config_hash"] = _config_hash(algo_config)
+    metadata.setdefault("status", "ok")
+    metadata["policy_step_timeout"] = timeout_metadata
+    # Preserve this mapping so policy-step fallback updates remain observable.
+    metadata.update(
+        enrich_algorithm_metadata(
+            algo=algo,
+            metadata=metadata,
+            execution_mode="native",
+        )
     )
 
     return policy_fn, metadata

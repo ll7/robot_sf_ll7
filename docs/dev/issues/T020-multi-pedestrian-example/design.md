@@ -28,6 +28,6 @@ Demonstrate and validate the ability to spawn and simulate multiple single pedes
 - Add visualization or video output for demo.
 
 ## Related Links
-- [example_multi_pedestrian.py](../../../examples/example_multi_pedestrian.py)
-- [test_multi_pedestrian.py](../../../tests/test_multi_pedestrian.py)
-- [docs/README.md](../../../docs/README.md)
+- [example_multi_pedestrian.py](../../../../examples/example_multi_pedestrian.py)
+- [test_multi_pedestrian.py](../../../../tests/test_multi_pedestrian.py)
+- [docs/README.md](../../../../docs/README.md)

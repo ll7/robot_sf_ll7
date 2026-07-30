@@ -417,10 +417,9 @@ class _PlannerStepProcess:
             Planner action payload returned by the worker process.
         """
         self._ensure_worker()
-        if self._conn is None:
-            raise RuntimeError("worker connection not initialized after _ensure_worker")
-        if self._process is None:
-            raise RuntimeError("worker process not initialized after _ensure_worker")
+        # Internal worker invariants established by _ensure_worker().
+        assert self._conn is not None
+        assert self._process is not None
         try:
             self._conn.send(("step", obs))
         except (BrokenPipeError, EOFError, OSError) as exc:
@@ -719,8 +718,7 @@ class _NativeCommandPolicy:
         Returns:
             Decoded response text without the line terminator.
         """
-        if process.stdout is None:
-            raise RuntimeError("worker process stdout not initialized")
+        assert process.stdout is not None  # Persistent workers always pipe stdout.
         deadline = time.monotonic() + self._timeout_s
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ)
@@ -781,8 +779,7 @@ class _NativeCommandPolicy:
         try:
             if self._persistent:
                 process = self._ensure_process()
-                if process.stdin is None:
-                    raise RuntimeError("worker process stdin not initialized")
+                assert process.stdin is not None  # _ensure_process() pipes stdin.
                 process.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
                 process.stdin.flush()
                 stdout = self._readline_with_timeout(process)

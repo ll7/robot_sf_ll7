@@ -319,8 +319,7 @@ def _load_arm_algo_config(
                 ),
             ),
         )
-    if path is None:
-        raise RuntimeError("config path must not be None after error-free validation")
+    assert path is not None  # Internal invariant: path_error is the only path-less outcome.
     if not path.is_file():
         # A missing config file is a FileNotFoundError, not a shape error -- it is not an
         # apparently-valid packet. The caller's structural checker already owns that contract.

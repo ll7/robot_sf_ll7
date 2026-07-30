@@ -302,8 +302,7 @@ def _count(record: Mapping[str, Any], metric_name: str) -> float:
         The non-negative event count.
     """
     value = _numeric_from_aliases(record, _COUNT_ALIASES[metric_name], default=0.0)
-    if value is None:
-        raise RuntimeError(f"count resolution invariant failed for {metric_name}: returned None")
+    assert value is not None  # Internal invariant: the numeric resolver has a float default.
     if value < 0:
         raise LongHorizonRouteError(f"{metric_name} count must not be negative")
     return value

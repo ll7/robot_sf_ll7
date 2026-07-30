@@ -416,8 +416,7 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
         _finalize_record(record)
         return record
 
-    if spec.relpath is None:  # shipped_json always has a path
-        raise RuntimeError("shipped_json spec.relpath must not be None")
+    assert spec.relpath is not None  # Internal invariant: shipped_json always has a path.
     path = repo_root / spec.relpath
     if not path.exists():
         record.load_error = "file not found"

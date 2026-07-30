@@ -779,7 +779,7 @@ def load_episode_requests(  # noqa: C901
     )
 
 
-def load_episode_mapping(  # noqa: C901, PLR0912, PLR0915
+def load_episode_mapping(  # noqa: C901, PLR0912
     path: Path,
     *,
     expected_count: int | None = ISSUE_5756_REQUEST_COUNT,
@@ -887,24 +887,12 @@ def load_episode_mapping(  # noqa: C901, PLR0912, PLR0915
             raise CandidateTraceResolutionError(
                 f"episode mapping row {index} marks an outcome mismatch with equal outcomes"
             )
-        if episode_id is None:
-            raise RuntimeError(
-                f"episode mapping row {index} invariant violated: episode_id is None"
-            )
-        if release_episode_id is None:
-            raise RuntimeError(
-                f"episode mapping row {index} invariant violated: release_episode_id is None"
-            )
-        if scenario_id is None or planner is None or seed is None:
-            raise RuntimeError(
-                f"episode mapping row {index} invariant violated: "
-                "scenario_id, planner, and seed must be resolved"
-            )
-        if trace_uri is None or trace_sha256 is None:
-            raise RuntimeError(
-                f"episode mapping row {index} invariant violated: "
-                "trace_uri and trace_sha256 must be resolved"
-            )
+        # Internal type-narrowing invariants: the fail-closed checks above reject
+        # every missing identity, trace, digest, or outcome before this point.
+        assert episode_id is not None
+        assert release_episode_id is not None
+        assert scenario_id is not None and planner is not None and seed is not None
+        assert trace_uri is not None and trace_sha256 is not None
         tuple_key = _episode_request_key(scenario_id, planner, seed)
         row = {
             **dict(raw_row),

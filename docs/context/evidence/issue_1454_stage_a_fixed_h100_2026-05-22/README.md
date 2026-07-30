@@ -5,7 +5,7 @@ Date: 2026-05-22
 > **Loss notice (2026-07-28):** The raw campaign tree (`output/` from commit
 > `17b179007e6292dd0365c53cff719cccea1276a9`) is confirmed unretrievable on all accessible
 > machines. The campaign ran locally, the tree was ephemeral, and no copy survived on any
-> reachable host. Per the maintainer's Domain-Aware Approval decision, this campaign remains
+> reachable host. Per the maintainer's [Domain-Aware Approval decision (#6410)](https://github.com/ll7/robot_sf_ll7/issues/6410), this campaign remains
 > **unindexed**: no derived manifest, atlas entry, prerelease, or rerun is performed. Existing
 > aggregate evidence and caveats are unchanged.
 

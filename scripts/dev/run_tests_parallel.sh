@@ -262,9 +262,18 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
   fi
   sharding_active="1"
   cmd+=("--splits" "$shard_count" "--group" "$shard_index")
-  # CI restores a prior aggregate and uploads each shard's updated store for
-  # the workflow-level merge job; local runs simply keep the generated file.
+  # CI restores a prior aggregate and uploads each shard's store for a
+  # workflow-level merge job; local runs simply keep the generated file.
   cmd+=("--store-durations" "--durations-path" ".test_durations")
+  # In CI, emit only the tests this shard actually ran (--clean-durations) so
+  # the workflow merge unions disjoint per-shard measurements. Without it each
+  # shard also re-stores the restored aggregate's stale values for the other
+  # shards' tests, and the merge's last-writer-wins would freeze the cache on
+  # those stale values (only the final shard's group would stay fresh). Local
+  # runs keep pytest-split's default retain-and-update behavior.
+  if [[ "${CI:-}" == "true" ]]; then
+    cmd+=("--clean-durations")
+  fi
   echo "Resolved pytest-split shard: group $shard_index of $shard_count" >&2
 fi
 

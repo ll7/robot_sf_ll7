@@ -96,7 +96,19 @@ class TestGateScript:
         assert not missing, f"Missing base-sensitive files: {missing}"
 
     def test_subset_run_under_two_minutes(self) -> None:
-        """The base_sensitive subset must run in under 2 minutes."""
+        """The base_sensitive subset must run in under 2 minutes.
+
+        This node is a deliberate *diagnostic contract*: the outer test walls a
+        ``pytest -m base_sensitive`` subprocess whose wall time is dominated by
+        collection of the full suite (tens of seconds, by design), so it sits
+        well above the 20s per-test soft budget but is bounded by its own
+        ``assert elapsed < 120`` hard cap below. The slow-test performance report
+        therefore classifies its expected soft breach as an accepted
+        ``"diagnostic"`` contract (see ``tests/perf_utils/reporting.py``
+        ``DIAGNOSTIC_NODES``, issue #6320) instead of emitting an unexplained
+        ``SOFT`` breach. It does not exempt a run at or above the report's 60s
+        hard threshold, which remains a hard enforceable breach.
+        """
         start = time.monotonic()
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "-m", "base_sensitive", "-q"],

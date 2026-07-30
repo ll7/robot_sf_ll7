@@ -163,6 +163,13 @@ from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
 )
+from robot_sf.benchmark.types import (
+    AlgoMeta,
+    EpisodeRecordDict,
+    NoiseSpec,
+    PlannerDecisionTraceEntry,
+    TrackingPrecisionSpec,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -175,7 +182,7 @@ from robot_sf.planner.safety_shield import shield_metrics_from_stats
 if TYPE_CHECKING:
     from pathlib import Path
 
-PolicyBuilder = Callable[..., tuple[Any, dict[str, Any]]]
+PolicyBuilder = Callable[..., tuple[Any, AlgoMeta]]
 PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
 
 
@@ -418,7 +425,7 @@ def _write_observed_pedestrian_positions(obs: Any, positions: np.ndarray) -> boo
 
 def _apply_tracking_precision_to_observation(
     obs: dict[str, Any],
-    spec: dict[str, Any],
+    spec: TrackingPrecisionSpec,
     rng: np.random.Generator,
 ) -> tuple[dict[str, Any], np.ndarray | None]:
     """Apply default-off MOTP drift mask to planner-facing tracked actors.
@@ -798,7 +805,7 @@ def _update_topology_candidate_availability_fields(
 def _update_topology_guided_episode_fields(
     accumulator: _TopologyGuidedEpisodeAccumulator,
     *,
-    step: dict[str, Any],
+    step: PlannerDecisionTraceEntry,
     topology: dict[str, Any],
 ) -> None:
     """Fold one topology-guided planner-step row into the episode accumulator."""
@@ -843,7 +850,7 @@ def _update_topology_guided_episode_fields(
 
 
 def _collect_topology_guided_episode_fields(
-    planner_decision_trace: list[dict[str, Any]],
+    planner_decision_trace: list[PlannerDecisionTraceEntry],
 ) -> _TopologyGuidedEpisodeAccumulator | None:
     """Collect topology-guided fields from reduced planner-step rows.
 
@@ -915,7 +922,7 @@ def _topology_route_progress_summary(
 
 
 def _topology_guided_episode_diagnostics(
-    planner_decision_trace: list[dict[str, Any]],
+    planner_decision_trace: list[PlannerDecisionTraceEntry],
 ) -> dict[str, Any] | None:
     """Aggregate topology-guided lane diagnostics from reduced planner-step rows.
 
@@ -1138,7 +1145,7 @@ def _min_finite_or_inf(values: list[float]) -> float:
 
 def _build_tracking_precision_summary(
     *,
-    spec: dict[str, Any],
+    spec: TrackingPrecisionSpec,
     records: list[dict[str, Any]],
     min_separation_corrupted_values: list[float],
 ) -> dict[str, Any]:
@@ -1192,11 +1199,11 @@ class _EpisodeRunContext:
     ped_impact_window_steps: int
     benchmark_track: str | None
     track_schema_version: str | None
-    noise_spec: dict[str, Any]
+    noise_spec: NoiseSpec
     noise_rng: Any
     noise_state: Any
     noise_stats: Any
-    tracking_precision_spec: dict[str, Any]
+    tracking_precision_spec: TrackingPrecisionSpec
     tracking_precision_rng: Any
     safety_wrapper_runtime: Any
     cbf_runtime: Any
@@ -1514,7 +1521,7 @@ class _PolicyContract:
     """
 
     policy_fn: Any
-    algo_meta: dict[str, Any]
+    algo_meta: AlgoMeta
     planner_close: Any
     planner_reset: Any
     planner_bind_env: Any
@@ -1702,17 +1709,17 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_close: Any,
     planner_stats: Any,
     planner_native_action: bool,
-    noise_spec: dict[str, Any],
+    noise_spec: NoiseSpec,
     noise_rng: Any,
     noise_state: Any,
     noise_stats: Any,
-    tracking_precision_spec: dict[str, Any],
+    tracking_precision_spec: TrackingPrecisionSpec,
     tracking_precision_rng: Any,
     safety_wrapper_runtime: Any,
     safety_wrapper_deadlock_monitor: Any,
     cbf_runtime: Any,
     actuation_controller: Any,
-    algo_meta: dict[str, Any],
+    algo_meta: AlgoMeta,
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
@@ -2284,7 +2291,7 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ctx: _EpisodeRunContext,
     loop_result: _EpisodeStepLoopResult,
     post_loop: _EpisodePostLoopResult,
-    algo_meta: dict[str, Any],
+    algo_meta: AlgoMeta,
     actuation_controller: Any,
     active_observation_mode: str,
     active_observation_level: str,
@@ -2300,11 +2307,11 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Assemble the benchmark JSONL record from the step-loop and post-loop results.
 
     Returns:
-        dict[str, Any]: The finalized episode record with metrics, provenance, and
+        EpisodeRecordDict: The finalized episode record with metrics, provenance, and
         planner metadata, mirroring the prior inline metadata-finalization phase.
     """
     scenario = ctx.scenario
@@ -2725,11 +2732,11 @@ def run_map_episode(  # noqa: PLR0913
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
     Returns:
-        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+        EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
     ctx = _resolve_episode_run_context(
         scenario=scenario,

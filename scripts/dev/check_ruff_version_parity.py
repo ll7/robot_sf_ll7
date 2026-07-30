@@ -25,6 +25,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PRE_COMMIT = REPO_ROOT / ".pre-commit-config.yaml"
 DEFAULT_PYPROJECT = REPO_ROOT / "pyproject.toml"
+RUFF_PRE_COMMIT_REPO = "https://github.com/astral-sh/ruff-pre-commit"
+RUFF_PIN_PATTERN = re.compile(r"^ruff\s*==\s*(?P<version>\S+)$")
 
 
 def normalize_version(raw: str) -> str:
@@ -57,7 +59,8 @@ def read_pre_commit_version(path: Path) -> str:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     repos = data.get("repos", [])
     for repo in repos:
-        if "https://github.com/astral-sh/ruff-pre-commit" in repo.get("repo", ""):
+        repo_url = str(repo.get("repo", "")).removesuffix(".git")
+        if repo_url == RUFF_PRE_COMMIT_REPO:
             rev = repo.get("rev")
             if rev is not None:
                 return str(rev)
@@ -88,13 +91,13 @@ def read_pyproject_dev_dep_pin(path: Path) -> str:
     """
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     dep_groups = data.get("dependency-groups", {})
-    for deps in dep_groups.values():
-        if not isinstance(deps, list):
-            continue
-        for dep in deps:
-            if isinstance(dep, str) and "ruff==" in dep:
-                return dep.strip()
-    raise ValueError(f"no ruff== pin found in any [dependency-groups] in {path}")
+    dev_dependencies = dep_groups.get("dev", [])
+    if not isinstance(dev_dependencies, list):
+        raise ValueError(f"[dependency-groups].dev in {path} must be a list")
+    for dependency in dev_dependencies:
+        if isinstance(dependency, str) and RUFF_PIN_PATTERN.fullmatch(dependency.strip()):
+            return dependency.strip()
+    raise ValueError(f"no exact ruff== pin found in [dependency-groups].dev in {path}")
 
 
 def evaluate(

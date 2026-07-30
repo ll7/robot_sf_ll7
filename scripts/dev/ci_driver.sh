@@ -123,10 +123,9 @@ run_lint_phase() {
   # here on every CI run; enforced (gating) on tag pushes by
   # .github/workflows/release-functional-badge.yml.
   _run_lint_check uv run python scripts/dev/check_version_alignment.py --advisory
-  # Advisory (non-gating) Ruff version parity guard: ensures that the three
-  # Ruff version axes remain aligned. Gating locally via the pre-commit hook;
-  # advisory here so CI surfaces drift without blocking the pipeline.
-  _run_lint_check uv run python scripts/dev/check_ruff_version_parity.py --advisory
+  # Ruff version parity is a lint contract: pre-commit, Ruff's required-version,
+  # and the development dependency pin must not drift independently.
+  _run_lint_check uv run python scripts/dev/check_ruff_version_parity.py
 
   if [[ "$lint_status" -ne 0 ]]; then
     echo "lint phase FAILED: one or more checks reported errors (see above)." >&2

@@ -63,6 +63,45 @@ def test_read_pyproject_dev_dep_pin_from_repo() -> None:
     assert "ruff==" in pin
 
 
+def test_read_pyproject_dev_dep_pin_uses_only_dev_group(tmp_path: Path) -> None:
+    """A Ruff dependency in another group must not override the development pin."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[dependency-groups]\ndocs = ["ruff==99.99.99"]\ndev = ["ruff==0.16.0"]\n',
+        encoding="utf-8",
+    )
+
+    assert read_pyproject_dev_dep_pin(pyproject) == "ruff==0.16.0"
+
+
+def test_read_pyproject_dev_dep_pin_rejects_lookalike_dependency(tmp_path: Path) -> None:
+    """A package whose name merely contains ``ruff`` is not the Ruff tool pin."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[dependency-groups]\ndev = ["some-ruff==0.16.0"]\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"\[dependency-groups\]\.dev"):
+        read_pyproject_dev_dep_pin(pyproject)
+
+
+def test_read_pre_commit_version_rejects_lookalike_repo(tmp_path: Path) -> None:
+    """A repository URL that merely prefixes the canonical URL must not pass."""
+    pre_commit = tmp_path / ".pre-commit-config.yaml"
+    pre_commit.write_text(
+        "repos:\n"
+        "  - repo: https://github.com/astral-sh/ruff-pre-commit-lookalike\n"
+        "    rev: v0.16.0\n"
+        "    hooks:\n"
+        "      - id: ruff\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="no astral-sh/ruff-pre-commit repo"):
+        read_pre_commit_version(pre_commit)
+
+
 def test_evaluate_passes_at_head() -> None:
     """All three version axes agree at the current HEAD."""
     from scripts.dev.check_ruff_version_parity import (
@@ -175,3 +214,23 @@ def test_main_advisory_exits_zero_on_mismatch(tmp_path: Path) -> None:
         ]
     )
     assert exit_code == 0
+
+
+def test_ci_lint_phase_enforces_ruff_version_parity() -> None:
+    """CI must fail on version drift instead of hiding it behind advisory mode."""
+    from scripts.dev.check_ruff_version_parity import REPO_ROOT
+
+    ci_driver = (REPO_ROOT / "scripts" / "dev" / "ci_driver.sh").read_text(encoding="utf-8")
+    invocation = next(
+        line.strip() for line in ci_driver.splitlines() if "check_ruff_version_parity.py" in line
+    )
+
+    assert invocation == "_run_lint_check uv run python scripts/dev/check_ruff_version_parity.py"
+
+
+def test_pre_commit_hook_runs_when_guard_changes() -> None:
+    """Editing the parity guard itself must trigger its local pre-commit hook."""
+    from scripts.dev.check_ruff_version_parity import DEFAULT_PRE_COMMIT
+
+    config = DEFAULT_PRE_COMMIT.read_text(encoding="utf-8")
+    assert r"scripts/dev/check_ruff_version_parity\.py" in config

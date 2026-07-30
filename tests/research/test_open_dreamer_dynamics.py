@@ -473,6 +473,17 @@ def test_weights_reject_non_array_encoder_with_contract_error() -> None:
         replace(weights, w_enc=[])  # type: ignore[arg-type]
 
 
+def test_weights_reject_non_robot_sf_action_width() -> None:
+    """A standalone weight bundle cannot encode an action space outside Robot SF's contract."""
+    weights = DynamicsWeights.from_config(DynamicsConfig(obs_dim=_BASE_OBS_DIM, latent_dim=4))
+
+    with pytest.raises(OpenDreamerDynamicsError, match="action_dim must equal"):
+        replace(
+            weights,
+            w_action=np.zeros((weights.latent_dim, ACTION_DIM + 1), dtype=float),
+        )
+
+
 def test_weights_reject_infinite_bias_scalar() -> None:
     """A non-finite scalar bias fails closed when the bundle is constructed."""
     config = DynamicsConfig(obs_dim=_BASE_OBS_DIM, latent_dim=4, seed=1)
@@ -501,6 +512,57 @@ def test_model_rejects_config_weight_shape_mismatch() -> None:
 
     with pytest.raises(OpenDreamerDynamicsError, match="does not match config obs_dim"):
         LatentDynamicsModel(config, other_weights)
+
+
+@pytest.mark.parametrize("field_name", ["observations", "actions"])
+def test_imagine_rejects_misaligned_episode_sequences(field_name: str) -> None:
+    """An episode with missing observation or action steps fails before open-loop rollout."""
+    episode = _make_structured_episode(step_count=3)
+    broken = replace(episode, **{field_name: getattr(episode, field_name)[:2]})
+    model = _default_model()
+
+    with pytest.raises(OpenDreamerDynamicsError, match="has 2 steps; expected 3"):
+        model.imagine(broken)
+
+
+def test_imagine_rejects_empty_observation_sequence_with_contract_error() -> None:
+    """An episode with steps but no observations fails with the dynamics error boundary."""
+    episode = _make_structured_episode(step_count=3)
+    broken = replace(episode, observations=())
+
+    with pytest.raises(OpenDreamerDynamicsError, match="observations.*expected 3"):
+        _default_model().imagine(broken)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    [
+        (
+            "observation_contract",
+            "other_observation_contract.v1",
+            "observation_contract does not match",
+        ),
+        ("drive_state_layout", ("wrong",), "drive_state_layout does not match"),
+    ],
+)
+def test_from_episode_rejects_noncanonical_observation_contract(
+    field_name: str,
+    value: object,
+    message: str,
+) -> None:
+    """The dynamics model accepts only the merged adapter's fixed observation contract."""
+    episode = replace(_make_structured_episode(), **{field_name: value})
+
+    with pytest.raises(OpenDreamerDynamicsError, match=message):
+        LatentDynamicsModel.from_episode(episode)
+
+
+def test_imagine_rejects_non_mapping_episode_provenance() -> None:
+    """Malformed source provenance cannot bypass the rollout provenance boundary."""
+    episode = replace(_make_structured_episode(), provenance=[])
+
+    with pytest.raises(OpenDreamerDynamicsError, match="provenance must be a mapping"):
+        _default_model().imagine(episode)
 
 
 @pytest.mark.parametrize(

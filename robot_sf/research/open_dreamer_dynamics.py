@@ -76,7 +76,9 @@ import numpy as np
 from robot_sf.research.open_dreamer_adapter import (
     DRIVE_STATE_LAYOUT,
     OPEN_DREAMER_OBSERVATION_CONTRACT,
+    StructuredActionStep,
     StructuredEpisode,
+    StructuredObservationStep,
 )
 
 #: Dynamics contract version. Bumped only if the latent transition or head shapes change.
@@ -433,6 +435,10 @@ class DynamicsWeights:
             )
         action_dim = self.w_action.shape[1]
         _require_positive_int(action_dim, "action_dim")
+        if action_dim != ACTION_DIM:
+            raise OpenDreamerDynamicsError(
+                f"action_dim must equal Robot SF action width {ACTION_DIM}, got {action_dim}"
+            )
         w_action = _require_finite_array(self.w_action, "w_action", (latent_dim, action_dim))
         b_latent = _require_finite_array(self.b_latent, "b_latent", (latent_dim,))
         w_reward = _require_finite_array(self.w_reward, "w_reward", (latent_dim,))
@@ -997,6 +1003,15 @@ class LatentDynamicsModel:
             OpenDreamerDynamicsError: If any produced latent, reward, or continuation is non-finite
                 or a continuation is outside ``(0, 1)``.
         """
+        if observations.shape[0] != actions.shape[0]:
+            raise OpenDreamerDynamicsError(
+                "observations and actions must be aligned (equal step count), "
+                f"got {observations.shape[0]} and {actions.shape[0]}"
+            )
+        if observations.shape[0] < 1:
+            raise OpenDreamerDynamicsError(
+                "observations and actions must contain at least one step"
+            )
         step_count = actions.shape[0]
         latent_dim = self._config.latent_dim
         latent_trajectory = np.empty((step_count + 1, latent_dim), dtype=float)
@@ -1045,7 +1060,21 @@ class LatentDynamicsModel:
         }
         provenance: dict[str, Any] = {}
         if episode is not None:
-            source_provenance = episode.to_dict()["provenance"]
+            try:
+                source_provenance = episode.to_dict()["provenance"]
+            except (
+                AttributeError,
+                KeyError,
+                TypeError,
+                ValueError,
+                OverflowError,
+                RecursionError,
+            ) as exc:
+                raise OpenDreamerDynamicsError(
+                    "episode provenance must be JSON-serializable"
+                ) from exc
+            if not isinstance(source_provenance, Mapping):
+                raise OpenDreamerDynamicsError("episode provenance must be a mapping")
             if DYNAMICS_PROVENANCE_KEY in source_provenance:
                 raise OpenDreamerDynamicsError(
                     f"provenance already contains reserved key {DYNAMICS_PROVENANCE_KEY!r}"
@@ -1083,7 +1112,59 @@ def _require_structured_episode(episode: Any) -> StructuredEpisode:
             f"episode must be a StructuredEpisode from the merged adapter, "
             f"got {type(episode).__name__}"
         )
+    if episode.drive_state_layout != DRIVE_STATE_LAYOUT:
+        raise OpenDreamerDynamicsError(
+            "episode drive_state_layout does not match the merged adapter contract"
+        )
+    if episode.observation_contract != OPEN_DREAMER_OBSERVATION_CONTRACT:
+        raise OpenDreamerDynamicsError(
+            "episode observation_contract does not match the merged adapter contract"
+        )
+    if not isinstance(episode.rays_available, bool):
+        raise OpenDreamerDynamicsError("episode rays_available must be a boolean")
+    _require_episode_alignment(episode)
     return episode
+
+
+def _require_episode_alignment(episode: StructuredEpisode) -> None:
+    """Require every episode-major per-step field to share the reward sequence length.
+
+    Args:
+        episode: A candidate structured episode.
+
+    Raises:
+        OpenDreamerDynamicsError: If the step-count field is unavailable or any aligned field has
+            a different length.
+    """
+    try:
+        expected_step_count = episode.step_count
+    except (AttributeError, TypeError) as exc:
+        raise OpenDreamerDynamicsError("episode step_count must be readable") from exc
+    field_names = (
+        "observations",
+        "raw_observations",
+        "actions",
+        "raw_actions",
+        "rewards",
+        "return_to_go",
+        "terminated",
+        "truncated",
+        "pedestrians",
+        "robot_states",
+    )
+    for field_name in field_names:
+        try:
+            field_value = getattr(episode, field_name)
+            field_length = len(field_value)
+        except (AttributeError, TypeError) as exc:
+            raise OpenDreamerDynamicsError(
+                f"episode field {field_name!r} must be an ordered per-step sequence"
+            ) from exc
+        if field_length != expected_step_count:
+            raise OpenDreamerDynamicsError(
+                f"episode field {field_name!r} has {field_length} steps; "
+                f"expected {expected_step_count}"
+            )
 
 
 def _as_finite_vector(value: Any, name: str, expected_width: int) -> np.ndarray:
@@ -1191,6 +1272,10 @@ def _episode_observation_array(episode: StructuredEpisode, obs_dim: int) -> np.n
     """
     rows: list[np.ndarray] = []
     for step_index, step in enumerate(episode.observations):
+        if not isinstance(step, StructuredObservationStep):
+            raise OpenDreamerDynamicsError(
+                f"observation at step {step_index} must be a StructuredObservationStep"
+            )
         if step.rays_available:
             row = np.concatenate([step.drive_state, step.rays])
         else:
@@ -1222,6 +1307,10 @@ def _episode_action_array(episode: StructuredEpisode, action_dim: int) -> np.nda
     """
     rows: list[np.ndarray] = []
     for step_index, step in enumerate(episode.actions):
+        if not isinstance(step, StructuredActionStep):
+            raise OpenDreamerDynamicsError(
+                f"action at step {step_index} must be a StructuredActionStep"
+            )
         row = np.asarray(step.raw, dtype=float)
         if row.shape != (action_dim,):
             raise OpenDreamerDynamicsError(

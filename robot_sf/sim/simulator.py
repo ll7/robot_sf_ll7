@@ -777,11 +777,7 @@ def init_simulators(
     Returns:
         list[Simulator]: Simulator instances sized to cover ``num_robots`` robots.
     """
-    # assert that the map_def has the correct type
-    try:
-        assert isinstance(map_def, MapDefinition)
-    except AssertionError:
-        # rasie type error and print the type of map_def
+    if not isinstance(map_def, MapDefinition):
         raise TypeError(f"map_def should be of type MapDefinition, got {type(map_def)}")
 
     # Calculate the number of simulators needed based on the number of robots and start positions

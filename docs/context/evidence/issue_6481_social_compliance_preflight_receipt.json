@@ -386,5 +386,8 @@
     }
   ],
   "campaign_result_status": "completed",
-  "output_root": "output/benchmarks/issue_6481_preflight"
+  "local_output_root": {
+    "status": "ignored_runtime_artifact",
+    "note": "Campaign rows were written under the --output-root location during generation. That path is intentionally omitted from the durable receipt because repository evidence must not point at ignored runtime output artifacts."
+  }
 }

@@ -215,7 +215,15 @@ def build_receipt(
         "social_compliance_schema_version": SOCIAL_COMPLIANCE_SCHEMA_VERSION,
         "rows": row_classifications,
         "campaign_result_status": campaign_result.get("campaign_execution_status", "unknown"),
-        "output_root": str(output_root),
+        "local_output_root": {
+            "status": "ignored_runtime_artifact",
+            "note": (
+                "Campaign rows were written under the --output-root location during "
+                "generation. That path is intentionally omitted from the durable "
+                "receipt because repository evidence must not point at ignored "
+                "runtime output artifacts."
+            ),
+        },
     }
 
 

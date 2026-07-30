@@ -242,32 +242,38 @@ def test_fetch_pr_snapshot_fails_closed_on_non_green_ci_rollups(
     assert snapshot["checks"] == {"overall": expected}
 
 
-def test_workflow_uses_fail_closed_source_head_gate_and_safe_manual_input() -> None:
-    """Source-head state changes cannot retain an older passing required check."""
+def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
+    """Only native merge-group evaluation is a failing required check."""
     workflow = Path(".github/workflows/merge-queue-gate.yml").read_text(encoding="utf-8")
 
     assert "PR_NUMBER: ${{ inputs.pr_number }}" in workflow
     assert '--pr "$PR_NUMBER"' in workflow
     assert '--pr "${{ inputs.pr_number }}"' not in workflow
     assert "pull_request:" in workflow
-    assert "pull_request_review:" in workflow
-    assert "pull_request_review_comment:" in workflow
-    for activity in (
+    assert "pull_request_review:" not in workflow
+    assert "pull_request_review_comment:" not in workflow
+    for activity in ("labeled", "unlabeled", "synchronize"):
+        assert activity in workflow
+    for noisy_activity in (
+        "opened",
+        "reopened",
         "ready_for_review",
         "converted_to_draft",
         "review_requested",
         "review_request_removed",
-        "submitted",
-        "dismissed",
-        "created",
-        "deleted",
     ):
-        assert activity in workflow
-    assert "pull_request|pull_request_review|pull_request_review_comment)" in workflow
+        assert noisy_activity not in workflow
     assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in workflow
-    assert "Run merge-queue gate (source PR head)" in workflow
-    assert "PR-head evaluation is advisory; merge_group enforces the gate." not in workflow
-    assert "status=0" not in workflow
+    assert "Run merge-admission audit (source PR head)" in workflow
+    assert "Source-PR admission is advisory; merge_group remains fail-closed." in workflow
+    assert workflow.count("--advisory") == 2
+    merge_group_step, source_pr_step = workflow.split(
+        "- name: Run merge-admission audit (source PR head)",
+        maxsplit=1,
+    )
+    assert "--advisory" not in merge_group_step
+    assert "--from-event" in merge_group_step
+    assert "--advisory" in source_pr_step
     assert "exit 0" in workflow  # Bootstrap skip remains advisory before the gate exists on main.
     assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
     assert "PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in workflow
@@ -625,3 +631,26 @@ def test_pr_mode_records_snapshot_failure_in_audit(capsys) -> None:
     audit = json.loads(capsys.readouterr().out)
     assert exit_code == 1
     assert "pr_snapshot_unavailable" in audit["reasons"]
+
+
+def test_pr_advisory_mode_preserves_failed_audit_but_exits_zero(capsys) -> None:
+    """Source-PR audit remains truthful without presenting ordinary CI as red."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(returncode=1, stderr="snapshot unavailable")
+        exit_code = main(["--pr", "42", "--repo", "owner/repo", "--advisory"])
+
+    captured = capsys.readouterr()
+    audit = json.loads(captured.out)
+    assert exit_code == 0
+    assert audit["passed"] is False
+    assert "pr_snapshot_unavailable" in audit["reasons"]
+    assert "Source-PR admission is advisory" in captured.err
+
+
+def test_merge_group_cannot_opt_into_advisory_mode(capsys) -> None:
+    """Queue-time evaluation cannot bypass its fail-closed exit policy."""
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--from-event", "event.json", "--repo", "owner/repo", "--advisory"])
+
+    assert excinfo.value.code == 2
+    assert "--advisory is valid only with --pr" in capsys.readouterr().err

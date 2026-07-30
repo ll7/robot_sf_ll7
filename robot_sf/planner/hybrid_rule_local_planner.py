@@ -2010,24 +2010,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         route_progress = float(np.dot(end_pos - start_pos, route_dir))
         return float(np.clip(route_progress / max(max_progress, _EPS), -1.0, 1.0))
 
-    def _evaluate_candidate(  # noqa: C901, PLR0913, PLR0915
+    def _reject_excessive_angular_near_human(
         self,
-        *,
         candidate: HybridRuleCandidate,
-        observation: dict[str, Any],
-        state: dict[str, Any],
-        speed_cap: float,
         nearest_ped: float,
-        progress_windows: dict[str, float] | None = None,
-        route_corridor: dict[str, Any] | None = None,
-        strict_static_clearance: bool = False,
-        goal_posterior: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Filter and score one candidate command.
-
-        Returns:
-            dict[str, Any]: Rejection reason or accepted score/term diagnostics.
-        """
+    ) -> dict[str, Any] | None:
+        """Return a rejection dict when angular speed exceeds the near-human limit."""
         if nearest_ped < float(self.config.near_human_angular_limit_distance) and abs(
             candidate.angular
         ) > float(self.config.near_human_max_angular_speed):
@@ -2036,7 +2024,20 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 "reason": "excessive_angular_near_human",
                 "candidate": candidate,
             }
+        return None
 
+    def _prepare_evaluation_context(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        state: dict[str, Any],
+        strict_static_clearance: bool,
+    ) -> dict[str, Any]:
+        """Compute initial rollout and clearance context for candidate evaluation.
+
+        Returns:
+            dict[str, Any]: Rollout parameters, positions, and clearance thresholds.
+        """
         dt, _steps, rollout_commands = self._candidate_rollout_plan(candidate)
         start_pos = np.array(state["robot_pos"], dtype=float)
         robot_pos = np.array(start_pos, dtype=float)
@@ -2049,7 +2050,6 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(state["ped_radius"])
             + float(self.config.hard_safety_margin)
         )
-
         start_dist = float(np.linalg.norm(goal - robot_pos))
         static_margin = (
             float(self.config.static_hard_safety_margin)
@@ -2072,101 +2072,277 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 or bool(self.config.continuous_static_clearance_enabled)
             )
         )
+        proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
+        return {
+            "dt": dt,
+            "rollout_commands": rollout_commands,
+            "start_pos": start_pos,
+            "robot_pos": robot_pos,
+            "heading": heading,
+            "goal": goal,
+            "ped_pos": ped_pos,
+            "ped_vel": ped_vel,
+            "collision_radius": collision_radius,
+            "start_dist": start_dist,
+            "hard_static_clearance": hard_static_clearance,
+            "corridor_clearance_buffer": corridor_clearance_buffer,
+            "required_static_clearance": required_static_clearance,
+            "use_continuous_static_check": use_continuous_static_check,
+            "proxemic_enabled": proxemic_enabled,
+            "proxemic_costmap_config": self._proxemic_costmap_config if proxemic_enabled else None,
+            "rollout_points": [np.array(robot_pos, dtype=float)] if proxemic_enabled else None,
+        }
+
+    def _check_dynamic_collision(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        ped_pos: np.ndarray,
+        ped_vel: np.ndarray,
+        robot_pos: np.ndarray,
+        collision_radius: float,
+        min_dynamic_clearance: float,
+        t: float,
+    ) -> dict[str, Any] | None:
+        """Check predicted dynamic collision at a rollout step.
+
+        Returns:
+            dict[str, Any] | None: Rejection dict on collision, else None.
+        """
+        if ped_pos.size == 0:
+            return None
+        ped_future = ped_pos + ped_vel * t
+        distances = np.linalg.norm(ped_future - robot_pos[None, :], axis=1)
+        step_min = float(np.min(distances))
+        updated_clearance = min(min_dynamic_clearance, step_min)
+        if t <= float(self.config.hard_collision_horizon) and updated_clearance <= collision_radius:
+            return {
+                "accepted": False,
+                "reason": "dynamic_collision",
+                "candidate": candidate,
+                "min_dynamic_clearance": float(updated_clearance),
+                "collision_radius": float(collision_radius),
+                "time": float(t),
+            }
+        return None
+
+    def _rollout_step_static_check(  # noqa: PLR0913
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        ctx: dict[str, Any],
+        robot_pos: np.ndarray,
+        initial_static_clearance: float,
+        min_static_clearance: float,
+        static_clearance_exception_terms: set[str],
+        strict_static_clearance: bool,
+        progress_windows: dict[str, float] | None,
+        t: float,
+    ) -> tuple[dict[str, Any] | None, float]:
+        """Run static collision and clearance checks for one rollout step.
+
+        Returns:
+            Tuple of (rejection dict or None, updated min_static_clearance).
+        """
+        static_rejection = self._static_collision_rejection(
+            candidate=candidate,
+            observation=observation,
+            robot_pos=robot_pos,
+            hard_static_clearance=ctx["hard_static_clearance"],
+            use_continuous_static_check=ctx["use_continuous_static_check"],
+            t=t,
+        )
+        if static_rejection is not None:
+            return static_rejection, min_static_clearance
+        min_static_clearance = min(
+            min_static_clearance,
+            self._min_obstacle_clearance(robot_pos, observation),
+        )
+        clearance_rejection = self._check_static_clearance_violation(
+            candidate=candidate,
+            min_static_clearance=min_static_clearance,
+            required_static_clearance=ctx["required_static_clearance"],
+            hard_static_clearance=ctx["hard_static_clearance"],
+            use_continuous_static_check=ctx["use_continuous_static_check"],
+            strict_static_clearance=strict_static_clearance,
+            corridor_clearance_buffer=ctx["corridor_clearance_buffer"],
+            initial_static_clearance=initial_static_clearance,
+            start_dist=ctx["start_dist"],
+            robot_pos=robot_pos,
+            goal=ctx["goal"],
+            progress_windows=progress_windows,
+            static_clearance_exception_terms=static_clearance_exception_terms,
+            t=t,
+        )
+        return clearance_rejection, min_static_clearance
+
+    def _execute_rollout_collision_check(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        ctx: dict[str, Any],
+        progress_windows: dict[str, float] | None,
+        strict_static_clearance: bool,
+    ) -> dict[str, Any] | None:
+        """Run the rollout loop checking static and dynamic collisions.
+
+        Returns:
+            None if the candidate survives all collision checks (with ``ctx``
+            mutated to reflect final rollout state), or a rejection dict.
+        """
+        robot_pos = ctx["robot_pos"]
+        heading = ctx["heading"]
         initial_static_clearance = self._min_obstacle_clearance(robot_pos, observation)
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
         static_clearance_exception_terms: set[str] = set()
-        proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
-        proxemic_costmap_config = self._proxemic_costmap_config if proxemic_enabled else None
-        rollout_points = [np.array(robot_pos, dtype=float)] if proxemic_enabled else None
 
-        for step_idx, (step_linear, step_angular) in enumerate(rollout_commands):
-            t = (step_idx + 1) * dt
+        for step_idx, (step_linear, step_angular) in enumerate(ctx["rollout_commands"]):
+            t = (step_idx + 1) * ctx["dt"]
             robot_pos = (
                 robot_pos
                 + np.array(
                     [step_linear * np.cos(heading), step_linear * np.sin(heading)],
                     dtype=float,
                 )
-                * dt
+                * ctx["dt"]
             )
-            heading = _wrap_angle(heading + step_angular * dt)
-            if proxemic_enabled and rollout_points is not None:
-                rollout_points.append(np.array(robot_pos, dtype=float))
+            heading = _wrap_angle(heading + step_angular * ctx["dt"])
+            if ctx["proxemic_enabled"] and ctx["rollout_points"] is not None:
+                ctx["rollout_points"].append(np.array(robot_pos, dtype=float))
 
-            static_rejection = self._static_collision_rejection(
+            static_result, min_static_clearance = self._rollout_step_static_check(
                 candidate=candidate,
                 observation=observation,
+                ctx=ctx,
                 robot_pos=robot_pos,
-                hard_static_clearance=hard_static_clearance,
-                use_continuous_static_check=use_continuous_static_check,
+                initial_static_clearance=initial_static_clearance,
+                min_static_clearance=min_static_clearance,
+                static_clearance_exception_terms=static_clearance_exception_terms,
+                strict_static_clearance=strict_static_clearance,
+                progress_windows=progress_windows,
                 t=t,
             )
-            if static_rejection is not None:
-                return static_rejection
-            min_static_clearance = min(
-                min_static_clearance,
-                self._min_obstacle_clearance(robot_pos, observation),
+            if static_result is not None:
+                return static_result
+
+            dynamic_rejection = self._check_dynamic_collision(
+                candidate=candidate,
+                ped_pos=ctx["ped_pos"],
+                ped_vel=ctx["ped_vel"],
+                robot_pos=robot_pos,
+                collision_radius=ctx["collision_radius"],
+                min_dynamic_clearance=min_dynamic_clearance,
+                t=t,
             )
-            if min_static_clearance <= required_static_clearance:
-                if use_continuous_static_check:
-                    continue
-                static_violation_policy = (
-                    None
-                    if strict_static_clearance or corridor_clearance_buffer > 0.0
-                    else self._static_clearance_violation_policy(
-                        candidate=candidate,
-                        initial_clearance=initial_static_clearance,
-                        current_min_clearance=min_static_clearance,
-                        hard_static_clearance=hard_static_clearance,
-                        step_progress=start_dist - float(np.linalg.norm(goal - robot_pos)),
-                        progress_windows=progress_windows,
-                    )
-                )
-                if static_violation_policy is None:
-                    return {
-                        "accepted": False,
-                        "reason": "static_clearance",
-                        "candidate": candidate,
-                        "min_static_clearance": float(min_static_clearance),
-                        "hard_static_clearance": float(hard_static_clearance),
-                        "required_static_clearance": float(required_static_clearance),
-                        "time": float(t),
-                    }
-                static_clearance_exception_terms.add(static_violation_policy)
-
-            if (
-                "escape" in static_clearance_exception_terms
-                and initial_static_clearance <= hard_static_clearance
-                and min_static_clearance + float(self.config.static_clearance_escape_tolerance)
-                < initial_static_clearance
-            ):
-                return {
-                    "accepted": False,
-                    "reason": "static_clearance",
-                    "candidate": candidate,
-                    "min_static_clearance": float(min_static_clearance),
-                    "hard_static_clearance": float(hard_static_clearance),
-                    "time": float(t),
-                }
-
-            if ped_pos.size > 0:
-                ped_future = ped_pos + ped_vel * t
+            if dynamic_rejection is not None:
+                return dynamic_rejection
+            if ctx["ped_pos"].size > 0:
+                ped_future = ctx["ped_pos"] + ctx["ped_vel"] * t
                 distances = np.linalg.norm(ped_future - robot_pos[None, :], axis=1)
                 min_dynamic_clearance = min(min_dynamic_clearance, float(np.min(distances)))
-                if (
-                    t <= float(self.config.hard_collision_horizon)
-                    and min_dynamic_clearance <= collision_radius
-                ):
-                    return {
-                        "accepted": False,
-                        "reason": "dynamic_collision",
-                        "candidate": candidate,
-                        "min_dynamic_clearance": float(min_dynamic_clearance),
-                        "collision_radius": float(collision_radius),
-                        "time": float(t),
-                    }
 
+        ctx["robot_pos"] = robot_pos
+        ctx["heading"] = heading
+        ctx["min_static_clearance"] = min_static_clearance
+        ctx["min_dynamic_clearance"] = min_dynamic_clearance
+        ctx["static_clearance_exception_terms"] = static_clearance_exception_terms
+        ctx["initial_static_clearance"] = initial_static_clearance
+        return None
+
+    def _check_static_clearance_violation(  # noqa: PLR0913
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        min_static_clearance: float,
+        required_static_clearance: float,
+        hard_static_clearance: float,
+        use_continuous_static_check: bool,
+        strict_static_clearance: bool,
+        corridor_clearance_buffer: float,
+        initial_static_clearance: float,
+        start_dist: float,
+        robot_pos: np.ndarray,
+        goal: np.ndarray,
+        progress_windows: dict[str, float] | None,
+        static_clearance_exception_terms: set[str],
+        t: float,
+    ) -> dict[str, Any] | None:
+        """Check static clearance violation and return rejection dict or None.
+
+        Returns:
+            dict[str, Any] | None: Rejection dict if clearance is violated, else None.
+        """
+        if min_static_clearance > required_static_clearance:
+            return None
+        if use_continuous_static_check:
+            return None
+        static_violation_policy = (
+            None
+            if strict_static_clearance or corridor_clearance_buffer > 0.0
+            else self._static_clearance_violation_policy(
+                candidate=candidate,
+                initial_clearance=initial_static_clearance,
+                current_min_clearance=min_static_clearance,
+                hard_static_clearance=hard_static_clearance,
+                step_progress=start_dist - float(np.linalg.norm(goal - robot_pos)),
+                progress_windows=progress_windows,
+            )
+        )
+        if static_violation_policy is None:
+            return {
+                "accepted": False,
+                "reason": "static_clearance",
+                "candidate": candidate,
+                "min_static_clearance": float(min_static_clearance),
+                "hard_static_clearance": float(hard_static_clearance),
+                "required_static_clearance": float(required_static_clearance),
+                "time": float(t),
+            }
+        static_clearance_exception_terms.add(static_violation_policy)
+
+        if (
+            "escape" in static_clearance_exception_terms
+            and initial_static_clearance <= hard_static_clearance
+            and min_static_clearance + float(self.config.static_clearance_escape_tolerance)
+            < initial_static_clearance
+        ):
+            return {
+                "accepted": False,
+                "reason": "static_clearance",
+                "candidate": candidate,
+                "min_static_clearance": float(min_static_clearance),
+                "hard_static_clearance": float(hard_static_clearance),
+                "time": float(t),
+            }
+        return None
+
+    def _compute_post_rollout_metrics(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        state: dict[str, Any],
+        ctx: dict[str, Any],
+        route_corridor: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Compute geometric and clearance metrics after rollout completion.
+
+        Returns:
+            dict[str, Any]: Progress, heading, TTC, and clearance metrics.
+        """
+        robot_pos = ctx["robot_pos"]
+        heading = ctx["heading"]
+        goal = ctx["goal"]
+        ped_pos = ctx["ped_pos"]
+        ped_vel = ctx["ped_vel"]
+        collision_radius = ctx["collision_radius"]
+        start_dist = ctx["start_dist"]
+        start_pos = ctx["start_pos"]
+        min_static_clearance = ctx["min_static_clearance"]
+        min_dynamic_clearance = ctx["min_dynamic_clearance"]
+        rollout_commands = ctx["rollout_commands"]
         end_dist = float(np.linalg.norm(goal - robot_pos))
         progress = start_dist - end_dist
         static_gate_progress, static_gate_progress_metric = self._static_safety_gate_progress(
@@ -2192,7 +2368,6 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ped_pos=ped_pos,
             ped_vel=ped_vel,
         )
-
         dynamic_margin = min_dynamic_clearance - collision_radius
         desired_dynamic_margin = max(
             float(self.config.desired_dynamic_clearance) - collision_radius, _EPS
@@ -2210,9 +2385,36 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             if np.isinf(min_dynamic_clearance)
             else _clip01(dynamic_margin / desired_dynamic_margin)
         )
-        velocity_delta = abs(candidate.linear - float(state["current_speed"]))
-        angular_delta = abs(candidate.angular - float(self._last_command[1]))
-        progress_windows = progress_windows or {}
+        return {
+            "progress": progress,
+            "static_gate_progress": static_gate_progress,
+            "static_gate_progress_metric": static_gate_progress_metric,
+            "max_progress": max_progress,
+            "heading_error": heading_error,
+            "ttc": ttc,
+            "static_clearance": static_clearance,
+            "dynamic_clearance": dynamic_clearance,
+            "rollout_mean_linear": rollout_mean_linear,
+            "rollout_max_linear": rollout_max_linear,
+        }
+
+    def _compute_recovery_and_commitment_terms(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        state: dict[str, Any],
+        ctx: dict[str, Any],
+        nearest_ped: float,
+        progress_windows: dict[str, float],
+    ) -> dict[str, float]:
+        """Compute deadlock-escape, static-recenter, and route-commitment terms.
+
+        Returns:
+            dict[str, float]: Recovery and commitment score terms.
+        """
+        start_dist = ctx["start_dist"]
+        hard_static_clearance = ctx["hard_static_clearance"]
         stalled_progress = float(progress_windows.get("3s", 0.0)) <= float(
             self.config.deadlock_progress_threshold
         )
@@ -2240,6 +2442,83 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_windows=progress_windows,
             start_dist=start_dist,
         )
+        return {
+            "deadlock_escape": deadlock_escape,
+            "static_recenter": static_recenter,
+            "route_guide_commitment": route_guide_commitment,
+        }
+
+    def _compute_gate_and_proxemic(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        ctx: dict[str, Any],
+        metrics: dict[str, Any],
+    ) -> tuple[float, float, float, dict[str, Any], float]:
+        """Compute proxemic cost and static safety gate diagnostics.
+
+        Returns:
+            Tuple of (proxemic_mean, proxemic_max, proxemic_norm, gate_dict, gate_penalty).
+        """
+        proxemic_cost_mean, proxemic_cost_max, proxemic_cost_norm = self._proxemic_cost_summary(
+            proxemic_costmap_config=ctx["proxemic_costmap_config"],
+            rollout_points=ctx["rollout_points"],
+            ped_pos=ctx["ped_pos"],
+            ped_vel=ctx["ped_vel"],
+        )
+        static_safety_gate = self._static_safety_gate(
+            candidate=candidate,
+            progress=metrics["static_gate_progress"],
+            progress_metric=metrics["static_gate_progress_metric"],
+            initial_static_clearance=ctx["initial_static_clearance"],
+            min_static_clearance=ctx["min_static_clearance"],
+        )
+        static_safety_gate_penalty = (
+            float(static_safety_gate.get("penalty", 0.0))
+            if isinstance(static_safety_gate, dict)
+            else 0.0
+        )
+        return (
+            proxemic_cost_mean,
+            proxemic_cost_max,
+            proxemic_cost_norm,
+            static_safety_gate,
+            static_safety_gate_penalty,
+        )
+
+    def _compute_behavioral_score_terms(  # noqa: PLR0913
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        state: dict[str, Any],
+        ctx: dict[str, Any],
+        nearest_ped: float,
+        progress_windows: dict[str, float] | None,
+        route_corridor: dict[str, Any] | None,
+        goal_posterior: dict[str, Any] | None,
+        metrics: dict[str, Any],
+    ) -> tuple[dict[str, float], dict[str, Any]]:
+        """Compute behavioral and policy score terms.
+
+        Returns:
+            Tuple of (behavioral terms dict, diagnostics dict).
+        """
+        robot_pos = ctx["robot_pos"]
+        heading = ctx["heading"]
+        min_static_clearance = ctx["min_static_clearance"]
+        static_clearance_exception_terms = ctx["static_clearance_exception_terms"]
+        progress_windows = progress_windows or {}
+        velocity_delta = abs(candidate.linear - float(state["current_speed"]))
+        angular_delta = abs(candidate.angular - float(self._last_command[1]))
+        recovery_terms = self._compute_recovery_and_commitment_terms(
+            candidate=candidate,
+            observation=observation,
+            state=state,
+            ctx=ctx,
+            nearest_ped=nearest_ped,
+            progress_windows=progress_windows,
+        )
         corridor_subgoal_terms = self._corridor_subgoal_score_terms(
             candidate=candidate,
             route_corridor=route_corridor,
@@ -2247,12 +2526,177 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             end_pos=robot_pos,
             end_heading=heading,
             min_static_clearance=min_static_clearance,
-            hard_static_clearance=hard_static_clearance,
+            hard_static_clearance=ctx["hard_static_clearance"],
         )
         actuation_terms, actuation_diagnostics = self._actuation_terms(
             candidate=candidate,
             state=state,
         )
+        px_mean, px_max, px_norm, gate, gate_penalty = self._compute_gate_and_proxemic(
+            candidate=candidate,
+            ctx=ctx,
+            metrics=metrics,
+        )
+        behavioral_terms: dict[str, float] = {
+            "velocity_delta": velocity_delta,
+            "angular_delta": angular_delta,
+            "static_clearance_escape": 1.0 if "escape" in static_clearance_exception_terms else 0.0,
+            "static_corridor_transit": 1.0
+            if "corridor_transit" in static_clearance_exception_terms
+            else 0.0,
+            "static_safety_gate_penalty": gate_penalty,
+            "goal_posterior_avoidance": self._goal_posterior_score_term(
+                candidate=candidate,
+                goal_posterior=goal_posterior,
+            ),
+            "proxemic_cost": px_norm,
+            **recovery_terms,
+            **corridor_subgoal_terms,
+            **actuation_terms,
+        }
+        diagnostics = {
+            "static_safety_gate": gate,
+            "static_safety_gate_penalty": gate_penalty,
+            "actuation_diagnostics": actuation_diagnostics,
+            "proxemic_cost_mean": px_mean,
+            "proxemic_cost_max": px_max,
+            "proxemic_cost_norm": px_norm,
+        }
+        return behavioral_terms, diagnostics
+
+    def _assemble_geometric_terms(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        ctx: dict[str, Any],
+        speed_cap: float,
+        route_corridor: dict[str, Any] | None,
+        metrics: dict[str, Any],
+        behavioral_terms: dict[str, float],
+    ) -> dict[str, float]:
+        """Assemble the final terms dict from geometric and behavioral components.
+
+        Returns:
+            dict[str, float]: Complete score terms dictionary.
+        """
+        start_dist = ctx["start_dist"]
+        terms: dict[str, float] = {
+            "goal_progress": float(
+                np.clip(metrics["progress"] / metrics["max_progress"], -1.0, 1.0)
+            ),
+            "route_arc_progress": self._route_arc_progress_term(
+                route_corridor=route_corridor,
+                start_pos=ctx["start_pos"],
+                end_pos=ctx["robot_pos"],
+                max_progress=metrics["max_progress"],
+            ),
+            "path_alignment": float(np.cos(metrics["heading_error"])),
+            "speed_preference": _clip01(metrics["rollout_mean_linear"] / max(speed_cap, _EPS)),
+            "static_clearance": metrics["static_clearance"],
+            "dynamic_clearance": metrics["dynamic_clearance"],
+            "time_to_collision_margin": 1.0
+            if np.isinf(metrics["ttc"])
+            else _clip01(metrics["ttc"] / max(float(self.config.soft_prediction_horizon), _EPS)),
+            "heading_smoothness": 1.0
+            - _clip01(
+                behavioral_terms["angular_delta"] / max(float(self.config.max_angular_speed), _EPS)
+            ),
+            "velocity_smoothness": 1.0
+            - _clip01(
+                behavioral_terms["velocity_delta"] / max(float(self.config.max_linear_speed), _EPS)
+            ),
+            "control_effort": 1.0
+            - 0.5
+            * (
+                _clip01(candidate.linear / max(float(self.config.max_linear_speed), _EPS))
+                + _clip01(abs(candidate.angular) / max(float(self.config.max_angular_speed), _EPS))
+            ),
+            "freezing_penalty": 1.0
+            if metrics["rollout_max_linear"] <= float(self.config.freezing_speed_threshold)
+            and start_dist > float(self.config.goal_far_distance)
+            else 0.0,
+            "oscillation_penalty": self._oscillation_penalty(candidate.angular),
+        }
+        for key in (
+            "deadlock_escape",
+            "static_recenter",
+            "static_clearance_escape",
+            "static_corridor_transit",
+            "route_guide_commitment",
+            "static_safety_gate_penalty",
+            "goal_posterior_avoidance",
+            "proxemic_cost",
+        ):
+            terms[key] = behavioral_terms[key]
+        terms.update(
+            {
+                k: v
+                for k, v in behavioral_terms.items()
+                if k.startswith(("corridor_subgoal_", "actuation_"))
+            }
+        )
+        return terms
+
+    def _compute_candidate_score_terms(  # noqa: PLR0913
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        state: dict[str, Any],
+        ctx: dict[str, Any],
+        speed_cap: float,
+        nearest_ped: float,
+        progress_windows: dict[str, float] | None,
+        route_corridor: dict[str, Any] | None,
+        goal_posterior: dict[str, Any] | None,
+    ) -> tuple[dict[str, float], dict[str, Any]]:
+        """Compute all scoring terms and diagnostics after a successful rollout.
+
+        Returns:
+            Tuple of (terms dict, diagnostics dict with auxiliary data).
+        """
+        metrics = self._compute_post_rollout_metrics(
+            candidate=candidate,
+            state=state,
+            ctx=ctx,
+            route_corridor=route_corridor,
+        )
+        behavioral_terms, diagnostics = self._compute_behavioral_score_terms(
+            candidate=candidate,
+            observation=observation,
+            state=state,
+            ctx=ctx,
+            nearest_ped=nearest_ped,
+            progress_windows=progress_windows,
+            route_corridor=route_corridor,
+            goal_posterior=goal_posterior,
+            metrics=metrics,
+        )
+        terms = self._assemble_geometric_terms(
+            candidate=candidate,
+            ctx=ctx,
+            speed_cap=speed_cap,
+            route_corridor=route_corridor,
+            metrics=metrics,
+            behavioral_terms=behavioral_terms,
+        )
+        diagnostics["ttc"] = metrics["ttc"]
+        diagnostics["use_continuous_static_check"] = ctx["use_continuous_static_check"]
+        return terms, diagnostics
+
+    def _proxemic_cost_summary(
+        self,
+        *,
+        proxemic_costmap_config: ProxemicCostmapConfig | None,
+        rollout_points: list[np.ndarray] | None,
+        ped_pos: np.ndarray,
+        ped_vel: np.ndarray,
+    ) -> tuple[float, float, float]:
+        """Compute proxemic cost mean, max, and normalized mean.
+
+        Returns:
+            tuple[float, float, float]: Mean, max, and normalized proxemic cost.
+        """
         if proxemic_costmap_config is not None and rollout_points is not None:
             proxemic_cost_values = proxemic_cost_at_points(
                 np.asarray(rollout_points, dtype=float),
@@ -2269,65 +2713,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             proxemic_cost_mean = 0.0
             proxemic_cost_max = 0.0
             proxemic_cost_norm = 0.0
-        static_safety_gate = self._static_safety_gate(
-            candidate=candidate,
-            progress=static_gate_progress,
-            progress_metric=static_gate_progress_metric,
-            initial_static_clearance=initial_static_clearance,
-            min_static_clearance=min_static_clearance,
-        )
-        static_safety_gate_penalty = (
-            float(static_safety_gate.get("penalty", 0.0))
-            if isinstance(static_safety_gate, dict)
-            else 0.0
-        )
-        terms = {
-            "goal_progress": float(np.clip(progress / max_progress, -1.0, 1.0)),
-            "route_arc_progress": self._route_arc_progress_term(
-                route_corridor=route_corridor,
-                start_pos=start_pos,
-                end_pos=robot_pos,
-                max_progress=max_progress,
-            ),
-            "path_alignment": float(np.cos(heading_error)),
-            "speed_preference": _clip01(rollout_mean_linear / max(speed_cap, _EPS)),
-            "static_clearance": static_clearance,
-            "dynamic_clearance": dynamic_clearance,
-            "time_to_collision_margin": 1.0
-            if np.isinf(ttc)
-            else _clip01(ttc / max(float(self.config.soft_prediction_horizon), _EPS)),
-            "heading_smoothness": 1.0
-            - _clip01(angular_delta / max(float(self.config.max_angular_speed), _EPS)),
-            "velocity_smoothness": 1.0
-            - _clip01(velocity_delta / max(float(self.config.max_linear_speed), _EPS)),
-            "control_effort": 1.0
-            - 0.5
-            * (
-                _clip01(candidate.linear / max(float(self.config.max_linear_speed), _EPS))
-                + _clip01(abs(candidate.angular) / max(float(self.config.max_angular_speed), _EPS))
-            ),
-            "freezing_penalty": 1.0
-            if rollout_max_linear <= float(self.config.freezing_speed_threshold)
-            and start_dist > float(self.config.goal_far_distance)
-            else 0.0,
-            "oscillation_penalty": self._oscillation_penalty(candidate.angular),
-            "deadlock_escape": deadlock_escape,
-            "static_recenter": static_recenter,
-            "static_clearance_escape": 1.0 if "escape" in static_clearance_exception_terms else 0.0,
-            "static_corridor_transit": 1.0
-            if "corridor_transit" in static_clearance_exception_terms
-            else 0.0,
-            "route_guide_commitment": route_guide_commitment,
-            "static_safety_gate_penalty": static_safety_gate_penalty,
-            "goal_posterior_avoidance": self._goal_posterior_score_term(
-                candidate=candidate,
-                goal_posterior=goal_posterior,
-            ),
-            "proxemic_cost": proxemic_cost_norm,
-            **corridor_subgoal_terms,
-            **actuation_terms,
-        }
-        raw_value_score = (
+        return proxemic_cost_mean, proxemic_cost_max, proxemic_cost_norm
+
+    def _compute_weighted_score(self, terms: dict[str, float]) -> float:
+        """Compute the raw weighted value score from individual terms.
+
+        Returns:
+            float: Weighted sum of all score terms.
+        """
+        return (
             float(self.config.goal_progress_weight) * terms["goal_progress"]
             + float(self.config.path_alignment_weight) * terms["path_alignment"]
             + float(self.config.speed_preference_weight) * terms["speed_preference"]
@@ -2358,27 +2752,78 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )
-        score = raw_value_score - static_safety_gate_penalty
+
+    def _evaluate_candidate(  # noqa: PLR0913
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        observation: dict[str, Any],
+        state: dict[str, Any],
+        speed_cap: float,
+        nearest_ped: float,
+        progress_windows: dict[str, float] | None = None,
+        route_corridor: dict[str, Any] | None = None,
+        strict_static_clearance: bool = False,
+        goal_posterior: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Filter and score one candidate command.
+
+        Returns:
+            dict[str, Any]: Rejection reason or accepted score/term diagnostics.
+        """
+        angular_rejection = self._reject_excessive_angular_near_human(candidate, nearest_ped)
+        if angular_rejection is not None:
+            return angular_rejection
+
+        ctx = self._prepare_evaluation_context(
+            candidate=candidate,
+            state=state,
+            strict_static_clearance=strict_static_clearance,
+        )
+        collision_rejection = self._execute_rollout_collision_check(
+            candidate=candidate,
+            observation=observation,
+            ctx=ctx,
+            progress_windows=progress_windows,
+            strict_static_clearance=strict_static_clearance,
+        )
+        if collision_rejection is not None:
+            return collision_rejection
+
+        terms, diagnostics = self._compute_candidate_score_terms(
+            candidate=candidate,
+            observation=observation,
+            state=state,
+            ctx=ctx,
+            speed_cap=speed_cap,
+            nearest_ped=nearest_ped,
+            progress_windows=progress_windows,
+            route_corridor=route_corridor,
+            goal_posterior=goal_posterior,
+        )
+        raw_value_score = self._compute_weighted_score(terms)
+        score = raw_value_score - diagnostics["static_safety_gate_penalty"]
+        proxemic_costmap_config = ctx["proxemic_costmap_config"]
         return {
             "accepted": True,
             "candidate": candidate,
             "score": float(score),
             "raw_value_score": float(raw_value_score),
             "terms": terms,
-            "min_static_clearance": min_static_clearance,
-            "min_dynamic_clearance": min_dynamic_clearance,
-            "predicted_ttc": ttc,
-            "continuous_static_checked": bool(use_continuous_static_check),
+            "min_static_clearance": ctx["min_static_clearance"],
+            "min_dynamic_clearance": ctx["min_dynamic_clearance"],
+            "predicted_ttc": diagnostics["ttc"],
+            "continuous_static_checked": bool(diagnostics["use_continuous_static_check"]),
             "proxemic_cost_summary": {
                 "enabled": bool(proxemic_costmap_config.enabled)
                 if proxemic_costmap_config is not None
                 else False,
-                "mean": proxemic_cost_mean,
-                "max": proxemic_cost_max,
-                "normalized_mean": proxemic_cost_norm,
+                "mean": diagnostics["proxemic_cost_mean"],
+                "max": diagnostics["proxemic_cost_max"],
+                "normalized_mean": diagnostics["proxemic_cost_norm"],
             },
-            "actuation_diagnostics": actuation_diagnostics,
-            "static_safety_gate": static_safety_gate,
+            "actuation_diagnostics": diagnostics["actuation_diagnostics"],
+            "static_safety_gate": diagnostics["static_safety_gate"],
         }
 
     def _candidate_diagnostic(self, evaluation: dict[str, Any]) -> dict[str, Any]:

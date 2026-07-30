@@ -235,6 +235,35 @@ def test_repo_allowlist_is_superset_of_files_with_violations() -> None:
     )
 
 
+def test_fingerprint_is_python_version_independent() -> None:
+    """Regression for issue #6575: fingerprints must not drift across interpreters.
+
+    Main CI runs on Python 3.12 while developers and the compatibility matrix
+    use 3.13. ``ast.dump`` changed in 3.13 (it omits empty ``Call.keywords``)
+    and ``ast.unparse`` selects a different outer f-string quote when an
+    interpolation contains a literal quote. A fingerprint derived from either
+    representation was therefore not portable, so a baseline generated on one
+    interpreter failed the ratchet on the other and broke main CI. The
+    fingerprint must be a function of the f-string's semantic content (literal
+    segments plus interpolation expressions) only.
+    """
+    # Interpolation is a call with no keyword arguments: under ast.dump this
+    # serializes with ``keywords=[]`` on 3.12 but without it on 3.13. The locked
+    # value is the content-based fingerprint and must hold on every interpreter.
+    call_source = "from loguru import logger\nlogger.info(f'value is {msg.strip()}')\n"
+    call_fingerprint = find_violations(call_source, "<call>")[0].fingerprint
+    assert call_fingerprint == "c801c0bd2904bc02"
+
+    # The interpolation contains a literal quote, which forces 3.12 and 3.13
+    # ``ast.unparse`` to pick different outer quotes for the whole f-string.
+    # The fingerprint must depend on the literal value plus the expression text,
+    # not the chosen outer quote, so it is identical to the 3.12 value below.
+    nested_quote_source = "from loguru import logger\nlogger.info(f\"v {'; '.join(x['y'])}\")\n"
+    nested_fingerprint = find_violations(nested_quote_source, "<nested>")[0].fingerprint
+    assert nested_fingerprint == "ea3b688463012d96"
+    assert len(nested_fingerprint) == _HOOK.FINGERPRINT_LENGTH
+
+
 def test_hot_path_files_not_in_allowlist() -> None:
     """The migrated hot-path files must NOT be allowlisted (guard enforces them)."""
     repo_root = Path(__file__).resolve().parents[2]

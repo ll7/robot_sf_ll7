@@ -18,6 +18,7 @@ import yaml
 from loguru import logger
 from torch.utils.data import DataLoader, TensorDataset
 
+from robot_sf import common
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from robot_sf.models.registry import upsert_registry_entry
@@ -93,7 +94,7 @@ def _dataset_diagnostics(
     return diagnostics
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI args for predictive model training."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -150,7 +151,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow training to continue even when dataset diagnostics detect degeneration.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _git_commit() -> str:
@@ -693,9 +694,9 @@ def _validate_checkpoint_registration_inputs(
         )
 
 
-def main() -> int:  # noqa: C901, PLR0912, PLR0915
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Train predictive trajectory model and persist checkpoint + metrics."""
-    args = parse_args()
+    args = parse_args(argv)
 
     if args.checkpoint_only_register is not None:
         if args.training_summary is None:
@@ -756,8 +757,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
 
     started_at_utc = datetime.now(UTC)
 
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    common.set_global_seed(args.seed)
 
     raw = np.load(args.dataset)
     state = np.asarray(raw["state"], dtype=np.float32)

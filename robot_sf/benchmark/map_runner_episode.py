@@ -178,8 +178,8 @@ from robot_sf.planner.safety_shield import shield_metrics_from_stats
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from robot_sf.benchmark.latency_stress import LatencyStressProfile
     from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
-    from robot_sf.benchmark.types import NoiseConfig, PlannerRuntime
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
     from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor
 
@@ -1205,7 +1205,7 @@ class _EpisodeRunContext:
     noise_state: ObservationNoiseState
     noise_stats: dict[str, int]
     tracking_precision_spec: dict[str, Any]
-    tracking_precision_rng: np.random.Generator | None
+    tracking_precision_rng: np.random.Generator
     safety_wrapper_runtime: SafetyWrapperRuntimeConfig
     cbf_runtime: CBFSafetyFilterRuntimeConfig
     safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None
@@ -1214,7 +1214,7 @@ class _EpisodeRunContext:
     robot_kinematics: str
     robot_command_mode: str
     actuation_profile: SyntheticActuationProfile | None
-    latency_profile: SyntheticActuationProfile | None
+    latency_profile: LatencyStressProfile | None
     algo: str
     policy_cfg: dict[str, Any]
 
@@ -1531,8 +1531,8 @@ class _PolicyContract:
     actuation_controller: SyntheticActuationController | None
     active_observation_mode: str
     active_observation_level: str
-    single_pedestrian_intent_metadata: list[dict[str, Any]]
-    single_pedestrian_vru_metadata: list[dict[str, Any]]
+    single_pedestrian_intent_metadata: list[dict[str, Any] | None]
+    single_pedestrian_vru_metadata: list[dict[str, Any] | None]
 
 
 def _prepare_policy_and_observation_contract(  # noqa: PLR0913
@@ -1704,20 +1704,18 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any] | None = None,
     config: RobotSimulationConfig,
     horizon_val: int,
-    planner_runtime: PlannerRuntime | None = None,
-    policy_fn: Callable[..., Any] | None = None,
+    policy_fn: Callable[..., Any],
     planner_bind_env: Callable[..., Any] | None = None,
     planner_reset: Callable[..., Any] | None = None,
     planner_close: Callable[..., Any] | None = None,
     planner_stats: Callable[..., Any] | None = None,
     planner_native_action: bool = False,
-    noise: NoiseConfig | None = None,
-    noise_spec: dict[str, Any] | None = None,
-    noise_rng: np.random.Generator | None = None,
+    noise_spec: dict[str, Any],
+    noise_rng: np.random.Generator,
     noise_state: ObservationNoiseState | None = None,
-    noise_stats: dict[str, int] | None = None,
+    noise_stats: dict[str, int],
     tracking_precision_spec: dict[str, Any],
-    tracking_precision_rng: np.random.Generator | None = None,
+    tracking_precision_rng: np.random.Generator,
     safety_wrapper_runtime: SafetyWrapperRuntimeConfig,
     safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None = None,
     cbf_runtime: CBFSafetyFilterRuntimeConfig,
@@ -1726,8 +1724,8 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-    single_pedestrian_intent_metadata: list[dict[str, Any]] | None = None,
-    single_pedestrian_vru_metadata: list[dict[str, Any]] | None = None,
+    single_pedestrian_intent_metadata: list[dict[str, Any] | None] | None = None,
+    single_pedestrian_vru_metadata: list[dict[str, Any] | None] | None = None,
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
 ) -> _EpisodeStepLoopResult:
@@ -1738,18 +1736,6 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
         outcome flag produced by the step loop, plus the planner runtime snapshot
         captured in the ``finally`` teardown.
     """
-    if planner_runtime is not None:
-        policy_fn = planner_runtime.policy_fn
-        planner_bind_env = planner_runtime.planner_bind_env
-        planner_reset = planner_runtime.planner_reset
-        planner_close = planner_runtime.planner_close
-        planner_stats = planner_runtime.planner_stats
-        planner_native_action = planner_runtime.planner_native_action
-    if noise is not None:
-        noise_spec = noise.spec
-        noise_rng = noise.rng
-        noise_state = noise.state
-        noise_stats = noise.stats
     # Per-episode instrumentation buffers (populated during the step loop below).
     tracking_precision_records: list[dict[str, Any]] = []
     safety_wrapper_trace: list[dict[str, Any]] = []
@@ -2503,7 +2489,7 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     if fast_bicycle_summary is not None:
         algo_meta["fast_bicycle_actor"] = fast_bicycle_summary
-    if actuation_controller is not None:
+    if actuation_controller is not None and actuation_profile is not None:
         actuation_summary = actuation_controller.summary()
         algo_meta["synthetic_actuation"] = {
             "profile": actuation_profile.to_metadata(),

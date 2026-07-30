@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile
+
 
 @dataclass(slots=True)
 class ScenarioSpec:
@@ -187,9 +189,10 @@ class NoiseConfig:
 class MapBatchConfig:
     """Consolidated keyword arguments for ``run_map_batch``.
 
-    Every keyword-only parameter of ``run_map_batch`` has a corresponding field.
-    Use ``MapBatchConfig(**kwargs)`` to bundle and validate the batch
-    configuration before passing it to the runner.
+    Mirrors the keyword-only parameters of ``run_map_batch`` (excluding
+    ``batch_config`` itself and the ``scenario_path`` I/O argument), so a caller
+    can bundle and validate the batch configuration in one typed object before
+    passing it to the runner via ``run_map_batch(..., batch_config=cfg)``.
     """
 
     horizon: int | None = None
@@ -199,7 +202,7 @@ class MapBatchConfig:
     snqi_baseline: dict[str, dict[str, float]] | None = None
     algo: str = "goal"
     algo_config_path: str | None = None
-    benchmark_profile: str = "baseline-safe"
+    benchmark_profile: BenchmarkProfile = "baseline-safe"
     socnav_missing_prereq_policy: str = "fail-fast"
     adapter_impact_eval: bool = False
     experimental_ped_impact: bool = False

@@ -204,9 +204,43 @@ def _message_argument(node: ast.Call, method: str) -> ast.expr | None:
     return node.args[message_index] if len(node.args) > message_index else None
 
 
+def _canonical_ast_repr(node: object) -> str:
+    """Return a version-stable canonical serialization of ``node``.
+
+    ``ast.dump`` changed its output format across CPython releases: 3.13 omits
+    empty fields such as ``keywords=[]`` on ``Call`` nodes, while 3.11 still
+    emits the since-removed ``Constant.kind`` field. Those differences make
+    f-string fingerprints diverge across interpreters, which silently breaks
+    the per-call ratchet: the same grandfathered call gets a different
+    identity on each Python version, so the baseline never validates on all
+    of them at once (issue #6566).
+
+    This walker emits every field whose value is not a semantic no-op
+    (``None`` or an empty ``list``/``tuple``) in ``_fields`` order, producing
+    identical bytes on Python 3.11, 3.12, and 3.13 for the same parsed
+    f-string. It preserves exact-identity semantics: two f-strings collide
+    only when their structure is identical, so the ratchet still rejects any
+    newly added f-string logger call.
+    """
+    if isinstance(node, ast.AST):
+        parts = []
+        for name, value in ast.iter_fields(node):
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple)) and len(value) == 0:
+                continue
+            parts.append(f"{name}={_canonical_ast_repr(value)}")
+        return f"{type(node).__name__}({', '.join(parts)})"
+    if isinstance(node, list):
+        return "[" + ", ".join(_canonical_ast_repr(item) for item in node) + "]"
+    if isinstance(node, tuple):
+        return "(" + ", ".join(_canonical_ast_repr(item) for item in node) + ")"
+    return repr(node)
+
+
 def _message_fingerprint(message: ast.JoinedStr) -> str:
     """Return a location-independent fingerprint for one f-string expression."""
-    normalized = ast.dump(message, annotate_fields=True, include_attributes=False)
+    normalized = _canonical_ast_repr(message)
     return sha256(normalized.encode("utf-8")).hexdigest()[:FINGERPRINT_LENGTH]
 
 

@@ -7,6 +7,7 @@ allowlist ratchet) and prove it flags a deliberately injected f-string.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import re
 from collections import Counter
@@ -42,6 +43,54 @@ def test_flags_injected_fstring_logger_call(tmp_path: Path) -> None:
     assert violations[0].preview == "f'value is {x}'"
     assert violations[0].scope == "f"
     assert len(violations[0].fingerprint) == _HOOK.FINGERPRINT_LENGTH
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_repr", "expected_fingerprint"),
+    [
+        # Version-stable canonical f-string AST serialization (issue #6566).
+        # ``ast.dump`` diverges across interpreters: 3.13 omits empty fields such
+        # as ``keywords=[]`` on Call nodes, while 3.11 still emits the removed
+        # ``Constant.kind`` field. These pinned bytes are the canonical form
+        # produced identically on Python 3.11, 3.12, and 3.13; reverting the
+        # fingerprint to ``ast.dump`` would change them on 3.11/3.12.
+        (
+            'f"value is {x}"',
+            "JoinedStr(values=[Constant(value='value is '), "
+            "FormattedValue(value=Name(id='x', ctx=Load()), conversion=-1)])",
+            "84844c275ea48afc",
+        ),
+        (
+            'f"len is {len(items)}"',
+            "JoinedStr(values=[Constant(value='len is '), "
+            "FormattedValue(value=Call(func=Name(id='len', ctx=Load()), "
+            "args=[Name(id='items', ctx=Load())]), conversion=-1)])",
+            "74505df916c2050d",
+        ),
+        (
+            'f"dump {json.dumps(x, indent=2)}"',
+            "JoinedStr(values=[Constant(value='dump '), "
+            "FormattedValue(value=Call(func=Attribute(value=Name(id='json', "
+            "ctx=Load()), attr='dumps', ctx=Load()), "
+            "args=[Name(id='x', ctx=Load())], "
+            "keywords=[keyword(arg='indent', value=Constant(value=2))]), conversion=-1)])",
+            "00556df024a1897a",
+        ),
+    ],
+)
+def test_fstring_fingerprint_is_version_stable(
+    source: str, expected_repr: str, expected_fingerprint: str
+) -> None:
+    """The f-string fingerprint must not depend on the running interpreter.
+
+    A ``Call`` with no keyword arguments is the exact case where ``ast.dump``
+    diverges (3.13 omits ``keywords=[]``), so it is pinned explicitly. These
+    canonical bytes are identical on Python 3.11, 3.12, and 3.13.
+    """
+    message = ast.parse(source, mode="eval").body
+    assert isinstance(message, ast.JoinedStr)
+    assert _HOOK._canonical_ast_repr(message) == expected_repr
+    assert _HOOK._message_fingerprint(message) == expected_fingerprint
 
 
 def test_structured_style_is_not_flagged() -> None:

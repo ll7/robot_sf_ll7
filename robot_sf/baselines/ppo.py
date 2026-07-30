@@ -303,7 +303,10 @@ class PPOPlanner:
 
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
-        assert isinstance(obs, Observation)
+        if not isinstance(obs, Observation):
+            raise TypeError(
+                f"PPOPolicy requires Observation, got {type(obs).__name__}",
+            )
 
         # Try model predict
         try:

@@ -614,8 +614,8 @@ class OccupancyGrid:
             self.config.grid_height,
             self.config.grid_width,
         )
-        # Boundary assertion: ensure grid dimensions are positive
-        assert all(dim > 0 for dim in shape), f"Invalid grid shape: {shape}"
+        if not all(dim > 0 for dim in shape):
+            raise ValueError(f"Invalid grid shape: {shape}")
         self._grid_data = np.zeros(shape, dtype=self.config.dtype)
 
         logger.debug(

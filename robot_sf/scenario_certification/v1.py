@@ -319,9 +319,12 @@ def _certify_route(
             evidence=evidence,
         )
 
-    assert start is not None
-    assert goal is not None
-    assert route_line is not None
+    if start is None:
+        raise RuntimeError("Unexpected: route validated as non-empty produced None start")
+    if goal is None:
+        raise RuntimeError("Unexpected: route validated as non-empty produced None goal")
+    if route_line is None:
+        raise RuntimeError("Unexpected: route validated as non-empty produced None route_line")
     direct_length = float(Point(start).distance(Point(goal)))
     checks["direct_start_goal_distance_m"] = direct_length
     checks["authored_route_length_m"] = _polyline_length(route.waypoints)

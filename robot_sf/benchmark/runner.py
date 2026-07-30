@@ -1410,6 +1410,11 @@ def _create_baseline_planner_policy(
     metadata["config_hash"] = _config_hash(algo_config)
     metadata.setdefault("status", "ok")
     metadata["policy_step_timeout"] = timeout_metadata
+    # Merge enrichment in place rather than rebinding ``metadata``. The policy
+    # closure built above captures this exact dict object and mutates
+    # ``status``/``fallback_reason`` during episode steps; ``enrich_algorithm_metadata``
+    # returns a fresh copy, so rebinding would sever that live link and the
+    # recorded metadata would no longer reflect per-step fallbacks.
     metadata.update(
         enrich_algorithm_metadata(
             algo=algo,

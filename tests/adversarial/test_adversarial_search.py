@@ -8,6 +8,7 @@ import json
 import sys
 import types
 from pathlib import Path
+from random import Random
 from typing import Any
 from unittest.mock import Mock
 
@@ -17,7 +18,13 @@ import yaml
 
 from robot_sf.adversarial import certification, objectives, search
 from robot_sf.adversarial.attribution import attribution_from_episode_record, attribution_from_error
-from robot_sf.adversarial.bundle import write_trajectory_csv
+from robot_sf.adversarial.bundle import (
+    build_candidate_payload,
+    compute_effective_scenario_hash,
+    effective_scenario_payload,
+    write_candidate_inputs,
+    write_trajectory_csv,
+)
 from robot_sf.adversarial.certification import failed_status, not_available_status, passed_status
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
@@ -696,6 +703,158 @@ def test_manifest_materialization_rejects_degenerate_manifest() -> None:
             manifest,
             {"scenarios": [{"name": "template", "map_id": "classic_cross_trap"}]},
         )
+
+
+def _bundle_template_scenario() -> dict[str, Any]:
+    """Return a minimal scenario-template mapping for bundle materialization checks."""
+    return {
+        "name": "template",
+        "map_id": "classic_cross_trap",
+        "simulation_config": {"max_episode_steps": 30, "ped_density": 0.0},
+        "metadata": {"archetype": "test"},
+        "seeds": [1],
+    }
+
+
+def test_bundle_materializes_pedestrian_route_and_single_pedestrian_when_id_declared() -> None:
+    """A declared pedestrian id should bind the candidate to a concrete runtime pedestrian."""
+    candidate = _candidate(7)
+
+    scenario, route_payload = build_candidate_payload(
+        candidate,
+        index=0,
+        template_scenario=_bundle_template_scenario(),
+        pedestrian_id="crossing_probe",
+    )
+
+    assert route_payload["ped_routes"][0]["id"] == "crossing_probe"
+    assert route_payload["ped_routes"][0]["spawn_time_s"] == pytest.approx(0.0)
+    assert route_payload["ped_routes"][0]["waypoints"] == [[1.0, 2.0], [5.0, 2.0]]
+
+    pedestrian = scenario["single_pedestrians"][0]
+    assert pedestrian["id"] == "crossing_probe"
+    assert pedestrian["start"] == [1.0, 2.0]
+    assert pedestrian["goal"] == [5.0, 2.0]
+    assert pedestrian["start_delay_s"] == pytest.approx(candidate.spawn_time_s)
+    assert pedestrian["wait_at"][0]["wait_s"] == pytest.approx(candidate.pedestrian_delay_s)
+
+
+def test_bundle_omits_pedestrian_route_and_single_pedestrian_without_id() -> None:
+    """Without a declared pedestrian id the generic bundle stays metadata-only."""
+    scenario, route_payload = build_candidate_payload(
+        _candidate(7),
+        index=0,
+        template_scenario=_bundle_template_scenario(),
+        pedestrian_id=None,
+    )
+
+    assert route_payload["ped_routes"] == []
+    assert "single_pedestrians" not in scenario
+
+
+def test_bundle_spawn_time_perturbation_changes_effective_scenario_hash() -> None:
+    """One-at-a-time spawn_time_s changes must change the effective scenario and its hash."""
+    baseline = _candidate(7)
+    perturbed = dataclasses.replace(baseline, spawn_time_s=baseline.spawn_time_s + 1.5)
+
+    base_scenario, base_route = build_candidate_payload(
+        baseline, index=0, template_scenario=_bundle_template_scenario(), pedestrian_id="probe"
+    )
+    perturbed_scenario, perturbed_route = build_candidate_payload(
+        perturbed, index=0, template_scenario=_bundle_template_scenario(), pedestrian_id="probe"
+    )
+
+    base_hash = compute_effective_scenario_hash(base_scenario, base_route)
+    perturbed_hash = compute_effective_scenario_hash(perturbed_scenario, perturbed_route)
+    assert base_hash != perturbed_hash
+    assert perturbed_scenario["single_pedestrians"][0]["start_delay_s"] == pytest.approx(
+        perturbed.spawn_time_s
+    )
+    assert perturbed_route["ped_routes"][0]["spawn_time_s"] == pytest.approx(perturbed.spawn_time_s)
+
+
+def test_bundle_pedestrian_delay_perturbation_changes_effective_scenario_hash() -> None:
+    """One-at-a-time pedestrian_delay_s changes must change the effective scenario and hash."""
+    baseline = _candidate(7)
+    perturbed = dataclasses.replace(baseline, pedestrian_delay_s=baseline.pedestrian_delay_s + 2.0)
+
+    base_scenario, base_route = build_candidate_payload(
+        baseline, index=0, template_scenario=_bundle_template_scenario(), pedestrian_id="probe"
+    )
+    perturbed_scenario, perturbed_route = build_candidate_payload(
+        perturbed, index=0, template_scenario=_bundle_template_scenario(), pedestrian_id="probe"
+    )
+
+    base_hash = compute_effective_scenario_hash(base_scenario, base_route)
+    perturbed_hash = compute_effective_scenario_hash(perturbed_scenario, perturbed_route)
+    assert base_hash != perturbed_hash
+    assert perturbed_scenario["single_pedestrians"][0]["wait_at"][0]["wait_s"] == pytest.approx(
+        perturbed.pedestrian_delay_s
+    )
+
+
+def test_bundle_effective_hash_ignores_provenance_metadata() -> None:
+    """The effective scenario hash must strip the provenance-only candidate metadata block."""
+    scenario, route_payload = build_candidate_payload(
+        _candidate(7),
+        index=0,
+        template_scenario=_bundle_template_scenario(),
+        pedestrian_id="probe",
+    )
+
+    assert "adversarial_candidate" in scenario["metadata"]
+    effective = effective_scenario_payload(scenario, route_payload)
+    assert "adversarial_candidate" not in effective["metadata"]
+    assert effective["route_overrides"] == route_payload
+
+
+def test_write_candidate_inputs_materializes_pedestrian_when_id_declared(tmp_path: Path) -> None:
+    """write_candidate_inputs should write a populated pedestrian scenario and route file."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    search_space.write_text(
+        yaml.safe_dump(
+            {
+                "variables": {
+                    "start_x": {"min": 1.0, "max": 1.0},
+                    "start_y": {"min": 2.0, "max": 2.0},
+                    "goal_x": {"min": 5.0, "max": 5.0},
+                    "goal_y": {"min": 2.0, "max": 2.0},
+                    "spawn_time_s": {"min": 0.5, "max": 0.5},
+                    "pedestrian_speed_mps": {"min": 1.0, "max": 1.0},
+                    "pedestrian_delay_s": {"min": 0.25, "max": 0.25},
+                    "scenario_seed": {"min": 7, "max": 7},
+                },
+                "constraints": {"min_start_goal_distance_m": 0.5},
+                "pedestrian": {"id": "crossing_probe"},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+        budget=1,
+        seed=123,
+    )
+    candidate = config.search_space.sample_candidate(Random(123))
+
+    scenario_path, route_path = write_candidate_inputs(
+        config=config, candidate=candidate, candidate_dir=tmp_path / "candidate", index=0
+    )
+
+    scenario = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"][0]
+    route_payload = yaml.safe_load(route_path.read_text(encoding="utf-8"))
+    assert scenario["single_pedestrians"][0]["id"] == "crossing_probe"
+    assert scenario["single_pedestrians"][0]["start_delay_s"] == pytest.approx(0.5)
+    assert scenario["single_pedestrians"][0]["wait_at"][0]["wait_s"] == pytest.approx(0.25)
+    assert route_payload["ped_routes"][0]["id"] == "crossing_probe"
+    assert route_payload["ped_routes"][0]["spawn_time_s"] == pytest.approx(0.5)
 
 
 def test_multi_ped_config_converts_to_runtime_single_pedestrians_with_metadata() -> None:

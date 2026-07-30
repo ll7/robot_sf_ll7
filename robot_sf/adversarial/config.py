@@ -17,6 +17,13 @@ if TYPE_CHECKING:
     from robot_sf.adversarial.attribution import FailureAttribution
     from robot_sf.adversarial.certification import CertificationStatus
 
+#: Frozen candidate timing dimensions that the #5303 search-promotion path must bind to a
+#: concrete pedestrian. The side-effect-free promotion preflight rejects any of these that
+#: is missing, metadata-only, targets no pedestrian, or leaves the effective runtime
+#: scenario unchanged. Kept here as the canonical registry so the preflight and the bundle
+#: materialization agree on which dimensions must be runtime-effective.
+PROMOTION_TIMING_DIMENSIONS: tuple[str, ...] = ("spawn_time_s", "pedestrian_delay_s")
+
 
 @dataclass(frozen=True)
 class Pose2D:
@@ -502,6 +509,20 @@ class SearchSpaceConfig:
         if math.hypot(dx, dy) < self.min_start_goal_distance_m:
             errors.append("start and goal are closer than min_start_goal_distance_m")
         return errors
+
+    def timing_dimension_range(self, name: str) -> RangeConfig | None:
+        """Return the declared range for a frozen promotion timing dimension.
+
+        Returns:
+            RangeConfig | None: The declared range, or ``None`` when ``name`` is not a
+            recognized promotion timing dimension so callers can fail closed on missing
+            dimensions.
+        """
+        if name == "spawn_time_s":
+            return self.spawn_time_s
+        if name == "pedestrian_delay_s":
+            return self.pedestrian_delay_s
+        return None
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable search-space payload."""

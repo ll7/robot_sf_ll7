@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
@@ -16,6 +17,11 @@ import yaml
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, SearchConfig
 
 MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
+
+#: Metadata key holding per-candidate search provenance. This block records the sampled
+#: controls for reproducibility but does not by itself change runtime behavior, so it is
+#: stripped when hashing the runtime-effective scenario.
+CANDIDATE_PROVENANCE_KEY = "adversarial_candidate"
 DENSE_TRAJECTORY_COLUMNS = [
     "episode_id",
     "seed",
@@ -42,18 +48,40 @@ def _load_template(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _candidate_route_payload(candidate: CandidateSpec, *, index: int) -> dict[str, Any]:
-    """Build a route-overrides payload for the candidate start and goal."""
+def _candidate_route_payload(
+    candidate: CandidateSpec,
+    *,
+    index: int,
+    pedestrian_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a route-overrides payload for the candidate start and goal.
+
+    When ``pedestrian_id`` is supplied, a pedestrian route bound to the candidate's
+    start/goal and ``spawn_time_s`` is emitted so the frozen timing dimension changes the
+    effective runtime route instead of remaining candidate metadata only.
+    """
     route_id = 100_000 + int(index)
+    waypoints = [candidate.start.as_waypoint(), candidate.goal.as_waypoint()]
+    ped_routes: list[dict[str, Any]] = []
+    if pedestrian_id:
+        ped_routes.append(
+            {
+                "id": pedestrian_id,
+                "spawn_id": route_id,
+                "goal_id": route_id,
+                "spawn_time_s": float(candidate.spawn_time_s),
+                "waypoints": waypoints,
+            }
+        )
     return {
         "robot_routes": [
             {
                 "spawn_id": route_id,
                 "goal_id": route_id,
-                "waypoints": [candidate.start.as_waypoint(), candidate.goal.as_waypoint()],
+                "waypoints": waypoints,
             }
         ],
-        "ped_routes": [],
+        "ped_routes": ped_routes,
     }
 
 
@@ -76,7 +104,7 @@ def _apply_candidate_to_scenario(
     sim_config["peds_speed_mult"] = float(candidate.pedestrian_speed_mps)
     updated["simulation_config"] = sim_config
     metadata = dict(updated.get("metadata") or {})
-    metadata["adversarial_candidate"] = {
+    metadata[CANDIDATE_PROVENANCE_KEY] = {
         **candidate.to_json(),
         "candidate_index": int(index),
         "spawn_time_s_note": "stored for search provenance; route-spawn timing support is adapter-dependent",
@@ -87,7 +115,10 @@ def _apply_candidate_to_scenario(
         entries = list(updated.get("single_pedestrians") or [])
         replacement = {
             "id": pedestrian_id,
+            "start": candidate.start.as_waypoint(),
+            "goal": candidate.goal.as_waypoint(),
             "speed_m_s": float(candidate.pedestrian_speed_mps),
+            "start_delay_s": float(candidate.spawn_time_s),
             "wait_at": [{"waypoint_index": 0, "wait_s": float(candidate.pedestrian_delay_s)}],
         }
         for entry_index, entry in enumerate(entries):
@@ -102,6 +133,72 @@ def _apply_candidate_to_scenario(
     return updated
 
 
+def build_candidate_payload(
+    candidate: CandidateSpec,
+    *,
+    index: int,
+    template_scenario: Mapping[str, Any],
+    pedestrian_id: str | None,
+    route_file_name: str = "route_overrides.yaml",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the in-memory scenario and route-override payloads for one candidate.
+
+    Pure and side-effect-free: performs no disk I/O, search, planner execution, replay,
+    campaign, or outcome inspection. Shared by :func:`write_candidate_inputs` and the
+    side-effect-free #5303 search-promotion preflight probe so both materialize candidates
+    through one code path.
+
+    Returns:
+        tuple[dict[str, Any], dict[str, Any]]: The specialized scenario mapping and the
+        route-override payload.
+    """
+    route_payload = _candidate_route_payload(candidate, index=index, pedestrian_id=pedestrian_id)
+    scenario = _apply_candidate_to_scenario(
+        dict(template_scenario),
+        candidate,
+        index=index,
+        route_file_name=route_file_name,
+        pedestrian_id=pedestrian_id,
+    )
+    return scenario, route_payload
+
+
+def effective_scenario_payload(
+    scenario: Mapping[str, Any],
+    route_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the runtime-effective subset of a materialized candidate scenario.
+
+    The per-candidate provenance block (``metadata.adversarial_candidate``) records the
+    sampled controls for reproducibility but does not by itself change runtime behavior, so
+    it is stripped. Everything else -- including ``single_pedestrians`` and the route
+    overrides -- is retained so the result reflects only fields that change what a run
+    actually executes.
+    """
+    effective = deepcopy(dict(scenario))
+    metadata = dict(effective.get("metadata") or {})
+    metadata.pop(CANDIDATE_PROVENANCE_KEY, None)
+    effective["metadata"] = metadata
+    effective["route_overrides"] = deepcopy(dict(route_payload))
+    return effective
+
+
+def compute_effective_scenario_hash(
+    scenario: Mapping[str, Any],
+    route_payload: Mapping[str, Any],
+) -> str:
+    """Return a canonical SHA-256 hash of the runtime-effective scenario content.
+
+    Provenance-only metadata is excluded (see :func:`effective_scenario_payload`) so two
+    candidates that differ only in a timing dimension that is *not* bound to the runtime
+    scenario hash identically. The #5303 promotion preflight relies on this to reject inert
+    or metadata-only timing dimensions.
+    """
+    effective = effective_scenario_payload(scenario, route_payload)
+    raw = json.dumps(effective, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def write_candidate_inputs(
     *,
     config: SearchConfig,
@@ -113,17 +210,15 @@ def write_candidate_inputs(
     candidate_dir.mkdir(parents=True, exist_ok=True)
     route_path = candidate_dir / "route_overrides.yaml"
     scenario_path = candidate_dir / "scenario.yaml"
-    route_payload = _candidate_route_payload(candidate, index=index)
-    route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")
-
     template = _load_template(config.scenario_template)
-    scenario = _apply_candidate_to_scenario(
-        dict(template["scenarios"][0]),
+    scenario, route_payload = build_candidate_payload(
         candidate,
         index=index,
-        route_file_name=route_path.name,
+        template_scenario=template["scenarios"][0],
         pedestrian_id=config.search_space.pedestrian_id,
+        route_file_name=route_path.name,
     )
+    route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")
     scenario_payload = {"scenarios": [scenario]}
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
     return scenario_path, route_path

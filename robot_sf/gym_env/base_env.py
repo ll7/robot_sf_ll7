@@ -91,7 +91,7 @@ class BaseEnv(Env):
         # Set video FPS if not provided
         if video_fps is None:
             video_fps = 1 / self.env_config.sim_config.time_per_step_in_secs
-            logger.debug(f"Video FPS not provided, setting to {video_fps}")
+            logger.debug("Video FPS not provided, setting to {video_fps}", video_fps=video_fps)
 
         # Extract map definition; respect explicit map_id when provided.
         map_id = getattr(env_config, "map_id", None)
@@ -234,7 +234,7 @@ class BaseEnv(Env):
 
         with target_path.open("wb") as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
-            logger.info(f"Recording saved to {target_path}")
+            logger.info("Recording saved to {target_path}", target_path=target_path)
             logger.info("Reset state list")
             self.recorded_states = []
 

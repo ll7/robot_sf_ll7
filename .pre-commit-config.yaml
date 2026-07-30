@@ -49,3 +49,11 @@ repos:
         language: system
         files: ^(docs/RELEASE\.md|CITATION\.cff|docs/context/evidence/issue_4683_release_assurance_case_example\.json)$
         pass_filenames: false
+      - id: no-fstring-logger
+        name: No f-string logger.*() calls (loguru structured-style guard)
+        entry: uv run python hooks/no_fstring_logger.py
+        language: system
+        # ruff G004 cannot see loguru; this hook flags logger.<method>(f"...")
+        # calls and is ratcheted via hooks/no_fstring_logger_allowlist.txt.
+        files: ^robot_sf/.*\.py$
+        pass_filenames: true

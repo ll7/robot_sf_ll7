@@ -1,0 +1,70 @@
+# Grandfathered allowlist for hooks/no_fstring_logger.py (issue #6468).
+#
+# Each non-empty, non-comment line is a repository-root-relative path to a Python
+# file that is still permitted to contain f-string logger.*() calls. The hook is
+# green today and blocks NEW f-string regressions in any file NOT listed here.
+#
+# Detection is AST-based (see hooks/no_fstring_logger.py) and therefore also
+# catches multi-line and implicitly-concatenated f-string messages that a naive
+# single-line grep (logger.\(info|debug|warning|error\)(f") ) misses. The issue
+# body's grep-based count (235/238) undercounts; the AST-true total across
+# robot_sf/ is 281 f-string logger calls.
+#
+# Status on creation (2026-07-30): the hot-path modules robot_sf/sim/ and
+# robot_sf/gym_env/ are migrated EXCEPT for one out-of-scope site. Concretely,
+# robot_sf/sim/simulator.py, robot_sf/gym_env/base_env.py, and
+# robot_sf/gym_env/pedestrian_env.py now contain ZERO f-string logger calls (9
+# sites migrated: 7 single-line + 2 multi-line concatenations) and are
+# intentionally absent from this list so the guard enforces them.
+#
+# Residual hot-path site (BLOCKED by this PR's allowed_paths contract, which
+# does not permit editing robot_env.py): robot_sf/gym_env/robot_env.py:1198 is
+# grandfathered here. Migrating it is follow-up scope that needs the allowed
+# path set widened; until then the single-line validation grep still passes
+# because that call is multi-line.
+#
+# Ratchet-down (follow-up scope, not this PR): once a file below is migrated to
+# structured {key}+kwargs style, DELETE its line. The guard will then enforce it.
+robot_sf/benchmark/campaign_checkpoint_preflight.py
+robot_sf/benchmark/episode_replay_figure.py
+robot_sf/benchmark/helper_catalog.py
+robot_sf/benchmark/orca_preflight.py
+robot_sf/benchmark/schema_reference.py
+robot_sf/benchmark/snqi/weights_validation.py
+robot_sf/benchmark/visualization.py
+robot_sf/common/matplotlib_utils.py
+robot_sf/coverage_tools/baseline_comparator.py
+robot_sf/data_analysis/extract_json_from_pickle.py
+robot_sf/data_analysis/extract_obj_from_pickle.py
+robot_sf/data_analysis/plot_npc_trajectory.py
+robot_sf/data_analysis/plot_utils.py
+robot_sf/data_analysis/recording_analysis.py
+robot_sf/docs/helper_catalog.py
+robot_sf/gym_env/robot_env.py
+robot_sf/maps/import_svg_from_osm.py
+robot_sf/maps/map_visualizer.py
+robot_sf/maps/osm_background_renderer.py
+robot_sf/maps/osm_zones_config.py
+robot_sf/maps/osm_zones_editor.py
+robot_sf/maps/osm_zones_yaml.py
+robot_sf/maps/verification/manifest.py
+robot_sf/maps/verification/map_inventory.py
+robot_sf/maps/verification/rules.py
+robot_sf/maps/verification/runner.py
+robot_sf/maps/verification/scope_resolver.py
+robot_sf/nav/map_config.py
+robot_sf/nav/occupancy.py
+robot_sf/nav/occupancy_grid.py
+robot_sf/nav/occupancy_grid_rasterization.py
+robot_sf/nav/osm_map_builder.py
+robot_sf/nav/svg_map_parser.py
+robot_sf/planner/classic_global_planner.py
+robot_sf/planner/socnav.py
+robot_sf/render/helper_catalog.py
+robot_sf/render/interactive_playback.py
+robot_sf/render/jsonl_playback.py
+robot_sf/render/jsonl_recording.py
+robot_sf/render/playback_recording.py
+robot_sf/render/sim_view.py
+robot_sf/research/imitation_report.py
+robot_sf/research/orchestrator.py

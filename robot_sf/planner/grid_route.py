@@ -22,6 +22,7 @@ from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 _DEFAULT_GRID_RESOLUTION = 0.2
+_DEFAULT_MAX_ANGULAR_SPEED = 1.2
 _MIN_RESOLUTION = 1e-6
 _ROBOT_RADIUS_MARGIN_CELLS = 1
 
@@ -40,7 +41,7 @@ class GridRoutePlannerConfig:
     """Configuration for :class:`GridRoutePlannerAdapter`."""
 
     max_linear_speed: float = 0.9
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
     goal_tolerance: float = 0.25
     heading_gain: float = 1.8
     turn_in_place_angle: float = 0.8
@@ -811,7 +812,7 @@ def build_grid_route_config(cfg: dict[str, Any] | None) -> GridRoutePlannerConfi
         return GridRoutePlannerConfig()
     return GridRoutePlannerConfig(
         max_linear_speed=float(cfg.get("max_linear_speed", 0.9)),
-        max_angular_speed=float(cfg.get("max_angular_speed", 1.2)),
+        max_angular_speed=float(cfg.get("max_angular_speed", _DEFAULT_MAX_ANGULAR_SPEED)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
         heading_gain=float(cfg.get("heading_gain", 1.8)),
         turn_in_place_angle=float(cfg.get("turn_in_place_angle", 0.8)),

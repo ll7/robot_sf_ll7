@@ -29,6 +29,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json
+
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "configs/benchmarks/issue_6481_social_compliance_preflight_smoke.yaml"
 SCENARIO_MATRIX_PATH = ROOT / "configs/scenarios/issue_6481_social_compliance_preflight.yaml"
@@ -262,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     receipt = build_receipt(campaign_result, episodes, output_root)
 
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
-    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    write_json(receipt_path, receipt)
     print(json.dumps(receipt, indent=2))
 
     if receipt["passed"]:

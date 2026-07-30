@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "receipt_schema": "issue_6481_preflight_receipt.v1",
   "evidence_tier": "smoke_preflight",
   "claim_class": "diagnostic_proxy",

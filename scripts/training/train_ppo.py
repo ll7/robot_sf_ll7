@@ -78,6 +78,7 @@ from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
     ExpertTrainingConfig,
+    validate_expert_training_config_keys,
 )
 from robot_sf.training.multi_map_protocol import (
     DomainRandomization,
@@ -113,19 +114,6 @@ _DEFAULT_PPO_HYPERPARAMS: dict[str, object] = {
     "ent_coef": 0.01,
     "clip_range": 0.1,
     "target_kl": 0.02,
-}
-_ALLOWED_PPO_HYPERPARAMS = {
-    "learning_rate",
-    "batch_size",
-    "n_epochs",
-    "ent_coef",
-    "clip_range",
-    "target_kl",
-    "n_steps",
-    "gamma",
-    "gae_lambda",
-    "vf_coef",
-    "max_grad_norm",
 }
 
 
@@ -936,6 +924,11 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     path = Path(config_path).resolve()
     data = _load_expert_training_config_mapping(path)
 
+    validate_expert_training_config_keys(
+        data,
+        allowed_ppo_hyperparams=_PPO_PARAM_COERCIONS,
+    )
+
     scenario_raw = Path(data["scenario_config"])
     scenario_config = (
         (path.parent / scenario_raw).resolve() if not scenario_raw.is_absolute() else scenario_raw
@@ -1358,7 +1351,7 @@ def _resolve_policy_kwargs(config: ExpertTrainingConfig) -> dict[str, Any]:
 def _resolve_ppo_hyperparams(config: ExpertTrainingConfig) -> dict[str, object]:
     """Merge default PPO hyperparameters with any overrides from config."""
     overrides = dict(config.ppo_hyperparams or {})
-    unknown = set(overrides) - _ALLOWED_PPO_HYPERPARAMS
+    unknown = set(overrides) - set(_PPO_PARAM_COERCIONS)
     if unknown:
         unknown_list = ", ".join(sorted(unknown))
         raise ValueError(f"ppo_hyperparams has unsupported keys: {unknown_list}")
@@ -3378,6 +3371,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
+    config_path = Path(args.config).resolve()
+    config_sha256 = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    config = load_expert_training_config(config_path)
+    resume_from = Path(args.resume_from).expanduser() if args.resume_from else config.resume_from
+
     log_level = str(args.log_level).upper()
     log_file = Path(args.log_file).expanduser() if args.log_file else None
     previous_loguru_level = os.environ.get("LOGURU_LEVEL")
@@ -3397,13 +3395,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.remove()
         logger.add(sys.stderr, level=log_level)
 
-        config_path = Path(args.config).resolve()
-        config_sha256 = hashlib.sha256(config_path.read_bytes()).hexdigest()
         logger.info("Resolved config SHA-256: {}", config_sha256)
-        config = load_expert_training_config(config_path)
-        resume_from = (
-            Path(args.resume_from).expanduser() if args.resume_from else config.resume_from
-        )
         run_expert_training(
             config,
             config_path=config_path,

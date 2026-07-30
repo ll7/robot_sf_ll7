@@ -1459,48 +1459,13 @@ RECOVERY_EVIDENCE: tuple[str, ...] = (
 )
 
 
-def build_uncertainty_reissue(
+def _validate_reissue_sources(
     packet: Mapping[str, Any],
-    *,
-    generator_source_sha256: str,
-    generator_source_rel_path: str,
-    input_sha256: str,
-    input_provenance_anchor: Mapping[str, Any],
-    reissue_date: str,
-) -> dict[str, Any]:
-    """Build the re-issued uncertainty packet from a canonical-analyzer packet.
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Validate the canonical-analyzer packet and return deep-copied pairwise/ranking blocks.
 
-    Issue #5928 DoD #2: the original job 13516 uncertainty generator was never
-    committed and is unrecoverable (see :data:`RECOVERY_EVIDENCE`). This function
-    re-issues the uncertainty block from the **committed canonical analyzer**
-    output (``packet`` produced by :func:`build_snqi_analysis`) under a fresh,
-    byte-reproducible provenance stamp.
-
-    The re-issued block is internally consistent by construction: every
-    ``slope_difference`` equals ``slope_A - slope_B`` of the committed per-planner
-    slopes recorded alongside it, and every ``probability_first_is_more_robust``
-    is an exact integer multiple of ``1 / BOOTSTRAP_RESAMPLES`` (no half-integer
-    counts). Native / adapter execution-mode labels and the diagnostic-only claim
-    boundary are carried through unchanged.
-
-    The generator identity is **content-addressed** by the analyzer source
-    SHA-256 (not by a volatile git head), so a regeneration from unchanged source
-    and unchanged durable input reproduces this packet byte-for-byte. The CLI
-    prints the best-effort git head to stdout for human convenience; it is
-    deliberately not embedded in the committed artifact.
-
-    Args:
-        packet: A packet from :func:`build_snqi_analysis` (already validated).
-        generator_source_sha256: SHA-256 of the analyzer source file at generation.
-        generator_source_rel_path: Repo-relative path of the analyzer source file.
-        input_sha256: SHA-256 of the durable sufficient input used.
-        input_provenance_anchor: The durable-input provenance sidecar payload
-            (anchoring the input to the raw rows).
-        reissue_date: ISO date recorded in the re-issue provenance.
-
-    Returns:
-        The JSON-serializable ``control-action-latency-snqi-uncertainty-reissue.v1``
-        packet.
+    Raises:
+        SnqiLatencyAnalysisError: if the schema or required blocks are missing.
     """
     if packet.get("schema_version") != ANALYSIS_SCHEMA_VERSION:
         raise SnqiLatencyAnalysisError(
@@ -1514,13 +1479,13 @@ def build_uncertainty_reissue(
             "canonical-analyzer packet is missing pairwise_slope_uncertainty / "
             "point_estimate_robustness_ranking"
         )
-    # The returned artifact is an independent packet: callers may annotate or
-    # tamper with it during review without mutating the canonical source packet.
-    pairwise = copy.deepcopy(pairwise_source)
-    ranking = copy.deepcopy(ranking_source)
+    return copy.deepcopy(pairwise_source), copy.deepcopy(ranking_source)
 
-    # Per-planner committed slopes the pairwise differences derive from. Recording
-    # them makes the internal consistency of the re-issued block auditable.
+
+def _extract_reissue_slopes(
+    ranking: list[dict[str, Any]],
+) -> tuple[dict[str, float], dict[str, str], list[dict[str, Any]]]:
+    """Extract per-planner slopes, execution modes, and interval summaries from the ranking."""
     slope_by_group = {row["planner_group"]: row["snqi_slope_per_100ms"] for row in ranking}
     mode_by_group = {row["planner_group"]: row["execution_mode"] for row in ranking}
     per_planner_intervals = [
@@ -1532,12 +1497,20 @@ def build_uncertainty_reissue(
         }
         for row in ranking
     ]
+    return slope_by_group, mode_by_group, per_planner_intervals
 
-    # Verify internal consistency of the re-issued pairwise differences and that
-    # every posterior probability is an exact integer resample count. The
-    # canonical analyzer guarantees both; this assertion fails closed if a future
-    # change breaks that invariant, so a re-issue can never silently carry an
-    # unrecoverable-style block.
+
+def _verify_reissue_consistency(
+    pairwise: list[dict[str, Any]], slope_by_group: dict[str, float]
+) -> list[dict[str, Any]]:
+    """Verify internal consistency of pairwise differences and integer resample counts.
+
+    Fails closed if any ``slope_difference`` deviates from ``slope_A - slope_B`` or any
+    posterior probability is not an exact integer resample count.
+
+    Returns:
+        The consistency-check records embedded in the re-issued packet.
+    """
     consistency_checks: list[dict[str, Any]] = []
     for entry in pairwise:
         first, _, second = str(entry["comparison"]).partition(" minus ")
@@ -1569,6 +1542,121 @@ def build_uncertainty_reissue(
                 f"resample count (implied {resample_count}); the canonical analyzer must not "
                 "produce half-integer counts."
             )
+    return consistency_checks
+
+
+def _build_reissue_provenance(
+    *,
+    generator_source_sha256: str,
+    generator_source_rel_path: str,
+    input_sha256: str,
+    input_provenance_anchor: Mapping[str, Any],
+    source: dict[str, Any],
+    promotion: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the provenance block for the re-issued uncertainty packet."""
+    return {
+        "generator": {
+            "kind": "committed_canonical_analyzer",
+            "module": "robot_sf.benchmark.control_action_latency_snqi",
+            "source_rel_path": generator_source_rel_path,
+            "source_sha256": generator_source_sha256,
+            "build_function": "build_snqi_analysis",
+            "reissue_function": "build_uncertainty_reissue",
+            "identity_note": (
+                "The generator is content-addressed by source_sha256 (not a git head) "
+                "so regenerating from unchanged source and unchanged durable input "
+                "reproduces this packet byte-for-byte."
+            ),
+        },
+        "durable_input": {
+            "input_rel_path": input_provenance_anchor.get("input_path"),
+            "input_sha256": input_sha256,
+            "input_schema_version": input_provenance_anchor.get("input_schema_version"),
+            "raw_rows_sha256": source.get("raw_rows_sha256"),
+            "axis": source.get("axis"),
+            "promotion_commit": promotion.get("promoter_git_head"),
+            "promotion_date": promotion.get("date"),
+        },
+        "job_id": JOB_ID,
+        "job_label": JOB_LABEL,
+        "execution_commit": EXECUTION_COMMIT,
+        "weights_sha256": WEIGHTS_SHA256,
+        "baseline_sha256": BASELINE_SHA256,
+        "regenerate_command": UNCERTAINTY_REISSUE_COMMAND,
+    }
+
+
+def _build_reissue_reproducibility(bootstrap_method: dict[str, Any]) -> dict[str, Any]:
+    """Build the reproducibility block for the re-issued uncertainty packet."""
+    return {
+        "byte_reproducible": True,
+        "description": (
+            "The re-issued uncertainty block is fully deterministic: a single "
+            "numpy.random.default_rng(5892) draws one shared resampling-index matrix "
+            "across planners, percentile endpoints use linear interpolation, and the "
+            "per-planner unit roster is ordered by (scenario_id, seed). The committed "
+            "analyzer source (sha256 above) plus the durable input (sha256 above) "
+            "reproduce this block byte-for-byte on a fixed numpy version. Unlike the "
+            "registered block, every probability is an exact integer resample count and "
+            "every slope_difference equals slope_A - slope_B."
+        ),
+        "bootstrap_method": bootstrap_method,
+        "point_estimate_abs_tol": POINT_TOL,
+        "pairwise_slope_difference_abs_tol": PAIRWISE_DIFF_TOL,
+        "bootstrap_interval_abs_tol": INTERVAL_TOL,
+        "bootstrap_probability_abs_tol": PROBABILITY_TOL,
+    }
+
+
+#: Recovery decision block recorded verbatim in the re-issued packet.
+_REISSUE_RECOVERY_DECISION: dict[str, Any] = {
+    "decision": (
+        "re-issue from the committed canonical analyzer; the original uncertainty "
+        "generator is unrecoverable"
+    ),
+    "recovery_path": "unrecoverable",
+    "evidence": list(RECOVERY_EVIDENCE),
+    "dod_reference": "issue #5928 Definition of Done #1 (recovery or maintainer "
+    "decision) and #2 (re-issue from the committed analyzer with a fresh provenance "
+    "stamp)",
+    "linked_issues": [5928, CANONICAL_ANALYZER_ISSUE, ISSUE, CAMPAIGN_ISSUE, PARENT_ISSUE],
+    "linked_prs": [5904, 5923],
+}
+
+#: Caveats recorded verbatim in the re-issued packet.
+_REISSUE_CAVEATS: list[str] = [
+    "The re-issued uncertainty block supersedes the unrecoverable registered "
+    "block for byte-exact reproduction going forward; it does not retroactively "
+    "make the registered snqi_analysis.json byte-identical, which remains the "
+    "canonical reference target for the #5923 numeric-tolerance contract.",
+    "This is internal diagnostic-only evidence and is not paper-facing; native "
+    "claims apply only to the default_social_force native rows, while orca and "
+    "hybrid_rule_v0_minimal remain explicitly labeled adapter diagnostics.",
+    "No qualitative conclusion changes relative to the registered block: every "
+    "95% interval sign and every probability threshold is preserved within the "
+    "documented tolerances.",
+]
+
+
+def build_uncertainty_reissue(
+    packet: Mapping[str, Any],
+    *,
+    generator_source_sha256: str,
+    generator_source_rel_path: str,
+    input_sha256: str,
+    input_provenance_anchor: Mapping[str, Any],
+    reissue_date: str,
+) -> dict[str, Any]:
+    """Build the re-issued uncertainty packet from a canonical-analyzer packet.
+
+    Re-issues the uncertainty block from the committed canonical analyzer under a
+    fresh, byte-reproducible, content-addressed provenance stamp. The re-issued
+    block is internally consistent by construction (see :data:`RECOVERY_EVIDENCE`).
+    """
+    pairwise, ranking = _validate_reissue_sources(packet)
+    slope_by_group, mode_by_group, per_planner_intervals = _extract_reissue_slopes(ranking)
+    consistency_checks = _verify_reissue_consistency(pairwise, slope_by_group)
 
     bootstrap_method = copy.deepcopy(packet.get("snqi_method", {}).get("bootstrap_method", {}))
     source = copy.deepcopy(dict(input_provenance_anchor.get("source") or {}))
@@ -1584,73 +1672,16 @@ def build_uncertainty_reissue(
         "date": reissue_date,
         "evidence_status": EVIDENCE_STATUS,
         "claim_boundary": CLAIM_BOUNDARY,
-        "recovery_decision": {
-            "decision": (
-                "re-issue from the committed canonical analyzer; the original uncertainty "
-                "generator is unrecoverable"
-            ),
-            "recovery_path": "unrecoverable",
-            "evidence": list(RECOVERY_EVIDENCE),
-            "dod_reference": "issue #5928 Definition of Done #1 (recovery or maintainer "
-            "decision) and #2 (re-issue from the committed analyzer with a fresh provenance "
-            "stamp)",
-            "linked_issues": [
-                5928,
-                CANONICAL_ANALYZER_ISSUE,
-                ISSUE,
-                CAMPAIGN_ISSUE,
-                PARENT_ISSUE,
-            ],
-            "linked_prs": [5904, 5923],
-        },
-        "provenance": {
-            "generator": {
-                "kind": "committed_canonical_analyzer",
-                "module": "robot_sf.benchmark.control_action_latency_snqi",
-                "source_rel_path": generator_source_rel_path,
-                "source_sha256": generator_source_sha256,
-                "build_function": "build_snqi_analysis",
-                "reissue_function": "build_uncertainty_reissue",
-                "identity_note": (
-                    "The generator is content-addressed by source_sha256 (not a git head) "
-                    "so regenerating from unchanged source and unchanged durable input "
-                    "reproduces this packet byte-for-byte."
-                ),
-            },
-            "durable_input": {
-                "input_rel_path": input_provenance_anchor.get("input_path"),
-                "input_sha256": input_sha256,
-                "input_schema_version": input_provenance_anchor.get("input_schema_version"),
-                "raw_rows_sha256": source.get("raw_rows_sha256"),
-                "axis": source.get("axis"),
-                "promotion_commit": promotion.get("promoter_git_head"),
-                "promotion_date": promotion.get("date"),
-            },
-            "job_id": JOB_ID,
-            "job_label": JOB_LABEL,
-            "execution_commit": EXECUTION_COMMIT,
-            "weights_sha256": WEIGHTS_SHA256,
-            "baseline_sha256": BASELINE_SHA256,
-            "regenerate_command": UNCERTAINTY_REISSUE_COMMAND,
-        },
-        "reproducibility": {
-            "byte_reproducible": True,
-            "description": (
-                "The re-issued uncertainty block is fully deterministic: a single "
-                "numpy.random.default_rng(5892) draws one shared resampling-index matrix "
-                "across planners, percentile endpoints use linear interpolation, and the "
-                "per-planner unit roster is ordered by (scenario_id, seed). The committed "
-                "analyzer source (sha256 above) plus the durable input (sha256 above) "
-                "reproduce this block byte-for-byte on a fixed numpy version. Unlike the "
-                "registered block, every probability is an exact integer resample count and "
-                "every slope_difference equals slope_A - slope_B."
-            ),
-            "bootstrap_method": bootstrap_method,
-            "point_estimate_abs_tol": POINT_TOL,
-            "pairwise_slope_difference_abs_tol": PAIRWISE_DIFF_TOL,
-            "bootstrap_interval_abs_tol": INTERVAL_TOL,
-            "bootstrap_probability_abs_tol": PROBABILITY_TOL,
-        },
+        "recovery_decision": copy.deepcopy(_REISSUE_RECOVERY_DECISION),
+        "provenance": _build_reissue_provenance(
+            generator_source_sha256=generator_source_sha256,
+            generator_source_rel_path=generator_source_rel_path,
+            input_sha256=input_sha256,
+            input_provenance_anchor=input_provenance_anchor,
+            source=source,
+            promotion=promotion,
+        ),
+        "reproducibility": _build_reissue_reproducibility(bootstrap_method),
         "point_estimate_slopes": {
             "description": (
                 "Committed per-planner SNQI-v0 latency slopes (per 100 ms-equivalent) that "
@@ -1663,18 +1694,7 @@ def build_uncertainty_reissue(
         "per_planner_slope_intervals": per_planner_intervals,
         "pairwise_slope_uncertainty": pairwise,
         "consistency_checks": consistency_checks,
-        "caveats": [
-            "The re-issued uncertainty block supersedes the unrecoverable registered "
-            "block for byte-exact reproduction going forward; it does not retroactively "
-            "make the registered snqi_analysis.json byte-identical, which remains the "
-            "canonical reference target for the #5923 numeric-tolerance contract.",
-            "This is internal diagnostic-only evidence and is not paper-facing; native "
-            "claims apply only to the default_social_force native rows, while orca and "
-            "hybrid_rule_v0_minimal remain explicitly labeled adapter diagnostics.",
-            "No qualitative conclusion changes relative to the registered block: every "
-            "95% interval sign and every probability threshold is preserved within the "
-            "documented tolerances.",
-        ],
+        "caveats": list(_REISSUE_CAVEATS),
     }
 
 

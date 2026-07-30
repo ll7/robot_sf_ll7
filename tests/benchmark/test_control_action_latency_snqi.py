@@ -41,6 +41,7 @@ from robot_sf.benchmark.control_action_latency_snqi import (
     verify_against_reference,
     write_input_provenance,
     write_input_rows,
+    write_snqi_analysis,
     write_uncertainty_reissue,
 )
 
@@ -365,6 +366,37 @@ def test_csv_round_trip_preserves_inputs(tmp_path: Path) -> None:
     assert first.latency_step == 0 or first.latency_step in STEPS
     # Every reloaded row is a valid result.
     assert all(entry.classification == "result" for entry in reloaded)
+
+
+def test_write_snqi_analysis_uses_review_marked_shared_writers(tmp_path: Path) -> None:
+    """Generated JSON and CSV outputs carry canonical review markers."""
+    packet = {
+        "schema_version": ANALYSIS_SCHEMA_VERSION,
+        "_unit_keys": {"orca": ["scenario_00:111"]},
+        "point_estimate_robustness_ranking": [
+            {
+                "planner_group": "orca",
+                "planner": "orca",
+                "execution_mode": "adapter",
+                "paired_units": 1,
+                "snqi_mean_at_0_steps": 0.3,
+                "snqi_mean_at_1_step": 0.2,
+                "snqi_mean_at_3_steps": 0.1,
+                "snqi_slope_per_100ms": -0.1,
+                "snqi_slope_95pct_ci": [-0.2, 0.0],
+                "rank": 1,
+            }
+        ],
+    }
+
+    analysis_path, csv_path = write_snqi_analysis(packet, tmp_path)
+
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    assert analysis["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert "_unit_keys" not in analysis
+    csv_lines = csv_path.read_text(encoding="utf-8").splitlines()
+    assert csv_lines[0] == "# AI-GENERATED NEEDS-REVIEW"
+    assert len(csv_lines) == 5  # marker, header, and one row per latency step
 
 
 def test_load_input_rows_rejects_missing_columns(tmp_path: Path) -> None:

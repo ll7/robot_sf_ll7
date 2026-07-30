@@ -182,8 +182,9 @@ class ConstantVelocityGmmPredictor:
             heading_spread_rad=self.heading_spread_rad,
         )
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """No per-episode state to clear for the deterministic surrogate."""
+        del seed
 
 
 def _spawn_scenario(

@@ -145,8 +145,9 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         self.config = config or NMPCSocialConfig()
         self.reset()
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear any per-episode optimizer warm-start state."""
+        del seed
         self._last_solution: np.ndarray | None = None
         self._stats = {
             "calls": 0,

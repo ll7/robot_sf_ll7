@@ -170,9 +170,9 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         self._last_constraint_count = 0
         super().__init__(_to_nmpc_config(self.chance_config))
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear solver and forecast diagnostics at an episode boundary."""
-
+        del seed
         super().reset()
         self._last_forecast = None
         self._last_constraint_count = 0

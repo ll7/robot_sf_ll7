@@ -233,20 +233,14 @@ class LidarOccupancyPlannerAdapter:
         self._unavailable_count = 0
         self._last_error: str | None = None
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset wrapper counters and the wrapped planner when supported."""
         self._converted_count = 0
         self._unavailable_count = 0
         self._last_error = None
         reset = getattr(self.planner, "reset", None)
         if callable(reset):
-            if seed is None:
-                reset()
-                return
-            try:
-                reset(seed=seed)
-            except TypeError:
-                reset()
+            reset(seed=seed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Convert rays to occupancy and delegate to the wrapped planner.

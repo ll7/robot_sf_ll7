@@ -398,7 +398,7 @@ class SonicCrowdNavAdapter:
             }
         )
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset recurrent state and masks for one deterministic rollout."""
         del seed
         self._hidden_state = {

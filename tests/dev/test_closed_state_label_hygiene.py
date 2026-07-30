@@ -10,6 +10,28 @@ import pytest
 from scripts.dev import closed_state_label_hygiene
 
 
+def _mock_current_rest_issue(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    labels: list[str],
+    title: str = "current issue",
+    number: int = 12,
+) -> None:
+    """Install a current closed-issue REST response for reconciliation tests."""
+
+    monkeypatch.setattr(
+        "scripts.dev.gh_issue_rest.fetch_issue",
+        lambda requested_number, **kwargs: {
+            "number": requested_number,
+            "status": "ok",
+            "title": title,
+            "url": f"https://github.com/ll7/robot_sf_ll7/issues/{number}",
+            "state": "CLOSED",
+            "labels": labels,
+        },
+    )
+
+
 def test_collect_stale_issues_aggregates_closed_issue_state_labels() -> None:
     """Closed issues should be reported once with all stale live state labels."""
     rows_by_label = {
@@ -194,16 +216,10 @@ def test_main_returns_nonzero_json_summary_without_live_github(
         }
 
     monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fake_fetch)
-    monkeypatch.setattr(
-        "scripts.dev.gh_issue_rest.fetch_issue",
-        lambda number, **kwargs: {
-            "number": number,
-            "status": "ok",
-            "title": "done but still queued",
-            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
-            "state": "CLOSED",
-            "labels": ["state:ready"],
-        },
+    _mock_current_rest_issue(
+        monkeypatch,
+        labels=["state:ready"],
+        title="done but still queued",
     )
 
     exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7"])
@@ -235,17 +251,7 @@ def test_main_suppresses_search_label_absent_from_current_rest_issue(
             ]
         },
     )
-    monkeypatch.setattr(
-        "scripts.dev.gh_issue_rest.fetch_issue",
-        lambda number, **kwargs: {
-            "number": number,
-            "status": "ok",
-            "title": "current issue",
-            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
-            "state": "CLOSED",
-            "labels": ["priority:4", "technical-debt"],
-        },
-    )
+    _mock_current_rest_issue(monkeypatch, labels=["priority:4", "technical-debt"])
 
     exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7"])
 
@@ -465,15 +471,6 @@ def test_main_fix_mode_strips_labels_and_reports(
             ]
         }
 
-    def fake_fetch_issue(number: int, **kwargs: object) -> dict:
-        return {
-            "number": number,
-            "status": "ok",
-            "state": "CLOSED",
-            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
-            "labels": ["state:ready"],
-        }
-
     edits: list[list[str]] = []
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -481,7 +478,7 @@ def test_main_fix_mode_strips_labels_and_reports(
         return subprocess.CompletedProcess(args=tuple(command), returncode=0, stdout="")
 
     monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fake_fetch)
-    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
+    _mock_current_rest_issue(monkeypatch, labels=["state:ready"])
     monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
 
     exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7", "--fix"])

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import difflib
-from dataclasses import dataclass, field
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,168 +13,6 @@ from robot_sf.telemetry.progress import PipelineStepDefinition
 
 if TYPE_CHECKING:
     from robot_sf.training.multi_map_protocol import DomainRandomization, MultiMapTrainTestProtocol
-
-_ALLOWED_PPO_HYPERPARAMS: frozenset[str] = frozenset(
-    {
-        "learning_rate",
-        "batch_size",
-        "n_epochs",
-        "ent_coef",
-        "clip_range",
-        "target_kl",
-        "n_steps",
-        "gamma",
-        "gae_lambda",
-        "vf_coef",
-        "max_grad_norm",
-    }
-)
-
-_ALLOWED_TOP_LEVEL_KEYS: frozenset[str] = frozenset(
-    {
-        "algorithm",
-        "base_config",
-        "best_checkpoint_metric",
-        "candidates",
-        "convergence",
-        "density_curriculum",
-        "device",
-        "domain_randomization",
-        "env_factory_kwargs",
-        "env_overrides",
-        "eval_episodes",
-        "eval_every",
-        "evaluation",
-        "feature_extractor",
-        "feature_extractor_kwargs",
-        "metric",
-        "multi_map_protocol",
-        "num_envs",
-        "num_envs_reserve_cores",
-        "output_dir",
-        "policy",
-        "policy_id",
-        "policy_net_arch",
-        "ppo_hyperparams",
-        "randomize_seeds",
-        "recurrent_policy",
-        "recurrent_ppo_hyperparams",
-        "resume_from",
-        "resume_model_id",
-        "resume_source_step",
-        "safety_constraints",
-        "scenario_config",
-        "scenario_id",
-        "scenario_sampling",
-        "seed",
-        "seeds",
-        "snqi_baseline",
-        "snqi_weights",
-        "socnav_orca",
-        "socnav_orca_neighbor_dist",
-        "socnav_orca_time_horizon",
-        "total_timesteps",
-        "tracking",
-        "worker_mode",
-    }
-)
-
-_ALLOWED_CONVERGENCE_KEYS: frozenset[str] = frozenset(
-    {
-        "success_rate",
-        "collision_rate",
-        "plateau_window",
-    }
-)
-
-_ALLOWED_EVALUATION_KEYS: frozenset[str] = frozenset(
-    {
-        "evaluation_episodes",
-        "frequency_episodes",
-        "full_policy_analysis_on_new_best",
-        "full_policy_analysis_videos",
-        "hold_out_scenarios",
-        "randomize_seeds",
-        "scenario_config",
-        "step_schedule",
-    }
-)
-
-
-def _suggest_close_matches(
-    unknown_key: str,
-    allowed: frozenset[str],
-    *,
-    max_suggestions: int = 3,
-) -> list[str]:
-    return difflib.get_close_matches(unknown_key, allowed, n=max_suggestions, cutoff=0.4)
-
-
-def _validate_config_section_keys(
-    section_name: str,
-    section_data: object,
-    allowed_keys: frozenset[str],
-    dotted_prefix: str,
-) -> None:
-    if not isinstance(section_data, dict):
-        return
-    unknown = set(section_data) - allowed_keys
-    if not unknown:
-        return
-    parts: list[str] = []
-    for key in sorted(unknown):
-        close = _suggest_close_matches(key, allowed_keys)
-        hint = f" (did you mean {close}?)" if close else ""
-        parts.append(f"    {dotted_prefix}.{key}{hint}")
-    raise ValueError(f"{section_name} has unsupported keys:\n" + "\n".join(parts))
-
-
-def validate_expert_training_config_keys(config_data: dict[str, object]) -> None:
-    """Validate config keys against the allow-list, rejecting unknown keys.
-
-    Raises:
-        ValueError: With the full dotted key path and nearest valid alternatives
-            when an unknown key is found.
-    """
-    unknown_top = set(config_data) - _ALLOWED_TOP_LEVEL_KEYS
-    if unknown_top:
-        parts: list[str] = []
-        for key in sorted(unknown_top):
-            close = _suggest_close_matches(key, _ALLOWED_TOP_LEVEL_KEYS)
-            hint = f" (did you mean {close}?)" if close else ""
-            parts.append(f"    {key}{hint}")
-        raise ValueError(
-            "ExpertTrainingConfig has unsupported top-level keys:\n" + "\n".join(parts)
-        )
-
-    convergence = config_data.get("convergence")
-    if isinstance(convergence, dict):
-        _validate_config_section_keys(
-            "convergence",
-            convergence,
-            _ALLOWED_CONVERGENCE_KEYS,
-            "convergence",
-        )
-
-    evaluation = config_data.get("evaluation")
-    if isinstance(evaluation, dict):
-        _validate_config_section_keys(
-            "evaluation",
-            evaluation,
-            _ALLOWED_EVALUATION_KEYS,
-            "evaluation",
-        )
-
-    ppo_raw = config_data.get("ppo_hyperparams")
-    if isinstance(ppo_raw, dict):
-        unknown_ppo = set(ppo_raw) - _ALLOWED_PPO_HYPERPARAMS
-        if unknown_ppo:
-            pko_parts: list[str] = []
-            for key in sorted(unknown_ppo):
-                close = _suggest_close_matches(key, _ALLOWED_PPO_HYPERPARAMS)
-                hint = f" (did you mean {close}?)" if close else ""
-                pko_parts.append(f"    ppo_hyperparams.{key}{hint}")
-            raise ValueError("ppo_hyperparams has unsupported keys:\n" + "\n".join(pko_parts))
 
 
 @dataclass(slots=True)
@@ -314,6 +153,214 @@ class ExpertTrainingConfig:
                 int(resume_source_step) if resume_source_step is not None else None
             ),
         )
+
+
+_EXPERT_CONFIG_FIELD_ALIASES: dict[str, str] = {
+    "snqi_baseline_path": "snqi_baseline",
+    "snqi_weights_path": "snqi_weights",
+}
+_EXPERT_CONFIG_COMPATIBILITY_KEYS: frozenset[str] = frozenset(
+    {
+        # The recursive loader consumes this before final validation.
+        "base_config",
+        # The recurrent PPO loader validates these extensions before reusing
+        # ExpertTrainingConfig for its shared base fields.
+        "algorithm",
+        "recurrent_policy",
+        "recurrent_ppo_hyperparams",
+        # Backward-compatible grouped alias for the two flat dataclass fields.
+        "socnav_orca",
+    }
+)
+_CONVERGENCE_KEYS: frozenset[str] = frozenset(
+    field_info.name for field_info in fields(ConvergenceCriteria)
+)
+_EVALUATION_KEYS: frozenset[str] = frozenset(
+    {
+        *(field_info.name for field_info in fields(EvaluationSchedule)),
+        # Legacy no-op keys remain in tracked canonical configs. Keep them
+        # recognized until those configs are migrated explicitly.
+        "full_policy_analysis_on_new_best",
+        "full_policy_analysis_videos",
+    }
+)
+_EVALUATION_STEP_KEYS: frozenset[str] = frozenset({"every_steps", "until_step"})
+_SOCNAV_ORCA_KEYS: frozenset[str] = frozenset({"neighbor_dist", "time_horizon"})
+_MAPPING_SECTIONS: frozenset[str] = frozenset(
+    {
+        "convergence",
+        "density_curriculum",
+        "domain_randomization",
+        "env_factory_kwargs",
+        "env_overrides",
+        "evaluation",
+        "feature_extractor_kwargs",
+        "multi_map_protocol",
+        "ppo_hyperparams",
+        "recurrent_ppo_hyperparams",
+        "scenario_sampling",
+        "socnav_orca",
+        "tracking",
+    }
+)
+
+
+def _expert_training_config_keys() -> frozenset[str]:
+    """Return YAML keys owned by ExpertTrainingConfig and compatibility loaders."""
+    field_keys = {
+        _EXPERT_CONFIG_FIELD_ALIASES.get(field_info.name, field_info.name)
+        for field_info in fields(ExpertTrainingConfig)
+    }
+    return frozenset(field_keys) | _EXPERT_CONFIG_COMPATIBILITY_KEYS
+
+
+def _suggest_key(unknown_key: str, allowed_keys: Collection[str]) -> str | None:
+    """Return the deterministic nearest key suggestion, when one is useful."""
+    matches = difflib.get_close_matches(
+        unknown_key,
+        sorted(allowed_keys),
+        n=1,
+        cutoff=0.6,
+    )
+    return matches[0] if matches else None
+
+
+def _unknown_key_errors(
+    section_data: Mapping[object, object],
+    *,
+    allowed_keys: Collection[str],
+    dotted_prefix: str,
+) -> list[tuple[str, str]]:
+    """Return deterministic full-path errors for unsupported mapping keys."""
+    errors: list[tuple[str, str]] = []
+    unknown_keys = set(section_data) - set(allowed_keys)
+    for key in sorted(unknown_keys, key=lambda value: (type(value).__name__, repr(value))):
+        if isinstance(key, str):
+            dotted_path = f"{dotted_prefix}.{key}"
+            suggestion = _suggest_key(key, allowed_keys)
+            hint = f"; did you mean '{dotted_prefix}.{suggestion}'?" if suggestion else ""
+        else:
+            dotted_path = f"{dotted_prefix}[{key!r}]"
+            hint = ""
+        errors.append((dotted_path, f"{dotted_path}: unsupported key{hint}"))
+    return errors
+
+
+def _collect_mapping_sections(
+    config_data: Mapping[object, object],
+) -> tuple[dict[str, Mapping[object, object]], list[tuple[str, str]]]:
+    """Collect mapping-valued sections and report malformed section values.
+
+    Returns:
+        Valid mapping sections and deterministic validation errors.
+    """
+    mappings: dict[str, Mapping[object, object]] = {}
+    errors: list[tuple[str, str]] = []
+    for section_name in sorted(_MAPPING_SECTIONS):
+        if section_name not in config_data:
+            continue
+        section_data = config_data[section_name]
+        dotted_path = f"config.{section_name}"
+        if isinstance(section_data, Mapping):
+            mappings[section_name] = section_data
+        else:
+            errors.append(
+                (
+                    dotted_path,
+                    f"{dotted_path}: expected a mapping, got {type(section_data).__name__}",
+                )
+            )
+    return mappings, errors
+
+
+def _step_schedule_errors(
+    evaluation: Mapping[object, object] | None,
+) -> list[tuple[str, str]]:
+    """Return full-path errors for malformed evaluation schedule entries."""
+    if evaluation is None or "step_schedule" not in evaluation:
+        return []
+
+    errors: list[tuple[str, str]] = []
+    step_schedule = evaluation["step_schedule"]
+    step_path = "config.evaluation.step_schedule"
+    if isinstance(step_schedule, (str, bytes)) or not isinstance(step_schedule, Sequence):
+        return [
+            (
+                step_path,
+                f"{step_path}: expected a sequence of mappings, got {type(step_schedule).__name__}",
+            )
+        ]
+
+    for index, entry in enumerate(step_schedule):
+        entry_path = f"{step_path}[{index}]"
+        if not isinstance(entry, Mapping):
+            errors.append(
+                (
+                    entry_path,
+                    f"{entry_path}: expected a mapping, got {type(entry).__name__}",
+                )
+            )
+            continue
+        errors.extend(
+            _unknown_key_errors(
+                entry,
+                allowed_keys=_EVALUATION_STEP_KEYS,
+                dotted_prefix=entry_path,
+            )
+        )
+    return errors
+
+
+def validate_expert_training_config_keys(
+    config_data: object,
+    *,
+    allowed_ppo_hyperparams: Collection[str],
+) -> None:
+    """Reject unsupported keys and malformed nested sections before training.
+
+    The dataclass owns top-level YAML field names. The PPO launcher supplies its
+    coercion-table keys so runtime parsing and validation cannot drift.
+
+    Raises:
+        ValueError: With deterministic full dotted paths for every discovered
+            unsupported key or non-mapping section.
+    """
+    if not isinstance(config_data, Mapping):
+        raise ValueError(
+            f"config: expected a mapping for ExpertTrainingConfig, got {type(config_data).__name__}"
+        )
+
+    errors = _unknown_key_errors(
+        config_data,
+        allowed_keys=_expert_training_config_keys(),
+        dotted_prefix="config",
+    )
+    mappings, mapping_errors = _collect_mapping_sections(config_data)
+    errors.extend(mapping_errors)
+
+    closed_sections = (
+        ("convergence", _CONVERGENCE_KEYS),
+        ("evaluation", _EVALUATION_KEYS),
+        ("ppo_hyperparams", frozenset(allowed_ppo_hyperparams)),
+        ("socnav_orca", _SOCNAV_ORCA_KEYS),
+    )
+    for section_name, allowed_keys in closed_sections:
+        section_data = mappings.get(section_name)
+        if section_data is None:
+            continue
+        errors.extend(
+            _unknown_key_errors(
+                section_data,
+                allowed_keys=allowed_keys,
+                dotted_prefix=f"config.{section_name}",
+            )
+        )
+
+    errors.extend(_step_schedule_errors(mappings.get("evaluation")))
+
+    if errors:
+        lines = "\n".join(f"- {message}" for _, message in sorted(errors))
+        raise ValueError(f"Invalid ExpertTrainingConfig keys or sections:\n{lines}")
 
 
 @dataclass(slots=True)
@@ -555,10 +602,6 @@ class PPOFineTuneConfig:
 
 
 __all__ = [
-    "_ALLOWED_CONVERGENCE_KEYS",
-    "_ALLOWED_EVALUATION_KEYS",
-    "_ALLOWED_PPO_HYPERPARAMS",
-    "_ALLOWED_TOP_LEVEL_KEYS",
     "BCPretrainingConfig",
     "BehaviouralCloningConfig",
     "ConvergenceCriteria",

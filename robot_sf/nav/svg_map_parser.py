@@ -1590,10 +1590,7 @@ class SvgMapConverter:
         Returns:
             MapDefinition: The validated map definition created from SVG parsing.
         """
-        # verify that the map definition is the correct type
-        try:
-            assert isinstance(self.map_definition, MapDefinition)
-        except AssertionError:
+        if not isinstance(self.map_definition, MapDefinition):
             raise TypeError(
                 f"Map definition is not of type MapDefinition: {type(self.map_definition)}",
             )
@@ -1652,7 +1649,10 @@ def convert_map(svg_file: str) -> MapDefinition | None:
 
     try:
         converter = SvgMapConverter(svg_file)
-        assert isinstance(converter.map_definition, MapDefinition)
+        if not isinstance(converter.map_definition, MapDefinition):
+            raise TypeError(
+                f"SVG map converter produced unexpected type: {type(converter.map_definition)}",
+            )
         md: MapDefinition = converter.map_definition
         logger.debug(
             "SVG map {svg_file} converted: robot_routes={rr} ped_routes={pr} spawn_zones={sz} goal_zones={gz}",

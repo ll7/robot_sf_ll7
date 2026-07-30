@@ -18,6 +18,7 @@ from typing import Any
 import torch
 import yaml
 
+from robot_sf import common
 from robot_sf.training.discrete_action_lattice import DiscreteUnicycleActionLattice
 from robot_sf.training.distributional_rl import (
     QuantileQNetwork,
@@ -394,8 +395,7 @@ def run_distributional_rl_training(
     if config.device != "cpu" and not torch.cuda.is_available():
         raise RuntimeError(f"requested device {config.device!r} unavailable")
     device = torch.device(config.device)
-    random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    common.set_global_seed(config.seed)
 
     config.output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = config.output_dir / f"{config.policy_id}.pt"

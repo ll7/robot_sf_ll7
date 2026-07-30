@@ -49,6 +49,12 @@ repos:
         language: system
         files: ^(docs/RELEASE\.md|CITATION\.cff|docs/context/evidence/issue_4683_release_assurance_case_example\.json)$
         pass_filenames: false
+      - id: check-ruff-version-parity
+        name: Check Ruff Version Parity
+        entry: uv run python scripts/dev/check_ruff_version_parity.py
+        language: system
+        files: ^(\.pre-commit-config\.yaml|pyproject\.toml|scripts/dev/check_ruff_version_parity\.py)$
+        pass_filenames: false
       - id: no-fstring-logger
         name: No f-string logger.*() calls (loguru structured-style guard)
         entry: uv run python hooks/no_fstring_logger.py

@@ -12,7 +12,10 @@ Checks performed:
 - ``.json`` files parse JSON.
 - ``.yaml`` / ``.yml`` files parse YAML (multi-document allowed).
 - Markdown files: every explicit repository-local relative link (a target that
-  starts ``./`` or ``../``) must resolve to an existing path.
+  starts ``./`` or ``../`` or is a bare-relative path with a file extension)
+  must resolve to an existing path.
+- Markdown links using ``file:///`` absolute local paths are flagged as
+  non-portable internal references.
 - Changed ``docs/context/evidence`` files must be registered in
   ``docs/context/catalog.yaml``.
 - Changed catalog rows must point at existing files and use valid status /
@@ -97,6 +100,11 @@ _CITED_REPO_PATH = re.compile(
     r"(?<![\w./-])(?P<path>(?:scripts|configs)/[A-Za-z0-9_./:-]+\.(?:py|sh|ya?ml))"
 )
 _RELATIVE_PREFIXES = ("./", "../")
+_FILE_SCHEME_PREFIX = "file:///"
+_EXTERNAL_SCHEMES = frozenset({"http://", "https://", "mailto:", "tel:", "ftp://"})
+_LOCAL_FILE_EXTENSIONS = frozenset(
+    {".md", ".markdown", ".py", ".yaml", ".yml", ".json", ".cfg", ".toml", ".sl", ".sh"}
+)
 # A self-declared artifact-presence registry (e.g. the research-package registry,
 # issue #3057) enumerates artifact paths that a companion preflight probes for
 # presence and surfaces as explicit gaps when missing. Such entries are meant to
@@ -161,8 +169,25 @@ def _check_yaml(path: Path) -> list[str]:
     return []
 
 
+def _is_bare_relative(target: str) -> bool:
+    """Return whether a link target is a bare-relative file reference."""
+    if target.startswith(_RELATIVE_PREFIXES):
+        return False
+    if target.startswith("/"):
+        return False
+    if target.startswith("#"):
+        return False
+    for scheme in _EXTERNAL_SCHEMES:
+        if target.startswith(scheme):
+            return False
+    if target.startswith(_FILE_SCHEME_PREFIX):
+        return False
+    suffix = Path(target).suffix.lower()
+    return suffix in _LOCAL_FILE_EXTENSIONS
+
+
 def _check_markdown_links(path: Path, *, root: Path) -> list[str]:
-    """Return broken explicit repo-local relative links in a Markdown file."""
+    """Return broken repo-local relative links and file:/// references in a Markdown file."""
     problems: list[str] = []
     try:
         text = path.read_text(encoding="utf-8")
@@ -171,7 +196,15 @@ def _check_markdown_links(path: Path, *, root: Path) -> list[str]:
 
     for raw_target in _MD_LINK.findall(text):
         target = raw_target.strip()
-        if not target.startswith(_RELATIVE_PREFIXES):
+
+        if target.startswith(_FILE_SCHEME_PREFIX):
+            problems.append(f"{path}: file:/// absolute local path: {target}")
+            continue
+
+        is_relative = target.startswith(_RELATIVE_PREFIXES)
+        is_bare = _is_bare_relative(target)
+
+        if not is_relative and not is_bare:
             continue
 
         file_part = target.split("#", 1)[0]
@@ -571,13 +604,23 @@ def check_files(files: Iterable[str], *, root: Path) -> list[str]:
     return problems
 
 
+def _all_docs_markdown_files(root: Path) -> list[str]:
+    """Return all repository-relative .md paths under docs/."""
+    docs_dir = root / "docs"
+    if not docs_dir.is_dir():
+        return []
+    return [str(p.relative_to(root)) for p in sorted(docs_dir.rglob("*.md")) if p.is_file()]
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Build CLI parser."""
     parser = argparse.ArgumentParser(
         description=(
-            "Changed-path docs/evidence integrity check for JSON/YAML parseability, "
+            "Docs/evidence integrity check for JSON/YAML parseability, "
             "repo-local Markdown links, evidence catalog registration/checksums, "
-            "README-vs-summary drift, and cited command/config paths."
+            "README-vs-summary drift, and cited command/config paths. "
+            "By default inspects only changed files (git diff). "
+            "Use --full to scan all .md files under docs/."
         )
     )
     parser.add_argument(
@@ -589,6 +632,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--files",
         nargs="+",
         help="Explicit repository-relative files to check instead of git diff.",
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Scan all .md files under docs/ instead of changed files only.",
     )
     parser.add_argument(
         "--warn-only",
@@ -608,7 +656,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run docs/evidence integrity check and return a shell exit code."""
     args = _build_parser().parse_args(argv)
     root = _repo_root()
-    files = list(args.files) if args.files is not None else changed_files(args.base_ref, root=root)
+
+    if args.full:
+        files = _all_docs_markdown_files(root)
+        if not files:
+            print("docs/evidence integrity: no .md files found under docs/.")
+            return 0
+        print(f"docs/evidence integrity: full-repo scan of {len(files)} file(s) under docs/.")
+    elif args.files is not None:
+        files = list(args.files)
+    else:
+        files = changed_files(args.base_ref, root=root)
+
     if not files:
         print("docs/evidence integrity: no changed docs/evidence files to check.")
         return 0

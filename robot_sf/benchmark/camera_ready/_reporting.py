@@ -325,52 +325,49 @@ def _normalized_algorithm_metadata_contract(summary: dict[str, Any]) -> dict[str
     return {}
 
 
-def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
-    planner: PlannerSpec,
-    summary: dict[str, Any],
-    aggregates: dict[str, Any] | None,
-    *,
-    kinematics: str,
-    synthetic_actuation_profile: SyntheticActuationProfile | None = None,
-    records: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Build one campaign table row for a planner run.
+def _resolve_metric_block(aggregates: dict[str, Any] | None) -> dict[str, Any]:
+    """Extract the aggregate metric block from nested aggregates payload.
 
     Returns:
-        Flattened row payload for CSV/Markdown export.
+        Aggregate metric block dict or empty dict.
     """
     if aggregates:
         groups = [name for name in aggregates.keys() if name != "_meta"]
-        metric_block = aggregates.get(groups[0], {}) if groups else {}
-    else:
-        metric_block = {}
+        return aggregates.get(groups[0], {}) if groups else {}
+    return {}
 
-    success_ci = _metric_ci(metric_block, "success")
-    collision_ci = _metric_ci(metric_block, "collisions")
-    snqi_ci = _metric_ci(metric_block, "snqi")
 
-    algorithm_metadata_contract = _normalized_algorithm_metadata_contract(summary)
-    availability = summarize_benchmark_availability(summary)
-    execution_mode = availability.execution_mode
-    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
-    if not isinstance(planner_kinematics, dict):
-        planner_kinematics = {}
-    preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
+def _extract_learned_policy_contract_status(
+    summary: dict[str, Any],
+) -> tuple[str, int, int]:
+    """Extract learned-policy contract status, critical counts, and warning counts.
+
+    Returns:
+        Tuple of (status, critical_count, warning_count).
+    """
     learned_policy_contract = (summary.get("preflight") or {}).get("learned_policy_contract")
-    contract_status = "not_applicable"
-    contract_critical = 0
-    contract_warnings = 0
-    if isinstance(learned_policy_contract, dict):
-        contract_status = str(learned_policy_contract.get("status", "not_applicable"))
-        critical_list = learned_policy_contract.get("critical_mismatches")
-        warning_list = learned_policy_contract.get("warnings")
-        if isinstance(critical_list, list):
-            contract_critical = len(critical_list)
-        if isinstance(warning_list, list):
-            contract_warnings = len(warning_list)
-    status = str(summary.get("status", "unknown"))
-    readiness_status = availability.readiness_status
+    if not isinstance(learned_policy_contract, dict):
+        return "not_applicable", 0, 0
+    contract_status = str(learned_policy_contract.get("status", "not_applicable"))
+    critical_list = learned_policy_contract.get("critical_mismatches")
+    warning_list = learned_policy_contract.get("warnings")
+    contract_critical = len(critical_list) if isinstance(critical_list, list) else 0
+    contract_warnings = len(warning_list) if isinstance(warning_list, list) else 0
+    return contract_status, contract_critical, contract_warnings
 
+
+def _resolve_planner_metrics(
+    metric_block: dict[str, Any],
+    records: list[dict[str, Any]] | None,
+    success_ci: tuple[float, float],
+    collision_ci: tuple[float, float],
+    snqi_ci: tuple[float, float],
+) -> tuple[dict[str, float], tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """Resolve aggregate metrics and optionally override from episode records.
+
+    Returns:
+        Tuple of (resolved_metrics, updated_success_ci, updated_collision_ci, updated_snqi_ci).
+    """
     resolved_metrics = {
         "success_mean": _metric_mean(metric_block, "success"),
         "collisions_mean": _metric_mean(metric_block, "collisions"),
@@ -397,79 +394,62 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         ),
         "signed_braking_peak_m_s2_mean": _metric_mean(metric_block, "signed_braking_peak_m_s2"),
         "snqi_mean": _metric_mean(metric_block, "snqi"),
-        # Dedicated release-gate retention fields (issue #4326). These use the
-        # exact names the release-gate evaluator consumes so FUTURE campaigns
-        # become evaluable for the clearance/proxemic gates. min_clearance_m is
-        # the campaign-wide worst-case (minimum) clearance, distinct from the
-        # mean-of-per-episode-minimums already retained as min_clearance_mean;
-        # the aggregate CI block carries no minimum, so it defaults to nan and is
-        # filled from episode records below. proxemic_intrusion_rate is the mean
-        # per-episode personal-space intrusion fraction. Campaigns that never
-        # recorded these stay nan -> not_evaluable (fail-closed); no backfill.
         "min_clearance_m": float("nan"),
         "proxemic_intrusion_rate": _metric_mean(metric_block, "social_proxemic_intrusion_frac"),
     }
-    if records:
-        metric_sources = {
-            "success_mean": "success",
-            "collisions_mean": "collisions",
-            "ped_collision_count_mean": "ped_collision_count",
-            "obstacle_collision_count_mean": "obstacle_collision_count",
-            "total_collision_count_mean": "total_collision_count",
-            "near_misses_mean": "near_misses",
-            "min_clearance_mean": "min_clearance",
-            "time_to_collision_min_mean": "time_to_collision_min",
-            "time_to_goal_norm_mean": "time_to_goal_norm",
-            "failure_to_progress_mean": "failure_to_progress",
-            "stalled_time_mean": "stalled_time",
-            "path_efficiency_mean": "path_efficiency",
-            "velocity_max_mean": "velocity_max",
-            "acceleration_max_mean": "acceleration_max",
-            "comfort_exposure_mean": "comfort_exposure",
-            "jerk_mean": "jerk_mean",
-            "jerk_max_mean": "jerk_max",
-            "curvature_mean_mean": "curvature_mean",
-            "energy_mean": "energy",
-            "command_clip_fraction_mean": "command_clip_fraction",
-            "yaw_rate_saturation_fraction_mean": "yaw_rate_saturation_fraction",
-            "signed_braking_peak_m_s2_mean": "signed_braking_peak_m_s2",
-            "snqi_mean": "snqi",
-            # Release-gate proxemic field (issue #4326): mean per-episode
-            # personal-space intrusion fraction, retained under its gate name.
-            "proxemic_intrusion_rate": "social_proxemic_intrusion_frac",
-        }
-        for field_name, metric_name in metric_sources.items():
-            resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
-            if field_name == "success_mean":
-                success_ci = _episode_metric_ci(records, metric_name)
-            elif field_name == "collisions_mean":
-                collision_ci = _episode_metric_ci(records, metric_name)
-            elif field_name == "snqi_mean":
-                snqi_ci = _episode_metric_ci(records, metric_name)
-        # Release-gate clearance floor (issue #4326): worst-case (minimum)
-        # per-episode clearance across the campaign, not a mean, so the safety
-        # floor gate evaluates the strictest observed value.
-        resolved_metrics["min_clearance_m"] = _episode_metric_min(records, "min_clearance")
-    episode_count = (
-        len(records)
-        if records is not None
-        else int(summary.get("episodes_total", summary.get("written", 0)))
-    )
+    if not records:
+        return resolved_metrics, success_ci, collision_ci, snqi_ci
 
-    row = {
-        "planner_key": planner.key,
-        "algo": planner.algo,
-        "human_model_variant": planner.human_model_variant or "",
-        "human_model_source": planner.human_model_source or "",
-        "planner_group": planner.planner_group,
-        "kinematics": kinematics,
-        "status": status,
-        "episodes": int(episode_count),
-        "started_at_utc": str(summary.get("started_at_utc", "unknown")),
-        "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
-        "runtime_sec": _safe_float(summary.get("runtime_sec")),
-        "episodes_per_second": _safe_float(summary.get("episodes_per_second")),
-        "failed_jobs": int(summary.get("failed_jobs", 0)),
+    metric_sources = {
+        "success_mean": "success",
+        "collisions_mean": "collisions",
+        "ped_collision_count_mean": "ped_collision_count",
+        "obstacle_collision_count_mean": "obstacle_collision_count",
+        "total_collision_count_mean": "total_collision_count",
+        "near_misses_mean": "near_misses",
+        "min_clearance_mean": "min_clearance",
+        "time_to_collision_min_mean": "time_to_collision_min",
+        "time_to_goal_norm_mean": "time_to_goal_norm",
+        "failure_to_progress_mean": "failure_to_progress",
+        "stalled_time_mean": "stalled_time",
+        "path_efficiency_mean": "path_efficiency",
+        "velocity_max_mean": "velocity_max",
+        "acceleration_max_mean": "acceleration_max",
+        "comfort_exposure_mean": "comfort_exposure",
+        "jerk_mean": "jerk_mean",
+        "jerk_max_mean": "jerk_max",
+        "curvature_mean_mean": "curvature_mean",
+        "energy_mean": "energy",
+        "command_clip_fraction_mean": "command_clip_fraction",
+        "yaw_rate_saturation_fraction_mean": "yaw_rate_saturation_fraction",
+        "signed_braking_peak_m_s2_mean": "signed_braking_peak_m_s2",
+        "snqi_mean": "snqi",
+        "proxemic_intrusion_rate": "social_proxemic_intrusion_frac",
+    }
+    for field_name, metric_name in metric_sources.items():
+        resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
+        if field_name == "success_mean":
+            success_ci = _episode_metric_ci(records, metric_name)
+        elif field_name == "collisions_mean":
+            collision_ci = _episode_metric_ci(records, metric_name)
+        elif field_name == "snqi_mean":
+            snqi_ci = _episode_metric_ci(records, metric_name)
+    resolved_metrics["min_clearance_m"] = _episode_metric_min(records, "min_clearance")
+    return resolved_metrics, success_ci, collision_ci, snqi_ci
+
+
+def _build_planner_row_metrics(
+    resolved_metrics: dict[str, float],
+    success_ci: tuple[float, float],
+    collision_ci: tuple[float, float],
+    snqi_ci: tuple[float, float],
+) -> dict[str, str]:
+    """Build metric fields for a planner row from resolved values.
+
+    Returns:
+        Dict of metric field names to formatted strings.
+    """
+    return {
         "success_mean": _safe_float(resolved_metrics["success_mean"]),
         "collisions_mean": _safe_float(resolved_metrics["collisions_mean"]),
         "ped_collision_count_mean": _safe_float(resolved_metrics["ped_collision_count_mean"]),
@@ -479,7 +459,6 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         "total_collision_count_mean": _safe_float(resolved_metrics["total_collision_count_mean"]),
         "near_misses_mean": _safe_float(resolved_metrics["near_misses_mean"]),
         "min_clearance_mean": _safe_float(resolved_metrics["min_clearance_mean"]),
-        # Dedicated release-gate safety field (issue #4326): worst-case clearance.
         "min_clearance_m": _safe_float(resolved_metrics["min_clearance_m"]),
         "time_to_collision_min_mean": _safe_float(resolved_metrics["time_to_collision_min_mean"]),
         "time_to_goal_norm_mean": _safe_float(resolved_metrics["time_to_goal_norm_mean"]),
@@ -489,7 +468,6 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         "velocity_max_mean": _safe_float(resolved_metrics["velocity_max_mean"]),
         "acceleration_max_mean": _safe_float(resolved_metrics["acceleration_max_mean"]),
         "comfort_exposure_mean": _safe_float(resolved_metrics["comfort_exposure_mean"]),
-        # Dedicated release-gate comfort field (issue #4326): proxemic-intrusion rate.
         "proxemic_intrusion_rate": _safe_float(resolved_metrics["proxemic_intrusion_rate"]),
         "jerk_mean": _safe_float(resolved_metrics["jerk_mean"]),
         "jerk_max_mean": _safe_float(resolved_metrics["jerk_max_mean"]),
@@ -509,6 +487,43 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         "collision_ci_high": _safe_float(collision_ci[1]),
         "snqi_ci_low": _safe_float(snqi_ci[0]),
         "snqi_ci_high": _safe_float(snqi_ci[1]),
+    }
+
+
+def _build_planner_row_metadata(  # noqa: PLR0913
+    planner: PlannerSpec,
+    kinematics: str,
+    status: str,
+    episode_count: int,
+    summary: dict[str, Any],
+    execution_mode: str,
+    planner_kinematics: dict[str, Any],
+    readiness_status: str,
+    availability: Any,
+    preflight_status: str,
+    contract_status: str,
+    contract_critical: int,
+    contract_warnings: int,
+) -> dict[str, Any]:
+    """Build metadata fields for a planner row.
+
+    Returns:
+        Dict of metadata field names to values.
+    """
+    return {
+        "planner_key": planner.key,
+        "algo": planner.algo,
+        "human_model_variant": planner.human_model_variant or "",
+        "human_model_source": planner.human_model_source or "",
+        "planner_group": planner.planner_group,
+        "kinematics": kinematics,
+        "status": status,
+        "episodes": int(episode_count),
+        "started_at_utc": str(summary.get("started_at_utc", "unknown")),
+        "finished_at_utc": str(summary.get("finished_at_utc", "unknown")),
+        "runtime_sec": _safe_float(summary.get("runtime_sec")),
+        "episodes_per_second": _safe_float(summary.get("episodes_per_second")),
+        "failed_jobs": int(summary.get("failed_jobs", 0)),
         "execution_mode": execution_mode,
         "execution_detail": str(planner_kinematics.get("execution_detail", "unspecified")),
         "planner_command_space": str(planner_kinematics.get("planner_command_space", "unknown")),
@@ -532,6 +547,87 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         "learned_policy_contract_critical": contract_critical,
         "learned_policy_contract_warnings": contract_warnings,
     }
+
+
+def _build_planner_row_base(  # noqa: PLR0913
+    planner: PlannerSpec,
+    kinematics: str,
+    status: str,
+    episode_count: int,
+    summary: dict[str, Any],
+    resolved_metrics: dict[str, float],
+    success_ci: tuple[float, float],
+    collision_ci: tuple[float, float],
+    snqi_ci: tuple[float, float],
+    execution_mode: str,
+    planner_kinematics: dict[str, Any],
+    readiness_status: str,
+    availability: Any,
+    preflight_status: str,
+    contract_status: str,
+    contract_critical: int,
+    contract_warnings: int,
+) -> dict[str, Any]:
+    """Build the core planner row dict without actuation or feasibility fields.
+
+    Key insertion order mirrors the pre-decomposition literal so serialized
+    artifacts (e.g. ``campaign_summary.json`` planner rows) stay byte-identical:
+    identity metadata, then metric fields, then execution/readiness/contract
+    metadata. CSV columns are unaffected because writers pin an explicit
+    ``headers`` tuple; this only preserves the JSON/object field order.
+
+    Returns:
+        Flattened planner row dict for CSV/Markdown export.
+    """
+    metrics = _build_planner_row_metrics(
+        resolved_metrics,
+        success_ci,
+        collision_ci,
+        snqi_ci,
+    )
+    metadata = _build_planner_row_metadata(
+        planner,
+        kinematics,
+        status,
+        episode_count,
+        summary,
+        execution_mode,
+        planner_kinematics,
+        readiness_status,
+        availability,
+        preflight_status,
+        contract_status,
+        contract_critical,
+        contract_warnings,
+    )
+    # Identity metadata first, then metrics, then the remaining
+    # execution/readiness/contract metadata, matching the original literal.
+    identity_keys = (
+        "planner_key",
+        "algo",
+        "human_model_variant",
+        "human_model_source",
+        "planner_group",
+        "kinematics",
+        "status",
+        "episodes",
+        "started_at_utc",
+        "finished_at_utc",
+        "runtime_sec",
+        "episodes_per_second",
+        "failed_jobs",
+    )
+    row: dict[str, Any] = {key: metadata[key] for key in identity_keys}
+    row.update(metrics)
+    row.update({key: value for key, value in metadata.items() if key not in identity_keys})
+    return row
+
+
+def _add_synthetic_actuation_to_row(
+    row: dict[str, Any],
+    synthetic_actuation_profile: SyntheticActuationProfile | None,
+) -> None:
+    """Enrich a planner row with synthetic actuation fields or saturation placeholders."""
     if synthetic_actuation_profile is not None:
         row["synthetic_actuation_profile_name"] = synthetic_actuation_profile.name
         row["synthetic_actuation_profile_version"] = synthetic_actuation_profile.profile_version
@@ -552,6 +648,13 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
     else:
         for key, value in not_available_saturation_metrics().items():
             row[f"{key}_mean"] = value
+
+
+def _add_feasibility_to_row(
+    row: dict[str, Any],
+    algorithm_metadata_contract: dict[str, Any],
+) -> None:
+    """Enrich a planner row with kinematics feasibility fields."""
     feasibility = algorithm_metadata_contract.get("kinematics_feasibility")
     if isinstance(feasibility, dict):
         row["commands_evaluated"] = int(feasibility.get("commands_evaluated", 0) or 0)
@@ -561,6 +664,77 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         row["commands_evaluated"] = 0
         row["projection_rate"] = _safe_float(0.0)
         row["infeasible_rate"] = _safe_float(0.0)
+
+
+def _planner_report_row(
+    planner: PlannerSpec,
+    summary: dict[str, Any],
+    aggregates: dict[str, Any] | None,
+    *,
+    kinematics: str,
+    synthetic_actuation_profile: SyntheticActuationProfile | None = None,
+    records: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build one campaign table row for a planner run.
+
+    Returns:
+        Flattened row payload for CSV/Markdown export.
+    """
+    metric_block = _resolve_metric_block(aggregates)
+
+    success_ci = _metric_ci(metric_block, "success")
+    collision_ci = _metric_ci(metric_block, "collisions")
+    snqi_ci = _metric_ci(metric_block, "snqi")
+
+    algorithm_metadata_contract = _normalized_algorithm_metadata_contract(summary)
+    availability = summarize_benchmark_availability(summary)
+    execution_mode = availability.execution_mode
+    planner_kinematics = algorithm_metadata_contract.get("planner_kinematics")
+    if not isinstance(planner_kinematics, dict):
+        planner_kinematics = {}
+    preflight_status = str((summary.get("preflight") or {}).get("status", "unknown"))
+
+    contract_status, contract_critical, contract_warnings = _extract_learned_policy_contract_status(
+        summary
+    )
+
+    status = str(summary.get("status", "unknown"))
+    readiness_status = availability.readiness_status
+
+    resolved_metrics, success_ci, collision_ci, snqi_ci = _resolve_planner_metrics(
+        metric_block,
+        records,
+        success_ci,
+        collision_ci,
+        snqi_ci,
+    )
+    episode_count = (
+        len(records)
+        if records is not None
+        else int(summary.get("episodes_total", summary.get("written", 0)))
+    )
+
+    row = _build_planner_row_base(
+        planner,
+        kinematics,
+        status,
+        episode_count,
+        summary,
+        resolved_metrics,
+        success_ci,
+        collision_ci,
+        snqi_ci,
+        execution_mode,
+        planner_kinematics,
+        readiness_status,
+        availability,
+        preflight_status,
+        contract_status,
+        contract_critical,
+        contract_warnings,
+    )
+    _add_synthetic_actuation_to_row(row, synthetic_actuation_profile)
+    _add_feasibility_to_row(row, algorithm_metadata_contract)
     return row
 
 
@@ -783,82 +957,79 @@ def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
-    path: Path, payload: dict[str, Any]
+def _write_header_lines(
+    lines: list[str],
+    campaign: dict[str, Any],
+    campaign_integrity: dict[str, Any],
 ) -> None:
-    """Write a human-readable campaign report in Markdown."""
-    campaign = payload.get("campaign", {})
-    rows = payload.get("planner_rows", [])
-    warnings = payload.get("warnings", [])
-    scorecard = payload.get("credibility_scorecard")
-    campaign_integrity = payload.get("campaign_integrity") or {}
-    accepted_unavailable_rows = [
-        row
-        for row in rows
-        if classify_planner_row_status(str(row.get("status", ""))) == "accepted_unavailable"
-    ]
-    unexpected_failed_rows = [
-        row
-        for row in rows
-        if classify_planner_row_status(str(row.get("status", ""))) == "unexpected_failure"
-    ]
+    """Append campaign metadata header lines to the report."""
+    lines.extend(
+        [
+            "# Camera-Ready Benchmark Campaign Report",
+            "",
+            f"- Campaign ID: `{campaign.get('campaign_id', 'unknown')}`",
+            f"- Name: `{campaign.get('name', 'unknown')}`",
+            f"- Created (UTC): `{campaign.get('created_at_utc', 'unknown')}`",
+            f"- Scenario matrix: `{campaign.get('scenario_matrix', 'unknown')}`",
+            f"- Scenario matrix hash: `{campaign.get('scenario_matrix_hash', 'unknown')}`",
+            f"- Git commit: `{campaign.get('git_hash', 'unknown')}`",
+            f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
+            f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
+            f"- Campaign status: `{campaign.get('status', 'unknown')}`",
+            f"- Campaign execution status: `{campaign.get('campaign_execution_status', 'unknown')}`",
+            f"- Evidence status: `{campaign.get('evidence_status', 'unknown')}`",
+            f"- Aggregate integrity: `{campaign_integrity.get('status', 'not_evaluated')}`",
+            f"- Status reason: `{campaign.get('status_reason', 'unknown')}`",
+            f"- Benchmark success: `{campaign.get('benchmark_success', False)}`",
+            f"- Successful rows: `{campaign.get('successful_runs', 0)}` / `{campaign.get('total_runs', 0)}`",
+            f"- Accepted unavailable/excluded rows: `{campaign.get('accepted_unavailable_runs', 0)}`",
+            f"- Unexpected failed rows: `{campaign.get('unexpected_failed_runs', 0)}`",
+            (f"- Row status summary: `{campaign.get('row_status_summary', {})}`"),
+            f"- Interpretation profile: `{campaign.get('paper_interpretation_profile', 'unknown')}`",
+            f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
+            "",
+            "## Planner Summary",
+            "",
+        ]
+    )
 
-    lines = [
-        "# Camera-Ready Benchmark Campaign Report",
-        "",
-        f"- Campaign ID: `{campaign.get('campaign_id', 'unknown')}`",
-        f"- Name: `{campaign.get('name', 'unknown')}`",
-        f"- Created (UTC): `{campaign.get('created_at_utc', 'unknown')}`",
-        f"- Scenario matrix: `{campaign.get('scenario_matrix', 'unknown')}`",
-        f"- Scenario matrix hash: `{campaign.get('scenario_matrix_hash', 'unknown')}`",
-        f"- Git commit: `{campaign.get('git_hash', 'unknown')}`",
-        f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
-        f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
-        f"- Campaign status: `{campaign.get('status', 'unknown')}`",
-        f"- Campaign execution status: `{campaign.get('campaign_execution_status', 'unknown')}`",
-        f"- Evidence status: `{campaign.get('evidence_status', 'unknown')}`",
-        f"- Aggregate integrity: `{campaign_integrity.get('status', 'not_evaluated')}`",
-        f"- Status reason: `{campaign.get('status_reason', 'unknown')}`",
-        f"- Benchmark success: `{campaign.get('benchmark_success', False)}`",
-        f"- Successful rows: `{campaign.get('successful_runs', 0)}` / `{campaign.get('total_runs', 0)}`",
-        f"- Accepted unavailable/excluded rows: `{campaign.get('accepted_unavailable_runs', 0)}`",
-        f"- Unexpected failed rows: `{campaign.get('unexpected_failed_runs', 0)}`",
-        (f"- Row status summary: `{campaign.get('row_status_summary', {})}`"),
-        f"- Interpretation profile: `{campaign.get('paper_interpretation_profile', 'unknown')}`",
-        f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
-        "",
-        "## Planner Summary",
-        "",
-    ]
 
-    if rows:
-        lines.extend(
-            [
-                "| planner | algo | planner group | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
-                "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
-            ],
-        )
-        for row in rows:
-            lines.append(
-                "| "
-                f"{_escape_markdown_cell(row.get('planner_key'))} | "
-                f"{_escape_markdown_cell(row.get('algo'))} | "
-                f"{_escape_markdown_cell(row.get('planner_group'))} | "
-                f"{_escape_markdown_cell(row.get('kinematics'))} | "
-                f"{_escape_markdown_cell(row.get('status'))} | "
-                f"{_escape_markdown_cell(row.get('started_at_utc'))} | "
-                f"{_escape_markdown_cell(row.get('runtime_sec'))} | "
-                f"{_escape_markdown_cell(row.get('episodes'))} | "
-                f"{_escape_markdown_cell(row.get('episodes_per_second'))} | "
-                f"{_escape_markdown_cell(row.get('success_mean'))} | "
-                f"{_escape_markdown_cell(row.get('collisions_mean'))} | "
-                f"{_escape_markdown_cell(row.get('snqi_mean'))} | "
-                f"{_escape_markdown_cell(row.get('projection_rate'))} | "
-                f"{_escape_markdown_cell(row.get('infeasible_rate'))} |",
-            )
-    else:
+def _write_planner_summary_table(lines: list[str], rows: list[dict[str, Any]]) -> None:
+    """Append the planner summary table section to the report."""
+    if not rows:
         lines.append("No planner rows were produced.")
+        return
+    lines.extend(
+        [
+            "| planner | algo | planner group | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
+            "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in rows:
+        lines.append(
+            "| "
+            f"{_escape_markdown_cell(row.get('planner_key'))} | "
+            f"{_escape_markdown_cell(row.get('algo'))} | "
+            f"{_escape_markdown_cell(row.get('planner_group'))} | "
+            f"{_escape_markdown_cell(row.get('kinematics'))} | "
+            f"{_escape_markdown_cell(row.get('status'))} | "
+            f"{_escape_markdown_cell(row.get('started_at_utc'))} | "
+            f"{_escape_markdown_cell(row.get('runtime_sec'))} | "
+            f"{_escape_markdown_cell(row.get('episodes'))} | "
+            f"{_escape_markdown_cell(row.get('episodes_per_second'))} | "
+            f"{_escape_markdown_cell(row.get('success_mean'))} | "
+            f"{_escape_markdown_cell(row.get('collisions_mean'))} | "
+            f"{_escape_markdown_cell(row.get('snqi_mean'))} | "
+            f"{_escape_markdown_cell(row.get('projection_rate'))} | "
+            f"{_escape_markdown_cell(row.get('infeasible_rate'))} |",
+        )
 
+
+def _write_aggregate_integrity(
+    lines: list[str],
+    campaign_integrity: dict[str, Any],
+) -> None:
+    """Append the aggregate integrity section to the report."""
     lines.extend(["", "## Aggregate Integrity", ""])
     if campaign_integrity.get("status") == "valid":
         lines.append("Final arm aggregates have exact logical coverage and compatible provenance.")
@@ -877,39 +1048,49 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         f"Claim boundary: {_escape_markdown_cell(campaign_integrity.get('claim_boundary', ''))}"
     )
 
-    arm_rollup = payload.get("arm_rollup") or []
-    if arm_rollup:
-        lines.extend(["", "## Arm Rollup", ""])
-        has_errors = any(arm.get("first_error") for arm in arm_rollup)
-        if has_errors:
-            lines.append(
-                "| planner | kinematics | status | written | failed | first_error | distinct_errors |"
-            )
-            lines.append("|---|---|---|---:|---:|---|---:|")
-            for arm in arm_rollup:
-                lines.append(
-                    "| "
-                    f"{_escape_markdown_cell(arm.get('planner_key'))} | "
-                    f"{_escape_markdown_cell(arm.get('kinematics'))} | "
-                    f"{_escape_markdown_cell(arm.get('status'))} | "
-                    f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
-                    f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} | "
-                    f"{_escape_markdown_cell(arm.get('first_error', ''))} | "
-                    f"{_escape_markdown_cell(arm.get('distinct_error_count', 0))} |"
-                )
-        else:
-            lines.append("| planner | kinematics | status | written | failed |")
-            lines.append("|---|---|---|---:|---:|")
-            for arm in arm_rollup:
-                lines.append(
-                    "| "
-                    f"{_escape_markdown_cell(arm.get('planner_key'))} | "
-                    f"{_escape_markdown_cell(arm.get('kinematics'))} | "
-                    f"{_escape_markdown_cell(arm.get('status'))} | "
-                    f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
-                    f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} |"
-                )
 
+def _write_arm_rollup(lines: list[str], arm_rollup: list[dict[str, Any]]) -> None:
+    """Append the arm rollup section to the report."""
+    if not arm_rollup:
+        return
+    lines.extend(["", "## Arm Rollup", ""])
+    has_errors = any(arm.get("first_error") for arm in arm_rollup)
+    if has_errors:
+        lines.append(
+            "| planner | kinematics | status | written | failed | first_error | distinct_errors |"
+        )
+        lines.append("|---|---|---|---:|---:|---|---:|")
+        for arm in arm_rollup:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(arm.get('planner_key'))} | "
+                f"{_escape_markdown_cell(arm.get('kinematics'))} | "
+                f"{_escape_markdown_cell(arm.get('status'))} | "
+                f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
+                f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} | "
+                f"{_escape_markdown_cell(arm.get('first_error', ''))} | "
+                f"{_escape_markdown_cell(arm.get('distinct_error_count', 0))} |"
+            )
+    else:
+        lines.append("| planner | kinematics | status | written | failed |")
+        lines.append("|---|---|---|---:|---:|")
+        for arm in arm_rollup:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(arm.get('planner_key'))} | "
+                f"{_escape_markdown_cell(arm.get('kinematics'))} | "
+                f"{_escape_markdown_cell(arm.get('status'))} | "
+                f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
+                f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} |"
+            )
+
+
+def _write_credibility_scorecard(
+    lines: list[str],
+    scorecard: Any,
+    payload: dict[str, Any],
+) -> None:
+    """Append the credibility scorecard section to the report."""
     if not isinstance(scorecard, dict):
         scorecard = build_campaign_credibility_scorecard(payload)
     factors = scorecard.get("factors", []) if isinstance(scorecard.get("factors"), list) else []
@@ -941,6 +1122,9 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             f"{_escape_markdown_cell(factor.get('justification'))} |"
         )
 
+
+def _write_readiness_and_fallback(lines: list[str], rows: list[dict[str, Any]]) -> None:
+    """Append the readiness and fallback/degraded status section."""
     fallback_rows = [
         row for row in rows if str(row.get("readiness_status", "")) in {"fallback", "degraded"}
     ]
@@ -978,97 +1162,148 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         lines.append("")
         lines.append("- No fallback/degraded planners detected.")
 
+
+def _write_socnav_disclosure(lines: list[str], rows: list[dict[str, Any]]) -> None:
+    """Append the SocNav strict-vs-fallback disclosure section."""
     lines.extend(["", "## SocNav Strict-vs-Fallback Disclosure", ""])
-    if rows:
+    if not rows:
+        return
+    lines.append(
+        "| planner | algo | planner group | prereq policy | preflight status | readiness status |"
+    )
+    lines.append("|---|---|---|---|---|---|")
+    for row in rows:
         lines.append(
-            "| planner | algo | planner group | prereq policy | preflight status | readiness status |"
+            "| "
+            f"{_escape_markdown_cell(row.get('planner_key'))} | "
+            f"{_escape_markdown_cell(row.get('algo'))} | "
+            f"{_escape_markdown_cell(row.get('planner_group'))} | "
+            f"{_escape_markdown_cell(row.get('socnav_prereq_policy'))} | "
+            f"{_escape_markdown_cell(row.get('preflight_status'))} | "
+            f"{_escape_markdown_cell(row.get('readiness_status'))} |"
         )
-        lines.append("|---|---|---|---|---|---|")
-        for row in rows:
-            lines.append(
-                "| "
-                f"{_escape_markdown_cell(row.get('planner_key'))} | "
-                f"{_escape_markdown_cell(row.get('algo'))} | "
-                f"{_escape_markdown_cell(row.get('planner_group'))} | "
-                f"{_escape_markdown_cell(row.get('socnav_prereq_policy'))} | "
-                f"{_escape_markdown_cell(row.get('preflight_status'))} | "
-                f"{_escape_markdown_cell(row.get('readiness_status'))} |"
-            )
-        comparisons = _strict_vs_fallback_comparisons(rows)
-        if comparisons:
-            lines.append("")
-            lines.append("Strict-vs-fallback comparisons (where both modes are present):")
-            for line in comparisons:
-                lines.append(f"- {line}")
-        else:
-            lines.append("")
-            lines.append(
-                "- No within-campaign strict-vs-fallback pair available for direct comparison."
-            )
+    comparisons = _strict_vs_fallback_comparisons(rows)
+    if comparisons:
+        lines.append("")
+        lines.append("Strict-vs-fallback comparisons (where both modes are present):")
+        for line in comparisons:
+            lines.append(f"- {line}")
+    else:
+        lines.append("")
+        lines.append(
+            "- No within-campaign strict-vs-fallback pair available for direct comparison."
+        )
 
-    scenario_path = (payload.get("artifacts") or {}).get("scenario_breakdown_csv")
-    family_path = (payload.get("artifacts") or {}).get("scenario_family_breakdown_csv")
-    if isinstance(scenario_path, str) or isinstance(family_path, str):
-        lines.extend(["", "## Scenario Diagnostics", ""])
-        if isinstance(scenario_path, str):
-            lines.append(f"- Per-scenario breakdown: `{scenario_path}`")
-        if isinstance(family_path, str):
-            lines.append(f"- Per-family breakdown: `{family_path}`")
-    parity_path = (payload.get("artifacts") or {}).get("kinematics_parity_csv")
-    skipped_path = (payload.get("artifacts") or {}).get("kinematics_skipped_combinations_csv")
-    if isinstance(parity_path, str) or isinstance(skipped_path, str):
-        lines.extend(["", "## Kinematics Parity", ""])
-        if isinstance(parity_path, str):
-            lines.append(f"- Planner x kinematics parity table: `{parity_path}`")
-        if isinstance(skipped_path, str):
-            lines.append(f"- Skipped planner/kinematics combinations: `{skipped_path}`")
-    amv_json = (payload.get("artifacts") or {}).get("amv_coverage_json")
-    amv_md = (payload.get("artifacts") or {}).get("amv_coverage_md")
-    if isinstance(amv_json, str) or isinstance(amv_md, str):
-        lines.extend(["", "## AMV Coverage Contract", ""])
-        if isinstance(amv_json, str):
-            lines.append(f"- Coverage JSON: `{amv_json}`")
-        if isinstance(amv_md, str):
-            lines.append(f"- Coverage Markdown: `{amv_md}`")
-        lines.append(
-            f"- Coverage status: `{campaign.get('amv_coverage_status', 'unknown')}` "
-            f"(enforcement: `{campaign.get('amv_coverage_enforcement', 'warn')}`)"
-        )
-    comparability_json = (payload.get("artifacts") or {}).get("comparability_json")
-    comparability_md = (payload.get("artifacts") or {}).get("comparability_md")
-    if isinstance(comparability_json, str) or isinstance(comparability_md, str):
-        lines.extend(["", "## Alyassi Comparability", ""])
-        if isinstance(comparability_json, str):
-            lines.append(f"- Comparability JSON: `{comparability_json}`")
-        if isinstance(comparability_md, str):
-            lines.append(f"- Comparability Markdown: `{comparability_md}`")
-        lines.append(
-            f"- Mapping version: `{campaign.get('comparability_mapping_version', 'unknown')}`"
-        )
-    snqi_diag_json = (payload.get("artifacts") or {}).get("snqi_diagnostics_json")
-    snqi_diag_md = (payload.get("artifacts") or {}).get("snqi_diagnostics_md")
-    snqi_sensitivity = (payload.get("artifacts") or {}).get("snqi_sensitivity_csv")
-    if isinstance(snqi_diag_json, str) or isinstance(snqi_diag_md, str):
-        lines.extend(["", "## SNQI Contract", ""])
-        lines.append(f"- Contract status: `{campaign.get('snqi_contract_status', 'unknown')}`")
-        lines.append(
-            f"- Rank alignment (Spearman): `{campaign.get('snqi_contract_rank_alignment_spearman', 'nan')}`"
-        )
-        lines.append(
-            f"- Outcome separation: `{campaign.get('snqi_contract_outcome_separation', 'nan')}`"
-        )
-        lines.append(
-            f"- Positioning recommendation: `{campaign.get('snqi_positioning_recommendation', 'unknown')}`"
-        )
-        lines.append(f"- Weights version: `{campaign.get('snqi_weights_version', 'unknown')}`")
-        lines.append(f"- Baseline version: `{campaign.get('snqi_baseline_version', 'unknown')}`")
-        if isinstance(snqi_diag_json, str):
-            lines.append(f"- Diagnostics JSON: `{snqi_diag_json}`")
-        if isinstance(snqi_diag_md, str):
-            lines.append(f"- Diagnostics Markdown: `{snqi_diag_md}`")
-        if isinstance(snqi_sensitivity, str):
-            lines.append(f"- Sensitivity CSV: `{snqi_sensitivity}`")
 
+def _write_scenario_diagnostics(lines: list[str], artifacts: dict[str, Any]) -> None:
+    """Append scenario diagnostics section from artifacts."""
+    scenario_path = artifacts.get("scenario_breakdown_csv")
+    family_path = artifacts.get("scenario_family_breakdown_csv")
+    if not isinstance(scenario_path, str) and not isinstance(family_path, str):
+        return
+    lines.extend(["", "## Scenario Diagnostics", ""])
+    if isinstance(scenario_path, str):
+        lines.append(f"- Per-scenario breakdown: `{scenario_path}`")
+    if isinstance(family_path, str):
+        lines.append(f"- Per-family breakdown: `{family_path}`")
+
+
+def _write_kinematics_parity(lines: list[str], artifacts: dict[str, Any]) -> None:
+    """Append kinematics parity section from artifacts."""
+    parity_path = artifacts.get("kinematics_parity_csv")
+    skipped_path = artifacts.get("kinematics_skipped_combinations_csv")
+    if not isinstance(parity_path, str) and not isinstance(skipped_path, str):
+        return
+    lines.extend(["", "## Kinematics Parity", ""])
+    if isinstance(parity_path, str):
+        lines.append(f"- Planner x kinematics parity table: `{parity_path}`")
+    if isinstance(skipped_path, str):
+        lines.append(f"- Skipped planner/kinematics combinations: `{skipped_path}`")
+
+
+def _write_amv_coverage(
+    lines: list[str], artifacts: dict[str, Any], campaign: dict[str, Any]
+) -> None:
+    """Append AMV coverage contract section from artifacts."""
+    amv_json = artifacts.get("amv_coverage_json")
+    amv_md = artifacts.get("amv_coverage_md")
+    if not isinstance(amv_json, str) and not isinstance(amv_md, str):
+        return
+    lines.extend(["", "## AMV Coverage Contract", ""])
+    if isinstance(amv_json, str):
+        lines.append(f"- Coverage JSON: `{amv_json}`")
+    if isinstance(amv_md, str):
+        lines.append(f"- Coverage Markdown: `{amv_md}`")
+    lines.append(
+        f"- Coverage status: `{campaign.get('amv_coverage_status', 'unknown')}` "
+        f"(enforcement: `{campaign.get('amv_coverage_enforcement', 'warn')}`)"
+    )
+
+
+def _write_comparability(
+    lines: list[str], artifacts: dict[str, Any], campaign: dict[str, Any]
+) -> None:
+    """Append Alyassi comparability section from artifacts."""
+    comparability_json = artifacts.get("comparability_json")
+    comparability_md = artifacts.get("comparability_md")
+    if not isinstance(comparability_json, str) and not isinstance(comparability_md, str):
+        return
+    lines.extend(["", "## Alyassi Comparability", ""])
+    if isinstance(comparability_json, str):
+        lines.append(f"- Comparability JSON: `{comparability_json}`")
+    if isinstance(comparability_md, str):
+        lines.append(f"- Comparability Markdown: `{comparability_md}`")
+    lines.append(f"- Mapping version: `{campaign.get('comparability_mapping_version', 'unknown')}`")
+
+
+def _write_snqi_contract(
+    lines: list[str], artifacts: dict[str, Any], campaign: dict[str, Any]
+) -> None:
+    """Append SNQI contract section from artifacts."""
+    snqi_diag_json = artifacts.get("snqi_diagnostics_json")
+    snqi_diag_md = artifacts.get("snqi_diagnostics_md")
+    snqi_sensitivity = artifacts.get("snqi_sensitivity_csv")
+    if not isinstance(snqi_diag_json, str) and not isinstance(snqi_diag_md, str):
+        return
+    lines.extend(["", "## SNQI Contract", ""])
+    lines.append(f"- Contract status: `{campaign.get('snqi_contract_status', 'unknown')}`")
+    lines.append(
+        f"- Rank alignment (Spearman): `{campaign.get('snqi_contract_rank_alignment_spearman', 'nan')}`"
+    )
+    lines.append(
+        f"- Outcome separation: `{campaign.get('snqi_contract_outcome_separation', 'nan')}`"
+    )
+    lines.append(
+        f"- Positioning recommendation: `{campaign.get('snqi_positioning_recommendation', 'unknown')}`"
+    )
+    lines.append(f"- Weights version: `{campaign.get('snqi_weights_version', 'unknown')}`")
+    lines.append(f"- Baseline version: `{campaign.get('snqi_baseline_version', 'unknown')}`")
+    if isinstance(snqi_diag_json, str):
+        lines.append(f"- Diagnostics JSON: `{snqi_diag_json}`")
+    if isinstance(snqi_diag_md, str):
+        lines.append(f"- Diagnostics Markdown: `{snqi_diag_md}`")
+    if isinstance(snqi_sensitivity, str):
+        lines.append(f"- Sensitivity CSV: `{snqi_sensitivity}`")
+
+
+def _write_artifact_diagnostics(
+    lines: list[str],
+    payload: dict[str, Any],
+    campaign: dict[str, Any],
+) -> None:
+    """Append scenario, kinematics, AMV, comparability, and SNQI diagnostic sections."""
+    artifacts = payload.get("artifacts") or {}
+    _write_scenario_diagnostics(lines, artifacts)
+    _write_kinematics_parity(lines, artifacts)
+    _write_amv_coverage(lines, artifacts, campaign)
+    _write_comparability(lines, artifacts, campaign)
+    _write_snqi_contract(lines, artifacts, campaign)
+
+
+def _write_fairness_contract(
+    lines: list[str], payload: dict[str, Any], rows: list[dict[str, Any]]
+) -> None:
+    """Append the fairness contract section to the report."""
     lines.extend(["", "## Fairness Contract", ""])
     fairness_payload = payload.get("fairness_contract")
     fairness_report = (
@@ -1140,6 +1375,13 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
                 f"- **{m['dimension']}**: {m['planner_a']} vs {m['planner_b']} — {m['description']}"
             )
 
+
+def _write_unavailable_and_failed(
+    lines: list[str],
+    accepted_unavailable_rows: list[dict[str, Any]],
+    unexpected_failed_rows: list[dict[str, Any]],
+) -> None:
+    """Append the accepted unavailable and unexpected failed planner sections."""
     lines.extend(["", "## Accepted Unavailable/Excluded Planners", ""])
     if accepted_unavailable_rows:
         lines.append("| planner | status | availability reason |")
@@ -1168,6 +1410,9 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     else:
         lines.append("- No unexpected failed/partial planners.")
 
+
+def _write_campaign_warnings(lines: list[str], warnings: list[str]) -> None:
+    """Append the campaign warnings section to the report."""
     lines.extend(["", "## Campaign Warnings", ""])
     if warnings:
         for warning in warnings:
@@ -1175,18 +1420,55 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     else:
         lines.append("- No campaign-level warnings.")
 
+
+def _write_publication_bundle(lines: list[str], payload: dict[str, Any]) -> None:
+    """Append the publication bundle section to the report."""
     publication = payload.get("publication_bundle")
-    if isinstance(publication, dict):
-        lines.extend(
-            [
-                "",
-                "## Publication Bundle",
-                "",
-                f"- Bundle dir: `{publication.get('bundle_dir', 'unknown')}`",
-                f"- Archive: `{publication.get('archive_path', 'unknown')}`",
-                f"- Manifest: `{publication.get('manifest_path', 'unknown')}`",
-                f"- Checksums: `{publication.get('checksums_path', 'unknown')}`",
-            ],
-        )
+    if not isinstance(publication, dict):
+        return
+    lines.extend(
+        [
+            "",
+            "## Publication Bundle",
+            "",
+            f"- Bundle dir: `{publication.get('bundle_dir', 'unknown')}`",
+            f"- Archive: `{publication.get('archive_path', 'unknown')}`",
+            f"- Manifest: `{publication.get('manifest_path', 'unknown')}`",
+            f"- Checksums: `{publication.get('checksums_path', 'unknown')}`",
+        ]
+    )
+
+
+def write_campaign_report(path: Path, payload: dict[str, Any]) -> None:
+    """Write a human-readable campaign report in Markdown."""
+    campaign = payload.get("campaign", {})
+    rows = payload.get("planner_rows", [])
+    warnings = payload.get("warnings", [])
+    scorecard = payload.get("credibility_scorecard")
+    campaign_integrity = payload.get("campaign_integrity") or {}
+    accepted_unavailable_rows = [
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "accepted_unavailable"
+    ]
+    unexpected_failed_rows = [
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "unexpected_failure"
+    ]
+
+    lines: list[str] = []
+    _write_header_lines(lines, campaign, campaign_integrity)
+    _write_planner_summary_table(lines, rows)
+    _write_aggregate_integrity(lines, campaign_integrity)
+    _write_arm_rollup(lines, payload.get("arm_rollup") or [])
+    _write_credibility_scorecard(lines, scorecard, payload)
+    _write_readiness_and_fallback(lines, rows)
+    _write_socnav_disclosure(lines, rows)
+    _write_artifact_diagnostics(lines, payload, campaign)
+    _write_fairness_contract(lines, payload, rows)
+    _write_unavailable_and_failed(lines, accepted_unavailable_rows, unexpected_failed_rows)
+    _write_campaign_warnings(lines, warnings)
+    _write_publication_bundle(lines, payload)
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

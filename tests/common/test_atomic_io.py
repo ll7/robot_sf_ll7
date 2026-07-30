@@ -67,3 +67,32 @@ def test_closes_temp_fd_when_fdopen_fails(tmp_path: Path, monkeypatch: pytest.Mo
         os.fstat(captured_fd)
     assert not target.exists()
     assert list(tmp_path.iterdir()) == []
+
+
+def test_closes_temp_fd_when_fdopen_raises_value_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A ValueError from os.fdopen is also caught and the raw fd is closed.
+
+    ``os.fdopen`` documents ``OSError`` (bad fd) and ``ValueError`` (incompatible
+    mode/arg combination) as its realistic failure types; the narrowed handler
+    (issue #6459) must close the raw mkstemp fd and re-raise for both.
+    """
+    target = tmp_path / "data.json"
+    captured_fd: int | None = None
+
+    def fail_fdopen(fd: int, *args: object, **kwargs: object):
+        nonlocal captured_fd
+        captured_fd = fd
+        raise ValueError("bad mode")
+
+    monkeypatch.setattr(os, "fdopen", fail_fdopen)
+
+    with pytest.raises(ValueError, match="bad mode"):
+        atomic_write_json(target, {"v": 1})
+
+    assert captured_fd is not None
+    with pytest.raises(OSError):
+        os.fstat(captured_fd)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []

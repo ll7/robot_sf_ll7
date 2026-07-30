@@ -38,7 +38,7 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     try:
         try:
             handle = os.fdopen(tmp_fd, "w", encoding="utf-8")
-        except Exception:
+        except (OSError, ValueError):
             try:
                 os.close(tmp_fd)
             except OSError:  # pragma: no cover - defensive cleanup

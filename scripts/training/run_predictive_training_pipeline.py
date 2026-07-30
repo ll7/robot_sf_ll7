@@ -887,6 +887,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         str(float(train_cfg.get("val_split", 0.2))),
         "--seed",
         str(int(train_cfg.get("seed", 42))),
+        "--num-workers",
+        str(int(train_cfg.get("num_workers", 0))),
+        "--prefetch-factor",
+        str(int(train_cfg.get("prefetch_factor", 2))),
         "--model-family",
         str(train_cfg.get("model_family", model_family)),
         "--hidden-dim",
@@ -911,6 +915,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         str(int(train_cfg.get("proxy_workers", 1))),
         "--select-by-proxy",
     ]
+    if bool(train_cfg.get("pin_memory", False)):
+        train_cmd.append("--pin-memory")
+    if bool(train_cfg.get("persistent_workers", False)):
+        train_cmd.append("--persistent-workers")
     if bool(wandb_cfg.get("enabled", True)):
         train_cmd.extend(
             [

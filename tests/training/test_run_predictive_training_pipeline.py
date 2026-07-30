@@ -293,7 +293,12 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
                     "ego_conditioning": True,
                 },
                 "mixing": {},
-                "training": {},
+                "training": {
+                    "num_workers": 3,
+                    "pin_memory": True,
+                    "persistent_workers": True,
+                    "prefetch_factor": 5,
+                },
                 "wandb": {"enabled": False},
                 "evaluation": {},
             },
@@ -342,8 +347,15 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     collector_cmds = [
         cmd for cmd in invoked if any("collect_predictive_hardcase_data.py" in part for part in cmd)
     ]
+    train_cmd = next(
+        cmd for cmd in invoked if any("train_predictive_planner.py" in part for part in cmd)
+    )
     assert len(collector_cmds) == 2
     assert all("--ego-conditioning" in cmd for cmd in collector_cmds)
+    assert train_cmd[train_cmd.index("--num-workers") + 1] == "3"
+    assert train_cmd[train_cmd.index("--prefetch-factor") + 1] == "5"
+    assert "--pin-memory" in train_cmd
+    assert "--persistent-workers" in train_cmd
     final_summary = json.loads(resolved_paths.final_summary.read_text(encoding="utf-8"))
     assert final_summary["producer_metadata_preflight"]["status"] == "ok"
     mixed_manifest = json.loads(

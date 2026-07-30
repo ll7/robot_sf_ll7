@@ -74,20 +74,29 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          resolve_branch_sha() {
+            local branch="$1"
+            local encoded_branch
+            encoded_branch="$(jq -rn --arg value "$branch" '$value|@uri')"
+            gh api "repos/$REPOSITORY/branches/$encoded_branch" --jq '.commit.sha'
+          }
+
           case "$EVENT_NAME" in
             merge_group)
               trusted_ref="$MERGE_GROUP_BASE_SHA"
               ;;
             pull_request)
-              trusted_ref="$PULL_REQUEST_BASE_SHA"
+              trusted_ref="$(resolve_branch_sha "$PULL_REQUEST_BASE_REF")"
               ;;
             workflow_dispatch)
-              trusted_ref="$DEFAULT_BRANCH"
+              trusted_ref="$(resolve_branch_sha "$DEFAULT_BRANCH")"
               ;;
             *)
               echo "Unsupported event: $EVENT_NAME" >&2
@@ -98,6 +107,11 @@ jobs:
             echo "Trusted gate revision is empty for event $EVENT_NAME" >&2
             exit 1
           fi
+          if [[ ! "$trusted_ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Trusted gate revision is not a commit SHA: $trusted_ref" >&2
+            exit 1
+          fi
+          echo "::notice::Trusted gate revision: $trusted_ref"
           printf 'ref=%s\n' "$trusted_ref" >> "$GITHUB_OUTPUT"
 
       - name: Checkout

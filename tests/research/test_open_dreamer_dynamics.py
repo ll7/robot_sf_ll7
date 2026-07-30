@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ast
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -38,6 +39,7 @@ from robot_sf.research.open_dreamer_adapter import (
 from robot_sf.research.open_dreamer_dynamics import (
     ACTION_DIM,
     DEFAULT_LATENT_DIM,
+    DYNAMICS_PROVENANCE_KEY,
     EVIDENCE_BOUNDARY,
     OPEN_DREAMER_DYNAMICS_VERSION,
     DynamicsConfig,
@@ -198,6 +200,35 @@ def test_continuation_head_is_strictly_inside_unit_interval() -> None:
     assert 0.0 < continuation < 1.0
 
 
+@pytest.mark.parametrize("bias", [-1000.0, 1000.0])
+def test_continuation_head_stays_open_interval_when_float_sigmoid_saturates(bias: float) -> None:
+    """Finite extreme logits preserve the promised open probability interval."""
+    config = DynamicsConfig(obs_dim=_BASE_OBS_DIM)
+    weights = replace(DynamicsWeights.from_config(config), b_cont=bias)
+    model = LatentDynamicsModel(config, weights)
+
+    continuation = model.continuation_head(np.zeros(config.latent_dim, dtype=float))
+
+    assert 0.0 < continuation < 1.0
+
+
+def test_encoder_stays_open_interval_when_float_tanh_saturates() -> None:
+    """Finite extreme pre-activations preserve the promised open latent interval."""
+    config = DynamicsConfig(obs_dim=_BASE_OBS_DIM)
+    weights = DynamicsWeights.from_config(config)
+    saturated_weights = replace(
+        weights,
+        w_enc=np.zeros_like(weights.w_enc),
+        b_enc=np.full(config.latent_dim, 1000.0, dtype=float),
+    )
+    model = LatentDynamicsModel(config, saturated_weights)
+
+    latent = model.encode(np.zeros(config.obs_dim, dtype=float))
+
+    assert np.all(latent > -1.0)
+    assert np.all(latent < 1.0)
+
+
 def test_step_produces_finite_next_latent_and_both_heads() -> None:
     """One action-conditioned transition yields a finite bounded next latent and finite heads."""
     model = _default_model()
@@ -304,14 +335,42 @@ def test_rollout_provenance_records_clean_room_idea_boundary() -> None:
     rollout = model.imagine(episode)
     provenance = rollout.provenance
 
-    assert provenance["dynamics_version"] == OPEN_DREAMER_DYNAMICS_VERSION
-    assert provenance["evidence_boundary"] == EVIDENCE_BOUNDARY == "idea"
-    assert provenance["route"] == "clean_room"
-    assert provenance["trained"] is False
-    assert provenance["compute_free"] is True
-    assert provenance["consumed_observation_contract"] == OPEN_DREAMER_OBSERVATION_CONTRACT
-    assert provenance["episode_id"] == episode.episode_id
-    assert provenance["step_count"] == episode.step_count
+    assert provenance["source"] == "unit_test"
+    dynamics_provenance = provenance[DYNAMICS_PROVENANCE_KEY]
+    assert dynamics_provenance["dynamics_version"] == OPEN_DREAMER_DYNAMICS_VERSION
+    assert dynamics_provenance["evidence_boundary"] == EVIDENCE_BOUNDARY == "idea"
+    assert dynamics_provenance["route"] == "clean_room"
+    assert dynamics_provenance["trained"] is False
+    assert dynamics_provenance["compute_free"] is True
+    assert dynamics_provenance["consumed_observation_contract"] == OPEN_DREAMER_OBSERVATION_CONTRACT
+    assert dynamics_provenance["dataset_id"] == episode.dataset_id
+    assert dynamics_provenance["episode_id"] == episode.episode_id
+    assert dynamics_provenance["source_policy_id"] == episode.source_policy_id
+    assert dynamics_provenance["split"] == episode.split
+    assert dynamics_provenance["step_count"] == episode.step_count
+
+
+def test_rollout_provenance_is_recursively_immutable() -> None:
+    """Callers cannot mutate source or nested dynamics provenance after validation."""
+    rollout = _default_model().imagine(_make_structured_episode())
+
+    with pytest.raises(TypeError):
+        rollout.provenance["source"] = "changed"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        rollout.provenance[DYNAMICS_PROVENANCE_KEY]["trained"] = True  # type: ignore[index]
+
+
+def test_rollout_refuses_to_overwrite_reserved_provenance_key() -> None:
+    """A source provenance collision fails closed instead of hiding prior metadata."""
+    episode = _make_structured_episode()
+    colliding_episode = replace(
+        episode,
+        provenance={DYNAMICS_PROVENANCE_KEY: {"source": "preexisting"}},
+    )
+    model = LatentDynamicsModel.from_episode(colliding_episode)
+
+    with pytest.raises(OpenDreamerDynamicsError, match="reserved key"):
+        model.imagine(colliding_episode)
 
 
 def test_rollout_to_dict_is_json_serializable() -> None:
@@ -373,6 +432,18 @@ def test_config_rejects_boolean_dimensions(field_name: str) -> None:
         DynamicsConfig(**kwargs)
 
 
+def test_config_rejects_non_robot_sf_action_width() -> None:
+    """The dynamics contract cannot silently accept a non-Robot-SF action space."""
+    with pytest.raises(OpenDreamerDynamicsError, match="action_dim must equal"):
+        DynamicsConfig(obs_dim=_BASE_OBS_DIM, action_dim=ACTION_DIM + 1)
+
+
+def test_config_rejects_negative_seed_with_contract_error() -> None:
+    """Invalid NumPy seeds fail through the module's declared error boundary."""
+    with pytest.raises(OpenDreamerDynamicsError, match="seed must be non-negative"):
+        DynamicsConfig(obs_dim=_BASE_OBS_DIM, seed=-1)
+
+
 def test_weights_reject_non_finite_array() -> None:
     """A NaN in any weight array fails closed when the bundle is constructed."""
     config = DynamicsConfig(obs_dim=_BASE_OBS_DIM, latent_dim=4, seed=1)
@@ -392,6 +463,14 @@ def test_weights_reject_non_finite_array() -> None:
             w_cont=weights.w_cont,
             b_cont=weights.b_cont,
         )
+
+
+def test_weights_reject_non_array_encoder_with_contract_error() -> None:
+    """Malformed weight containers cannot leak an AttributeError."""
+    weights = DynamicsWeights.from_config(DynamicsConfig(obs_dim=_BASE_OBS_DIM))
+
+    with pytest.raises(OpenDreamerDynamicsError, match="w_enc must be a 2D NumPy ndarray"):
+        replace(weights, w_enc=[])  # type: ignore[arg-type]
 
 
 def test_weights_reject_infinite_bias_scalar() -> None:
@@ -497,6 +576,15 @@ def test_dynamics_step_rejects_non_finite_latent() -> None:
         )
 
 
+def test_dynamics_step_rejects_latent_at_closed_interval_boundary() -> None:
+    """Direct construction cannot bypass the open latent interval contract."""
+    latent = np.zeros(DEFAULT_LATENT_DIM, dtype=float)
+    latent[0] = 1.0
+
+    with pytest.raises(OpenDreamerDynamicsError, match="strictly inside"):
+        DynamicsStep(latent=latent, reward=0.0, continuation=0.5)
+
+
 def test_latent_rollout_rejects_misaligned_arrays() -> None:
     """A rollout whose latent rows do not equal step_count + 1 fails closed."""
     with pytest.raises(OpenDreamerDynamicsError, match="latents must have shape"):
@@ -504,6 +592,16 @@ def test_latent_rollout_rejects_misaligned_arrays() -> None:
             latents=np.zeros((2, DEFAULT_LATENT_DIM), dtype=float),
             rewards=np.zeros(3, dtype=float),
             continuations=np.full(3, 0.5, dtype=float),
+        )
+
+
+def test_latent_rollout_rejects_empty_rollout() -> None:
+    """Direct construction cannot bypass the non-empty rollout contract."""
+    with pytest.raises(OpenDreamerDynamicsError, match="at least one step"):
+        LatentRollout(
+            latents=np.zeros((1, DEFAULT_LATENT_DIM), dtype=float),
+            rewards=np.zeros(0, dtype=float),
+            continuations=np.zeros(0, dtype=float),
         )
 
 

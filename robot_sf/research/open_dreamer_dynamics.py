@@ -65,6 +65,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from numbers import Real
+from types import MappingProxyType
 from typing import Any
 
 import numpy as np
@@ -93,6 +94,11 @@ DEFAULT_LATENT_DIM = 16
 
 #: Provenance key under which a rollout records the dynamics metadata.
 DYNAMICS_PROVENANCE_KEY = "open_dreamer_dynamics"
+
+_OPEN_UNIT_LOWER = np.nextafter(0.0, 1.0)
+_OPEN_UNIT_UPPER = np.nextafter(1.0, 0.0)
+_OPEN_SIGNED_UNIT_LOWER = np.nextafter(-1.0, 0.0)
+_OPEN_SIGNED_UNIT_UPPER = np.nextafter(1.0, 0.0)
 
 
 class OpenDreamerDynamicsError(ValueError):
@@ -127,7 +133,7 @@ def _require_positive_int(value: Any, name: str) -> int:
 
 
 def _require_seed(value: Any) -> int:
-    """Return one non-boolean integer seed suitable for ``np.random.default_rng``.
+    """Return one non-negative integer seed suitable for ``np.random.default_rng``.
 
     Args:
         value: Candidate seed value.
@@ -140,6 +146,8 @@ def _require_seed(value: Any) -> int:
     """
     if isinstance(value, bool) or not isinstance(value, int):
         raise OpenDreamerDynamicsError(f"seed must be a non-boolean integer, got {value!r}")
+    if value < 0:
+        raise OpenDreamerDynamicsError(f"seed must be non-negative, got {value!r}")
     return value
 
 
@@ -244,6 +252,14 @@ def _require_continuations_in_unit_interval(continuations: np.ndarray) -> None:
         )
 
 
+def _require_latents_in_unit_interval(latents: np.ndarray, name: str) -> None:
+    """Require every latent component to lie strictly inside ``(-1, 1)``."""
+    if not np.all((latents > -1.0) & (latents < 1.0)):
+        raise OpenDreamerDynamicsError(
+            f"{name} must lie strictly inside (-1, 1) in every component"
+        )
+
+
 def _stable_sigmoid(logit: float) -> float:
     """Return ``sigmoid(logit)`` computed without overflowing ``exp`` for extreme finite logits.
 
@@ -254,9 +270,60 @@ def _stable_sigmoid(logit: float) -> float:
         The sigmoid probability, strictly inside ``(0, 1)`` for any finite logit.
     """
     if logit >= 0.0:
-        return float(1.0 / (1.0 + np.exp(-logit)))
-    exp_logit = float(np.exp(logit))
-    return float(exp_logit / (1.0 + exp_logit))
+        probability = float(1.0 / (1.0 + np.exp(-logit)))
+    else:
+        exp_logit = float(np.exp(logit))
+        probability = float(exp_logit / (1.0 + exp_logit))
+    return float(np.clip(probability, _OPEN_UNIT_LOWER, _OPEN_UNIT_UPPER))
+
+
+def _freeze_json_value(value: Any, name: str) -> Any:
+    """Validate and recursively freeze one JSON-safe provenance value.
+
+    Args:
+        value: Candidate provenance value.
+        name: Value path used in error messages.
+
+    Returns:
+        Immutable JSON-safe value.
+
+    Raises:
+        OpenDreamerDynamicsError: If the value is not JSON-safe or is non-finite.
+    """
+    if isinstance(value, Mapping):
+        frozen: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise OpenDreamerDynamicsError(f"{name} mapping keys must be strings, got {key!r}")
+            frozen[key] = _freeze_json_value(item, f"{name}.{key}")
+        return MappingProxyType(frozen)
+    if isinstance(value, list | tuple):
+        return tuple(
+            _freeze_json_value(item, f"{name}[{index}]") for index, item in enumerate(value)
+        )
+    if value is None or isinstance(value, str | bool | int):
+        return value
+    if isinstance(value, Real):
+        return _as_finite_float(value, name)
+    raise OpenDreamerDynamicsError(
+        f"{name} must contain only JSON-safe values, got {type(value).__name__}"
+    )
+
+
+def _thaw_json_value(value: Any) -> Any:
+    """Return a mutable JSON-safe copy of a recursively frozen value.
+
+    Args:
+        value: Frozen JSON-safe value.
+
+    Returns:
+        Mutable dictionaries and lists suitable for JSON serialization.
+    """
+    if isinstance(value, Mapping):
+        return {key: _thaw_json_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_json_value(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,7 +354,11 @@ class DynamicsConfig:
     def __post_init__(self) -> None:
         """Validate that every dimension is a positive integer and the seed is an integer."""
         _require_positive_int(self.obs_dim, "obs_dim")
-        _require_positive_int(self.action_dim, "action_dim")
+        action_dim = _require_positive_int(self.action_dim, "action_dim")
+        if action_dim != ACTION_DIM:
+            raise OpenDreamerDynamicsError(
+                f"action_dim must equal Robot SF action width {ACTION_DIM}, got {action_dim}"
+            )
         _require_positive_int(self.latent_dim, "latent_dim")
         _require_seed(self.seed)
 
@@ -340,9 +411,10 @@ class DynamicsWeights:
         """Validate every weight array's shape and finiteness, then freeze the bundle."""
         # Shape consistency is checked against the encoder/transition arrays; the config-level
         # dimensions are enforced by LatentDynamicsModel when it pairs a config with these weights.
-        if self.w_enc.ndim != 2:
+        if not isinstance(self.w_enc, np.ndarray) or self.w_enc.ndim != 2:
             raise OpenDreamerDynamicsError(
-                f"w_enc must be 2D (latent_dim, obs_dim), got shape {self.w_enc.shape}"
+                "w_enc must be a 2D NumPy ndarray (latent_dim, obs_dim), "
+                f"got {type(self.w_enc).__name__}"
             )
         latent_dim, obs_dim = self.w_enc.shape
         _require_positive_int(latent_dim, "latent_dim")
@@ -350,10 +422,14 @@ class DynamicsWeights:
         w_enc = _require_finite_array(self.w_enc, "w_enc", (latent_dim, obs_dim))
         b_enc = _require_finite_array(self.b_enc, "b_enc", (latent_dim,))
         w_latent = _require_finite_array(self.w_latent, "w_latent", (latent_dim, latent_dim))
-        if self.w_action.ndim != 2 or self.w_action.shape[0] != latent_dim:
+        if (
+            not isinstance(self.w_action, np.ndarray)
+            or self.w_action.ndim != 2
+            or self.w_action.shape[0] != latent_dim
+        ):
             raise OpenDreamerDynamicsError(
                 "w_action must be 2D (latent_dim, action_dim) with action_dim >= 1, "
-                f"got shape {self.w_action.shape}"
+                f"got {type(self.w_action).__name__}"
             )
         action_dim = self.w_action.shape[1]
         _require_positive_int(action_dim, "action_dim")
@@ -466,8 +542,11 @@ class DynamicsStep:
             raise OpenDreamerDynamicsError(
                 f"latent must be a 1D float vector, got shape {self.latent.shape}"
             )
+        if self.latent.size == 0:
+            raise OpenDreamerDynamicsError("latent must have positive width")
         if not np.all(np.isfinite(self.latent)):
             raise OpenDreamerDynamicsError("latent must contain only finite values")
+        _require_latents_in_unit_interval(self.latent, "latent")
         reward = _as_finite_float(self.reward, "reward")
         continuation = _as_finite_float(self.continuation, "continuation")
         if not 0.0 < continuation < 1.0:
@@ -510,6 +589,8 @@ class LatentRollout:
         rewards = _require_finite_float_array(self.rewards, "rewards", ndim=1)
         continuations = _require_finite_float_array(self.continuations, "continuations", ndim=1)
         step_count = rewards.shape[0]
+        if step_count < 1:
+            raise OpenDreamerDynamicsError("rollout must contain at least one step")
         if continuations.shape[0] != step_count:
             raise OpenDreamerDynamicsError(
                 "rewards and continuations must have the same step count, "
@@ -520,6 +601,9 @@ class LatentRollout:
                 "latents must have shape (step_count + 1, latent_dim); "
                 f"expected {step_count + 1} rows, got {latents.shape[0]}"
             )
+        if latents.shape[1] < 1:
+            raise OpenDreamerDynamicsError("latents must have positive latent width")
+        _require_latents_in_unit_interval(latents, "latents")
         _require_continuations_in_unit_interval(continuations)
         if not isinstance(self.provenance, Mapping):
             raise OpenDreamerDynamicsError(
@@ -531,9 +615,11 @@ class LatentRollout:
         latents.setflags(write=False)
         rewards.setflags(write=False)
         continuations.setflags(write=False)
+        provenance = _freeze_json_value(self.provenance, "provenance")
         object.__setattr__(self, "latents", latents)
         object.__setattr__(self, "rewards", rewards)
         object.__setattr__(self, "continuations", continuations)
+        object.__setattr__(self, "provenance", provenance)
 
     @property
     def step_count(self) -> int:
@@ -566,7 +652,7 @@ class LatentRollout:
             "latents": self.latents.tolist(),
             "rewards": self.rewards.tolist(),
             "continuations": self.continuations.tolist(),
-            "provenance": dict(self.provenance),
+            "provenance": _thaw_json_value(self.provenance),
         }
 
 
@@ -947,7 +1033,7 @@ class LatentDynamicsModel:
             A provenance mapping recording the dynamics version, evidence boundary, clean-room
             route, config, and (when available) the consumed episode identity.
         """
-        provenance: dict[str, Any] = {
+        dynamics_provenance: dict[str, Any] = {
             "dynamics_version": OPEN_DREAMER_DYNAMICS_VERSION,
             "evidence_boundary": EVIDENCE_BOUNDARY,
             "route": "clean_room",
@@ -957,11 +1043,26 @@ class LatentDynamicsModel:
             "config": self._config.to_dict(),
             "step_count": int(step_count),
         }
+        provenance: dict[str, Any] = {}
         if episode is not None:
-            provenance["episode_id"] = episode.episode_id
-            provenance["scenario_id"] = episode.scenario_id
-            provenance["seed"] = int(episode.seed)
-            provenance["rays_available"] = bool(episode.rays_available)
+            source_provenance = episode.to_dict()["provenance"]
+            if DYNAMICS_PROVENANCE_KEY in source_provenance:
+                raise OpenDreamerDynamicsError(
+                    f"provenance already contains reserved key {DYNAMICS_PROVENANCE_KEY!r}"
+                )
+            provenance.update(source_provenance)
+            dynamics_provenance.update(
+                {
+                    "dataset_id": episode.dataset_id,
+                    "episode_id": episode.episode_id,
+                    "scenario_id": episode.scenario_id,
+                    "seed": int(episode.seed),
+                    "source_policy_id": episode.source_policy_id,
+                    "split": episode.split,
+                    "rays_available": bool(episode.rays_available),
+                }
+            )
+        provenance[DYNAMICS_PROVENANCE_KEY] = dynamics_provenance
         return provenance
 
 
@@ -1064,7 +1165,12 @@ def _finish_latent(latent: np.ndarray, name: str) -> np.ndarray:
     """
     if latent.dtype.kind != "f" or not np.all(np.isfinite(latent)):
         raise OpenDreamerDynamicsError(f"{name} produced a non-finite value")
-    frozen = np.array(latent, copy=True)
+    frozen = np.clip(
+        latent,
+        _OPEN_SIGNED_UNIT_LOWER,
+        _OPEN_SIGNED_UNIT_UPPER,
+    )
+    _require_latents_in_unit_interval(frozen, name)
     frozen.setflags(write=False)
     return frozen
 

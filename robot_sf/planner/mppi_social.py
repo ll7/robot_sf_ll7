@@ -459,6 +459,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                         float(self.config.max_angular_speed),
                     )
                 )
+        return float(action[0]), float(action[1])
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

@@ -646,6 +646,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 )
                 if forced_cost < float(self.config.invalid_sequence_cost):
                     action = forced_action
+        return float(action[0]), float(action[1])
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

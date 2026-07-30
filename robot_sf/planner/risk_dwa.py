@@ -402,6 +402,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                 if escape_score > best_score:
                     best_score = escape_score
                     best_cmd = (escape_v, escape_w)
+        return best_cmd
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

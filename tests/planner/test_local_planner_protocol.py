@@ -425,3 +425,44 @@ def test_baseline_adapter_wraps_real_social_force_end_to_end() -> None:
     diagnostics = adapter.diagnostics()
     assert isinstance(diagnostics[PLANNER_TYPE_KEY], str) and diagnostics[PLANNER_TYPE_KEY]
     adapter.close()
+
+
+@pytest.mark.parametrize(
+    "rel_path,cls_name,method_name",
+    [
+        ("robot_sf/planner/risk_dwa.py", "RiskDWAPlannerAdapter", "plan"),
+        ("robot_sf/planner/mppi_social.py", "MPPISocialPlannerAdapter", "plan"),
+        ("robot_sf/planner/predictive_mppi.py", "PredictiveMPPIAdapter", "plan"),
+        ("robot_sf/planner/safety_barrier.py", "SafetyBarrierPlannerAdapter", "plan"),
+        ("robot_sf/planner/stream_gap.py", "StreamGapPlannerAdapter", "plan"),
+        ("robot_sf/planner/guarded_ppo.py", "GuardedPPOAdapter", "_violated_constraints"),
+        ("robot_sf/planner/visibility_planner.py", "VisibilityPlanner", "_nearest_neighbor_order"),
+    ],
+)
+def test_diagnostics_insertion_did_not_drop_preceding_return(
+    rel_path: str, cls_name: str, method_name: str
+) -> None:
+    """Regression guard (#6505): ``diagnostics()`` insertion must not erase a return.
+
+    The mechanical insertion of ``diagnostics()`` replaced the final ``return`` of
+    several ``plan()``/helper methods, silently making them fall through to
+    ``None``. Existing behavioral coverage did not reach those final returns, so
+    the regression passed CI. Assert each affected concrete method still contains
+    a ``return`` statement so the regression fails fast if it recurs.
+    """
+    import ast
+    import pathlib
+
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+    tree = ast.parse((repo_root / rel_path).read_text())
+    cls = next(
+        node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name == cls_name
+    )
+    method = next(
+        member
+        for member in cls.body
+        if isinstance(member, ast.FunctionDef) and member.name == method_name
+    )
+    assert any(isinstance(node, ast.Return) for node in ast.walk(method)), (
+        f"{cls_name}.{method_name} in {rel_path} lost its return statement"
+    )

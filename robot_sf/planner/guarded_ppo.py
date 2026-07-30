@@ -848,6 +848,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             violations.append("obstacle_clearance")
         if np.isfinite(min_ttc) and min_ttc < float(self.config.min_ttc):
             violations.append("time_to_collision")
+        return tuple(violations)
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

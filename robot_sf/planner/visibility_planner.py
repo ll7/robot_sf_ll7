@@ -595,6 +595,7 @@ class VisibilityPlanner:
             next_goal = remaining.pop(0)
             ordered.append(next_goal)
             current = next_goal
+        return ordered
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

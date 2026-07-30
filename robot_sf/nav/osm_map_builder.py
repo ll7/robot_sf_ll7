@@ -47,10 +47,6 @@ from shapely.ops import triangulate, unary_union
 from robot_sf.common.optional_import import require_extra
 from robot_sf.nav.map_config import MapDefinition, Obstacle
 
-#: Width of a single UTM longitude zone in degrees; the globe's 360 degrees are divided into
-#: 60 zones of this width. Used to derive the UTM zone number from a centroid longitude.
-_UTM_ZONE_WIDTH_DEG = 6
-
 
 def _require_maps_dependencies() -> None:
     """Raise an actionable error when the optional map-authoring stack is absent."""
@@ -296,7 +292,7 @@ def project_to_utm(gdf: geopandas.GeoDataFrame) -> tuple[geopandas.GeoDataFrame,
     centroid_y = (bounds[1] + bounds[3]) / 2
 
     # Calculate UTM zone from longitude
-    utm_zone = int((centroid_x + 180) / _UTM_ZONE_WIDTH_DEG) + 1
+    utm_zone = int((centroid_x + 180) / 6) + 1
     if not 1 <= utm_zone <= 60:
         logger.warning(f"Computed UTM zone {utm_zone} outside valid range [1, 60]; clamping")
         utm_zone = max(1, min(utm_zone, 60))

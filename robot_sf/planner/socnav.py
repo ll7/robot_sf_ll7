@@ -596,7 +596,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                 ),
             )
             return linear, angular
-        except Exception as exc:  # pragma: no cover - safety net
+        except Exception as exc:  # pragma: no cover - broad catch: upstream planner safety net; fall back to heuristic
             if self._allow_fallback:
                 return self._heuristic_plan(observation)
             raise RuntimeError("SocNavBench planner failed during _plan_upstream.") from exc
@@ -1210,7 +1210,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         checkpoint_sha256 = self._compute_checkpoint_sha256()
         try:
             self._model = self._build_model()
-        except Exception as exc:
+        except Exception as exc:  # broad catch: load surface unknown; fall back or fail
             self._record_foresight_load_failure(exc, checkpoint_sha256)
             if self._allow_fallback:
                 self._load_error = exc

@@ -120,7 +120,7 @@ def collect_stale_issues(
     Returns:
         Stale issue summaries sorted by issue number.
     """
-    watched = set(watched_labels)
+    watched = set(watched_labels) & set(LIVE_STATE_LABELS)
     issue_rows: dict[int, dict[str, object]] = {}
     issue_labels: dict[int, set[str]] = {}
 
@@ -437,6 +437,14 @@ def main(argv: list[str] | None = None) -> int:
     labels = tuple(args.labels) if args.labels else LIVE_STATE_LABELS
 
     try:
+        if args.fix:
+            unsupported_labels = sorted(set(labels) - set(LIVE_STATE_LABELS))
+            if unsupported_labels:
+                raise ValueError(
+                    "--fix only supports live state labels: "
+                    f"{', '.join(LIVE_STATE_LABELS)}; unsupported: "
+                    f"{', '.join(unsupported_labels)}"
+                )
         rows_by_label = fetch_closed_issues_by_label(
             repo=args.repo,
             labels=labels,

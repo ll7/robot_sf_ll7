@@ -489,3 +489,31 @@ def test_main_fix_mode_strips_labels_and_reports(
     assert payload["read_only"] is False
     assert payload["fix_actions"][0]["removed_labels"] == ["state:ready"]
     assert any(cmd[:3] == ["gh", "issue", "edit"] for cmd in edits)
+
+
+def test_main_fix_mode_rejects_labels_outside_live_state_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Fix mode must fail closed before searching or editing an arbitrary label."""
+
+    def fail_fetch(**kwargs: object) -> dict[str, list[dict[str, object]]]:
+        raise AssertionError("GitHub search must not run for an unsupported fix label")
+
+    def fail_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("GitHub edit must not run for an unsupported fix label")
+
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "fetch_closed_issues_by_label",
+        fail_fetch,
+    )
+    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fail_run)
+
+    exit_code = closed_state_label_hygiene.main(["--label", "workflow", "--fix"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["ok"] is False
+    assert payload["read_only"] is False
+    assert "--fix only supports live state labels" in payload["error"]

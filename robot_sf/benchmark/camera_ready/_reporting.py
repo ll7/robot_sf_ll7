@@ -570,6 +570,12 @@ def _build_planner_row_base(  # noqa: PLR0913
 ) -> dict[str, Any]:
     """Build the core planner row dict without actuation or feasibility fields.
 
+    Key insertion order mirrors the pre-decomposition literal so serialized
+    artifacts (e.g. ``campaign_summary.json`` planner rows) stay byte-identical:
+    identity metadata, then metric fields, then execution/readiness/contract
+    metadata. CSV columns are unaffected because writers pin an explicit
+    ``headers`` tuple; this only preserves the JSON/object field order.
+
     Returns:
         Flattened planner row dict for CSV/Markdown export.
     """
@@ -594,7 +600,27 @@ def _build_planner_row_base(  # noqa: PLR0913
         contract_critical,
         contract_warnings,
     )
-    return {**metadata, **metrics}
+    # Identity metadata first, then metrics, then the remaining
+    # execution/readiness/contract metadata, matching the original literal.
+    identity_keys = (
+        "planner_key",
+        "algo",
+        "human_model_variant",
+        "human_model_source",
+        "planner_group",
+        "kinematics",
+        "status",
+        "episodes",
+        "started_at_utc",
+        "finished_at_utc",
+        "runtime_sec",
+        "episodes_per_second",
+        "failed_jobs",
+    )
+    row: dict[str, Any] = {key: metadata[key] for key in identity_keys}
+    row.update(metrics)
+    row.update({key: value for key, value in metadata.items() if key not in identity_keys})
+    return row
 
 
 def _add_synthetic_actuation_to_row(

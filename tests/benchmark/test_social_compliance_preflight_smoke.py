@@ -17,6 +17,10 @@ from robot_sf.benchmark.aggregate import compute_aggregates, flatten_metrics
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.social_compliance import SOCIAL_COMPLIANCE_SCHEMA_VERSION
+from scripts.validation.preflight_social_compliance_smoke_issue_6481 import (
+    _classify_row,
+    build_receipt,
+)
 
 REPO_ROOT = Path(__file__).parents[2]
 CONFIG_PATH = REPO_ROOT / "configs/benchmarks/issue_6481_social_compliance_preflight_smoke.yaml"
@@ -156,6 +160,67 @@ def test_unavailable_families_are_not_zero_imputed() -> None:
         assert "mean" not in metric
         assert "median" not in metric
         assert "p95" not in metric
+
+
+def test_receipt_preserves_contract_metadata_and_rejects_non_native_rows() -> None:
+    """Receipt validation retains metadata and requires explicit native execution."""
+    episode = EpisodeData(
+        robot_pos=np.zeros((3, 2), dtype=float),
+        robot_vel=np.zeros((3, 2), dtype=float),
+        robot_acc=np.zeros((3, 2), dtype=float),
+        peds_pos=np.asarray([[[0.5, 0.0]], [[2.0, 0.0]], [[0.5, 0.0]]], dtype=float),
+        ped_forces=np.ones((3, 1, 2), dtype=float),
+        goal=np.asarray([1.0, 0.0]),
+        dt=0.5,
+        reached_goal_step=2,
+        robot_radius=0.1,
+        ped_radius=0.1,
+    )
+    record = {
+        "episode_id": "preflight-contract",
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "seed": 111,
+        "execution_mode": "native",
+        "scenario_params": {"algo": "goal"},
+        "metrics": compute_all_metrics(episode, horizon=3),
+    }
+
+    classified = _classify_row(record)
+    assert classified["schema_valid"] is True
+    assert classified["denominators"]["comfort_exposure_person_s"] == "pedestrian_steps"
+    assert (
+        classified["unavailable_reasons"]["pedestrian_deviation_mean_m"]
+        == "matched pedestrian reference trajectory is unavailable"
+    )
+
+    campaign_result = {
+        "_runner_returncode": 0,
+        "campaign_execution_status": "completed",
+        "exit_code": 0,
+    }
+    for candidate in (
+        {**record, "execution_mode": "adapter"},
+        {key: value for key, value in record.items() if key != "execution_mode"},
+    ):
+        receipt = build_receipt(campaign_result, [candidate], Path("output/unused"))
+        assert receipt["all_native"] is False
+        assert receipt["campaign_ok"] is True
+        assert receipt["passed"] is False
+
+
+def test_receipt_requires_completed_zero_exit_campaign() -> None:
+    """A successful-looking row set cannot hide a failed campaign process."""
+    receipt = build_receipt(
+        {
+            "_runner_returncode": 1,
+            "campaign_execution_status": "failed",
+            "exit_code": 2,
+        },
+        [],
+        Path("output/unused"),
+    )
+    assert receipt["campaign_ok"] is False
+    assert receipt["passed"] is False
 
 
 def test_scenario_matrix_selects_one_pedestrian_scenario() -> None:

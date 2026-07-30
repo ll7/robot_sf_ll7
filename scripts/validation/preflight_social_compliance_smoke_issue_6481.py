@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -40,13 +41,15 @@ EXPECTED_SEEDS = (111, 112, 113)
 EXPECTED_SCENARIO = "single_ped_crossing_orthogonal"
 EXPECTED_ROW_COUNT = len(EXPECTED_PLANNERS) * len(EXPECTED_SEEDS)  # 9
 SOCIAL_COMPLIANCE_SCHEMA_VERSION = "social-compliance-metric-contract.v1"
-REQUIRED_FAMILIES = {
-    "pedestrian_deviation",
-    "flow_disruption",
-    "comfort_exposure",
-    "legibility_progress",
-    "distributional_inconvenience",
+EXPECTED_METRIC_FAMILIES = {
+    "pedestrian_deviation_mean_m": "pedestrian_deviation",
+    "flow_disruption_delay_s": "flow_disruption",
+    "comfort_exposure_person_s": "comfort_exposure",
+    "legibility_progress_deficit_m": "legibility_progress",
+    "distributional_inconvenience_p90_p50_gap": "distributional_inconvenience",
 }
+REQUIRED_FAMILIES = set(EXPECTED_METRIC_FAMILIES.values())
+VALID_STATUSES = {"available", "unavailable", "not_applicable"}
 
 
 def _file_sha256(path: Path) -> str:
@@ -66,6 +69,43 @@ def _git_head_sha() -> str:
     return result.stdout.strip()
 
 
+def _find_last_json_object(stdout: str) -> Any | None:
+    """Return the last complete JSON object embedded in noisy process output."""
+    depth = 0
+    end = len(stdout)
+    for i in range(end - 1, -1, -1):
+        if stdout[i] == "}":
+            if depth == 0:
+                end = i + 1
+            depth += 1
+        elif stdout[i] == "{":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(stdout[i:end])
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+def _parse_campaign_stdout(stdout: str, returncode: int) -> dict[str, Any]:
+    """Parse the camera-ready runner's final JSON object and retain its process status."""
+    if not stdout:
+        return {"_runner_returncode": returncode}
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        payload = _find_last_json_object(stdout)
+    if isinstance(payload, dict):
+        return {**payload, "_runner_returncode": returncode}
+    return {"_runner_returncode": returncode, "raw_stdout": stdout[-2000:]}
+
+
+def _is_zero_exit_code(value: Any) -> bool:
+    """Return whether a JSON exit-code field is the canonical integer zero."""
+    return isinstance(value, int) and not isinstance(value, bool) and value == 0
+
+
 def _run_campaign(output_root: Path) -> dict[str, Any]:
     """Execute the camera-ready campaign and return the JSON result."""
     cmd = [
@@ -83,41 +123,19 @@ def _run_campaign(output_root: Path) -> dict[str, Any]:
     env["DISPLAY"] = ""
     env["MPLBACKEND"] = "Agg"
     env["SDL_VIDEODRIVER"] = "dummy"
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-        env=env,
-        timeout=600,
-        check=False,
-    )
-    stdout = result.stdout.strip()
-    # The campaign runner prints a multi-line JSON object as its final output.
-    # Find the last complete JSON object in stdout.
-    if not stdout:
-        return {"returncode": result.returncode}
-    # Try parsing the entire stdout as JSON first (common case).
     try:
-        return json.loads(stdout)
-    except json.JSONDecodeError:
-        pass
-    # Fall back to finding the last JSON object by scanning for the last '{'.
-    depth = 0
-    end = len(stdout)
-    for i in range(end - 1, -1, -1):
-        if stdout[i] == "}":
-            if depth == 0:
-                end = i + 1
-            depth += 1
-        elif stdout[i] == "{":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(stdout[i:end])
-                except json.JSONDecodeError:
-                    break
-    return {"raw_stdout": stdout[-2000:], "returncode": result.returncode}
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            env=env,
+            timeout=600,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"_runner_returncode": 124, "error": "campaign timed out after 600 seconds"}
+    return _parse_campaign_stdout(result.stdout.strip(), result.returncode)
 
 
 def _read_episodes(campaign_root: Path) -> list[dict[str, Any]]:
@@ -137,25 +155,80 @@ def _read_episodes(campaign_root: Path) -> list[dict[str, Any]]:
 def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
     """Classify one episode row for the preflight receipt."""
     scenario_params = record.get("scenario_params", {})
+    if not isinstance(scenario_params, dict):
+        scenario_params = {}
     algo = scenario_params.get("algo", record.get("algo", "unknown"))
     scenario_id = record.get("scenario_id", "unknown")
     seed = record.get("seed")
     metrics = record.get("metrics", {})
-    social = metrics.get("social_compliance", {})
-    social_metrics = social.get("metrics", {}) if isinstance(social, dict) else {}
+    social = metrics.get("social_compliance", {}) if isinstance(metrics, dict) else {}
+    raw_social_metrics = social.get("metrics", {}) if isinstance(social, dict) else {}
+    social_metrics = raw_social_metrics if isinstance(raw_social_metrics, dict) else {}
 
     schema_version = social.get("schema_version") if isinstance(social, dict) else None
     families_present = set()
     statuses: dict[str, str] = {}
     support_counts: dict[str, int] = {}
+    denominators: dict[str, Any] = {}
+    unavailable_reasons: dict[str, str | None] = {}
+    schema_valid = (
+        isinstance(social, dict)
+        and social.get("claim_class") == "diagnostic_proxy"
+        and isinstance(social_metrics, dict)
+        and set(social_metrics) == set(EXPECTED_METRIC_FAMILIES)
+        and schema_version == SOCIAL_COMPLIANCE_SCHEMA_VERSION
+    )
     for metric_id, row in social_metrics.items():
         if isinstance(row, dict):
             family = row.get("family", metric_id)
-            families_present.add(family)
-            statuses[metric_id] = row.get("status", "unknown")
-            support_counts[metric_id] = row.get("support_count", 0)
+            if isinstance(family, str):
+                families_present.add(family)
+            status = row.get("status", "unknown")
+            support_count = row.get("support_count", 0)
+            denominator = row.get("denominator")
+            reason = row.get("unavailable_reason")
+            statuses[metric_id] = status
+            support_counts[metric_id] = support_count
+            denominators[metric_id] = denominator
+            unavailable_reasons[metric_id] = reason
 
-    execution_mode = record.get("execution_mode", "native")
+            row_valid = (
+                metric_id in EXPECTED_METRIC_FAMILIES
+                and row.get("id") == metric_id
+                and family == EXPECTED_METRIC_FAMILIES.get(metric_id)
+                and row.get("claim_class") == "diagnostic_proxy"
+                and isinstance(row.get("units"), str)
+                and bool(row["units"].strip())
+                and isinstance(denominator, str)
+                and bool(denominator.strip())
+                and isinstance(status, str)
+                and status in VALID_STATUSES
+                and isinstance(support_count, int)
+                and not isinstance(support_count, bool)
+                and support_count >= 0
+            )
+            if status == "available":
+                row_valid = (
+                    row_valid
+                    and support_count > 0
+                    and isinstance(row.get("value"), (int, float))
+                    and not isinstance(row.get("value"), bool)
+                    and math.isfinite(float(row["value"]))
+                )
+            else:
+                row_valid = (
+                    row_valid
+                    and support_count == 0
+                    and isinstance(reason, str)
+                    and bool(reason.strip())
+                )
+            schema_valid = schema_valid and row_valid
+        else:
+            schema_valid = False
+
+    schema_valid = schema_valid and set(statuses) == set(EXPECTED_METRIC_FAMILIES)
+
+    execution_mode = record.get("execution_mode", "unknown")
     if execution_mode not in ("native", "adapter"):
         execution_mode = "fallback_or_degraded"
 
@@ -168,7 +241,9 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
         "families_present": sorted(families_present),
         "statuses": statuses,
         "support_counts": support_counts,
-        "schema_valid": schema_version == SOCIAL_COMPLIANCE_SCHEMA_VERSION,
+        "denominators": denominators,
+        "unavailable_reasons": unavailable_reasons,
+        "schema_valid": schema_valid,
         "all_families_present": REQUIRED_FAMILIES <= families_present,
     }
 
@@ -187,13 +262,27 @@ def build_receipt(
         (p, EXPECTED_SCENARIO, s) for p in EXPECTED_PLANNERS for s in EXPECTED_SEEDS
     )
 
-    all_native = all(r["execution_mode"] in ("native", "adapter") for r in row_classifications)
+    all_native = all(r["execution_mode"] == "native" for r in row_classifications)
     all_schema_valid = all(r["schema_valid"] for r in row_classifications)
     all_families = all(r["all_families_present"] for r in row_classifications)
     row_count_ok = len(episodes) == EXPECTED_ROW_COUNT
     identities_ok = observed_identities == expected_identities
+    campaign_returncode = campaign_result.get("_runner_returncode")
+    campaign_exit_code = campaign_result.get("exit_code")
+    campaign_ok = (
+        _is_zero_exit_code(campaign_returncode)
+        and campaign_result.get("campaign_execution_status") == "completed"
+        and _is_zero_exit_code(campaign_exit_code)
+    )
 
-    passed = row_count_ok and identities_ok and all_native and all_schema_valid and all_families
+    passed = (
+        campaign_ok
+        and row_count_ok
+        and identities_ok
+        and all_native
+        and all_schema_valid
+        and all_families
+    )
 
     return {
         "receipt_schema": "issue_6481_preflight_receipt.v1",
@@ -212,6 +301,9 @@ def build_receipt(
         "all_native": all_native,
         "all_schema_valid": all_schema_valid,
         "all_families_present": all_families,
+        "campaign_ok": campaign_ok,
+        "campaign_returncode": campaign_returncode,
+        "campaign_exit_code": campaign_exit_code,
         "execution_modes": {r["planner"]: r["execution_mode"] for r in row_classifications},
         "social_compliance_schema_version": SOCIAL_COMPLIANCE_SCHEMA_VERSION,
         "rows": row_classifications,
@@ -252,13 +344,22 @@ def main(argv: list[str] | None = None) -> int:
     campaign_result = _run_campaign(output_root)
 
     campaign_root_str = campaign_result.get("campaign_root", "")
-    if not campaign_root_str:
-        print("[issue_6481] ERROR: campaign did not produce a campaign_root", file=sys.stderr)
+    if (
+        not campaign_root_str
+        or not _is_zero_exit_code(campaign_result.get("_runner_returncode"))
+        or campaign_result.get("campaign_execution_status") != "completed"
+        or not _is_zero_exit_code(campaign_result.get("exit_code"))
+    ):
+        print("[issue_6481] ERROR: campaign did not complete successfully", file=sys.stderr)
         print(json.dumps(campaign_result, indent=2), file=sys.stderr)
         return 2
 
     campaign_root = Path(campaign_root_str)
-    episodes = _read_episodes(campaign_root)
+    try:
+        episodes = _read_episodes(campaign_root)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[issue_6481] ERROR: could not read campaign episodes: {exc}", file=sys.stderr)
+        return 2
 
     receipt = build_receipt(campaign_result, episodes, output_root)
 

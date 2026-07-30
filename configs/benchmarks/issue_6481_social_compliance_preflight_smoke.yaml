@@ -10,6 +10,12 @@
 #   No planner ranking, fairness, ethics, safety, or real-world validity
 #   claim.  No SNQI weighting or headline metric change.  Fallback or
 #   degraded rows are unavailable and cannot count as successful evidence.
+# Execution-mode note:
+#   goal runs natively; social_force and orca are velocity-vector planners
+#   that execute through declared compatibility adapters (benchmark-capable
+#   per the issue #691 fallback policy and
+#   NATIVE_EXECUTION_MODES = {native, adapter}).  No row uses fallback or
+#   degraded execution.
 #
 # Canonical validation:
 #   robot_sf_bench validate-config --matrix configs/scenarios/issue_6481_social_compliance_preflight.yaml

@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 """Issue #6481 social-compliance preflight smoke receipt.
 
-Run the frozen nine-row native smoke config and produce a compact preflight
-receipt recording config/source SHA, expected/observed row identities,
-execution modes, and metric-block schema version.
+Run the frozen nine-row native/adapter smoke config and produce a compact
+preflight receipt recording config/source SHA, expected/observed row
+identities, execution modes, and metric-block schema version.
 
 Evidence tier: smoke / preflight only.  No planner ranking, fairness,
 ethics, safety, or real-world validity claim.
+
+Execution-mode contract:
+    Per the issue #691 benchmark fallback policy and
+    ``control_action_latency_snqi.NATIVE_EXECUTION_MODES``, a *declared*
+    adapter runs the planner through a benchmark-capable compatibility adapter
+    and is grouped with native execution.  ``social_force`` and ``orca`` are
+    inherently adapter planners (``supports_native_commands: False``) and
+    cannot run native, so the preflight passes when every row is
+    benchmark-capable (native or declared adapter) and no row is
+    fallback/degraded/unavailable.
 
 Usage:
     DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
@@ -14,7 +24,8 @@ Usage:
         --output-root output/benchmarks/issue_6481_preflight
 
 Exit codes:
-    0  preflight passed (all nine rows native with schema-valid social block)
+    0  preflight passed (all nine rows benchmark-capable [native or declared
+       adapter] with schema-valid social block and no fallback/degraded rows)
     1  preflight failed (row-count, schema, or execution-mode mismatch)
     2  campaign execution error
 """
@@ -60,6 +71,13 @@ VALID_EXECUTION_MODES = {
     "unavailable",
     "unknown",
 }
+#: Execution modes that count as benchmark-capable native-success rows. Per the issue #691
+#: benchmark fallback policy and ``control_action_latency_snqi.NATIVE_EXECUTION_MODES``, a
+#: *declared* adapter runs the planner through a benchmark-capable compatibility adapter and is
+#: grouped with native execution; only fallback/degraded/unavailable rows are excluded from
+#: successful preflight evidence. ``social_force`` and ``orca`` are inherently adapter planners
+#: (``supports_native_commands: False``) and cannot run native.
+NATIVE_EXECUTION_MODES = frozenset({"native", "adapter"})
 VALID_READINESS_STATUSES = {"native", "adapter", "fallback", "degraded", "unknown"}
 VALID_AVAILABILITY_STATUSES = {
     "available",
@@ -383,9 +401,10 @@ def _receipt_failure_messages(receipt: dict[str, Any]) -> list[str]:
         failures.append(f"row count {receipt['observed_row_count']} != {EXPECTED_ROW_COUNT}")
     if not receipt["identities_ok"]:
         failures.append("row identity mismatch")
-    if not receipt["all_native"]:
+    if not receipt["all_benchmark_capable_execution"]:
         failures.append(
-            "native-only execution contract not met: "
+            "benchmark-capable execution contract not met (rows must be native or a declared "
+            "adapter per issue #691; fallback/degraded/unavailable are excluded): "
             + ", ".join(
                 f"{planner}={modes}" for planner, modes in receipt["execution_modes"].items()
             )
@@ -424,6 +443,9 @@ def build_receipt(
     )
 
     all_native = all(r["execution_mode"] == "native" for r in row_classifications)
+    all_benchmark_capable_execution = bool(row_classifications) and all(
+        r["execution_mode"] in NATIVE_EXECUTION_MODES for r in row_classifications
+    )
     all_execution_modes_recorded = bool(row_classifications) and all(
         r["execution_mode"] != "unknown" for r in row_classifications
     )
@@ -451,7 +473,7 @@ def build_receipt(
         and planner_summary_ok
         and all_execution_modes_recorded
         and execution_modes_consistent
-        and all_native
+        and all_benchmark_capable_execution
         and no_fallback_or_degraded
         and all_schema_valid
         and all_families
@@ -472,6 +494,7 @@ def build_receipt(
         "row_count_ok": row_count_ok,
         "identities_ok": identities_ok,
         "all_native": all_native,
+        "all_benchmark_capable_execution": all_benchmark_capable_execution,
         "all_execution_modes_recorded": all_execution_modes_recorded,
         "execution_modes_consistent": execution_modes_consistent,
         "no_fallback_or_degraded": no_fallback_or_degraded,
@@ -559,8 +582,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if receipt["passed"]:
         print(
-            f"\n[issue_6481] PREFLIGHT PASSED: {EXPECTED_ROW_COUNT} native rows, "
-            "schema-valid social blocks, and no fallback/degraded rows."
+            f"\n[issue_6481] PREFLIGHT PASSED: {EXPECTED_ROW_COUNT} benchmark-capable rows "
+            "(native or declared adapter; zero fallback/degraded), schema-valid social blocks."
         )
         return 0
 

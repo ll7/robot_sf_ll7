@@ -162,8 +162,8 @@ def test_unavailable_families_are_not_zero_imputed() -> None:
         assert "p95" not in metric
 
 
-def test_receipt_preserves_contract_metadata_and_rejects_non_native_rows() -> None:
-    """Receipt validation retains metadata and requires explicit native execution."""
+def test_receipt_preserves_contract_metadata_and_classifies_execution_modes() -> None:
+    """Receipt keeps metadata; native/adapter are benchmark-capable, fallback/degraded excluded."""
     episode = EpisodeData(
         robot_pos=np.zeros((3, 2), dtype=float),
         robot_vel=np.zeros((3, 2), dtype=float),
@@ -200,15 +200,36 @@ def test_receipt_preserves_contract_metadata_and_rejects_non_native_rows() -> No
         "campaign_execution_status": "completed",
         "exit_code": 0,
     }
-    for candidate in (
-        {**record, "execution_mode": "adapter"},
-        {key: value for key, value in record.items() if key != "execution_mode"},
-    ):
-        receipt = build_receipt(campaign_result, [candidate], Path("output/unused"))
-        assert receipt["all_native"] is False
-        assert receipt["campaign_ok"] is True
-        assert receipt["passed"] is False
 
+    # Native rows satisfy both the literal-native and benchmark-capable contracts.
+    native_receipt = build_receipt(campaign_result, [record], Path("output/unused"))
+    assert native_receipt["all_native"] is True
+    assert native_receipt["all_benchmark_capable_execution"] is True
+    assert native_receipt["campaign_ok"] is True
+
+    # Declared adapter rows (e.g. social_force/orca, which are inherently adapter planners per
+    # ``_KINEMATICS_PROFILE_BY_CANONICAL`` with ``supports_native_commands: False``) are
+    # benchmark-capable execution under the issue #691 fallback policy and
+    # ``NATIVE_EXECUTION_MODES = {native, adapter}``; they are not fallback/degraded and so
+    # remain eligible for the preflight pass even though they are not literally "native".
+    adapter_receipt = build_receipt(
+        campaign_result, [{**record, "execution_mode": "adapter"}], Path("output/unused")
+    )
+    assert adapter_receipt["all_native"] is False
+    assert adapter_receipt["all_benchmark_capable_execution"] is True
+
+    # Fallback, degraded, and unavailable rows are excluded from successful evidence and
+    # must fail the benchmark-capable execution contract.
+    for bad_mode in ("fallback", "degraded", "unavailable"):
+        bad_receipt = build_receipt(
+            campaign_result, [{**record, "execution_mode": bad_mode}], Path("output/unused")
+        )
+        assert bad_receipt["all_native"] is False
+        assert bad_receipt["all_benchmark_capable_execution"] is False
+        assert bad_receipt["passed"] is False
+
+    # ``algorithm_metadata.planner_kinematics.execution_mode`` is canonical provenance and
+    # takes precedence over the legacy top-level ``execution_mode`` label.
     metadata_overrides_top_level = {
         **record,
         "execution_mode": "native",

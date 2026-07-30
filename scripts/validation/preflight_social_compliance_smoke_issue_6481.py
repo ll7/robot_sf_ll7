@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -77,9 +78,7 @@ def _run_campaign(output_root: Path) -> dict[str, Any]:
         "--skip-publication-bundle",
     ]
     env = {
-        k: v
-        for k, v in __import__("os").environ.items()
-        if k not in ("DISPLAY", "MPLBACKEND", "SDL_VIDEODRIVER")
+        k: v for k, v in os.environ.items() if k not in ("DISPLAY", "MPLBACKEND", "SDL_VIDEODRIVER")
     }
     env["DISPLAY"] = ""
     env["MPLBACKEND"] = "Agg"

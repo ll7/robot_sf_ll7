@@ -75,6 +75,31 @@ def test_release_evidence_snapshot_includes_tracked_catalog_files(
     _assert_repo_path(repo)
 
 
+def test_release_evidence_snapshot_prints_when_no_output_path_is_requested(
+    tmp_path: Path, monkeypatch: Any, capsys: Any
+) -> None:
+    """The documented default returns the manifest on stdout without writing a file."""
+    repo = _init_fixture_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+
+    exit_code = snapshot.main(
+        [
+            "--source-ref",
+            "HEAD",
+            "--no-default-includes",
+            "--include",
+            "configs/release_smoke.yaml",
+            "--artifact-catalog",
+            "docs/context/evidence/issue_fixture/artifact_catalog.yaml",
+            "--no-auto-artifact-catalogs",
+        ]
+    )
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "valid"
+    _assert_repo_path(repo)
+
+
 def test_release_evidence_snapshot_missing_required_input_fails_closed(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

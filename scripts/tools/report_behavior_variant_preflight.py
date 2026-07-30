@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOCIAL_NAVIGATION_PYENVS_ROOT = Path("output/repos/Social-Navigation-PyEnvs")
 AMMV_EVIDENCE = (
@@ -375,10 +377,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 def write_report(report: dict[str, Any], *, output_json: Path, output_md: Path | None) -> None:
     """Write JSON and optional Markdown reports."""
     output_json.parent.mkdir(parents=True, exist_ok=True)
-    output_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(output_json, report)
     if output_md is not None:
         output_md.parent.mkdir(parents=True, exist_ok=True)
-        output_md.write_text(render_markdown(report), encoding="utf-8")
+        write_text(output_md, render_markdown(report), issue_ref="robot_sf#5696")
 
 
 def parse_args() -> argparse.Namespace:

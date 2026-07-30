@@ -30,6 +30,7 @@ from scripts.training.train_ppo import (
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
     _finalize_best_checkpoint,
+    _load_expert_training_config_mapping,
     _parse_num_envs,
     _persist_best_checkpoint_if_updated,
     _reapply_resumed_ppo_hyperparams,
@@ -1355,3 +1356,24 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
     assert second_best is None
     assert second_eval_step == 17_000_000
     assert len(run.logged) == 1
+
+
+def test_issue_6484_base_config_inheritance_equivalence() -> None:
+    """All 24 seed-fixed issue-2557 variants should resolve identically to pre-change baseline."""
+    baseline_path = Path("tests/integration/_baseline_issue_6484_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert len(baseline) == 24
+
+    ablate_dir = Path("configs/training/ppo/ablations")
+    for name, expected in baseline.items():
+        config_path = (ablate_dir / name).resolve()
+        assert config_path.exists(), f"Variant {name} no longer exists"
+        resolved = _load_expert_training_config_mapping(config_path)
+        actual = json.loads(json.dumps(resolved, default=str, sort_keys=True))
+        assert actual == expected, (
+            f"Resolved config {name} differs from baseline. "
+            "Regenerate baseline if the change is intentional."
+        )

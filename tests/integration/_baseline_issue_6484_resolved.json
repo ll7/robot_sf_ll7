@@ -1,0 +1,4058 @@
+{
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed501_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed501_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      501
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed501-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-501",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed502_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed502_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      502
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed502-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-502",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed503_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed503_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      503
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed503-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-503",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed504_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed504_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      504
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed504-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-504",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed505_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed505_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      505
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed505-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-505",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed506_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed506_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      506
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed506-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-506",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed507_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed507_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      507
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed507-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-507",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed508_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed508_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      508
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed508-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-508",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed509_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed509_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      509
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed509-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-509",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed510_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed510_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      510
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed510-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-510",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed511_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed511_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      511
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed511-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-511",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed512_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed512_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      512
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed512-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-512",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed513_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed513_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      513
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed513-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-513",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed514_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed514_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      514
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed514-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-514",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed515_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed515_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      515
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed515-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-515",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed516_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed516_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      516
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed516-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-516",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed517_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed517_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      517
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed517-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-517",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed518_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed518_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      518
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed518-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-518",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed519_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed519_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      519
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed519-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-519",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed520_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed520_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      520
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed520-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-520",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed521_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed521_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      521
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed521-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-521",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed522_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed522_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      522
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed522-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-522",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed523_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed523_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      523
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed523-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-523",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  },
+  "expert_ppo_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed524_fixed.yaml": {
+    "best_checkpoint_metric": "success_rate",
+    "convergence": {
+      "collision_rate": 0.05,
+      "plateau_window": 32,
+      "success_rate": 0.95
+    },
+    "env_factory_kwargs": {
+      "reward_curriculum": {
+        "stages": [
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "progress": 1.1,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5
+              }
+            },
+            "until_episodes": 100
+          },
+          {
+            "reward_kwargs": {
+              "weights": {
+                "collision": -15.0,
+                "comfort": -0.5,
+                "living": -0.015,
+                "near_miss": -1.5,
+                "progress": 1.1,
+                "smoothness": -0.18,
+                "stagnation": -0.8,
+                "terminal_bonus": 20.0,
+                "timeout": -6.5,
+                "ttc_risk": -1.2
+              }
+            }
+          }
+        ]
+      },
+      "reward_kwargs": {
+        "weights": {
+          "collision": -15.0,
+          "comfort": -0.5,
+          "living": -0.015,
+          "near_miss": -1.5,
+          "progress": 1.1,
+          "smoothness": -0.18,
+          "stagnation": -0.8,
+          "terminal_bonus": 20.0,
+          "timeout": -6.5,
+          "ttc_risk": -1.2
+        }
+      },
+      "reward_name": "route_completion_v3"
+    },
+    "env_overrides": {
+      "grid_config": {
+        "center_on_robot": true,
+        "channels": [
+          "obstacles",
+          "pedestrians",
+          "combined"
+        ],
+        "height": 32.0,
+        "resolution": 0.2,
+        "use_ego_frame": true,
+        "width": 32.0
+      },
+      "include_grid_in_observation": true,
+      "observation_mode": "socnav_struct",
+      "peds_have_static_obstacle_forces": true,
+      "predictive_foresight_device": "cuda",
+      "predictive_foresight_enabled": true,
+      "predictive_foresight_front_corridor_half_width": 1.0,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_rollout_dt": 0.2,
+      "robot_config": {
+        "allow_backwards": true,
+        "max_angular_speed": 1.0,
+        "max_linear_speed": 3.0,
+        "type": "differential_drive"
+      },
+      "sim_config": {
+        "max_peds_per_group": 3,
+        "prf_config": {
+          "is_active": true
+        }
+      },
+      "use_occupancy_grid": true
+    },
+    "evaluation": {
+      "evaluation_episodes": 70,
+      "full_policy_analysis_on_new_best": false,
+      "full_policy_analysis_videos": false,
+      "hold_out_scenarios": [],
+      "randomize_seeds": false,
+      "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+      "step_schedule": [
+        {
+          "every_steps": 524288
+        }
+      ]
+    },
+    "feature_extractor": "grid_socnav",
+    "feature_extractor_kwargs": {
+      "dropout_rate": 0.1,
+      "grid_channels": [
+        64,
+        128,
+        128
+      ],
+      "grid_kernel_sizes": [
+        5,
+        3,
+        3
+      ],
+      "socnav_hidden_dims": [
+        256,
+        256
+      ]
+    },
+    "num_envs": 22,
+    "policy_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed524_fixed",
+    "ppo_hyperparams": {
+      "batch_size": 256,
+      "clip_range": 0.1,
+      "ent_coef": 0.008,
+      "learning_rate": 7.5e-05,
+      "n_epochs": 4,
+      "target_kl": 0.02
+    },
+    "randomize_seeds": false,
+    "scenario_config": "../../../scenarios/sets/ppo_full_maintained_eval_v1.yaml",
+    "scenario_sampling": {
+      "profile_strategy": "cycle",
+      "strategy": "random"
+    },
+    "seeds": [
+      524
+    ],
+    "total_timesteps": 10000000,
+    "tracking": {
+      "tensorboard": false,
+      "wandb": {
+        "enabled": true,
+        "group": "issue-2557-night-fill-seeds",
+        "job_type": "expert-ppo-10m-eval-aligned-large-capacity-seed524-fixed",
+        "project": "robot_sf",
+        "tags": [
+          "issue-2557",
+          "issue-791-followup",
+          "reward-curriculum",
+          "ppo",
+          "promotion-10m-env22",
+          "eval-aligned",
+          "large-capacity",
+          "seed-524",
+          "fixed-seed",
+          "seed-replica",
+          "night-fill"
+        ]
+      }
+    },
+    "worker_mode": "subproc"
+  }
+}

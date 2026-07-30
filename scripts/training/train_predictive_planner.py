@@ -6,8 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import subprocess
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -119,6 +120,37 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-decay", type=float, default=1e-5)
     parser.add_argument("--val-split", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=0,
+        help=(
+            "DataLoader worker processes per loader. 0 keeps the legacy "
+            "single-process CPU path and is the safe default."
+        ),
+    )
+    parser.add_argument(
+        "--pin-memory",
+        action="store_true",
+        help=(
+            "Enable DataLoader pinned (page-locked) memory. Only the CUDA "
+            "transfer path benefits; on CPU it stays a no-op-safe opt-in."
+        ),
+    )
+    parser.add_argument(
+        "--persistent-workers",
+        action="store_true",
+        help=(
+            "Keep DataLoader worker processes alive across epochs. Only applied "
+            "when --num-workers > 0."
+        ),
+    )
+    parser.add_argument(
+        "--prefetch-factor",
+        type=int,
+        default=2,
+        help="Batches prefetched per worker. Only applied when --num-workers > 0.",
+    )
     parser.add_argument("--hidden-dim", type=int, default=96)
     parser.add_argument("--message-passing-steps", type=int, default=2)
     parser.add_argument("--max-val-ade", type=float, default=1.2)
@@ -301,6 +333,112 @@ def _run_proxy_eval(
     }
 
 
+@dataclass(frozen=True)
+class LoaderSettings:
+    """Effective DataLoader worker and pinned-memory settings.
+
+    Fields hold the *resolved* values that ``DataLoader`` actually uses and that
+    are recorded in the training summary manifest. They are not the raw CLI
+    args: ``persistent_workers`` and ``prefetch_factor`` are dropped to safe
+    values when ``num_workers == 0``, and ``non_blocking`` is gated on both
+    ``pin_memory`` and a CUDA device.
+    """
+
+    num_workers: int
+    pin_memory: bool
+    persistent_workers: bool
+    prefetch_factor: int | None
+    non_blocking: bool
+    device: str
+
+    def as_manifest(self) -> dict[str, Any]:
+        """Return a JSON-serializable view of the effective loader settings."""
+        return {
+            "num_workers": int(self.num_workers),
+            "pin_memory": bool(self.pin_memory),
+            "persistent_workers": bool(self.persistent_workers),
+            "prefetch_factor": (
+                None if self.prefetch_factor is None else int(self.prefetch_factor)
+            ),
+            "non_blocking": bool(self.non_blocking),
+            "device": str(self.device),
+        }
+
+
+def _resolve_loader_settings(
+    *,
+    num_workers: int,
+    pin_memory: bool,
+    persistent_workers: bool,
+    prefetch_factor: int | None,
+    device: torch.device,
+) -> LoaderSettings:
+    """Resolve effective loader settings with safe ``num_workers=0`` behavior.
+
+    ``persistent_workers`` and ``prefetch_factor`` are only valid on the
+    multi-worker path, so they are forced off when ``num_workers == 0``.
+    Non-blocking host-to-device transfer is enabled only when pinned memory is
+    active and the target device is CUDA; on CPU the transfer stays blocking.
+    """
+    if num_workers < 0:
+        raise ValueError(f"--num-workers must be >= 0, got {num_workers}")
+    if prefetch_factor is not None and prefetch_factor < 1:
+        raise ValueError(f"--prefetch-factor must be >= 1, got {prefetch_factor}")
+    use_workers = num_workers > 0
+    effective_prefetch: int | None = None
+    if prefetch_factor is not None and use_workers:
+        effective_prefetch = int(prefetch_factor)
+    non_blocking = bool(pin_memory) and device.type == "cuda"
+    return LoaderSettings(
+        num_workers=int(num_workers),
+        pin_memory=bool(pin_memory),
+        persistent_workers=bool(persistent_workers and use_workers),
+        prefetch_factor=effective_prefetch,
+        non_blocking=non_blocking,
+        device=str(device),
+    )
+
+
+def _seeded_worker_init_fn(_worker_id: int) -> None:
+    """Seed each DataLoader worker deterministically from the base torch seed.
+
+    ``torch.initial_seed()`` inside a worker returns the per-worker seed that
+    ``DataLoader`` derives from the main process seed (or generator), so the
+    numpy/random RNG inside worker processes stays reproducible across runs.
+    """
+    worker_seed = torch.initial_seed() % (2**32)
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
+def _dataloader_kwargs(
+    *,
+    batch_size: int,
+    settings: LoaderSettings,
+    seed: int,
+) -> dict[str, Any]:
+    """Build DataLoader kwargs honoring safe single-process behavior.
+
+    ``persistent_workers``, ``prefetch_factor``, the seeded ``worker_init_fn``,
+    and a seeded ``generator`` are added only when ``num_workers > 0`` so the
+    default ``num_workers=0`` path is unchanged.
+    """
+    kwargs: dict[str, Any] = {
+        "batch_size": batch_size,
+        "pin_memory": bool(settings.pin_memory),
+    }
+    if settings.num_workers > 0:
+        kwargs["num_workers"] = int(settings.num_workers)
+        kwargs["persistent_workers"] = bool(settings.persistent_workers)
+        if settings.prefetch_factor is not None:
+            kwargs["prefetch_factor"] = int(settings.prefetch_factor)
+        kwargs["worker_init_fn"] = _seeded_worker_init_fn
+        generator = torch.Generator()
+        generator.manual_seed(int(seed))
+        kwargs["generator"] = generator
+    return kwargs
+
+
 def _prepare_loaders(
     *,
     state: np.ndarray,
@@ -310,6 +448,7 @@ def _prepare_loaders(
     val_split: float,
     batch_size: int,
     seed: int,
+    settings: LoaderSettings,
 ) -> tuple[DataLoader, DataLoader]:
     """Create train/val dataloaders from numpy arrays."""
     n = state.shape[0]
@@ -336,8 +475,18 @@ def _prepare_loaders(
             torch.from_numpy(target_mask[sel]).float(),
         )
 
-    train_loader = DataLoader(_ds(train_idx), batch_size=batch_size, shuffle=True, drop_last=False)
-    val_loader = DataLoader(_ds(val_idx), batch_size=batch_size, shuffle=False, drop_last=False)
+    train_loader = DataLoader(
+        _ds(train_idx),
+        shuffle=True,
+        drop_last=False,
+        **_dataloader_kwargs(batch_size=batch_size, settings=settings, seed=seed),
+    )
+    val_loader = DataLoader(
+        _ds(val_idx),
+        shuffle=False,
+        drop_last=False,
+        **_dataloader_kwargs(batch_size=batch_size, settings=settings, seed=seed),
+    )
     return train_loader, val_loader
 
 
@@ -347,8 +496,14 @@ def _run_epoch(
     loader: DataLoader,
     optimizer: torch.optim.Optimizer | None,
     device: torch.device,
+    non_blocking: bool = False,
 ) -> tuple[float, float, float]:
-    """Run one train/eval epoch and return ``(loss, ade, fde)``."""
+    """Run one train/eval epoch and return ``(loss, ade, fde)``.
+
+    ``non_blocking`` is forwarded to every host-to-device batch transfer. It
+    must be ``True`` only on the pinned-memory CUDA path; on CPU it stays
+    ``False`` so transfers remain blocking and deterministic.
+    """
     training = optimizer is not None
     if training:
         model.train()
@@ -362,10 +517,10 @@ def _run_epoch(
     horizon_weights = torch.linspace(1.5, 1.0, steps=model.config.horizon_steps, device=device)
 
     for state_b, target_b, mask_b, target_mask_b in loader:
-        state_b = state_b.to(device)
-        target_b = target_b.to(device)
-        mask_b = mask_b.to(device)
-        target_mask_b = target_mask_b.to(device)
+        state_b = state_b.to(device, non_blocking=non_blocking)
+        target_b = target_b.to(device, non_blocking=non_blocking)
+        mask_b = mask_b.to(device, non_blocking=non_blocking)
+        target_mask_b = target_mask_b.to(device, non_blocking=non_blocking)
 
         if training:
             assert optimizer is not None
@@ -800,6 +955,15 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "Pass --allow-degenerate-dataset to bypass for debugging only."
         )
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    loader_settings = _resolve_loader_settings(
+        num_workers=int(args.num_workers),
+        pin_memory=bool(args.pin_memory),
+        persistent_workers=bool(args.persistent_workers),
+        prefetch_factor=int(args.prefetch_factor),
+        device=device,
+    )
+
     train_loader, val_loader = _prepare_loaders(
         state=state,
         target=target,
@@ -808,6 +972,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         val_split=float(args.val_split),
         batch_size=int(args.batch_size),
         seed=int(args.seed),
+        settings=loader_settings,
     )
 
     cfg = PredictiveModelConfig(
@@ -819,7 +984,6 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         feature_schema_name=str(feature_schema["name"]),
     )
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = PredictiveTrajectoryModel(cfg).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -848,12 +1012,14 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             loader=train_loader,
             optimizer=optimizer,
             device=device,
+            non_blocking=loader_settings.non_blocking,
         )
         val_loss, val_ade, val_fde = _run_epoch(
             model=model,
             loader=val_loader,
             optimizer=None,
             device=device,
+            non_blocking=loader_settings.non_blocking,
         )
 
         row = {
@@ -1062,6 +1228,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "dataset": str(args.dataset),
         "checkpoint": str(checkpoint_path),
         "device": str(device),
+        "data_loader": loader_settings.as_manifest(),
         "config": asdict(cfg),
         "feature_schema": feature_schema,
         "best": best,

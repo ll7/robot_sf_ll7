@@ -67,7 +67,7 @@ repos:
         pass_filenames: false
       - id: ty-advisory-typecheck
         name: Ty Advisory Type Check
-        # Advisory pre-push mirror of CI's typecheck phase (scripts/dev/ci_driver.sh).
+        # Advisory pre-commit mirror of CI's typecheck phase (scripts/dev/ci_driver.sh).
         # Keep the ty pin in sync with that phase; --exit-zero surfaces pre-existing
         # ty findings without blocking routine commits. The whole-repo downward
         # ratchet still runs in CI via scripts/dev/ty_advisory_ratchet.py.

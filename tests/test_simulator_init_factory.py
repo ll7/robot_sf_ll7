@@ -81,6 +81,18 @@ def test_response_multipliers_fall_back_to_archetype_composition() -> None:
     assert set(np.unique(multipliers)).issubset({0.5, 1.0})
 
 
+def test_response_multipliers_composition_applies_hesitating_scale() -> None:
+    """The composition branch must also apply the hesitating multiplier scale."""
+    config = _config_stub(
+        response_law_composition={"hesitating": 1.0},
+        response_law_seed=11,
+    )
+
+    multipliers = _compute_pedestrian_response_multipliers(config, 3)
+
+    np.testing.assert_allclose(multipliers, np.full(3, 0.75))
+
+
 def test_control_trace_labels_take_precedence_over_composition() -> None:
     """The trace-labels branch wins over the response_law_composition branch."""
     config = _config_stub(

@@ -1850,6 +1850,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             steps=steps,
             best=best,
         )
+        return best
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

@@ -700,7 +700,7 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
     failing = [d for d in defects if severity_order.get(d.severity, 1) >= threshold]
     summary = "; ".join(f"[{d.defect_type}] {d.message}" for d in failing)
     if failing:
-        raise ValueError(
+        raise AssertionError(
             f"Figure has {len(failing)} defect(s) at severity >= {max_severity}: {summary}"
         )
 

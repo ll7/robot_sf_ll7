@@ -888,15 +888,23 @@ def load_episode_mapping(  # noqa: C901, PLR0912, PLR0915
                 f"episode mapping row {index} marks an outcome mismatch with equal outcomes"
             )
         if episode_id is None:
-            raise ValueError("episode_id must not be None after rerun resolution")
+            raise RuntimeError(
+                f"episode mapping row {index} invariant violated: episode_id is None"
+            )
         if release_episode_id is None:
-            raise ValueError("release_episode_id must not be None after rerun resolution")
+            raise RuntimeError(
+                f"episode mapping row {index} invariant violated: release_episode_id is None"
+            )
         if scenario_id is None or planner is None or seed is None:
-            raise ValueError(
-                "scenario_id, planner, and seed must not be None after rerun resolution"
+            raise RuntimeError(
+                f"episode mapping row {index} invariant violated: "
+                "scenario_id, planner, and seed must be resolved"
             )
         if trace_uri is None or trace_sha256 is None:
-            raise ValueError("trace_uri and trace_sha256 must not be None after rerun resolution")
+            raise RuntimeError(
+                f"episode mapping row {index} invariant violated: "
+                "trace_uri and trace_sha256 must be resolved"
+            )
         tuple_key = _episode_request_key(scenario_id, planner, seed)
         row = {
             **dict(raw_row),

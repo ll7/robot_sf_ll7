@@ -539,9 +539,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             return goal_decision
 
         current_min_dist = self._min_pedestrian_distance(ped_pos, robot_pos)
-        prior_allowed = not bool(
-            self.config.prior_near_field_only
-        ) or current_min_dist <= float(self.config.near_field_distance)
+        prior_allowed = not bool(self.config.prior_near_field_only) or current_min_dist <= float(
+            self.config.near_field_distance
+        )
         ppo_eval = self._evaluate_command(
             observation,
             ppo_command,

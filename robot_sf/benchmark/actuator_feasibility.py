@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from robot_sf.common.validation import _require_finite_coerce as _require_finite
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -181,9 +183,6 @@ class ActuatorFeasibilityReport:
 # ---------------------------------------------------------------------------
 # Input validation helpers
 # ---------------------------------------------------------------------------
-
-
-from robot_sf.common.validation import _require_finite_coerce as _require_finite
 
 
 def _as_float2d(name: str, array: NDArray[np.floating] | object) -> NDArray[np.floating]:

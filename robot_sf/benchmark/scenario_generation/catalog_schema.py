@@ -14,6 +14,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.common.validation import _require_finite_position as _validate_finite_position
 from robot_sf.errors import RobotSfError
 
 CATALOG_ENTRY_SCHEMA_VERSION = "generated-scenario-catalog-entry.v1"
@@ -139,9 +140,6 @@ def _validate_trace_frames(entry: Mapping[str, Any]) -> None:
         _require_finite_position(frame["robot"]["position"])
         for pedestrian in frame["pedestrians"]:
             _require_finite_position(pedestrian["position"])
-
-
-from robot_sf.common.validation import _require_finite_position as _validate_finite_position
 
 
 def _require_finite_position(position: list[object]) -> None:

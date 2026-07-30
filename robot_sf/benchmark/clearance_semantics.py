@@ -34,6 +34,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.common.validation import (
+    _require_finite_non_negative_coerce as _require_finite_non_negative,
+)
+
 FOOTPRINT_CLEARANCE_SCHEMA = "footprint-clearance-semantics.v1"
 FOOTPRINT_CLEARANCE_CONFIG_KEY = "footprint_semantics"
 
@@ -608,11 +612,6 @@ def _validate_threshold_monotonic(
             f"threshold_sweep ordering violated: min(near_miss_threshold_m)={min_near} "
             f"> min(conservative_buffer_m)={min_cons}"
         )
-
-
-from robot_sf.common.validation import (
-    _require_finite_non_negative_coerce as _require_finite_non_negative,
-)
 
 
 def _require_mapping(block: Mapping[str, Any], key: str) -> Mapping[str, Any]:

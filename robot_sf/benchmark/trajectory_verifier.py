@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from robot_sf.common.validation import _require_finite_ndarray as _require_finite
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -129,9 +131,6 @@ class VerifierResult:
     min_ttc_s: float | None
     braking_feasible: bool | None
     claim_boundary: str = field(default=TRAJECTORY_VERIFIER_CLAIM_BOUNDARY)
-
-
-from robot_sf.common.validation import _require_finite_ndarray as _require_finite
 
 
 def _as_float2d(name: str, array: np.ndarray | None) -> np.ndarray | None:

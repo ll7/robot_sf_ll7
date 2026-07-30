@@ -19,6 +19,7 @@ from robot_sf.benchmark.ped_trajectory_quality import (
     TrajectoryQualityConfig,
     compute_trajectory_quality_distributions,
 )
+from robot_sf.common.validation import _require_finite_number
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
@@ -89,9 +90,6 @@ class PedFlowRunConfig:
             raise ValueError("pedestrian_counts must not be empty")
         if any(isinstance(count, bool) or count < 0 for count in self.pedestrian_counts):
             raise ValueError("pedestrian_counts must be non-negative integers")
-
-
-from robot_sf.common.validation import _require_finite_number
 
 
 @dataclass(frozen=True)

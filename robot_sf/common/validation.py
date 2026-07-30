@@ -12,6 +12,18 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
+def require_finite(name: str, value: Real, *, allow_negative: bool = True) -> float:
+    """Return ``value`` as a finite float, optionally rejecting negative values.
+
+    This is the public scalar entry point for new callers. Compatibility helpers
+    below retain their historical coercion and error-message contracts.
+    """
+    numeric = require_finite_scalar(name, value)
+    if not allow_negative and numeric < 0.0:
+        raise ValueError(f"{name} must be non-negative: {numeric}")
+    return numeric
+
+
 def require_finite_scalar(name: str, value: Real) -> float:
     """Return a real numeric scalar as float or raise when it is non-finite."""
     if not isinstance(value, Real):
@@ -138,16 +150,8 @@ def _require_finite_position(position: list[object]) -> None:
 
 
 __all__ = [
+    "require_finite",
     "require_finite_array",
     "require_finite_fields",
     "require_finite_scalar",
-    "_require_finite",
-    "_require_finite_bounded_values",
-    "_require_finite_coerce",
-    "_require_finite_ndarray",
-    "_require_finite_non_negative",
-    "_require_finite_non_negative_coerce",
-    "_require_finite_number",
-    "_require_finite_position",
-    "_require_finite_real",
 ]

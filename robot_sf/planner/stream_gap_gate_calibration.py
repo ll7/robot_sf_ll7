@@ -54,6 +54,20 @@ class SafetyTolerance:
     min_separation_abs: float = 0.0
 
 
+def _require_finite_setting(result: GateSettingResult, label: str) -> None:
+    """Fail closed on a non-finite (NaN/Inf) safety aggregate.
+
+    A degraded sweep point or baseline can carry NaN/Inf; the ``<=`` / ``>=`` safety
+    comparisons then evaluate ``False`` and the setting is silently classified
+    ``less_safe`` (or, for the baseline, lets settings pass) without flagging the
+    bad input. Raising names the offending field so the caller drops the trace.
+
+    Raises:
+        ValueError: If any safety aggregate of ``result`` is not finite.
+    """
+    require_finite_fields(label, result, _SETTING_METRIC_FIELDS)
+
+
 def classify_setting_safety(
     setting: GateSettingResult,
     baseline: GateSettingResult,
@@ -67,8 +81,8 @@ def classify_setting_safety(
     Returns:
         str: ``at_least_as_safe`` or ``less_safe``.
     """
-    require_finite_fields("setting", setting, _SETTING_METRIC_FIELDS)
-    require_finite_fields("baseline", baseline, _SETTING_METRIC_FIELDS)
+    _require_finite_setting(setting, "setting")
+    _require_finite_setting(baseline, "baseline")
     tolerance = tolerance or SafetyTolerance()
     safe = (
         setting.unsafe_commit_rate <= baseline.unsafe_commit_rate + tolerance.unsafe_commit_abs

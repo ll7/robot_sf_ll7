@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import yaml
 
+from robot_sf.common.validation import _require_finite_real
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
@@ -505,9 +506,6 @@ def _normalize_case(payload: Any) -> SensitivityCase:
         relative_to_reference=payload.get("relative_to_reference"),
         parameters=parameters,
     )
-
-
-from robot_sf.common.validation import _require_finite_real
 
 
 def _validate_metadata(metadata: Mapping[str, Any]) -> tuple[str, str]:

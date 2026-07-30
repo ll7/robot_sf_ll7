@@ -8,7 +8,6 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
-
 from robot_sf.common.validation import _require_finite_bounded_values
 
 

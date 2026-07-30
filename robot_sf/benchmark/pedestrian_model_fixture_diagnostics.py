@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from robot_sf.common.validation import _require_finite_number
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
@@ -123,9 +124,6 @@ class PedestrianModelFixtureTrace:
     duration_s: float
     positions: np.ndarray
     velocities: np.ndarray
-
-
-from robot_sf.common.validation import _require_finite_number
 
 
 def build_pedestrian_model_fixture_scenarios() -> dict[str, PedestrianModelFixtureSpec]:

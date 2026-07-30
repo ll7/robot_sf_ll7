@@ -498,7 +498,14 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
         reason_key = f"social_compliance.{metric_id}.unavailable_reason"
         value_key = f"social_compliance.{metric_id}"
         statuses = [row.get(status_key) or "unavailable" for row in rows]
-        values = [row[value_key] for row in rows if isinstance(row.get(value_key), int | float)]
+        values = [
+            row[value_key]
+            for row, status in zip(rows, statuses, strict=True)
+            if status == "available"
+            and isinstance(row.get(value_key), int | float)
+            and not isinstance(row.get(value_key), bool)
+            and math.isfinite(float(row[value_key]))
+        ]
         support = [
             row.get(support_key, 0) if status == "available" else 0
             for row, status in zip(rows, statuses, strict=True)

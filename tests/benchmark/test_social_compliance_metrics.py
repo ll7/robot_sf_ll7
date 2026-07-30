@@ -150,3 +150,42 @@ def test_aggregate_normalizes_legacy_social_rows() -> None:
     comfort = aggregate["planner_a"]["social_compliance"]["metrics"]["comfort_exposure_person_s"]
     assert comfort["status_counts"] == {"unavailable": 1}
     assert comfort["support_count"] == 0
+
+
+def test_aggregate_excludes_values_from_unavailable_social_rows() -> None:
+    """Unavailable rows cannot contribute stale numeric values to reducers."""
+    metrics = compute_all_metrics(_episode(), horizon=3)
+    comfort = metrics["social_compliance"]["metrics"]["comfort_exposure_person_s"]
+    unavailable_comfort = {
+        **comfort,
+        "status": "unavailable",
+        "support_count": 0,
+        "unavailable_reason": "fixture unavailable",
+        "value": 99.0,
+    }
+    record = {
+        "episode_id": "unavailable-with-value",
+        "scenario_id": "fixture",
+        "seed": 1,
+        "scenario_params": {"algo": "planner_a"},
+        "metrics": {
+            **metrics,
+            "social_compliance": {
+                **metrics["social_compliance"],
+                "metrics": {
+                    **metrics["social_compliance"]["metrics"],
+                    "comfort_exposure_person_s": unavailable_comfort,
+                },
+            },
+        },
+    }
+
+    aggregate = compute_aggregates([record])
+    comfort_summary = aggregate["planner_a"]["social_compliance"]["metrics"][
+        "comfort_exposure_person_s"
+    ]
+    assert comfort_summary["status_counts"] == {"unavailable": 1}
+    assert comfort_summary["support_count"] == 0
+    assert "mean" not in comfort_summary
+    assert "median" not in comfort_summary
+    assert "p95" not in comfort_summary

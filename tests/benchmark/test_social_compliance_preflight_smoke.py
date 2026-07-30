@@ -187,6 +187,7 @@ def test_receipt_preserves_contract_metadata_and_rejects_non_native_rows() -> No
 
     classified = _classify_row(record)
     assert classified["schema_valid"] is True
+    assert classified["execution_mode"] == "native"
     assert classified["denominators"]["comfort_exposure_person_s"] == "pedestrian_steps"
     assert (
         classified["unavailable_reasons"]["pedestrian_deviation_mean_m"]
@@ -195,6 +196,7 @@ def test_receipt_preserves_contract_metadata_and_rejects_non_native_rows() -> No
 
     campaign_result = {
         "_runner_returncode": 0,
+        "campaign_root": "output/unused",
         "campaign_execution_status": "completed",
         "exit_code": 0,
     }
@@ -206,6 +208,13 @@ def test_receipt_preserves_contract_metadata_and_rejects_non_native_rows() -> No
         assert receipt["all_native"] is False
         assert receipt["campaign_ok"] is True
         assert receipt["passed"] is False
+
+    metadata_overrides_top_level = {
+        **record,
+        "execution_mode": "native",
+        "algorithm_metadata": {"planner_kinematics": {"execution_mode": "adapter"}},
+    }
+    assert _classify_row(metadata_overrides_top_level)["execution_mode"] == "adapter"
 
 
 def test_receipt_requires_completed_zero_exit_campaign() -> None:

@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.fallback_policy import resolve_execution_mode
 from robot_sf.evidence.writers import write_json
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +51,23 @@ EXPECTED_METRIC_FAMILIES = {
 }
 REQUIRED_FAMILIES = set(EXPECTED_METRIC_FAMILIES.values())
 VALID_STATUSES = {"available", "unavailable", "not_applicable"}
+VALID_EXECUTION_MODES = {
+    "native",
+    "adapter",
+    "mixed",
+    "fallback",
+    "degraded",
+    "unavailable",
+    "unknown",
+}
+VALID_READINESS_STATUSES = {"native", "adapter", "fallback", "degraded", "unknown"}
+VALID_AVAILABILITY_STATUSES = {
+    "available",
+    "not_available",
+    "partial-failure",
+    "failed",
+    "unknown",
+}
 
 
 def _file_sha256(path: Path) -> str:
@@ -106,6 +124,65 @@ def _is_zero_exit_code(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value == 0
 
 
+def _normalized_text(value: Any, *, default: str = "unknown") -> str:
+    """Return a lower-case non-empty status label or a fail-closed default."""
+    if not isinstance(value, str):
+        return default
+    normalized = value.strip().lower()
+    return normalized or default
+
+
+def _resolve_row_execution_mode(record: dict[str, Any]) -> str:
+    """Resolve execution mode from canonical episode metadata without native defaults."""
+    for key in ("algorithm_metadata", "algorithm_metadata_contract"):
+        payload = record.get(key)
+        mode = _normalized_text(resolve_execution_mode(payload))
+        if mode != "unknown":
+            return mode if mode in VALID_EXECUTION_MODES else "unknown"
+
+    mode = _normalized_text(resolve_execution_mode(record))
+    return mode if mode in VALID_EXECUTION_MODES else "unknown"
+
+
+def _as_bool(value: Any) -> bool:
+    """Parse the campaign summary's boolean fields without truthy-string coercion."""
+    if isinstance(value, bool):
+        return value
+    return isinstance(value, str) and value.strip().lower() == "true"
+
+
+def _load_campaign_planner_statuses(
+    campaign_result: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], bool]:
+    """Load canonical planner readiness fields from the campaign summary."""
+    raw_rows = campaign_result.get("planner_rows")
+    if not isinstance(raw_rows, list):
+        summary_path = campaign_result.get("summary_json")
+        if isinstance(summary_path, str) and summary_path:
+            try:
+                summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return {}, False
+            raw_rows = summary.get("planner_rows")
+    if not isinstance(raw_rows, list):
+        return {}, False
+
+    statuses: dict[str, dict[str, Any]] = {}
+    for raw_row in raw_rows:
+        if not isinstance(raw_row, dict):
+            return {}, False
+        planner = _normalized_text(raw_row.get("planner_key") or raw_row.get("algo"))
+        if planner in statuses or planner == "unknown":
+            return {}, False
+        statuses[planner] = {
+            "execution_mode": _normalized_text(raw_row.get("execution_mode")),
+            "readiness_status": _normalized_text(raw_row.get("readiness_status")),
+            "availability_status": _normalized_text(raw_row.get("availability_status")),
+            "benchmark_success": _as_bool(raw_row.get("benchmark_success")),
+        }
+    return statuses, True
+
+
 def _run_campaign(output_root: Path) -> dict[str, Any]:
     """Execute the camera-ready campaign and return the JSON result."""
     cmd = [
@@ -148,7 +225,10 @@ def _read_episodes(campaign_root: Path) -> list[dict[str, Any]]:
         for line in jsonl_path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line:
-                episodes.append(json.loads(line))
+                record = json.loads(line)
+                if not isinstance(record, dict):
+                    raise ValueError(f"episode row is not a JSON object: {jsonl_path}")
+                episodes.append(record)
     return episodes
 
 
@@ -228,9 +308,7 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
 
     schema_valid = schema_valid and set(statuses) == set(EXPECTED_METRIC_FAMILIES)
 
-    execution_mode = record.get("execution_mode", "unknown")
-    if execution_mode not in ("native", "adapter"):
-        execution_mode = "fallback_or_degraded"
+    execution_mode = _resolve_row_execution_mode(record)
 
     return {
         "planner": algo,
@@ -248,6 +326,85 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _attach_campaign_status(
+    row: dict[str, Any],
+    planner_statuses: dict[str, dict[str, Any]],
+) -> None:
+    """Attach canonical planner status and detect episode/summary mode drift."""
+    status = planner_statuses.get(row["planner"])
+    if status is None:
+        row.update(
+            {
+                "readiness_status": "unknown",
+                "availability_status": "unknown",
+                "benchmark_success": False,
+                "execution_mode_consistent": False,
+            }
+        )
+        return
+
+    summary_mode = status["execution_mode"]
+    row.update(
+        {
+            "readiness_status": (
+                status["readiness_status"]
+                if status["readiness_status"] in VALID_READINESS_STATUSES
+                else "unknown"
+            ),
+            "availability_status": (
+                status["availability_status"]
+                if status["availability_status"] in VALID_AVAILABILITY_STATUSES
+                else "unknown"
+            ),
+            "benchmark_success": status["benchmark_success"],
+            "execution_mode_consistent": (
+                row["execution_mode"] != "unknown"
+                and summary_mode in VALID_EXECUTION_MODES
+                and row["execution_mode"] == summary_mode
+            ),
+        }
+    )
+
+
+def _campaign_result_is_ok(campaign_result: dict[str, Any]) -> bool:
+    """Return whether the child process and canonical campaign both succeeded."""
+    return (
+        bool(campaign_result.get("campaign_root"))
+        and _is_zero_exit_code(campaign_result.get("_runner_returncode"))
+        and campaign_result.get("campaign_execution_status") == "completed"
+        and _is_zero_exit_code(campaign_result.get("exit_code"))
+    )
+
+
+def _receipt_failure_messages(receipt: dict[str, Any]) -> list[str]:
+    """Return concise fail-closed reasons for the CLI result."""
+    failures: list[str] = []
+    if not receipt["row_count_ok"]:
+        failures.append(f"row count {receipt['observed_row_count']} != {EXPECTED_ROW_COUNT}")
+    if not receipt["identities_ok"]:
+        failures.append("row identity mismatch")
+    if not receipt["all_native"]:
+        failures.append(
+            "native-only execution contract not met: "
+            + ", ".join(
+                f"{planner}={modes}" for planner, modes in receipt["execution_modes"].items()
+            )
+        )
+    if not receipt["planner_summary_ok"]:
+        failures.append("canonical planner status summary missing or malformed")
+    if not receipt["all_execution_modes_recorded"]:
+        failures.append("execution mode missing or unknown")
+    if not receipt["execution_modes_consistent"]:
+        failures.append("episode and campaign-summary execution modes differ")
+    if not receipt["no_fallback_or_degraded"]:
+        failures.append("fallback/degraded/unavailable planner status detected")
+    if not receipt["all_schema_valid"]:
+        failures.append("schema-invalid social_compliance block")
+    if not receipt["all_families_present"]:
+        failures.append("missing metric families")
+    return failures
+
+
 def build_receipt(
     campaign_result: dict[str, Any],
     episodes: list[dict[str, Any]],
@@ -255,6 +412,10 @@ def build_receipt(
 ) -> dict[str, Any]:
     """Build the compact preflight receipt."""
     row_classifications = [_classify_row(ep) for ep in episodes]
+    planner_statuses, planner_summary_ok = _load_campaign_planner_statuses(campaign_result)
+    planner_summary_ok = planner_summary_ok and set(planner_statuses) == set(EXPECTED_PLANNERS)
+    for row in row_classifications:
+        _attach_campaign_status(row, planner_statuses)
     observed_identities = sorted(
         {(r["planner"], r["scenario_id"], r["seed"]) for r in row_classifications}
     )
@@ -263,23 +424,35 @@ def build_receipt(
     )
 
     all_native = all(r["execution_mode"] == "native" for r in row_classifications)
+    all_execution_modes_recorded = bool(row_classifications) and all(
+        r["execution_mode"] != "unknown" for r in row_classifications
+    )
+    execution_modes_consistent = bool(row_classifications) and all(
+        r["execution_mode_consistent"] for r in row_classifications
+    )
+    no_fallback_or_degraded = bool(row_classifications) and all(
+        r["readiness_status"] in {"native", "adapter"}
+        and r["availability_status"] == "available"
+        and r["benchmark_success"]
+        for r in row_classifications
+    )
     all_schema_valid = all(r["schema_valid"] for r in row_classifications)
     all_families = all(r["all_families_present"] for r in row_classifications)
     row_count_ok = len(episodes) == EXPECTED_ROW_COUNT
     identities_ok = observed_identities == expected_identities
     campaign_returncode = campaign_result.get("_runner_returncode")
     campaign_exit_code = campaign_result.get("exit_code")
-    campaign_ok = (
-        _is_zero_exit_code(campaign_returncode)
-        and campaign_result.get("campaign_execution_status") == "completed"
-        and _is_zero_exit_code(campaign_exit_code)
-    )
+    campaign_ok = _campaign_result_is_ok(campaign_result)
 
     passed = (
         campaign_ok
         and row_count_ok
         and identities_ok
+        and planner_summary_ok
+        and all_execution_modes_recorded
+        and execution_modes_consistent
         and all_native
+        and no_fallback_or_degraded
         and all_schema_valid
         and all_families
     )
@@ -299,12 +472,21 @@ def build_receipt(
         "row_count_ok": row_count_ok,
         "identities_ok": identities_ok,
         "all_native": all_native,
+        "all_execution_modes_recorded": all_execution_modes_recorded,
+        "execution_modes_consistent": execution_modes_consistent,
+        "no_fallback_or_degraded": no_fallback_or_degraded,
+        "planner_summary_ok": planner_summary_ok,
         "all_schema_valid": all_schema_valid,
         "all_families_present": all_families,
         "campaign_ok": campaign_ok,
         "campaign_returncode": campaign_returncode,
         "campaign_exit_code": campaign_exit_code,
-        "execution_modes": {r["planner"]: r["execution_mode"] for r in row_classifications},
+        "execution_modes": {
+            planner: sorted(
+                {r["execution_mode"] for r in row_classifications if r["planner"] == planner}
+            )
+            for planner in EXPECTED_PLANNERS
+        },
         "social_compliance_schema_version": SOCIAL_COMPLIANCE_SCHEMA_VERSION,
         "rows": row_classifications,
         "campaign_result_status": campaign_result.get("campaign_execution_status", "unknown"),
@@ -344,21 +526,29 @@ def main(argv: list[str] | None = None) -> int:
     campaign_result = _run_campaign(output_root)
 
     campaign_root_str = campaign_result.get("campaign_root", "")
-    if (
-        not campaign_root_str
-        or not _is_zero_exit_code(campaign_result.get("_runner_returncode"))
-        or campaign_result.get("campaign_execution_status") != "completed"
-        or not _is_zero_exit_code(campaign_result.get("exit_code"))
-    ):
+    episodes: list[dict[str, Any]] = []
+    episode_read_error: str | None = None
+    if campaign_root_str:
+        campaign_root = Path(campaign_root_str)
+        try:
+            episodes = _read_episodes(campaign_root)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            episode_read_error = str(exc)
+
+    campaign_ok = _campaign_result_is_ok(campaign_result)
+    if not campaign_ok:
         print("[issue_6481] ERROR: campaign did not complete successfully", file=sys.stderr)
         print(json.dumps(campaign_result, indent=2), file=sys.stderr)
-        return 2
+    elif episode_read_error is not None:
+        print(
+            f"[issue_6481] ERROR: could not read campaign episodes: {episode_read_error}",
+            file=sys.stderr,
+        )
 
-    campaign_root = Path(campaign_root_str)
-    try:
-        episodes = _read_episodes(campaign_root)
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"[issue_6481] ERROR: could not read campaign episodes: {exc}", file=sys.stderr)
+    if not campaign_ok or episode_read_error is not None:
+        receipt = build_receipt(campaign_result, episodes, output_root)
+        receipt_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(receipt_path, receipt)
         return 2
 
     receipt = build_receipt(campaign_result, episodes, output_root)
@@ -369,21 +559,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if receipt["passed"]:
         print(
-            f"\n[issue_6481] PREFLIGHT PASSED: {EXPECTED_ROW_COUNT} native rows, schema-valid social blocks."
+            f"\n[issue_6481] PREFLIGHT PASSED: {EXPECTED_ROW_COUNT} native rows, "
+            "schema-valid social blocks, and no fallback/degraded rows."
         )
         return 0
 
-    failures = []
-    if not receipt["row_count_ok"]:
-        failures.append(f"row count {receipt['observed_row_count']} != {EXPECTED_ROW_COUNT}")
-    if not receipt["identities_ok"]:
-        failures.append("row identity mismatch")
-    if not receipt["all_native"]:
-        failures.append("non-native execution mode detected")
-    if not receipt["all_schema_valid"]:
-        failures.append("schema-invalid social_compliance block")
-    if not receipt["all_families_present"]:
-        failures.append("missing metric families")
+    failures = _receipt_failure_messages(receipt)
     print(f"\n[issue_6481] PREFLIGHT FAILED: {'; '.join(failures)}", file=sys.stderr)
     return 1
 

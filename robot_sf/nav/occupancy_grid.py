@@ -110,10 +110,7 @@ def _load_pygame():
     return pygame
 
 
-def _require_finite(name: str, value: float) -> None:
-    """Raise a clear error when a numeric grid parameter is not finite."""
-    if not math.isfinite(value):
-        raise ValueError(f"{name} must be finite, got {value}")
+from robot_sf.common.validation import _require_finite
 
 
 class GridChannel(Enum):

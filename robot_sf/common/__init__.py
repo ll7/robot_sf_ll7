@@ -72,6 +72,20 @@ from robot_sf.common.types import (
     Vec2D,
     Zone,
 )
+from robot_sf.common.validation import (
+    _require_finite,
+    _require_finite_bounded_values,
+    _require_finite_coerce,
+    _require_finite_ndarray,
+    _require_finite_non_negative,
+    _require_finite_non_negative_coerce,
+    _require_finite_number,
+    _require_finite_position,
+    _require_finite_real,
+    require_finite_array,
+    require_finite_fields,
+    require_finite_scalar,
+)
 
 __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     # Artifact helpers (from .artifact_paths)
@@ -145,4 +159,17 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     "warn_soft_degrade",
     # Compatibility (from .compat)
     "validate_compatibility",
+    # Validation (from .validation)
+    "_require_finite",
+    "_require_finite_bounded_values",
+    "_require_finite_coerce",
+    "_require_finite_ndarray",
+    "_require_finite_non_negative",
+    "_require_finite_non_negative_coerce",
+    "_require_finite_number",
+    "_require_finite_position",
+    "_require_finite_real",
+    "require_finite_array",
+    "require_finite_fields",
+    "require_finite_scalar",
 ]

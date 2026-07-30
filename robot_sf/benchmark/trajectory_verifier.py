@@ -131,15 +131,7 @@ class VerifierResult:
     claim_boundary: str = field(default=TRAJECTORY_VERIFIER_CLAIM_BOUNDARY)
 
 
-def _require_finite(name: str, arr: np.ndarray) -> None:
-    """Raise ``ValueError`` if ``arr`` holds any non-finite (NaN/inf) value.
-
-    Non-finite inputs would silently defeat every threshold comparison — e.g.
-    ``nan < min_clearance`` evaluates to ``False`` — and could cause an unsafe
-    trajectory to be accepted. Reject them at the input boundary (fail closed).
-    """
-    if not np.isfinite(arr).all():
-        raise ValueError(f"{name} must contain only finite values (no NaN or inf)")
+from robot_sf.common.validation import _require_finite_ndarray as _require_finite
 
 
 def _as_float2d(name: str, array: np.ndarray | None) -> np.ndarray | None:

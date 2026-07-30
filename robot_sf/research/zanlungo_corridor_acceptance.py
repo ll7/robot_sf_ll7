@@ -11,7 +11,6 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from numbers import Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -508,11 +507,7 @@ def _normalize_case(payload: Any) -> SensitivityCase:
     )
 
 
-def _require_finite_real(value: Any, field_name: str) -> float:
-    """Return a finite real value while rejecting YAML booleans explicitly."""
-    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(float(value)):
-        raise ValueError(f"{field_name} must be a finite real number, not a boolean")
-    return float(value)
+from robot_sf.common.validation import _require_finite_real
 
 
 def _validate_metadata(metadata: Mapping[str, Any]) -> tuple[str, str]:

@@ -9,22 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _require_finite_bounded_values(
-    *,
-    values: tuple[float, ...],
-    field_name: str,
-    max_abs_value: float,
-    max_field_name: str,
-) -> None:
-    """Validate one lattice axis against its configured absolute bound."""
-
-    if not values:
-        raise ValueError(f"{field_name} must contain at least one command value")
-    for value in values:
-        if not isfinite(value):
-            raise ValueError(f"{field_name} must be finite")
-        if abs(value) > max_abs_value:
-            raise ValueError(f"{field_name} exceed {max_field_name}")
+from robot_sf.common.validation import _require_finite_bounded_values
 
 
 @dataclass(frozen=True)

@@ -28,24 +28,11 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.finite_checks import require_finite_array, require_finite_scalar
+from robot_sf.common.validation import require_finite_array, require_finite_scalar
 
 HETEROGENEOUS_POPULATION_METRICS_SCHEMA = "heterogeneous_population_metrics.v1"
 
 _CONTROL_TRACE_REDUCERS = frozenset({"mean", "min", "max", "final"})
-
-
-def _require_finite(name: str, value: float) -> None:
-    """Fail closed on a non-finite (NaN/Inf) metric value.
-
-    A degraded trace can leak NaN/Inf, after which ``min``/``max`` for the worst
-    stratum and ``np.mean`` for the CVaR evaluate inconsistently by element order
-    (fail-open). Raising names the offending field so the caller drops the input.
-
-    Raises:
-        ValueError: If ``value`` is not finite.
-    """
-    require_finite_scalar(name, value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,7 +191,7 @@ def per_archetype_metrics(
     grouped: dict[str, list[float]] = {}
     for observation in observations:
         value = float(observation.value)
-        _require_finite(f"observation value for archetype {observation.archetype!r}", value)
+        require_finite_scalar(f"observation value for archetype {observation.archetype!r}", value)
         grouped.setdefault(observation.archetype, []).append(value)
 
     per_archetype: dict[str, Any] = {}
@@ -401,8 +388,8 @@ def mean_matched_heterogeneity_effect(
     Returns:
         dict[str, Any]: Versioned report with the isolated effect and a validity flag.
     """
-    _require_finite("homogeneous_mean", float(homogeneous_mean))
-    _require_finite("heterogeneous_mean", float(heterogeneous_mean))
+    require_finite_scalar("homogeneous_mean", float(homogeneous_mean))
+    require_finite_scalar("heterogeneous_mean", float(heterogeneous_mean))
     effect = float(heterogeneous_mean) - float(homogeneous_mean)
     return {
         "schema_version": HETEROGENEOUS_POPULATION_METRICS_SCHEMA,

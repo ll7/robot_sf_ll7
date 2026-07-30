@@ -99,4 +99,5 @@ def test_stream_gap_classifier_rejects_non_finite_safety_aggregate() -> None:
 )
 def test_diagnostic_producers_import_shared_finite_policy(module: object) -> None:
     """Recent diagnostic producers use the shared fail-closed finite policy."""
-    assert "robot_sf.benchmark.finite_checks" in inspect.getsource(module)
+    source = inspect.getsource(module)
+    assert "robot_sf.common.validation" in source or "robot_sf.benchmark.finite_checks" in source

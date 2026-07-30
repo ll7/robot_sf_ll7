@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import copy
 import json
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -611,21 +610,9 @@ def _validate_threshold_monotonic(
         )
 
 
-def _require_finite_non_negative(value: Any, *, key: str) -> float:
-    """Coerce ``value`` to a float, raising ``ValueError`` unless it is finite and non-negative.
-
-    Returns:
-        The coerced finite, non-negative float value.
-    """
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{key} must be numeric") from exc
-    if not math.isfinite(numeric):
-        raise ValueError(f"{key} must be finite")
-    if numeric < 0.0:
-        raise ValueError(f"{key} must be non-negative")
-    return numeric
+from robot_sf.common.validation import (
+    _require_finite_non_negative_coerce as _require_finite_non_negative,
+)
 
 
 def _require_mapping(block: Mapping[str, Any], key: str) -> Mapping[str, Any]:

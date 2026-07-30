@@ -102,11 +102,7 @@ def proxemic_cost_at_points(
     return np.minimum(costs, cfg.max_cost)
 
 
-def _require_finite_non_negative(name: str, value: float) -> None:
-    """Raise ValueError unless value is finite and >= 0."""
-    scalar = float(value)
-    if not np.isfinite(scalar) or scalar < 0.0:
-        raise ValueError(f"{name} must be finite and >= 0")
+from robot_sf.common.validation import _require_finite_non_negative
 
 
 def _as_points_array(name: str, values: np.ndarray) -> np.ndarray:

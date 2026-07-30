@@ -221,7 +221,7 @@ def run_adversarial_search(
             evaluation = replace(evaluation, certification_status=certification_status)
             score = objective(evaluation)
             evaluation = evaluation.with_objective(score)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - evaluation surface is unknown; record candidate failure attribution, do not crash the search
             num_failed += 1
             error = repr(exc)
             attribution = attribution_from_error(error)
@@ -350,7 +350,7 @@ def production_candidate_evaluator(
             evaluation = replace(evaluation, certification_status=certification_status)
             score = objective(evaluation)
             return evaluation.with_objective(score)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - evaluation surface is unknown; record candidate failure attribution, do not crash the search
             error = repr(exc)
             attribution = attribution_from_error(error)
             write_json(candidate_dir / "failure_attribution.json", attribution.to_json())

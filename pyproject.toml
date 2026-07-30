@@ -545,8 +545,11 @@ max-statements = 60
 # cluster-bootstrap carry compact one-line docstrings; complexity concentrates in the
 # fail-closed coverage and verification routines.
 "robot_sf/benchmark/control_action_latency_snqi.py" = ["DOC201", "C901"]
-"robot_sf/adversarial/search.py" = ["BLE001"]
-"robot_sf/adversarial/certification.py" = ["BLE001", "PLC0415"]
+# Issue #6459: search.py and certification.py BLE001 removed - broad catches now carry
+# inline `# noqa: BLE001 - <reason>` directives (search evaluation-attribution sites,
+# certification adapter-defensive site). certification.py keeps PLC0415 for the lazy
+# scenario_certification import_module probe.
+"robot_sf/adversarial/certification.py" = ["PLC0415"]
 "tests/adversarial/**/*.py" = ["D100", "D103", "TC003"]
 
 # fast-pysf subtree: gradual adoption - complexity rules relaxed, allow prints in examples/benchmarks

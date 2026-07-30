@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import numpy as np
 import pytest
 from loguru import logger
@@ -45,6 +47,38 @@ def test_run_batch_sequential_worker_failure_logs_warning(tmp_path, monkeypatch)
         "Benchmark batch job failed in serial execution" in msg.record["message"]
         for msg in captured
     )
+
+
+def test_policy_step_fallback_updates_returned_metadata(monkeypatch) -> None:
+    """Planner-step fallback status must remain visible in returned metadata."""
+    planner = Mock()
+    planner.get_metadata.return_value = {"algorithm": "random", "status": "ok"}
+    step_runner = Mock()
+    step_runner.step.side_effect = ValueError("forced planner failure")
+
+    monkeypatch.setattr(
+        runner,
+        "_load_baseline_planner",
+        lambda *_args: (planner, object, {}),
+    )
+    monkeypatch.setattr(runner, "_build_observation", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runner, "_PlannerStepProcess", lambda *_args, **_kwargs: step_runner)
+
+    policy, metadata = runner._create_robot_policy("random", None, seed=42)
+    try:
+        velocity = policy(
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            np.array([1.0, 0.0]),
+            np.empty((0, 2)),
+            0.1,
+        )
+    finally:
+        policy.close()  # type: ignore[attr-defined]
+
+    assert velocity == pytest.approx(np.array([0.0, 0.0]))
+    assert metadata["status"] == "policy_step_error_fallback"
+    assert metadata["fallback_reason"] == "policy_step_error"
 
 
 def test_maybe_encode_video_logs_nonfatal_errors(tmp_path, monkeypatch) -> None:

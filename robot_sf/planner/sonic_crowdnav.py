@@ -531,6 +531,7 @@ class SonicCrowdNavAdapter:
         if not math.isfinite(time_step) or time_step <= 0.0:
             raise ValueError(f"Invalid SoNIC time_step: {time_step}")
         obs_tensors, meta = self._build_model_inputs(observation, time_step=float(time_step))
+        # Hidden state must be initialized after reset()
         assert self._hidden_state is not None
         with torch.no_grad():
             _value, action, _log_prob, self._hidden_state = self._policy.act(

@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_text
+
 DEFAULT_EVIDENCE_ROOT = Path("docs/context/evidence")
 DEFAULT_OUTPUT = Path("docs/benchmarks/CAMPAIGN_ATLAS.md")
 FALLBACK_REMOTE = "https://github.com/ll7/robot_sf_ll7"
@@ -370,7 +372,7 @@ def render_atlas(rows: Sequence[CampaignRow], *, atlas_output: Path) -> str:
     ok_count = sum(1 for r in rows if r.status == "OK")
     incomplete_count = len(rows) - ok_count
     lines: list[str] = [
-        "<!-- AI-GENERATED (robot_sf campaign atlas) - DO NOT EDIT; regenerate with",
+        "<!-- AI-GENERATED (robot_sf campaign atlas) - NEEDS-REVIEW; DO NOT EDIT; regenerate with",
         "     uv run python scripts/tools/generate_campaign_atlas.py",
         "     and commit the result. Deterministic: sorted rows, no timestamps. -->",
         "",
@@ -464,7 +466,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(rendered, encoding="utf-8")
+    write_text(args.output, rendered)
     print(f"Wrote campaign atlas with {row_count} row(s) -> {args.output}")
     return 0
 

@@ -25,8 +25,10 @@ status so the merge decision is inspectable and reproducible.
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
 live PR (``--pr`` or ``--from-event`` for a ``merge_group`` payload), evaluates,
-prints the audit JSON, appends a ``GITHUB_STEP_SUMMARY`` block, and exits 0 on
-pass / 1 on fail (fail closed).
+prints the audit JSON, and appends a ``GITHUB_STEP_SUMMARY`` block. Native
+``merge_group`` evaluation always exits 0 on pass / 1 on fail (fail closed).
+Source-PR diagnostics may opt into ``--advisory`` so a truthfully failed audit
+does not present ordinary implementation CI as red.
 
 Why a separate gate instead of relying on labels alone: issue #6274 observed an
 external/parallel auto-merge path merging PRs without ``merge-ready`` or without
@@ -1146,6 +1148,16 @@ def _load_merge_group_event(path: str) -> tuple[dict[str, Any] | None, str | Non
     return event, None
 
 
+def _audit_exit_code(audit: MergeGateAudit, *, advisory: bool) -> int:
+    """Return the CLI status while preserving a truthful advisory audit."""
+    if advisory and not audit.passed:
+        print(
+            "Source-PR admission is advisory; merge_group remains fail-closed.",
+            file=sys.stderr,
+        )
+    return 0 if audit.passed or advisory else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point: evaluate the merge-queue gate and print the audit JSON."""
     parser = argparse.ArgumentParser(
@@ -1177,10 +1189,18 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help="write only the step summary; suppress stdout audit JSON",
     )
+    parser.add_argument(
+        "--advisory",
+        action="store_true",
+        default=False,
+        help=("preserve a failed source-PR audit but exit zero; valid only with --pr"),
+    )
     args = parser.parse_args(argv)
 
     if args.self_test:
         return _self_test()
+    if args.advisory and not args.pr:
+        parser.error("--advisory is valid only with --pr; merge_group remains fail-closed")
 
     repo = _resolve_owner_repo(args.repo)
     if not repo:
@@ -1225,7 +1245,7 @@ def main(argv: list[str] | None = None) -> int:
     if error:
         print(f"gate evaluation warning: {error}", file=sys.stderr)
 
-    return 0 if audit.passed else 1
+    return _audit_exit_code(audit, advisory=args.advisory)
 
 
 if __name__ == "__main__":

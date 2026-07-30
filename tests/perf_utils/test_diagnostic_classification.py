@@ -1,0 +1,209 @@
+"""Regression tests for the diagnostic-contract classification in reporting.
+
+Pins the contract from issue #6320: the base-sensitive gate subset node
+``test_subset_run_under_two_minutes`` is reported as an accepted ``"diagnostic"``
+contract (with an explanation) instead of an unexplained ``"soft"`` breach,
+because that test walls a ``pytest -m base_sensitive`` subprocess whose runtime
+is dominated by full-suite collection and carries its own 120s hard cap.
+
+Generic slow nodes must keep flowing through the normal soft/hard envelope.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from tests import conftest as root_conftest
+
+from .policy import PerformanceBudgetPolicy
+from .reporting import DIAGNOSTIC_NODES, SlowTestSample, format_report, generate_report
+
+GATE_NODE = (
+    "tests/dev/test_base_sensitive_gate_contract.py::TestGateScript::"
+    "test_subset_run_under_two_minutes"
+)
+
+
+def test_gate_node_is_registered_diagnostic() -> None:
+    """The gate-contract node must be in the scoped diagnostic set with a note."""
+    assert GATE_NODE in DIAGNOSTIC_NODES
+    note = DIAGNOSTIC_NODES[GATE_NODE]
+    assert note, "diagnostic note must be non-empty"
+    assert "soft-threshold breach" in note
+    assert "configured hard threshold still applies" in note
+
+
+def test_diagnostic_set_is_scoped_to_gate_node_only() -> None:
+    """Guardrail: the diagnostic set stays narrow (only the gate node today).
+
+    The issue #6320 contract scopes the classification to this single test. If a
+    future PR registers another diagnostic contract, update this assertion
+    deliberately so the scope change is visible at review.
+    """
+    assert set(DIAGNOSTIC_NODES) == {GATE_NODE}
+
+
+def test_gate_node_classified_as_diagnostic_not_soft() -> None:
+    """A slow sample for the gate node reports as diagnostic, never soft."""
+    policy = PerformanceBudgetPolicy()  # soft=20.0, hard=60.0
+    samples = [SlowTestSample(test_identifier=GATE_NODE, duration_seconds=38.0)]
+    records = generate_report(samples, policy)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec.breach_type == "diagnostic"
+    # Explanatory note present; generic episode/horizon guidance must NOT appear.
+    joined = " ".join(rec.guidance).lower()
+    assert "diagnostic" in joined
+    assert "episode" not in joined
+    assert "horizon" not in joined
+
+
+def test_gate_node_below_soft_threshold_remains_unclassified() -> None:
+    """A diagnostic registration does not label an in-budget sample."""
+    policy = PerformanceBudgetPolicy()  # soft=20.0, hard=60.0
+    samples = [
+        SlowTestSample(
+            test_identifier=GATE_NODE,
+            duration_seconds=policy.soft_threshold_seconds - 0.1,
+        ),
+    ]
+    records = generate_report(samples, policy)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec.breach_type == "none"
+    assert rec.guidance == []
+
+
+def test_gate_node_at_hard_timeout_remains_a_hard_breach() -> None:
+    """The diagnostic exemption never weakens the 60s hard enforcement boundary."""
+    policy = PerformanceBudgetPolicy()  # soft=20.0, hard=60.0
+    samples = [
+        SlowTestSample(
+            test_identifier=GATE_NODE,
+            duration_seconds=policy.hard_timeout_seconds,
+        ),
+    ]
+    records = generate_report(samples, policy)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec.breach_type == "hard"
+    assert "diagnostic" not in " ".join(rec.guidance).lower()
+
+
+def test_generic_slow_node_still_classified_soft() -> None:
+    """Non-diagnostic slow nodes keep the normal soft classification and guidance."""
+    policy = PerformanceBudgetPolicy()
+    samples = [SlowTestSample(test_identifier="dummy::test_slow_example", duration_seconds=38.0)]
+    records = generate_report(samples, policy)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec.breach_type == "soft"
+    # Generic guidance still applies to non-diagnostic nodes.
+    joined = " ".join(rec.guidance).lower()
+    assert "episode" in joined
+
+
+def test_diagnostic_node_does_not_shadow_slower_generic_node() -> None:
+    """A slower generic node ranks above the diagnostic node and keeps its breach."""
+    policy = PerformanceBudgetPolicy()  # soft=20.0, hard=60.0
+    samples = [
+        SlowTestSample(test_identifier=GATE_NODE, duration_seconds=38.0),
+        SlowTestSample(test_identifier="dummy::test_slower", duration_seconds=70.0),
+    ]
+    records = generate_report(samples, policy)
+    assert [record.test_identifier for record in records] == [
+        "dummy::test_slower",
+        GATE_NODE,
+    ]
+    by_id = {r.test_identifier: r for r in records}
+    assert by_id[GATE_NODE].breach_type == "diagnostic"
+    # 70s >= hard_timeout (60s) so the generic node is a hard breach, unaffected by
+    # the diagnostic classification scoped to the gate node.
+    assert by_id["dummy::test_slower"].breach_type == "hard"
+
+
+def test_diagnostic_guidance_uses_configured_envelope() -> None:
+    """Diagnostic text must not claim the default thresholds under an override."""
+    policy = PerformanceBudgetPolicy(soft_threshold_seconds=10.0, hard_timeout_seconds=30.0)
+    samples = [SlowTestSample(test_identifier=GATE_NODE, duration_seconds=20.0)]
+    records = generate_report(samples, policy)
+    assert records[0].breach_type == "diagnostic"
+    joined = " ".join(records[0].guidance)
+    assert "soft<10s" in joined
+    assert "hard=30s" in joined
+
+
+def test_format_report_labels_diagnostic_clearly() -> None:
+    """The rendered report shows a DIAGNOSTIC label, not a SOFT breach, for the gate node."""
+    policy = PerformanceBudgetPolicy()
+    samples = [SlowTestSample(test_identifier=GATE_NODE, duration_seconds=38.0)]
+    records = generate_report(samples, policy)
+    rendered = format_report(records, policy)
+    assert "DIAGNOSTIC" in rendered
+    assert "SOFT" not in rendered
+    assert GATE_NODE in rendered
+    assert "Accepted diagnostic contract" in rendered
+
+
+def test_diagnostic_matcher_is_path_separator_robust() -> None:
+    """The matcher accepts backslash-separated variants of the registered node."""
+    from .reporting import _diagnostic_note
+
+    backslash_node = GATE_NODE.replace("/", "\\")
+    assert _diagnostic_note(backslash_node) is not None
+    absolute_node = f"/workspace/robot_sf_ll7/{GATE_NODE}"
+    assert _diagnostic_note(absolute_node) is not None
+    # Unrelated nodes are never matched.
+    assert _diagnostic_note("dummy::test_example") is None
+    assert _diagnostic_note("") is None
+
+
+def test_diagnostic_node_does_not_fail_terminal_enforce_mode(monkeypatch) -> None:
+    """The real terminal-summary hook reports, but does not enforce, this diagnostic node."""
+
+    class CapturingReporter:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def write_line(self, line: str) -> None:
+            self.lines.append(line)
+
+    reporter = CapturingReporter()
+    monkeypatch.setattr(root_conftest, "_SLOW_SAMPLES", [(GATE_NODE, 38.0)])
+    monkeypatch.setenv("ROBOT_SF_PERF_ENFORCE", "1")
+    monkeypatch.delenv("ROBOT_SF_PERF_RELAX", raising=False)
+
+    root_conftest.pytest_terminal_summary(reporter, exitstatus=0, config=None)
+
+    rendered = "\n".join(reporter.lines)
+    assert "DIAGNOSTIC" in rendered
+    assert "(enforce mode)" in rendered
+    assert "Performance breach" not in rendered
+
+
+def test_diagnostic_node_hard_breach_fails_terminal_enforce_mode(monkeypatch) -> None:
+    """The registered node remains enforceable at the hard boundary."""
+
+    class CapturingReporter:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def write_line(self, line: str) -> None:
+            self.lines.append(line)
+
+    reporter = CapturingReporter()
+    policy = PerformanceBudgetPolicy()
+    monkeypatch.setattr(
+        root_conftest,
+        "_SLOW_SAMPLES",
+        [(GATE_NODE, policy.hard_timeout_seconds)],
+    )
+    monkeypatch.setenv("ROBOT_SF_PERF_ENFORCE", "1")
+    monkeypatch.delenv("ROBOT_SF_PERF_RELAX", raising=False)
+
+    with pytest.raises(pytest.exit.Exception, match="Performance breach"):
+        root_conftest.pytest_terminal_summary(reporter, exitstatus=0, config=None)
+
+    rendered = "\n".join(reporter.lines)
+    assert "HARD" in rendered
+    assert "DIAGNOSTIC" not in rendered

@@ -10,6 +10,28 @@ import pytest
 from scripts.dev import closed_state_label_hygiene
 
 
+def _mock_current_rest_issue(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    labels: list[str],
+    title: str = "current issue",
+    number: int = 12,
+) -> None:
+    """Install a current closed-issue REST response for reconciliation tests."""
+
+    monkeypatch.setattr(
+        "scripts.dev.gh_issue_rest.fetch_issue",
+        lambda requested_number, **kwargs: {
+            "number": requested_number,
+            "status": "ok",
+            "title": title,
+            "url": f"https://github.com/ll7/robot_sf_ll7/issues/{number}",
+            "state": "CLOSED",
+            "labels": labels,
+        },
+    )
+
+
 def test_collect_stale_issues_aggregates_closed_issue_state_labels() -> None:
     """Closed issues should be reported once with all stale live state labels."""
     rows_by_label = {
@@ -61,6 +83,48 @@ def test_collect_stale_issues_ignores_pull_request_rows() -> None:
     }
 
     assert closed_state_label_hygiene.collect_stale_issues(rows_by_label) == []
+
+
+def test_reconcile_stale_issues_suppresses_search_index_lag() -> None:
+    """A removed REST label should override the stale label still returned by search."""
+    candidates = [_stale(12, ("state:ready",))]
+
+    stale = closed_state_label_hygiene.reconcile_stale_issues(
+        repo="ll7/robot_sf_ll7",
+        candidates=candidates,
+        fetch_issue=lambda number, **kwargs: {
+            "number": number,
+            "status": "ok",
+            "title": "done and cleaned up",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+            "state": "CLOSED",
+            "labels": ["priority:4", "technical-debt"],
+        },
+    )
+
+    assert stale == []
+
+
+def test_reconcile_stale_issues_preserves_current_rest_live_labels() -> None:
+    """A genuinely stale live label in the current REST record remains a failure."""
+    candidates = [_stale(12, ("state:ready", "state:running"))]
+
+    stale = closed_state_label_hygiene.reconcile_stale_issues(
+        repo="ll7/robot_sf_ll7",
+        candidates=candidates,
+        fetch_issue=lambda number, **kwargs: {
+            "number": number,
+            "status": "ok",
+            "title": "current REST title",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+            "state": "CLOSED",
+            "labels": ["priority:4", "state:running"],
+        },
+    )
+
+    assert len(stale) == 1
+    assert stale[0].title == "current REST title"
+    assert stale[0].stale_labels == ("state:running",)
 
 
 @pytest.mark.parametrize(
@@ -152,6 +216,11 @@ def test_main_returns_nonzero_json_summary_without_live_github(
         }
 
     monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fake_fetch)
+    _mock_current_rest_issue(
+        monkeypatch,
+        labels=["state:ready"],
+        title="done but still queued",
+    )
 
     exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7"])
 
@@ -160,6 +229,39 @@ def test_main_returns_nonzero_json_summary_without_live_github(
     assert payload["ok"] is False
     assert payload["stale_count"] == 1
     assert payload["issues"][0]["number"] == 12
+
+
+def test_main_suppresses_search_label_absent_from_current_rest_issue(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Search-index lag should preserve the successful read-only JSON and exit contracts."""
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "fetch_closed_issues_by_label",
+        lambda **kwargs: {
+            "state:ready": [
+                {
+                    "number": 12,
+                    "title": "stale search row",
+                    "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+                    "state": "closed",
+                    "labels": [{"name": "state:ready"}],
+                }
+            ]
+        },
+    )
+    _mock_current_rest_issue(monkeypatch, labels=["priority:4", "technical-debt"])
+
+    exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["schema"] == "closed_state_label_hygiene.v1"
+    assert payload["ok"] is True
+    assert payload["read_only"] is True
+    assert payload["stale_count"] == 0
+    assert payload["issues"] == []
 
 
 def test_run_search_command_reports_missing_gh(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -369,14 +471,6 @@ def test_main_fix_mode_strips_labels_and_reports(
             ]
         }
 
-    def fake_fetch_issue(number: int, **kwargs: object) -> dict:
-        return {
-            "number": number,
-            "status": "ok",
-            "state": "CLOSED",
-            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
-        }
-
     edits: list[list[str]] = []
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -384,7 +478,7 @@ def test_main_fix_mode_strips_labels_and_reports(
         return subprocess.CompletedProcess(args=tuple(command), returncode=0, stdout="")
 
     monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fake_fetch)
-    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
+    _mock_current_rest_issue(monkeypatch, labels=["state:ready"])
     monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
 
     exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7", "--fix"])
@@ -395,3 +489,31 @@ def test_main_fix_mode_strips_labels_and_reports(
     assert payload["read_only"] is False
     assert payload["fix_actions"][0]["removed_labels"] == ["state:ready"]
     assert any(cmd[:3] == ["gh", "issue", "edit"] for cmd in edits)
+
+
+def test_main_fix_mode_rejects_labels_outside_live_state_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Fix mode must fail closed before searching or editing an arbitrary label."""
+
+    def fail_fetch(**kwargs: object) -> dict[str, list[dict[str, object]]]:
+        raise AssertionError("GitHub search must not run for an unsupported fix label")
+
+    def fail_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("GitHub edit must not run for an unsupported fix label")
+
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "fetch_closed_issues_by_label",
+        fail_fetch,
+    )
+    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fail_run)
+
+    exit_code = closed_state_label_hygiene.main(["--label", "workflow", "--fix"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["ok"] is False
+    assert payload["read_only"] is False
+    assert "--fix only supports live state labels" in payload["error"]

@@ -233,7 +233,7 @@ export SDL_VIDEODRIVER=dummy
 export PYGAME_HIDE_SUPPORT_PROMPT=1
 export PYTHONWARNINGS=ignore
 
-# Switch the --config path to the multi-modal sibling iff #789 landed and Job 1
+# Switch the config-argument value to the multi-modal sibling iff #789 landed and Job 1
 # (multi-modal gate) was healthy.
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
   --config configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml \
@@ -279,7 +279,7 @@ Full-run stop conditions:
 3. **#609 stale branch trap.** `codex/609-dreamer-scenario-matrix-parity` is ~96k
    lines behind main; do not merge it directly. The parity surface that issue asks for
    is already on `578-br-08-dreamerv3-retraining-v2`.
-4. **Run-history immutability** (per [feedback](../../memory/feedback_run_history_configs.md)):
+4. **Run-history immutability** (per `memory/feedback_run_history_configs.md`):
    if PR review flags an issue with a config that has already been launched, do not
    edit the config in place — open a follow-up issue with a new sibling config + new
    SLURM job.

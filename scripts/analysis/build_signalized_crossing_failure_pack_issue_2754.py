@@ -23,6 +23,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
 )
 from robot_sf.benchmark.failure_extractor import is_failure
+from robot_sf.evidence.writers import write_json
 
 # Canonical allowed claim wording for signalized behavior (Issue #2760 / Dissertation Ledger)
 ALLOWED_CLAIM_WORDING = (
@@ -801,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sanitized_pack = _sanitize(pack)
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
-    args.output_json.write_text(json.dumps(sanitized_pack, indent=2) + "\n", encoding="utf-8")
+    write_json(args.output_json, sanitized_pack)
     print(f"Wrote signalized crossing failure pack to {args.output_json}")
     return 0
 

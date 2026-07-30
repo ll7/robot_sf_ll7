@@ -1,16 +1,27 @@
 {
+  "all_execution_modes_recorded": true,
   "all_families_present": true,
-  "all_native": true,
+  "all_native": false,
   "all_schema_valid": true,
+  "campaign_exit_code": 0,
+  "campaign_ok": true,
   "campaign_result_status": "completed",
+  "campaign_returncode": 0,
   "claim_class": "diagnostic_proxy",
   "config_sha256": "8611b4f6ad9eea7134cfe189f319f7bb8afcedf8a657ea6c291666b5d548bbab",
   "evidence_tier": "smoke_preflight",
   "execution_modes": {
-    "goal": "native",
-    "orca": "native",
-    "social_force": "native"
+    "goal": [
+      "native"
+    ],
+    "orca": [
+      "adapter"
+    ],
+    "social_force": [
+      "adapter"
+    ]
   },
+  "execution_modes_consistent": true,
   "expected_identities": [
     [
       "goal",
@@ -64,6 +75,7 @@
     "note": "Campaign rows were written under the --output-root location during generation. That path is intentionally omitted from the durable receipt because repository evidence must not point at ignored runtime output artifacts.",
     "status": "ignored_runtime_artifact"
   },
+  "no_fallback_or_degraded": true,
   "observed_identities": [
     [
       "goal",
@@ -112,14 +124,25 @@
     ]
   ],
   "observed_row_count": 9,
-  "passed": true,
+  "passed": false,
+  "planner_summary_ok": true,
   "receipt_schema": "issue_6481_preflight_receipt.v1",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "row_count_ok": true,
   "rows": [
     {
       "all_families_present": true,
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
       "execution_mode": "native",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -128,6 +151,7 @@
         "pedestrian_deviation"
       ],
       "planner": "goal",
+      "readiness_status": "native",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 111,
@@ -145,11 +169,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
       "execution_mode": "native",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -158,6 +199,7 @@
         "pedestrian_deviation"
       ],
       "planner": "goal",
+      "readiness_status": "native",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 112,
@@ -175,11 +217,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
       "execution_mode": "native",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -188,6 +247,7 @@
         "pedestrian_deviation"
       ],
       "planner": "goal",
+      "readiness_status": "native",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 113,
@@ -205,11 +265,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
-      "execution_mode": "native",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
+      "execution_mode": "adapter",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -218,6 +295,7 @@
         "pedestrian_deviation"
       ],
       "planner": "orca",
+      "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 111,
@@ -235,11 +313,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
-      "execution_mode": "native",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
+      "execution_mode": "adapter",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -248,6 +343,7 @@
         "pedestrian_deviation"
       ],
       "planner": "orca",
+      "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 112,
@@ -265,11 +361,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
-      "execution_mode": "native",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
+      "execution_mode": "adapter",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -278,6 +391,7 @@
         "pedestrian_deviation"
       ],
       "planner": "orca",
+      "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 113,
@@ -295,11 +409,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
-      "execution_mode": "native",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
+      "execution_mode": "adapter",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -308,6 +439,7 @@
         "pedestrian_deviation"
       ],
       "planner": "social_force",
+      "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 111,
@@ -325,11 +457,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
-      "execution_mode": "native",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
+      "execution_mode": "adapter",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -338,6 +487,7 @@
         "pedestrian_deviation"
       ],
       "planner": "social_force",
+      "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 112,
@@ -355,11 +505,28 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     },
     {
       "all_families_present": true,
-      "execution_mode": "native",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "denominators": {
+        "comfort_exposure_person_s": "pedestrian_steps",
+        "distributional_inconvenience_p90_p50_gap": "pedestrians_with_delay_samples",
+        "flow_disruption_delay_s": "pedestrians_with_reference_arrival",
+        "legibility_progress_deficit_m": "robot_steps_before_terminal",
+        "pedestrian_deviation_mean_m": "tracked_pedestrian_steps_with_baseline"
+      },
+      "execution_mode": "adapter",
+      "execution_mode_consistent": true,
       "families_present": [
         "comfort_exposure",
         "distributional_inconvenience",
@@ -368,6 +535,7 @@
         "pedestrian_deviation"
       ],
       "planner": "social_force",
+      "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
       "schema_valid": true,
       "seed": 113,
@@ -385,10 +553,17 @@
         "flow_disruption_delay_s": 0,
         "legibility_progress_deficit_m": 0,
         "pedestrian_deviation_mean_m": 0
+      },
+      "unavailable_reasons": {
+        "comfort_exposure_person_s": null,
+        "distributional_inconvenience_p90_p50_gap": "per-pedestrian delay samples are unavailable or under-supported",
+        "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
+        "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
+        "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
       }
     }
   ],
   "scenario_matrix_sha256": "d403aba974aacb67de41c96d41bc809d88460c87517ae788224830991e747faf",
   "social_compliance_schema_version": "social-compliance-metric-contract.v1",
-  "source_sha": "2ca1b24db0b8bc8437fd94facc450cf43bed382d"
+  "source_sha": "269d383b65077e31325968949fe0685b31f9ad2d"
 }

@@ -889,7 +889,10 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Wrapped angle in radians.
         """
-        return wrap_angle_pi_closed(angle)
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SamplingPlannerAdapter"}
 
 
 class SocNavPlannerPolicy:
@@ -2626,7 +2629,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             steps=steps,
             best=best,
         )
-        return best
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "PredictionPlannerAdapter"}
 
 
 def make_prediction_policy(
@@ -2673,6 +2679,10 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             use_upstream=True,
             allow_fallback=allow_fallback,
         )
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SocNavBenchSamplingAdapter"}
 
 
 __all__ = [

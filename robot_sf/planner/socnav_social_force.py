@@ -1,6 +1,7 @@
 """Social-force planner-family implementation extracted from the SocNav facade."""
 
 from math import atan2, pi
+from typing import Any
 
 import numpy as np
 
@@ -420,7 +421,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         norm = float(np.linalg.norm(force))
         if norm < self._EPS or norm <= self.config.social_force_max_force:
             return force
-        return force / (norm + self._EPS) * float(self.config.social_force_max_force)
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SocialForcePlannerAdapter"}
 
 
 def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:

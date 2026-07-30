@@ -52,6 +52,10 @@ class GapAwarePredictionAdapter:
 
         return float(pred_v), float(pred_w)
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "GapAwarePredictionAdapter"}
+
 
 def build_gap_prediction_config(cfg: dict[str, Any] | None) -> GapPredictionConfig:
     """Build :class:`GapPredictionConfig` from a mapping payload.

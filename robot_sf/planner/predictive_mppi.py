@@ -8,6 +8,7 @@ command. The executed control is the first action of the best sampled sequence.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from typing import Any
 
 import numpy as np
 
@@ -644,7 +645,10 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 )
                 if forced_cost < float(self.config.invalid_sequence_cost):
                     action = forced_action
-        return float(action[0]), float(action[1])
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "PredictiveMPPIAdapter"}
 
 
 def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPPIConfig:

@@ -500,7 +500,10 @@ class StreamGapPlannerAdapter:
             return float(self.config.wait_speed), angular
 
         self._commit_steps_remaining = 0
-        return float(self.config.creep_speed), angular
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "StreamGapPlannerAdapter"}
 
 
 def build_stream_gap_config(cfg: dict[str, Any] | None) -> StreamGapPlannerConfig:

@@ -26,7 +26,7 @@ import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 from loguru import logger
@@ -1316,6 +1316,10 @@ class ClassicGlobalPlanner:
             marker=marker,
             output_dpi=output_dpi,
         )
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "ClassicGlobalPlanner"}
 
 
 __all__ = [

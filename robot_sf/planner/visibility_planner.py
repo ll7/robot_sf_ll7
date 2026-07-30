@@ -9,6 +9,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import pairwise
+from typing import Any
 
 from loguru import logger
 from shapely.geometry import LineString, Point, Polygon
@@ -594,4 +595,7 @@ class VisibilityPlanner:
             next_goal = remaining.pop(0)
             ordered.append(next_goal)
             current = next_goal
-        return ordered
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "VisibilityPlanner"}

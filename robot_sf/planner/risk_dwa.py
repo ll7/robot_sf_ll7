@@ -398,7 +398,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     best_score = escape_score
                     best_cmd = (escape_v, escape_w)
 
-        return best_cmd
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "RiskDWAPlannerAdapter"}
 
 
 def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:

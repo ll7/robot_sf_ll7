@@ -332,7 +332,10 @@ class SafetyBarrierPlannerAdapter(OccupancyAwarePlannerMixin):
         # Avoid issuing accelerating forward commands while already rotating sharply in place.
         if abs(angular) > 0.9 * float(self.config.max_angular_speed):
             linear = min(linear, max(speed * 0.5, 0.15))
-        return linear, angular
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SafetyBarrierPlannerAdapter"}
 
 
 def build_safety_barrier_config(cfg: dict[str, Any] | None) -> SafetyBarrierPlannerConfig:

@@ -984,6 +984,10 @@ class CrowdNavHeightAdapter:
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "CrowdNavHeightAdapter"}
+
 
 __all__ = [
     "CrowdNavHeightAdapter",

@@ -12,6 +12,7 @@ from robot_sf.benchmark.types import (
     EpisodeRecordDict,
     NoiseSpec,
     OutcomePayload,
+    PlannerDecisionTrace,
     PlannerDecisionTraceEntry,
     TrackingPrecisionSpec,
     TrackingPrecisionSpeedContract,
@@ -134,6 +135,23 @@ def test_planner_decision_trace_entry_with_topology() -> None:
     assert entry["topology_guided"]["hypothesis_count"] == 3
 
 
+def test_planner_decision_trace_envelope() -> None:
+    """PlannerDecisionTrace types the episode-level trace without changing its dict shape."""
+    trace: PlannerDecisionTrace = {
+        "schema_version": "planner-decision-trace.v1",
+        "dt": 0.1,
+        "initial_goal_distance_m": 5.0,
+        "steps": [
+            {
+                "step": 0,
+                "selected_command": [1.0, 0.0],
+            }
+        ],
+    }
+    assert trace["schema_version"] == "planner-decision-trace.v1"
+    assert trace["steps"][0]["step"] == 0
+
+
 def test_outcome_payload() -> None:
     """OutcomePayload carries episode outcome flags."""
     outcome: OutcomePayload = {
@@ -167,7 +185,11 @@ def test_episode_record_dict_structural() -> None:
         "scenario_id": "test-scenario",
         "seed": 42,
         "scenario_params": {"id": "test-scenario", "algo": "orca"},
-        "metrics": {"success": 1.0, "collisions": 0.0},
+        "metrics": {
+            "success": True,
+            "collisions": 0,
+            "force_quantiles": {"q50": 0.1, "q90": 0.2, "q95": 0.3},
+        },
         "algorithm_metadata": {"algorithm": "orca"},
         "algo": "orca",
         "observation_mode": "lidar",
@@ -177,7 +199,8 @@ def test_episode_record_dict_structural() -> None:
         "tracking_precision": {"enabled": False},
     }
     assert record["episode_id"] == "test-scenario--42--abc123"
-    assert record["metrics"]["success"] == 1.0
+    assert record["metrics"]["success"] is True
+    assert record["metrics"]["force_quantiles"]["q50"] == 0.1
     assert record["observation_noise"]["enabled"] is False
 
 

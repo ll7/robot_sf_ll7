@@ -118,7 +118,7 @@ class AlgoMeta(TypedDict, total=False):
     ammv_feasibility: dict[str, Any]
     planner_runtime: dict[str, Any]
     foresight_prediction: dict[str, Any]
-    planner_decision_trace: dict[str, Any]
+    planner_decision_trace: PlannerDecisionTrace
     topology_guided_episode: dict[str, Any]
     simulation_step_trace: dict[str, Any]
     safety_wrapper: dict[str, Any]
@@ -172,6 +172,15 @@ class PlannerDecisionTraceEntry(TypedDict, total=False):
     global_route_probe_activated: bool
 
 
+class PlannerDecisionTrace(TypedDict, total=False):
+    """Episode-level planner-decision trace envelope."""
+
+    schema_version: str
+    dt: float
+    initial_goal_distance_m: float
+    steps: list[PlannerDecisionTraceEntry]
+
+
 class EpisodeRecordDict(TypedDict, total=False):
     """Top-level episode record returned by ``run_map_episode``.
 
@@ -184,7 +193,7 @@ class EpisodeRecordDict(TypedDict, total=False):
     scenario_id: str
     seed: int
     scenario_params: dict[str, Any]
-    metrics: dict[str, float]
+    metrics: dict[str, Any]
     safety_predicates: dict[str, Any]
     public_requirement: dict[str, Any]
     algorithm_metadata: AlgoMeta
@@ -217,7 +226,6 @@ class EpisodeRecordDict(TypedDict, total=False):
     track_schema_version: str
     result_provenance: dict[str, Any]
     metric_parameters: dict[str, Any]
-    collision_events: list[dict[str, Any]]
     low_progress_window: dict[str, Any]
     recenter_activation_count: int
     distance_to_goal_delta: dict[str, Any]
@@ -363,6 +371,7 @@ __all__ = [
     "MetricsBundle",
     "NoiseSpec",
     "OutcomePayload",
+    "PlannerDecisionTrace",
     "PlannerDecisionTraceEntry",
     "ResumeManifest",
     "SNQIWeights",

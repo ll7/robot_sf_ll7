@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from robot_sf.benchmark.types import EpisodeRecordDict
+
 
 def _param_or_default(params: dict[str, Any], key: str, default: Any) -> Any:
     """Return a parameter value, treating explicit ``None`` as missing.
@@ -34,12 +36,12 @@ def _required_path_param(params: dict[str, Any], key: str) -> Path:
 def execute_map_job(
     job: tuple[dict[str, Any], int, dict[str, Any]],
     *,
-    run_map_episode: Callable[..., dict[str, Any]],
-) -> dict[str, Any]:
+    run_map_episode: Callable[..., EpisodeRecordDict],
+) -> EpisodeRecordDict:
     """Execute one serialized map-runner job with the supplied episode runner.
 
     Returns:
-        dict[str, Any]: Episode record returned by ``run_map_episode``.
+        EpisodeRecordDict: Episode record returned by ``run_map_episode``.
     """
     scenario, seed, params = job
     algo = str(_param_or_default(params, "algo", "goal"))

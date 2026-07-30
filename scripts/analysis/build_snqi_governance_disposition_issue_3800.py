@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
 from scripts.validation.check_snqi_governance import CLAIM_BOUNDARY, build_governance_report
 
 SCHEMA_VERSION = "snqi_governance_disposition_issue_3800.v1"
@@ -236,8 +237,8 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     json_path = args.output_dir / "snqi_governance_disposition.json"
     markdown_path = args.output_dir / "snqi_governance_disposition.md"
-    json_path.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    markdown_path.write_text(render_markdown(packet), encoding="utf-8")
+    write_json(json_path, packet)
+    write_text(markdown_path, render_markdown(packet), issue_ref="robot_sf#3800")
 
     if args.json:
         print(json.dumps(packet, indent=2, sort_keys=True))

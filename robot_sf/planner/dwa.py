@@ -272,6 +272,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> float:
         """Return grid-derived obstacle clearance, or infinity when no grid is available."""
         if grid_payload is None:
+            # Observation required when grid_payload not provided
             assert observation is not None
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:

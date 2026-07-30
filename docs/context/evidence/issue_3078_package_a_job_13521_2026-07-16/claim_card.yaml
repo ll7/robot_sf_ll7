@@ -1,11 +1,34 @@
+# Preliminary Package A claim card (issue #3078, job 13521 real held-out pilot).
+# AI-GENERATED NEEDS-REVIEW
+# Mirrors the canonical campaign-claim-card.v1 shape. This card records a
+# diagnostic_review_ready decision packet whose real-data diagnostics are both
+# not_identifiable; it is not benchmark evidence and not paper-facing.
 schema_version: package-a-transfer-claim-card.v1
 issue: 3078
-claim_status: reviewed
-classification: diagnostic
-transfer_sub_classification: no_eligible_comparator
-claim_boundary: Diagnostic transfer report only; no paper-facing or benchmark-strength
-  claim is promoted by this renderer.
+claim_status: not_reviewed
+evidence_tier: diagnostic
+classification: diagnostic_review_ready
+decision_packet_classification: diagnostic_review_ready
+issue_result_classification: diagnostic
+seed_rank_stability_classification: not_identifiable
+seed_rank_stability_reason: single evaluation seed (111); stability requires
+  multiple seeds per (cell, planner)
+heldout_transfer_delta_classification: not_identifiable
+heldout_transfer_delta_reason: no eligible benchmark-set comparator (frozen by
+  #6150 / merged PR #6166); held-out transfer delta empty, claim_eligible=false
+claim_boundary: >
+  Diagnostic transfer report only. Seed/rank-stability and held-out
+  transfer-delta are both not_identifiable. No paper-facing or
+  benchmark-strength claim is promoted by this card. Adapter rows
+  (social_force, orca) remain labeled adapter and are never relabeled
+  native-only.
 eligible_row_statuses:
 - adapter
 - native
 non_promotable_row_status_counts: {}
+review_required_before_paper_use: true
+forbidden_actions_confirmed:
+  benchmark_campaign_run: false
+  compute_submit: false
+  ranking_claim_promotion: false
+  paper_claim_edits: false

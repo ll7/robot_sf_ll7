@@ -3100,6 +3100,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_1454_stage_a_fixed_h100_2026-05-22
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_1454_stage_a_fixed_h100_2026-05-22/reports/statistical_sufficiency.json
   status: evidence
   freshness: evidence

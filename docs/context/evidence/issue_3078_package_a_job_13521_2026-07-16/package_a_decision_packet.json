@@ -3,7 +3,7 @@
     {
       "criterion": "Runs seed-sufficiency analysis on retained campaign bundles.",
       "evidence": [
-        "docs/context/evidence/issue_3078_package_a_2026-07-08/seed_sufficiency_analysis.json"
+        "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/seed_rank_stability_diagnostic.json"
       ],
       "remaining": [],
       "status": "satisfied"
@@ -21,7 +21,9 @@
       "criterion": "Produces baseline table, seed-stability figure, transfer-delta figure, and preliminary claim card.",
       "evidence": [
         "private-campaign://job-13521/result_store",
-        "docs/context/evidence/issue_3078_package_a_2026-07-08/seed_sufficiency_analysis.json"
+        "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/seed_rank_stability_diagnostic.json",
+        "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fig_seed_rank_stability.png",
+        "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fig_transfer_delta.png"
       ],
       "remaining": [],
       "status": "satisfied"
@@ -30,13 +32,15 @@
       "criterion": "Classifies result as benchmark, diagnostic, negative, null, invalid, or blocked durable evidence.",
       "evidence": [
         "issue_result_classification=diagnostic",
-        "all required evidence surfaces validate, but claim-card review is required before any benchmark / negative / null promotion"
+        "all required evidence surfaces validate, but claim-card review is required before any benchmark / negative / null promotion",
+        "seed_rank_stability=not_identifiable",
+        "heldout_transfer_delta=not_identifiable"
       ],
       "remaining": [],
       "status": "satisfied"
     }
   ],
-  "classification": "diagnostic",
+  "classification": "diagnostic_review_ready",
   "forbidden_actions_confirmed": {
     "benchmark_campaign_run": false,
     "compute_submit": false,
@@ -71,12 +75,13 @@
       "path": "private-campaign://job-13521/result_store"
     }
   ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "package_a_decision_packet.v1",
   "seed_analysis_reports": [
     {
       "errors": [],
       "ok": true,
-      "path": "docs/context/evidence/issue_3078_package_a_2026-07-08/seed_sufficiency_analysis.json"
+      "path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/seed_rank_stability_diagnostic.json"
     }
   ]
 }

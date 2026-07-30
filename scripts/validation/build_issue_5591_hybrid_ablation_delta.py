@@ -25,13 +25,14 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import math
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from robot_sf.evidence.writers import write_json
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -177,11 +178,6 @@ def build(campaign_root: Path) -> dict[str, Any]:
     }
 
 
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-
 def main() -> int:
     """Parse args, build the delta evidence, and write the output JSON."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -201,7 +197,8 @@ def main() -> int:
 
     result = build(args.campaign_root)
     out_path = args.out / "issue_5591_hybrid_ablation_delta.json"
-    _write_json(out_path, result)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(out_path, result)
 
     skipped = sum(
         int(summary.get("skipped_numeric_cells", 0))

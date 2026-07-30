@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 
 from robot_sf.data_ingestion.real_trajectory_contract import load_manifest, run_preflight
 from robot_sf.planner.learned_short_horizon_predictor import (
@@ -426,6 +425,7 @@ def train_short_horizon_predictor(config: ShortHorizonTrainerConfig) -> Training
     Returns:
         TrainingResult: Paths and loss metrics for the training run.
     """
+    import torch  # noqa: PLC0415
 
     torch.manual_seed(config.seed)
     features_np, targets_np = generate_training_batch(config)

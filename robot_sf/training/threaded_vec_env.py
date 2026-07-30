@@ -1,202 +1,112 @@
-"""In-process threaded vector environment for Stable-Baselines3 rollouts.
-
-``ThreadedVecEnv`` keeps each Gymnasium environment independent while dispatching
-reset and step calls concurrently from one process.  It is intended for Robot SF
-environments whose hot numerical kernels release the Python global interpreter
-lock; it is not a replacement for subprocess isolation.
-"""
+"""Threaded vectorized environment for parallel environment stepping."""
 
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor
-from copy import deepcopy
+import multiprocessing as mp
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from pysocialforce.forces import social_force_gil_releasing_context
-from stable_baselines3.common.vec_env import DummyVecEnv
-
-from robot_sf.sensor.range_sensor import LidarBatchCoordinator, lidar_batch_context
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    import gymnasium as gym
+    from stable_baselines3.common.vec_env.base_vec_env import VecEnvStepReturn
 
 
-def _fast_deepcopy_info(obj: Any) -> Any:
-    """A highly optimized deep copy helper for environment info dicts.
+def _init_classes() -> dict[str, Any]:
+    from stable_baselines3.common.vec_env import DummyVecEnv  # noqa: PLC0415
 
-    Avoids the slow introspection overhead of standard ``copy.deepcopy``.
+    class ThreadedVecEnv(DummyVecEnv):
+        """Threaded vectorized environment for parallel environment stepping.
 
-    Returns:
-        A recursively isolated copy of the supported container values.
-        Unsupported values use ``deepcopy`` to preserve the previous helper's
-        isolation contract.
-    """
-    if isinstance(obj, dict):
-        return {k: _fast_deepcopy_info(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_fast_deepcopy_info(x) for x in obj]
-    if type(obj) is tuple:
-        return tuple(_fast_deepcopy_info(x) for x in obj)
-    if isinstance(obj, np.ndarray):
-        return obj.copy()
-    return deepcopy(obj)
-
-
-class ThreadedVecEnv(DummyVecEnv):
-    """Run independent Gymnasium environments concurrently in one process.
-
-    The class implements the Stable-Baselines3 ``VecEnv`` contract by extending
-    ``DummyVecEnv``.  Observations, automatic resets, terminal observations, and
-    attribute helpers therefore retain the established SB3 behavior.  Unlike
-    ``SubprocVecEnv``, environment objects are not serialized between workers.
-
-    Args:
-        env_fns: Factories that each create a distinct Gymnasium environment.
-        max_workers: Maximum concurrent reset/step calls. Defaults to one worker
-            per environment and must be positive.
-        batch_lidar: Coordinate homogeneous static-obstacle LiDAR rows from each
-            step through one cross-environment kernel dispatch. Disabled by default.
-
-    Raises:
-        ValueError: If ``max_workers`` is not positive.
-        RuntimeError: If a reset or second asynchronous step is requested while
-            a previous step is still pending.
-    """
-
-    def __init__(
-        self,
-        env_fns: list[Callable[[], gym.Env]],
-        *,
-        max_workers: int | None = None,
-        batch_lidar: bool = False,
-    ) -> None:
-        """Initialize independent environments and a bounded in-process worker pool."""
-        super().__init__(env_fns)
-        resolved_workers = self.num_envs if max_workers is None else int(max_workers)
-        if resolved_workers < 1:
-            raise ValueError("max_workers must be at least 1")
-        if batch_lidar and self.num_envs > 1 and resolved_workers < self.num_envs:
-            raise ValueError(
-                "batch_lidar requires at least one worker per environment to reach the batch"
-            )
-        self._executor = ThreadPoolExecutor(
-            max_workers=min(resolved_workers, self.num_envs),
-            thread_name_prefix="robot-sf-vec-env",
-        )
-        self._step_futures: list[Future[Any]] | None = None
-        self._closed = False
-        self._lidar_batch_coordinator = (
-            LidarBatchCoordinator(self.num_envs) if batch_lidar and self.num_envs > 1 else None
-        )
-
-    def reset(self) -> Any:
-        """Reset all environments concurrently.
-
-        Returns:
-            Batched observations in the Stable-Baselines3 ``VecEnv`` format.
+        Subclasses DummyVecEnv to execute environment steps in parallel using a
+        ThreadPoolExecutor while keeping the single-process execution model.
         """
-        self._ensure_no_pending_step("reset")
-        futures = [
-            self._executor.submit(
-                env.reset,
-                seed=self._seeds[env_idx],
-                **({"options": self._options[env_idx]} if self._options[env_idx] else {}),
+
+        def __init__(
+            self,
+            env_fns: list[Callable[[], Any]],
+            max_workers: int | None = None,
+        ):
+            super().__init__(env_fns)
+            if max_workers is None:
+                max_workers = min(32, (mp.cpu_count() or 1) + 4)
+            self._executor = ThreadPoolExecutor(max_workers=max_workers)
+
+        def step_async(self, actions: np.ndarray) -> None:
+            """Tell all environments to step in parallel.
+
+            Args:
+                actions: Actions for each environment.
+            """
+            self.actions = actions
+
+        def step_wait(self) -> VecEnvStepReturn:
+            """Wait for steps to complete and gather results.
+
+            Returns:
+                VecEnvStepReturn: Tuple of (obs, rewards, dones, infos).
+            """
+            futures = [
+                self._executor.submit(self._step_single_env, env_idx, action)
+                for env_idx, action in enumerate(self.actions)
+            ]
+
+            for env_idx, future in enumerate(futures):
+                obs, self.buf_rews[env_idx], self.buf_dones[env_idx], self.buf_infos[env_idx] = (
+                    future.result()
+                )
+                self._save_obs(env_idx, obs)
+
+            return (
+                self._obs_from_buf(),
+                np.copy(self.buf_rews),
+                np.copy(self.buf_dones),
+                self._clone_infos(self.buf_infos),
             )
-            for env_idx, env in enumerate(self.envs)
-        ]
-        for env_idx, future in enumerate(futures):
-            obs, self.reset_infos[env_idx] = future.result()
-            self._save_obs(env_idx, obs)
-        self._reset_seeds()
-        self._reset_options()
-        return self._obs_from_buf()
 
-    def step_async(self, actions: np.ndarray) -> None:
-        """Dispatch one action per environment without waiting for completion."""
-        self._ensure_no_pending_step("step_async")
-        copied_actions = np.asarray(actions).copy()
-        self._step_futures = [
-            self._executor.submit(
-                self._step_env,
-                env_idx,
-                env,
-                copied_actions[env_idx].copy(),
-            )
-            for env_idx, env in enumerate(self.envs)
-        ]
+        def _step_single_env(self, env_idx: int, action: Any) -> tuple:
+            """Execute step on a single environment.
 
-    def step_wait(self) -> tuple[Any, np.ndarray, np.ndarray, list[dict[str, Any]]]:
-        """Collect concurrent steps and apply Stable-Baselines3 done handling.
-
-        Returns:
-            Batched observations, rewards, done flags, and information dictionaries.
-        """
-        futures = self._step_futures
-        if futures is None:
-            raise RuntimeError("step_wait called before step_async")
-        try:
-            transitions = [future.result() for future in futures]
-        finally:
-            self._step_futures = None
-
-        for env_idx, (obs, reward, terminated, truncated, info) in enumerate(transitions):
-            self.buf_rews[env_idx] = reward
-            self.buf_dones[env_idx] = terminated or truncated
+            Returns:
+                tuple: Tuple of (obs, reward, done, info).
+            """
+            obs, reward, terminated, truncated, info = self.envs[env_idx].step(action)
+            done = terminated or truncated
             self.buf_infos[env_idx] = info
-            self.buf_infos[env_idx]["TimeLimit.truncated"] = truncated and not terminated
-            if self.buf_dones[env_idx]:
-                self.buf_infos[env_idx]["terminal_observation"] = obs
-                obs, self.reset_infos[env_idx] = self.envs[env_idx].reset()
-            self._save_obs(env_idx, obs)
-        return (
-            self._obs_from_buf(),
-            np.copy(self.buf_rews),
-            np.copy(self.buf_dones),
-            _fast_deepcopy_info(self.buf_infos),
-        )
 
-    def close(self) -> None:
-        """Stop workers and close the owned environments exactly once."""
-        if self._closed:
-            return
-        self._closed = True
-        if self._step_futures is not None:
-            for future in self._step_futures:
-                future.cancel()
-            self._step_futures = None
-        if self._lidar_batch_coordinator is not None:
-            self._lidar_batch_coordinator.abort(RuntimeError("ThreadedVecEnv closed"))
-        self._executor.shutdown(wait=True, cancel_futures=True)
-        super().close()
+            if done:
+                info["terminal_observation"] = obs
+                obs, reset_info = self.envs[env_idx].reset()
+                info.update(reset_info)
 
-    def _step_env(self, env_idx: int, env: gym.Env, action: np.ndarray) -> Any:
-        """Step one environment with its optional coordinated LiDAR binding.
+            return obs, reward, done, info
 
-        The GIL-releasing social-force context is always active so that Numba
-        kernels in the step hot path run without the GIL regardless of whether
-        cross-environment LiDAR batching is also enabled.
+        def _clone_infos(self, infos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            """Clone dictionary elements in infos list.
 
-        Returns:
-            The Gymnasium step transition emitted by ``env``.
-        """
-        coordinator = self._lidar_batch_coordinator
-        if coordinator is None:
-            with social_force_gil_releasing_context():
-                return env.step(action)
-        with social_force_gil_releasing_context():
-            try:
-                with lidar_batch_context(coordinator, env_idx):
-                    return env.step(action)
-            except BaseException as exc:
-                coordinator.abort(exc)
-                raise
+            Returns:
+                list[dict[str, Any]]: Cloned list of info dicts.
+            """
+            return [info.copy() for info in infos]
 
-    def _ensure_no_pending_step(self, operation: str) -> None:
-        """Reject operations that would race an outstanding asynchronous step."""
-        if self._closed:
-            raise RuntimeError("cannot use a closed ThreadedVecEnv")
-        if self._step_futures is not None:
-            raise RuntimeError(f"cannot call {operation} while a step is pending")
+        def close(self) -> None:
+            """Clean up environment resources and thread pool."""
+            self._executor.shutdown(wait=True)
+            super().close()
+
+    return {"ThreadedVecEnv": ThreadedVecEnv}
+
+
+_cache: dict[str, Any] | None = None
+_LAZY_NAMES = {"ThreadedVecEnv"}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_NAMES:
+        global _cache
+        if _cache is None:
+            _cache = _init_classes()
+        return _cache[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

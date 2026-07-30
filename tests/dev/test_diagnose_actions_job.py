@@ -174,6 +174,43 @@ def test_main_falls_back_across_multiple_annotation_pages(monkeypatch, capsys) -
     assert calls[3] == ["api", "--include", next_url]
 
 
+def test_collect_annotations_accepts_a_terminal_page_at_the_guard(monkeypatch, capsys) -> None:
+    """A terminal page at the request cap is complete, not an exhaustion error."""
+    monkeypatch.setattr(diagnose_actions_job, "MAX_ANNOTATION_PAGES", 1)
+    monkeypatch.setattr(
+        diagnose_actions_job,
+        "_gh",
+        lambda _args: _result(0, _include_page(json.dumps([{"message": "final"}]))),
+    )
+
+    assert diagnose_actions_job._collect_annotations(
+        "repos/owner/repo/check-runs/789/annotations"
+    ) == [{"message": "final"}]
+    assert capsys.readouterr().err == ""
+
+
+def test_collect_annotations_rejects_a_next_page_beyond_the_guard(monkeypatch, capsys) -> None:
+    """A rel=next link at the request cap fails closed without fetching it."""
+    monkeypatch.setattr(diagnose_actions_job, "MAX_ANNOTATION_PAGES", 1)
+    monkeypatch.setattr(
+        diagnose_actions_job,
+        "_gh",
+        lambda _args: _result(
+            0,
+            _include_page(
+                json.dumps([{"message": "first"}]),
+                next_url="https://api.github.com/repos/owner/repo/check-runs/789/annotations?page=2",
+            ),
+        ),
+    )
+
+    assert (
+        diagnose_actions_job._collect_annotations("repos/owner/repo/check-runs/789/annotations")
+        is None
+    )
+    assert "pagination exceeded the page guard" in capsys.readouterr().err
+
+
 def test_main_fails_closed_when_annotation_fallback_is_unavailable(monkeypatch, capsys) -> None:
     """Missing logs are not treated as diagnosed when annotations also fail."""
     results = iter(

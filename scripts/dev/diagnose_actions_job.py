@@ -23,8 +23,8 @@ from typing import Any
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 API_PREFIX = "https://api.github.com/"
-# Safety guard for the rel="next" pagination loop; a single GitHub check run
-# exposes at most 50 annotations, so this should never bind in practice.
+# Safety guard for the rel="next" pagination loop. The check-run annotations
+# endpoint permits pages of up to 100 results; this is a local request budget.
 MAX_ANNOTATION_PAGES = 100
 
 
@@ -152,6 +152,8 @@ def _collect_annotations(initial_path: str) -> list[dict[str, Any]] | None:
             return None
         annotations.extend(page)
         request_path = next_url
+        if request_path is None:
+            break
     else:
         print(
             "Could not recover check-run annotations: pagination exceeded the page guard",

@@ -112,6 +112,7 @@ class HybridReplayBuffer:
         sources: list[str] = []
 
         if offline_count:
+            # Offline buffer must be initialized before offline sampling
             assert self._offline is not None
             for index in self._rng.choice(offline_available, size=offline_count, replace=False):
                 observations.append(self._offline.observations[int(index)])

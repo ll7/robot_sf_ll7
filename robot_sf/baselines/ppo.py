@@ -61,6 +61,13 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
 
+def _require_observation(obs: object) -> Observation:
+    """Return a typed observation or reject an invalid planner input."""
+    if not isinstance(obs, Observation):
+        raise TypeError(f"PPOPolicy requires Observation, got {type(obs).__name__}")
+    return obs
+
+
 @dataclass
 class PPOPlannerConfig:
     """Configuration for the PPO planner adapter."""
@@ -303,10 +310,7 @@ class PPOPlanner:
 
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
-        if not isinstance(obs, Observation):
-            raise TypeError(
-                f"PPOPolicy requires Observation, got {type(obs).__name__}",
-            )
+        obs = _require_observation(obs)
 
         # Try model predict
         try:

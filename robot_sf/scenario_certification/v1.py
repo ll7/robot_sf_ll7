@@ -273,6 +273,21 @@ def _certify_routes_for_map(
     ]
 
 
+def _require_route_geometry(
+    start: Vec2D | None,
+    goal: Vec2D | None,
+    route_line: LineString | None,
+) -> tuple[Vec2D, Vec2D, LineString]:
+    """Return route geometry after enforcing validated-route invariants."""
+    if start is None:
+        raise RuntimeError("Unexpected: route validated as non-empty produced None start")
+    if goal is None:
+        raise RuntimeError("Unexpected: route validated as non-empty produced None goal")
+    if route_line is None:
+        raise RuntimeError("Unexpected: route validated as non-empty produced None route_line")
+    return start, goal, route_line
+
+
 def _certify_route(
     route: GlobalRoute,
     *,
@@ -319,12 +334,7 @@ def _certify_route(
             evidence=evidence,
         )
 
-    if start is None:
-        raise RuntimeError("Unexpected: route validated as non-empty produced None start")
-    if goal is None:
-        raise RuntimeError("Unexpected: route validated as non-empty produced None goal")
-    if route_line is None:
-        raise RuntimeError("Unexpected: route validated as non-empty produced None route_line")
+    start, goal, route_line = _require_route_geometry(start, goal, route_line)
     direct_length = float(Point(start).distance(Point(goal)))
     checks["direct_start_goal_distance_m"] = direct_length
     checks["authored_route_length_m"] = _polyline_length(route.waypoints)

@@ -38,6 +38,8 @@ from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
     from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
     from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
@@ -198,6 +200,191 @@ def _make_ped_forces(
     return forces
 
 
+def _compute_pedestrian_response_multipliers(
+    config: SimulationSettings, num_peds: int
+) -> np.ndarray:
+    """Compute per-pedestrian response multipliers for PedRobotForce (issue #3574).
+
+    Extracted from ``Simulator.__post_init__`` (issue #6465) so the shared pysf
+    initialization factory can own the multiplier wiring without duplicating the
+    branching logic. Returns an all-ones vector when neither control-trace labels
+    nor a response-law composition are configured, which is byte-identical to the
+    prior homogeneous default.
+
+    Args:
+        config: Simulation settings carrying the optional control-trace labels and
+            response-law ablation knobs (``non_reactive_response_multiplier``,
+            ``hesitating_response_multiplier``).
+        num_peds: Number of pedestrian rows in the PySocialForce state.
+
+    Returns:
+        Per-pedestrian scaling factors consumed by :class:`PedRobotForce`.
+    """
+    multipliers = np.ones(num_peds, dtype=float)
+
+    labels = getattr(config, "pedestrian_control_trace_labels", None)
+    if labels and num_peds > 0:
+        for label in labels:
+            sim_idx = label.get("simulator_index")
+            resp_law = label.get("response_law")
+            if sim_idx is not None and 0 <= sim_idx < num_peds:
+                if resp_law in ("non_reactive", "non_yielding"):
+                    multipliers[sim_idx] = config.non_reactive_response_multiplier
+                elif resp_law == "hesitating":
+                    multipliers[sim_idx] = config.hesitating_response_multiplier
+    elif getattr(config, "response_law_composition", None) and num_peds > 0:
+        response_laws = assign_archetype_labels(
+            num_peds,
+            config.response_law_composition,
+            seed=config.response_law_seed,
+        )
+        for idx, law in enumerate(response_laws):
+            if law in ("non_reactive", "non_yielding"):
+                multipliers[idx] = config.non_reactive_response_multiplier
+            elif law == "hesitating":
+                multipliers[idx] = config.hesitating_response_multiplier
+
+    return multipliers
+
+
+def _build_pysf_simulation(  # noqa: PLR0913
+    *,
+    config: SimulationSettings,
+    map_def: MapDefinition,
+    robots: list[Robot],
+    robot_pose_provider: Callable[[], list[RobotPose]],
+    peds_have_obstacle_forces: bool,
+    add_ego_state: bool = False,
+    include_response_law_multipliers: bool = True,
+    response_law_composition: dict[str, float] | None = None,
+    response_law_seed: int | None = None,
+    force_population_size: int | None = None,
+) -> tuple[
+    PySFSimulator,
+    PedestrianStates,
+    PedestrianGroupings,
+    list[PedestrianBehavior],
+    np.ndarray | None,
+]:
+    """Build the shared PySocialForce simulator and pedestrian state (issue #6465).
+
+    Owns the PySocialForce initialization previously duplicated between
+    ``Simulator.__post_init__`` and ``PedSimulator.__post_init__``: the PySF scene
+    config, the :class:`PedSpawnConfig`, the :func:`populate_simulation` call, the
+    single-pedestrian robot-pose-provider wiring, the per-pedestrian response
+    multipliers, and the :class:`PySFSimulator` construction (including the
+    max-speed and desired-speed propagation).
+
+    The behavior-preserving divergence (issue #4618 R2) is kept explicit at the call
+    site rather than unified:
+
+    - :class:`Simulator` forwards its ``response_law_composition`` /
+      ``response_law_seed`` / ``force_population_size`` into :class:`PedSpawnConfig`
+      and requests computed response multipliers
+      (``include_response_law_multipliers=True``). The
+      ``peds_have_obstacle_forces is None`` warning-and-default guard runs in
+      ``Simulator.__post_init__`` before this factory is called, so callers must pass
+      a resolved boolean.
+    - :class:`PedSimulator` intentionally OMITS the three response-law spawn fields
+      (they default to ``None``) and sets ``include_response_law_multipliers=False``
+      so the per-pedestrian multiplier vector is ``None`` and :class:`PedRobotForce`
+      falls back to unscaled robot repulsion. The heterogeneous-population ablation
+      targets the robot-only benchmark simulator; the appended ego-pedestrian row
+      would otherwise misalign the per-pedestrian multiplier vector.
+
+    Args:
+        config: Simulation settings (timestep, density, forces, response-law knobs).
+        map_def: Map definition with obstacles, spawn zones, and routes.
+        robots: Active robots used for interaction forces and reserved-zone sizing.
+        robot_pose_provider: Dynamic provider for the caller's current robot poses.
+            Keeping this callback separate from ``robots`` preserves the original
+            ``lambda: self.robot_poses`` behavior if the public robot collection is
+            replaced after construction.
+        peds_have_obstacle_forces: Resolved flag controlling whether pedestrians
+            experience obstacle collision forces. Callers must run the
+            ``None``-warning guard (:class:`Simulator`) before calling.
+        add_ego_state: When True, append an ego-pedestrian state row
+            (:class:`PedSimulator` only).
+        include_response_law_multipliers: When True, compute per-pedestrian response
+            multipliers (:class:`Simulator`); when False, return ``None``
+            (:class:`PedSimulator`, issue #4618 R2).
+        response_law_composition: Optional spawn-config response-law composition,
+            forwarded to :class:`PedSpawnConfig` only when provided.
+        response_law_seed: Optional spawn-config response-law seed.
+        force_population_size: Optional exact pedestrian count for spawn config.
+
+    Returns:
+        Tuple of ``(pysf_sim, pysf_state, groups, peds_behaviors,
+        pedestrian_response_multipliers)`` for the caller to assign to its instance.
+    """
+    pysf_config = PySFSimConfig()
+    pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
+    pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
+    _apply_ped_desired_speed_config(pysf_config, config)
+    spawn_config = PedSpawnConfig(
+        config.peds_per_area_m2,
+        config.max_peds_per_group,
+        route_spawn_distribution=config.route_spawn_distribution,
+        route_spawn_jitter_frac=config.route_spawn_jitter_frac,
+        route_spawn_seed=config.route_spawn_seed,
+        reset_follow_route_at_start=config.peds_reset_follow_route_at_start,
+        archetype_composition=config.archetype_composition,
+        archetype_speed_factors=config.archetype_speed_factors,
+        archetype_seed=config.archetype_seed,
+        response_law_composition=response_law_composition,
+        response_law_seed=response_law_seed,
+        force_population_size=force_population_size,
+    )
+    pysf_state, groups, peds_behaviors = populate_simulation(
+        pysf_config.scene_config.tau,
+        spawn_config,
+        map_def.ped_routes,
+        map_def.ped_crowded_zones,
+        obstacle_polygons=get_prepared_obstacles(map_def),
+        single_pedestrians=map_def.single_pedestrians,
+        time_step_s=config.time_per_step_in_secs,
+        single_ped_goal_threshold=pysf_config.desired_force_config.goal_threshold,
+        add_ego_state=add_ego_state,
+        map_bounds=map_def.get_map_bounds(),
+        reserved_zones=[*map_def.robot_spawn_zones, *map_def.robot_goal_zones],
+        ped_radius=config.ped_radius,
+        reserved_zone_radius=max(
+            (float(robot.config.radius) for robot in robots),
+            default=0.0,
+        ),
+    )
+    for behavior in peds_behaviors:
+        if isinstance(behavior, SinglePedestrianBehavior):
+            behavior.set_robot_pose_provider(robot_pose_provider)
+
+    if include_response_law_multipliers:
+        num_peds = pysf_state.pysf_states().shape[0]
+        pedestrian_response_multipliers = _compute_pedestrian_response_multipliers(config, num_peds)
+    else:
+        # issue #4618 R2: PedSimulator keeps an unscaled PedRobotForce (None multipliers).
+        pedestrian_response_multipliers = None
+
+    pysf_sim = PySFSimulator(
+        pysf_state.pysf_states(),
+        groups.groups_as_lists,
+        map_def.obstacles_pysf,
+        config=pysf_config,
+        make_forces=lambda sim, sf_config: _make_ped_forces(
+            sim,
+            sf_config,
+            robots,
+            peds_have_obstacle_forces,
+            config.prf_config,
+            config.apf_config,
+            pedestrian_response_multipliers,
+        ),
+    )
+    pysf_sim.peds.max_speed_multiplier = config.peds_speed_mult
+    _enforce_ped_desired_speeds(pysf_sim.peds, config)
+
+    return pysf_sim, pysf_state, groups, peds_behaviors, pedestrian_response_multipliers
+
+
 @dataclass
 class Simulator:
     """Manages robot and pedestrian simulation in a shared environment.
@@ -241,7 +428,7 @@ class Simulator:
     ped_angular_velocities: np.ndarray = field(init=False, repr=False)
     pedestrian_model: str = field(init=False)
 
-    def __post_init__(self):  # noqa: C901
+    def __post_init__(self):
         """Initialize simulator components after dataclass construction.
 
         Sets up pedestrian spawn locations, groups, and behaviors; configures
@@ -249,45 +436,9 @@ class Simulator:
         initializes robot navigation paths; and resets all agents to start state.
         Route spawning honors SimulationSettings route spawn options when provided.
         """
-        pysf_config = PySFSimConfig()
-        pysf_config.scene_config.dt_secs = self.config.time_per_step_in_secs
-        pysf_config.scene_config.integration_scheme = self.config.pedestrian_integration_scheme
-        _apply_ped_desired_speed_config(pysf_config, self.config)
-        spawn_config = PedSpawnConfig(
-            self.config.peds_per_area_m2,
-            self.config.max_peds_per_group,
-            route_spawn_distribution=self.config.route_spawn_distribution,
-            route_spawn_jitter_frac=self.config.route_spawn_jitter_frac,
-            route_spawn_seed=self.config.route_spawn_seed,
-            reset_follow_route_at_start=self.config.peds_reset_follow_route_at_start,
-            archetype_composition=self.config.archetype_composition,
-            archetype_speed_factors=self.config.archetype_speed_factors,
-            archetype_seed=self.config.archetype_seed,
-            response_law_composition=self.config.response_law_composition,
-            response_law_seed=self.config.response_law_seed,
-            force_population_size=self.config.population_size,
-        )
-        self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
-            pysf_config.scene_config.tau,
-            spawn_config,
-            self.map_def.ped_routes,
-            self.map_def.ped_crowded_zones,
-            obstacle_polygons=get_prepared_obstacles(self.map_def),
-            single_pedestrians=self.map_def.single_pedestrians,
-            time_step_s=self.config.time_per_step_in_secs,
-            single_ped_goal_threshold=pysf_config.desired_force_config.goal_threshold,
-            map_bounds=self.map_def.get_map_bounds(),
-            reserved_zones=[*self.map_def.robot_spawn_zones, *self.map_def.robot_goal_zones],
-            ped_radius=self.config.ped_radius,
-            reserved_zone_radius=max(
-                (float(robot.config.radius) for robot in self.robots),
-                default=0.0,
-            ),
-        )
-        for behavior in self.peds_behaviors:
-            if isinstance(behavior, SinglePedestrianBehavior):
-                behavior.set_robot_pose_provider(lambda: self.robot_poses)
-
+        # The ``peds_have_obstacle_forces is None`` warning-and-default-to-False guard
+        # stays in Simulator (issue #6465): it mutates ``self`` before the shared
+        # :func:`_build_pysf_simulation` factory reads the resolved value.
         if self.peds_have_obstacle_forces is None:
             logger.warning(
                 "The peds_have_obstacle_forces attribute is not set. "
@@ -296,51 +447,25 @@ class Simulator:
             )
             self.peds_have_obstacle_forces = False
 
-        # Determine per-pedestrian response multipliers for PedRobotForce (issue #3574)
-        num_peds = self.pysf_state.pysf_states().shape[0]
-        multipliers = np.ones(num_peds, dtype=float)
-
-        labels = getattr(self.config, "pedestrian_control_trace_labels", None)
-        if labels and num_peds > 0:
-            for label in labels:
-                sim_idx = label.get("simulator_index")
-                resp_law = label.get("response_law")
-                if sim_idx is not None and 0 <= sim_idx < num_peds:
-                    if resp_law in ("non_reactive", "non_yielding"):
-                        multipliers[sim_idx] = self.config.non_reactive_response_multiplier
-                    elif resp_law == "hesitating":
-                        multipliers[sim_idx] = self.config.hesitating_response_multiplier
-        elif getattr(self.config, "response_law_composition", None) and num_peds > 0:
-            response_laws = assign_archetype_labels(
-                num_peds,
-                self.config.response_law_composition,
-                seed=self.config.response_law_seed,
-            )
-            for idx, law in enumerate(response_laws):
-                if law in ("non_reactive", "non_yielding"):
-                    multipliers[idx] = self.config.non_reactive_response_multiplier
-                elif law == "hesitating":
-                    multipliers[idx] = self.config.hesitating_response_multiplier
-
-        self.pedestrian_response_multipliers = multipliers
-
-        self.pysf_sim = PySFSimulator(
-            self.pysf_state.pysf_states(),
-            self.groups.groups_as_lists,
-            self.map_def.obstacles_pysf,
-            config=pysf_config,
-            make_forces=lambda sim, config: _make_ped_forces(
-                sim,
-                config,
-                self.robots,
-                self.peds_have_obstacle_forces,
-                self.config.prf_config,
-                self.config.apf_config,
-                self.pedestrian_response_multipliers,
-            ),
+        (
+            self.pysf_sim,
+            self.pysf_state,
+            self.groups,
+            self.peds_behaviors,
+            self.pedestrian_response_multipliers,
+        ) = _build_pysf_simulation(
+            config=self.config,
+            map_def=self.map_def,
+            robots=self.robots,
+            robot_pose_provider=lambda: self.robot_poses,
+            peds_have_obstacle_forces=self.peds_have_obstacle_forces,
+            add_ego_state=False,
+            include_response_law_multipliers=True,
+            response_law_composition=self.config.response_law_composition,
+            response_law_seed=self.config.response_law_seed,
+            force_population_size=self.config.population_size,
         )
-        self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
-        _enforce_ped_desired_speeds(self.pysf_sim.peds, self.config)
+
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
         ]
@@ -732,66 +857,31 @@ class PedSimulator(Simulator):
         ego pedestrian state, initializes the physics simulator with pedestrian
         forces and robot interactions, and prepares robot navigation paths.
         """
-        pysf_config = PySFSimConfig()
-        pysf_config.scene_config.dt_secs = self.config.time_per_step_in_secs
-        pysf_config.scene_config.integration_scheme = self.config.pedestrian_integration_scheme
-        _apply_ped_desired_speed_config(pysf_config, self.config)
-        spawn_config = PedSpawnConfig(
-            self.config.peds_per_area_m2,
-            self.config.max_peds_per_group,
-            route_spawn_distribution=self.config.route_spawn_distribution,
-            route_spawn_jitter_frac=self.config.route_spawn_jitter_frac,
-            route_spawn_seed=self.config.route_spawn_seed,
-            reset_follow_route_at_start=self.config.peds_reset_follow_route_at_start,
-            archetype_composition=self.config.archetype_composition,
-            archetype_speed_factors=self.config.archetype_speed_factors,
-            archetype_seed=self.config.archetype_seed,
+        # NOTE (issue #4618 R2): the pedestrian-centric simulator intentionally
+        # diverges from Simulator's heterogeneous-population wiring, and the
+        # divergence is preserved (not unified) per issue #6465. It OMITS the
+        # response_law_* / force_population_size spawn fields and requests
+        # ``include_response_law_multipliers=False`` so
+        # ``self.pedestrian_response_multipliers`` stays ``None`` and
+        # :class:`PedRobotForce` falls back to unscaled robot repulsion. The
+        # heterogeneous-population ablation targets the robot-only benchmark
+        # simulator; the appended ego-pedestrian row would otherwise misalign the
+        # per-pedestrian multiplier vector.
+        (
+            self.pysf_sim,
+            self.pysf_state,
+            self.groups,
+            self.peds_behaviors,
+            self.pedestrian_response_multipliers,
+        ) = _build_pysf_simulation(
+            config=self.config,
+            map_def=self.map_def,
+            robots=self.robots,
+            robot_pose_provider=lambda: self.robot_poses,
+            peds_have_obstacle_forces=self.peds_have_obstacle_forces,
+            add_ego_state=True,
+            include_response_law_multipliers=False,
         )
-        self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
-            pysf_config.scene_config.tau,
-            spawn_config,
-            self.map_def.ped_routes,
-            self.map_def.ped_crowded_zones,
-            obstacle_polygons=get_prepared_obstacles(self.map_def),
-            single_pedestrians=self.map_def.single_pedestrians,
-            time_step_s=self.config.time_per_step_in_secs,
-            single_ped_goal_threshold=pysf_config.desired_force_config.goal_threshold,
-            add_ego_state=True,  # Add Ego pedestrian state to pysf_state
-            map_bounds=self.map_def.get_map_bounds(),
-            reserved_zones=[*self.map_def.robot_spawn_zones, *self.map_def.robot_goal_zones],
-            ped_radius=self.config.ped_radius,
-            reserved_zone_radius=max(
-                (float(robot.config.radius) for robot in self.robots),
-                default=0.0,
-            ),
-        )
-        for behavior in self.peds_behaviors:
-            if isinstance(behavior, SinglePedestrianBehavior):
-                behavior.set_robot_pose_provider(lambda: self.robot_poses)
-
-        # Pedestrian response-law multipliers (issue #3574) are intentionally NOT wired
-        # into the pedestrian-centric simulator (issue #4618 R2): the heterogeneous
-        # population ablation targets the robot-only benchmark simulator, and the ego
-        # pedestrian row would misalign the per-pedestrian multiplier vector. Pass
-        # ``None`` explicitly so PedRobotForce falls back to unscaled robot repulsion.
-        self.pedestrian_response_multipliers = None
-        self.pysf_sim = PySFSimulator(
-            self.pysf_state.pysf_states(),
-            self.groups.groups_as_lists,
-            self.map_def.obstacles_pysf,
-            config=pysf_config,
-            make_forces=lambda sim, sf_config: _make_ped_forces(
-                sim,
-                sf_config,
-                self.robots,
-                self.peds_have_obstacle_forces,
-                self.config.prf_config,
-                self.config.apf_config,
-                pedestrian_response_multipliers=None,
-            ),
-        )
-        self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
-        _enforce_ped_desired_speeds(self.pysf_sim.peds, self.config)
 
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots

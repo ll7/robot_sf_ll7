@@ -562,7 +562,7 @@ entries:
   - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     exists: true
-    sha256: 91f9d9a7c0bcb54f3628beef9140181a64277ab8bdf9b12dcdc37f0251a7d437
+    sha256: 90c29865a801c642253bb85b2eee225e61ae26d90979c362fabf431a08cea4d7
     sha256_matches: true
   - field: training_starting_points.checksums.configs/algos/ppo_v3_camera_ready.yaml
     path: configs/algos/ppo_v3_camera_ready.yaml
@@ -769,7 +769,7 @@ entries:
   - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     exists: true
-    sha256: 91f9d9a7c0bcb54f3628beef9140181a64277ab8bdf9b12dcdc37f0251a7d437
+    sha256: 90c29865a801c642253bb85b2eee225e61ae26d90979c362fabf431a08cea4d7
     sha256_matches: true
   - field: training_starting_points.checksums.configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
     path: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml

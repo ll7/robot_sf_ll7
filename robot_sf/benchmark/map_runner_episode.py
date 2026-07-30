@@ -21,6 +21,7 @@ from robot_sf.benchmark.algorithm_metadata import (
 )
 from robot_sf.benchmark.ammv_feasibility import evaluate_artifact_command_feasibility
 from robot_sf.benchmark.cbf_safety_filter_runtime import (
+    CBFSafetyFilterRuntimeConfig,
     apply_runtime_cbf_safety_filter,
     ineligible_cbf_safety_filter_step_record,
     summarize_cbf_safety_filter_trace,
@@ -108,6 +109,7 @@ from robot_sf.benchmark.map_runner_view_integrity import (
 )
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.observation_noise import (
+    ObservationNoiseState,
     apply_observation_noise,
     make_observation_noise_rng,
     make_observation_noise_state,
@@ -136,6 +138,7 @@ from robot_sf.benchmark.safety_predicates import (
     oscillatory_control_predicate,
 )
 from robot_sf.benchmark.safety_wrapper_runtime import (
+    SafetyWrapperRuntimeConfig,
     apply_runtime_safety_wrapper,
     ineligible_safety_wrapper_step_record,
     make_deadlock_recovery_monitor,
@@ -174,6 +177,11 @@ from robot_sf.planner.safety_shield import shield_metrics_from_stats
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
+    from robot_sf.benchmark.types import NoiseConfig, PlannerRuntime
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor
 
 PolicyBuilder = Callable[..., tuple[Any, dict[str, Any]]]
 PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
@@ -1193,20 +1201,20 @@ class _EpisodeRunContext:
     benchmark_track: str | None
     track_schema_version: str | None
     noise_spec: dict[str, Any]
-    noise_rng: Any
-    noise_state: Any
-    noise_stats: Any
+    noise_rng: np.random.Generator
+    noise_state: ObservationNoiseState
+    noise_stats: dict[str, int]
     tracking_precision_spec: dict[str, Any]
-    tracking_precision_rng: Any
-    safety_wrapper_runtime: Any
-    cbf_runtime: Any
-    safety_wrapper_deadlock_monitor: Any
-    config: Any
+    tracking_precision_rng: np.random.Generator | None
+    safety_wrapper_runtime: SafetyWrapperRuntimeConfig
+    cbf_runtime: CBFSafetyFilterRuntimeConfig
+    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None
+    config: RobotSimulationConfig
     horizon_val: int
     robot_kinematics: str
     robot_command_mode: str
-    actuation_profile: Any
-    latency_profile: Any
+    actuation_profile: SyntheticActuationProfile | None
+    latency_profile: SyntheticActuationProfile | None
     algo: str
     policy_cfg: dict[str, Any]
 
@@ -1513,18 +1521,18 @@ class _PolicyContract:
     object instead of recomputing these inline.
     """
 
-    policy_fn: Any
+    policy_fn: Callable[..., Any]
     algo_meta: dict[str, Any]
-    planner_close: Any
-    planner_reset: Any
-    planner_bind_env: Any
-    planner_stats: Any
+    planner_close: Callable[..., Any] | None
+    planner_reset: Callable[..., Any] | None
+    planner_bind_env: Callable[..., Any] | None
+    planner_stats: Callable[..., Any] | None
     planner_native_action: bool
-    actuation_controller: Any
+    actuation_controller: SyntheticActuationController | None
     active_observation_mode: str
     active_observation_level: str
-    single_pedestrian_intent_metadata: Any
-    single_pedestrian_vru_metadata: Any
+    single_pedestrian_intent_metadata: list[dict[str, Any]]
+    single_pedestrian_vru_metadata: list[dict[str, Any]]
 
 
 def _prepare_policy_and_observation_contract(  # noqa: PLR0913
@@ -1532,7 +1540,7 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
     scenario: dict[str, Any],
     algo: str,
     policy_cfg: dict[str, Any],
-    config: Any,
+    config: RobotSimulationConfig,
     observation_mode: str | None,
     observation_level: str | None,
     robot_kinematics: str,
@@ -1540,7 +1548,7 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
     adapter_impact_eval: bool,
     benchmark_track: str | None,
     track_schema_version: str | None,
-    actuation_profile: Any,
+    actuation_profile: SyntheticActuationProfile | None,
     policy_builder: PolicyBuilder,
 ) -> _PolicyContract:
     """Resolve the learned observation contract, build the policy, and derive hooks.
@@ -1694,30 +1702,32 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     *,
     seed: int,
     scenario: dict[str, Any] | None = None,
-    config: Any,
+    config: RobotSimulationConfig,
     horizon_val: int,
-    policy_fn: Any,
-    planner_bind_env: Any,
-    planner_reset: Any,
-    planner_close: Any,
-    planner_stats: Any,
-    planner_native_action: bool,
-    noise_spec: dict[str, Any],
-    noise_rng: Any,
-    noise_state: Any,
-    noise_stats: Any,
+    planner_runtime: PlannerRuntime | None = None,
+    policy_fn: Callable[..., Any] | None = None,
+    planner_bind_env: Callable[..., Any] | None = None,
+    planner_reset: Callable[..., Any] | None = None,
+    planner_close: Callable[..., Any] | None = None,
+    planner_stats: Callable[..., Any] | None = None,
+    planner_native_action: bool = False,
+    noise: NoiseConfig | None = None,
+    noise_spec: dict[str, Any] | None = None,
+    noise_rng: np.random.Generator | None = None,
+    noise_state: ObservationNoiseState | None = None,
+    noise_stats: dict[str, int] | None = None,
     tracking_precision_spec: dict[str, Any],
-    tracking_precision_rng: Any,
-    safety_wrapper_runtime: Any,
-    safety_wrapper_deadlock_monitor: Any,
-    cbf_runtime: Any,
-    actuation_controller: Any,
+    tracking_precision_rng: np.random.Generator | None = None,
+    safety_wrapper_runtime: SafetyWrapperRuntimeConfig,
+    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None = None,
+    cbf_runtime: CBFSafetyFilterRuntimeConfig,
+    actuation_controller: SyntheticActuationController | None = None,
     algo_meta: dict[str, Any],
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-    single_pedestrian_intent_metadata: Any,
-    single_pedestrian_vru_metadata: Any,
+    single_pedestrian_intent_metadata: list[dict[str, Any]] | None = None,
+    single_pedestrian_vru_metadata: list[dict[str, Any]] | None = None,
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
 ) -> _EpisodeStepLoopResult:
@@ -1728,6 +1738,18 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
         outcome flag produced by the step loop, plus the planner runtime snapshot
         captured in the ``finally`` teardown.
     """
+    if planner_runtime is not None:
+        policy_fn = planner_runtime.policy_fn
+        planner_bind_env = planner_runtime.planner_bind_env
+        planner_reset = planner_runtime.planner_reset
+        planner_close = planner_runtime.planner_close
+        planner_stats = planner_runtime.planner_stats
+        planner_native_action = planner_runtime.planner_native_action
+    if noise is not None:
+        noise_spec = noise.spec
+        noise_rng = noise.rng
+        noise_state = noise.state
+        noise_stats = noise.stats
     # Per-episode instrumentation buffers (populated during the step loop below).
     tracking_precision_records: list[dict[str, Any]] = []
     safety_wrapper_trace: list[dict[str, Any]] = []

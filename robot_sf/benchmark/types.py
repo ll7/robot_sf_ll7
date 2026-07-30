@@ -19,7 +19,7 @@ from datetime import (
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
 
 @dataclass(slots=True)
@@ -152,9 +152,83 @@ class ResumeManifest:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PlannerRuntime:
+    """Planner lifecycle hooks, policy callable, and native-action flag.
+
+    Groups the six ``planner_*`` parameters of ``_run_episode_step_loop``
+    (policy_fn, planner_bind_env, planner_reset, planner_close, planner_stats,
+    planner_native_action) into a single typed object.
+    """
+
+    policy_fn: Callable[..., Any]
+    planner_bind_env: Callable[..., Any] | None = None
+    planner_reset: Callable[..., Any] | None = None
+    planner_close: Callable[..., Any] | None = None
+    planner_stats: Callable[..., Any] | None = None
+    planner_native_action: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class NoiseConfig:
+    """Observation-noise parameters for the episode step loop.
+
+    Groups the ``noise_spec``, ``noise_rng``, ``noise_state``, and
+    ``noise_stats`` keyword arguments into a single typed object.
+    """
+
+    spec: dict[str, Any]
+    rng: Any | None = None
+    state: Any | None = None
+    stats: dict[str, int] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MapBatchConfig:
+    """Consolidated keyword arguments for ``run_map_batch``.
+
+    Every keyword-only parameter of ``run_map_batch`` has a corresponding field.
+    Use ``MapBatchConfig(**kwargs)`` to bundle and validate the batch
+    configuration before passing it to the runner.
+    """
+
+    horizon: int | None = None
+    dt: float | None = None
+    record_forces: bool = True
+    snqi_weights: dict[str, float] | None = None
+    snqi_baseline: dict[str, dict[str, float]] | None = None
+    algo: str = "goal"
+    algo_config_path: str | None = None
+    benchmark_profile: str = "baseline-safe"
+    socnav_missing_prereq_policy: str = "fail-fast"
+    adapter_impact_eval: bool = False
+    experimental_ped_impact: bool = False
+    ped_impact_radius_m: float = 2.0
+    ped_impact_window_steps: int = 5
+    observation_mode: str | None = None
+    observation_level: str | None = None
+    benchmark_track: str | None = None
+    track_schema_version: str | None = None
+    observation_noise: dict[str, Any] | None = None
+    tracking_precision: dict[str, Any] | None = None
+    synthetic_actuation_profile: dict[str, Any] | None = None
+    latency_stress_profile: dict[str, Any] | None = None
+    safety_wrapper: dict[str, Any] | None = None
+    cbf_safety_filter: dict[str, Any] | None = None
+    record_planner_decision_trace: bool = False
+    record_simulation_step_trace: bool = False
+    multiprocessing_context: Any | None = None
+    workers: int = 1
+    resume: bool = True
+    circuit_breaker_threshold: int | None = None
+
+
 __all__ = [
     "EpisodeRecord",
+    "MapBatchConfig",
     "MetricsBundle",
+    "NoiseConfig",
+    "PlannerRuntime",
     "ResumeManifest",
     "SNQIWeights",
     "ScenarioSpec",

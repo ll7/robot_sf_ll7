@@ -9,6 +9,11 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
+if TYPE_CHECKING:
+    import multiprocessing as mp
+
+    from robot_sf.benchmark.types import MapBatchConfig
+
 import numpy as np
 from loguru import logger
 
@@ -2778,6 +2783,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     out_path: str | Path,
     schema_path: str | Path,
     *,
+    batch_config: MapBatchConfig | None = None,
     scenario_path: str | Path | None = None,
     horizon: int | None = None,
     dt: float | None = None,
@@ -2804,16 +2810,49 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
-    multiprocessing_context: Any | None = None,
+    multiprocessing_context: mp.context.BaseContext | None = None,
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,
 ) -> dict[str, Any]:
     """Run map-based scenarios and append episode records.
 
+    Accepts ``batch_config`` as an alternative to the individual keyword-only
+    parameters (horizon, dt, record_forces, ...).
+
     Returns:
         Summary payload with counts and failure details.
     """
+    if batch_config is not None:
+        horizon = batch_config.horizon
+        dt = batch_config.dt
+        record_forces = batch_config.record_forces
+        snqi_weights = batch_config.snqi_weights
+        snqi_baseline = batch_config.snqi_baseline
+        algo = batch_config.algo
+        algo_config_path = batch_config.algo_config_path
+        benchmark_profile = batch_config.benchmark_profile
+        socnav_missing_prereq_policy = batch_config.socnav_missing_prereq_policy
+        adapter_impact_eval = batch_config.adapter_impact_eval
+        experimental_ped_impact = batch_config.experimental_ped_impact
+        ped_impact_radius_m = batch_config.ped_impact_radius_m
+        ped_impact_window_steps = batch_config.ped_impact_window_steps
+        observation_mode = batch_config.observation_mode
+        observation_level = batch_config.observation_level
+        benchmark_track = batch_config.benchmark_track
+        track_schema_version = batch_config.track_schema_version
+        observation_noise = batch_config.observation_noise
+        tracking_precision = batch_config.tracking_precision
+        synthetic_actuation_profile = batch_config.synthetic_actuation_profile
+        latency_stress_profile = batch_config.latency_stress_profile
+        safety_wrapper = batch_config.safety_wrapper
+        cbf_safety_filter = batch_config.cbf_safety_filter
+        record_planner_decision_trace = batch_config.record_planner_decision_trace
+        record_simulation_step_trace = batch_config.record_simulation_step_trace
+        multiprocessing_context = batch_config.multiprocessing_context
+        workers = batch_config.workers
+        resume = batch_config.resume
+        circuit_breaker_threshold = batch_config.circuit_breaker_threshold
     circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
         experimental_ped_impact=experimental_ped_impact,

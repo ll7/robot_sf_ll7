@@ -15,38 +15,26 @@ name: Merge Queue Gate
 # verdict, CI conclusion, thread resolution, and requested-reviewer status) is
 # emitted to the job summary and stdout.
 #
-# To activate fail-closed behavior, add this job's status check
-# ("Merge Queue Gate / merge-queue-gate") to the merge queue's required status
-# checks, enable "Only merge non-failing pull requests", and enable "Require
+# Source-PR runs are advisory audits: they preserve failed reasons in the JSON
+# and job summary while exiting successfully, so admission readiness is not
+# misreported as failing implementation CI. Only `merge_group` runs fail closed.
+# To activate that queue-time behavior, add this job's status check ("Merge
+# Queue Gate / merge-queue-gate") to the merge queue's required status checks,
+# enable "Only merge non-failing pull requests", and enable "Require
 # conversation resolution before merging" in the branch-protection rules for
-# `main`. Review-thread resolution changes do not reliably create a fresh
-# source-head Actions check, so GitHub's native conversation-resolution rule
-# makes this gate's thread condition binding at merge time. Both the source-PR
-# and `merge_group` runs enforce the same fail-closed contract. The workflow
-# does not locate or control direct merge dispatchers that can bypass GitHub
-# branch protection.
+# `main`. The workflow does not locate or control direct merge dispatchers that
+# can bypass GitHub branch protection.
 # See docs/dev_guide.md ("Merge queue gate") for the exact configuration and
 # residual issue #6274 acceptance proof.
 
 on:
   pull_request:
-    # Each state change that can affect source-head admission must create a
-    # fresh required check. Otherwise an earlier pass could remain usable after
-    # a reviewer is requested or an actionable review is added.
+    # Refresh the advisory audit only when merge-ready changes or a labeled
+    # source head changes. Queue-time enforcement is handled by merge_group.
     types:
-      - opened
       - labeled
       - unlabeled
-      - reopened
       - synchronize
-      - ready_for_review
-      - converted_to_draft
-      - review_requested
-      - review_request_removed
-  pull_request_review:
-    types: [submitted, edited, dismissed]
-  pull_request_review_comment:
-    types: [created, edited, deleted]
   merge_group:
   workflow_dispatch:
     inputs:
@@ -68,6 +56,16 @@ concurrency:
 
 jobs:
   merge-queue-gate:
+    # Ordinary source PRs publish an advisory audit. Only native merge-group
+    # execution is fail-closed. Skip unrelated label and head churn.
+    if: >-
+      github.event_name == 'merge_group' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+        (((github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+          github.event.label.name == 'merge-ready') ||
+         (github.event.action == 'synchronize' &&
+          contains(github.event.pull_request.labels.*.name, 'merge-ready'))))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -76,20 +74,29 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
-          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          resolve_branch_sha() {
+            local branch="$1"
+            local encoded_branch
+            encoded_branch="$(jq -rn --arg value "$branch" '$value|@uri')"
+            gh api "repos/$REPOSITORY/branches/$encoded_branch" --jq '.commit.sha'
+          }
+
           case "$EVENT_NAME" in
             merge_group)
               trusted_ref="$MERGE_GROUP_BASE_SHA"
               ;;
-            pull_request|pull_request_review|pull_request_review_comment)
-              trusted_ref="$PULL_REQUEST_BASE_SHA"
+            pull_request)
+              trusted_ref="$(resolve_branch_sha "$PULL_REQUEST_BASE_REF")"
               ;;
             workflow_dispatch)
-              trusted_ref="$DEFAULT_BRANCH"
+              trusted_ref="$(resolve_branch_sha "$DEFAULT_BRANCH")"
               ;;
             *)
               echo "Unsupported event: $EVENT_NAME" >&2
@@ -100,6 +107,11 @@ jobs:
             echo "Trusted gate revision is empty for event $EVENT_NAME" >&2
             exit 1
           fi
+          if [[ ! "$trusted_ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Trusted gate revision is not a commit SHA: $trusted_ref" >&2
+            exit 1
+          fi
+          echo "::notice::Trusted gate revision: $trusted_ref"
           printf 'ref=%s\n' "$trusted_ref" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
@@ -144,19 +156,18 @@ jobs:
             --repo "${{ github.repository }}" \
             --json
 
-      - name: Run merge-queue gate (source PR head)
-        if: >-
-          (github.event_name == 'pull_request' || github.event_name == 'pull_request_review' ||
-          github.event_name == 'pull_request_review_comment') &&
-          steps.gate-source.outputs.available == 'true'
+      - name: Run merge-admission audit (source PR head)
+        if: github.event_name == 'pull_request' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          echo "::notice::Source-PR admission is advisory; merge_group remains fail-closed."
           python scripts/dev/merge_queue_gate.py \
             --pr "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
+            --advisory \
             --json
 
       - name: Run merge-queue gate (advisory, workflow_dispatch)
@@ -169,4 +180,5 @@ jobs:
           python scripts/dev/merge_queue_gate.py \
             --pr "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
+            --advisory \
             --json

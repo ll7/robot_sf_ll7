@@ -16,13 +16,12 @@ See ``robot_sf/nav/svg_map_parser.py`` for the canonical pattern.
 
 Ratchet / allowlist
 -------------------
-Issue #6468 migrated only the hot-path modules under ``robot_sf/sim/`` and
-``robot_sf/gym_env/`` (7 call sites). The remaining ~228 f-string sites live in
-the grandfathered files listed in ``hooks/no_fstring_logger_allowlist.txt``. The
-guard therefore passes today and prevents NEW f-string regressions in any
-non-allowlisted file (notably the migrated hot paths). Shrinking the allowlist
-is explicit follow-up scope, not this hook's job: once a file is migrated,
-delete its line from the allowlist and the guard will start enforcing it.
+Issue #6468 migrated nine call sites in three hot-path modules. Remaining calls
+are grandfathered as stable per-call identities in
+``hooks/no_fstring_logger_allowlist.txt``. A whole-file exemption would allow
+new violations in legacy files, so the guard compares each current violation
+against that exact baseline and rejects additions. Removing old calls is always
+allowed; regenerate the deterministic baseline after a reviewed migration.
 
 Usage
 -----
@@ -40,6 +39,8 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections import Counter
+from hashlib import sha256
 from pathlib import Path
 from typing import NamedTuple
 
@@ -59,8 +60,10 @@ LOGGER_METHODS: frozenset[str] = frozenset(
         "log",
     }
 )
+LOGGER_CHAIN_METHODS: frozenset[str] = frozenset({"bind", "opt", "patch"})
 
 ALLOWLIST_FILENAME = "no_fstring_logger_allowlist.txt"
+FINGERPRINT_LENGTH = 16
 
 
 class Violation(NamedTuple):
@@ -69,36 +72,186 @@ class Violation(NamedTuple):
     lineno: int
     method: str
     preview: str
+    scope: str
+    fingerprint: str
+
+
+class AllowlistKey(NamedTuple):
+    """Stable identity for one grandfathered violation."""
+
+    path: str
+    scope: str
+    method: str
+    fingerprint: str
 
 
 class HookError(Exception):
     """Raised when a file cannot be parsed or the allowlist is unreadable."""
 
 
-def _logger_chain_root_is_logger(func: ast.Attribute) -> bool:
+def _matching_alias_names(aliases: list[ast.alias], target: str) -> set[str]:
+    """Return local names for imports whose source name equals ``target``."""
+    return {alias.asname or alias.name for alias in aliases if alias.name == target}
+
+
+def _collect_import_bindings(tree: ast.AST) -> tuple[set[str], set[str], set[str]]:
+    """Collect logger, Loguru-module, and get_logger import aliases."""
+    logger_names: set[str] = set()
+    loguru_modules: set[str] = set()
+    get_logger_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            loguru_modules.update(_matching_alias_names(node.names, "loguru"))
+        elif isinstance(node, ast.ImportFrom) and node.module == "loguru":
+            logger_names.update(_matching_alias_names(node.names, "logger"))
+        elif isinstance(node, ast.ImportFrom) and node.module == "robot_sf.common.logging":
+            get_logger_names.update(_matching_alias_names(node.names, "get_logger"))
+    return logger_names, loguru_modules, get_logger_names
+
+
+def _assignment_is_loguru_logger(
+    value: ast.expr,
+    *,
+    loguru_modules: set[str],
+    get_logger_names: set[str],
+) -> bool:
+    """Return whether an assignment value is a supported Loguru logger factory."""
+    if (
+        isinstance(value, ast.Attribute)
+        and value.attr == "logger"
+        and isinstance(value.value, ast.Name)
+    ):
+        return value.value.id in loguru_modules
+    return (
+        isinstance(value, ast.Call)
+        and isinstance(value.func, ast.Name)
+        and value.func.id in get_logger_names
+    )
+
+
+def _find_logger_bindings(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Return supported Loguru logger names and imported Loguru module aliases."""
+    logger_names, loguru_modules, get_logger_names = _collect_import_bindings(tree)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        value = node.value
+        if value is None or not _assignment_is_loguru_logger(
+            value,
+            loguru_modules=loguru_modules,
+            get_logger_names=get_logger_names,
+        ):
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                logger_names.add(target.id)
+
+    return logger_names, loguru_modules
+
+
+def _is_logger_receiver(
+    node: ast.expr,
+    *,
+    logger_names: set[str],
+    loguru_modules: set[str],
+) -> bool:
+    """Return whether ``node`` is a supported Loguru logger receiver."""
+    if isinstance(node, ast.Name):
+        return node.id in logger_names
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr == "logger"
+        and isinstance(node.value, ast.Name)
+    ):
+        return node.value.id in loguru_modules
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in LOGGER_CHAIN_METHODS
+    ):
+        return _is_logger_receiver(
+            node.func.value,
+            logger_names=logger_names,
+            loguru_modules=loguru_modules,
+        )
+    return False
+
+
+def _logger_chain_root_is_logger(
+    func: ast.Attribute,
+    *,
+    logger_names: set[str],
+    loguru_modules: set[str],
+) -> bool:
     """Return True if ``func`` is a logger method reached through a chain rooted at ``logger``.
 
-    Handles direct calls (``logger.info(...)``), attribute receivers
-    (``self.logger.info(...)``), and loguru chain calls
-    (``logger.opt(...).info(...)`` / ``logger.bind(...).warning(...)``) by
-    unwrapping attribute/call nodes until a terminal ``logger`` name is reached.
+    Handles direct calls and Loguru ``opt``/``bind``/``patch`` chains. It
+    deliberately rejects unrelated ``self.logger`` attributes and arbitrary
+    call chains even when an attribute happens to be named ``logger``.
     """
 
-    if func.attr not in LOGGER_METHODS:
-        return False
-    node: ast.expr = func.value
-    while True:
-        if isinstance(node, ast.Name):
-            return node.id == "logger"
-        if isinstance(node, ast.Attribute):
-            if node.attr == "logger":  # e.g. self.logger
-                return True
-            node = node.value
-            continue
-        if isinstance(node, ast.Call):
-            node = node.func
-            continue
-        return False
+    return func.attr in LOGGER_METHODS and _is_logger_receiver(
+        func.value,
+        logger_names=logger_names,
+        loguru_modules=loguru_modules,
+    )
+
+
+def _message_argument(node: ast.Call, method: str) -> ast.expr | None:
+    """Return the positional Loguru message expression for ``node``."""
+    message_index = 1 if method == "log" else 0
+    return node.args[message_index] if len(node.args) > message_index else None
+
+
+def _message_fingerprint(message: ast.JoinedStr) -> str:
+    """Return a location-independent fingerprint for one f-string expression."""
+    normalized = ast.dump(message, annotate_fields=True, include_attributes=False)
+    return sha256(normalized.encode("utf-8")).hexdigest()[:FINGERPRINT_LENGTH]
+
+
+class _ViolationVisitor(ast.NodeVisitor):
+    """Collect violations while preserving their class/function scope."""
+
+    def __init__(self, logger_names: set[str], loguru_modules: set[str]) -> None:
+        self.logger_names = logger_names
+        self.loguru_modules = loguru_modules
+        self.scope: list[str] = []
+        self.violations: list[Violation] = []
+
+    def _visit_scope(self, node: ast.AST, name: str) -> None:
+        self.scope.append(name)
+        self.generic_visit(node)
+        self.scope.pop()
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._visit_scope(node, node.name)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_scope(node, node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_scope(node, node.name)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        func = node.func
+        if isinstance(func, ast.Attribute) and _logger_chain_root_is_logger(
+            func,
+            logger_names=self.logger_names,
+            loguru_modules=self.loguru_modules,
+        ):
+            message_arg = _message_argument(node, func.attr)
+            if isinstance(message_arg, ast.JoinedStr):
+                self.violations.append(
+                    Violation(
+                        lineno=node.lineno,
+                        method=func.attr,
+                        preview=ast.unparse(message_arg),
+                        scope=".".join(self.scope) or "<module>",
+                        fingerprint=_message_fingerprint(message_arg),
+                    )
+                )
+        self.generic_visit(node)
 
 
 def find_fstring_logger_violations(source: str, filename: str = "<unknown>") -> list[Violation]:
@@ -115,51 +268,63 @@ def find_fstring_logger_violations(source: str, filename: str = "<unknown>") -> 
     except SyntaxError as exc:  # pragma: no cover - defensive parse failure
         raise HookError(f"{filename}: could not parse Python source: {exc}") from exc
 
-    violations: list[Violation] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if not isinstance(func, ast.Attribute):
-            continue
-        if not _logger_chain_root_is_logger(func):
-            continue
-        message_index = 1 if func.attr == "log" else 0
-        if len(node.args) <= message_index:
-            continue
-        message_arg = node.args[message_index]
-        if isinstance(message_arg, ast.JoinedStr):
-            preview = ast.unparse(message_arg)
-            violations.append(Violation(node.lineno, func.attr, preview))
-    return violations
+    logger_names, loguru_modules = _find_logger_bindings(tree)
+    visitor = _ViolationVisitor(logger_names, loguru_modules)
+    visitor.visit(tree)
+    return visitor.violations
 
 
-def _load_allowlist(path: Path) -> set[str]:
-    """Load grandfathered file paths, returning both repo-relative and absolute posix keys."""
+def _load_allowlist(path: Path) -> Counter[AllowlistKey]:
+    """Load stable per-call ratchet entries from a tab-separated baseline."""
     if not path.is_file():
         raise HookError(f"allowlist not found: {path}")
-    entries: set[str] = set()
-    cwd = Path.cwd()
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    entries: Counter[AllowlistKey] = Counter()
+    for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        entries.add(Path(line).as_posix())
+        fields = line.split("\t")
+        if len(fields) != 5:
+            raise HookError(
+                f"{path}:{lineno}: expected path<TAB>scope<TAB>method<TAB>fingerprint<TAB>count"
+            )
+        file_path, scope, method, fingerprint, raw_count = fields
+        if method not in LOGGER_METHODS:
+            raise HookError(f"{path}:{lineno}: unsupported logger method {method!r}")
+        if len(fingerprint) != FINGERPRINT_LENGTH or any(
+            char not in "0123456789abcdef" for char in fingerprint
+        ):
+            raise HookError(f"{path}:{lineno}: invalid fingerprint {fingerprint!r}")
         try:
-            entries.add((cwd / line).resolve().as_posix())
-        except OSError:  # pragma: no cover - pathological filesystem
-            entries.add((cwd / line).as_posix())
+            count = int(raw_count)
+        except ValueError as exc:
+            raise HookError(f"{path}:{lineno}: invalid count {raw_count!r}") from exc
+        if count < 1:
+            raise HookError(f"{path}:{lineno}: count must be positive")
+        key = AllowlistKey(Path(file_path).as_posix(), scope, method, fingerprint)
+        if key in entries:
+            raise HookError(f"{path}:{lineno}: duplicate baseline identity {key!r}")
+        entries[key] = count
     return entries
 
 
-def _file_keys(path: Path) -> set[str]:
-    """Return the set of posix path strings that identify ``path`` for allowlist matching."""
-    keys: set[str] = {Path(path).as_posix()}
+def _repo_relative_path(path: Path, root: Path) -> str:
+    """Return a stable repository-relative path when possible."""
     try:
-        keys.add(path.resolve().as_posix())
+        return path.resolve().relative_to(root.resolve()).as_posix()
     except OSError:  # pragma: no cover - pathological filesystem
-        pass
-    return keys
+        return path.as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _allowlist_key(path: Path, violation: Violation, root: Path) -> AllowlistKey:
+    return AllowlistKey(
+        _repo_relative_path(path, root),
+        violation.scope,
+        violation.method,
+        violation.fingerprint,
+    )
 
 
 def _discover_robot_sf_files(root: Path) -> list[Path]:
@@ -167,6 +332,60 @@ def _discover_robot_sf_files(root: Path) -> list[Path]:
     if not robot_sf.is_dir():
         return []
     return sorted(robot_sf.rglob("*.py"))
+
+
+def _scan_file(path: Path) -> list[Violation]:
+    try:
+        source = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HookError(f"cannot read {path}: {exc}") from exc
+    return find_fstring_logger_violations(source, str(path))
+
+
+def _generate_allowlist(files: list[Path], root: Path) -> int:
+    """Print deterministic baseline rows for ``files``."""
+    generated: Counter[AllowlistKey] = Counter()
+    try:
+        for path in files:
+            if path.is_file():
+                generated.update(_allowlist_key(path, item, root) for item in _scan_file(path))
+    except HookError as exc:
+        sys.stderr.write(f"no-fstring-logger hook: {exc}\n")
+        return 1
+    for key in sorted(generated):
+        sys.stdout.write("\t".join((*key, str(generated[key]))) + "\n")
+    return 0
+
+
+def _check_files(
+    files: list[Path],
+    *,
+    root: Path,
+    remaining_allowlist: Counter[AllowlistKey],
+) -> bool:
+    """Return whether any scanned file has an uncovered violation or read error."""
+    failure = False
+    for path in files:
+        if not path.is_file():
+            continue
+        try:
+            violations = _scan_file(path)
+        except HookError as exc:
+            sys.stderr.write(f"no-fstring-logger hook: {exc}\n")
+            failure = True
+            continue
+        for violation in violations:
+            key = _allowlist_key(path, violation, root)
+            if remaining_allowlist[key] > 0:
+                remaining_allowlist[key] -= 1
+                continue
+            sys.stderr.write(
+                f"{path}:{violation.lineno}: logger.{violation.method}({violation.preview}) "
+                "uses an f-string; use structured {key} + kwargs style "
+                "(see robot_sf/nav/svg_map_parser.py). ruff G004 cannot see loguru.\n"
+            )
+            failure = True
+    return failure
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -180,51 +399,33 @@ def main(argv: list[str] | None = None) -> int:
         default=default_allowlist,
         help=f"path to the grandfathered allowlist (default: {default_allowlist.name})",
     )
+    parser.add_argument(
+        "--generate-allowlist",
+        action="store_true",
+        help="print a deterministic baseline for the selected files and exit",
+    )
     args = parser.parse_args(argv)
-
-    try:
-        allowlist = _load_allowlist(args.allowlist)
-    except HookError as exc:
-        sys.stderr.write(f"no-fstring-logger hook: {exc}\n")
-        return 1
 
     cwd = Path.cwd()
     files = [Path(f) for f in args.filenames] or _discover_robot_sf_files(cwd)
 
-    failure = False
-    for path in files:
-        if not path.is_file():
-            continue
-        try:
-            source = path.read_text(encoding="utf-8")
-        except OSError as exc:
-            sys.stderr.write(f"no-fstring-logger hook: cannot read {path}: {exc}\n")
-            failure = True
-            continue
-        try:
-            violations = find_fstring_logger_violations(source, str(path))
-        except HookError as exc:
-            sys.stderr.write(f"{exc}\n")
-            failure = True
-            continue
-        if not violations:
-            continue
-        if _file_keys(path) & allowlist:
-            continue  # grandfathered: follow-up migration scope
-        for violation in violations:
-            sys.stderr.write(
-                f"{path}:{violation.lineno}: logger.{violation.method}({violation.preview}) "
-                "uses an f-string; use structured {key} + kwargs style "
-                "(see robot_sf/nav/svg_map_parser.py). ruff G004 cannot see loguru.\n"
-            )
-        failure = True
+    if args.generate_allowlist:
+        return _generate_allowlist(files, cwd)
+
+    try:
+        remaining_allowlist = _load_allowlist(args.allowlist)
+    except HookError as exc:
+        sys.stderr.write(f"no-fstring-logger hook: {exc}\n")
+        return 1
+
+    failure = _check_files(files, root=cwd, remaining_allowlist=remaining_allowlist)
 
     if failure:
         sys.stderr.write(
             "\nMigrate with a named placeholder plus keyword argument, e.g.\n"
             '  logger.info(f"loaded {n}")  ->  logger.info("loaded {n}", n=n)\n'
-            "Once a file is fully migrated, remove it from "
-            "hooks/no_fstring_logger_allowlist.txt so the guard enforces it.\n"
+            "After removing grandfathered calls, regenerate and review "
+            "hooks/no_fstring_logger_allowlist.txt to shrink the ratchet.\n"
         )
         return 1
     return 0

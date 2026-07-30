@@ -8,9 +8,12 @@ allowlist ratchet) and prove it flags a deliberately injected f-string.
 from __future__ import annotations
 
 import importlib.util
+import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
+import yaml
 
 _HOOK_PATH = Path(__file__).resolve().parents[2] / "hooks" / "no_fstring_logger.py"
 _SPEC = importlib.util.spec_from_file_location("no_fstring_logger", _HOOK_PATH)
@@ -33,7 +36,12 @@ def test_flags_injected_fstring_logger_call(tmp_path: Path) -> None:
     """The core negative control: an f-string logger call is detected."""
     source = "from loguru import logger\n\n\ndef f(x):\n    logger.info(f'value is {x}')\n"
     violations = find_violations(source, str(_write(tmp_path, "bad.py", source)))
-    assert violations == [Violation(lineno=5, method="info", preview="f'value is {x}'")]
+    assert len(violations) == 1
+    assert violations[0].lineno == 5
+    assert violations[0].method == "info"
+    assert violations[0].preview == "f'value is {x}'"
+    assert violations[0].scope == "f"
+    assert len(violations[0].fingerprint) == _HOOK.FINGERPRINT_LENGTH
 
 
 def test_structured_style_is_not_flagged() -> None:
@@ -107,13 +115,35 @@ def test_logger_chain_calls_detected() -> None:
     assert methods == ["error", "warning"]
 
 
-def test_argparse_and_non_logger_receivers_not_flagged() -> None:
-    """parser.error(f'...') and unrelated obj.info(f'...') are not logger calls."""
+def test_supported_loguru_binding_shapes_detected() -> None:
+    """Imported aliases, module access, assignments, and bound loggers are detected."""
+    source = (
+        "import loguru as lu\n"
+        "from loguru import logger as audit_logger\n"
+        "from robot_sf.common.logging import get_logger\n"
+        "logger = lu.logger\n"
+        "bound_logger = get_logger(__name__)\n"
+        "lu.logger.info(f'module {1}')\n"
+        "audit_logger.info(f'alias {1}')\n"
+        "logger.info(f'assigned {1}')\n"
+        "bound_logger.info(f'bound {1}')\n"
+    )
+    assert len(find_violations(source, "<bindings>")) == 4
+
+
+def test_non_loguru_receivers_and_arbitrary_chains_not_flagged() -> None:
+    """Only proven Loguru roots and supported chain methods are inspected."""
     source = (
         "import argparse\n"
+        "import logging\n"
+        "from loguru import logger\n"
         "parser = argparse.ArgumentParser()\n"
+        "stdlib_logger = logging.getLogger(__name__)\n"
         "parser.error(f'bad {1}')\n"
         "obj.info(f'not logger {1}')\n"
+        "self.logger.info(f'attribute {1}')\n"
+        "stdlib_logger.info(f'stdlib {1}')\n"
+        "logger.factory().info(f'arbitrary chain {1}')\n"
     )
     assert find_violations(source, "<nope>") == []
 
@@ -122,6 +152,17 @@ def _allowlist_file(tmp_path: Path, entries: list[str]) -> Path:
     allow = tmp_path / "allow.txt"
     allow.write_text("\n".join(entries) + "\n", encoding="utf-8")
     return allow
+
+
+def _baseline_lines(path: str, source: str) -> list[str]:
+    """Return deterministic allowlist lines for violations in one source file."""
+    counts = Counter(
+        (item.scope, item.method, item.fingerprint) for item in find_violations(source, path)
+    )
+    return [
+        "\t".join((path, scope, method, fingerprint, str(count)))
+        for (scope, method, fingerprint), count in sorted(counts.items())
+    ]
 
 
 def test_main_blocks_non_allowlisted_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,9 +176,22 @@ def test_main_blocks_non_allowlisted_file(tmp_path: Path, monkeypatch: pytest.Mo
 def test_main_allows_grandfathered_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An allowlisted file is permitted (ratchet), so the hook exits 0."""
     monkeypatch.chdir(tmp_path)
-    bad = _write(tmp_path, "robot_sf/mod.py", "from loguru import logger\nlogger.info(f'x {1}')\n")
-    allow = _allowlist_file(tmp_path, ["robot_sf/mod.py"])
+    source = "from loguru import logger\nlogger.info(f'x {1}')\n"
+    bad = _write(tmp_path, "robot_sf/mod.py", source)
+    allow = _allowlist_file(tmp_path, _baseline_lines("robot_sf/mod.py", source))
     assert _HOOK.main([str(bad), "--allowlist", str(allow)]) == 0
+
+
+def test_main_blocks_new_call_in_grandfathered_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A per-call baseline cannot hide a new violation in a legacy file."""
+    monkeypatch.chdir(tmp_path)
+    baseline = "from loguru import logger\nlogger.info(f'old {1}')\n"
+    changed = baseline + "logger.warning(f'new {2}')\n"
+    bad = _write(tmp_path, "robot_sf/mod.py", changed)
+    allow = _allowlist_file(tmp_path, _baseline_lines("robot_sf/mod.py", baseline))
+    assert _HOOK.main([str(bad), "--allowlist", str(allow)]) == 1
 
 
 def test_main_clean_file_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -153,25 +207,30 @@ def test_main_clean_file_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
 
 def test_repo_allowlist_is_superset_of_files_with_violations() -> None:
-    """The shipped allowlist must cover every robot_sf file that still has violations.
+    """The shipped baseline must cover every exact grandfathered violation.
 
-    A regression guard that is not green is useless: if a file gains an
-    f-string logger call it must either be migrated or listed here.
+    New identities or multiplicities fail even inside files with historical calls.
     """
     repo_root = Path(__file__).resolve().parents[2]
     allow_path = repo_root / "hooks" / _HOOK.ALLOWLIST_FILENAME
-    allowlisted = {line.strip() for line in allow_path.read_text("utf-8").splitlines()}
-    allowlisted = {x for x in allowlisted if x and not x.startswith("#")}
-    uncovered: list[str] = []
+    remaining = _HOOK._load_allowlist(allow_path)
+    uncovered: list[tuple[str, Violation]] = []
     for py in sorted((repo_root / "robot_sf").rglob("*.py")):
         rel = py.relative_to(repo_root).as_posix()
-        if rel in allowlisted:
-            continue  # grandfathered; whether or not it currently has calls is fine
         src = py.read_text(encoding="utf-8")
-        if find_violations(src, rel):
-            uncovered.append(rel)
+        for violation in find_violations(src, rel):
+            key = _HOOK.AllowlistKey(
+                rel,
+                violation.scope,
+                violation.method,
+                violation.fingerprint,
+            )
+            if remaining[key] > 0:
+                remaining[key] -= 1
+            else:
+                uncovered.append((rel, violation))
     assert not uncovered, (
-        "Files with f-string logger calls are neither migrated nor allowlisted: "
+        "F-string logger calls are absent from the exact ratchet baseline: "
         f"{uncovered}. Either migrate them or add them to {allow_path.as_posix()}."
     )
 
@@ -180,8 +239,7 @@ def test_hot_path_files_not_in_allowlist() -> None:
     """The migrated hot-path files must NOT be allowlisted (guard enforces them)."""
     repo_root = Path(__file__).resolve().parents[2]
     allow_path = repo_root / "hooks" / _HOOK.ALLOWLIST_FILENAME
-    allowlisted = {line.strip() for line in allow_path.read_text("utf-8").splitlines()}
-    allowlisted = {x for x in allowlisted if x and not x.startswith("#")}
+    allowlisted = {key.path for key in _HOOK._load_allowlist(allow_path)}
     hot_paths = {
         "robot_sf/sim/simulator.py",
         "robot_sf/gym_env/base_env.py",
@@ -190,3 +248,22 @@ def test_hot_path_files_not_in_allowlist() -> None:
     assert not (hot_paths & allowlisted), (
         f"migrated hot-path files must be absent from allowlist: {hot_paths & allowlisted}"
     )
+
+
+def test_precommit_runs_full_scan_for_source_and_guard_changes() -> None:
+    """The hook cannot be bypassed by pre-commit filename filtering."""
+    repo_root = Path(__file__).resolve().parents[2]
+    config = yaml.safe_load((repo_root / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    hook = next(
+        hook
+        for repo in config["repos"]
+        if repo["repo"] == "local"
+        for hook in repo["hooks"]
+        if hook["id"] == "no-fstring-logger"
+    )
+    assert hook["pass_filenames"] is False
+    pattern = re.compile(hook["files"])
+    assert pattern.fullmatch("robot_sf/gym_env/base_env.py")
+    assert pattern.fullmatch("hooks/no_fstring_logger.py")
+    assert pattern.fullmatch("hooks/no_fstring_logger_allowlist.txt")
+    assert not pattern.fullmatch("tests/hooks/test_no_fstring_logger.py")

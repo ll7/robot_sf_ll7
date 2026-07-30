@@ -16,6 +16,7 @@ grandfathered instead.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +47,7 @@ class MigratedSite:
     fmt: str
     values: dict[str, Any]
     before: Callable[..., str]
+    expected_occurrences: int = 1
 
 
 # Ground-truth "before" text is built with a real Python f-string (CPython
@@ -73,7 +75,7 @@ MIGRATED_SITES = [
         file="robot_sf/gym_env/pedestrian_env.py",
         level="warning",
         fmt="Failed to set robot model action space: {exc}",
-        values={"exc": ValueError("boom")},
+        values={"exc": ValueError("{boom}")},
         before=lambda exc: f"Failed to set robot model action space: {exc}",
     ),
     MigratedSite(
@@ -81,7 +83,7 @@ MIGRATED_SITES = [
         file="robot_sf/gym_env/pedestrian_env.py",
         level="warning",
         fmt="Robot model predict failed ({exc}); using null action.",
-        values={"exc": RuntimeError("predict failed")},
+        values={"exc": RuntimeError("predict {failed}")},
         before=lambda exc: f"Robot model predict failed ({exc}); using null action.",
     ),
     MigratedSite(
@@ -89,7 +91,7 @@ MIGRATED_SITES = [
         file="robot_sf/gym_env/pedestrian_env.py",
         level="info",
         fmt="Recording saved to {target_path}",
-        values={"target_path": Path("/tmp/episode.pkl")},
+        values={"target_path": Path("/tmp/{episode}.pkl")},
         before=lambda target_path: f"Recording saved to {target_path}",
     ),
     MigratedSite(
@@ -109,6 +111,7 @@ MIGRATED_SITES = [
             f"{model_shape} does not match env shape "
             f"{env_shape}. Falling back to null actions."
         ),
+        expected_occurrences=2,
     ),
     MigratedSite(
         id="base-video-fps",
@@ -123,7 +126,7 @@ MIGRATED_SITES = [
         file="robot_sf/gym_env/base_env.py",
         level="info",
         fmt="Recording saved to {target_path}",
-        values={"target_path": Path("output/rec.pkl")},
+        values={"target_path": Path("output/{rec}.pkl")},
         before=lambda target_path: f"Recording saved to {target_path}",
     ),
 ]
@@ -152,7 +155,11 @@ def test_structured_call_renders_identical_to_fstring(
     """The migrated structured call renders the exact text the f-string did."""
     expected = site.before(**site.values)
     captured_messages.clear()
-    getattr(logger, site.level)(site.fmt, **site.values)
+    # The production rewrite pre-formats each value with an empty f-string
+    # format spec before passing it to Loguru. This preserves the original
+    # evaluation timing and __format__ exception behavior.
+    eager_values = {key: f"{value}" for key, value in site.values.items()}
+    getattr(logger, site.level)(site.fmt, **eager_values)
     assert captured_messages == [expected], (
         f"loguru structured render diverged from f-string for {site.file}\n"
         f"  expected: {expected!r}\n  got:      {captured_messages!r}"
@@ -165,6 +172,43 @@ def test_migrated_placeholder_present_in_source(site: MigratedSite) -> None:
     source = (_REPO_ROOT / site.file).read_text(encoding="utf-8")
     for key in site.values:
         assert "{" + key + "}" in source, f"{site.file}: placeholder {{{key}}} not found in source"
+
+
+@pytest.mark.parametrize("site", MIGRATED_SITES, ids=lambda s: s.id)
+def test_migrated_fields_are_eagerly_formatted_in_source(site: MigratedSite) -> None:
+    """Every migrated field is formatted before entering Loguru."""
+    tree = ast.parse((_REPO_ROOT / site.file).read_text(encoding="utf-8"), filename=site.file)
+    matching_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == site.fmt
+        and {keyword.arg for keyword in node.keywords} == set(site.values)
+    ]
+    assert len(matching_calls) == site.expected_occurrences
+    for call in matching_calls:
+        assert all(isinstance(keyword.value, ast.JoinedStr) for keyword in call.keywords)
+
+
+def test_eager_format_exception_prevents_logger_invocation() -> None:
+    """A formatting failure still occurs before the logger call, as with the original f-string."""
+
+    class Explosive:
+        def __format__(self, spec: str) -> str:
+            assert spec == ""
+            raise RuntimeError("format failed")
+
+    invoked = False
+
+    def fake_logger(_message: str, **_values: str) -> None:
+        nonlocal invoked
+        invoked = True
+
+    with pytest.raises(RuntimeError, match="format failed"):
+        fake_logger("Value: {value}", value=f"{Explosive()}")
+    assert not invoked
 
 
 def test_hot_path_files_have_no_fstring_logger_calls() -> None:

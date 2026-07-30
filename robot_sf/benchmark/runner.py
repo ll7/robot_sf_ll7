@@ -1143,135 +1143,218 @@ def _create_native_command_policy(
     return policy_fn, enriched
 
 
-def _create_robot_policy(  # noqa: C901, PLR0915
+def _clamp_speed(vel: np.ndarray) -> np.ndarray:
+    """Clamp velocity magnitude to maximum allowed speed.
+
+    Args:
+        vel: Velocity vector to clamp.
+
+    Returns:
+        Clamped velocity vector.
+    """
+    speed = float(np.linalg.norm(vel))
+    if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
+        return vel / speed * FINAL_SPEED_CLAMP
+    return vel
+
+
+def _action_to_velocity(
+    action: dict[str, float],
+    robot_pos: np.ndarray,
+    robot_vel: np.ndarray,
+    robot_goal: np.ndarray,
     algo: str,
-    algo_config_path: str | None,
-    seed: int,
+) -> np.ndarray:
+    """Convert planner action dict to velocity vector.
+
+    Args:
+        action: Action dict with either (vx, vy) or (v, omega) keys.
+        robot_pos: Current robot position.
+        robot_vel: Current robot velocity.
+        robot_goal: Target goal position.
+        algo: Algorithm name for error messages.
+
+    Returns:
+        Velocity vector as 2D array.
+    """
+    if "vx" in action and "vy" in action:
+        return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
+    if "v" in action and "omega" in action:
+        v = action["v"]
+        current_speed = np.linalg.norm(robot_vel)
+        if current_speed > 1e-6:
+            vel = robot_vel / current_speed * v
+        else:
+            goal_dir = robot_goal - robot_pos
+            if np.linalg.norm(goal_dir) > 1e-6:
+                vel = goal_dir / np.linalg.norm(goal_dir) * v
+            else:
+                vel = np.zeros(2)
+        return _clamp_speed(vel)
+    raise ValueError(f"Invalid action format from {algo}: {action}")
+
+
+def _step_planner_with_retry(
+    step_runner: _PlannerStepProcess | None,
+    obs: Any,
+    algo: str,
+    timeout_metadata: dict[str, Any],
+    metadata: dict[str, Any],
+    retry_budget: int,
+) -> dict[str, float]:
+    """Execute one planner step with timeout and transient-error retry.
+
+    Returns:
+        Action dict from the planner, or a zero-velocity fallback.
+    """
+    retries = 0
+    while True:
+        try:
+            if step_runner is None:
+                raise RuntimeError("policy step isolation unavailable")
+            return step_runner.step(obs)
+        except FuturesTimeoutError:
+            timeout_metadata["step_timeouts"] += 1
+            if retries < retry_budget:
+                retries += 1
+                timeout_metadata["step_retries"] += 1
+                logger.warning(
+                    "Retrying {} planner step after transient worker timeout ({}/{}).",
+                    algo,
+                    retries,
+                    retry_budget,
+                )
+                continue
+            timeout_metadata["fallback_actions"] += 1
+            metadata["status"] = "policy_step_timeout_fallback"
+            metadata["fallback_reason"] = "policy_step_timeout"
+            return {"vx": 0.0, "vy": 0.0}
+        except (RuntimeError, TypeError, ValueError) as exc:
+            timeout_metadata["worker_errors"] += 1
+            timeout_metadata["last_error"] = str(exc)
+            if retries < retry_budget and isinstance(exc, RuntimeError) and step_runner is not None:
+                retries += 1
+                timeout_metadata["step_retries"] += 1
+                logger.warning(
+                    "Retrying {} planner step after transient worker error ({}/{}): {}",
+                    algo,
+                    retries,
+                    retry_budget,
+                    exc,
+                )
+                continue
+            timeout_metadata["fallback_actions"] += 1
+            metadata["status"] = "policy_step_error_fallback"
+            metadata["fallback_reason"] = "policy_step_error"
+            logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
+            return {"vx": 0.0, "vy": 0.0}
+
+
+def _build_baseline_policy_fn(
     *,
-    scenario_params: dict[str, Any] | None = None,
-    horizon: int = 100,
-    dt: float = 0.1,
-    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
-    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+    algo: str,
+    observation_cls: type,
+    step_runner: _PlannerStepProcess | None,
+    timeout_metadata: dict[str, Any],
+    metadata: dict[str, Any],
+    retry_budget: int,
+    robot_radius: float,
+    ped_radius: float,
 ):
-    """Create a robot policy function based on the specified algorithm.
+    """Build the policy closure for a baseline planner.
+
+    Returns:
+        Policy function callable.
+    """
+
+    def policy_fn(
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt: float,
+    ) -> np.ndarray:
+        """Compute velocity via process-isolated planner step.
+
+        Returns:
+            Velocity command as 2D array.
+        """
+        obs = _build_observation(
+            observation_cls,
+            robot_pos,
+            robot_vel,
+            robot_goal,
+            ped_positions,
+            dt,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
+        action = _step_planner_with_retry(
+            step_runner, obs, algo, timeout_metadata, metadata, retry_budget
+        )
+        return _action_to_velocity(action, robot_pos, robot_vel, robot_goal, algo)
+
+    return policy_fn
+
+
+def _create_simple_policy(algo: str):
+    """Create a simple goal-directed policy.
 
     Returns:
         Tuple of (policy function, metadata dict).
     """
 
-    if algo == NATIVE_COMMAND_ARM:
-        return _create_native_command_policy(
-            scenario_params=scenario_params or {},
-            seed=seed,
-            scenario_id=str(
-                (scenario_params or {}).get(
-                    "scenario_id",
-                    (scenario_params or {}).get(
-                        "id", (scenario_params or {}).get("name", "unknown")
-                    ),
-                )
-            ),
-            horizon=horizon,
-            dt=dt,
-            robot_radius=robot_radius,
-            ped_radius=ped_radius,
-        )
-
-    def _simple_policy_adapter():
-        """Create simple policy that navigates directly toward goal.
-
-        Returns:
-            Tuple of (policy function, metadata dict).
-        """
-
-        def policy(
-            robot_pos: np.ndarray,
-            _robot_vel: np.ndarray,
-            robot_goal: np.ndarray,
-            _ped_positions: np.ndarray,
-            _dt: float,
-        ) -> np.ndarray:
-            """Compute velocity command toward goal.
-
-            Args:
-                robot_pos: Current robot position.
-                _robot_vel: Current robot velocity (unused).
-                robot_goal: Target goal position.
-                _ped_positions: Pedestrian positions (unused).
-                _dt: Timestep duration (unused).
-
-            Returns:
-                Velocity command as 2D array.
-            """
-            return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
-
-        return policy, {
-            "algorithm": "simple_policy",
-            "config": {},
-            "config_hash": "na",
-            "status": "ok",
-        }
-
-    if algo in SIMPLE_POLICY_ALIASES:
-        policy_fn, metadata = _simple_policy_adapter()
-        return (
-            policy_fn,
-            enrich_algorithm_metadata(
-                algo=algo,
-                metadata=metadata,
-                execution_mode="native",
-            ),
-        )
-
-    planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
-
-    def _clamp_speed(vel: np.ndarray) -> np.ndarray:
-        """Clamp velocity magnitude to maximum allowed speed.
-
-        Args:
-            vel: Velocity vector to clamp.
-
-        Returns:
-            Clamped velocity vector.
-        """
-        speed = float(np.linalg.norm(vel))
-        if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
-            return vel / speed * FINAL_SPEED_CLAMP
-        return vel
-
-    def _action_to_velocity(
-        action: dict[str, float],
+    def policy(
         robot_pos: np.ndarray,
-        robot_vel: np.ndarray,
+        _robot_vel: np.ndarray,
         robot_goal: np.ndarray,
+        _ped_positions: np.ndarray,
+        _dt: float,
     ) -> np.ndarray:
-        """Convert planner action dict to velocity vector.
+        """Compute velocity command toward goal.
 
         Args:
-            action: Action dict with either (vx, vy) or (v, omega) keys.
             robot_pos: Current robot position.
-            robot_vel: Current robot velocity.
+            _robot_vel: Current robot velocity (unused).
             robot_goal: Target goal position.
+            _ped_positions: Pedestrian positions (unused).
+            _dt: Timestep duration (unused).
 
         Returns:
-            Velocity vector as 2D array.
+            Velocity command as 2D array.
         """
-        if "vx" in action and "vy" in action:
-            return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
-        if "v" in action and "omega" in action:
-            v = action["v"]
-            current_speed = np.linalg.norm(robot_vel)
-            if current_speed > 1e-6:
-                vel = robot_vel / current_speed * v
-            else:
-                goal_dir = robot_goal - robot_pos
-                if np.linalg.norm(goal_dir) > 1e-6:
-                    vel = goal_dir / np.linalg.norm(goal_dir) * v
-                else:
-                    vel = np.zeros(2)
-            return _clamp_speed(vel)
-        raise ValueError(f"Invalid action format from {algo}: {action}")
+        return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
+
+    metadata = {
+        "algorithm": "simple_policy",
+        "config": {},
+        "config_hash": "na",
+        "status": "ok",
+    }
+    return (
+        policy,
+        enrich_algorithm_metadata(
+            algo=algo,
+            metadata=metadata,
+            execution_mode="native",
+        ),
+    )
+
+
+def _create_baseline_planner_policy(
+    algo: str,
+    algo_config_path: str | None,
+    seed: int,
+    *,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+):
+    """Create a baseline planner policy with process-isolated step execution.
+
+    Returns:
+        Tuple of (policy function, metadata dict).
+    """
+    planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
 
     metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
     timeout_metadata: dict[str, Any] = {
@@ -1303,80 +1386,16 @@ def _create_robot_policy(  # noqa: C901, PLR0915
         metadata["status"] = "policy_step_isolation_unavailable"
         metadata["fallback_reason"] = "policy_step_isolation_unavailable"
 
-    def policy_fn(
-        robot_pos: np.ndarray,
-        robot_vel: np.ndarray,
-        robot_goal: np.ndarray,
-        ped_positions: np.ndarray,
-        dt: float,
-    ) -> np.ndarray:
-        """Policy function that uses the baseline planner.
-
-        Returns:
-            Velocity command as 2D array.
-        """
-        obs = _build_observation(
-            Observation,
-            robot_pos,
-            robot_vel,
-            robot_goal,
-            ped_positions,
-            dt,
-            robot_radius=robot_radius,
-            ped_radius=ped_radius,
-        )
-
-        retries = 0
-        while True:
-            try:
-                if step_runner is None:
-                    raise RuntimeError("policy step isolation unavailable")
-                action = step_runner.step(obs)
-                break
-            except FuturesTimeoutError:
-                timeout_metadata["step_timeouts"] += 1
-                if retries < retry_budget:
-                    retries += 1
-                    timeout_metadata["step_retries"] += 1
-                    logger.warning(
-                        "Retrying {} planner step after transient worker timeout ({}/{}).",
-                        algo,
-                        retries,
-                        retry_budget,
-                    )
-                    continue
-                timeout_metadata["fallback_actions"] += 1
-                metadata["status"] = "policy_step_timeout_fallback"
-                metadata["fallback_reason"] = "policy_step_timeout"
-                action = {"vx": 0.0, "vy": 0.0}
-                break
-            except (RuntimeError, TypeError, ValueError) as exc:
-                timeout_metadata["worker_errors"] += 1
-                timeout_metadata["last_error"] = str(exc)
-                if (
-                    retries < retry_budget
-                    and isinstance(exc, RuntimeError)
-                    and step_runner is not None
-                ):
-                    retries += 1
-                    timeout_metadata["step_retries"] += 1
-                    logger.warning(
-                        "Retrying {} planner step after transient worker error ({}/{}): {}",
-                        algo,
-                        retries,
-                        retry_budget,
-                        exc,
-                    )
-                    continue
-                timeout_metadata["fallback_actions"] += 1
-                metadata["status"] = "policy_step_error_fallback"
-                metadata["fallback_reason"] = "policy_step_error"
-                logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
-                action = {"vx": 0.0, "vy": 0.0}
-                break
-
-        # Convert action to velocity (handle both action spaces)
-        return _action_to_velocity(action, robot_pos, robot_vel, robot_goal)
+    policy_fn = _build_baseline_policy_fn(
+        algo=algo,
+        observation_cls=Observation,
+        step_runner=step_runner,
+        timeout_metadata=timeout_metadata,
+        metadata=metadata,
+        retry_budget=retry_budget,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
 
     if step_runner is not None:
         policy_fn.close = step_runner.close  # type: ignore[attr-defined]
@@ -1386,7 +1405,6 @@ def _create_robot_policy(  # noqa: C901, PLR0915
     # diagnostics must be read from the IPC relay instead.
     if step_runner is not None and callable(getattr(planner, "foresight_diagnostics", None)):
         policy_fn.foresight_diagnostics = step_runner.foresight_diagnostics  # type: ignore[attr-defined]
-    # Ensure consistent metadata schema
     metadata.setdefault("algorithm", algo)
     metadata["config"] = algo_config
     metadata["config_hash"] = _config_hash(algo_config)
@@ -1399,6 +1417,52 @@ def _create_robot_policy(  # noqa: C901, PLR0915
     )
 
     return policy_fn, metadata
+
+
+def _create_robot_policy(
+    algo: str,
+    algo_config_path: str | None,
+    seed: int,
+    *,
+    scenario_params: dict[str, Any] | None = None,
+    horizon: int = 100,
+    dt: float = 0.1,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+):
+    """Create a robot policy function based on the specified algorithm.
+
+    Returns:
+        Tuple of (policy function, metadata dict).
+    """
+    if algo == NATIVE_COMMAND_ARM:
+        return _create_native_command_policy(
+            scenario_params=scenario_params or {},
+            seed=seed,
+            scenario_id=str(
+                (scenario_params or {}).get(
+                    "scenario_id",
+                    (scenario_params or {}).get(
+                        "id", (scenario_params or {}).get("name", "unknown")
+                    ),
+                )
+            ),
+            horizon=horizon,
+            dt=dt,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
+
+    if algo in SIMPLE_POLICY_ALIASES:
+        return _create_simple_policy(algo)
+
+    return _create_baseline_planner_policy(
+        algo,
+        algo_config_path,
+        seed,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
 
 
 def _close_robot_policy(policy: Any) -> None:

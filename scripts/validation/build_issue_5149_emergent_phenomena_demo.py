@@ -39,7 +39,7 @@ matplotlib.use("Agg")  # headless rendering; no display required
 import matplotlib.pyplot as plt
 import numpy as np
 
-from robot_sf.evidence.writers import write_json, write_sha256sums
+from robot_sf.evidence.writers import write_json, write_sha256sums, write_text
 from robot_sf.research.emergent_phenomena import (
     EmergentPhenomenaReport,
     ScenarioResult,
@@ -158,7 +158,6 @@ def _write_readme(
 ) -> None:
     """Write the human-readable README with the honest interpretation."""
     lines: list[str] = []
-    lines.append(f"<!-- AI-GENERATED ({ISSUE_REF}, {generated_at[:10]}) - NEEDS-REVIEW -->")
     lines.append("")
     lines.append(
         "# Issue #5149: Emergent-Phenomena Demonstration for the Released Pedestrian Substrate"
@@ -262,7 +261,8 @@ def _write_readme(
         stem = f"{rec['scenario']}__{rec['calibration']}"
         lines.append(f"- `{stem}.png` — trajectory plot.")
     lines.append("- `SHA256SUMS` — integrity manifest for the bundle.")
-    (out_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    content = "\n".join(lines) + "\n"
+    write_text(out_dir / "README.md", content, issue_ref=ISSUE_REF, marker_date=generated_at[:10])
 
 
 def build_packet(output_dir: Path, generated_at_override: str | None = None) -> Path:

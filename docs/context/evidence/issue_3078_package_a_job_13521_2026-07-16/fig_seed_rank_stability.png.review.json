@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fig_seed_rank_stability.png",
+  "artifact_sha256": "e9d33f80333a11fff4dd87de64c92084972d16e9b20fcfc2b29ef7b6fe964a71",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

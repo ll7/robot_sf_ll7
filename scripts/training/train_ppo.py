@@ -74,9 +74,11 @@ from robot_sf.training.density_curriculum import (
     curriculum_metadata,
 )
 from robot_sf.training.imitation_config import (
+    _ALLOWED_PPO_HYPERPARAMS,
     ConvergenceCriteria,
     EvaluationSchedule,
     ExpertTrainingConfig,
+    validate_expert_training_config_keys,
 )
 from robot_sf.training.multi_map_protocol import (
     DomainRandomization,
@@ -113,19 +115,7 @@ _DEFAULT_PPO_HYPERPARAMS: dict[str, object] = {
     "clip_range": 0.1,
     "target_kl": 0.02,
 }
-_ALLOWED_PPO_HYPERPARAMS = {
-    "learning_rate",
-    "batch_size",
-    "n_epochs",
-    "ent_coef",
-    "clip_range",
-    "target_kl",
-    "n_steps",
-    "gamma",
-    "gae_lambda",
-    "vf_coef",
-    "max_grad_norm",
-}
+# _ALLOWED_PPO_HYPERPARAMS imported from robot_sf.training.imitation_config
 
 
 def _coerce_optional_float(value: object) -> float | None:
@@ -934,6 +924,8 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
 
     path = Path(config_path).resolve()
     data = _load_expert_training_config_mapping(path)
+
+    validate_expert_training_config_keys(data)
 
     scenario_raw = Path(data["scenario_config"])
     scenario_config = (

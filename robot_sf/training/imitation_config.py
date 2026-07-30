@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,6 +12,168 @@ from robot_sf.telemetry.progress import PipelineStepDefinition
 
 if TYPE_CHECKING:
     from robot_sf.training.multi_map_protocol import DomainRandomization, MultiMapTrainTestProtocol
+
+_ALLOWED_PPO_HYPERPARAMS: frozenset[str] = frozenset(
+    {
+        "learning_rate",
+        "batch_size",
+        "n_epochs",
+        "ent_coef",
+        "clip_range",
+        "target_kl",
+        "n_steps",
+        "gamma",
+        "gae_lambda",
+        "vf_coef",
+        "max_grad_norm",
+    }
+)
+
+_ALLOWED_TOP_LEVEL_KEYS: frozenset[str] = frozenset(
+    {
+        "algorithm",
+        "base_config",
+        "best_checkpoint_metric",
+        "candidates",
+        "convergence",
+        "density_curriculum",
+        "device",
+        "domain_randomization",
+        "env_factory_kwargs",
+        "env_overrides",
+        "eval_episodes",
+        "eval_every",
+        "evaluation",
+        "feature_extractor",
+        "feature_extractor_kwargs",
+        "metric",
+        "multi_map_protocol",
+        "num_envs",
+        "num_envs_reserve_cores",
+        "output_dir",
+        "policy",
+        "policy_id",
+        "policy_net_arch",
+        "ppo_hyperparams",
+        "randomize_seeds",
+        "recurrent_policy",
+        "recurrent_ppo_hyperparams",
+        "resume_from",
+        "resume_model_id",
+        "resume_source_step",
+        "safety_constraints",
+        "scenario_config",
+        "scenario_id",
+        "scenario_sampling",
+        "seed",
+        "seeds",
+        "snqi_baseline",
+        "snqi_weights",
+        "socnav_orca",
+        "socnav_orca_neighbor_dist",
+        "socnav_orca_time_horizon",
+        "total_timesteps",
+        "tracking",
+        "worker_mode",
+    }
+)
+
+_ALLOWED_CONVERGENCE_KEYS: frozenset[str] = frozenset(
+    {
+        "success_rate",
+        "collision_rate",
+        "plateau_window",
+    }
+)
+
+_ALLOWED_EVALUATION_KEYS: frozenset[str] = frozenset(
+    {
+        "evaluation_episodes",
+        "frequency_episodes",
+        "full_policy_analysis_on_new_best",
+        "full_policy_analysis_videos",
+        "hold_out_scenarios",
+        "randomize_seeds",
+        "scenario_config",
+        "step_schedule",
+    }
+)
+
+
+def _suggest_close_matches(
+    unknown_key: str,
+    allowed: frozenset[str],
+    *,
+    max_suggestions: int = 3,
+) -> list[str]:
+    return difflib.get_close_matches(unknown_key, allowed, n=max_suggestions, cutoff=0.4)
+
+
+def _validate_config_section_keys(
+    section_name: str,
+    section_data: object,
+    allowed_keys: frozenset[str],
+    dotted_prefix: str,
+) -> None:
+    if not isinstance(section_data, dict):
+        return
+    unknown = set(section_data) - allowed_keys
+    if not unknown:
+        return
+    parts: list[str] = []
+    for key in sorted(unknown):
+        close = _suggest_close_matches(key, allowed_keys)
+        hint = f" (did you mean {close}?)" if close else ""
+        parts.append(f"    {dotted_prefix}.{key}{hint}")
+    raise ValueError(f"{section_name} has unsupported keys:\n" + "\n".join(parts))
+
+
+def validate_expert_training_config_keys(config_data: dict[str, object]) -> None:
+    """Validate config keys against the allow-list, rejecting unknown keys.
+
+    Raises:
+        ValueError: With the full dotted key path and nearest valid alternatives
+            when an unknown key is found.
+    """
+    unknown_top = set(config_data) - _ALLOWED_TOP_LEVEL_KEYS
+    if unknown_top:
+        parts: list[str] = []
+        for key in sorted(unknown_top):
+            close = _suggest_close_matches(key, _ALLOWED_TOP_LEVEL_KEYS)
+            hint = f" (did you mean {close}?)" if close else ""
+            parts.append(f"    {key}{hint}")
+        raise ValueError(
+            "ExpertTrainingConfig has unsupported top-level keys:\n" + "\n".join(parts)
+        )
+
+    convergence = config_data.get("convergence")
+    if isinstance(convergence, dict):
+        _validate_config_section_keys(
+            "convergence",
+            convergence,
+            _ALLOWED_CONVERGENCE_KEYS,
+            "convergence",
+        )
+
+    evaluation = config_data.get("evaluation")
+    if isinstance(evaluation, dict):
+        _validate_config_section_keys(
+            "evaluation",
+            evaluation,
+            _ALLOWED_EVALUATION_KEYS,
+            "evaluation",
+        )
+
+    ppo_raw = config_data.get("ppo_hyperparams")
+    if isinstance(ppo_raw, dict):
+        unknown_ppo = set(ppo_raw) - _ALLOWED_PPO_HYPERPARAMS
+        if unknown_ppo:
+            pko_parts: list[str] = []
+            for key in sorted(unknown_ppo):
+                close = _suggest_close_matches(key, _ALLOWED_PPO_HYPERPARAMS)
+                hint = f" (did you mean {close}?)" if close else ""
+                pko_parts.append(f"    ppo_hyperparams.{key}{hint}")
+            raise ValueError("ppo_hyperparams has unsupported keys:\n" + "\n".join(pko_parts))
 
 
 @dataclass(slots=True)
@@ -392,6 +555,10 @@ class PPOFineTuneConfig:
 
 
 __all__ = [
+    "_ALLOWED_CONVERGENCE_KEYS",
+    "_ALLOWED_EVALUATION_KEYS",
+    "_ALLOWED_PPO_HYPERPARAMS",
+    "_ALLOWED_TOP_LEVEL_KEYS",
     "BCPretrainingConfig",
     "BehaviouralCloningConfig",
     "ConvergenceCriteria",
@@ -401,6 +568,7 @@ __all__ = [
     "PPOFineTuningConfig",
     "TrajectoryCollectionConfig",
     "build_imitation_pipeline_steps",
+    "validate_expert_training_config_keys",
 ]
 
 

@@ -1,0 +1,390 @@
+{
+  "receipt_schema": "issue_6481_preflight_receipt.v1",
+  "evidence_tier": "smoke_preflight",
+  "claim_class": "diagnostic_proxy",
+  "passed": true,
+  "config_sha256": "8611b4f6ad9eea7134cfe189f319f7bb8afcedf8a657ea6c291666b5d548bbab",
+  "scenario_matrix_sha256": "d403aba974aacb67de41c96d41bc809d88460c87517ae788224830991e747faf",
+  "source_sha": "0ad1fdb506912ca8bfc2f322fe998c021e7b4389",
+  "expected_row_count": 9,
+  "observed_row_count": 9,
+  "expected_identities": [
+    [
+      "goal",
+      "single_ped_crossing_orthogonal",
+      111
+    ],
+    [
+      "goal",
+      "single_ped_crossing_orthogonal",
+      112
+    ],
+    [
+      "goal",
+      "single_ped_crossing_orthogonal",
+      113
+    ],
+    [
+      "orca",
+      "single_ped_crossing_orthogonal",
+      111
+    ],
+    [
+      "orca",
+      "single_ped_crossing_orthogonal",
+      112
+    ],
+    [
+      "orca",
+      "single_ped_crossing_orthogonal",
+      113
+    ],
+    [
+      "social_force",
+      "single_ped_crossing_orthogonal",
+      111
+    ],
+    [
+      "social_force",
+      "single_ped_crossing_orthogonal",
+      112
+    ],
+    [
+      "social_force",
+      "single_ped_crossing_orthogonal",
+      113
+    ]
+  ],
+  "observed_identities": [
+    [
+      "goal",
+      "single_ped_crossing_orthogonal",
+      111
+    ],
+    [
+      "goal",
+      "single_ped_crossing_orthogonal",
+      112
+    ],
+    [
+      "goal",
+      "single_ped_crossing_orthogonal",
+      113
+    ],
+    [
+      "orca",
+      "single_ped_crossing_orthogonal",
+      111
+    ],
+    [
+      "orca",
+      "single_ped_crossing_orthogonal",
+      112
+    ],
+    [
+      "orca",
+      "single_ped_crossing_orthogonal",
+      113
+    ],
+    [
+      "social_force",
+      "single_ped_crossing_orthogonal",
+      111
+    ],
+    [
+      "social_force",
+      "single_ped_crossing_orthogonal",
+      112
+    ],
+    [
+      "social_force",
+      "single_ped_crossing_orthogonal",
+      113
+    ]
+  ],
+  "row_count_ok": true,
+  "identities_ok": true,
+  "all_native": true,
+  "all_schema_valid": true,
+  "all_families_present": true,
+  "execution_modes": {
+    "goal": "native",
+    "orca": "native",
+    "social_force": "native"
+  },
+  "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+  "rows": [
+    {
+      "planner": "goal",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 111,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 231,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "goal",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 112,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 233,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "goal",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 113,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 234,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 111,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 122,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 112,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 123,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 113,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 124,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "social_force",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 111,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 47,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "social_force",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 112,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 46,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    },
+    {
+      "planner": "social_force",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 113,
+      "execution_mode": "native",
+      "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+      "families_present": [
+        "comfort_exposure",
+        "distributional_inconvenience",
+        "flow_disruption",
+        "legibility_progress",
+        "pedestrian_deviation"
+      ],
+      "statuses": {
+        "comfort_exposure_person_s": "available",
+        "distributional_inconvenience_p90_p50_gap": "unavailable",
+        "flow_disruption_delay_s": "unavailable",
+        "legibility_progress_deficit_m": "unavailable",
+        "pedestrian_deviation_mean_m": "unavailable"
+      },
+      "support_counts": {
+        "comfort_exposure_person_s": 48,
+        "distributional_inconvenience_p90_p50_gap": 0,
+        "flow_disruption_delay_s": 0,
+        "legibility_progress_deficit_m": 0,
+        "pedestrian_deviation_mean_m": 0
+      },
+      "schema_valid": true,
+      "all_families_present": true
+    }
+  ],
+  "campaign_result_status": "completed",
+  "output_root": "output/benchmarks/issue_6481_preflight"
+}

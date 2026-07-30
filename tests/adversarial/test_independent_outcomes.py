@@ -1,5 +1,8 @@
 """Tests for the v2 row-level independent planner-outcome contract (issue #3275)."""
 
+# evidence-writer-exempt: tests write synthetic and malformed fixtures only under pytest tmp_path;
+# they do not generate or modify repository evidence artifacts.
+
 from __future__ import annotations
 
 import hashlib

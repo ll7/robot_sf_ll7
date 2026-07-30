@@ -1,5 +1,8 @@
 """Tests for adversarial proposal model, frozen #3275 contract, and comparison script."""
 
+# evidence-writer-exempt: tests write synthetic and malformed fixtures only under pytest tmp_path;
+# they do not generate or modify repository evidence artifacts.
+
 from __future__ import annotations
 
 import hashlib

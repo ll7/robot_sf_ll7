@@ -1,5 +1,7 @@
 """Focused coverage for the extracted Prediction planner-family module."""
 
+from typing import Any
+
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_prediction as prediction
 
@@ -48,3 +50,42 @@ def test_factory_produces_policy_with_correct_adapter_type() -> None:
     policy = prediction.make_prediction_policy(allow_fallback=True)
     assert isinstance(policy, prediction.SocNavPlannerPolicy)
     assert isinstance(policy.adapter, prediction.PredictionPlannerAdapter)
+
+
+def test_adapter_reads_model_dependencies_from_live_facade(tmp_path, monkeypatch) -> None:
+    """Facade dependency patches remain effective after prediction-family extraction."""
+    checkpoint = tmp_path / "predictive-checkpoint.pt"
+    checkpoint.write_bytes(b"test checkpoint")
+    loaded: dict[str, Any] = {}
+
+    class FakeModel:
+        """Minimal predictive model returned by the patched checkpoint loader."""
+
+        def to(self, device: str) -> None:
+            loaded["device"] = device
+
+        def eval(self) -> None:
+            loaded["evaluated"] = True
+
+    model = FakeModel()
+
+    def fake_resolve_model_path(model_id: str):
+        loaded["model_id"] = model_id
+        return checkpoint
+
+    def fake_load_predictive_checkpoint(path, **kwargs):
+        loaded["path"] = path
+        loaded["loader_kwargs"] = kwargs
+        return model, {"feature_schema": None}
+
+    monkeypatch.setattr(socnav, "resolve_model_path", fake_resolve_model_path)
+    monkeypatch.setattr(socnav, "load_predictive_checkpoint", fake_load_predictive_checkpoint)
+    monkeypatch.setattr(socnav, "torch", object())
+
+    adapter = prediction.PredictionPlannerAdapter()
+
+    assert adapter._build_model() is model
+    assert loaded["model_id"] == adapter.config.predictive_model_id
+    assert loaded["path"] == checkpoint
+    assert loaded["device"] == "cpu"
+    assert loaded["evaluated"] is True

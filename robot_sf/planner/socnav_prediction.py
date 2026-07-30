@@ -9,7 +9,7 @@ from loguru import logger
 
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi
-from robot_sf.models import get_registry_entry, resolve_model_path
+from robot_sf.models import get_registry_entry
 from robot_sf.planner import socnav as _socnav
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
@@ -25,8 +25,6 @@ SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
 SocNavPlannerPolicy = _socnav.SocNavPlannerPolicy
 PredictiveTrajectoryModel = _socnav.PredictiveTrajectoryModel
-load_predictive_checkpoint = _socnav.load_predictive_checkpoint
-torch = _socnav.torch
 
 
 class PredictionPlannerAdapter(SamplingPlannerAdapter):
@@ -285,7 +283,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """
         requested = str(self.config.predictive_device).strip().lower()
         if requested.startswith("cuda"):
-            if torch is not None and torch.cuda.is_available():
+            runtime_torch = _socnav.torch
+            if runtime_torch is not None and runtime_torch.cuda.is_available():
                 return requested
             logger.warning(
                 "Predictive planner requested device '{}' but CUDA is unavailable; using CPU.",
@@ -361,7 +360,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         if self.config.predictive_checkpoint_path:
             checkpoint = Path(self.config.predictive_checkpoint_path).expanduser()
         else:
-            checkpoint = resolve_model_path(self.config.predictive_model_id)
+            checkpoint = _socnav.resolve_model_path(self.config.predictive_model_id)
         if not checkpoint.exists():
             raise FileNotFoundError(f"Predictive planner checkpoint not found: {checkpoint}")
         return checkpoint
@@ -372,16 +371,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             PredictiveTrajectoryModel: Loaded model instance.
         """
-        if torch is None:  # pragma: no cover - dependency guard
+        if _socnav.torch is None:  # pragma: no cover - dependency guard
             raise RuntimeError(
                 "PyTorch is required for PredictionPlannerAdapter. Install torch dependency."
             )
-        if load_predictive_checkpoint is None:  # pragma: no cover - dependency guard
+        checkpoint_loader = _socnav.load_predictive_checkpoint
+        if checkpoint_loader is None:  # pragma: no cover - dependency guard
             raise RuntimeError(
                 "Predictive model checkpoint loading is unavailable. Install torch dependency."
             )
         checkpoint_path = self._resolve_checkpoint_path()
-        model, _payload = load_predictive_checkpoint(
+        model, _payload = checkpoint_loader(
             checkpoint_path,
             map_location=self._device,
             expected_feature_schema_name=str(self.config.predictive_feature_schema_name),
@@ -552,10 +552,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         if model is None:
             self._record_foresight_constant_velocity_used()
             return self._constant_velocity_prediction(state, mask)
-        assert torch is not None
-        with torch.no_grad():
-            state_t = torch.from_numpy(state[None]).to(self._device)
-            mask_t = torch.from_numpy(mask[None]).to(self._device)
+        runtime_torch = _socnav.torch
+        assert runtime_torch is not None
+        with runtime_torch.no_grad():
+            state_t = runtime_torch.from_numpy(state[None]).to(self._device)
+            mask_t = runtime_torch.from_numpy(mask[None]).to(self._device)
             out = model(state_t, mask_t)
             future = out["future_positions"][0].detach().cpu().numpy().astype(np.float32)
         return future

@@ -29,6 +29,7 @@ tests/test_map_runner_sac.py
 tests/test_output_root_migration.py
 tests/test_ppo_diagnostics.py
 tests/test_predictive_model.py
+tests/test_socnav_planner_adapter.py
 tests/unit/test_cli_logging_flags.py
 tests/unit/test_figure_orchestrator_requirements.py
 tests/unit/test_runner_helper_coverage.py

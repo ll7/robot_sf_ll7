@@ -7,6 +7,8 @@ Tests verify:
 - Documentation and discoverability
 """
 
+# evidence-writer-exempt: tests deliberately build legacy, malformed, and synthetic fixture files for verifier coverage
+
 from __future__ import annotations
 
 import hashlib

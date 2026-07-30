@@ -5,11 +5,12 @@ Checks that the Ruff version is consistent across:
 
 1. The ``astral-sh/ruff-pre-commit`` ``rev:`` in ``.pre-commit-config.yaml``
 2. ``[tool.ruff]`` ``required-version`` in ``pyproject.toml``
-3. The ``ruff==`` pin in a ``[dependency-groups]`` group in ``pyproject.toml``
+3. The ``ruff==`` pin in ``[dependency-groups].dev`` in ``pyproject.toml``
 
-Exits non-zero when the versions disagree.  Intended to be wired into the
-dev-validation surface as a gating local pre-commit hook and a non-gating
-advisory CI check so that future drift fails fast.
+Exits non-zero when the versions disagree. It is wired into the development
+validation surface as a gating local pre-commit hook and a gating CI lint check
+so that future drift fails fast. ``--advisory`` remains available for explicitly
+non-blocking diagnostic invocations.
 """
 
 from __future__ import annotations
@@ -84,10 +85,10 @@ def read_pyproject_required_version(path: Path) -> str:
 
 
 def read_pyproject_dev_dep_pin(path: Path) -> str:
-    """Return the ``ruff==X.Y.Z`` pin from ``[dependency-groups]``.
+    """Return the exact ``ruff==X.Y.Z`` pin from ``[dependency-groups].dev``.
 
     Raises:
-        ValueError: If no ruff pin is found in any dependency group.
+        ValueError: If the development group is malformed or lacks an exact Ruff pin.
     """
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     dep_groups = data.get("dependency-groups", {})

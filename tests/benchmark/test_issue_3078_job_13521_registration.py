@@ -146,6 +146,8 @@ def test_domain_decision_overlay_preserves_renderer_state_and_binds_receipt() ->
         assert hashlib.sha256(path.read_bytes()).hexdigest() == artifact["sha256"]
 
     receipt_binding = overlay["transfer_comparator_receipt"]
+    assert receipt_binding["path"] == NO_COMPARATOR_SIDECAR_REL.removesuffix(".review.json")
+    assert receipt_binding["review_sidecar_path"] == NO_COMPARATOR_SIDECAR_REL
     receipt_path = REPO_ROOT / receipt_binding["path"]
     sidecar_path = REPO_ROOT / receipt_binding["review_sidecar_path"]
     assert hashlib.sha256(receipt_path.read_bytes()).hexdigest() == receipt_binding["sha256"]

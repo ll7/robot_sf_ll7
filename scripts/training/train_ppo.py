@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import importlib
 import json
 import os
@@ -3020,9 +3021,10 @@ def _persist_expert_checkpoint(
     return checkpoint_path, config_manifest
 
 
-def _build_training_notes(  # noqa: C901
+def _build_training_notes(  # noqa: C901, PLR0912
     *,
     config: ExpertTrainingConfig,
+    config_sha256: str | None = None,
     scenario_ctx: ScenarioContext,
     eval_steps: Sequence[int],
     outputs: TrainingOutputs,
@@ -3037,6 +3039,8 @@ def _build_training_notes(  # noqa: C901
         f"Converged at {config.total_timesteps} timesteps",
         f"eval_steps={eval_steps}",
     ]
+    if config_sha256 is not None:
+        notes.append(f"config_sha256={config_sha256}")
     # Record the resolved reward profile so training artifacts are self-describing
     # (issue #4967). Pairs the human-readable name with any reward_kwargs weights.
     notes.append(f"reward_profile={_resolved_reward_name(config.env_factory_kwargs)}")
@@ -3149,6 +3153,7 @@ def run_expert_training(
     config: ExpertTrainingConfig,
     *,
     config_path: Path | None = None,
+    config_sha256: str | None = None,
     dry_run: bool = False,
     resume_from: Path | None = None,
 ) -> ExpertTrainingResult:
@@ -3228,6 +3233,7 @@ def run_expert_training(
     )
     notes = _build_training_notes(
         config=config,
+        config_sha256=config_sha256,
         scenario_ctx=scenario_ctx,
         eval_steps=eval_steps,
         outputs=outputs,
@@ -3392,6 +3398,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         logger.add(sys.stderr, level=log_level)
 
         config_path = Path(args.config).resolve()
+        config_sha256 = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        logger.info("Resolved config SHA-256: {}", config_sha256)
         config = load_expert_training_config(config_path)
         resume_from = (
             Path(args.resume_from).expanduser() if args.resume_from else config.resume_from
@@ -3399,6 +3407,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_expert_training(
             config,
             config_path=config_path,
+            config_sha256=config_sha256,
             dry_run=bool(args.dry_run),
             resume_from=resume_from,
         )

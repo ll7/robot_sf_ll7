@@ -39,26 +39,64 @@ import math
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import yaml
+
+from robot_sf.benchmark.control_action_latency_snqi import NATIVE_EXECUTION_MODES
 from robot_sf.benchmark.fallback_policy import resolve_execution_mode
+from robot_sf.benchmark.social_compliance import (
+    SOCIAL_COMPLIANCE_CLAIM_CLASS,
+    SOCIAL_COMPLIANCE_SCHEMA_VERSION,
+)
 from robot_sf.evidence.writers import write_json
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "configs/benchmarks/issue_6481_social_compliance_preflight_smoke.yaml"
 SCENARIO_MATRIX_PATH = ROOT / "configs/scenarios/issue_6481_social_compliance_preflight.yaml"
+METRIC_CONTRACT_PATH = ROOT / "configs/benchmarks/social_compliance_metric_contract_v1.yaml"
 EXPECTED_PLANNERS = ("goal", "social_force", "orca")
 EXPECTED_SEEDS = (111, 112, 113)
 EXPECTED_SCENARIO = "single_ped_crossing_orthogonal"
 EXPECTED_ROW_COUNT = len(EXPECTED_PLANNERS) * len(EXPECTED_SEEDS)  # 9
-SOCIAL_COMPLIANCE_SCHEMA_VERSION = "social-compliance-metric-contract.v1"
+
+
+def _load_metric_contract() -> dict[str, dict[str, str]]:
+    """Load the canonical metric fields used to validate each emitted row."""
+    payload = yaml.safe_load(METRIC_CONTRACT_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("social-compliance metric contract is not a mapping")
+    if payload.get("schema_version") != SOCIAL_COMPLIANCE_SCHEMA_VERSION:
+        raise ValueError("social-compliance metric contract schema version mismatch")
+    raw_metrics = payload.get("metrics")
+    if not isinstance(raw_metrics, list):
+        raise ValueError("social-compliance metric contract metrics are not a list")
+
+    contract: dict[str, dict[str, str]] = {}
+    for raw_metric in raw_metrics:
+        if not isinstance(raw_metric, dict):
+            raise ValueError("social-compliance metric contract contains a non-mapping metric")
+        metric_id = raw_metric.get("id")
+        if not isinstance(metric_id, str) or not metric_id.strip() or metric_id in contract:
+            raise ValueError("social-compliance metric contract contains an invalid metric id")
+        fields = {}
+        for field in ("family", "units", "denominator", "claim_class"):
+            value = raw_metric.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"social-compliance metric contract field is invalid: {field}")
+            fields[field] = value
+        contract[metric_id] = fields
+
+    if not contract:
+        raise ValueError("social-compliance metric contract has no metrics")
+    return contract
+
+
+EXPECTED_METRIC_CONTRACT = _load_metric_contract()
 EXPECTED_METRIC_FAMILIES = {
-    "pedestrian_deviation_mean_m": "pedestrian_deviation",
-    "flow_disruption_delay_s": "flow_disruption",
-    "comfort_exposure_person_s": "comfort_exposure",
-    "legibility_progress_deficit_m": "legibility_progress",
-    "distributional_inconvenience_p90_p50_gap": "distributional_inconvenience",
+    metric_id: fields["family"] for metric_id, fields in EXPECTED_METRIC_CONTRACT.items()
 }
 REQUIRED_FAMILIES = set(EXPECTED_METRIC_FAMILIES.values())
 VALID_STATUSES = {"available", "unavailable", "not_applicable"}
@@ -71,13 +109,6 @@ VALID_EXECUTION_MODES = {
     "unavailable",
     "unknown",
 }
-#: Execution modes that count as benchmark-capable native-success rows. Per the issue #691
-#: benchmark fallback policy and ``control_action_latency_snqi.NATIVE_EXECUTION_MODES``, a
-#: *declared* adapter runs the planner through a benchmark-capable compatibility adapter and is
-#: grouped with native execution; only fallback/degraded/unavailable rows are excluded from
-#: successful preflight evidence. ``social_force`` and ``orca`` are inherently adapter planners
-#: (``supports_native_commands: False``) and cannot run native.
-NATIVE_EXECUTION_MODES = frozenset({"native", "adapter"})
 VALID_READINESS_STATUSES = {"native", "adapter", "fallback", "degraded", "unknown"}
 VALID_AVAILABILITY_STATUSES = {
     "available",
@@ -201,6 +232,156 @@ def _load_campaign_planner_statuses(
     return statuses, True
 
 
+def _load_campaign_summary_runs(campaign_result: dict[str, Any]) -> list[Any] | None:
+    """Load campaign run entries from the result envelope or its summary JSON."""
+    raw_runs = campaign_result.get("runs")
+    if not isinstance(raw_runs, list):
+        summary_path = campaign_result.get("summary_json")
+        if isinstance(summary_path, str) and summary_path:
+            try:
+                summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                return None
+            raw_runs = summary.get("runs")
+    return raw_runs if isinstance(raw_runs, list) else None
+
+
+def _run_planner_identifiers(raw_run: Any) -> tuple[str, str] | None:
+    """Return the planner key and algorithm name from one campaign run entry."""
+    if not isinstance(raw_run, dict):
+        return None
+    planner_payload = raw_run.get("planner")
+    if isinstance(planner_payload, dict):
+        planner = _normalized_text(planner_payload.get("key") or planner_payload.get("algo"))
+        algo = _normalized_text(planner_payload.get("algo"))
+    else:
+        planner = _normalized_text(raw_run.get("planner_key") or raw_run.get("algo"))
+        algo = _normalized_text(raw_run.get("algo"))
+    if planner == "unknown":
+        return None
+    return planner, algo
+
+
+def _load_campaign_social_aggregates(
+    campaign_result: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], bool]:
+    """Load social-compliance aggregate blocks from the canonical campaign summary."""
+    raw_runs = _load_campaign_summary_runs(campaign_result)
+    if raw_runs is None:
+        return {}, False
+
+    blocks: dict[str, dict[str, Any]] = {}
+    for raw_run in raw_runs:
+        identifiers = _run_planner_identifiers(raw_run)
+        if identifiers is None:
+            return {}, False
+        planner, algo = identifiers
+        if planner in blocks:
+            return {}, False
+
+        if not isinstance(raw_run, dict):
+            return {}, False
+        aggregates = raw_run.get("aggregates")
+        if not isinstance(aggregates, dict):
+            return {}, False
+        aggregate_group = aggregates.get(planner)
+        if not isinstance(aggregate_group, dict) and algo != "unknown":
+            aggregate_group = aggregates.get(algo)
+        if not isinstance(aggregate_group, dict):
+            return {}, False
+        social = aggregate_group.get("social_compliance")
+        if not isinstance(social, dict):
+            return {}, False
+        blocks[planner] = social
+    return blocks, True
+
+
+def _aggregate_label(value: Any) -> str:
+    """Normalize aggregate metadata labels using the aggregator's fail-visible default."""
+    return value.strip() if isinstance(value, str) and value.strip() else "unknown"
+
+
+def _aggregate_contract_is_ok(
+    campaign_result: dict[str, Any],
+    row_classifications: list[dict[str, Any]],
+) -> bool:
+    """Verify that canonical campaign aggregates preserve social-compliance metadata."""
+    aggregate_blocks, aggregates_loaded = _load_campaign_social_aggregates(campaign_result)
+    if not aggregates_loaded:
+        return False
+
+    rows_by_planner: dict[str, list[dict[str, Any]]] = {}
+    for row in row_classifications:
+        rows_by_planner.setdefault(row["planner"], []).append(row)
+    if set(rows_by_planner) != set(aggregate_blocks):
+        return False
+
+    for planner, rows in rows_by_planner.items():
+        block = aggregate_blocks[planner]
+        if block.get("schema_version") != SOCIAL_COMPLIANCE_SCHEMA_VERSION:
+            return False
+        aggregate_metrics = block.get("metrics")
+        if not isinstance(aggregate_metrics, dict):
+            return False
+        if set(aggregate_metrics) != set(EXPECTED_METRIC_CONTRACT):
+            return False
+        if not all(
+            _aggregate_metric_contract_is_ok(metric_id, aggregate_metrics[metric_id], rows)
+            for metric_id in EXPECTED_METRIC_CONTRACT
+        ):
+            return False
+    return True
+
+
+def _aggregate_metric_contract_is_ok(
+    metric_id: str,
+    aggregate_metric: Any,
+    rows: list[dict[str, Any]],
+) -> bool:
+    """Verify status, support, denominator, reason, and reducer metadata for one metric."""
+    if not isinstance(aggregate_metric, dict):
+        return False
+    statuses = [row["statuses"].get(metric_id, "unavailable") for row in rows]
+    expected_status_counts = dict(Counter(str(status) for status in statuses))
+    expected_support_count = sum(
+        support
+        for row, status in zip(rows, statuses, strict=True)
+        for support in (row["support_counts"].get(metric_id, 0),)
+        if status == "available" and isinstance(support, (int, float))
+    )
+    expected_denominators = dict(
+        sorted(
+            Counter(_aggregate_label(row["denominators"].get(metric_id)) for row in rows).items()
+        )
+    )
+    expected_reasons = dict(
+        sorted(
+            Counter(
+                _aggregate_label(row["unavailable_reasons"].get(metric_id))
+                for row, status in zip(rows, statuses, strict=True)
+                if status != "available"
+            ).items()
+        )
+    )
+    if aggregate_metric.get("status_counts") != expected_status_counts:
+        return False
+    if aggregate_metric.get("support_count") != int(expected_support_count):
+        return False
+    if aggregate_metric.get("denominators") != expected_denominators:
+        return False
+    if aggregate_metric.get("unavailable_reasons") != expected_reasons:
+        return False
+
+    reducers = {"mean", "median", "p95"}
+    if any(status == "available" for status in statuses):
+        return reducers <= aggregate_metric.keys() and all(
+            isinstance(aggregate_metric.get(key), (int, float))
+            and math.isfinite(float(aggregate_metric[key]))
+            for key in reducers
+        )
+    return not reducers & aggregate_metric.keys()
+
+
 def _run_campaign(output_root: Path) -> dict[str, Any]:
     """Execute the camera-ready campaign and return the JSON result."""
     cmd = [
@@ -271,13 +452,14 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
     unavailable_reasons: dict[str, str | None] = {}
     schema_valid = (
         isinstance(social, dict)
-        and social.get("claim_class") == "diagnostic_proxy"
+        and social.get("claim_class") == SOCIAL_COMPLIANCE_CLAIM_CLASS
         and isinstance(social_metrics, dict)
-        and set(social_metrics) == set(EXPECTED_METRIC_FAMILIES)
+        and set(social_metrics) == set(EXPECTED_METRIC_CONTRACT)
         and schema_version == SOCIAL_COMPLIANCE_SCHEMA_VERSION
     )
     for metric_id, row in social_metrics.items():
         if isinstance(row, dict):
+            expected_contract = EXPECTED_METRIC_CONTRACT.get(metric_id)
             family = row.get("family", metric_id)
             if isinstance(family, str):
                 families_present.add(family)
@@ -291,14 +473,13 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
             unavailable_reasons[metric_id] = reason
 
             row_valid = (
-                metric_id in EXPECTED_METRIC_FAMILIES
+                expected_contract is not None
+                and metric_id in EXPECTED_METRIC_FAMILIES
                 and row.get("id") == metric_id
-                and family == EXPECTED_METRIC_FAMILIES.get(metric_id)
-                and row.get("claim_class") == "diagnostic_proxy"
-                and isinstance(row.get("units"), str)
-                and bool(row["units"].strip())
-                and isinstance(denominator, str)
-                and bool(denominator.strip())
+                and family == expected_contract["family"]
+                and row.get("claim_class") == expected_contract["claim_class"]
+                and row.get("units") == expected_contract["units"]
+                and denominator == expected_contract["denominator"]
                 and isinstance(status, str)
                 and status in VALID_STATUSES
                 and isinstance(support_count, int)
@@ -394,6 +575,13 @@ def _campaign_result_is_ok(campaign_result: dict[str, Any]) -> bool:
     )
 
 
+def _receipt_aggregation_failure_messages(receipt: dict[str, Any]) -> list[str]:
+    """Return aggregate-contract failure text for the CLI receipt."""
+    if receipt["aggregation_contract_ok"]:
+        return []
+    return ["canonical aggregate lost social-compliance contract metadata"]
+
+
 def _receipt_failure_messages(receipt: dict[str, Any]) -> list[str]:
     """Return concise fail-closed reasons for the CLI result."""
     failures: list[str] = []
@@ -421,6 +609,7 @@ def _receipt_failure_messages(receipt: dict[str, Any]) -> list[str]:
         failures.append("schema-invalid social_compliance block")
     if not receipt["all_families_present"]:
         failures.append("missing metric families")
+    failures.extend(_receipt_aggregation_failure_messages(receipt))
     return failures
 
 
@@ -460,6 +649,7 @@ def build_receipt(
     )
     all_schema_valid = all(r["schema_valid"] for r in row_classifications)
     all_families = all(r["all_families_present"] for r in row_classifications)
+    aggregation_contract_ok = _aggregate_contract_is_ok(campaign_result, row_classifications)
     row_count_ok = len(episodes) == EXPECTED_ROW_COUNT
     identities_ok = observed_identities == expected_identities
     campaign_returncode = campaign_result.get("_runner_returncode")
@@ -477,6 +667,7 @@ def build_receipt(
         and no_fallback_or_degraded
         and all_schema_valid
         and all_families
+        and aggregation_contract_ok
     )
 
     return {
@@ -501,6 +692,7 @@ def build_receipt(
         "planner_summary_ok": planner_summary_ok,
         "all_schema_valid": all_schema_valid,
         "all_families_present": all_families,
+        "aggregation_contract_ok": aggregation_contract_ok,
         "campaign_ok": campaign_ok,
         "campaign_returncode": campaign_returncode,
         "campaign_exit_code": campaign_exit_code,

@@ -454,7 +454,7 @@ def _flatten_human_interaction_proxy_block(
 
 
 def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
-    """Flatten social-compliance values while retaining status/support metadata."""
+    """Flatten social-compliance values while retaining contract metadata."""
     if not isinstance(block, dict):
         return
     metrics = block.get("metrics") or {}
@@ -466,6 +466,9 @@ def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
         prefix = f"social_compliance.{metric_id}"
         base[f"{prefix}.status"] = row.get("status")
         base[f"{prefix}.support_count"] = row.get("support_count", 0)
+        base[f"{prefix}.denominator"] = row.get("denominator")
+        if row.get("status") != "available":
+            base[f"{prefix}.unavailable_reason"] = row.get("unavailable_reason")
         if row.get("status") == "available" and row.get("value") is not None:
             base[prefix] = row["value"]
 
@@ -491,6 +494,8 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
     for metric_id in dict.fromkeys(metric_ids):
         status_key = f"social_compliance.{metric_id}.status"
         support_key = f"social_compliance.{metric_id}.support_count"
+        denominator_key = f"social_compliance.{metric_id}.denominator"
+        reason_key = f"social_compliance.{metric_id}.unavailable_reason"
         value_key = f"social_compliance.{metric_id}"
         statuses = [row.get(status_key) or "unavailable" for row in rows]
         values = [row[value_key] for row in rows if isinstance(row.get(value_key), int | float)]
@@ -498,9 +503,21 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
             row.get(support_key, 0) if status == "available" else 0
             for row, status in zip(rows, statuses, strict=True)
         ]
+        denominators = Counter(
+            value.strip() if isinstance(value, str) and value.strip() else "unknown"
+            for value in (row.get(denominator_key) for row in rows)
+        )
+        unavailable_reasons = Counter(
+            value.strip() if isinstance(value, str) and value.strip() else "unknown"
+            for row, status in zip(rows, statuses, strict=True)
+            if status != "available"
+            for value in (row.get(reason_key),)
+        )
         metric_summary: dict[str, Any] = {
             "status_counts": dict(Counter(str(status) for status in statuses)),
             "support_count": int(sum(value for value in support if isinstance(value, int | float))),
+            "denominators": dict(sorted(denominators.items())),
+            "unavailable_reasons": dict(sorted(unavailable_reasons.items())),
         }
         if values:
             arr = np.asarray(values, dtype=float)

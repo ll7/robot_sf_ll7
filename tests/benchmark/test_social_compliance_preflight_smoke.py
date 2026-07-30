@@ -18,6 +18,7 @@ from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.social_compliance import SOCIAL_COMPLIANCE_SCHEMA_VERSION
 from scripts.validation.preflight_social_compliance_smoke_issue_6481 import (
+    _aggregate_contract_is_ok,
     _classify_row,
     build_receipt,
 )
@@ -105,6 +106,7 @@ def test_social_compliance_block_survives_flatten_and_aggregate() -> None:
     flat = flatten_metrics(record)
     assert flat["social_compliance.comfort_exposure_person_s.status"] == "available"
     assert flat["social_compliance.comfort_exposure_person_s.support_count"] == 3
+    assert flat["social_compliance.comfort_exposure_person_s.denominator"] == "pedestrian_steps"
     assert flat["social_compliance.pedestrian_deviation_mean_m.status"] == "unavailable"
 
     aggregate = compute_aggregates([record])
@@ -114,11 +116,16 @@ def test_social_compliance_block_survives_flatten_and_aggregate() -> None:
     comfort = social["metrics"]["comfort_exposure_person_s"]
     assert comfort["status_counts"] == {"available": 1}
     assert comfort["support_count"] == 3
+    assert comfort["denominators"] == {"pedestrian_steps": 1}
     assert comfort["mean"] == pytest.approx(1.0)
 
     deviation = social["metrics"]["pedestrian_deviation_mean_m"]
     assert deviation["status_counts"] == {"unavailable": 1}
     assert deviation["support_count"] == 0
+    assert deviation["denominators"] == {"tracked_pedestrian_steps_with_baseline": 1}
+    assert deviation["unavailable_reasons"] == {
+        "matched pedestrian reference trajectory is unavailable": 1
+    }
     assert "mean" not in deviation
 
 
@@ -192,6 +199,62 @@ def test_receipt_preserves_contract_metadata_and_classifies_execution_modes() ->
     assert (
         classified["unavailable_reasons"]["pedestrian_deviation_mean_m"]
         == "matched pedestrian reference trajectory is unavailable"
+    )
+
+    invalid_contract_record = {
+        **record,
+        "metrics": {
+            **record["metrics"],
+            "social_compliance": {
+                **record["metrics"]["social_compliance"],
+                "metrics": {
+                    **record["metrics"]["social_compliance"]["metrics"],
+                    "comfort_exposure_person_s": {
+                        **record["metrics"]["social_compliance"]["metrics"][
+                            "comfort_exposure_person_s"
+                        ],
+                        "units": "seconds",
+                    },
+                },
+            },
+        },
+    }
+    assert _classify_row(invalid_contract_record)["schema_valid"] is False
+
+    aggregate = compute_aggregates([record])["goal"]
+    campaign_with_aggregate = {
+        "runs": [
+            {
+                "planner": {"key": "goal", "algo": "goal"},
+                "aggregates": {"goal": aggregate},
+            }
+        ]
+    }
+    assert _aggregate_contract_is_ok(campaign_with_aggregate, [classified]) is True
+
+    missing_aggregate_metadata = {
+        **aggregate,
+        "social_compliance": {
+            **aggregate["social_compliance"],
+            "metrics": {
+                **aggregate["social_compliance"]["metrics"],
+                "comfort_exposure_person_s": {
+                    **aggregate["social_compliance"]["metrics"]["comfort_exposure_person_s"],
+                    "denominators": {},
+                },
+            },
+        },
+    }
+    assert (
+        _aggregate_contract_is_ok(
+            {
+                "runs": [
+                    {"planner": {"key": "goal"}, "aggregates": {"goal": missing_aggregate_metadata}}
+                ]
+            },
+            [classified],
+        )
+        is False
     )
 
     campaign_result = {

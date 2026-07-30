@@ -1,7 +1,8 @@
 # Issue #6481 social-compliance preflight scenario matrix.
 #
 # Selects exactly one small scenario with pedestrians so the diagnostic
-# social-compliance emission from PR #6236 can be exercised natively.
+# social-compliance emission from PR #6236 can be exercised through the
+# canonical native-or-adapter benchmark path.
 # This is a preflight-only surface; it does not establish planner ranking,
 # fairness, or social-validity claims.
 

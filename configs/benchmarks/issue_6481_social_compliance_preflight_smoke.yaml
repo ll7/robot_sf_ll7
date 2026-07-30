@@ -2,7 +2,7 @@
 #
 # Purpose:
 #   Prove the already-merged metrics.social_compliance diagnostic block
-#   (PR #6236) survives one small native cross-planner execution and
+#   (PR #6236) survives one small native-or-adapter cross-planner execution and
 #   aggregation path before any full campaign is preregistered.
 #
 # Evidence tier: smoke / preflight only.

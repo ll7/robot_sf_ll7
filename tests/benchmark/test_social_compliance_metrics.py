@@ -103,13 +103,26 @@ def test_flatten_and_aggregate_preserve_status_support_and_values() -> None:
     assert flat["social_compliance.comfort_exposure_person_s"] == 1.0
     assert flat["social_compliance.comfort_exposure_person_s.status"] == "available"
     assert flat["social_compliance.comfort_exposure_person_s.support_count"] == 3
+    assert flat["social_compliance.comfort_exposure_person_s.denominator"] == "pedestrian_steps"
+    assert (
+        flat["social_compliance.pedestrian_deviation_mean_m.unavailable_reason"]
+        == "matched pedestrian reference trajectory is unavailable"
+    )
 
     aggregate = compute_aggregates([record])
     social = aggregate["planner_a"]["social_compliance"]
     comfort = social["metrics"]["comfort_exposure_person_s"]
     assert comfort["status_counts"] == {"available": 1}
     assert comfort["support_count"] == 3
+    assert comfort["denominators"] == {"pedestrian_steps": 1}
+    assert comfort["unavailable_reasons"] == {}
     assert comfort["mean"] == 1.0
+
+    deviation = social["metrics"]["pedestrian_deviation_mean_m"]
+    assert deviation["denominators"] == {"tracked_pedestrian_steps_with_baseline": 1}
+    assert deviation["unavailable_reasons"] == {
+        "matched pedestrian reference trajectory is unavailable": 1
+    }
 
 
 def test_aggregate_normalizes_legacy_social_rows() -> None:

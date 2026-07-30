@@ -684,9 +684,12 @@ class NativeCommandPlanner:
         """
         if self._process is None or self._process.poll() is not None:
             self._start_process()
-        assert self._process is not None
-        assert self._process.stdin is not None
-        assert self._process.stdout is not None
+        if self._process is None:
+            raise RuntimeError("native command process not started after _start_process")
+        if self._process.stdin is None:
+            raise RuntimeError("native command process stdin not initialized")
+        if self._process.stdout is None:
+            raise RuntimeError("native command process stdout not initialized")
         try:
             self._process.stdin.write((request + "\n").encode("utf-8"))
             self._process.stdin.flush()
@@ -726,8 +729,10 @@ class NativeCommandPlanner:
         Returns:
             Decoded response text without the line terminator.
         """
-        assert self._process is not None
-        assert self._process.stdout is not None
+        if self._process is None:
+            raise RuntimeError("native command process not started")
+        if self._process.stdout is None:
+            raise RuntimeError("native command process stdout not initialized")
         deadline = time.monotonic() + self._spec.step_timeout_sec
         with selectors.DefaultSelector() as selector:
             selector.register(self._process.stdout, selectors.EVENT_READ)

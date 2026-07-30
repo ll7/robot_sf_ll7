@@ -263,7 +263,8 @@ def encode_frames(
         stop_sampler()
         return EncodeResult(path=out_path, status="failed", note=err)
 
-    assert first is not None  # for type checker
+    if first is None:  # for type checker
+        raise TypeError("first frame must not be None after successful validation")
     frame_list = _materialize_frames(first, chained)
     if not frame_list:
         stop_sampler()

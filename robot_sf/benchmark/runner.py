@@ -417,8 +417,10 @@ class _PlannerStepProcess:
             Planner action payload returned by the worker process.
         """
         self._ensure_worker()
-        assert self._conn is not None
-        assert self._process is not None
+        if self._conn is None:
+            raise RuntimeError("worker connection not initialized after _ensure_worker")
+        if self._process is None:
+            raise RuntimeError("worker process not initialized after _ensure_worker")
         try:
             self._conn.send(("step", obs))
         except (BrokenPipeError, EOFError, OSError) as exc:
@@ -717,7 +719,8 @@ class _NativeCommandPolicy:
         Returns:
             Decoded response text without the line terminator.
         """
-        assert process.stdout is not None
+        if process.stdout is None:
+            raise RuntimeError("worker process stdout not initialized")
         deadline = time.monotonic() + self._timeout_s
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ)
@@ -778,7 +781,8 @@ class _NativeCommandPolicy:
         try:
             if self._persistent:
                 process = self._ensure_process()
-                assert process.stdin is not None
+                if process.stdin is None:
+                    raise RuntimeError("worker process stdin not initialized")
                 process.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
                 process.stdin.flush()
                 stdout = self._readline_with_timeout(process)
@@ -1005,9 +1009,10 @@ def _stack_or_zero(
         return stack_fn(traj)
     else:
         # Ensure empty_shape[0] == 0 for lazy evaluation
-        assert empty_shape[0] == 0, (
-            "empty_shape should have zero in the first dimension for lazy evaluation"
-        )
+        if empty_shape[0] != 0:
+            raise ValueError(
+                "empty_shape should have zero in the first dimension for lazy evaluation"
+            )
         # Return a zero-length array with the correct shape and dtype
         return np.empty(empty_shape)
 

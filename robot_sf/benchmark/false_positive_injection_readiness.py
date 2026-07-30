@@ -286,7 +286,8 @@ def check_false_positive_injection_readiness(
             observation_view=observation_view,
         )
 
-    assert perturbation_spec is not None  # guaranteed when no blockers recorded
+    if perturbation_spec is None:  # guaranteed when no blockers recorded
+        raise RuntimeError("perturbation_spec must not be None after block-free readiness check")
     injected_actor_count = perturbation_spec.false_positive_actor_count
     if injected_actor_count == 0:
         # No false-positive actors requested: explicitly unavailable, mirroring how

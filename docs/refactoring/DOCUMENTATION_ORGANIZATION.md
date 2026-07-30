@@ -54,7 +54,7 @@ Every refactoring document now includes:
 
 ### 🎯 Clear Entry Points
 1. **[Main README](../README.md#-documentation)** - Project overview with documentation links
-2. **[Docs Index](../README.md)** - Complete documentation catalog  
+2. **[Docs Index](../README.md)** - Complete documentation catalog
 3. **[Refactoring Index](../refactoring/README.md)** - Focused refactoring guide
 
 ### 🔄 Easy Navigation

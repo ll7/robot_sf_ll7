@@ -1,5 +1,8 @@
 """Tests for the changed-path docs/evidence integrity check (issue #3476)."""
 
+# evidence-writer-exempt: tests intentionally write valid and malformed tmp_path fixtures to
+# exercise the integrity checker's parser, diagnostics, and fail-closed CLI behavior.
+
 from __future__ import annotations
 
 import json

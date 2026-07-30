@@ -14,10 +14,10 @@ import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.planner.constants import (
-    DEFAULT_FORWARD_LOOKAHEAD_M,
-    DEFAULT_MAX_ANGULAR_SPEED,
-    DEFAULT_MAX_LINEAR_SPEED,
-    DEFAULT_SAMPLE_HORIZON_S,
+    DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M,
+    DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED,
+    DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED,
+    DEFAULT_STREAM_GAP_SAMPLE_HORIZON_S,
 )
 
 
@@ -25,19 +25,19 @@ from robot_sf.planner.constants import (
 class StreamGapPlannerConfig:
     """Configuration for :class:`StreamGapPlannerAdapter`."""
 
-    max_linear_speed: float = DEFAULT_MAX_LINEAR_SPEED
-    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
+    max_linear_speed: float = DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED
+    max_angular_speed: float = DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED
     goal_tolerance: float = 0.25
     heading_gain: float = 1.6
     turn_in_place_angle: float = 0.7
 
-    forward_lookahead: float = DEFAULT_FORWARD_LOOKAHEAD_M
+    forward_lookahead: float = DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M
     rear_margin: float = 0.5
     corridor_half_width: float = 0.85
     emergency_clearance: float = 0.55
 
     sample_dt: float = 0.2
-    sample_horizon: float = DEFAULT_SAMPLE_HORIZON_S
+    sample_horizon: float = DEFAULT_STREAM_GAP_SAMPLE_HORIZON_S
     safe_gap_time: float = 1.0
     approach_gap_time: float = 0.8
 
@@ -518,17 +518,19 @@ def build_stream_gap_config(cfg: dict[str, Any] | None) -> StreamGapPlannerConfi
     if not isinstance(cfg, dict):
         return StreamGapPlannerConfig()
     return StreamGapPlannerConfig(
-        max_linear_speed=float(cfg.get("max_linear_speed", DEFAULT_MAX_LINEAR_SPEED)),
-        max_angular_speed=float(cfg.get("max_angular_speed", DEFAULT_MAX_ANGULAR_SPEED)),
+        max_linear_speed=float(cfg.get("max_linear_speed", DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED)),
+        max_angular_speed=float(cfg.get("max_angular_speed", DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
         heading_gain=float(cfg.get("heading_gain", 1.6)),
         turn_in_place_angle=float(cfg.get("turn_in_place_angle", 0.7)),
-        forward_lookahead=float(cfg.get("forward_lookahead", DEFAULT_FORWARD_LOOKAHEAD_M)),
+        forward_lookahead=float(
+            cfg.get("forward_lookahead", DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M)
+        ),
         rear_margin=float(cfg.get("rear_margin", 0.5)),
         corridor_half_width=float(cfg.get("corridor_half_width", 0.85)),
         emergency_clearance=float(cfg.get("emergency_clearance", 0.55)),
         sample_dt=float(cfg.get("sample_dt", 0.2)),
-        sample_horizon=float(cfg.get("sample_horizon", DEFAULT_SAMPLE_HORIZON_S)),
+        sample_horizon=float(cfg.get("sample_horizon", DEFAULT_STREAM_GAP_SAMPLE_HORIZON_S)),
         safe_gap_time=float(cfg.get("safe_gap_time", 1.0)),
         approach_gap_time=float(cfg.get("approach_gap_time", 0.8)),
         wait_speed=float(cfg.get("wait_speed", 0.0)),

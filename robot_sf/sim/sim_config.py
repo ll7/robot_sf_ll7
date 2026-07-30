@@ -20,11 +20,6 @@ from robot_sf.sim.pedestrian_speed_tiers import (
     normalize_ped_speed_tier,
 )
 
-#: Default cap on the magnitude (N) of opt-in predictive/collision pedestrian
-#: social forces. Behaviorally identical to the literal ``5.0``; module-level
-#: because it recurs within this simulator-config module (no planner dependency).
-DEFAULT_MAX_FORCE: float = 5.0
-
 
 @dataclass(frozen=True)
 class TtcPredictiveForceConfig:
@@ -34,7 +29,7 @@ class TtcPredictiveForceConfig:
     tau0_s: float = 1.0
     horizon_s: float = 3.0
     force_scale: float = 1.0
-    max_force: float = DEFAULT_MAX_FORCE
+    max_force: float = 5.0
     include_ped_ped: bool = True
     include_robot_proxy: bool = False
 
@@ -70,7 +65,7 @@ class ZanlungoCollisionPredictionConfig:
     interaction_range_m: float = 0.71
     anisotropy_lambda: float = 0.29
     angle_threshold_rad: float = pi / 4
-    max_force: float = DEFAULT_MAX_FORCE
+    max_force: float = 5.0
     include_ped_ped: bool = True
 
     def __post_init__(self) -> None:

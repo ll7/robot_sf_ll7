@@ -13,12 +13,11 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
-from robot_sf.planner.constants import (
-    DEFAULT_GOAL_PROGRESS_WEIGHT,
-    DEFAULT_MAX_ANGULAR_SPEED,
-    DEFAULT_MAX_LINEAR_SPEED,
-)
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
+
+_DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
+_DEFAULT_MAX_ANGULAR_SPEED = 1.2
+_DEFAULT_MAX_LINEAR_SPEED = 1.2
 
 
 def _safe_mean(values: np.ndarray) -> float:
@@ -33,8 +32,8 @@ def _safe_mean(values: np.ndarray) -> float:
 class RiskDWAPlannerConfig:
     """Configuration for :class:`RiskDWAPlannerAdapter`."""
 
-    max_linear_speed: float = DEFAULT_MAX_LINEAR_SPEED
-    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
+    max_linear_speed: float = _DEFAULT_MAX_LINEAR_SPEED
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
     rollout_dt: float = 0.2
     rollout_steps: int = 8
     goal_tolerance: float = 0.25
@@ -42,7 +41,7 @@ class RiskDWAPlannerConfig:
     linear_candidates: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2)
     angular_candidates: tuple[float, ...] = (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2)
 
-    goal_progress_weight: float = DEFAULT_GOAL_PROGRESS_WEIGHT
+    goal_progress_weight: float = _DEFAULT_GOAL_PROGRESS_WEIGHT
     heading_weight: float = 0.8
     ped_clearance_weight: float = 1.6
     obstacle_clearance_weight: float = 1.2
@@ -429,14 +428,14 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
     )
 
     return RiskDWAPlannerConfig(
-        max_linear_speed=float(cfg.get("max_linear_speed", DEFAULT_MAX_LINEAR_SPEED)),
-        max_angular_speed=float(cfg.get("max_angular_speed", DEFAULT_MAX_ANGULAR_SPEED)),
+        max_linear_speed=float(cfg.get("max_linear_speed", _DEFAULT_MAX_LINEAR_SPEED)),
+        max_angular_speed=float(cfg.get("max_angular_speed", _DEFAULT_MAX_ANGULAR_SPEED)),
         rollout_dt=float(cfg.get("rollout_dt", 0.2)),
         rollout_steps=int(cfg.get("rollout_steps", 8)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
         linear_candidates=linear_candidates,
         angular_candidates=angular_candidates,
-        goal_progress_weight=float(cfg.get("goal_progress_weight", DEFAULT_GOAL_PROGRESS_WEIGHT)),
+        goal_progress_weight=float(cfg.get("goal_progress_weight", _DEFAULT_GOAL_PROGRESS_WEIGHT)),
         heading_weight=float(cfg.get("heading_weight", 0.8)),
         ped_clearance_weight=float(cfg.get("ped_clearance_weight", 1.6)),
         obstacle_clearance_weight=float(cfg.get("obstacle_clearance_weight", 1.2)),

@@ -23,8 +23,9 @@ if TYPE_CHECKING:
 
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.nav.occupancy import is_circle_circle_intersection
-from robot_sf.planner.constants import DEFAULT_MAX_ANGULAR_SPEED
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
+
+_DEFAULT_MAX_ANGULAR_SPEED = 1.2
 
 
 class PrimitiveKind(Enum):
@@ -103,7 +104,7 @@ class SippLatticePrimitiveSet:
     """
 
     max_linear_speed: float = 1.0
-    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
     max_linear_acceleration: float = 0.8
     max_steering_rate: float = 2.0
     primitive_duration: float = 0.2
@@ -490,7 +491,7 @@ class SippLatticeConfig:
     """Tunable parameters for the kinodynamic state-time lattice planner."""
 
     max_linear_speed: float = 1.0
-    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
     max_linear_acceleration: float = 0.8
     max_steering_rate: float = 2.0
     primitive_duration: float = 0.2

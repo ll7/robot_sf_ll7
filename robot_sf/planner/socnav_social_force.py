@@ -421,6 +421,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         norm = float(np.linalg.norm(force))
         if norm < self._EPS or norm <= self.config.social_force_max_force:
             return force
+        return (
+            force
+            / (norm + self._EPS)
+            * float(self.config.social_force_max_force)
+        )
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

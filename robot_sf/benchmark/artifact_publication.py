@@ -1641,6 +1641,9 @@ def _snqi_scan_episode_snqi_fields(
             )
             if field_present:
                 episode_field_present += 1
+            if stored_snqi is not None:
+                per_arm_field_sum[arm] += stored_snqi
+                per_arm_field_count[arm] += 1
             if rejection is not None:
                 # Every drift is counted; the per-episode rejection sample is capped so a
                 # large drift cannot balloon the report, but ``violation_count`` below
@@ -1651,10 +1654,6 @@ def _snqi_scan_episode_snqi_fields(
                         mismatch_sample.append(rejection)
                 else:
                     rejections.append(rejection)
-                continue
-            if stored_snqi is not None:
-                per_arm_field_sum[arm] += stored_snqi
-                per_arm_field_count[arm] += 1
     return {
         "rejections": rejections,
         "rows": rows,

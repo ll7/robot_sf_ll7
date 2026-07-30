@@ -32,9 +32,14 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
 
-        assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
+        if num_heads <= 0:
+            raise ValueError(f"num_heads must be positive, got {num_heads}")
+        if embed_dim % num_heads != 0:
+            raise ValueError(
+                f"embed_dim={embed_dim} must be divisible by num_heads={num_heads}",
+            )
+        self.head_dim = embed_dim // num_heads
 
         self.query = nn.Linear(embed_dim, embed_dim)
         self.key = nn.Linear(embed_dim, embed_dim)

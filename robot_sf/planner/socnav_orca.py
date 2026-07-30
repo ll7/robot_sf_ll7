@@ -1044,6 +1044,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             scene.obstacle_vertices,
         )
         if self._rvo2_sim is not None and self._rvo2_signature == signature:
+            # RVO2 simulator references are valid when signature matches cached sim
             assert self._rvo2_robot_id is not None
             return self._rvo2_sim, self._rvo2_robot_id, self._rvo2_ped_ids
 

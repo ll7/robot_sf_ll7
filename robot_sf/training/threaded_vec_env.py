@@ -190,7 +190,7 @@ class ThreadedVecEnv(DummyVecEnv):
             try:
                 with lidar_batch_context(coordinator, env_idx):
                     return env.step(action)
-            except BaseException as exc:
+            except BaseException as exc:  # broad catch: abort coordinator on any exit incl. Ctrl-C
                 coordinator.abort(exc)
                 raise
 

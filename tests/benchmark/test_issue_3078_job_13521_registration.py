@@ -128,7 +128,27 @@ def test_no_eligible_comparator_receipt_is_recorded() -> None:
 def test_domain_decision_overlay_preserves_renderer_state_and_binds_receipt() -> None:
     """The reviewed decision overlays, rather than rewrites, generated evidence."""
     overlay = _load_json(OVERLAY_NAME)
-    assert overlay["approval"]["status"] == "domain_approved"
+    bundle_rel = BUNDLE.relative_to(REPO_ROOT).as_posix()
+    assert overlay["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert overlay["schema_version"] == "package_a_domain_decision_overlay.v1"
+    assert overlay["issue"] == 3078
+    assert overlay["bundle_path"] == bundle_rel
+    assert (
+        overlay["claim_boundary_ref"]
+        == "Issue #6157 canonical diagnostic-only boundary, as carried by issue #6430"
+    )
+    assert overlay["approval"] == {
+        "approval_source": "Issue #6430 approved decision, carried by PR #6444",
+        "approved_at_utc": "2026-07-30",
+        "review_marker": "DOMAIN-APPROVED (2026-07-30) - REVIEWED",
+        "status": "domain_approved",
+    }
+    assert overlay["forbidden_actions_confirmed"] == {
+        "benchmark_campaign_run": False,
+        "compute_submit": False,
+        "paper_claim_edits": False,
+        "ranking_claim_promotion": False,
+    }
     assert overlay["decision"] == {
         "claim_status": "reviewed",
         "classification": "diagnostic",
@@ -145,9 +165,34 @@ def test_domain_decision_overlay_preserves_renderer_state_and_binds_receipt() ->
         path = REPO_ROOT / artifact["path"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == artifact["sha256"]
 
+    renderer_by_path = {artifact["path"]: artifact for artifact in overlay["renderer_outputs"]}
+    assert set(renderer_by_path) == {
+        f"{bundle_rel}/claim_card.yaml",
+        f"{bundle_rel}/package_a_decision_packet.json",
+        f"{bundle_rel}/postrun_acceptance.json",
+        f"{bundle_rel}/registration.json",
+        f"{bundle_rel}/seed_rank_stability_diagnostic.json",
+    }
+    assert renderer_by_path[f"{bundle_rel}/claim_card.yaml"]["claim_status"] == "not_reviewed"
+    assert renderer_by_path[f"{bundle_rel}/claim_card.yaml"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    assert renderer_by_path[f"{bundle_rel}/package_a_decision_packet.json"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    assert renderer_by_path[f"{bundle_rel}/postrun_acceptance.json"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    assert renderer_by_path[f"{bundle_rel}/registration.json"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    seed_renderer = renderer_by_path[f"{bundle_rel}/seed_rank_stability_diagnostic.json"]
+    assert seed_renderer["classification"] == "not_identifiable"
+
     receipt_binding = overlay["transfer_comparator_receipt"]
     assert receipt_binding["path"] == NO_COMPARATOR_SIDECAR_REL.removesuffix(".review.json")
     assert receipt_binding["review_sidecar_path"] == NO_COMPARATOR_SIDECAR_REL
+    assert receipt_binding["status"] == "no_eligible_comparator"
     receipt_path = REPO_ROOT / receipt_binding["path"]
     sidecar_path = REPO_ROOT / receipt_binding["review_sidecar_path"]
     assert hashlib.sha256(receipt_path.read_bytes()).hexdigest() == receipt_binding["sha256"]
@@ -155,7 +200,9 @@ def test_domain_decision_overlay_preserves_renderer_state_and_binds_receipt() ->
         hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
         == receipt_binding["review_sidecar_sha256"]
     )
-    assert "DOMAIN-APPROVED" in json.loads(sidecar_path.read_text())["review_marker"]
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert "DOMAIN-APPROVED" in sidecar["review_marker"]
+    assert sidecar["review_source"] == OVERLAY_NAME
 
     manifest = yaml.safe_load((BUNDLE / "artifact_manifest.yaml").read_text(encoding="utf-8"))
     manifest_paths = {entry["path"] for entry in manifest["files"]}

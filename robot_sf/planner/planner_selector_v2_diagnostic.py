@@ -15,6 +15,7 @@ _REQUIRED_CANDIDATES = (
     "proxemic_conservative",
     "fast_progress_static_escape",
 )
+_DEFAULT_DENSE_PED_COUNT = 4
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,7 @@ def build_planner_selector_v2_diagnostic_config(
                 "docs/context/issue_1692_topology_hypothesis_probe.md",
             ),
         ),
-        dense_ped_count=int(selector_raw.get("dense_ped_count", 4)),
+        dense_ped_count=int(selector_raw.get("dense_ped_count", _DEFAULT_DENSE_PED_COUNT)),
         near_field_distance_m=float(selector_raw.get("near_field_distance_m", 2.3)),
         comfort_distance_m=float(selector_raw.get("comfort_distance_m", 1.05)),
         baseline_candidate=str(selector_raw.get("baseline_candidate", "baseline")),

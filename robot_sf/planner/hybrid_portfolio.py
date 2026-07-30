@@ -25,6 +25,9 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 
+_DEFAULT_DENSE_PED_COUNT = 6
+_DEFAULT_HYSTERESIS_STEPS = 6
+
 
 @dataclass
 class HybridPortfolioConfig:
@@ -262,9 +265,9 @@ def build_hybrid_portfolio_build_config(cfg: dict[str, Any] | None) -> HybridPor
     hybrid = HybridPortfolioConfig(
         emergency_clearance=float(hybrid_raw.get("emergency_clearance", 0.55)),
         caution_clearance=float(hybrid_raw.get("caution_clearance", 1.0)),
-        dense_ped_count=int(hybrid_raw.get("dense_ped_count", 6)),
+        dense_ped_count=int(hybrid_raw.get("dense_ped_count", _DEFAULT_DENSE_PED_COUNT)),
         near_field_distance=float(hybrid_raw.get("near_field_distance", 2.5)),
-        hysteresis_steps=int(hybrid_raw.get("hysteresis_steps", 6)),
+        hysteresis_steps=int(hybrid_raw.get("hysteresis_steps", _DEFAULT_HYSTERESIS_STEPS)),
         fallback_on_exception=bool(hybrid_raw.get("fallback_on_exception", True)),
         adaptive_switching_enabled=bool(hybrid_raw.get("adaptive_switching_enabled", True)),
     )

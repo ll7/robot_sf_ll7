@@ -16,6 +16,9 @@ from robot_sf.planner.mppi_social import (
 )
 from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
 
+_DEFAULT_ROLLOUT_STEPS = 6
+_DEFAULT_ROUTE_STALL_CYCLES_BEFORE_SAMPLER = 3
+
 
 @dataclass
 class HybridORCASamplerConfig(GuardedPPOConfig):
@@ -340,7 +343,7 @@ def build_hybrid_orca_sampler_build_config(
 
     guard = HybridORCASamplerConfig(
         rollout_dt=float(guard_raw.get("rollout_dt", 0.2)),
-        rollout_steps=int(guard_raw.get("rollout_steps", 6)),
+        rollout_steps=int(guard_raw.get("rollout_steps", _DEFAULT_ROLLOUT_STEPS)),
         goal_tolerance=float(guard_raw.get("goal_tolerance", 0.25)),
         near_field_distance=float(guard_raw.get("near_field_distance", 2.0)),
         hard_ped_clearance=float(guard_raw.get("hard_ped_clearance", 0.58)),
@@ -354,7 +357,9 @@ def build_hybrid_orca_sampler_build_config(
         ),
         route_progress_epsilon=float(guard_raw.get("route_progress_epsilon", 0.05)),
         route_stall_cycles_before_sampler=int(
-            guard_raw.get("route_stall_cycles_before_sampler", 3)
+            guard_raw.get(
+                "route_stall_cycles_before_sampler", _DEFAULT_ROUTE_STALL_CYCLES_BEFORE_SAMPLER
+            )
         ),
         route_goal_regression_tolerance=float(
             guard_raw.get("route_goal_regression_tolerance", 0.5)

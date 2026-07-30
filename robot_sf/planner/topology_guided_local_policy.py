@@ -19,6 +19,9 @@ from robot_sf.planner.hybrid_rule_local_planner import (
 
 _EPS = 1e-9
 _DEFAULT_TOPOLOGY_ARBITRATION_WEIGHT = 0.35
+_DEFAULT_ROUTE_GUIDE_OBSTACLE_INFLATION_CELLS = 3
+_DEFAULT_BLOCK_RADIUS_CELLS = 3
+_DEFAULT_PRIMARY_ROUTE_REUSE_PENALTY_COOLDOWN_STEPS = 3
 _TOPOLOGY_KEYS = {
     "diagnostic_only",
     "claim_boundary",
@@ -760,7 +763,9 @@ def build_topology_guided_local_policy_config(
     )
     route_payload.setdefault(
         "obstacle_inflation_cells",
-        raw.get("route_guide_obstacle_inflation_cells", 3),
+        raw.get(
+            "route_guide_obstacle_inflation_cells", _DEFAULT_ROUTE_GUIDE_OBSTACLE_INFLATION_CELLS
+        ),
     )
     route_payload.setdefault(
         "clearance_penalty_weight",
@@ -784,7 +789,7 @@ def build_topology_guided_local_policy_config(
         stall_window_steps=_non_negative_int_field(raw, "stall_window_steps", 20),
         min_hypotheses=int(raw.get("min_hypotheses", 2)),
         max_hypotheses=int(raw.get("max_hypotheses", 2)),
-        block_radius_cells=int(raw.get("block_radius_cells", 3)),
+        block_radius_cells=int(raw.get("block_radius_cells", _DEFAULT_BLOCK_RADIUS_CELLS)),
         block_stride_cells=int(raw.get("block_stride_cells", 8)),
         max_path_overlap=float(raw.get("max_path_overlap", 0.88)),
         length_weight=float(raw.get("length_weight", 1.0)),
@@ -821,7 +826,10 @@ def build_topology_guided_local_policy_config(
             raw.get("primary_route_reuse_penalty_weight", 1.0)
         ),
         primary_route_reuse_penalty_cooldown_steps=int(
-            raw.get("primary_route_reuse_penalty_cooldown_steps", 3)
+            raw.get(
+                "primary_route_reuse_penalty_cooldown_steps",
+                _DEFAULT_PRIMARY_ROUTE_REUSE_PENALTY_COOLDOWN_STEPS,
+            )
         ),
         primary_route_reuse_penalty_min_prior_primary_selections=int(
             raw.get("primary_route_reuse_penalty_min_prior_primary_selections", 2)

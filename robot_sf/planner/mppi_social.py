@@ -17,6 +17,7 @@ from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
 _DEFAULT_MAX_ANGULAR_SPEED = 1.2
 _DEFAULT_MAX_LINEAR_SPEED = 1.2
+_DEFAULT_ITERATIONS = 3
 
 
 def _wrap_angle_batch(angle: np.ndarray) -> np.ndarray:
@@ -477,7 +478,7 @@ def build_mppi_social_config(cfg: dict[str, Any] | None) -> MPPISocialConfig:
         horizon_steps=int(cfg.get("horizon_steps", 10)),
         rollout_dt=float(cfg.get("rollout_dt", 0.2)),
         sample_count=int(cfg.get("sample_count", 96)),
-        iterations=int(cfg.get("iterations", 3)),
+        iterations=int(cfg.get("iterations", _DEFAULT_ITERATIONS)),
         elite_fraction=float(cfg.get("elite_fraction", 0.2)),
         init_linear_std=float(cfg.get("init_linear_std", 0.35)),
         init_angular_std=float(cfg.get("init_angular_std", 0.7)),

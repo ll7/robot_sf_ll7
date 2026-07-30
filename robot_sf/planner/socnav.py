@@ -89,6 +89,8 @@ if TYPE_CHECKING:
         make_social_force_policy,
     )
 
+_DEFAULT_FORECAST_VARIANT_RISK_DISTANCE_M = 3.0
+
 _SACADRL_LAZY_EXPORTS = {
     "_SACADRLModel",
     "_SACADRL_STATE_ORDER",
@@ -223,7 +225,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 ),
                 dt_s=float(getattr(self.config, "forecast_variant_dt_s", 0.1)),
                 risk_distance_m=float(
-                    getattr(self.config, "forecast_variant_risk_distance_m", 3.0)
+                    getattr(
+                        self.config,
+                        "forecast_variant_risk_distance_m",
+                        _DEFAULT_FORECAST_VARIANT_RISK_DISTANCE_M,
+                    )
                 ),
             )
             logger.info(

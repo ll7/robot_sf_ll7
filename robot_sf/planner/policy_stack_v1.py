@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
+from robot_sf.planner.constants import DEFAULT_GOAL_PROGRESS_WEIGHT, DEFAULT_MAX_ANGULAR_SPEED
 from robot_sf.planner.risk_dwa import (
     RiskDWAPlannerAdapter,
     RiskDWAPlannerConfig,
@@ -70,12 +71,12 @@ class PolicyStackV1Config:
     degraded_sources: tuple[str, ...] = ()
 
     max_linear_speed: float = 1.0
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
     goal_tolerance: float = 0.25
     heading_gain: float = 1.4
     hard_stop_clearance: float = 0.35
 
-    goal_progress_weight: float = 4.0
+    goal_progress_weight: float = DEFAULT_GOAL_PROGRESS_WEIGHT
     heading_weight: float = 0.8
     angular_penalty_weight: float = 0.2
     clearance_weight: float = 0.8
@@ -615,11 +616,13 @@ def build_policy_stack_v1_build_config(
         fallback_sources=_tuple_of_strings(merged_stack.get("fallback_sources")),
         degraded_sources=_tuple_of_strings(merged_stack.get("degraded_sources")),
         max_linear_speed=float(merged_stack.get("max_linear_speed", 1.0)),
-        max_angular_speed=float(merged_stack.get("max_angular_speed", 1.2)),
+        max_angular_speed=float(merged_stack.get("max_angular_speed", DEFAULT_MAX_ANGULAR_SPEED)),
         goal_tolerance=float(merged_stack.get("goal_tolerance", 0.25)),
         heading_gain=float(merged_stack.get("heading_gain", 1.4)),
         hard_stop_clearance=float(merged_stack.get("hard_stop_clearance", 0.35)),
-        goal_progress_weight=float(merged_stack.get("goal_progress_weight", 4.0)),
+        goal_progress_weight=float(
+            merged_stack.get("goal_progress_weight", DEFAULT_GOAL_PROGRESS_WEIGHT)
+        ),
         heading_weight=float(merged_stack.get("heading_weight", 0.8)),
         angular_penalty_weight=float(merged_stack.get("angular_penalty_weight", 0.2)),
         clearance_weight=float(merged_stack.get("clearance_weight", 0.8)),

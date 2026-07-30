@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi
+from robot_sf.planner.constants import DEFAULT_MAX_ANGULAR_SPEED
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 
@@ -25,7 +26,7 @@ class DWAPlannerConfig:
     """Tunable parameters for the classical DWA baseline."""
 
     max_linear_speed: float = 1.0
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
     max_linear_acceleration: float = 0.8
     max_angular_acceleration: float = 1.5
     control_dt: float = 0.2

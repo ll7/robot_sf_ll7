@@ -53,6 +53,8 @@ import numpy as np
 from shapely.geometry import Point, Polygon
 from shapely.ops import unary_union
 
+from robot_sf.planner.constants import DEFAULT_PLANNING_TIME_BUDGET_S
+
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
 
@@ -111,7 +113,7 @@ class OmplGeometricConfig:
     """
 
     planner: OmplPlannerChoice = OmplPlannerChoice.BITSTAR
-    time_budget_s: float = 5.0
+    time_budget_s: float = DEFAULT_PLANNING_TIME_BUDGET_S
     interpolate_waypoints: int = 50
     robot_radius_m: float = 0.0
     _obstacle_polygons: list[Polygon] = field(default_factory=list, repr=False)

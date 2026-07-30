@@ -28,6 +28,7 @@ from robot_sf.nav.proxemic_costmap import (
     config_hash as proxemic_config_hash,
 )
 from robot_sf.planner import hybrid_route_corridor
+from robot_sf.planner.constants import DEFAULT_GOAL_PROGRESS_WEIGHT, DEFAULT_MAX_ANGULAR_SPEED
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -45,6 +46,11 @@ _SUPPORTED_VARIANTS = {
     "actuation_aware_hybrid_rule_v0",
 }
 _EPS = 1e-9
+
+#: Default maximum angular acceleration (rad/s^2) shared by the planning and
+#: actuation envelopes of the hybrid rule planner. Behaviorally identical to
+#: the literal ``4.0``; grouped here because both envelope fields default to it.
+DEFAULT_MAX_ANGULAR_ACCEL: float = 4.0
 
 
 def _clip01(value: float) -> float:
@@ -129,10 +135,10 @@ class HybridRuleLocalPlannerConfig:
 
     planner_variant: str = "hybrid_rule_v0_minimal"
     max_linear_speed: float = 2.0
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
     max_linear_accel: float = 2.0
     max_linear_decel: float = 2.5
-    max_angular_accel: float = 4.0
+    max_angular_accel: float = DEFAULT_MAX_ANGULAR_ACCEL
     control_period: float = 0.6
     rollout_dt: float = 0.2
     rollout_horizon: float = 1.6
@@ -171,7 +177,7 @@ class HybridRuleLocalPlannerConfig:
     near_human_angular_limit_distance: float = 0.8
     near_human_max_angular_speed: float = 0.7
 
-    goal_progress_weight: float = 4.0
+    goal_progress_weight: float = DEFAULT_GOAL_PROGRESS_WEIGHT
     path_alignment_weight: float = 0.8
     speed_preference_weight: float = 0.6
     static_clearance_weight: float = 1.5
@@ -277,7 +283,7 @@ class HybridRuleLocalPlannerConfig:
     actuation_max_linear_accel: float = 2.0
     actuation_max_linear_decel: float = 2.5
     actuation_max_yaw_rate: float = 1.2
-    actuation_max_angular_accel: float = 4.0
+    actuation_max_angular_accel: float = DEFAULT_MAX_ANGULAR_ACCEL
     actuation_clip_risk_weight: float = 0.0
 
 

@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
+from robot_sf.planner.constants import DEFAULT_MAX_ANGULAR_SPEED
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -18,7 +19,7 @@ class TEBCommitmentConfig:
     """Config for the native corridor-commitment local planner."""
 
     max_linear_speed: float = 0.9
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = DEFAULT_MAX_ANGULAR_SPEED
     angular_gain: float = 1.4
     goal_tolerance: float = 0.25
     probe_distance: float = 1.0

@@ -26,6 +26,8 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
+from robot_sf.planner.constants import DEFAULT_PLANNING_TIME_BUDGET_S
+
 # ---------------------------------------------------------------------------
 # Optional OMPL import gate
 # ---------------------------------------------------------------------------
@@ -79,7 +81,7 @@ class OmplSmokeConfig:
     control_bounds: tuple[float, float, float, float] = (0.0, 1.5, -2.0, 2.0)
     robot_radius: float = 0.25
     dt: float = 0.1
-    max_planning_time_sec: float = 5.0
+    max_planning_time_sec: float = DEFAULT_PLANNING_TIME_BUDGET_S
     state_tolerance: float = 0.5
     seed: int | None = None
     min_control_duration: int = 1

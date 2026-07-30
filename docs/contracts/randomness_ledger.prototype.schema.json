@@ -1,0 +1,181 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://robot-sf.dev/contracts/randomness_ledger.prototype.v1.json",
+    "title": "RandomnessLedgerEpisodeSidecar",
+    "description": "Non-normative PROTOTYPE JSON Schema (draft-07) for a single per-episode randomness-ledger sidecar. The prototype names each stochastic factor an episode consumed together with the random stream it drew from and the number of draws taken, plus episode and seed provenance. CLAIM BOUNDARY: this sidecar records seed-SENSITIVITY provenance only. A seed is an index into pseudorandom streams; recording which named factor drew from which stream does NOT explain why an outcome happened. Causal seed attribution would require independent per-factor replay, which is explicitly out of scope here (see parent design-gap issue #5617). This prototype is not emitted by any environment, planner, pedestrian, or benchmark execution and must not be treated as benchmark, paper-grade, or causal-seed evidence. Objects use additionalProperties: false so the prototype surface is explicit and reviewable; relax this if the prototype is promoted toward a normative contract.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schema_version",
+        "ledger_kind",
+        "episode",
+        "seed",
+        "factors"
+    ],
+    "properties": {
+        "schema_version": {
+            "type": "string",
+            "const": "randomness_ledger.prototype.v1",
+            "description": "Stable prototype schema version identifier. Must equal 'randomness_ledger.prototype.v1' for this prototype; bumping it is a prototype contract change, not a silent evolution."
+        },
+        "ledger_kind": {
+            "type": "string",
+            "const": "episode_randomness_sidecar",
+            "description": "Discriminator marking this artifact as one episode randomness-ledger prototype sidecar."
+        },
+        "episode": {
+            "$ref": "#/$defs/episodeProvenance"
+        },
+        "seed": {
+            "$ref": "#/$defs/seedProvenance"
+        },
+        "factors": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/$defs/factorEntry"
+            },
+            "description": "One entry per named stochastic factor consumed during the episode. Ordering is producer-defined and not semantically meaningful for this prototype."
+        },
+        "notes": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Optional free-form caveats or producer hints. Must not be used to smuggle causal claims."
+        }
+    },
+    "$defs": {
+        "episodeProvenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "episode_id",
+                "scenario_id"
+            ],
+            "description": "Provenance linking this ledger to a single episode.",
+            "properties": {
+                "episode_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable identifier of the episode this ledger describes."
+                },
+                "scenario_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Identifier of the scenario/map the episode ran against."
+                },
+                "recorded_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Optional ISO 8601 timestamp marking when the ledger was produced."
+                }
+            }
+        },
+        "seedProvenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "master_seed"
+            ],
+            "description": "Seed provenance. Sensitivity-only: the master seed is an index into pseudorandom streams, not a causal label for any outcome.",
+            "properties": {
+                "master_seed": {
+                    "type": "integer",
+                    "description": "The single integer seed that indexed the pseudorandom streams for this episode. Sensitivity-only provenance; not a causal explanation."
+                },
+                "seed_scheme": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Optional name of the seeding scheme (e.g. 'numpy.default_rng')."
+                },
+                "host": {
+                    "type": "string",
+                    "description": "Optional host or run label aiding reproducibility bookkeeping."
+                }
+            }
+        },
+        "factorEntry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "factor_name",
+                "stream_identity",
+                "draw_count"
+            ],
+            "description": "One named stochastic factor, the random stream it drew from, and how many draws it took.",
+            "properties": {
+                "factor_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Human-stable name of the stochastic factor (e.g. 'pedestrian_spawn_positions', 'robot_initial_pose', 'goal_choice')."
+                },
+                "stream_identity": {
+                    "$ref": "#/$defs/streamIdentity"
+                },
+                "draw_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of primitive draws consumed from this factor's stream during the episode. Zero is permitted to record a factor that was eligible but drew nothing."
+                },
+                "state_checkpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/stateCheckpoint"
+                    },
+                    "description": "Optional opaque stream-state checkpoints. Replay semantics are out of scope for this prototype."
+                }
+            }
+        },
+        "streamIdentity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "stream_id"
+            ],
+            "description": "Identity of the pseudorandom stream the factor drew from.",
+            "properties": {
+                "stream_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable identifier of the pseudorandom stream (e.g. 'rng/pedestrian/spawn'). Uniqueness across factors is producer-defined for this prototype."
+                },
+                "generator_kind": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Optional name of the generator family (e.g. 'numpy.default_rng', 'python.random')."
+                },
+                "stream_seed": {
+                    "type": "integer",
+                    "description": "Optional per-stream seed value, when the stream was seeded independently of the master seed."
+                },
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Optional zero-based draw offset at which this factor began consuming the stream."
+                }
+            }
+        },
+        "stateCheckpoint": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "at_step",
+                "state_token"
+            ],
+            "description": "Opaque, non-replayable record of stream state at a step.",
+            "properties": {
+                "at_step": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Zero-based episode step at which the checkpoint was taken."
+                },
+                "state_token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Opaque digest or token of stream state. The prototype does not define how, or whether, this can be reconstructed."
+                }
+            }
+        }
+    }
+}

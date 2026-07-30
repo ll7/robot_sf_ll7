@@ -1,4 +1,5 @@
 {
+  "aggregation_contract_ok": true,
   "all_benchmark_capable_execution": true,
   "all_execution_modes_recorded": true,
   "all_families_present": true,
@@ -9,7 +10,7 @@
   "campaign_result_status": "completed",
   "campaign_returncode": 0,
   "claim_class": "diagnostic_proxy",
-  "config_sha256": "50f305473b7d9b5752b04d0c7b0233e6d8f75ca68e97588c003ff8bf88de83e1",
+  "config_sha256": "8d70611f7ef8630ec4ac5b63fac784022f6841097c554f55d2ee310e83a40c3f",
   "evidence_tier": "smoke_preflight",
   "execution_modes": {
     "goal": [
@@ -564,7 +565,7 @@
       }
     }
   ],
-  "scenario_matrix_sha256": "d403aba974aacb67de41c96d41bc809d88460c87517ae788224830991e747faf",
+  "scenario_matrix_sha256": "968a3b590c9547cefac177a543022cbba3ab600f915750fc0dd04dc370505376",
   "social_compliance_schema_version": "social-compliance-metric-contract.v1",
-  "source_sha": "9f8b3a3333cf62754e825c803e165c53865c25c6"
+  "source_sha": "451ab06c19734d8dd602b4288a05d5351f86a804"
 }

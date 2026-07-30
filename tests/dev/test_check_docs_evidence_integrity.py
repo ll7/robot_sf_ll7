@@ -99,6 +99,139 @@ def test_link_with_anchor_fragment_resolves_to_file(tmp_path: Path) -> None:
     assert check_files(["note.md"], root=tmp_path) == []
 
 
+def test_reference_link_and_image_destinations_are_checked(tmp_path: Path) -> None:
+    """Reference definitions and image destinations are link-integrity surfaces."""
+    (tmp_path / "note.md").write_text(
+        "[missing reference][ref]\n"
+        "![missing inline image](missing.png)\n"
+        "![missing reference image][image-ref]\n"
+        "\n"
+        "[ref]: missing-reference.md#section\n"
+        "[image-ref]: missing-reference-image.svg\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files(["note.md"], root=tmp_path)
+
+    assert len(problems) == 3
+    assert any("missing.png" in problem for problem in problems)
+    assert any("missing-reference.md#section" in problem for problem in problems)
+    assert any("missing-reference-image.svg" in problem for problem in problems)
+
+
+def test_code_and_escaped_link_syntax_are_ignored(tmp_path: Path) -> None:
+    """Code examples, escaped syntax, and ordinary prose are not Markdown links."""
+    (tmp_path / "note.md").write_text(
+        "```markdown\n"
+        "[fenced](missing-fenced.md)\n"
+        "```\n"
+        "\n"
+        "    [indented](missing-indented.md)\n"
+        "\n"
+        "Inline code: `[inline](missing-inline.md)`.\n"
+        r"Escaped syntax: \[escaped](missing-escaped.md)."
+        "\n"
+        "Ordinary prose mentions (missing-prose.md) without a link label.\n",
+        encoding="utf-8",
+    )
+
+    assert check_files(["note.md"], root=tmp_path) == []
+
+
+def test_indented_list_continuation_is_still_scanned(tmp_path: Path) -> None:
+    """List continuation indentation must not be mistaken for an indented code block."""
+    (tmp_path / "note.md").write_text(
+        "- Related material:\n    [missing continuation link](missing-list-target.md)\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files(["note.md"], root=tmp_path)
+
+    assert len(problems) == 1
+    assert "missing-list-target.md" in problems[0]
+
+
+def test_fenced_code_inside_list_and_blockquote_is_ignored(tmp_path: Path) -> None:
+    """Container prefixes must not expose Markdown-looking examples inside fences."""
+    (tmp_path / "note.md").write_text(
+        "- Example:\n"
+        "    ~~~markdown\n"
+        "    [list code](missing-list-code.md)\n"
+        "    ~~~\n"
+        "\n"
+        "> ~~~markdown\n"
+        "> [quote code](missing-quote-code.md)\n"
+        "> ~~~\n",
+        encoding="utf-8",
+    )
+
+    assert check_files(["note.md"], root=tmp_path) == []
+
+
+def test_external_schemes_and_protocol_relative_links_are_ignored(tmp_path: Path) -> None:
+    """URI schemes are case-insensitive and are not repository-local paths."""
+    (tmp_path / "note.md").write_text(
+        "[HTTPS](HTTPS://example.com/guide.md) "
+        "[SSH](ssh://example.com/repo/readme.md) "
+        "[protocol relative](//example.com/guide.md)\n",
+        encoding="utf-8",
+    )
+
+    assert check_files(["note.md"], root=tmp_path) == []
+
+
+def test_file_url_is_rejected_case_insensitively(tmp_path: Path) -> None:
+    """Absolute file URLs are non-portable regardless of scheme casing."""
+    (tmp_path / "note.md").write_text(
+        "[local](FILE:///home/example/private.md)\n"
+        "`[code sample](file:///home/example/ignored.md)`\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files(["note.md"], root=tmp_path)
+
+    assert len(problems) == 1
+    assert "file:/// absolute local path" in problems[0]
+
+
+def test_output_link_is_rejected_even_when_local_artifact_exists(tmp_path: Path) -> None:
+    """Worktree-local output artifacts are not durable documentation targets."""
+    output = tmp_path / "output/run.json"
+    output.parent.mkdir()
+    output.write_text("{}\n", encoding="utf-8")
+    note = tmp_path / "docs/note.md"
+    note.parent.mkdir()
+    note.write_text("[ephemeral](../output/run.json)\n", encoding="utf-8")
+
+    problems = check_files(["docs/note.md"], root=tmp_path)
+
+    assert len(problems) == 1
+    assert "non-durable output/ link" in problems[0]
+
+
+def test_angle_bracket_destination_decodes_percent_escapes(tmp_path: Path) -> None:
+    """Angle-bracket destinations may contain encoded spaces and fragments."""
+    target = tmp_path / "target (v1).md"
+    target.write_text("# Section\n", encoding="utf-8")
+    (tmp_path / "note.md").write_text(
+        "[target](<target%20(v1).md#section>)\n",
+        encoding="utf-8",
+    )
+
+    assert check_files(["note.md"], root=tmp_path) == []
+
+
+def test_percent_encoded_hash_remains_part_of_file_path(tmp_path: Path) -> None:
+    """A percent-encoded hash is path data, while a literal hash starts the fragment."""
+    (tmp_path / "target#variant.md").write_text("# Section\n", encoding="utf-8")
+    (tmp_path / "note.md").write_text(
+        "[target](target%23variant.md#section)\n",
+        encoding="utf-8",
+    )
+
+    assert check_files(["note.md"], root=tmp_path) == []
+
+
 def test_changed_evidence_file_must_be_catalog_registered(tmp_path: Path) -> None:
     """A changed evidence file without a catalog entry must fail."""
     summary = tmp_path / "docs/context/evidence/issue_999_missing/summary.json"
@@ -383,6 +516,40 @@ def test_blocking_mode_fails_on_problems(tmp_path: Path, monkeypatch: MonkeyPatc
     (tmp_path / "broken.json").write_text("{not valid}", encoding="utf-8")
 
     assert main(["--files", "broken.json"]) == 1
+
+
+def test_full_mode_runs_only_markdown_link_integrity(
+    tmp_path: Path, capsys, monkeypatch: MonkeyPatch
+) -> None:
+    """A full docs link scan must not enable changed-file evidence checks repository-wide."""
+    monkeypatch.setattr("scripts.dev.check_docs_evidence_integrity._repo_root", lambda: tmp_path)
+    evidence = tmp_path / "docs/context/evidence/unregistered.md"
+    evidence.parent.mkdir(parents=True)
+    evidence.write_text(
+        "This intentionally cites `scripts/not-yet-created.py`.\n",
+        encoding="utf-8",
+    )
+
+    assert main(["--full"]) == 0
+    captured = capsys.readouterr()
+    assert "full-repo Markdown link scan of 1 file(s)" in captured.out
+    assert "not registered" not in captured.err
+    assert "cited command/config path" not in captured.err
+
+
+def test_full_mode_reports_files_in_deterministic_path_order(
+    tmp_path: Path, capsys, monkeypatch: MonkeyPatch
+) -> None:
+    """Repository-wide findings are stable regardless of filesystem traversal order."""
+    monkeypatch.setattr("scripts.dev.check_docs_evidence_integrity._repo_root", lambda: tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "z-last.md").write_text("[missing](z-missing.md)\n", encoding="utf-8")
+    (docs / "a-first.md").write_text("[missing](a-missing.md)\n", encoding="utf-8")
+
+    assert main(["--full"]) == 1
+    errors = capsys.readouterr().err
+    assert errors.index("a-first.md") < errors.index("z-last.md")
 
 
 def test_split_list_config_does_not_yield_phantom_dash(tmp_path: Path) -> None:

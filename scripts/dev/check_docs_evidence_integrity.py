@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Lightweight, changed-path-scoped integrity check for docs/evidence surfaces.
+"""Lightweight integrity checks for docs/evidence surfaces.
 
 This guard treats documentation, compact evidence bundles, schemas, catalogues,
 issue templates, and governance files as first-class research-facing state. It
-is intentionally changed-path scoped: only files a change actually touches are
-inspected, so it can be mandatory in CI without failing on pre-existing legacy
-drift in untouched files (issue #3476).
+keeps evidence, catalog, checksum, and citation rules changed-path scoped so they
+can be mandatory in CI without failing on pre-existing legacy drift in untouched
+files (issue #3476). ``--full`` is a separate deterministic, repository-wide
+Markdown-link scan.
 
 Checks performed:
 
 - ``.json`` files parse JSON.
 - ``.yaml`` / ``.yml`` files parse YAML (multi-document allowed).
-- Markdown files: every explicit repository-local relative link (a target that
-  starts ``./`` or ``../`` or is a bare-relative path with a file extension)
-  must resolve to an existing path.
-- Markdown links using ``file:///`` absolute local paths are flagged as
-  non-portable internal references.
+- Markdown files: inline, image, and reference-definition destinations that are
+  repository-local must resolve to an existing durable path.
+- Markdown links using ``file:`` absolute local paths or worktree-local
+  ``output/`` targets are flagged as non-portable internal references.
 - Changed ``docs/context/evidence`` files must be registered in
   ``docs/context/catalog.yaml``.
 - Changed catalog rows must point at existing files and use valid status /
@@ -33,12 +33,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import unquote
 
 import yaml
 
@@ -88,7 +90,6 @@ _CLASSIFICATION_KEYS = {
     "status",
 }
 
-_MD_LINK = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 _README_FIELD = re.compile(r"`(?P<key>[A-Za-z0-9_-]+)`\s*:\s*`(?P<value>[^`]+)`")
 _CONFIG_FLAG = re.compile(r"--[A-Za-z0-9_-]*config(?:=|\s+)(?P<path>[A-Za-z0-9_./:-]+)")
 # Paths handed to an output flag are *created* by the documented command, not
@@ -99,12 +100,12 @@ _OUTPUT_FLAG = re.compile(
 _CITED_REPO_PATH = re.compile(
     r"(?<![\w./-])(?P<path>(?:scripts|configs)/[A-Za-z0-9_./:-]+\.(?:py|sh|ya?ml))"
 )
-_RELATIVE_PREFIXES = ("./", "../")
-_FILE_SCHEME_PREFIX = "file:///"
-_EXTERNAL_SCHEMES = frozenset({"http://", "https://", "mailto:", "tel:", "ftp://"})
-_LOCAL_FILE_EXTENSIONS = frozenset(
-    {".md", ".markdown", ".py", ".yaml", ".yml", ".json", ".cfg", ".toml", ".sl", ".sh"}
-)
+_URI_SCHEME = re.compile(r"^(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*):")
+_REFERENCE_DEFINITION = re.compile(r"^[ ]{0,3}\[(?:\\.|[^\]\\])+\]:[ \t]*(?P<destination>.*)$")
+_FENCE_OPEN = re.compile(r"^[ ]{0,3}(?P<fence>`{3,}|~{3,})")
+_LIST_ITEM = re.compile(r"^(?P<indent> {0,3})(?P<marker>(?:[-+*]|\d{1,9}[.)]))(?P<spacing>[ \t]+)")
+_BLOCKQUOTE_PREFIX = re.compile(r"^[ ]{0,3}>[ \t]?")
+_MARKDOWN_ESCAPABLE = frozenset(r"""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~""")
 # A self-declared artifact-presence registry (e.g. the research-package registry,
 # issue #3057) enumerates artifact paths that a companion preflight probes for
 # presence and surfaces as explicit gaps when missing. Such entries are meant to
@@ -169,21 +170,316 @@ def _check_yaml(path: Path) -> list[str]:
     return []
 
 
-def _is_bare_relative(target: str) -> bool:
-    """Return whether a link target is a bare-relative file reference."""
-    if target.startswith(_RELATIVE_PREFIXES):
-        return False
-    if target.startswith("/"):
-        return False
-    if target.startswith("#"):
-        return False
-    for scheme in _EXTERNAL_SCHEMES:
-        if target.startswith(scheme):
-            return False
-    if target.startswith(_FILE_SCHEME_PREFIX):
-        return False
-    suffix = Path(target).suffix.lower()
-    return suffix in _LOCAL_FILE_EXTENSIONS
+def _is_escaped(text: str | list[str], index: int) -> bool:
+    """Return whether the character at ``index`` has an odd backslash prefix."""
+    backslashes = 0
+    index -= 1
+    while index >= 0 and text[index] == "\\":
+        backslashes += 1
+        index -= 1
+    return backslashes % 2 == 1
+
+
+def _is_closing_fence(content: str, *, character: str, minimum_length: int) -> bool:
+    """Return whether a line closes the active fenced-code block."""
+    stripped = content.lstrip(" ")
+    indentation = len(content) - len(stripped)
+    closing_run = len(stripped) - len(stripped.lstrip(character))
+    return indentation <= 3 and closing_run >= minimum_length and not stripped[closing_run:].strip()
+
+
+def _fence_container_content(content: str, *, list_content_indent: int | None) -> str:
+    """Remove list/blockquote container prefixes for fence recognition."""
+    indentation = len(content) - len(content.lstrip(" "))
+    if list_content_indent is not None and indentation >= list_content_indent:
+        content = content[list_content_indent:]
+    while blockquote := _BLOCKQUOTE_PREFIX.match(content):
+        content = content[blockquote.end() :]
+    return content
+
+
+def _blank_markdown_block_code(text: str) -> str:  # noqa: C901
+    """Blank fenced and indented code while preserving line structure."""
+    visible_lines: list[str] = []
+    fence_character: str | None = None
+    fence_length = 0
+    indented_code = False
+    list_content_indent: int | None = None
+
+    for line in text.splitlines(keepends=True):
+        newline = "\n" if line.endswith("\n") else ""
+        content = line[:-1] if newline else line
+        fence_content = _fence_container_content(
+            content,
+            list_content_indent=list_content_indent,
+        )
+        fence = _FENCE_OPEN.match(fence_content)
+
+        if fence_character is not None:
+            if _is_closing_fence(
+                fence_content,
+                character=fence_character,
+                minimum_length=fence_length,
+            ):
+                fence_character = None
+                fence_length = 0
+            visible_lines.append(newline)
+            continue
+
+        if indented_code:
+            if not content.strip() or content.startswith(("    ", "\t")):
+                visible_lines.append(newline)
+                continue
+            indented_code = False
+
+        if fence:
+            marker = fence.group("fence")
+            fence_character = marker[0]
+            fence_length = len(marker)
+            visible_lines.append(newline)
+            continue
+
+        if not content.strip():
+            visible_lines.append(newline)
+            continue
+
+        list_item = _LIST_ITEM.match(content)
+        if list_item:
+            spacing = list_item.group("spacing").expandtabs(4)
+            list_content_indent = (
+                len(list_item.group("indent")) + len(list_item.group("marker")) + len(spacing)
+            )
+            visible_lines.append(content + newline)
+            continue
+
+        indentation = len(content) - len(content.lstrip(" "))
+        if content.startswith("\t"):
+            indentation = 4
+        if indentation >= 4 and not (
+            list_content_indent is not None
+            and list_content_indent <= indentation < list_content_indent + 4
+        ):
+            indented_code = True
+            visible_lines.append(newline)
+            continue
+
+        if indentation < (list_content_indent or 0):
+            list_content_indent = None
+        visible_lines.append(content + newline)
+
+    return "".join(visible_lines)
+
+
+def _blank_markdown_inline_code(text: str) -> str:
+    """Blank inline code spans while preserving line structure."""
+    visible = list(text)
+    index = 0
+    while index < len(visible):
+        if visible[index] != "`" or _is_escaped(visible, index):
+            index += 1
+            continue
+
+        run_end = index
+        while run_end < len(visible) and visible[run_end] == "`":
+            run_end += 1
+        run_length = run_end - index
+        closing = run_end
+
+        while closing < len(visible):
+            if visible[closing] != "`":
+                closing += 1
+                continue
+            closing_end = closing
+            while closing_end < len(visible) and visible[closing_end] == "`":
+                closing_end += 1
+            if closing_end - closing == run_length:
+                for blank_index in range(index, closing_end):
+                    if visible[blank_index] != "\n":
+                        visible[blank_index] = " "
+                index = closing_end
+                break
+            closing = closing_end
+        else:
+            index = run_end
+
+    return "".join(visible)
+
+
+def _blank_markdown_code(text: str) -> str:
+    """Blank fenced, indented, and inline code while preserving line structure."""
+    return _blank_markdown_inline_code(_blank_markdown_block_code(text))
+
+
+def _unescape_markdown_target(target: str) -> str:
+    """Decode Markdown escapes and entities in a link target."""
+    target = html.unescape(target.strip())
+    decoded: list[str] = []
+    index = 0
+    while index < len(target):
+        if (
+            target[index] == "\\"
+            and index + 1 < len(target)
+            and target[index + 1] in _MARKDOWN_ESCAPABLE
+        ):
+            index += 1
+        decoded.append(target[index])
+        index += 1
+    return "".join(decoded)
+
+
+def _skip_horizontal_space(text: str, index: int) -> int:
+    """Return the first index after horizontal whitespace."""
+    while index < len(text) and text[index] in " \t":
+        index += 1
+    return index
+
+
+def _parse_angle_destination(text: str, index: int) -> tuple[str, int] | None:
+    """Parse a ``<destination>`` beginning at ``index``."""
+    target_start = index + 1
+    index = target_start
+    while index < len(text):
+        if text[index] == ">" and not _is_escaped(text, index):
+            return text[target_start:index], index + 1
+        if text[index] in "\r\n":
+            return None
+        index += 1
+    return None
+
+
+def _parse_bare_destination(text: str, index: int, *, inline: bool) -> tuple[str, int] | None:
+    """Parse a bare destination, balancing parentheses for inline links."""
+    target_start = index
+    nested_parentheses = 0
+    while index < len(text):
+        character = text[index]
+        if character in "\r\n\t " and not _is_escaped(text, index):
+            break
+        if inline and character == "(" and not _is_escaped(text, index):
+            nested_parentheses += 1
+        elif inline and character == ")" and not _is_escaped(text, index):
+            if nested_parentheses == 0:
+                break
+            nested_parentheses -= 1
+        index += 1
+    if index == target_start or nested_parentheses:
+        return None
+    return text[target_start:index], index
+
+
+def _parse_inline_link_end(text: str, index: int) -> int | None:
+    """Parse an optional title and required closing parenthesis."""
+    index = _skip_horizontal_space(text, index)
+    if index < len(text) and text[index] == ")":
+        return index + 1
+
+    if index >= len(text) or text[index] not in "\"'(":
+        return None
+    title_close = ")" if text[index] == "(" else text[index]
+    index += 1
+    while index < len(text):
+        if text[index] == title_close and not _is_escaped(text, index):
+            index = _skip_horizontal_space(text, index + 1)
+            return index + 1 if index < len(text) and text[index] == ")" else None
+        if text[index] in "\r\n":
+            return None
+        index += 1
+    return None
+
+
+def _parse_destination(text: str, start: int, *, inline: bool) -> tuple[str, int] | None:
+    """Parse an inline-link or reference-definition destination."""
+    index = _skip_horizontal_space(text, start)
+    if index >= len(text):
+        return None
+
+    parsed = (
+        _parse_angle_destination(text, index)
+        if text[index] == "<"
+        else _parse_bare_destination(text, index, inline=inline)
+    )
+    if parsed is None:
+        return None
+    target, index = parsed
+    if not inline:
+        return target, index
+    link_end = _parse_inline_link_end(text, index)
+    return (target, link_end) if link_end is not None else None
+
+
+def _matching_label_end(text: str, start: int) -> int | None:
+    """Return the closing bracket for a possibly nested Markdown link label."""
+    depth = 1
+    index = start + 1
+    while index < len(text):
+        if text[index] == "[" and not _is_escaped(text, index):
+            depth += 1
+        elif text[index] == "]" and not _is_escaped(text, index):
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _markdown_link_targets(text: str) -> list[str]:
+    """Return inline and reference-definition destinations from Markdown text."""
+    visible = _blank_markdown_code(text)
+    targets: list[str] = []
+
+    for line in visible.splitlines():
+        definition = _REFERENCE_DEFINITION.match(line)
+        if not definition:
+            continue
+        parsed = _parse_destination(definition.group("destination"), 0, inline=False)
+        if parsed is not None:
+            targets.append(parsed[0])
+
+    index = 0
+    while index < len(visible):
+        if visible[index] != "[" or _is_escaped(visible, index):
+            index += 1
+            continue
+        label_end = _matching_label_end(visible, index)
+        if label_end is None or label_end + 1 >= len(visible) or visible[label_end + 1] != "(":
+            index += 1
+            continue
+        parsed = _parse_destination(visible, label_end + 2, inline=True)
+        if parsed is None:
+            index = label_end + 1
+            continue
+        targets.append(parsed[0])
+        index = parsed[1]
+
+    return targets
+
+
+def _markdown_link_problem(path: Path, target: str, *, root: Path) -> str | None:
+    """Return one portability or resolution problem for a Markdown destination."""
+    target = _unescape_markdown_target(target)
+    scheme_match = _URI_SCHEME.match(target)
+    if scheme_match:
+        if scheme_match.group("scheme").lower() == "file":
+            return f"{path}: file:/// absolute local path: {target}"
+        return None
+    if target.startswith(("/", "#")):
+        return None
+
+    file_part = unquote(target.split("#", 1)[0].split("?", 1)[0])
+    if not file_part:
+        return None
+
+    resolved = (path.parent / file_part).resolve()
+    try:
+        repo_relative = resolved.relative_to(root.resolve())
+    except ValueError:
+        return f"{path}: relative link escapes repository: {target}"
+
+    if repo_relative.parts and repo_relative.parts[0] == "output":
+        return f"{path}: non-durable output/ link: {target}"
+    if not resolved.exists():
+        return f"{path}: broken repo-local link: {target}"
+    return None
 
 
 def _check_markdown_links(path: Path, *, root: Path) -> list[str]:
@@ -194,31 +490,10 @@ def _check_markdown_links(path: Path, *, root: Path) -> list[str]:
     except OSError as exc:
         return [f"{path}: unreadable Markdown: {exc}"]
 
-    for raw_target in _MD_LINK.findall(text):
-        target = raw_target.strip()
-
-        if target.startswith(_FILE_SCHEME_PREFIX):
-            problems.append(f"{path}: file:/// absolute local path: {target}")
-            continue
-
-        is_relative = target.startswith(_RELATIVE_PREFIXES)
-        is_bare = _is_bare_relative(target)
-
-        if not is_relative and not is_bare:
-            continue
-
-        file_part = target.split("#", 1)[0]
-        if not file_part:
-            continue
-
-        resolved = (path.parent / file_part).resolve()
-        try:
-            resolved.relative_to(root.resolve())
-        except ValueError:
-            problems.append(f"{path}: relative link escapes repository: {target}")
-            continue
-        if not resolved.exists():
-            problems.append(f"{path}: broken repo-local link: {target}")
+    for target in _markdown_link_targets(text):
+        problem = _markdown_link_problem(path, target, root=root)
+        if problem is not None:
+            problems.append(problem)
     return problems
 
 
@@ -604,12 +879,26 @@ def check_files(files: Iterable[str], *, root: Path) -> list[str]:
     return problems
 
 
+def check_markdown_link_files(files: Iterable[str], *, root: Path) -> list[str]:
+    """Run only Markdown-link checks over repository-relative files."""
+    problems: list[str] = []
+    for rel in files:
+        path = (root / rel).resolve()
+        if path.is_file() and path.suffix.lower() in {".md", ".markdown"}:
+            problems.extend(_check_markdown_links(path, root=root))
+    return problems
+
+
 def _all_docs_markdown_files(root: Path) -> list[str]:
-    """Return all repository-relative .md paths under docs/."""
+    """Return deterministic repository-relative Markdown paths under docs/."""
     docs_dir = root / "docs"
     if not docs_dir.is_dir():
         return []
-    return [str(p.relative_to(root)) for p in sorted(docs_dir.rglob("*.md")) if p.is_file()]
+    return [
+        str(path.relative_to(root))
+        for path in sorted(docs_dir.rglob("*"))
+        if path.is_file() and path.suffix.lower() in {".md", ".markdown"}
+    ]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -620,7 +909,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "repo-local Markdown links, evidence catalog registration/checksums, "
             "README-vs-summary drift, and cited command/config paths. "
             "By default inspects only changed files (git diff). "
-            "Use --full to scan all .md files under docs/."
+            "Use --full for a link-only scan of all Markdown files under docs/."
         )
     )
     parser.add_argument(
@@ -636,7 +925,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Scan all .md files under docs/ instead of changed files only.",
+        help=(
+            "Run only Markdown-link integrity across every Markdown file under docs/. "
+            "Other evidence checks remain changed-file scoped."
+        ),
     )
     parser.add_argument(
         "--warn-only",
@@ -660,9 +952,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.full:
         files = _all_docs_markdown_files(root)
         if not files:
-            print("docs/evidence integrity: no .md files found under docs/.")
+            print("docs/evidence integrity: no Markdown files found under docs/.")
             return 0
-        print(f"docs/evidence integrity: full-repo scan of {len(files)} file(s) under docs/.")
+        print(
+            "docs/evidence integrity: full-repo Markdown link scan of "
+            f"{len(files)} file(s) under docs/."
+        )
     elif args.files is not None:
         files = list(args.files)
     else:
@@ -672,9 +967,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("docs/evidence integrity: no changed docs/evidence files to check.")
         return 0
 
-    problems = check_files(files, root=root)
+    problems = (
+        check_markdown_link_files(files, root=root) if args.full else check_files(files, root=root)
+    )
     if not problems:
-        print(f"docs/evidence integrity: {len(files)} changed file(s) passed.")
+        scope = "Markdown file(s)" if args.full else "changed file(s)"
+        print(f"docs/evidence integrity: {len(files)} {scope} passed.")
         return 0
 
     if args.warn_only:

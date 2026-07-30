@@ -9,6 +9,8 @@ on:
   pull_request:
     paths:
       - "docs/**"
+      - "scripts/dev/check_docs_evidence_integrity.py"
+      - ".github/workflows/docs-link-integrity.yml"
 
 concurrency:
   group: docs-link-${{ github.ref }}

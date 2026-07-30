@@ -206,6 +206,7 @@ def test_domain_decision_overlay_preserves_renderer_state_and_binds_receipt() ->
 
     manifest = yaml.safe_load((BUNDLE / "artifact_manifest.yaml").read_text(encoding="utf-8"))
     manifest_paths = {entry["path"] for entry in manifest["files"]}
+    assert receipt_binding["path"] in manifest_paths
     assert NO_COMPARATOR_SIDECAR_REL in manifest_paths
     assert f"{BUNDLE.relative_to(REPO_ROOT).as_posix()}/{OVERLAY_NAME}" in manifest_paths
     for entry in manifest["files"]:

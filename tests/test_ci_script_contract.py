@@ -167,6 +167,14 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
 
     aggregate = workflow["jobs"]["ci"]
     assert "fast-feedback" in aggregate["needs"]
+    duration_checkout = next(
+        step
+        for step in aggregate["steps"]
+        if step.get("name") == "Checkout for duration-cache update"
+    )
+    assert duration_checkout["id"] == "checkout_duration_cache"
+    assert "always()" in duration_checkout["if"]
+    assert duration_checkout["continue-on-error"] is True
     duration_download = next(
         step for step in aggregate["steps"] if step.get("name") == "Download test-duration shards"
     )
@@ -181,8 +189,12 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
         "pattern": "pytest-durations-*",
         "path": ".duration-artifacts",
     }
+    assert "always()" in duration_download["if"]
+    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_download["if"]
     assert duration_merge["id"] == "merge-test-durations"
     assert duration_merge["continue-on-error"] is True
+    assert "always()" in duration_merge["if"]
+    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_merge["if"]
     assert (
         "Expected exactly one pytest duration store from each of four shards"
         in duration_merge["run"]
@@ -190,6 +202,8 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "Overlapping pytest duration stores" in duration_merge["run"]
     assert "merged.update(durations)" in duration_merge["run"]
     assert duration_save["continue-on-error"] is True
+    assert "always()" in duration_save["if"]
+    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_save["if"]
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
     assert duration_save["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_save["with"]["key"]

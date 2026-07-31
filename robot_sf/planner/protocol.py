@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from inspect import Signature, signature
 from typing import Any, Protocol, runtime_checkable
 
 __all__ = [
@@ -195,6 +196,49 @@ def _safe_diagnostics(planner: Any) -> Any:
         return {"_diagnostics_call_error": f"{type(exc).__name__}: {exc}"}
 
 
+def _signature_accepts(call_signature: Signature, *args: Any, **kwargs: Any) -> bool:
+    """Return whether a callable signature accepts the supplied arguments."""
+    try:
+        call_signature.bind(*args, **kwargs)
+    except TypeError:
+        return False
+    return True
+
+
+def _reset_with_optional_seed(reset: Any, *, seed: int | None) -> None:
+    """Invoke a reset hook without swallowing ``TypeError`` from its implementation.
+
+    Signature inspection chooses the compatible legacy call shape before the
+    hook runs. This avoids retrying a seed-aware reset when its body raises an
+    unrelated ``TypeError``, which could otherwise duplicate state changes.
+    """
+    try:
+        reset_signature = signature(reset)
+    except (TypeError, ValueError):
+        # Some extension callables do not expose a signature. Preserve the
+        # canonical keyword call when a seed exists and the seedless call when
+        # it does not; any TypeError from the hook must propagate unchanged.
+        if seed is None:
+            reset()
+        else:
+            reset(seed=seed)
+        return
+
+    if _signature_accepts(reset_signature, seed=seed):
+        reset(seed=seed)
+        return
+    if seed is None and _signature_accepts(reset_signature):
+        reset()
+        return
+    if _signature_accepts(reset_signature, seed):
+        reset(seed)
+        return
+    if _signature_accepts(reset_signature):
+        reset()
+        return
+    raise TypeError("reset hook accepts neither an optional seed nor a seedless call")
+
+
 class BaselineStepToLocalAdapter:
     """Wrap a baseline ``step() -> dict`` planner as a ``LocalPlannerProtocol``.
 
@@ -225,25 +269,13 @@ class BaselineStepToLocalAdapter:
     def reset(self, *, seed: int | None = None) -> None:
         """Forward reset to the wrapped planner, tolerating seedless signatures.
 
-        Tries the protocol's keyword form first, then falls back to a positional
-        or seedless call so planners that ignore the seed still reset cleanly.
+        Selects the protocol keyword form, a positional legacy form, or a
+        seedless call from the hook signature before invoking it.
         """
         reset = getattr(self.planner, "reset", None)
         if not callable(reset):
             return
-        try:
-            reset(seed=seed)
-            return
-        except TypeError:
-            pass
-        # Wrapped planner uses a positional or seedless reset signature.
-        if seed is None:
-            reset()
-            return
-        try:
-            reset(seed)
-        except TypeError:
-            reset()
+        _reset_with_optional_seed(reset, seed=seed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Delegate to the wrapped baseline ``step`` and convert to a command tuple.

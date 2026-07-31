@@ -87,6 +87,7 @@ class _RecordingInner:
         self.accepts_seed = accepts_seed
         self.reset_calls: list[Any] = []
         self.plan_calls = 0
+        self.close_calls = 0
 
     def reset(self, *args: Any, **kwargs: Any) -> None:
         self.reset_calls.append((args, kwargs))
@@ -95,6 +96,9 @@ class _RecordingInner:
         del observation
         self.plan_calls += 1
         return 0.5, 0.25
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 class _SeedlessInner:
@@ -280,6 +284,39 @@ def test_baseline_adapter_reset_no_seed_calls_seedless_baseline() -> None:
     assert baseline.reset_calls == 1
 
 
+@pytest.mark.parametrize("adapter_family", ["native", "baseline"])
+def test_adapter_reset_does_not_retry_internal_type_error(adapter_family: str) -> None:
+    """A reset-body TypeError must propagate after one call, not trigger a legacy retry."""
+
+    class _FailingReset:
+        def __init__(self) -> None:
+            self.reset_calls = 0
+
+        def reset(self, *, seed: int | None = None) -> None:
+            del seed
+            self.reset_calls += 1
+            raise TypeError("internal reset failure")
+
+        def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+            del observation
+            return 0.0, 0.0
+
+        def step(self, observation: dict[str, Any]) -> dict[str, float]:
+            del observation
+            return {"v": 0.0, "omega": 0.0}
+
+    planner = _FailingReset()
+    adapter: Any
+    if adapter_family == "native":
+        adapter = LidarOccupancyPlannerAdapter(planner, _lidar_config())
+    else:
+        adapter = BaselineStepToLocalAdapter(planner)
+
+    with pytest.raises(TypeError, match="internal reset failure"):
+        adapter.reset(seed=3)
+    assert planner.reset_calls == 1
+
+
 # ---------------------------------------------------------------------------
 # Diagnostics: planner_type plus explicit unavailable fields (fail-closed)
 # ---------------------------------------------------------------------------
@@ -324,23 +361,22 @@ def test_normalize_fail_closed_on_invalid_planner_type() -> None:
     assert "42" in normalized[DIAGNOSTICS_UNAVAILABLE_REASON_KEY]
 
 
-def test_native_lidar_adapter_diagnostics_behavior_unchanged() -> None:
-    """The native adapter's raw diagnostics must remain unchanged (no planner_type)."""
+def test_native_lidar_adapter_diagnostics_include_minimum_schema() -> None:
+    """The native adapter diagnostics must include the protocol planner type."""
     adapter = LidarOccupancyPlannerAdapter(_SeedlessInner(), _lidar_config())
     raw = adapter.diagnostics()
-    # Existing behavior preserved: nested adapter payload, no top-level planner_type.
+    assert raw[PLANNER_TYPE_KEY] == "LidarOccupancyPlannerAdapter"
     assert "lidar_occupancy_adapter" in raw
-    assert PLANNER_TYPE_KEY not in raw
 
 
-def test_native_lidar_diagnostics_normalize_fail_closed() -> None:
-    """The native raw diagnostics normalize fail-closed to a synthesized planner_type."""
+def test_native_lidar_diagnostics_normalize_without_synthesis() -> None:
+    """Valid native diagnostics must normalize without unavailable fields."""
     adapter = LidarOccupancyPlannerAdapter(_SeedlessInner(), _lidar_config())
     normalized = normalize_planner_diagnostics(
         adapter.diagnostics(), fallback_planner_type="LidarOccupancyPlannerAdapter"
     )
     assert normalized["planner_type"] == "LidarOccupancyPlannerAdapter"
-    assert normalized[DIAGNOSTICS_UNAVAILABLE_KEY] == [PLANNER_TYPE_KEY]
+    assert DIAGNOSTICS_UNAVAILABLE_KEY not in normalized
 
 
 def test_baseline_adapter_diagnostics_fail_closed_without_diagnostics_method() -> None:
@@ -368,13 +404,22 @@ def test_baseline_adapter_explicit_planner_type_overrides_default() -> None:
 
 
 def test_native_lidar_adapter_close_is_idempotent_noop() -> None:
-    """The native adapter's new close() is a no-op and idempotent."""
+    """The native adapter close is idempotent when its planner has no close hook."""
     adapter = LidarOccupancyPlannerAdapter(_SeedlessInner(), _lidar_config())
     adapter.close()
     adapter.close()  # second call must not raise
     # plan/reset/diagnostics still work after close (close is terminal but harmless).
     adapter.reset(seed=0)
     assert adapter.plan(_lidar_observation()) == (0.0, 0.0)
+
+
+def test_native_lidar_adapter_close_is_idempotent_and_forwards_once() -> None:
+    """The native adapter must forward close exactly once when the planner supports it."""
+    inner = _RecordingInner(accepts_seed=True)
+    adapter = LidarOccupancyPlannerAdapter(inner, _lidar_config())
+    adapter.close()
+    adapter.close()
+    assert inner.close_calls == 1
 
 
 def test_baseline_adapter_close_is_idempotent_and_forwards_once() -> None:
@@ -398,8 +443,10 @@ def test_native_lidar_adapter_full_lifecycle_order() -> None:
     command = adapter.plan(_lidar_observation())
     assert command == (0.5, 0.25)
     raw = adapter.diagnostics()
+    assert raw[PLANNER_TYPE_KEY] == "LidarOccupancyPlannerAdapter"
     assert raw["lidar_occupancy_adapter"]["converted_observations"] == 1
     adapter.close()
+    assert adapter.planner.close_calls == 1
 
 
 def test_baseline_adapter_full_lifecycle_order() -> None:

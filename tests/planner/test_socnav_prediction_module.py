@@ -1,5 +1,6 @@
 """Focused coverage for the extracted Prediction planner-family module."""
 
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -87,6 +88,39 @@ def test_invalid_forecast_variant_reports_blocked_when_fallback_is_allowed() -> 
     adapter = prediction.PredictionPlannerAdapter(config, allow_fallback=True)
 
     assert adapter.get_forecast_variant_execution_mode() == "blocked"
+
+
+def test_forecast_variant_type_error_degrades_when_fallback_is_allowed(monkeypatch) -> None:
+    """Predictor construction errors remain explicit while fallback is enabled."""
+    from robot_sf.nav import baseline_probabilistic_predictor
+
+    class _BrokenPredictor:
+        def __init__(self, **kwargs: Any) -> None:
+            del kwargs
+            raise TypeError("invalid predictor configuration")
+
+    monkeypatch.setattr(
+        baseline_probabilistic_predictor,
+        "BaselineProbabilisticPredictor",
+        _BrokenPredictor,
+    )
+    adapter = prediction.PredictionPlannerAdapter(
+        prediction.SocNavPlannerConfig(forecast_variant="interaction_aware"),
+        allow_fallback=True,
+    )
+
+    assert adapter.get_forecast_variant_execution_mode() == "degraded"
+
+
+def test_forecast_variant_import_error_degrades_when_fallback_is_allowed(monkeypatch) -> None:
+    """Missing predictor dependencies remain explicit while fallback is enabled."""
+    monkeypatch.setitem(sys.modules, "robot_sf.nav.baseline_probabilistic_predictor", None)
+    adapter = prediction.PredictionPlannerAdapter(
+        prediction.SocNavPlannerConfig(forecast_variant="interaction_aware"),
+        allow_fallback=True,
+    )
+
+    assert adapter.get_forecast_variant_execution_mode() == "degraded"
 
 
 def test_factory_produces_policy_with_correct_adapter_type() -> None:

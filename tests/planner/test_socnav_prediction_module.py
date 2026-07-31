@@ -4,6 +4,7 @@ import sys
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
 import pytest
 
 from robot_sf.planner import socnav
@@ -121,6 +122,25 @@ def test_forecast_variant_import_error_degrades_when_fallback_is_allowed(monkeyp
     )
 
     assert adapter.get_forecast_variant_execution_mode() == "degraded"
+
+
+def test_baseline_prediction_error_uses_constant_velocity_fallback() -> None:
+    """Baseline prediction errors retain the explicit constant-velocity fallback."""
+
+    class _BrokenPredictor:
+        def predict(self, observation: dict[str, Any]) -> None:
+            del observation
+            raise ValueError("invalid observation")
+
+    adapter = prediction.PredictionPlannerAdapter(allow_fallback=True)
+    adapter._baseline_predictor = _BrokenPredictor()
+    state = np.array([[1.0, 2.0, 0.5, -0.25]], dtype=np.float32)
+    mask = np.array([1.0], dtype=np.float32)
+
+    future = adapter._predict_with_baseline(state, mask)
+
+    assert future.shape == (1, adapter.config.predictive_horizon_steps, 2)
+    assert np.all(np.isfinite(future))
 
 
 def test_factory_produces_policy_with_correct_adapter_type() -> None:

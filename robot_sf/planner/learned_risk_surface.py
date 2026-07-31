@@ -311,7 +311,7 @@ class RiskSurfacePlannerAdapter(OccupancyAwarePlannerMixin):
         self._last_error: str | None = None
         self._last_surface: dict[str, Any] | None = None
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset wrapped planner state when it exposes a reset hook."""
         reset = getattr(self.planner, "reset", None)
         if callable(reset):

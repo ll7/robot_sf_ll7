@@ -533,9 +533,7 @@ class CbfSafetyFilterPlannerWrapper:
         """Return wrapped planner and filter diagnostics when available."""
 
         payload = {"cbf_safety_filter": self.filter.diagnostics()}
-        diagnostics = getattr(self.planner, "diagnostics", None)
-        if callable(diagnostics):
-            payload["wrapped_planner"] = diagnostics()
+        payload["wrapped_planner"] = self.planner.diagnostics()
         return payload
 
     def reset(self, *args: Any, **kwargs: Any) -> Any:

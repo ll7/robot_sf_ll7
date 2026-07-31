@@ -2913,11 +2913,8 @@ def configure_logging(quiet: bool, level: str) -> None:
     _configure_logging(quiet, level)
 
 
-def _add_snqi_optimize(
-    sp: argparse._SubParsersAction[argparse.ArgumentParser],
-) -> None:
-    """Register the SNQI optimize subcommand parser."""
-    p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
+def _add_snqi_optimize_input_args(p: argparse.ArgumentParser) -> None:
+    """Register required inputs and primary optimization options."""
     p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
     p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
     p.add_argument("--output", type=Path, required=True, help="Output JSON file")
@@ -2950,6 +2947,10 @@ def _add_snqi_optimize(
         help="JSON file containing initial weight mapping",
     )
     p.add_argument("--progress", action="store_true", help="Show progress bars (tqdm)")
+
+
+def _add_snqi_optimize_analysis_args(p: argparse.ArgumentParser) -> None:
+    """Register validation, sampling, and uncertainty options for optimization."""
     p.add_argument(
         "--missing-metric-max-list",
         type=int,
@@ -3007,18 +3008,20 @@ def _add_snqi_optimize(
             "(stability and CIs may be unreliable)."
         ),
     )
+
+
+def _add_snqi_optimize(
+    sp: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the SNQI optimize subcommand parser."""
+    p = sp.add_parser("optimize", help="Optimize SNQI weights (grid / evolution)")
+    _add_snqi_optimize_input_args(p)
+    _add_snqi_optimize_analysis_args(p)
     p.set_defaults(cmd="snqi", snqi_cmd="optimize")
 
 
-def _add_snqi_recompute(
-    sp: argparse._SubParsersAction[argparse.ArgumentParser],
-) -> None:
-    """Register the SNQI recompute subcommand parser."""
-    p = sp.add_parser(
-        "recompute",
-        help="Recompute SNQI weights via predefined strategies",
-        conflict_handler="resolve",
-    )
+def _add_snqi_recompute_input_args(p: argparse.ArgumentParser) -> None:
+    """Register required inputs and comparison options for recomputation."""
     p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
     p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
     p.add_argument(
@@ -3043,6 +3046,10 @@ def _add_snqi_recompute(
         default=None,
         help="Evaluate external weights JSON mapping",
     )
+
+
+def _add_snqi_recompute_analysis_args(p: argparse.ArgumentParser) -> None:
+    """Register sampling, validation, and Pareto options for recomputation."""
     p.add_argument(
         "--export-pareto-front",
         action="store_true",
@@ -3094,6 +3101,10 @@ def _add_snqi_recompute(
             "(stability and CIs may be unreliable)."
         ),
     )
+
+
+def _add_snqi_recompute_legacy_args(p: argparse.ArgumentParser) -> None:
+    """Preserve the legacy duplicate options resolved by the recompute parser."""
     p.add_argument(
         "--export-pareto-front",
         action="store_true",
@@ -3116,6 +3127,20 @@ def _add_snqi_recompute(
         default=0.0,
         help="If >0 compare-strategies, flag correlation pairs below value.",
     )
+
+
+def _add_snqi_recompute(
+    sp: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the SNQI recompute subcommand parser."""
+    p = sp.add_parser(
+        "recompute",
+        help="Recompute SNQI weights via predefined strategies",
+        conflict_handler="resolve",
+    )
+    _add_snqi_recompute_input_args(p)
+    _add_snqi_recompute_analysis_args(p)
+    _add_snqi_recompute_legacy_args(p)
     p.set_defaults(cmd="snqi", snqi_cmd="recompute")
 
 

@@ -278,10 +278,6 @@ class LidarOccupancyPlannerAdapter:
             }
         }
 
-    def close(self) -> None:
-        """No resources to release; included for ``LocalPlannerProtocol`` conformance."""
-        return None
-
 
 __all__ = [
     "LidarOccupancyAdapterError",

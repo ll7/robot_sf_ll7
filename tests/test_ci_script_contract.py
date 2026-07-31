@@ -110,6 +110,31 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "Core pytest lane cannot run optional-extra path" in script_text
 
 
+def test_run_tests_parallel_emits_duration_store_flags_for_sharded_runs() -> None:
+    """Sharded runs must record pytest-split durations so CI can balance later shards."""
+
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    splits_line = 'cmd+=("--splits" "$shard_count" "--group" "$shard_index")'
+    store_line = 'cmd+=("--store-durations" "--durations-path" ".test_durations")'
+    assert splits_line in script_text
+    assert store_line in script_text
+    # Duration-store flags belong to the sharding block, not default unsharded runs.
+    assert script_text.find(splits_line) < script_text.find(store_line)
+
+    # ``--clean-durations`` keeps the CI cache fresh: each shard uploads only the
+    # tests it ran so the workflow-level merge unions disjoint stores instead of
+    # freezing on the restored aggregate's stale values. It must stay gated on
+    # ``CI=true`` so local sharded runs keep pytest-split's retain-and-update
+    # default behavior.
+    ci_gate = 'if [[ "${CI:-}" == "true" ]]; then'
+    clean_flag = 'cmd+=("--clean-durations")'
+    assert ci_gate in script_text
+    assert clean_flag in script_text
+    assert script_text.find(store_line) < script_text.find(ci_gate)
+    assert script_text.find(ci_gate) < script_text.find(clean_flag)
+
+
 def test_pytest_coverage_is_explicit_opt_in() -> None:
     """Default pytest runs should stay fast while the wrapper preserves coverage opt-in."""
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))

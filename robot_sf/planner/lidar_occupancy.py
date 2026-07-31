@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.errors import RobotSfError
-from robot_sf.planner.protocol import PLANNER_TYPE_KEY, _reset_with_optional_seed
+from robot_sf.planner.protocol import PLANNER_TYPE_KEY
 
 
 @dataclass(frozen=True)
@@ -235,14 +235,14 @@ class LidarOccupancyPlannerAdapter:
         self._last_error: str | None = None
         self._closed = False
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset wrapper counters and the wrapped planner when supported."""
         self._converted_count = 0
         self._unavailable_count = 0
         self._last_error = None
         reset = getattr(self.planner, "reset", None)
         if callable(reset):
-            _reset_with_optional_seed(reset, seed=seed)
+            reset(seed=seed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Convert rays to occupancy and delegate to the wrapped planner.

@@ -276,7 +276,13 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     assert "--advisory" in source_pr_step
     assert "exit 0" in workflow  # Bootstrap skip remains advisory before the gate exists on main.
     assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
-    assert "PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in workflow
+    assert "PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}" not in workflow
+    assert "PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}" in workflow
+    assert "encoded_branch=" in workflow
+    assert "'$value|@uri'" in workflow
+    assert 'gh api "repos/$REPOSITORY/branches/$encoded_branch"' in workflow
+    assert 'printf \'ref=%s\\n\' "$trusted_ref" >> "$GITHUB_OUTPUT"' in workflow
+    assert "Trusted gate revision: $trusted_ref" in workflow
     assert "checks: read" in workflow
     assert "issues: read" in workflow
     assert "ref: ${{ steps.trusted-gate.outputs.ref }}" in workflow

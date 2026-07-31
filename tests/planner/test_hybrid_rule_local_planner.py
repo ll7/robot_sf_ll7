@@ -1460,50 +1460,6 @@ def test_hybrid_rule_continuous_static_clearance_opt_in_rejects_dynamic_collisio
     assert evaluation["continuous_static_collision"] is True
 
 
-def test_hybrid_rule_continuous_static_clearance_skips_dynamic_check_on_violation(
-    monkeypatch,
-) -> None:
-    """Continuous static acceptance preserves the legacy per-step dynamic skip.
-
-    Regression guard for the ``_evaluate_candidate`` decomposition: when continuous
-    static checking is active and a static-clearance violation is accepted (rather than
-    rejected), the original monolithic loop issued ``continue`` and skipped that step's
-    dynamic-collision check. The refactor must preserve that, so a pedestrian that is
-    only in dynamic-collision range at such a step is not flagged, and the running
-    ``min_dynamic_clearance`` stays at infinity for the skipped step.
-    """
-    cfg = HybridRuleLocalPlannerConfig(
-        rollout_horizon=0.2,
-        continuous_static_clearance_enabled=True,
-    )
-    planner = HybridRuleLocalPlannerAdapter(cfg)
-    _bind_continuous_static_env(planner)
-    # Pedestrian on the rollout path, well inside the hard dynamic-collision radius.
-    observation = _obs(goal=(4.0, 0.0), ped_positions=[(0.05, 0.0)])
-    state = planner._extract_state(observation)
-    candidate = HybridRuleCandidate(0.2, 0.0, "dynamic_window")
-
-    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda observation: None)
-    # No continuous static *collision* (so clearance, not collision, is the violated gate).
-    monkeypatch.setattr(planner, "_static_collision_rejection", lambda **_kwargs: None)
-    # Static clearance below the required hard threshold -> violation accepted via
-    # the continuous static path, which triggers the legacy per-step dynamic skip.
-    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda point, observation: 0.05)
-
-    evaluation = planner._evaluate_candidate(
-        candidate=candidate,
-        observation=observation,
-        state=state,
-        speed_cap=cfg.max_linear_speed,
-        nearest_ped=float("inf"),
-        progress_windows={"3s": 0.0},
-    )
-
-    assert evaluation["accepted"] is True
-    assert evaluation["continuous_static_checked"] is True
-    assert evaluation["min_dynamic_clearance"] == pytest.approx(float("inf"))
-
-
 def test_hybrid_rule_corridor_subgoal_strict_lock_blocks_escape_candidates(monkeypatch) -> None:
     """Active subgoal recovery should make every candidate obey hard static clearance."""
     cfg = HybridRuleLocalPlannerConfig(

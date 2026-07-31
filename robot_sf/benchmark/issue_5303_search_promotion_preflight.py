@@ -184,7 +184,7 @@ def _single_pedestrian_by_id(
     if not isinstance(entries, list):
         return None
     for entry in entries:
-        if isinstance(entry, dict) and str(entry.get("id")) == pedestrian_id:
+        if isinstance(entry, dict) and str(entry.get("id") or "").strip() == pedestrian_id:
             return entry
     return None
 

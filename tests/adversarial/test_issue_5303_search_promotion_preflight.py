@@ -113,6 +113,18 @@ def test_preflight_explicit_pedestrian_override_binds_concrete_pedestrian() -> N
     assert result.materialized_pedestrian_id == "override_probe"
 
 
+def test_preflight_normalizes_template_pedestrian_id_like_runtime_loader() -> None:
+    """Whitespace around a template id must not hide the loader-bound candidate pedestrian."""
+    result = evaluate_preflight(
+        search_space=_space(),
+        template_scenario=_template(pedestrian_id="  crossing_probe  "),
+    )
+
+    assert result.status == "promotion_timing_ready"
+    assert result.materialized_pedestrian_id == "crossing_probe"
+    assert all(probe.status == "effective" for probe in result.dimensions)
+
+
 def test_preflight_inspects_candidate_pedestrian_among_preexisting_entries() -> None:
     """A template with other pedestrians must not cause probing the wrong pedestrian.
 

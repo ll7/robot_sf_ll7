@@ -110,6 +110,23 @@ def test_positive_workers_enable_persistent_and_prefetch() -> None:
     assert settings.prefetch_factor == 4
 
 
+def test_positive_workers_resolve_default_prefetch_for_manifest_provenance() -> None:
+    """Positive-worker loaders must record PyTorch's default prefetch factor when omitted."""
+    settings = _resolve(num_workers=2, prefetch_factor=None, device="cpu")
+
+    assert settings.prefetch_factor == 2
+
+    arrays = _make_arrays(n=16)
+    train_loader, _val_loader = trainer._prepare_loaders(
+        val_split=0.2,
+        batch_size=4,
+        seed=7,
+        settings=settings,
+        **arrays,
+    )
+    assert train_loader.prefetch_factor == 2
+
+
 def test_zero_workers_force_off_persistent_and_prefetch() -> None:
     """num_workers=0 must drop persistent_workers/prefetch_factor to safe values."""
     settings = _resolve(

@@ -39,6 +39,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 _CONTRACT_VERSION = "benchmark-reset-v2"
 _TRAINING_FAMILY = "prediction_planner"
+_DEFAULT_PREFETCH_FACTOR = 2
 
 
 def _is_near_constant(arr: np.ndarray, *, tol: float = 1e-6) -> bool:
@@ -149,7 +150,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--prefetch-factor",
         type=int,
-        default=2,
+        default=_DEFAULT_PREFETCH_FACTOR,
         help="Batches prefetched per worker. Only applied when --num-workers > 0.",
     )
     parser.add_argument("--hidden-dim", type=int, default=96)
@@ -387,8 +388,13 @@ def _resolve_loader_settings(
         raise ValueError(f"--prefetch-factor must be >= 1, got {prefetch_factor}")
     use_workers = num_workers > 0
     effective_prefetch: int | None = None
-    if prefetch_factor is not None and use_workers:
-        effective_prefetch = int(prefetch_factor)
+    if use_workers:
+        # ``DataLoader`` uses 2 when a positive-worker loader receives no
+        # explicit factor. Resolve that default here so the manifest records
+        # the effective value instead of claiming that prefetching is absent.
+        effective_prefetch = (
+            _DEFAULT_PREFETCH_FACTOR if prefetch_factor is None else int(prefetch_factor)
+        )
     non_blocking = bool(pin_memory) and device.type == "cuda"
     return LoaderSettings(
         num_workers=int(num_workers),

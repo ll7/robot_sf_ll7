@@ -67,10 +67,12 @@ PERTURBATION_DELTA_S = 1.0
 
 #: Per-dimension runtime field the materialized ``single_pedestrians`` entry must bind the
 #: timing value to. ``spawn_time_s`` maps to the pedestrian spawn delay; ``pedestrian_delay_s``
-#: maps to the waypoint wait rule. Both are runtime-effective pedestrian controls.
+#: maps to the waypoint wait rule. Both are runtime-effective pedestrian controls. The entry
+#: is matched by pedestrian identity (see :func:`_single_pedestrian_by_id`), not list position,
+#: so the bound field refers to the candidate pedestrian's entry.
 _DIMENSION_BOUND_FIELD = {
-    "spawn_time_s": "single_pedestrians[0].start_delay_s",
-    "pedestrian_delay_s": "single_pedestrians[0].wait_at[0].wait_s",
+    "spawn_time_s": "single_pedestrians[matched_id].start_delay_s",
+    "pedestrian_delay_s": "single_pedestrians[matched_id].wait_at[0].wait_s",
 }
 
 #: Declared downstream gates that keep promotion from being authorized here even when every

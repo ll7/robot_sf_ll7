@@ -359,7 +359,9 @@ def test_wrapper_enabled_forwards_diagnostics_reset_and_close() -> None:
     assert wrapper.plan(_head_on_observation())[0] < 0.8
     assert wrapper.last_decision is not None
     assert wrapper.diagnostics()["wrapped_planner"] == {"planner": "dummy"}
-    assert wrapper.reset(seed=7) == "reset"
+    # The standardized local-planner reset() contract returns None; the wrapper
+    # forwards keyword seed to the wrapped planner instead of passing the value through.
+    assert wrapper.reset(seed=7) is None
     assert planner.reset_seed == 7
     wrapper.close()
     assert planner.closed is True

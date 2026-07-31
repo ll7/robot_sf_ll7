@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
+    GuardedPPOConfig,
     build_guarded_ppo_config,
     build_guarded_ppo_fallback,
     build_guarded_ppo_prior,
@@ -763,3 +766,30 @@ def test_guarded_ppo_no_peds_and_stop_best_effort_branch() -> None:
     )
     assert command == (0.0, 0.0)
     assert decision == "stop_best_effort"
+
+
+def test_guarded_ppo_degenerate_blend_weight_never_emits_nan_command() -> None:
+    """A NaN blend weight must skip blending instead of failing open on a NaN command."""
+    guard = GuardedPPOAdapter(
+        config=GuardedPPOConfig(prior_blend_weight=float("nan")),
+        fallback_adapter=_FallbackAdapter((0.1, 0.0)),
+        prior_adapter=_PriorAdapter((0.3, 0.4)),
+    )
+    command, decision = guard.choose_command(
+        _obs(ped_positions=[(0.6, 0.0)], ped_velocities=[(-0.5, 0.0)]),
+        (1.0, 0.0),
+    )
+    assert not any(math.isnan(value) for value in command)
+    assert decision != "prior_blend_safe"
+
+
+def test_guarded_ppo_nan_goal_tolerance_preserves_normal_safety_selection() -> None:
+    """A NaN goal tolerance must not turn an unverified goal into a stop decision."""
+    guard = GuardedPPOAdapter(
+        config=GuardedPPOConfig(goal_tolerance=float("nan")),
+        fallback_adapter=_FallbackAdapter((0.1, 0.0)),
+    )
+
+    decision = guard.choose_command_decision(_obs(), (0.4, 0.1))
+
+    assert decision.decision_label == "ppo_clear"

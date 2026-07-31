@@ -60,6 +60,14 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _config_bool(config: dict[str, Any], *, key: str, default: bool) -> bool:
+    """Read a boolean config value without silently coercing malformed YAML."""
+    value = config.get(key, default)
+    if not isinstance(value, bool):
+        raise TypeError(f"training.{key} must be a boolean, got {type(value).__name__}: {value!r}")
+    return value
+
+
 def _resolve(path_raw: str | Path, *, base: Path) -> Path:
     """Resolve ``path_raw`` against ``base`` and return an absolute ``Path``."""
     path = Path(path_raw)
@@ -635,6 +643,12 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     training_cfg_for_schema = cfg.get("training", {})
     if not isinstance(training_cfg_for_schema, dict):
         raise TypeError("training must be a mapping")
+    pin_memory = _config_bool(training_cfg_for_schema, key="pin_memory", default=False)
+    persistent_workers = _config_bool(
+        training_cfg_for_schema,
+        key="persistent_workers",
+        default=False,
+    )
     model_family = str(
         cfg.get("model_family")
         or base_collection.get("model_family")
@@ -915,9 +929,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         str(int(train_cfg.get("proxy_workers", 1))),
         "--select-by-proxy",
     ]
-    if bool(train_cfg.get("pin_memory", False)):
+    if pin_memory:
         train_cmd.append("--pin-memory")
-    if bool(train_cfg.get("persistent_workers", False)):
+    if persistent_workers:
         train_cmd.append("--persistent-workers")
     if bool(wandb_cfg.get("enabled", True)):
         train_cmd.extend(

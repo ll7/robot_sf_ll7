@@ -87,6 +87,14 @@ def _pipeline_test_output_root(tmp_path: Path) -> str:
     return str(tmp_path / "predictive_pipeline_output")
 
 
+@pytest.mark.parametrize("key", ["pin_memory", "persistent_workers"])
+@pytest.mark.parametrize("value", ["false", 0, 1, None])
+def test_loader_boolean_config_rejects_non_boolean_values(key: str, value: object) -> None:
+    """New loader flags must not enable accidentally through Python truthiness."""
+    with pytest.raises(TypeError, match=rf"training\.{key} must be a boolean"):
+        pipeline._config_bool({key: value}, key=key, default=False)
+
+
 def _make_ego_pipeline_run_stub(invoked: list[list[str]]):
     """Return a pipeline stage stub that materializes ego-conditioned dataset artifacts."""
     ego_schema_json = _predictive_feature_schema_json(

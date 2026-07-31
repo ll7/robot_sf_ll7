@@ -7,6 +7,7 @@ diagnostic block survives the aggregation path without zero imputation.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -231,6 +232,16 @@ def test_receipt_preserves_contract_metadata_and_classifies_execution_modes() ->
         ]
     }
     assert _aggregate_contract_is_ok(campaign_with_aggregate, [classified]) is True
+
+    incorrect_aggregate = deepcopy(aggregate)
+    incorrect_aggregate["social_compliance"]["metrics"]["comfort_exposure_person_s"]["mean"] = 99.0
+    assert (
+        _aggregate_contract_is_ok(
+            {"runs": [{"planner": {"key": "goal"}, "aggregates": {"goal": incorrect_aggregate}}]},
+            [classified],
+        )
+        is False
+    )
 
     missing_aggregate_metadata = {
         **aggregate,

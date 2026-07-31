@@ -43,6 +43,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
 from robot_sf.benchmark.control_action_latency_snqi import NATIVE_EXECUTION_MODES
@@ -373,11 +374,39 @@ def _aggregate_metric_contract_is_ok(
         return False
 
     reducers = {"mean", "median", "p95"}
-    if any(status == "available" for status in statuses):
-        return reducers <= aggregate_metric.keys() and all(
+    available_status_count = sum(status == "available" for status in statuses)
+    available_values = [
+        values[metric_id]
+        for row, status in zip(rows, statuses, strict=True)
+        for values in (row.get("values", {}),)
+        if status == "available"
+        and isinstance(values, dict)
+        and metric_id in values
+        and isinstance(values[metric_id], (int, float))
+        and not isinstance(values[metric_id], bool)
+        and math.isfinite(float(values[metric_id]))
+    ]
+    if available_status_count:
+        if len(available_values) != available_status_count or not reducers.issubset(
+            aggregate_metric
+        ):
+            return False
+        expected_reducers = {
+            "mean": float(np.mean(available_values)),
+            "median": float(np.median(available_values)),
+            "p95": float(np.percentile(available_values, 95)),
+        }
+        return all(
             isinstance(aggregate_metric.get(key), (int, float))
+            and not isinstance(aggregate_metric.get(key), bool)
             and math.isfinite(float(aggregate_metric[key]))
-            for key in reducers
+            and math.isclose(
+                float(aggregate_metric[key]),
+                expected,
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            )
+            for key, expected in expected_reducers.items()
         )
     return not reducers & aggregate_metric.keys()
 
@@ -450,6 +479,7 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
     support_counts: dict[str, int] = {}
     denominators: dict[str, Any] = {}
     unavailable_reasons: dict[str, str | None] = {}
+    values: dict[str, float] = {}
     schema_valid = (
         isinstance(social, dict)
         and social.get("claim_class") == SOCIAL_COMPLIANCE_CLAIM_CLASS
@@ -487,13 +517,16 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
                 and support_count >= 0
             )
             if status == "available":
+                raw_value = row.get("value")
                 row_valid = (
                     row_valid
                     and support_count > 0
-                    and isinstance(row.get("value"), (int, float))
-                    and not isinstance(row.get("value"), bool)
-                    and math.isfinite(float(row["value"]))
+                    and isinstance(raw_value, (int, float))
+                    and not isinstance(raw_value, bool)
+                    and math.isfinite(float(raw_value))
                 )
+                if row_valid:
+                    values[metric_id] = float(raw_value)
             else:
                 row_valid = (
                     row_valid
@@ -520,6 +553,7 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
         "support_counts": support_counts,
         "denominators": denominators,
         "unavailable_reasons": unavailable_reasons,
+        "values": values,
         "schema_valid": schema_valid,
         "all_families_present": REQUIRED_FAMILIES <= families_present,
     }

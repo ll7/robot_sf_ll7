@@ -185,9 +185,40 @@ def test_rejects_matrix_with_missing_class(tmp_path: Path) -> None:
             output_path=out,
         )
     except metric.RankingMetricError as exc:
-        assert "no eligible rows" in str(exc)
+        assert "missing planner key(s)" in str(exc)
+        assert "guarded_ppo" in str(exc)
+        assert "ppo" in str(exc)
     else:
         raise AssertionError("missing-class matrix must fail closed")
+
+
+def test_rejects_matrix_with_one_missing_frozen_planner(tmp_path: Path) -> None:
+    """Every frozen planner must occur even when its structural class remains non-empty."""
+    rows = [row for row in _rows_with_success({}) if row["planner_key"] != "guarded_ppo"]
+
+    with pytest.raises(metric.RankingMetricError, match="missing planner key") as exc_info:
+        metric.build_ranking_for_matrix(
+            packet_path=PACKET,
+            episode_rows_path=_write_rows(tmp_path, "missing_planner.csv", rows),
+            output_path=tmp_path / "out.csv",
+        )
+
+    assert "guarded_ppo" in str(exc_info.value)
+
+
+def test_rejects_duplicate_frozen_planner(tmp_path: Path) -> None:
+    """A repeated planner row must not receive extra weight in its structural-class mean."""
+    rows = _rows_with_success({})
+    rows.append(dict(rows[0]))
+
+    with pytest.raises(metric.RankingMetricError, match="duplicate planner key") as exc_info:
+        metric.build_ranking_for_matrix(
+            packet_path=PACKET,
+            episode_rows_path=_write_rows(tmp_path, "duplicate_planner.csv", rows),
+            output_path=tmp_path / "out.csv",
+        )
+
+    assert rows[0]["planner_key"] in str(exc_info.value)
 
 
 def test_metric_output_feedable_to_agreement_builder(

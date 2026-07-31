@@ -215,9 +215,10 @@ def compute_structural_ranking(
 
     Raises:
         RankingMetricError: If a row is a fallback/degraded execution, a planner key
-            is unknown, a required metric field is missing, or a structural class has
-            no eligible rows.
+            is unknown, missing, or duplicated, or a required metric field is missing.
     """
+    expected_planner_keys = set(planner_to_class)
+    observed_planner_keys: set[str] = set()
     by_class: dict[str, list[dict[str, Any]]] = {klass: [] for klass in STRUCTURAL_CLASS_ORDER}
     for row in episode_rows:
         if _is_fallback_or_degraded(row):
@@ -226,21 +227,31 @@ def compute_structural_ranking(
         planner_key = row.get("planner_key") or row.get("planner")
         if planner_key is None:
             raise RankingMetricError("episode row missing planner_key/planner")
+        normalized_planner_key = str(planner_key).strip()
+        klass = planner_to_class.get(normalized_planner_key)
+        if klass is None:
+            raise RankingMetricError(f"planner not in preregistered roster: {planner_key!r}")
+        if normalized_planner_key in observed_planner_keys:
+            raise RankingMetricError(
+                f"duplicate planner key in matrix aggregate: {normalized_planner_key!r}"
+            )
+        observed_planner_keys.add(normalized_planner_key)
+
         missing_fields = [field for field in REQUIRED_METRIC_FIELDS if row.get(field) in (None, "")]
         if missing_fields:
             raise RankingMetricError(
                 f"episode row for {planner_key!r} missing required metric field(s): "
                 f"{missing_fields}"
             )
-        klass = planner_to_class.get(str(planner_key).strip())
-        if klass is None:
-            raise RankingMetricError(f"planner not in preregistered roster: {planner_key!r}")
-        by_class[klass].append(_parse_metric_aggregate(row, str(planner_key).strip()))
+        by_class[klass].append(_parse_metric_aggregate(row, normalized_planner_key))
 
-    missing_classes = [klass for klass, rows in by_class.items() if not rows]
-    if missing_classes:
+    if observed_planner_keys != expected_planner_keys:
+        missing_planner_keys = sorted(expected_planner_keys - observed_planner_keys)
+        extra_planner_keys = sorted(observed_planner_keys - expected_planner_keys)
         raise RankingMetricError(
-            f"structural class(es) have no eligible rows: {sorted(missing_classes)}"
+            "matrix aggregate does not cover the frozen planner roster exactly once; "
+            f"missing planner key(s): {missing_planner_keys}; "
+            f"extra planner key(s): {extra_planner_keys}"
         )
 
     class_scores: dict[str, tuple[float, float, float, float, float]] = {}

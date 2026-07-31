@@ -513,8 +513,11 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
             and math.isfinite(float(row[value_key]))
         ]
         support = [
-            row.get(support_key, 0) if status == "available" else 0
+            value
             for row, status in zip(rows, statuses, strict=True)
+            if status == "available"
+            for value in (row.get(support_key, 0),)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0
         ]
         denominators = Counter(
             value.strip() if isinstance(value, str) and value.strip() else "unknown"
@@ -528,7 +531,7 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
         )
         metric_summary: dict[str, Any] = {
             "status_counts": dict(Counter(str(status) for status in statuses)),
-            "support_count": int(sum(value for value in support if isinstance(value, int | float))),
+            "support_count": int(sum(support)),
             "denominators": dict(sorted(denominators.items())),
             "unavailable_reasons": dict(sorted(unavailable_reasons.items())),
         }

@@ -230,3 +230,52 @@ def test_aggregate_excludes_invalid_available_social_values(invalid_value: objec
     assert "mean" not in summary
     assert "median" not in summary
     assert "p95" not in summary
+
+
+@pytest.mark.parametrize("invalid_support_count", [True, -1, float("nan"), float("inf")])
+def test_aggregate_excludes_invalid_available_social_support_counts(
+    invalid_support_count: object,
+) -> None:
+    """Malformed support counts neither inflate totals nor make aggregation fail."""
+    metrics = compute_all_metrics(_episode(), horizon=3)
+    comfort = metrics["social_compliance"]["metrics"]["comfort_exposure_person_s"]
+    invalid_record = {
+        "episode_id": "invalid-support-count",
+        "scenario_id": "fixture",
+        "seed": 1,
+        "scenario_params": {"algo": "planner_a"},
+        "metrics": {
+            **metrics,
+            "social_compliance": {
+                **metrics["social_compliance"],
+                "metrics": {
+                    **metrics["social_compliance"]["metrics"],
+                    "comfort_exposure_person_s": {
+                        **comfort,
+                        "support_count": invalid_support_count,
+                    },
+                },
+            },
+        },
+    }
+    valid_record = {
+        **invalid_record,
+        "episode_id": "valid-support-count",
+        "seed": 2,
+        "metrics": {
+            **invalid_record["metrics"],
+            "social_compliance": {
+                **invalid_record["metrics"]["social_compliance"],
+                "metrics": {
+                    **invalid_record["metrics"]["social_compliance"]["metrics"],
+                    "comfort_exposure_person_s": comfort,
+                },
+            },
+        },
+    }
+
+    summary = compute_aggregates([invalid_record, valid_record])["planner_a"]["social_compliance"][
+        "metrics"
+    ]["comfort_exposure_person_s"]
+
+    assert summary["support_count"] == comfort["support_count"]

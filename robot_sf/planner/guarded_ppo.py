@@ -684,7 +684,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             ShieldDecision | None: Blend decision when preferred, otherwise ``None``.
         """
         prior_weight = float(self.config.prior_blend_weight)
-        if prior_command is None or prior_weight <= 0.0:
+        # Keep the original ``prior_weight > 0.0`` polarity rather than negating it to
+        # ``prior_weight <= 0.0``: the two differ for NaN, and a NaN weight must skip the
+        # blend instead of failing open into a NaN command labelled ``prior_blend_safe``.
+        if prior_command is None or not prior_weight > 0.0:
             return None
         blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)
         blended_eval = self._evaluate_command(

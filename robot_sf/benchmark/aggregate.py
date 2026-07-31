@@ -469,8 +469,14 @@ def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
         base[f"{prefix}.denominator"] = row.get("denominator")
         if row.get("status") != "available":
             base[f"{prefix}.unavailable_reason"] = row.get("unavailable_reason")
-        if row.get("status") == "available" and row.get("value") is not None:
-            base[prefix] = row["value"]
+        value = row.get("value")
+        if (
+            row.get("status") == "available"
+            and isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        ):
+            base[prefix] = value
 
 
 def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, Any] | None:

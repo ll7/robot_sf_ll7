@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.benchmark.aggregate import compute_aggregates, flatten_metrics
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
@@ -189,3 +190,43 @@ def test_aggregate_excludes_values_from_unavailable_social_rows() -> None:
     assert "mean" not in comfort_summary
     assert "median" not in comfort_summary
     assert "p95" not in comfort_summary
+
+
+@pytest.mark.parametrize("invalid_value", [True, float("nan"), float("inf")])
+def test_aggregate_excludes_invalid_available_social_values(invalid_value: object) -> None:
+    """Invalid available values cannot enter flat or nested aggregate reducers."""
+    record = {
+        "episode_id": "invalid-available-value",
+        "scenario_id": "fixture",
+        "seed": 1,
+        "scenario_params": {"algo": "planner_a"},
+        "metrics": {
+            "social_compliance": {
+                "schema_version": SOCIAL_COMPLIANCE_SCHEMA_VERSION,
+                "claim_class": "diagnostic_proxy",
+                "metrics": {
+                    "comfort_exposure_person_s": {
+                        "id": "comfort_exposure_person_s",
+                        "family": "comfort_exposure",
+                        "claim_class": "diagnostic_proxy",
+                        "units": "person_seconds",
+                        "denominator": "pedestrian_steps",
+                        "status": "available",
+                        "support_count": 1,
+                        "value": invalid_value,
+                    }
+                },
+            }
+        },
+    }
+
+    flat = flatten_metrics(record)
+    assert "social_compliance.comfort_exposure_person_s" not in flat
+
+    summary = compute_aggregates([record])["planner_a"]["social_compliance"]["metrics"][
+        "comfort_exposure_person_s"
+    ]
+    assert summary["status_counts"] == {"available": 1}
+    assert "mean" not in summary
+    assert "median" not in summary
+    assert "p95" not in summary

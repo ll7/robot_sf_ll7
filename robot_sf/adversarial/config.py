@@ -437,9 +437,7 @@ class SearchSpaceConfig:
             pedestrian = {}
         if not isinstance(pedestrian, dict):
             raise ValueError("search-space pedestrian section must be a mapping")
-        pedestrian_id = pedestrian.get("id")
-        if pedestrian_id is not None:
-            pedestrian_id = str(pedestrian_id).strip() or None
+        pedestrian_id = str(pedestrian.get("id") or "").strip() or None
 
         config = cls(
             start_x=_range("start_x"),

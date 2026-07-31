@@ -101,6 +101,35 @@ def test_preflight_rejects_search_space_without_pedestrian_id() -> None:
         assert probe.bound_to_pedestrian is False
 
 
+def test_preflight_rejects_falsy_mapping_pedestrian_id() -> None:
+    """A YAML numeric zero id must normalize like the canonical runtime loader."""
+    search_space = SearchSpaceConfig.from_mapping(
+        {
+            "variables": {
+                "start_x": {"min": 1.0, "max": 1.0},
+                "start_y": {"min": 2.0, "max": 2.0},
+                "goal_x": {"min": 5.0, "max": 5.0},
+                "goal_y": {"min": 2.0, "max": 2.0},
+                "spawn_time_s": {"min": 0.0, "max": 2.0},
+                "pedestrian_speed_mps": {"min": 1.0, "max": 1.0},
+                "pedestrian_delay_s": {"min": 0.0, "max": 1.5},
+                "scenario_seed": {"min": 7.0, "max": 7.0},
+            },
+            "constraints": {"min_start_goal_distance_m": 0.5},
+            "pedestrian": {"id": 0},
+        }
+    )
+
+    result = evaluate_preflight(
+        search_space=search_space,
+        template_scenario=_template(pedestrian_id="0"),
+    )
+
+    assert search_space.pedestrian_id is None
+    assert result.status == "blocked_no_pedestrian"
+    assert result.materialized_pedestrian_id is None
+
+
 def test_preflight_rejects_pedestrian_override_when_space_declares_none() -> None:
     """An override cannot turn a search space without a pedestrian into a ready space."""
     result = evaluate_preflight(

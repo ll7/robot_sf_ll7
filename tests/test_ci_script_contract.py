@@ -32,6 +32,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
@@ -133,6 +134,56 @@ def test_run_tests_parallel_emits_duration_store_flags_for_sharded_runs() -> Non
     assert clean_flag in script_text
     assert script_text.find(store_line) < script_text.find(ci_gate)
     assert script_text.find(ci_gate) < script_text.find(clean_flag)
+
+
+def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
+    """Keep CI duration restore, per-shard upload, and aggregate-save wiring intact."""
+
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    fast_feedback = workflow["jobs"]["fast-feedback"]
+    fast_feedback_steps = fast_feedback["steps"]
+    duration_restore = next(
+        step
+        for step in fast_feedback_steps
+        if step.get("name") == "Restore test durations for pytest-split balancing"
+    )
+    duration_upload = next(
+        step for step in fast_feedback_steps if step.get("name") == "Upload test durations"
+    )
+
+    assert duration_restore["uses"].startswith("actions/cache/restore@")
+    assert duration_restore["with"]["path"] == ".test_durations"
+    assert "${{ github.run_id }}" in duration_restore["with"]["key"]
+    assert "test-durations-${{ runner.os }}-" in duration_restore["with"]["restore-keys"]
+    assert duration_upload["if"] == "always()"
+    assert duration_upload["with"] == {
+        "name": "pytest-durations-${{ matrix.shard }}",
+        "path": ".test_durations",
+        "if-no-files-found": "ignore",
+        "include-hidden-files": True,
+    }
+
+    aggregate = workflow["jobs"]["ci"]
+    assert "fast-feedback" in aggregate["needs"]
+    duration_download = next(
+        step for step in aggregate["steps"] if step.get("name") == "Download test-duration shards"
+    )
+    duration_merge = next(
+        step for step in aggregate["steps"] if step.get("name") == "Merge test durations"
+    )
+    duration_save = next(
+        step for step in aggregate["steps"] if step.get("name") == "Save merged test durations"
+    )
+
+    assert duration_download["with"] == {
+        "pattern": "pytest-durations-*",
+        "path": ".duration-artifacts",
+    }
+    assert duration_merge["continue-on-error"] is True
+    assert "merged.update(json.loads" in duration_merge["run"]
+    assert duration_save["continue-on-error"] is True
+    assert duration_save["with"]["path"] == ".test_durations"
+    assert "${{ github.run_id }}" in duration_save["with"]["key"]
 
 
 def test_pytest_coverage_is_explicit_opt_in() -> None:

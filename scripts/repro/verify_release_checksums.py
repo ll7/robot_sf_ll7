@@ -226,6 +226,60 @@ def _bundle_file_coverage_errors(
     return []
 
 
+def _resolve_bundle_directory(
+    bundle_evidence: dict[str, Any],
+    repo_root: Path,
+) -> tuple[str | None, Path | None, list[str]]:
+    """Resolve and validate the optional directory-backed bundle root."""
+    raw_directory = bundle_evidence.get("directory")
+    if raw_directory is None:
+        return None, None, []
+    if not isinstance(raw_directory, str) or not raw_directory:
+        return None, None, ["artifact_set.bundle_evidence.directory must be a non-empty path."]
+    if Path(raw_directory).is_absolute():
+        return (
+            raw_directory,
+            None,
+            ["artifact_set.bundle_evidence.directory must be repository-relative."],
+        )
+
+    resolved_root = repo_root.resolve()
+    directory = (resolved_root / raw_directory).resolve()
+    try:
+        directory.relative_to(resolved_root)
+    except ValueError:
+        return (
+            raw_directory,
+            None,
+            ["artifact_set.bundle_evidence.directory escapes the repository root."],
+        )
+    if not directory.is_dir():
+        return (
+            raw_directory,
+            None,
+            ["artifact_set.bundle_evidence.directory is missing or not a directory."],
+        )
+    return raw_directory, directory, []
+
+
+def _bundle_file_scope_error(
+    path: str,
+    directory: Path,
+    bundle_directory: str,
+    repo_root: Path,
+) -> str | None:
+    """Return an error when a declared bundle file is outside its directory."""
+    resolved_path = (repo_root.resolve() / Path(path)).resolve()
+    try:
+        resolved_path.relative_to(directory)
+    except ValueError:
+        return (
+            f"Bundle-evidence file {path!r} is outside the declared bundle directory "
+            f"{bundle_directory!r}."
+        )
+    return None
+
+
 def _verify_bundle_evidence_coverage(
     bundle_evidence: Any,
     entries: Any,
@@ -238,6 +292,11 @@ def _verify_bundle_evidence_coverage(
     if not isinstance(files, list) or not files:
         return ["artifact_set.bundle_evidence.files must be a non-empty list."]
 
+    bundle_directory, directory, directory_errors = _resolve_bundle_directory(
+        bundle_evidence,
+        repo_root,
+    )
+
     entry_digests, errors = _repository_entry_digests(entries)
     bundle_paths: set[str] = set()
     for index, bundle_file in enumerate(files):
@@ -245,21 +304,25 @@ def _verify_bundle_evidence_coverage(
             _bundle_file_coverage_errors(index, bundle_file, entry_digests, bundle_paths),
         )
 
-    bundle_directory = bundle_evidence.get("directory")
-    if bundle_directory is None:
-        return errors
-    if not isinstance(bundle_directory, str) or not bundle_directory:
-        return [*errors, "artifact_set.bundle_evidence.directory must be a non-empty path."]
-    directory = (repo_root.resolve() / bundle_directory).resolve()
-    try:
-        directory.relative_to(repo_root.resolve())
-    except ValueError:
-        return [*errors, "artifact_set.bundle_evidence.directory escapes the repository root."]
-    if not directory.is_dir():
-        return [*errors, "artifact_set.bundle_evidence.directory is missing or not a directory."]
+        if directory is not None and bundle_directory is not None and isinstance(bundle_file, dict):
+            path = bundle_file.get("path")
+            if isinstance(path, str) and path:
+                scope_error = _bundle_file_scope_error(
+                    path,
+                    directory,
+                    bundle_directory,
+                    repo_root,
+                )
+                if scope_error is not None:
+                    errors.append(scope_error)
+
+    if directory is None:
+        return [*errors, *directory_errors]
+
+    resolved_root = repo_root.resolve()
 
     for path in sorted(candidate for candidate in directory.rglob("*") if candidate.is_file()):
-        relative_path = path.relative_to(repo_root.resolve()).as_posix()
+        relative_path = path.relative_to(resolved_root).as_posix()
         if relative_path not in bundle_paths:
             errors.append(
                 f"Bundle directory file {relative_path!r} is missing from checksum entries."

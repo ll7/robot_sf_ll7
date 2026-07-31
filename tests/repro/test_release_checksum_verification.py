@@ -491,6 +491,83 @@ class TestVerificationScript:
             "Bundle directory file 'docs/bundle/evidence.txt.review.json' is missing from checksum entries.",
         ]
 
+    def test_repository_entry_verification_rejects_files_outside_bundle_directory(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        bundle = tmp_path / "docs" / "bundle"
+        bundle.mkdir(parents=True)
+        outside = tmp_path / "docs" / "outside.txt"
+        outside.write_text("outside bundle", encoding="utf-8")
+        digest = hashlib.sha256(outside.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "directory": "docs/bundle",
+                    "files": [{"path": "docs/outside.txt", "sha256": digest}],
+                },
+            },
+            "entries": [{"path": "docs/outside.txt", "sha256": digest}],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "Bundle-evidence file 'docs/outside.txt' is outside the declared bundle directory "
+            "'docs/bundle'.",
+        ]
+
+    def test_repository_entry_verification_rejects_absolute_bundle_directory(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        bundle = tmp_path / "docs" / "bundle"
+        bundle.mkdir(parents=True)
+        evidence_path = bundle / "evidence.txt"
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "directory": str(bundle),
+                    "files": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+                },
+            },
+            "entries": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "artifact_set.bundle_evidence.directory must be repository-relative.",
+        ]
+
     def test_null_bundle_archive_cannot_fall_back_to_repository_entries(
         self,
         tmp_path: Path,

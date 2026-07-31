@@ -192,7 +192,15 @@ def test_aggregate_excludes_values_from_unavailable_social_rows() -> None:
     assert "p95" not in comfort_summary
 
 
-@pytest.mark.parametrize("invalid_value", [True, float("nan"), float("inf")])
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        True,
+        float("nan"),
+        float("inf"),
+        pytest.param(10**1000, id="oversized-integer"),
+    ],
+)
 def test_aggregate_excludes_invalid_available_social_values(invalid_value: object) -> None:
     """Invalid available values cannot enter flat or nested aggregate reducers."""
     record = {
@@ -232,7 +240,7 @@ def test_aggregate_excludes_invalid_available_social_values(invalid_value: objec
     assert "p95" not in summary
 
 
-@pytest.mark.parametrize("invalid_support_count", [True, -1, float("nan"), float("inf")])
+@pytest.mark.parametrize("invalid_support_count", [True, 0, -1, float("nan"), float("inf")])
 def test_aggregate_excludes_invalid_available_social_support_counts(
     invalid_support_count: object,
 ) -> None:
@@ -253,6 +261,7 @@ def test_aggregate_excludes_invalid_available_social_support_counts(
                     "comfort_exposure_person_s": {
                         **comfort,
                         "support_count": invalid_support_count,
+                        "value": 99.0,
                     },
                 },
             },
@@ -279,3 +288,6 @@ def test_aggregate_excludes_invalid_available_social_support_counts(
     ]["comfort_exposure_person_s"]
 
     assert summary["support_count"] == comfort["support_count"]
+    assert summary["mean"] == pytest.approx(comfort["value"])
+    assert summary["median"] == pytest.approx(comfort["value"])
+    assert summary["p95"] == pytest.approx(comfort["value"])

@@ -356,6 +356,9 @@ def test_aggregate_contract_ignores_invalid_support_counts(
 
     assert _aggregate_metric_contract_is_ok(metric_id, aggregate_metric, rows) is True
 
+    oversized_reducer = {**aggregate_metric, "mean": 10**1000}
+    assert _aggregate_metric_contract_is_ok(metric_id, oversized_reducer, rows) is False
+
 
 def test_scenario_matrix_selects_one_pedestrian_scenario() -> None:
     """The preflight scenario matrix must select exactly one scenario with pedestrians."""

@@ -453,6 +453,23 @@ def _flatten_human_interaction_proxy_block(
             base[source_key] = reductions.get(source_key)
 
 
+def _is_valid_social_support_count(value: Any, *, require_positive: bool = False) -> bool:
+    """Return whether a social-compliance support count has the contract type and range."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return False
+    return value > 0 if require_positive else value >= 0
+
+
+def _is_finite_social_value(value: Any) -> bool:
+    """Return whether a social-compliance value is a finite JSON-compatible number."""
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
 def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
     """Flatten social-compliance values while retaining contract metadata."""
     if not isinstance(block, dict):
@@ -472,9 +489,8 @@ def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
         value = row.get("value")
         if (
             row.get("status") == "available"
-            and isinstance(value, int | float)
-            and not isinstance(value, bool)
-            and math.isfinite(float(value))
+            and _is_valid_social_support_count(row.get("support_count"), require_positive=True)
+            and _is_finite_social_value(value)
         ):
             base[prefix] = value
 
@@ -508,16 +524,15 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
             row[value_key]
             for row, status in zip(rows, statuses, strict=True)
             if status == "available"
-            and isinstance(row.get(value_key), int | float)
-            and not isinstance(row.get(value_key), bool)
-            and math.isfinite(float(row[value_key]))
+            and _is_valid_social_support_count(row.get(support_key), require_positive=True)
+            and _is_finite_social_value(row.get(value_key))
         ]
         support = [
             value
             for row, status in zip(rows, statuses, strict=True)
             if status == "available"
             for value in (row.get(support_key, 0),)
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            if _is_valid_social_support_count(value)
         ]
         denominators = Counter(
             value.strip() if isinstance(value, str) and value.strip() else "unknown"

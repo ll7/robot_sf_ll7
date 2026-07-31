@@ -174,6 +174,16 @@ def _is_zero_exit_code(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value == 0
 
 
+def _is_finite_number(value: Any) -> bool:
+    """Return whether a value is a finite non-boolean number without coercion errors."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
 def _normalized_text(value: Any, *, default: str = "unknown") -> str:
     """Return a lower-case non-empty status label or a fail-closed default."""
     if not isinstance(value, str):
@@ -385,9 +395,7 @@ def _aggregate_metric_contract_is_ok(
         if status == "available"
         and isinstance(values, dict)
         and metric_id in values
-        and isinstance(values[metric_id], (int, float))
-        and not isinstance(values[metric_id], bool)
-        and math.isfinite(float(values[metric_id]))
+        and _is_finite_number(values[metric_id])
     ]
     if available_status_count:
         if len(available_values) != available_status_count or not reducers.issubset(
@@ -400,9 +408,7 @@ def _aggregate_metric_contract_is_ok(
             "p95": float(np.percentile(available_values, 95)),
         }
         return all(
-            isinstance(aggregate_metric.get(key), (int, float))
-            and not isinstance(aggregate_metric.get(key), bool)
-            and math.isfinite(float(aggregate_metric[key]))
+            _is_finite_number(aggregate_metric.get(key))
             and math.isclose(
                 float(aggregate_metric[key]),
                 expected,
@@ -521,13 +527,7 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
             )
             if status == "available":
                 raw_value = row.get("value")
-                row_valid = (
-                    row_valid
-                    and support_count > 0
-                    and isinstance(raw_value, (int, float))
-                    and not isinstance(raw_value, bool)
-                    and math.isfinite(float(raw_value))
-                )
+                row_valid = row_valid and support_count > 0 and _is_finite_number(raw_value)
                 if row_valid:
                     values[metric_id] = float(raw_value)
             else:

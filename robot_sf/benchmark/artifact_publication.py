@@ -1478,7 +1478,250 @@ def _snqi_diagnostics_ordering(diagnostics: Mapping[str, Any]) -> dict[str, int]
     return ordering
 
 
-def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
+def _snqi_load_canonical_basis() -> dict[str, Any]:
+    """Load canonical SNQI weights and baseline files for consistency checking.
+
+    Returns:
+        A dict with either ``rejections`` (when files are missing or unreadable)
+        or ``weights``, ``baseline``, ``weights_sha256``, and ``baseline_sha256``.
+    """
+    repo_root = get_repository_root()
+    weights_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_WEIGHTS_NAME
+    baseline_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_BASELINE_NAME
+    rejections: list[str] = []
+    if not weights_path.is_file():
+        rejections.append(f"canonical SNQI weights file is missing: {weights_path}")
+    if not baseline_path.is_file():
+        rejections.append(f"canonical SNQI baseline file is missing: {baseline_path}")
+    if rejections:
+        return {"rejections": rejections}
+
+    weights_sha256 = _sha256_file(weights_path)
+    baseline_sha256 = _sha256_file(baseline_path)
+    try:
+        weights = _load_snqi_weight_mapping(weights_path)
+        baseline = _load_snqi_baseline_mapping(baseline_path)
+    except (OSError, TypeError, ValueError) as exc:
+        return {
+            "rejections": [f"canonical SNQI inputs cannot be loaded: {exc}"],
+            "integrity": {
+                "snqi_weights_sha256": weights_sha256,
+                "snqi_baseline_sha256": baseline_sha256,
+            },
+        }
+    return {
+        "weights": weights,
+        "baseline": baseline,
+        "weights_sha256": weights_sha256,
+        "baseline_sha256": baseline_sha256,
+    }
+
+
+def _snqi_validate_declared_hashes(
+    diagnostics: Mapping[str, Any],
+    weights_sha256: str,
+    baseline_sha256: str,
+) -> list[str]:
+    """Compare diagnostics-declared SHA256 values against canonical inputs.
+
+    Returns:
+        List of rejection messages for any hash mismatch (empty when all match).
+    """
+    rejections: list[str] = []
+    declared_weights_sha = diagnostics.get("weights_sha256")
+    declared_baseline_sha = diagnostics.get("baseline_sha256")
+    if not isinstance(declared_weights_sha, str) or declared_weights_sha.lower() != weights_sha256:
+        rejections.append(
+            "snqi_diagnostics.json weights_sha256 does not match the canonical "
+            f"{_SNQI_DEFAULT_WEIGHTS_NAME} (missing/invalid or {declared_weights_sha!r} != "
+            f"{weights_sha256})"
+        )
+    if (
+        not isinstance(declared_baseline_sha, str)
+        or declared_baseline_sha.lower() != baseline_sha256
+    ):
+        rejections.append(
+            "snqi_diagnostics.json baseline_sha256 does not match the canonical "
+            f"{_SNQI_DEFAULT_BASELINE_NAME} (missing/invalid or {declared_baseline_sha!r} != "
+            f"{baseline_sha256})"
+        )
+    return rejections
+
+
+def _snqi_validate_episode_record(  # noqa: C901
+    raw_line: str,
+    source: str,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Any],
+) -> tuple[str | None, bool, float | None]:
+    """Validate one episode JSONL record's ``metrics.snqi`` field and recompute.
+
+    Returns:
+        A tuple of ``(rejection, field_present, stored_snqi)`` where ``rejection``
+        is a message when validation fails, ``field_present`` is True when
+        ``metrics.snqi`` exists, and ``stored_snqi`` is the validated float when
+        the record is fully valid.
+    """
+    try:
+        record = json.loads(raw_line)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return f"{source}: invalid JSON: {exc}", False, None
+    if not isinstance(record, Mapping):
+        return f"{source}: expected a JSON object", False, None
+    metrics = record.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return f"{source}: metrics must be an object", False, None
+    if "snqi" not in metrics:
+        return f"{source}: metrics.snqi field is absent", False, None
+
+    raw_stored_snqi = metrics["snqi"]
+    if isinstance(raw_stored_snqi, bool) or not isinstance(raw_stored_snqi, (int, float)):
+        return f"{source}: metrics.snqi must be a finite JSON number", True, None
+    try:
+        stored_snqi = float(raw_stored_snqi)
+        if not math.isfinite(stored_snqi):
+            raise ValueError("value is not finite")
+    except (TypeError, ValueError) as exc:
+        return f"{source}: metrics.snqi is not a finite number: {exc}", True, None
+    metric_values = dict(metrics)
+    try:
+        recomputed_snqi = _curvature_aware_snqi(metric_values, weights, baseline_stats=baseline)
+        if not math.isfinite(recomputed_snqi):
+            raise ValueError("value is not finite")
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        return f"{source}: curvature-aware recompute failed: {exc}", True, None
+    if not math.isclose(
+        stored_snqi,
+        recomputed_snqi,
+        rel_tol=_SNQI_RECOMPUTE_RTOL,
+        abs_tol=_SNQI_RECOMPUTE_ATOL,
+    ):
+        mismatch_msg = (
+            f"{source}: stored SNQI {stored_snqi!r} != curvature-aware recompute "
+            f"{recomputed_snqi!r}"
+        )
+        return mismatch_msg, True, stored_snqi
+    return None, True, stored_snqi
+
+
+def _snqi_scan_episode_snqi_fields(
+    payload_dir: Path,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Scan all episode JSONL files and validate per-episode SNQI fields.
+
+    Returns:
+        Accumulated scan results with ``rejections``, ``rows``,
+        ``episode_field_present``, ``per_arm_field_sum``, ``per_arm_field_count``,
+        ``mismatch_sample``, and ``mismatch_total``.
+    """
+    rejections: list[str] = []
+    rows = 0
+    episode_field_present = 0
+    per_arm_field_sum: dict[str, float] = defaultdict(float)
+    per_arm_field_count: dict[str, int] = defaultdict(int)
+    mismatch_sample: list[str] = []
+    mismatch_total = 0
+    for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+        arm = episodes_path.parent.name
+        try:
+            lines = episodes_path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            rejections.append(f"cannot read {episodes_path}: {exc}")
+            continue
+        for line_number, raw_line in enumerate(lines, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            rows += 1
+            source = f"{episodes_path}:{line_number}"
+            rejection, field_present, stored_snqi = _snqi_validate_episode_record(
+                line, source, weights, baseline
+            )
+            if field_present:
+                episode_field_present += 1
+            if stored_snqi is not None:
+                per_arm_field_sum[arm] += stored_snqi
+                per_arm_field_count[arm] += 1
+            if rejection is not None:
+                # Every drift is counted; the per-episode rejection sample is capped so a
+                # large drift cannot balloon the report, but ``violation_count`` below
+                # accounts for every drifted episode so the evidence is not misleading.
+                if stored_snqi is not None:
+                    mismatch_total += 1
+                    if len(mismatch_sample) < 20:
+                        mismatch_sample.append(rejection)
+                else:
+                    rejections.append(rejection)
+    return {
+        "rejections": rejections,
+        "rows": rows,
+        "episode_field_present": episode_field_present,
+        "per_arm_field_sum": per_arm_field_sum,
+        "per_arm_field_count": per_arm_field_count,
+        "mismatch_sample": mismatch_sample,
+        "mismatch_total": mismatch_total,
+    }
+
+
+def _snqi_build_consistency_result(
+    scan: dict[str, Any],
+    diagnostics_ordering: dict[str, int],
+    rejections: list[str],
+    integrity: dict[str, str],
+) -> dict[str, Any]:
+    """Assemble the final SNQI consistency evidence dict from scan results.
+
+    Compares per-episode field ordering against diagnostics ordering and appends
+    any terminal rejection messages before building the result dict.
+
+    Returns:
+        The complete consistency evidence dict for the caller.
+    """
+    rejections.extend(scan["rejections"])
+    rejections.extend(scan["mismatch_sample"])
+    truncated_mismatches = max(scan["mismatch_total"] - len(scan["mismatch_sample"]), 0)
+
+    per_arm_field_sum = scan["per_arm_field_sum"]
+    per_arm_field_count = scan["per_arm_field_count"]
+    field_means = {
+        arm: (per_arm_field_sum[arm] / per_arm_field_count[arm])
+        if per_arm_field_count[arm]
+        else 0.0
+        for arm in per_arm_field_sum
+    }
+    field_ranked = sorted(field_means, key=lambda a: (-field_means[a], a))
+    field_ordering = {_snqi_planner_key(a): rank for rank, a in enumerate(field_ranked, start=1)}
+    if field_ordering != diagnostics_ordering:
+        rejections.append(
+            "per-episode metrics.snqi arm ordering disagrees with "
+            "snqi_diagnostics.json planner_ordering"
+        )
+    if scan["episode_field_present"] == 0 and scan["rows"] > 0:
+        rejections.append(
+            "no per-episode metrics.snqi fields found despite declaring snqi_diagnostics.json"
+        )
+
+    return {
+        "checked": True,
+        "violation_count": len(rejections) + truncated_mismatches,
+        "violations": rejections,
+        "ordering": {
+            "field_planner_ordering": field_ordering,
+            "diagnostics_planner_ordering": diagnostics_ordering,
+        },
+        "counts": {
+            "rows": scan["rows"],
+            "episode_field_present": scan["episode_field_present"],
+            "snqi_field_mismatches": scan["mismatch_total"],
+            "arms": len(per_arm_field_count),
+        },
+        "integrity": integrity,
+    }
+
+
+def _check_snqi_field_consistency(
     payload_dir: Path,
 ) -> dict[str, Any]:
     """Release-gate self-check: per-episode SNQI field vs diagnostics basis (issue #5580).
@@ -1505,56 +1748,25 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
     if diagnostics is None:
         return {"checked": False, "violation_count": 0, "violations": [], "ordering": {}}
 
-    rejections: list[str] = []
-    repo_root = get_repository_root()
-    weights_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_WEIGHTS_NAME
-    baseline_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_BASELINE_NAME
-    if not weights_path.is_file():
-        rejections.append(f"canonical SNQI weights file is missing: {weights_path}")
-    if not baseline_path.is_file():
-        rejections.append(f"canonical SNQI baseline file is missing: {baseline_path}")
-    if rejections:
-        return {
+    canonical = _snqi_load_canonical_basis()
+    if "rejections" in canonical:
+        result: dict[str, Any] = {
             "checked": True,
-            "violation_count": len(rejections),
-            "violations": rejections,
+            "violation_count": len(canonical["rejections"]),
+            "violations": canonical["rejections"],
             "ordering": {},
         }
+        if "integrity" in canonical:
+            result["integrity"] = canonical["integrity"]
+        return result
 
-    weights_sha256 = _sha256_file(weights_path)
-    baseline_sha256 = _sha256_file(baseline_path)
-    try:
-        weights = _load_snqi_weight_mapping(weights_path)
-        baseline = _load_snqi_baseline_mapping(baseline_path)
-    except (OSError, TypeError, ValueError) as exc:
-        return {
-            "checked": True,
-            "violation_count": 1,
-            "violations": [f"canonical SNQI inputs cannot be loaded: {exc}"],
-            "ordering": {},
-            "integrity": {
-                "snqi_weights_sha256": weights_sha256,
-                "snqi_baseline_sha256": baseline_sha256,
-            },
-        }
-
-    declared_weights_sha = diagnostics.get("weights_sha256")
-    declared_baseline_sha = diagnostics.get("baseline_sha256")
-    if not isinstance(declared_weights_sha, str) or declared_weights_sha.lower() != weights_sha256:
-        rejections.append(
-            "snqi_diagnostics.json weights_sha256 does not match the canonical "
-            f"{_SNQI_DEFAULT_WEIGHTS_NAME} (missing/invalid or {declared_weights_sha!r} != "
-            f"{weights_sha256})"
-        )
-    if (
-        not isinstance(declared_baseline_sha, str)
-        or declared_baseline_sha.lower() != baseline_sha256
-    ):
-        rejections.append(
-            "snqi_diagnostics.json baseline_sha256 does not match the canonical "
-            f"{_SNQI_DEFAULT_BASELINE_NAME} (missing/invalid or {declared_baseline_sha!r} != "
-            f"{baseline_sha256})"
-        )
+    weights_sha256 = canonical["weights_sha256"]
+    baseline_sha256 = canonical["baseline_sha256"]
+    integrity = {
+        "snqi_weights_sha256": weights_sha256,
+        "snqi_baseline_sha256": baseline_sha256,
+    }
+    rejections = _snqi_validate_declared_hashes(diagnostics, weights_sha256, baseline_sha256)
 
     try:
         diagnostics_ordering = _snqi_diagnostics_ordering(diagnostics)
@@ -1564,125 +1776,11 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
             "violation_count": len(rejections) + 1,
             "violations": [*rejections, f"invalid SNQI diagnostics ordering: {exc}"],
             "ordering": {},
-            "integrity": {
-                "snqi_weights_sha256": weights_sha256,
-                "snqi_baseline_sha256": baseline_sha256,
-            },
+            "integrity": integrity,
         }
 
-    rows = 0
-    episode_field_present = 0
-    per_arm_field_sum: dict[str, float] = defaultdict(float)
-    per_arm_field_count: dict[str, int] = defaultdict(int)
-    mismatch_sample: list[str] = []
-    mismatch_total = 0
-    for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
-        arm = episodes_path.parent.name
-        try:
-            lines = episodes_path.read_text(encoding="utf-8").splitlines()
-        except OSError as exc:
-            rejections.append(f"cannot read {episodes_path}: {exc}")
-            continue
-        for line_number, raw_line in enumerate(lines, start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
-            rows += 1
-            source = f"{episodes_path}:{line_number}"
-            try:
-                record = json.loads(line)
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                rejections.append(f"{source}: invalid JSON: {exc}")
-                continue
-            if not isinstance(record, Mapping):
-                rejections.append(f"{source}: expected a JSON object")
-                continue
-            metrics = record.get("metrics")
-            if not isinstance(metrics, Mapping):
-                rejections.append(f"{source}: metrics must be an object")
-                continue
-            if "snqi" not in metrics:
-                rejections.append(f"{source}: metrics.snqi field is absent")
-                continue
-            episode_field_present += 1
-            raw_stored_snqi = metrics["snqi"]
-            if isinstance(raw_stored_snqi, bool) or not isinstance(raw_stored_snqi, (int, float)):
-                rejections.append(f"{source}: metrics.snqi must be a finite JSON number")
-                continue
-            try:
-                stored_snqi = float(raw_stored_snqi)
-                if not math.isfinite(stored_snqi):
-                    raise ValueError("value is not finite")
-            except (TypeError, ValueError) as exc:
-                rejections.append(f"{source}: metrics.snqi is not a finite number: {exc}")
-                continue
-            metric_values = dict(metrics)
-            try:
-                recomputed_snqi = _curvature_aware_snqi(
-                    metric_values, weights, baseline_stats=baseline
-                )
-                if not math.isfinite(recomputed_snqi):
-                    raise ValueError("value is not finite")
-            except (ValueError, TypeError, KeyError, AttributeError) as exc:
-                rejections.append(f"{source}: curvature-aware recompute failed: {exc}")
-                continue
-            per_arm_field_sum[arm] += stored_snqi
-            per_arm_field_count[arm] += 1
-            if not math.isclose(
-                stored_snqi,
-                recomputed_snqi,
-                rel_tol=_SNQI_RECOMPUTE_RTOL,
-                abs_tol=_SNQI_RECOMPUTE_ATOL,
-            ):
-                # Every drift is counted; the per-episode rejection sample is capped so a
-                # large drift cannot balloon the report, but ``violation_count`` below
-                # accounts for every drifted episode so the evidence is not misleading.
-                mismatch_total += 1
-                if len(mismatch_sample) < 20:
-                    mismatch_sample.append(
-                        f"{source}: stored SNQI {stored_snqi!r} != curvature-aware recompute "
-                        f"{recomputed_snqi!r}"
-                    )
-
-    rejections.extend(mismatch_sample)
-    truncated_mismatches = max(mismatch_total - len(mismatch_sample), 0)
-    field_means = {
-        arm: (per_arm_field_sum[arm] / per_arm_field_count[arm])
-        if per_arm_field_count[arm]
-        else 0.0
-        for arm in per_arm_field_sum
-    }
-    field_ranked = sorted(field_means, key=lambda a: (-field_means[a], a))
-    field_ordering = {_snqi_planner_key(a): rank for rank, a in enumerate(field_ranked, start=1)}
-    if field_ordering != diagnostics_ordering:
-        rejections.append(
-            "per-episode metrics.snqi arm ordering disagrees with "
-            "snqi_diagnostics.json planner_ordering"
-        )
-    if episode_field_present == 0 and rows > 0:
-        rejections.append(
-            "no per-episode metrics.snqi fields found despite declaring snqi_diagnostics.json"
-        )
-
-    return {
-        "checked": True,
-        "violation_count": len(rejections) + truncated_mismatches,
-        "violations": rejections,
-        "ordering": {
-            "field_planner_ordering": field_ordering,
-            "diagnostics_planner_ordering": diagnostics_ordering,
-        },
-        "counts": {
-            "rows": rows,
-            "episode_field_present": episode_field_present,
-            "snqi_field_mismatches": mismatch_total,
-            "arms": len(per_arm_field_count),
-        },
-        "integrity": {
-            "snqi_weights_sha256": weights_sha256,
-            "snqi_baseline_sha256": baseline_sha256,
-        },
-    }
+    scan = _snqi_scan_episode_snqi_fields(payload_dir, canonical["weights"], canonical["baseline"])
+    return _snqi_build_consistency_result(scan, diagnostics_ordering, rejections, integrity)
 
 
 def _manifest_checksum_mapping(

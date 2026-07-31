@@ -233,6 +233,19 @@ def test_wrapper_disabled_returns_nominal_command_unchanged() -> None:
     assert wrapper.last_decision is None
 
 
+def test_wrapper_diagnostics_requires_protocol_member() -> None:
+    """The wrapper must fail loudly when the wrapped planner lacks diagnostics()."""
+
+    class _Planner:
+        def plan(self, _observation: dict[str, object]) -> tuple[float, float]:
+            return 0.8, 0.1
+
+    wrapper = CbfSafetyFilterPlannerWrapper(_Planner(), CbfSafetyFilterConfig(enabled=False))
+
+    with pytest.raises(AttributeError, match="diagnostics"):
+        wrapper.diagnostics()
+
+
 def test_build_cbf_config_accepts_dynamic_parabolic_variant() -> None:
     """Dynamic-parabolic CBF config builds the versioned DPCBF filter."""
 

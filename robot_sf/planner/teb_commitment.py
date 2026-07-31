@@ -443,6 +443,10 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
             forward=forward, robot_heading=robot_heading, blocked=blocked
         )
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "TEBCommitmentPlannerAdapter"}
+
 
 def build_teb_commitment_config(cfg: dict[str, Any] | None) -> TEBCommitmentConfig:
     """Build the native TEB-style config from a mapping payload.

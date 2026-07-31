@@ -629,6 +629,10 @@ class SonicCrowdNavAdapter:
             )
         return float(velocity_world[0]), float(velocity_world[1])
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SonicCrowdNavAdapter"}
+
 
 __all__ = [
     "SonicCrowdNavAdapter",

@@ -547,6 +547,10 @@ class CrowdNavPredAttnGraphAdapter:
         vx, vy, _meta = self.act(observation, time_step=dt)
         return vx, vy
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "CrowdNavPredAttnGraphAdapter"}
+
 
 def _clip_holonomic_to_v_pref(vx: float, vy: float, v_pref: float) -> tuple[float, float]:
     """Replicate the upstream holonomic clip_action (normalize to v_pref).

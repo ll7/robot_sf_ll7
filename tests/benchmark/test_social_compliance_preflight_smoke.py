@@ -325,6 +325,7 @@ def test_receipt_requires_completed_zero_exit_campaign() -> None:
     )
     assert receipt["campaign_ok"] is False
     assert receipt["passed"] is False
+    assert receipt["all_native"] is False
 
 
 def test_scenario_matrix_selects_one_pedestrian_scenario() -> None:

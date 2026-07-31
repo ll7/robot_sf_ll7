@@ -665,7 +665,9 @@ def build_receipt(
         (p, EXPECTED_SCENARIO, s) for p in EXPECTED_PLANNERS for s in EXPECTED_SEEDS
     )
 
-    all_native = all(r["execution_mode"] == "native" for r in row_classifications)
+    all_native = bool(row_classifications) and all(
+        r["execution_mode"] == "native" for r in row_classifications
+    )
     all_benchmark_capable_execution = bool(row_classifications) and all(
         r["execution_mode"] in NATIVE_EXECUTION_MODES for r in row_classifications
     )

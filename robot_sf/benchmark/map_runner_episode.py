@@ -166,6 +166,7 @@ from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
 )
+from robot_sf.benchmark.types import NoiseConfig, PlannerRuntime
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -1704,28 +1705,20 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any] | None = None,
     config: RobotSimulationConfig,
     horizon_val: int,
-    policy_fn: Callable[..., Any],
-    planner_bind_env: Callable[..., Any] | None = None,
-    planner_reset: Callable[..., Any] | None = None,
-    planner_close: Callable[..., Any] | None = None,
-    planner_stats: Callable[..., Any] | None = None,
-    planner_native_action: bool = False,
-    noise_spec: dict[str, Any],
-    noise_rng: np.random.Generator,
-    noise_state: ObservationNoiseState | None = None,
-    noise_stats: dict[str, int],
+    planner_runtime: PlannerRuntime,
+    noise: NoiseConfig,
     tracking_precision_spec: dict[str, Any],
     tracking_precision_rng: np.random.Generator,
     safety_wrapper_runtime: SafetyWrapperRuntimeConfig,
-    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None = None,
+    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None,
     cbf_runtime: CBFSafetyFilterRuntimeConfig,
-    actuation_controller: SyntheticActuationController | None = None,
+    actuation_controller: SyntheticActuationController | None,
     algo_meta: dict[str, Any],
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-    single_pedestrian_intent_metadata: list[dict[str, Any] | None] | None = None,
-    single_pedestrian_vru_metadata: list[dict[str, Any] | None] | None = None,
+    single_pedestrian_intent_metadata: list[dict[str, Any] | None],
+    single_pedestrian_vru_metadata: list[dict[str, Any] | None],
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
 ) -> _EpisodeStepLoopResult:
@@ -1736,6 +1729,17 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
         outcome flag produced by the step loop, plus the planner runtime snapshot
         captured in the ``finally`` teardown.
     """
+    policy_fn = planner_runtime.policy_fn
+    planner_bind_env = planner_runtime.planner_bind_env
+    planner_reset = planner_runtime.planner_reset
+    planner_close = planner_runtime.planner_close
+    planner_stats = planner_runtime.planner_stats
+    planner_native_action = planner_runtime.planner_native_action
+    noise_spec = noise.spec
+    noise_rng = noise.rng
+    noise_state = noise.state
+    noise_stats = noise.stats
+
     # Per-episode instrumentation buffers (populated during the step loop below).
     tracking_precision_records: list[dict[str, Any]] = []
     safety_wrapper_trace: list[dict[str, Any]] = []
@@ -1887,13 +1891,13 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 planner_stats
             ):
                 try:
-                    planner_runtime = planner_stats()
+                    planner_stats_payload = planner_stats()
                 except (RuntimeError, ValueError, TypeError):
-                    planner_runtime = None
-                if isinstance(planner_runtime, dict) and isinstance(
-                    planner_runtime.get("last_decision"), dict
+                    planner_stats_payload = None
+                if isinstance(planner_stats_payload, dict) and isinstance(
+                    planner_stats_payload.get("last_decision"), dict
                 ):
-                    planner_step_decision = dict(planner_runtime["last_decision"])
+                    planner_step_decision = dict(planner_stats_payload["last_decision"])
             if hybrid_command_sources is not None:
                 source = (
                     planner_step_decision.get(hybrid_source_field)
@@ -2239,12 +2243,12 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     finally:
         if callable(planner_stats):
             try:
-                planner_runtime = planner_stats()
+                planner_stats_payload = planner_stats()
             except (RuntimeError, ValueError, TypeError):
                 logger.debug("Planner stats hook failed before close", exc_info=True)
-                planner_runtime = None
-            if isinstance(planner_runtime, dict):
-                planner_runtime_snapshot = dict(planner_runtime)
+                planner_stats_payload = None
+            if isinstance(planner_stats_payload, dict):
+                planner_runtime_snapshot = dict(planner_stats_payload)
         if callable(planner_close):
             try:
                 planner_close()
@@ -2820,16 +2824,20 @@ def run_map_episode(  # noqa: PLR0913
         scenario=scenario,
         config=config,
         horizon_val=horizon_val,
-        policy_fn=policy_contract.policy_fn,
-        planner_bind_env=policy_contract.planner_bind_env,
-        planner_reset=policy_contract.planner_reset,
-        planner_close=policy_contract.planner_close if close_policy else None,
-        planner_stats=policy_contract.planner_stats,
-        planner_native_action=policy_contract.planner_native_action,
-        noise_spec=noise_spec,
-        noise_rng=noise_rng,
-        noise_state=noise_state,
-        noise_stats=noise_stats,
+        planner_runtime=PlannerRuntime(
+            policy_fn=policy_contract.policy_fn,
+            planner_bind_env=policy_contract.planner_bind_env,
+            planner_reset=policy_contract.planner_reset,
+            planner_close=policy_contract.planner_close if close_policy else None,
+            planner_stats=policy_contract.planner_stats,
+            planner_native_action=policy_contract.planner_native_action,
+        ),
+        noise=NoiseConfig(
+            spec=noise_spec,
+            rng=noise_rng,
+            state=noise_state,
+            stats=noise_stats,
+        ),
         tracking_precision_spec=tracking_precision_spec,
         tracking_precision_rng=tracking_precision_rng,
         safety_wrapper_runtime=safety_wrapper_runtime,

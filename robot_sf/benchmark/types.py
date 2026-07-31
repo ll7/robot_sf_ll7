@@ -169,11 +169,11 @@ class PlannerRuntime:
     """
 
     policy_fn: Callable[..., Any]
-    planner_bind_env: Callable[..., Any] | None = None
-    planner_reset: Callable[..., Any] | None = None
-    planner_close: Callable[..., Any] | None = None
-    planner_stats: Callable[..., Any] | None = None
-    planner_native_action: bool = False
+    planner_bind_env: Callable[..., Any] | None
+    planner_reset: Callable[..., Any] | None
+    planner_close: Callable[..., Any] | None
+    planner_stats: Callable[..., Any] | None
+    planner_native_action: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,9 +185,9 @@ class NoiseConfig:
     """
 
     spec: dict[str, Any]
-    rng: np.random.Generator | None = None
-    state: ObservationNoiseState | None = None
-    stats: dict[str, int] | None = None
+    rng: np.random.Generator
+    state: ObservationNoiseState | None
+    stats: dict[str, int]
 
 
 @dataclass(frozen=True, slots=True)

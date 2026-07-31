@@ -181,9 +181,16 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
         "pattern": "pytest-durations-*",
         "path": ".duration-artifacts",
     }
+    assert duration_merge["id"] == "merge-test-durations"
     assert duration_merge["continue-on-error"] is True
-    assert "merged.update(json.loads" in duration_merge["run"]
+    assert (
+        "Expected exactly one pytest duration store from each of four shards"
+        in duration_merge["run"]
+    )
+    assert "Overlapping pytest duration stores" in duration_merge["run"]
+    assert "merged.update(durations)" in duration_merge["run"]
     assert duration_save["continue-on-error"] is True
+    assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
     assert duration_save["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
 

@@ -591,20 +591,42 @@ jobs:
           path: .duration-artifacts
 
       - name: Merge test durations
+        id: merge-test-durations
         if: ${{ needs.fast-feedback.result == 'success' }}
         continue-on-error: true
         run: |
           python - <<'PY'
           import json
+          import math
           from pathlib import Path
 
+          expected_names = {f"pytest-durations-{index}" for index in range(1, 5)}
           files = sorted(Path(".duration-artifacts").glob("*/.test_durations"))
-          if not files:
-              raise SystemExit("No pytest duration artifacts were downloaded.")
+          actual_names = {path.parent.name for path in files}
+          if actual_names != expected_names:
+              missing = sorted(expected_names - actual_names)
+              unexpected = sorted(actual_names - expected_names)
+              raise SystemExit(
+                  "Expected exactly one pytest duration store from each of four shards; "
+                  f"missing={missing or 'none'} unexpected={unexpected or 'none'}."
+              )
 
           merged = {}
           for path in files:
-              merged.update(json.loads(path.read_text(encoding="utf-8")))
+              durations = json.loads(path.read_text(encoding="utf-8"))
+              if not isinstance(durations, dict) or any(
+                  not isinstance(nodeid, str)
+                  or not isinstance(duration, (int, float))
+                  or isinstance(duration, bool)
+                  or not math.isfinite(duration)
+                  or duration < 0
+                  for nodeid, duration in durations.items()
+              ):
+                  raise SystemExit(f"Invalid pytest duration store: {path}")
+              overlap = set(merged).intersection(durations)
+              if overlap:
+                  raise SystemExit(f"Overlapping pytest duration stores: {path}")
+              merged.update(durations)
 
           Path(".test_durations").write_text(
               json.dumps(merged, indent=4, sort_keys=True) + "\n",
@@ -614,7 +636,7 @@ jobs:
           PY
 
       - name: Save merged test durations
-        if: ${{ needs.fast-feedback.result == 'success' }}
+        if: ${{ needs.fast-feedback.result == 'success' && steps.merge-test-durations.outcome == 'success' }}
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

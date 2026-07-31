@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from inspect import Signature, signature
+from inspect import Parameter, Signature, signature
 from typing import Any, Protocol, runtime_checkable
 
 __all__ = [
@@ -121,6 +121,9 @@ def normalize_planner_diagnostics(
         Normalized diagnostics dict with at least a string ``planner_type``,
         preserving any other keys the raw payload carried.
     """
+    if not isinstance(fallback_planner_type, str) or not fallback_planner_type.strip():
+        raise ValueError("fallback_planner_type must be a non-empty string")
+
     if isinstance(raw, Mapping):
         payload: dict[str, Any] = dict(raw)
     else:
@@ -169,15 +172,20 @@ def _action_dict_to_command(action: Any, planner_type: str) -> tuple[float, floa
     if not isinstance(action, Mapping):
         raise TypeError(f"{planner_type}.step() must return a dict, got {type(action).__name__}")
     if "v" in action and "omega" in action:
-        return float(action["v"]), float(action["omega"])
-    if "vx" in action and "vy" in action:
+        command = float(action["v"]), float(action["omega"])
+    elif "vx" in action and "vy" in action:
         # Holonomic velocity cannot yield an angular rate from a single sample
         # without held heading state; the angular component is explicitly zeroed
         # (documented incompatibility deferred to parent #6487).
-        return math.hypot(float(action["vx"]), float(action["vy"])), 0.0
-    raise ValueError(
-        f"{planner_type}.step() action must contain v/omega or vx/vy keys; got {dict(action)!r}"
-    )
+        command = math.hypot(float(action["vx"]), float(action["vy"])), 0.0
+    else:
+        raise ValueError(
+            f"{planner_type}.step() action must contain v/omega or vx/vy keys; got {dict(action)!r}"
+        )
+
+    if not all(math.isfinite(value) for value in command):
+        raise ValueError(f"{planner_type}.step() action values must be finite; got {command!r}")
+    return command
 
 
 def _safe_diagnostics(planner: Any) -> Any:
@@ -227,12 +235,24 @@ def _reset_with_optional_seed(reset: Any, *, seed: int | None) -> None:
     if _signature_accepts(reset_signature, seed=seed):
         reset(seed=seed)
         return
-    if seed is None and _signature_accepts(reset_signature):
-        reset()
-        return
-    if _signature_accepts(reset_signature, seed):
-        reset(seed)
-        return
+
+    parameters = tuple(reset_signature.parameters.values())
+    positional_seed = reset_signature.parameters.get("seed")
+    has_unlabelled_positional_seed = any(
+        parameter.kind is Parameter.VAR_POSITIONAL for parameter in parameters
+    ) and all(
+        parameter.kind not in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
+        or parameter.name == "seed"
+        for parameter in parameters
+    )
+    accepts_positional_seed = (
+        positional_seed is not None
+        and positional_seed.kind in (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD)
+    ) or has_unlabelled_positional_seed
+    if accepts_positional_seed and _signature_accepts(reset_signature, seed):
+        if seed is not None or not _signature_accepts(reset_signature):
+            reset(seed)
+            return
     if _signature_accepts(reset_signature):
         reset()
         return

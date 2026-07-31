@@ -239,6 +239,17 @@ def test_baseline_adapter_rejects_non_dict_action() -> None:
         adapter.plan({})
 
 
+@pytest.mark.parametrize(
+    "action",
+    [{"v": float("nan"), "omega": 0.0}, {"vx": float("inf"), "vy": 0.0}],
+)
+def test_baseline_adapter_rejects_non_finite_action(action: dict[str, float]) -> None:
+    """The adapter must not expose NaN or infinite commands to the local-planner runner."""
+    adapter = BaselineStepToLocalAdapter(_RecordingBaseline(accepts_seed=True, action=action))
+    with pytest.raises(ValueError, match="must be finite"):
+        adapter.plan({})
+
+
 # ---------------------------------------------------------------------------
 # Reset seed forwarding (when used) and ignoring (when not)
 # ---------------------------------------------------------------------------
@@ -282,6 +293,26 @@ def test_baseline_adapter_reset_no_seed_calls_seedless_baseline() -> None:
     adapter = BaselineStepToLocalAdapter(baseline)
     adapter.reset()
     assert baseline.reset_calls == 1
+
+
+def test_baseline_adapter_reset_ignores_seed_for_unrelated_optional_argument() -> None:
+    """A seed must not be passed positionally to a non-seed reset argument."""
+
+    class _OptionsResetBaseline:
+        def __init__(self) -> None:
+            self.reset_calls: list[object | None] = []
+
+        def reset(self, options: object | None = None) -> None:
+            self.reset_calls.append(options)
+
+        def step(self, obs: Any) -> dict[str, float]:
+            del obs
+            return {"v": 0.0, "omega": 0.0}
+
+    baseline = _OptionsResetBaseline()
+    adapter = BaselineStepToLocalAdapter(baseline)
+    adapter.reset(seed=99)
+    assert baseline.reset_calls == [None]
 
 
 @pytest.mark.parametrize("adapter_family", ["native", "baseline"])
@@ -359,6 +390,13 @@ def test_normalize_fail_closed_on_invalid_planner_type() -> None:
     assert normalized["planner_type"] == "Fallback"
     assert normalized[DIAGNOSTICS_UNAVAILABLE_KEY] == [PLANNER_TYPE_KEY]
     assert "42" in normalized[DIAGNOSTICS_UNAVAILABLE_REASON_KEY]
+
+
+@pytest.mark.parametrize("fallback", ["", " ", None, 42])
+def test_normalize_rejects_invalid_fallback_planner_type(fallback: Any) -> None:
+    """The normalizer must preserve its string planner_type guarantee at runtime."""
+    with pytest.raises(ValueError, match="fallback_planner_type must be a non-empty string"):
+        normalize_planner_diagnostics(None, fallback_planner_type=fallback)
 
 
 def test_native_lidar_adapter_diagnostics_include_minimum_schema() -> None:

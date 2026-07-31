@@ -38,7 +38,7 @@ def _base_config() -> dict[str, Any]:
                 "default_social_force": "social_force",
             },
         },
-        "ranking": {"metric": "snqi", "higher_is_better": True},
+        "ranking": {"primary_metric": "snqi", "higher_is_better": True},
         "metrics": [
             {"name": "snqi", "direction": "higher_is_better"},
             {"name": "success", "direction": "higher_is_better"},

@@ -64,6 +64,7 @@ fixed_scope:
       rationale: issue_5144_fixed_scope_prelaunch_opt_in
 
 ranking:
+  primary_metric: snqi
   metric: snqi
   higher_is_better: true
   stability_min_kendall_tau: 0.8
@@ -169,7 +170,7 @@ result_contract:
     drive model, peak forward speed, and #4976 actuation envelope per variant so
     per-band metric shifts are attributable to the speed band.
 
-primary_metric: success_rate
+primary_metric: snqi
 higher_is_better: true
 
 drift_metrics:

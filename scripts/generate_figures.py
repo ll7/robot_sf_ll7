@@ -54,22 +54,26 @@ SCRIPT_VERSION = "0.1.0"
 
 
 def _ensure_dir(p: Path) -> None:
-    """TODO docstring. Document this function.
+    """Create a directory if it does not already exist.
+
+    Parent directories are created as needed and no error is raised when the
+    target directory already exists.
 
     Args:
-        p: TODO docstring.
+        p: Directory path to create.
     """
     p.mkdir(parents=True, exist_ok=True)
 
 
 def _git_sha_short(length: int = 7) -> str:
-    """TODO docstring. Document this function.
+    """Return a short hash of the current git ``HEAD`` commit.
 
     Args:
-        length: TODO docstring.
+        length: Number of hex characters to keep from the commit hash.
 
     Returns:
-        TODO docstring.
+        The abbreviated commit hash, or ``"unknown"`` when git is unavailable
+        or no repository is found.
     """
     try:
         sha = (
@@ -86,14 +90,19 @@ def _git_sha_short(length: int = 7) -> str:
 
 
 def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
-    """TODO docstring. Document this function.
+    """Compute a canonical output directory for generated figures.
+
+    The folder name encodes the episodes stem, the current git short hash, and
+    the inferred schema version (``<stem>__<sha>__v<version>``). When
+    ``base_dir`` is ``None`` it defaults to ``docs/figures``.
 
     Args:
-        episodes: TODO docstring.
-        base_dir: TODO docstring.
+        episodes: Episodes JSONL path whose stem is embedded in the folder name.
+        base_dir: Parent directory for the computed folder, or ``None`` to use
+            ``docs/figures``.
 
     Returns:
-        TODO docstring.
+        Resolved output directory path for figures and metadata.
     """
     stem = episodes.stem
     sha = _git_sha_short()
@@ -104,12 +113,15 @@ def _compute_auto_out_dir(episodes: Path, base_dir: Path | None) -> Path:
 
 
 def _write_meta(out_dir: Path, episodes: Path, args: argparse.Namespace) -> None:
-    """TODO docstring. Document this function.
+    """Write a ``meta.json`` provenance file describing the figure run.
+
+    Records the source episodes path, generation timestamp, git short hash,
+    inferred schema version, script version, and the effective CLI arguments.
 
     Args:
-        out_dir: TODO docstring.
-        episodes: TODO docstring.
-        args: TODO docstring.
+        out_dir: Output directory where ``meta.json`` is written.
+        episodes: Episodes JSONL path used as the figure source.
+        args: Parsed CLI namespace serialized into the metadata.
     """
     meta = {
         "episodes_path": str(episodes),
@@ -157,15 +169,24 @@ def _load_snqi_inputs(
     weights_from: Path | None,
     baseline_path: Path | None,
 ) -> tuple[dict | None, dict | None]:
-    """TODO docstring. Document this function.
+    """Best-effort load of optional SNQI weights and baseline statistics.
+
+    Weights are read from ``weights_path`` when present; otherwise they are
+    extracted from the ``recommended`` section of the report at
+    ``weights_from``. Baseline stats are read from ``baseline_path`` when
+    present. Malformed or unreadable files are ignored silently so figure
+    generation is never blocked by bad auxiliary inputs.
 
     Args:
-        weights_path: TODO docstring.
-        weights_from: TODO docstring.
-        baseline_path: TODO docstring.
+        weights_path: Direct path to a SNQI weights JSON file, or ``None``.
+        weights_from: Path to a recomputation report JSON whose recommended
+            weights are used as a fallback, or ``None``.
+        baseline_path: Path to a baseline stats JSON (per-metric med/p95), or
+            ``None``.
 
     Returns:
-        TODO docstring.
+        A ``(weights, baseline)`` pair where each entry is the loaded mapping
+        or ``None`` when unavailable or not a dict.
     """
     weights = None
     baseline = None
@@ -195,12 +216,17 @@ def _load_snqi_inputs(
 
 
 def _inject_snqi(records: list[dict], weights: dict | None, baseline: dict | None) -> None:
-    """TODO docstring. Document this function.
+    """Add an ``snqi`` score to each record that does not already have one.
+
+    Records are mutated in place: their ``metrics`` mapping gains an ``snqi``
+    value computed from the supplied weights and baseline statistics. Records
+    missing a ``metrics`` mapping, already carrying an ``snqi`` entry, or whose
+    score cannot be computed are left unchanged.
 
     Args:
-        records: TODO docstring.
-        weights: TODO docstring.
-        baseline: TODO docstring.
+        records: Episode records to annotate in place.
+        weights: SNQI weight mapping; when ``None`` no injection is performed.
+        baseline: Baseline normalization statistics passed to the SNQI scorer.
     """
     if not isinstance(weights, dict):
         return
@@ -528,12 +554,17 @@ def _generate_distributions(
     formats: Sequence[str] = (),
     caption: str | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Generate per-metric distribution plots and save them to ``out_dir``.
+
+    Groups records by the configured group-by field, writes one distribution
+    plot per requested metric, and, in publication mode, emits provenance
+    sidecars (and an optional caption) for each written plot.
 
     Args:
-        records: TODO docstring.
-        out_dir: TODO docstring.
-        args: TODO docstring.
+        records: Episode records to group and plot.
+        out_dir: Output directory where distribution plots are written.
+        args: Parsed CLI namespace supplying ``dmetrics``, ``dists-*``, and
+            group-by options.
         publication: Write provenance sidecars (and optional caption) per metric.
         formats: Output formats recorded in provenance.
         caption: Optional LaTeX-ready caption fragment.
@@ -565,12 +596,19 @@ def _generate_distributions(
 
 
 def _generate_table(records, out_dir: Path, args) -> None:
-    """TODO docstring. Document this function.
+    """Write the baseline comparison table as Markdown (and optionally LaTeX).
+
+    When ``args.table_summary`` is set, rows are built from a pre-computed
+    aggregate summary JSON; otherwise they are computed directly from the
+    episode records. A Markdown table is always written and a LaTeX booktabs
+    table is additionally written when ``args.table_tex`` is set.
 
     Args:
-        records: TODO docstring.
-        out_dir: TODO docstring.
-        args: TODO docstring.
+        records: Episode records used to compute the table (ignored when a
+            summary path is supplied).
+        out_dir: Output directory for the table files.
+        args: Parsed CLI namespace supplying table metrics, summary path, and
+            LaTeX/stats/CI options.
     """
     if args.table_summary:
         rows, metric_cols = _rows_from_summary(
@@ -607,11 +645,17 @@ def _maybe_thumbnails(
     formats: Sequence[str] = (),
     caption: str | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Generate scenario thumbnails and an optional montage when requested.
+
+    Does nothing unless ``args.thumbs_matrix`` names a scenario matrix. Loads
+    the matrix, renders one thumbnail per scenario, and, when
+    ``args.thumbs_montage`` is set, composites them into a montage image.
 
     Args:
-        out_dir: TODO docstring.
-        args: TODO docstring.
+        out_dir: Base output directory; thumbnails go to ``out_dir/scenarios``
+            unless ``args.thumbs_out_dir`` is set.
+        args: Parsed CLI namespace supplying the matrix, montage, column, and
+            publication options.
         publication: Render thumbnails/montage in publication style with provenance.
         formats: Output formats for publication mode.
         caption: Optional caption fragment (enables per-scenario caption sidecars).
@@ -658,11 +702,16 @@ def _maybe_force_field(
     formats: Sequence[str] = (),
     caption: str | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Generate a force-field figure when ``args.force_field`` is set.
+
+    Does nothing unless force-field generation is requested. Renders a quiver
+    plot over the configured grid extents into a PNG (and PDF), using explicit
+    ``args.ff_*`` paths when given or defaults under ``out_dir``.
 
     Args:
-        out_dir: TODO docstring.
-        args: TODO docstring.
+        out_dir: Base output directory for default force-field file paths.
+        args: Parsed CLI namespace supplying the ``ff-*`` bounds, grid, and
+            output-path options.
         publication: Render the force-field figure in publication style with provenance.
         formats: Output formats for publication mode.
         caption: Optional LaTeX-ready caption fragment.
@@ -695,16 +744,20 @@ def _summary_build_columns(
     include_ci: bool,
     ci_suffix: str,
 ) -> list[str]:
-    """TODO docstring. Document this function.
+    """Build the ordered column names for a summary-derived table.
+
+    Each metric/stat pair yields a ``<metric>_<stat>`` column, and when CIs are
+    requested it additionally yields matching ``..._<suffix>_low`` and
+    ``..._<suffix>_high`` columns.
 
     Args:
-        metrics: TODO docstring.
-        stats: TODO docstring.
-        include_ci: TODO docstring.
-        ci_suffix: TODO docstring.
+        metrics: Metric names to include as columns.
+        stats: Statistic names (e.g. ``mean``, ``p95``) per metric.
+        include_ci: When true, append low/high confidence-interval columns.
+        ci_suffix: Suffix inserted before ``_low``/``_high`` for CI columns.
 
     Returns:
-        TODO docstring.
+        Ordered list of column name strings for the table.
     """
     cols: list[str] = []
     for m in metrics:
@@ -739,19 +792,23 @@ def _summary_extract_row(
     ci_suffix: str,
     missing: set[str],
 ) -> TableRow:
-    """TODO docstring. Document this function.
+    """Extract one table row from a single group's metric summary.
+
+    Reads per-statistic values and, when CIs are requested, their low/high
+    bounds. Metric/stat combinations lacking a usable CI are recorded in
+    ``missing`` so callers can emit a consolidated warning.
 
     Args:
-        group: TODO docstring.
-        metrics_map: TODO docstring.
-        metrics: TODO docstring.
-        stats: TODO docstring.
-        include_ci: TODO docstring.
-        ci_suffix: TODO docstring.
-        missing: TODO docstring.
+        group: Name of the group (e.g. algorithm) this row represents.
+        metrics_map: Mapping of metric name to its stat (and CI) values.
+        metrics: Metric names to extract.
+        stats: Statistic names to extract per metric.
+        include_ci: When true, populate low/high CI columns.
+        ci_suffix: Suffix used to locate CI columns (e.g. ``ci``).
+        missing: Mutable set accumulating ``metric:stat`` pairs missing CIs.
 
     Returns:
-        TODO docstring.
+        A :class:`TableRow` for the group with populated numeric values.
     """
     values: dict[str, float] = {}
     for m in metrics:

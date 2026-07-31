@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -80,6 +81,44 @@ def _git_succeeds(repo_root: Path, *args: str) -> bool:
     )
 
 
+class ShallowRepositoryError(RuntimeError):
+    """Raised when commit reachability cannot be classified completely."""
+
+
+def _require_full_history(repo_root: Path) -> None:
+    """Fail before classifying commits when Git history is shallow."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=repo_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("evidence-registry linter could not determine Git repository depth")
+    if result.stdout.strip().lower() == "true":
+        raise ShallowRepositoryError(
+            "evidence-registry commit reachability requires a full-history Git "
+            "repository; shallow repository detected. Run `git fetch --unshallow` "
+            "(or use a full-history checkout) before rerunning."
+        )
+
+
+def _commit_is_head_reachable(repo_root: Path, commit: str) -> bool:
+    """Return whether ``commit`` exists and belongs to the checked-out history.
+
+    Git object stores may also contain commits fetched through unrelated branches
+    or tags. Treating raw object presence as provenance resolution makes the
+    evidence baseline depend on which refs happened to be fetched. Reachability
+    from ``HEAD`` gives full-history checkouts one stable authority while still
+    rejecting missing commit objects.
+    """
+    return _git_succeeds(repo_root, "cat-file", "-e", f"{commit}^{{commit}}") and _git_succeeds(
+        repo_root, "merge-base", "--is-ancestor", commit, "HEAD"
+    )
+
+
 def _git_bytes(repo_root: Path, *args: str) -> bytes | None:
     """Return Git command output bytes, or ``None`` when the object is unavailable."""
 
@@ -108,7 +147,12 @@ def _is_tracked(repo_root: Path, repo_path: str) -> bool:
 
 
 def _resolve_repo_path(repo_root: Path, value: str) -> tuple[str, Path] | None:
-    """Normalize a repository-relative artifact path, rejecting URLs and escapes."""
+    """Normalize a repository-root-relative path, rejecting URLs and escapes.
+
+    Manifest path fields are never relative to the manifest or its evidence bundle.
+    A sibling artifact must therefore use its full repository path, such as
+    ``docs/context/evidence/<bundle>/README.md``.
+    """
     if "://" in value or value.startswith("urn:"):
         return None
     candidate = (repo_root / value).resolve()
@@ -374,9 +418,7 @@ def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is inte
             _issue(display_path, "missing_commit", "campaign_id requires a full producing commit")
         )
     resolved_commits = [
-        commit
-        for commit in set(commits)
-        if _git_succeeds(repo_root, "cat-file", "-e", f"{commit}^{{commit}}")
+        commit for commit in set(commits) if _commit_is_head_reachable(repo_root, commit)
     ]
     declared_config_hashes = {item.lower() for item in config_hashes if SHA256_RE.fullmatch(item)}
     for config_path in sorted(set(config_paths)):
@@ -497,6 +539,7 @@ def lint_evidence_registry(
 ) -> dict[str, Any]:
     """Return a deterministic integrity report for every supported evidence file."""
     repo_root = repo_root.resolve()
+    _require_full_history(repo_root)
     registry_root = registry_root.resolve()
     campaigns: dict[str, list[_DocumentRecord]] = defaultdict(list)
     findings: list[dict[str, str]] = []
@@ -516,7 +559,7 @@ def lint_evidence_registry(
         config_hashes = [item for document in documents for item in document.config_hashes]
         commits = [commit for document in documents for commit in document.commits]
         for commit in sorted(set(commits)):
-            if not _git_succeeds(repo_root, "cat-file", "-e", f"{commit}^{{commit}}"):
+            if not _commit_is_head_reachable(repo_root, commit):
                 findings.append(
                     _issue(canonical_path, "dangling_commit", f"commit {commit} does not resolve")
                 )
@@ -630,7 +673,11 @@ def main(argv: list[str] | None = None) -> int:
         exclude_codes = exclude_codes | frozenset(
             code.strip() for code in args.exclude_codes.split(",") if code.strip()
         )
-    report = lint_evidence_registry(repo_root, registry_root, disposition_path, exclude_codes)
+    try:
+        report = lint_evidence_registry(repo_root, registry_root, disposition_path, exclude_codes)
+    except ShallowRepositoryError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     print(json.dumps(report, indent=2, sort_keys=True))
     return 1 if args.strict and report["summary"]["findings"] > 0 else 0
 

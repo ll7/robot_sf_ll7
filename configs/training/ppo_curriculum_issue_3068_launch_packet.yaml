@@ -76,7 +76,7 @@ training_starting_points:
   resume_policy_id: ppo_expert_br06_v3_15m_all_maps_randomized
   checksums:
     configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml: 91f9d9a7c0bcb54f3628beef9140181a64277ab8bdf9b12dcdc37f0251a7d437
-    configs/algos/ppo_v3_camera_ready.yaml: 6e7efd7bef68d4cdbac23bda7a0fa12d206229d5c0566c1e38f84cd9122a73c8
+    configs/algos/ppo_v3_camera_ready.yaml: ee914f1167da5d8513b90f1e3d90adabc83420d993306be9885f49c83f5b2efc
     configs/algos/guarded_ppo_relaxed_v2.yaml: 666eda5a47de6e452eba9b2f3cb15bda16fc97abcd7137434661a87ac9ff85d8
     configs/scenarios/classic_interactions_francis2023.yaml: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
     configs/benchmarks/seed_sets_v1.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6

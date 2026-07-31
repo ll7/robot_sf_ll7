@@ -20,8 +20,12 @@ Environment variables:
                       Ignored when PR_READY_MODE is set.
   PR_READY_SKIP_PREFLIGHT  Set to "1" to skip cheap preflight checks for
                       test-collection dependencies and the bundled fast-pysf API.
-  PR_READY_PR_BODY_FILE  Optional markdown PR body. When set, readiness checks
-                      that deferred work has a linked issue or explicit NA.
+  PR_READY_PR_BODY_FILE  Optional markdown PR body from an existing readable
+                      regular file.
+                      Process-substitution paths such as /dev/fd/63 are rejected
+                      because their descriptors do not survive into downstream
+                      readiness processes. When set, readiness checks that
+                      deferred work has a linked issue or explicit NA.
   PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES
                       Set to "0" to skip open-state verification for linked
                       follow-up issues when PR_READY_PR_BODY_FILE is set.
@@ -50,6 +54,32 @@ export PR_READY_MODE="${PR_READY_MODE:-}"
 export PR_READY_SKIP_PREFLIGHT="${PR_READY_SKIP_PREFLIGHT:-0}"
 export PR_READY_PR_BODY_FILE="${PR_READY_PR_BODY_FILE:-}"
 export PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES="${PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES:-1}"
+
+validate_pr_body_file() {
+  local body_file="$PR_READY_PR_BODY_FILE"
+  [[ -z "$body_file" ]] && return
+
+  if [[ -f "$body_file" && -r "$body_file" ]]; then
+    return
+  fi
+
+  printf 'PR_READY_PR_BODY_FILE must name an existing readable regular file; received %q.\n' \
+    "$body_file" >&2
+  case "$body_file" in
+    /dev/fd/*|/proc/*/fd/*)
+      printf 'Process-substitution paths are not supported because their file descriptors are not inherited by readiness subprocesses.\n' >&2
+      printf 'Write the body to a persistent file first, for example:\n' >&2
+      printf '  body_file="%s"; gh pr view ... --json body --jq .body >"%s"; PR_READY_PR_BODY_FILE="%s" %q\n' \
+        '$(mktemp)' '$body_file' '$body_file' "$0" >&2
+      ;;
+    *)
+      printf 'Create the file first, then rerun with PR_READY_PR_BODY_FILE=/path/to/body.md.\n' >&2
+      ;;
+  esac
+  exit 2
+}
+
+validate_pr_body_file
 
 worktree_state() {
   if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
@@ -132,7 +162,7 @@ resolve_base_ref() {
 }
 
 is_optional_readiness_path() {
-  # Code paths that require optional extras (hardcoded for readiness scope)
+  # Code paths and test directory patterns that require optional extras
   case "$1" in
     robot_sf/benchmark/*|\
     robot_sf/baselines/drl_vo.py|\
@@ -145,7 +175,15 @@ is_optional_readiness_path() {
     scripts/tools/benchmark_feature_extractors.py|\
     scripts/tools/probe_social_navigation_pyenvs_socialforce_runtime.py|\
     scripts/tools/probe_sonic_model_inference.py|\
-    scripts/training/*)
+    scripts/training/*|\
+    tests/benchmark/*|\
+    tests/benchmark_full/*|\
+    tests/carla_bridge/*|\
+    tests/integration/*|\
+    tests/planner/*|\
+    tests/render/*|\
+    tests/training/*|\
+    tests/visuals/*)
       return 0
       ;;
   esac
@@ -268,6 +306,38 @@ while IFS= read -r changed_file; do
     core_changed_files+=("$changed_file")
   fi
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
+
+# Validate that every changed test file under tests/ or fast-pysf/tests/ is classified
+# and covered by the optional test allowlist if classified as optional.
+for changed_file in "${changed_files[@]}"; do
+  if [[ "$changed_file" == tests/*.py || "$changed_file" == fast-pysf/tests/*.py ]]; then
+    test_basename="$(basename "$changed_file")"
+    if [[ "$test_basename" == test_*.py || "$test_basename" == *_test.py ]]; then
+      if is_optional_readiness_path "$changed_file"; then
+        allowlist_file="${SCRIPT_DIR}/../../tests/support/optional_test_allowlist.txt"
+        is_in_allowlist=0
+        if [[ -f "$allowlist_file" ]]; then
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            line="${line%/}"
+            if [[ "$changed_file" == "$line" || "$changed_file" == "$line"/* ]]; then
+              is_in_allowlist=1
+              break
+            fi
+          done < "$allowlist_file"
+        fi
+        if [[ "$is_in_allowlist" -eq 0 ]]; then
+          printf 'Error: Changed test path %q is classified for lane %q but is omitted from optional test allowlist.\n' \
+            "$changed_file" "optional" >&2
+          printf 'Expected lane: optional\n' >&2
+          printf 'Actual collection decision: omitted\n' >&2
+          printf 'Remediation: Add %q to tests/support/optional_test_allowlist.txt.\n' "$changed_file" >&2
+          exit 2
+        fi
+      fi
+    fi
+  fi
+done
 
 # The existing readiness lanes intentionally exclude deleted paths from their
 # optional-test classification.  The base-drift guard has a stronger contract:

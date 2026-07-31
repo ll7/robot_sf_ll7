@@ -81,7 +81,7 @@ ConfigField(
     field_type="bool",
     default_value=False,
     required=False,
-    description="Enable pedestrian-robot physics interaction forces"
+    description="Enable pedestrian-robot physics interaction forces",
 )
 ```
 
@@ -107,11 +107,11 @@ MigrationMapping(
     legacy_class="EnvSettings",
     canonical_class="RobotSimulationConfig",
     field_mappings={
-        "sim_config": "sim_config",       # Direct match
-        "lidar_config": "lidar_config",   # Direct match
-        "robot_config": "robot_config",   # Direct match
-        "map_pool": "map_pool",           # Direct match
-        "render_scaling": "render_scaling"  # Direct match
+        "sim_config": "sim_config",  # Direct match
+        "lidar_config": "lidar_config",  # Direct match
+        "robot_config": "robot_config",  # Direct match
+        "map_pool": "map_pool",  # Direct match
+        "render_scaling": "render_scaling",  # Direct match
     },
     behavioral_changes=[],  # No known differences
     code_example="""
@@ -122,7 +122,7 @@ config = EnvSettings()
 # After (canonical)
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 config = RobotSimulationConfig()
-"""
+""",
 )
 ```
 
@@ -147,7 +147,7 @@ DeprecationWarning(
     warning_category="DeprecationWarning",
     message_template="{legacy_class} is deprecated and will be removed in a future version. Use {canonical_class} from robot_sf.gym_env.unified_config instead.",
     stack_level=2,
-    trigger_location="__post_init__"
+    trigger_location="__post_init__",
 )
 ```
 

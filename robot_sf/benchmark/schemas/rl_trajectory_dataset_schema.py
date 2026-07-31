@@ -29,6 +29,8 @@ def load_rl_trajectory_dataset_manifest_schema() -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def _manifest_validator() -> Draft202012Validator:
+    """Return the cached JSON Schema validator for RL trajectory dataset manifests."""
+
     return Draft202012Validator(load_rl_trajectory_dataset_manifest_schema())
 
 

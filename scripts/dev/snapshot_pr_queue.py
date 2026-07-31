@@ -19,6 +19,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_name,
     _rollup_status,
 )
+from scripts.dev.pr_loop_policy import GATE_VERDICT_RE
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ACTIVE_LIMIT = 20
@@ -88,6 +89,7 @@ def _review_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
         {
             "state": str(review.get("state", "UNKNOWN")),
             "author": _author_login(review.get("author")),
+            "author_association": str(review.get("authorAssociation", "")),
             "submitted_at": str(review.get("submittedAt", "")),
             "body_excerpt": _shorten_text(review.get("body"), limit=COMMENT_BODY_LIMIT),
         }
@@ -111,6 +113,7 @@ def _comment_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
     latest = [
         {
             "author": _author_login(comment.get("author")),
+            "author_association": str(comment.get("authorAssociation", "")),
             "created_at": str(comment.get("createdAt", "")),
             "body_excerpt": _shorten_text(comment.get("body"), limit=COMMENT_BODY_LIMIT),
         }
@@ -390,6 +393,59 @@ def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
     return "review_attention"
 
 
+def _parse_explicit_verdict(item: Any) -> str | None:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        verdict = str(item.get("verdict", "")).lower()
+        accepted_flag = item.get("accepted")
+        sha = str(item.get("sha") or item.get("head_sha") or "")
+        if sha and (verdict == "accepted" or accepted_flag is True):
+            return f"gate-verdict: accepted @ {sha}"
+    return None
+
+
+_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+
+
+def _extract_trailers_from_bodies(items: Any) -> list[str]:
+    """Extract verdicts only from repository-trusted comment or review authors."""
+    trailers: list[str] = []
+    if not isinstance(items, list):
+        return trailers
+    for entry in items:
+        if isinstance(entry, dict):
+            association = str(entry.get("authorAssociation", "")).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            body = entry.get("body")
+            if isinstance(body, str) and body:
+                for match in GATE_VERDICT_RE.finditer(body):
+                    trailers.append(f"gate-verdict: accepted @ {match.group(1)}")
+    return trailers
+
+
+def _extract_gate_verdicts(pr: dict[str, Any]) -> list[str]:
+    """Extract trusted structured gate-verdict trailers from raw comment and review bodies."""
+    verdicts: list[str] = []
+
+    existing_list = pr.get("gate_verdicts")
+    if isinstance(existing_list, list):
+        for item in existing_list:
+            parsed = _parse_explicit_verdict(item)
+            if parsed:
+                verdicts.append(parsed)
+
+    parsed_single = _parse_explicit_verdict(pr.get("gate_verdict"))
+    if parsed_single:
+        verdicts.append(parsed_single)
+
+    verdicts.extend(_extract_trailers_from_bodies(pr.get("reviews")))
+    verdicts.extend(_extract_trailers_from_bodies(pr.get("comments")))
+
+    return list(dict.fromkeys(verdicts))
+
+
 def _pr_payload_from_dict(
     pr: dict[str, Any],
     *,
@@ -400,7 +456,7 @@ def _pr_payload_from_dict(
     is_draft = bool(pr.get("isDraft"))
     labels = _labels(pr)
     checks = _checks(pr)
-    head_sha = str(pr.get("headRefOid", ""))
+    head_sha = str(pr.get("headRefOid", "") or pr.get("head_sha", ""))
     mergeable = str(pr.get("mergeable", "unknown"))
     preflight = _preflight(
         checks_overall=str(checks.get("overall", "")),
@@ -410,6 +466,7 @@ def _pr_payload_from_dict(
         mergeable=mergeable,
     )
     reviews = _reviews(pr)
+    gate_verdicts = _extract_gate_verdicts(pr)
     pr_payload = {
         "number": pr.get("number", default_number),
         "status": "ok",
@@ -423,10 +480,12 @@ def _pr_payload_from_dict(
         "mergeable": mergeable,
         "checks": checks,
         "reviews": reviews,
+        "gate_verdicts": gate_verdicts,
         "review_snapshot": _review_snapshot(pr),
         "comment_snapshot": _comment_snapshot(pr),
         "preflight": preflight,
     }
+
     next_action = _next_action(
         is_draft=is_draft,
         labels=labels,
@@ -645,6 +704,27 @@ def write_raw_review_comments_artifact(
     return payload
 
 
+def write_snapshot_artifact(payload: dict[str, Any], path: Path | None) -> None:
+    """Write a compact queue snapshot to *path* with stable JSON formatting."""
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def emit_snapshot(
+    payload: dict[str, Any], path: Path | None, *, as_json: bool, exit_code: int
+) -> int:
+    """Write an optional snapshot artifact, emit stdout, and return the CLI status."""
+    try:
+        write_snapshot_artifact(payload, path)
+    except OSError as exc:
+        print(f"snapshot output write failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2, sort_keys=True) if as_json else json.dumps(payload))
+    return exit_code
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prs", nargs="*", type=int, help="PR numbers to snapshot.")
@@ -678,6 +758,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "Opt-in path for raw review-comment payloads, including diff_hunk/full bodies; "
             "artifact is written to disk and never printed to stdout."
         ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the compact queue snapshot JSON to this path.",
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser.parse_args(argv)
@@ -736,10 +821,14 @@ def main(argv: list[str] | None = None) -> int:
     except subprocess.TimeoutExpired as exc:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
-    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
     has_pr_errors = any(pr.get("status") == "error" for pr in payload["prs"])
     has_artifact_errors = payload.get("raw_review_comments_artifact_status") == "error"
-    return 1 if has_pr_errors or has_artifact_errors else 0
+    return emit_snapshot(
+        payload,
+        args.output,
+        as_json=args.json,
+        exit_code=1 if has_pr_errors or has_artifact_errors else 0,
+    )
 
 
 if __name__ == "__main__":

@@ -501,8 +501,108 @@ def _catalog_entry_evidence_diagnostics(
     return diagnostics
 
 
-def _context_catalog_diagnostics(catalog_path: Path, *, repo_root: Path) -> list[Diagnostic]:
-    """Validate the curated context catalog sidecar."""
+def _catalog_entry_is_selected(
+    entry: dict[object, object], *, selected_entry_paths: set[Path] | None
+) -> bool:
+    """Return whether a catalog row is included in a scoped validation pass."""
+    if selected_entry_paths is None:
+        return True
+    return _catalog_path(entry.get("path")) in selected_entry_paths
+
+
+def _catalog_entry_diagnostics(
+    entry: dict[object, object],
+    *,
+    entry_path: str,
+    catalog_path: Path,
+    repo_root: Path,
+    status_values: set[str],
+    freshness_values: set[str],
+    seen_paths: set[Path],
+) -> list[Diagnostic]:
+    """Validate one selected context-catalog row."""
+    path, diagnostics = _catalog_entry_path_diagnostics(
+        entry,
+        entry_path=entry_path,
+        catalog_path=catalog_path,
+        repo_root=repo_root,
+        seen_paths=seen_paths,
+    )
+    diagnostics.extend(
+        _catalog_entry_metadata_diagnostics(
+            entry,
+            entry_path=entry_path,
+            catalog_path=catalog_path,
+            status_values=status_values,
+            freshness_values=freshness_values,
+        )
+    )
+    diagnostics.extend(
+        _catalog_entry_replacement_diagnostics(
+            entry,
+            entry_path=entry_path,
+            catalog_path=catalog_path,
+            repo_root=repo_root,
+        )
+    )
+    diagnostics.extend(
+        _catalog_entry_evidence_diagnostics(
+            entry,
+            path=path,
+            entry_path=entry_path,
+            catalog_path=catalog_path,
+            repo_root=repo_root,
+        )
+    )
+    return diagnostics
+
+
+def _catalog_entries_diagnostics(
+    entries: list[object],
+    *,
+    catalog_path: Path,
+    repo_root: Path,
+    status_values: set[str],
+    freshness_values: set[str],
+    selected_entry_paths: set[Path] | None,
+) -> list[Diagnostic]:
+    """Validate the selected rows in a context catalog."""
+    diagnostics: list[Diagnostic] = []
+    seen_paths: set[Path] = set()
+    for index, entry in enumerate(entries):
+        entry_path = f"{catalog_path.as_posix()}:entries[{index}]"
+        if not isinstance(entry, dict):
+            diagnostics.append(Diagnostic(catalog_path, f"{entry_path} must be a mapping"))
+            continue
+        if not _catalog_entry_is_selected(entry, selected_entry_paths=selected_entry_paths):
+            continue
+        diagnostics.extend(
+            _catalog_entry_diagnostics(
+                entry,
+                entry_path=entry_path,
+                catalog_path=catalog_path,
+                repo_root=repo_root,
+                status_values=status_values,
+                freshness_values=freshness_values,
+                seen_paths=seen_paths,
+            )
+        )
+    return diagnostics
+
+
+def _context_catalog_diagnostics(
+    catalog_path: Path,
+    *,
+    repo_root: Path,
+    selected_entry_paths: set[Path] | None = None,
+) -> list[Diagnostic]:
+    """Validate the curated context catalog sidecar.
+
+    When ``selected_entry_paths`` is provided, only catalog entries for those
+    paths receive row-level validation.  The catalog's top-level schema and
+    vocabulary remain validated in all modes.  ``None`` retains the full
+    catalog audit used by explicit catalog-only and full-audit invocations.
+    """
     diagnostics: list[Diagnostic] = []
     full_catalog_path = repo_root / catalog_path
     if not full_catalog_path.exists():
@@ -539,48 +639,16 @@ def _context_catalog_diagnostics(catalog_path: Path, *, repo_root: Path) -> list
         )
         return diagnostics
 
-    seen_paths: set[Path] = set()
-    for index, entry in enumerate(entries):
-        entry_path = f"{catalog_path.as_posix()}:entries[{index}]"
-        if not isinstance(entry, dict):
-            diagnostics.append(Diagnostic(catalog_path, f"{entry_path} must be a mapping"))
-            continue
-
-        path, path_diagnostics = _catalog_entry_path_diagnostics(
-            entry,
-            entry_path=entry_path,
+    diagnostics.extend(
+        _catalog_entries_diagnostics(
+            entries,
             catalog_path=catalog_path,
             repo_root=repo_root,
-            seen_paths=seen_paths,
+            status_values=status_values,
+            freshness_values=freshness_values,
+            selected_entry_paths=selected_entry_paths,
         )
-        diagnostics.extend(path_diagnostics)
-        diagnostics.extend(
-            _catalog_entry_metadata_diagnostics(
-                entry,
-                entry_path=entry_path,
-                catalog_path=catalog_path,
-                status_values=status_values,
-                freshness_values=freshness_values,
-            )
-        )
-        diagnostics.extend(
-            _catalog_entry_replacement_diagnostics(
-                entry,
-                entry_path=entry_path,
-                catalog_path=catalog_path,
-                repo_root=repo_root,
-            )
-        )
-        diagnostics.extend(
-            _catalog_entry_evidence_diagnostics(
-                entry,
-                path=path,
-                entry_path=entry_path,
-                catalog_path=catalog_path,
-                repo_root=repo_root,
-            )
-        )
-
+    )
     return diagnostics
 
 
@@ -880,7 +948,23 @@ def _collect_diagnostics(
             )
         )
     if force_context_catalog or _should_check_context_catalog(changed_list):
-        diagnostics.extend(_context_catalog_diagnostics(_CONTEXT_CATALOG, repo_root=repo_root))
+        selected_entry_paths = None
+        if not force_context_catalog:
+            requested_paths = {
+                changed.path
+                for changed in changed_list
+                if changed.path != _CONTEXT_CATALOG
+                and _is_within_dir(changed.path, _TOP_LEVEL_CONTEXT_DIR)
+            }
+            if requested_paths:
+                selected_entry_paths = requested_paths
+        diagnostics.extend(
+            _context_catalog_diagnostics(
+                _CONTEXT_CATALOG,
+                repo_root=repo_root,
+                selected_entry_paths=selected_entry_paths,
+            )
+        )
 
     for changed in changed_list:
         full_path = repo_root / changed.path

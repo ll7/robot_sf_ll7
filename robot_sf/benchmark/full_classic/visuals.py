@@ -626,11 +626,14 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
             Path(__file__).parent / "../../../../specs/127-enhance-benchmark-visual/contracts"
         ).resolve()
         try:
-            validated = validate_visual_manifests(reports_dir, contracts_dir)
-            logger.info("Validated visual manifests: %s", validated)
+            validation_errors = validate_visual_manifests(reports_dir, contracts_dir)
         except (RuntimeError, ValueError, OSError) as exc:
             logger.error("Visual manifest validation failed: %s", exc)
             raise
+        if validation_errors:
+            logger.warning("Visual manifest validation errors: {}", validation_errors)
+        else:
+            logger.info("Visual manifests passed validation")
 
     logger.info(
         "Visual artifacts generated: plots={} videos={} (disable_videos={} smoke={} mode={})",

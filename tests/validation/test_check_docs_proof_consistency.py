@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ from scripts.validation.check_docs_proof_consistency import (
     _parse_name_status,
     _selected_files,
     _should_check_context_catalog,
+    main,
 )
 
 
@@ -536,6 +538,83 @@ def test_selected_context_catalog_keeps_strict_catalog_diagnostics(tmp_path: Pat
     assert _should_check_context_catalog(
         [ChangedFile(status="M", path=Path("docs/context/catalog.yaml"))]
     )
+    assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_selected_context_catalog_scopes_row_diagnostics_to_requested_entries(
+    tmp_path: Path,
+) -> None:
+    """Mixed catalog selections must not surface unrelated catalog-row debt."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+    requested = repo_root / "docs/context/requested.md"
+    requested.write_text("requested\n", encoding="utf-8")
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        catalog.read_text(encoding="utf-8")
+        + "\n  - path: docs/context/requested.md\n"
+        + "    status: current\n"
+        + "    freshness: maintained\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _collect_diagnostics(
+        [
+            ChangedFile(status="M", path=Path("docs/context/catalog.yaml")),
+            ChangedFile(status="M", path=Path("docs/context/requested.md")),
+        ],
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == []
+
+
+def test_selected_context_catalog_ignores_unrelated_changed_paths(tmp_path: Path) -> None:
+    """Unrelated changed files must not disable catalog-row diagnostics."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+
+    diagnostics = _collect_diagnostics(
+        [
+            ChangedFile(status="M", path=Path("docs/context/catalog.yaml")),
+            ChangedFile(status="M", path=Path("scripts/example.py")),
+        ],
+        repo_root=repo_root,
+    )
+
+    assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_scoped_context_catalog_reports_non_mapping_entries(tmp_path: Path) -> None:
+    """Scoped validation must still report malformed catalog entry structure."""
+    repo_root = tmp_path
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text(
+        "version: 1\nentries:\n  - malformed\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+        selected_entry_paths={Path("docs/context/requested.md")},
+    )
+
+    assert any("entries[0] must be a mapping" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_forced_context_catalog_audit_still_checks_all_rows(tmp_path: Path) -> None:
+    """The explicit full-catalog mode retains repository-wide row diagnostics."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/requested.md"))],
+        repo_root=repo_root,
+        force_context_catalog=True,
+    )
+
     assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
 
 
@@ -1304,3 +1383,117 @@ def test_evidence_catalog_missing_catalog_file_passes(tmp_path: Path) -> None:
 
     # Without a catalog, every bundle is uncovered — should still report, not crash.
     assert any("issue_999_no_catalog" in d.message for d in diagnostics), diagnostics
+
+
+# ---------------------------------------------------------------------------
+# CLI-level scoping regression for mixed --path selections (issue #6011)
+# ---------------------------------------------------------------------------
+
+
+def _build_issue_6011_repo(tmp_path: Path) -> Path:
+    """Build a repo mirroring issue #6011: a requested note plus unrelated debt.
+
+    The catalog carries one historical evidence row that points at ignored
+    ``output/`` artifacts (the debt that used to block focused checks) alongside
+    a clean row for the requested note. Committing everything lets the
+    ``--base HEAD`` selection resolve the requested paths as modified.
+    """
+    repo_root = tmp_path
+    _run_git(repo_root, "init")
+    _run_git(repo_root, "config", "user.name", "Test Author")
+    _run_git(repo_root, "config", "user.email", "test@example.com")
+
+    context_dir = repo_root / "docs/context"
+    context_dir.mkdir(parents=True)
+    (context_dir / "README.md").write_text("# Context\n", encoding="utf-8")
+    (context_dir / "INDEX.md").write_text("# Index\n", encoding="utf-8")
+    requested = context_dir / "issue_6008_state.yaml"
+    requested.write_text("state: ok\n", encoding="utf-8")
+
+    evidence_dir = context_dir / "evidence"
+    evidence_dir.mkdir(parents=True)
+    (evidence_dir / "legacy_report.md").write_text(
+        "See output/runs/report.json.\n", encoding="utf-8"
+    )
+
+    catalog = context_dir / "catalog.yaml"
+    catalog.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "  - path: docs/context/evidence/legacy_report.md\n"
+        "    status: evidence\n"
+        "    freshness: evidence\n"
+        "  - path: docs/context/issue_6008_state.yaml\n"
+        "    status: current\n"
+        "    freshness: maintained\n",
+        encoding="utf-8",
+    )
+    _commit_all(repo_root, "issue_6011 fixture", iso_date="2026-01-01T00:00:00+00:00")
+    return repo_root
+
+
+def test_main_mixed_path_selection_scopes_unrelated_catalog_debt(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Issue #6011: a mixed --path selection must not surface unrelated catalog debt.
+
+    End-to-end CLI regression for the exact command reported in the issue: a
+    mixed selection of ``INDEX.md``, ``catalog.yaml``, and a requested note must
+    scope catalog-row diagnostics to the requested entries so a historical
+    evidence row pointing at ignored ``output/`` artifacts no longer blocks the
+    focused check. The catalog's top-level schema is still validated.
+    """
+    repo_root = _build_issue_6011_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_docs_proof_consistency.py",
+            "--base",
+            "HEAD",
+            "--path",
+            "docs/context/INDEX.md",
+            "--path",
+            "docs/context/catalog.yaml",
+            "--path",
+            "docs/context/issue_6008_state.yaml",
+        ],
+    )
+
+    return_code = main()
+    captured = capsys.readouterr()
+
+    assert return_code == 0
+    assert "ignored output/ artifacts" not in captured.out
+    assert "3 changed file(s)" in captured.out
+
+
+def test_main_forced_context_catalog_keeps_full_audit(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Issue #6011: explicit --check-context-catalog retains the full row audit.
+
+    The scoping in the previous test must not weaken the explicit full-catalog
+    mode: ``--check-context-catalog`` still reports the historical evidence row
+    that points at ignored ``output/`` artifacts, preserving the separate
+    full-audit path the issue asked to keep.
+    """
+    repo_root = _build_issue_6011_repo(tmp_path)
+    monkeypatch.chdir(repo_root)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_docs_proof_consistency.py",
+            "--base",
+            "HEAD",
+            "--path",
+            "docs/context/issue_6008_state.yaml",
+            "--check-context-catalog",
+        ],
+    )
+
+    return_code = main()
+    captured = capsys.readouterr()
+
+    assert return_code == 1
+    assert "ignored output/ artifacts" in captured.out

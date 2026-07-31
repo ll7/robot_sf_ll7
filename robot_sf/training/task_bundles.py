@@ -161,6 +161,11 @@ def describe_task_bundle_source(reference: str | Path) -> dict[str, object]:
 
 
 def _require_string(data: Mapping[str, Any], key: str, *, source: Path) -> str:
+    """Return a required non-empty string field from a task bundle, raising on invalid.
+
+    Returns:
+        The stripped string value of the field.
+    """
     value = data.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"Task bundle '{source}' must define non-empty string '{key}'.")
@@ -168,6 +173,11 @@ def _require_string(data: Mapping[str, Any], key: str, *, source: Path) -> str:
 
 
 def _optional_string(data: Mapping[str, Any], key: str, *, source: Path) -> str:
+    """Return an optional string field, defaulting to empty when absent.
+
+    Returns:
+        The stripped string value, or an empty string when absent.
+    """
     value = data.get(key)
     if value is None:
         return ""
@@ -187,6 +197,7 @@ def _has_task_bundle_header(path: Path) -> bool:
 
 
 def _validate_bundle_name(name: str, *, source: object) -> None:
+    """Validate a bundle name uses only lowercase letters, digits, hyphen, and underscore."""
     if not name:
         raise ValueError(f"Task bundle reference '{source}' must name a bundle.")
     allowed = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
@@ -198,6 +209,11 @@ def _validate_bundle_name(name: str, *, source: object) -> None:
 
 
 def _resolve_scenario_files(raw: object, *, source: Path) -> list[Path]:
+    """Resolve, dedupe, and validate the bundle's scenario_files list exists on disk.
+
+    Returns:
+        List of resolved scenario file paths.
+    """
     if not isinstance(raw, list) or not raw:
         raise ValueError(f"Task bundle '{source}' must define non-empty list 'scenario_files'.")
 
@@ -234,6 +250,11 @@ def _resolve_bundle_relative_path(entry: str | Path, *, source: Path) -> Path:
 
 
 def _resolve_select_scenarios(raw: object, *, source: Path) -> list[str]:
+    """Resolve the optional select_scenarios list into unique non-empty names.
+
+    Returns:
+        List of selected scenario names (empty when absent).
+    """
     if raw is None:
         return []
     if not isinstance(raw, list):
@@ -255,6 +276,7 @@ def _resolve_select_scenarios(raw: object, *, source: Path) -> list[str]:
 
 
 def _reject_local_output_path(candidate: Path, *, source: Path) -> None:
+    """Raise when a scenario path resolves under the worktree-local output directory."""
     output_root = (repo_root() / "output").resolve()
     try:
         candidate.relative_to(output_root)
@@ -285,6 +307,11 @@ def _load_bundle_scenario_file(
 
 
 def _scenario_name(scenario: Mapping[str, Any], *, source: Path, index: int) -> str:
+    """Extract and validate a scenario entry's name or scenario_id.
+
+    Returns:
+        The stripped scenario name.
+    """
     value = scenario.get("name") or scenario.get("scenario_id")
     if value is None:
         raise ValueError(
@@ -303,6 +330,11 @@ def _apply_bundle_selection(
     selected_names: tuple[str, ...],
     source: Path,
 ) -> list[Mapping[str, Any]]:
+    """Filter expanded scenarios down to the declared selected names.
+
+    Returns:
+        List of scenarios matching the selected names.
+    """
     scenario_map: dict[str, Mapping[str, Any]] = {}
     for index, scenario in enumerate(scenarios):
         name = _scenario_name(scenario, source=source, index=index)

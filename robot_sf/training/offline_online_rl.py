@@ -63,6 +63,8 @@ class OfflineTransitionBatch:
 
 @dataclass(slots=True)
 class _TransitionAccumulator:
+    """Mutable working buffer collecting per-episode transition fields while building a batch."""
+
     observations: list[Any] = field(default_factory=list)
     next_observations: list[Any] = field(default_factory=list)
     actions: list[np.ndarray] = field(default_factory=list)

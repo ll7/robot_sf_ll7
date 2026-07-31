@@ -1,0 +1,87 @@
+# Canonical issue-state surface for #6008.
+#
+# This append-only contract prevents a continuation retry from creating duplicate
+# work when its referenced patch has disappeared or has already landed. It records
+# durable reconciliation behavior only; it intentionally excludes target hosts,
+# worktree paths, packet lineage, and other transient queue-routing state.
+issue: 6008
+title: "friction: reconcile stale continue-patch retries before dispatch (#6008)"
+schema: robot_sf.issue_state.v1
+state_surface: continue_patch_retry_reconciliation
+
+entries:
+  - recorded_at_utc: "2026-07-19T00:00:00Z"
+    status: contract_defined__dispatcher_owner_implementation_pending
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/6008"
+      observed_condition: >-
+        A continuation retry referenced an unavailable patch location even though
+        the matching implementation had already landed in merged PR #5951.
+      merged_implementation:
+        pr: 5951
+        commit: "8c1f5499e"
+        ancestry: "ancestor_of_origin_main_at_issue_intake"
+    claim_boundary: >-
+      This is a fail-closed interface contract and local regression guard, not an
+      implementation of the private dispatcher. It does not establish that any
+      retry was reconciled in production.
+    reconciliation_contract:
+      contract_version: continue_patch_retry_reconciliation.v1
+      applies_when: "retry.kind == continue_patch before worker dispatch"
+      required_identity:
+        - "stable patch identity (commit, content digest, or immutable review reference)"
+        - "declared changed-path set or equivalent patch manifest"
+      decisions:
+        patch_available_and_unmerged:
+          dispatch: true
+          receipt: "dispatches only after identity and changed paths resolve"
+        patch_already_merged:
+          dispatch: false
+          terminal_state: superseded
+          receipt: "records merged evidence and selects no duplicate continuation"
+        patch_reference_missing:
+          dispatch: false
+          terminal_state: blocked
+          receipt: "records unavailable reference; never reconstructs a patch from a stale retry"
+        patch_identity_indeterminate:
+          dispatch: false
+          terminal_state: blocked
+          receipt: "requires review rather than comparing an ambiguous path-only reference"
+      invariants:
+        - "A path-only continue_patch retry is never enough authority to dispatch."
+        - "A superseded or blocked retry creates no worker session."
+        - "Every non-dispatch decision emits a durable reason and the resolved patch identity."
+        - "Only a newly reviewed retry with a fresh immutable identity may replace a blocked retry."
+      acceptance_matrix:
+        - case: "available, identified, and not merged"
+          expected_decision: dispatch
+        - case: "identified patch is already merged"
+          expected_decision: superseded_without_dispatch
+        - case: "referenced patch location is unavailable"
+          expected_decision: blocked_without_dispatch
+        - case: "identity cannot be resolved from supplied retry data"
+          expected_decision: blocked_without_dispatch
+    owner_boundary:
+      required_change: >-
+        Implement this pre-dispatch decision in the orchestrator that owns
+        continue_patch retries, before it creates a worker session.
+      repository_status: >-
+        The dispatcher implementation is outside the authorized robot_sf paths;
+        this repository carries the durable contract and its regression guard.
+    closure_boundary:
+      closure_call_for_this_pr: keep_open
+      remaining:
+        - "Port the v1 decision matrix to the dispatcher owner and add its runtime tests."
+        - "Exercise one already-merged and one missing-reference retry through the real dispatch boundary."
+      next_empirical_action: >-
+        Run the dispatcher-owner tests against fixtures for all four acceptance
+        matrix rows, then inspect the emitted non-dispatch receipts before
+        enabling the reconciler for live queue items.
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false

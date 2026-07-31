@@ -73,6 +73,11 @@ def build_planner_selector_v2_diagnostic_config(
     context_raw = context_raw if isinstance(context_raw, dict) else {}
 
     def _tuple_str(key: str, default: tuple[str, ...] = ()) -> tuple[str, ...]:
+        """Read selector ``key`` as a tuple of strings, accepting a scalar or a list.
+
+        Returns:
+            The key's value as a tuple of strings.
+        """
         raw = selector_raw.get(key, default)
         if isinstance(raw, str):
             return (raw,)
@@ -81,6 +86,11 @@ def build_planner_selector_v2_diagnostic_config(
         return default
 
     def _tuple_int(key: str) -> tuple[int, ...]:
+        """Read selector ``key`` as a tuple of ints, accepting a scalar or a list.
+
+        Returns:
+            The key's value as a tuple of ints.
+        """
         raw = selector_raw.get(key, ())
         if isinstance(raw, int):
             return (int(raw),)

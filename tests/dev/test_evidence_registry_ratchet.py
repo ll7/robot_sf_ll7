@@ -19,6 +19,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -348,21 +349,48 @@ def test_committed_baseline_exists_and_is_valid() -> None:
 def test_committed_baseline_reproduces_from_write_baseline(
     live_lint_report: dict[str, object],
 ) -> None:
-    """The committed baseline must match `--write-baseline` output byte-for-byte.
+    """ADVISORY (non-blocking): committed baseline reproduces from ``--write-baseline``.
 
-    This is the reproducibility half of the #5952 guard: the committed counts must be
-    machine-generated, so that a regenerated baseline is a true refresh and not a silent
-    hand-edit. If this fails, the baseline was edited by hand or the linter output changed
-    without a refresh; regenerate with `evidence_registry_ratchet.py --write-baseline`.
+    Historically this asserted the committed baseline matched ``--write-baseline`` output
+    byte-for-byte, proving the counts were machine-generated rather than hand-edited. In
+    practice it became a self-inflicted treadmill: the ``dangling_commit`` counts depend on
+    which commits are present in the checkout, and the blocking ``fast-feedback`` CI job uses a
+    shallow checkout (``actions/checkout`` default ``fetch-depth: 1``) while the committed
+    baseline is generated with full history. Every merged PR that shifts the shallow graft
+    point re-drifts the counts, reddening ``main`` and jamming the whole merge sweep.
+
+    Maintainer ruling (2026-07-17, tracked in issue #5991; origin guard #5952): development
+    speed outweighs this one reproducibility check, so on drift it is ADVISORY -- it emits a
+    loud warning and ``xfail``s instead of failing the build, so it can never jam ``main``.
+
+    The genuinely-protective ratchet behaviour is unchanged and stays fail-closed: net-new
+    integrity findings are still caught by
+    ``test_committed_baseline_passes_live_check_on_clean_main`` and the CLI ``--check`` gate
+    (evidence-registry-ratchet workflow, ``fetch-depth: 0``), structural tamper by
+    ``test_committed_baseline_exists_and_is_valid``, and net-new strict findings by
+    ``test_strict_ci_policy_has_zero_active_findings_on_clean_main``. Only the byte-for-byte
+    reproduce assertion is downgraded.
     """
     regenerated = ratchet.build_baseline_payload(live_lint_report)
     committed = json.loads(BASELINE.read_text(encoding="utf-8"))
     # Compare the machine-generated fields (generated_at is a timestamp by design).
-    for key in ("findings_by_path", "summary", "linter", "schema_version"):
-        assert committed.get(key) == regenerated.get(key), (
-            f"evidence-registry baseline field '{key}' does not reproduce from "
-            "--write-baseline; regenerate with `evidence_registry_ratchet.py --write-baseline`."
+    drifted = [
+        key
+        for key in ("findings_by_path", "summary", "linter", "schema_version")
+        if committed.get(key) != regenerated.get(key)
+    ]
+    if drifted:
+        message = (
+            "ADVISORY (non-blocking, maintainer ruling 2026-07-17, issue #5991): the committed "
+            f"evidence-registry baseline no longer reproduces from --write-baseline; drifted "
+            f"fields: {drifted}. This is the environment-sensitive reproducibility treadmill "
+            "(dangling_commit counts depend on checkout git-state); it is intentionally NOT a "
+            "hard failure so it can never jam main. Refresh with "
+            "`scripts/dev/evidence_registry_ratchet.py --write-baseline` when convenient. "
+            "Net-new integrity regressions remain fail-closed via the live ratchet check."
         )
+        warnings.warn(message, stacklevel=2)
+        pytest.xfail(message)
 
 
 @pytest.mark.slow
@@ -389,19 +417,17 @@ def test_committed_baseline_passes_live_check_on_clean_main(
 
 
 def test_review_companion_covers_every_post_5317_baseline_file() -> None:
-    """Every file added since the #5275/#5317 baseline has an explicit disposition (#5952 DoD).
+    """Every baseline delta has an explicit machine-checkable disposition (#5952 DoD).
 
-    The downward ratchet only stops drift if newly-baselined files are deliberate. This guard
-    fails if the committed baseline grew beyond the documented prior boundary without a matching
-    explicit per-file disposition in the review companion. It is self-contained: the prior
-    boundary file count and the refresh delta are both recorded in the review companion, so the
-    invariant is ``len(baseline_files) == prior_count + len(reviewed_files)`` together with
-    ``reviewed_files ⊆ baseline_files`` and a valid disposition on every reviewed entry. Future
-    net-new drift is additionally caught by the live check above.
+    Newly baselined files are listed under ``reviewed_files``. Per-code increases on files that
+    were already in the anchored baseline are listed under ``reviewed_baseline_increases`` so a
+    baseline refresh cannot silently grandfather a regression. Future net-new drift is additionally
+    caught by the live check above.
     """
     assert REVIEW.is_file(), "evidence_registry_baseline_review.yaml is missing."
     review = yaml.safe_load(REVIEW.read_text(encoding="utf-8"))
     reviewed_entries = review.get("reviewed_files", [])
+    increase_entries = review.get("reviewed_baseline_increases", [])
     reviewed = {entry["path"] for entry in reviewed_entries}
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     baseline_files = set(baseline["findings_by_path"])
@@ -422,6 +448,8 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
     assert prior_proc.returncode == 0, prior_proc.stderr
     prior_baseline = json.loads(prior_proc.stdout)
     prior_files = set(prior_baseline["findings_by_path"])
+    prior_findings = prior_baseline["findings_by_path"]
+    current_findings = baseline["findings_by_path"]
 
     # (2) The committed baseline must decompose as actual prior files + reviewed delta.
     prior_count = int(review["prior_baseline_files_with_findings"])
@@ -430,6 +458,23 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
         "The committed baseline contains a file not present in the anchored prior baseline "
         "without an explicit disposition in evidence_registry_baseline_review.yaml. Add a "
         "reviewed_files entry naming the new path and its remediate-or-baseline disposition."
+    )
+
+    expected_increases = {
+        (path, code)
+        for path, current_codes in current_findings.items()
+        for code, current_count in current_codes.items()
+        if path in prior_findings and current_count > prior_findings[path].get(code, 0)
+    }
+    declared_increases = [
+        (entry.get("path"), code) for entry in increase_entries for code in entry.get("codes", [])
+    ]
+    assert len(declared_increases) == len(set(declared_increases)), (
+        "reviewed_baseline_increases contains duplicate path/code rows."
+    )
+    assert set(declared_increases) == expected_increases, (
+        "Every per-code baseline increase must have an explicit reviewed_baseline_increases "
+        "entry, and stale entries must be removed."
     )
 
     # (3) Every reviewed entry must still be in the baseline (review stays honest).
@@ -448,6 +493,27 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
         )
         assert isinstance(entry.get("codes"), list) and entry["codes"], (
             f"reviewed file {entry.get('path')} must list its finding codes"
+        )
+
+    # (5) Per-code increases must be existing files with a valid explicit disposition.
+    for entry in increase_entries:
+        path = entry.get("path")
+        assert path in prior_files and path in baseline_files, (
+            f"reviewed baseline increase {path!r} must refer to an existing baseline file"
+        )
+        assert entry.get("disposition") in valid_dispositions, (
+            f"reviewed baseline increase {path} lacks a valid disposition "
+            f"(got {entry.get('disposition')!r})"
+        )
+        assert isinstance(entry.get("codes"), list) and entry["codes"], (
+            f"reviewed baseline increase {path} must list its finding codes"
+        )
+        for code in entry["codes"]:
+            assert current_findings[path].get(code, 0) > prior_findings[path].get(code, 0), (
+                f"reviewed baseline increase {path}::{code} is not a current per-code increase"
+            )
+        assert isinstance(entry.get("reason"), str) and entry["reason"].strip(), (
+            f"reviewed baseline increase {path} must explain its disposition"
         )
 
 

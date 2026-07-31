@@ -22,14 +22,22 @@ LLM Constitution and guides can be found here:
 # Check host tools that live outside uv.
 scripts/dev/check_runtime_requirements.sh
 
-# One‑time setup with all extras and pre-commit
+# Slim core setup (or use --extra viz / maps / benchmark / training / all)
 uv sync --all-extras
 source .venv/bin/activate
 uv run pre-commit install
 
-# Quick import check
+# Quick import check (works in core install without optional extras)
 uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
 ```
+
+Robot SF uses an aggressive extras split to keep the default core installation slim:
+- Core (`uv sync`): Gymnasium env factory, simulator basics, minimal SVG maps, random/social-force smoke
+- `[viz]` (`uv sync --extra viz`): PyGame, Matplotlib, MoviePy, Seaborn rendering and video tooling
+- `[maps]` (`uv sync --extra maps`): OSMnx, GeoPandas, PyProj geospatial map authoring
+- `[benchmark]` (`uv sync --extra benchmark`): Pandas, SciPy benchmark evaluation and reporting
+- `[training]` (`uv sync --extra training`): Stable-Baselines3, PyTorch, Optuna, W&B, TensorBoard
+- `[all]` (`uv sync --extra all`): all optional feature extras
 
 Host tools and optional machine capabilities that are not installed by `uv` are tracked in
 [`docs/dev_runtime_requirements.md`](dev_runtime_requirements.md).
@@ -178,8 +186,10 @@ checked.
 
 ### Targeted shared-venv worktree validation
 
-For quick, targeted checks in a sibling worktree, you can reuse the main checkout virtualenv while
-pinning imports to the current worktree:
+For quick, targeted checks in a sibling worktree, prefer
+`scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized
+current-worktree `.venv` when available, otherwise the main checkout `.venv`, while pinning
+imports to the current worktree:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
@@ -188,10 +198,10 @@ scripts/dev/run_worktree_shared_venv.sh --standalone -- \
   python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 ```
 
-The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the shared
+The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the selected
 `.venv`, and sets `UV_NO_SYNC=1`. By default it also prepends the worktree root to `PYTHONPATH`.
 This is intended for fast local feedback when dependencies are already current. It should fail if
-the shared virtualenv is missing instead of silently installing into the wrong checkout.
+the selected `.venv` is missing instead of silently installing into the wrong checkout.
 
 Use `--standalone` for a dependency-light command whose tests verify that it does not import
 `robot_sf` or other project packages. This mode still reuses third-party dependencies from the
@@ -347,6 +357,19 @@ uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero 
 `ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
 typecheck phase is not a PR-readiness merge blocker by itself.
 
+### Acceptance tests (pytest-bdd pilot)
+
+Acceptance scenarios live in `tests/bdd/` as Gherkin `.feature` files with pytest-bdd step
+definitions. These tests describe deterministic, fixture-first repository workflows and must not
+require network, GUI, CARLA, GPU, or long benchmark execution. Run them with:
+
+```bash
+uv run pytest tests/bdd -q
+uv run pytest --collect-only tests/bdd -q
+```
+
+The pilot covers episode schema validation: a valid record passes, a malformed record is rejected.
+
 ### Merge-race prevention (ADR — issue #5389)
 
 **Problem.** Three main-red incidents in 36 hours (2026-07-11/12) had the same shape: two PRs, each
@@ -386,6 +409,78 @@ The gate-side rule remains useful as a safety net for non-GitHub CI providers.
 **Rollback path.** Remove step 6 from `.agents/skills/gh-pr-merger/SKILL.md` and
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`
 and its tests can be deleted at that point.
+
+### Merge queue gate (issue #6274)
+
+**Problem.** An external or parallel auto-merge path merged several PRs without the `merge-ready`
+label and without a current exact-head `gate-verdict: accepted` trailer (issue #6274). The in-repo
+`gh-pr-merger` contract is fail-closed, but it only governs merges it performs itself; any
+dispatcher that routes through the GitHub native merge queue (or auto-merge) bypassed those gates,
+so review notes could not fail closed.
+
+**Scope: a native-queue gate, not a complete #6274 closure.** This workflow can protect only native
+`merge_group` events after a maintainer activates it as a required check. It does not locate, change,
+or prove coverage of the direct/parallel merge dispatcher observed in #6274. Keep #6274 open until
+that dispatcher and the active `main` protection configuration have both been verified.
+
+**Decision: required merge-queue status-check gate.** We add a dedicated status-check workflow that
+runs inside the native merge queue and enforces the same fail-closed preflight as `gh-pr-merger`
+before the queue auto-merges a PR:
+
+- **Workflow**: `.github/workflows/merge-queue-gate.yml` (checks out the gate implementation from
+  the trusted base revision rather than the evaluated PR or synthetic merge-group tree, with
+  checkout credentials disabled; enforces the required check fail-closed at queue-time on
+  `merge_group`, and publishes non-blocking source-PR and `workflow_dispatch` audits). Source-PR
+  audits refresh when `merge-ready` is added or removed and when a labeled source head changes.
+  They preserve a truthful failed `passed` value and reasons in their audit while exiting zero, so
+  admission readiness is not misreported as failing implementation CI. If a source-head base
+  predates this gate file, the run records a notice and skips evaluation so the bootstrap PR can
+  merge; a queue-time run fails closed when the trusted implementation is unavailable. The
+  queue-time invocation independently validates the synthetic merge group.
+- **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
+- **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
+  `gate-verdict: accepted @ <head_sha>` trailer (reuses
+  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`) authored by a repository owner,
+  member, or collaborator; verdict-like text from an untrusted contributor is ignored. The gate
+  also requires no unresolved actionable review threads and no outstanding explicitly requested
+  reviewers. The current source-head CI rollup
+  must also remain green; superseded check runs are discarded with the same helper used by the
+  guarded merger preflight, and the gate excludes its own in-progress source-head check to avoid
+  waiting on itself. The exact-head trailer binds that CI and review evidence to the source head,
+  while the merge queue independently runs its required checks on the synthetic queue head. The
+  live queue must use GitHub's `ALLGREEN`
+  strategy ("Only merge non-failing pull requests"), so every earlier entry represented by a
+  grouped synthetic head must pass its own gate; `HEADGREEN` fails closed because it can merge a
+  failing earlier entry with a passing tail entry. Staleness is fresh by construction inside the
+  queue (the queue base SHA equals current `main`).
+- **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
+  source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
+  SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread
+  resolution plus requested-reviewer status, so every merge decision is inspectable and
+  reproducible.
+- **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
+  fail-closed contract deterministically (the issue #6274 validation scenarios).
+
+**Required maintainer toggle (cannot be done from a worktree).** The gate fails closed only after
+a maintainer adds the status check **`Merge Queue Gate / merge-queue-gate`** to the merge queue's
+required status checks, enables **Only merge non-failing pull requests** (`ALLGREEN`), and enables
+**Require conversation resolution before merging** in the branch-protection rules for `main`
+(Settings → Branches → `main` → merge queue). The workflow verifies `ALLGREEN` at runtime and
+fails closed if the queue is configured as `HEADGREEN`. GitHub does not reliably create a fresh
+source-head Actions check when a reviewer resolves or reopens a thread; requiring conversation
+resolution therefore makes the gate's no-unresolved-threads condition binding at merge time.
+The source-PR audit is observational and is deliberately not a required status check; exact-head
+review evidence and all other admission conditions are re-evaluated by the fail-closed
+`merge_group` run.
+Until these toggles are applied, the workflow does not provide the queue-side contract; the
+in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
+queue itself also requires maintainer approval to toggle branch-protection settings, consistent
+with the gate-side rationale above.
+
+**Relationship to the gate-side staleness check.** The staleness preflight (step 6 of
+`gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
+non-queue CI providers. Inside the native merge queue, staleness is inherently fresh, so the
+merge-queue gate records the staleness verdict for audit purposes but does not block on it.
 
 ### Reusable dev scripts
 
@@ -885,6 +980,11 @@ For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the sub
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
 
+After a job reaches a terminal state, use `scripts/tools/slurm_job_finalize.py` to record
+the observed state, required local artifacts, checksums, and issue-update summary. See the
+[SLURM post-run closeout guide](dev/slurm_submission.md#post-run-closeout); the finalizer is
+metadata-only and does not turn local files into durable benchmark evidence.
+
 For paper-facing benchmark release runs, use the dedicated release wrapper:
 
 ```bash
@@ -914,12 +1014,16 @@ outcomes.
 **Always use factory functions** — never instantiate gymnasium environments directly:
 
 ```python
-from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robot_env, make_pedestrian_env
+from robot_sf.gym_env.environment_factory import (
+    make_robot_env,
+    make_image_robot_env,
+    make_pedestrian_env,
+)
 
 # Basic robot navigation
 env = make_robot_env(debug=True)
 
-# With image observations  
+# With image observations
 env = make_image_robot_env(debug=True)
 
 # Pedestrian environment (requires trained robot model)
@@ -1148,6 +1252,10 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ### Testing strategy (UNIFIED test suite)
 
+For the canonical contributor QA runbook, 12-class test taxonomy, command matrix, failure classification, and explicit CI rerun rules, see **[Contributor QA Runbook and Test Taxonomy](./qa_test_strategy.md)**.
+For the risk-based map of critical shared contracts to their direct tests and validation lanes, see
+**[Test Traceability Matrix](./test_traceability_matrix.md)**.
+
 **The project now uses a unified test suite** running both robot_sf and fast-pysf tests via a single command.
 
 #### Unified Test Suite
@@ -1271,8 +1379,13 @@ open output/coverage/htmlcov/index.html
 
 #### What gets measured
 
-- **Included**: All code in `robot_sf/` package
-- **Excluded**: Tests, examples, scripts, `fast-pysf/` subtree
+- **Included**: The canonical wrapper and non-PR CI measure only the `robot_sf/` package. Their
+  `--cov=robot_sf` argument overrides the broader `pyproject.toml` coverage.py source list.
+- **Not measured by this command**: `fast-pysf/pysocialforce`. It remains in the coverage.py
+  configuration but is not included in wrapper reports or the non-PR CI coverage gate.
+- **Excluded when the configured source list is used**: Test files (`*/tests/*`, `*/test_*`,
+  `fast-pysf/tests/*`), examples (`examples/*`, `fast-pysf/examples/*`), scripts (`scripts/*`),
+  `tests/pygame/*`, `*/conftest.py`, `*/__pycache__/*`
 - **Output formats**: 
   - Terminal summary (printed after test run)
   - HTML report (`output/coverage/htmlcov/index.html` - interactive, detailed)
@@ -1343,7 +1456,9 @@ ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests/test_batched_
 If you need focused changed-line coverage during development, run the test without `--cov` first
 to confirm it passes, then use the wrapper for the coverage snapshot.
 
-For coverage gap analysis, trend tracking, and CI integration, see `docs/coverage_guide.md` (created as part of US2/US3).
+For complete coverage collection details, baseline tracking, absolute floor enforcement, and CI integration, see [Coverage Guide](coverage_guide.md) (Note: gap analysis and trend tracking were descoped under issue #3349).
+
+For the reproducible, commit-stamped aggregate of all quality signals (test results, coverage, mutation, duration, flakiness, contract/scenario coverage, reproducibility, performance regression, and escaped defects) — which preserves the diagnostic-vs-gate distinction and never collapses signals into a single score — see [Quality Report Guide](quality_report_guide.md) (issue #6213).
 
 ### Must-have checklist
 
@@ -1529,6 +1644,7 @@ Here’s a concise map of the docs folder to help you find the right guidance qu
 #### Top-level guides (entry points)
 - README.md — Main docs landing page.
 - dev_guide.md — Primary development reference (setup, workflow, testing, CI).
+- `qa_test_strategy.md` — Canonical contributor QA runbook and test taxonomy.
 - `ENVIRONMENT.md` — Environment overview and usage.
 - `SIM_VIEW.md` — Simulation view/UI notes.
 - `UV_MIGRATION.md` — Migration notes to uv.
@@ -1623,9 +1739,14 @@ All figures must be **reproducible from code** and directly **integratable into 
   format check can be stale when the shared baseline moved.
 
 CI mapping to local tasks and CLI:
-- `fast-feedback` job → `scripts/dev/ci_driver.sh lint typecheck test`
+- `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
+  also runs lint and advisory type checking. Pull requests exclude slow tests, while non-PR events
+  run the complete suite and upload one coverage database per shard.
+- `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
+  floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
-- aggregate `ci` job → waits for both split jobs so existing required-check naming remains stable
+- aggregate `ci` job → requires the coverage gate on non-PR events and all other split jobs while
+  keeping the existing required-check name stable
 - local full equivalent → `scripts/dev/run_ci_local.sh`
 
 Workflow location: `.github/workflows/ci.yml`.
@@ -1671,7 +1792,10 @@ exit-code contract is unchanged.
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 
-- `fast-feedback` runs lint, advisory type checking, and the main pytest suite.
+- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker,
+  while main, manual, and merge-queue events run the complete suite with per-shard coverage data.
+- `coverage-gate` combines the complete non-PR coverage data before enforcing the 85.0% absolute floor
+  and advisory baseline comparison.
 - `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces
   the artifact-root policy.
 - Both jobs call the canonical `scripts/dev/ci_driver.sh` phases instead of duplicating validation

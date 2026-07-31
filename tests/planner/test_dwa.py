@@ -102,18 +102,59 @@ def test_dwa_config_builder_applies_explicit_acceleration_parameters() -> None:
 
 
 def test_dwa_prediction_scoring_is_opt_in_in_canonical_configs() -> None:
-    """The classic config retains static scoring while the variant opts into forecasts."""
+    """Canonical DWA configs retain exact defaults and make forecasting explicit."""
     config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
     classic = yaml.safe_load((config_dir / "dwa_classic.yaml").read_text(encoding="utf-8"))
     predictive = yaml.safe_load(
         (config_dir / "dwa_prediction_scoring.yaml").read_text(encoding="utf-8")
     )
 
+    common_defaults = {
+        "allow_testing_algorithms": True,
+        "max_linear_speed": 1.0,
+        "max_angular_speed": 1.2,
+        "max_linear_acceleration": 0.8,
+        "max_angular_acceleration": 1.5,
+        "control_dt": 0.2,
+        "prediction_dt": 0.1,
+        "prediction_steps": 15,
+        "linear_samples": 7,
+        "angular_samples": 9,
+        "goal_tolerance": 0.25,
+        "robot_radius": 0.25,
+        "pedestrian_radius": 0.30,
+        "safety_margin": 0.10,
+        "clearance_distance": 2.0,
+        "obstacle_threshold": 0.5,
+        "obstacle_search_cells": 12,
+        "heading_weight": 0.8,
+        "clearance_weight": 1.2,
+        "velocity_weight": 0.25,
+        "progress_weight": 1.0,
+    }
+    assert classic == {
+        **common_defaults,
+        "planner_variant": "dwa",
+        "native_occupancy_resolution": 0.1,
+        "prediction_scoring_enabled": False,
+        "native_command": {
+            "command": [
+                "python3",
+                "scripts/benchmark/frozen_comparator_native_command.py",
+                "--planner-id",
+                "dwa",
+                "--config",
+                "configs/algos/dwa_classic.yaml",
+            ],
+            "entrypoint_path": "scripts/benchmark/frozen_comparator_native_command.py",
+            "mode": "persistent",
+            "step_timeout_sec": 10.0,
+            "require_static_geometry": True,
+        },
+    }
+    assert predictive == {**common_defaults, "prediction_scoring_enabled": True}
     assert build_dwa_config(classic).prediction_scoring_enabled is False
     assert build_dwa_config(predictive).prediction_scoring_enabled is True
-    assert {
-        key: value for key, value in classic.items() if key != "prediction_scoring_enabled"
-    } == {key: value for key, value in predictive.items() if key != "prediction_scoring_enabled"}
 
 
 def test_dwa_prediction_scoring_avoids_a_future_crossing() -> None:
@@ -508,7 +549,7 @@ def test_dwa_route_rescue_classic_config_has_rescue_disabled() -> None:
 
 
 def test_dwa_route_rescue_rescue_config_is_distinct_from_classic() -> None:
-    """The dwa_route_rescue.yaml has rescue enabled and differs from classic only in intervention fields."""
+    """The rescue variant keeps shared defaults while classic owns the native comparator contract."""
     config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
     classic = yaml.safe_load((config_dir / "dwa_classic.yaml").read_text(encoding="utf-8"))
     rescue = yaml.safe_load((config_dir / "dwa_route_rescue.yaml").read_text(encoding="utf-8"))
@@ -525,9 +566,18 @@ def test_dwa_route_rescue_rescue_config_is_distinct_from_classic() -> None:
         "feasibility_slowdown_infeasible_ratio",
         "feasibility_slowdown_scale",
     }
-    assert {key: value for key, value in classic.items() if key not in intervention_keys} == {
-        key: value for key, value in rescue.items() if key not in intervention_keys
+    classic_only_comparator_keys = {
+        "planner_variant",
+        "native_occupancy_resolution",
+        "native_command",
     }
+    assert set(classic) - set(rescue) == classic_only_comparator_keys
+    assert set(rescue) - set(classic) == intervention_keys
+    assert {
+        key: value
+        for key, value in classic.items()
+        if key not in intervention_keys | classic_only_comparator_keys
+    } == {key: value for key, value in rescue.items() if key not in intervention_keys}
 
 
 def test_dwa_route_rescue_diagnostics_report_rescue_state() -> None:

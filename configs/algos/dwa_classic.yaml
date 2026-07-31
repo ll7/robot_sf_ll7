@@ -1,6 +1,8 @@
 # Classical Dynamic Window Approach baseline. This is experimental/testing-only:
 # it is runnable for controlled evaluation but is not paper-facing benchmark evidence.
 allow_testing_algorithms: true
+planner_variant: dwa
+native_occupancy_resolution: 0.1
 max_linear_speed: 1.0
 max_angular_speed: 1.2
 max_linear_acceleration: 0.8
@@ -23,3 +25,16 @@ velocity_weight: 0.25
 progress_weight: 1.0
 # Opt-in only: the base DWA scores pedestrians at their observed positions.
 prediction_scoring_enabled: false
+
+native_command:
+  command:
+    - python3
+    - scripts/benchmark/frozen_comparator_native_command.py
+    - --planner-id
+    - dwa
+    - --config
+    - configs/algos/dwa_classic.yaml
+  entrypoint_path: scripts/benchmark/frozen_comparator_native_command.py
+  mode: persistent
+  step_timeout_sec: 10.0
+  require_static_geometry: true

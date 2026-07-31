@@ -426,6 +426,7 @@ def latency_summary_from_samples(
     ordered = sorted(float(value) for value in samples_ms)
 
     def _percentile(fraction: float) -> float:
+        """Return the linear-interpolated percentile of ``ordered`` latencies for ``fraction`` in ``[0, 1]``."""
         if len(ordered) == 1:
             return ordered[0]
         rank = fraction * (len(ordered) - 1)

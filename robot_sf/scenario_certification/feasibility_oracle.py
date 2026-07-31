@@ -43,7 +43,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from shapely.geometry import LineString, Point
 
 from robot_sf.benchmark.map_runner_env import build_env_config
 from robot_sf.benchmark.utils import _git_hash_fallback
@@ -65,6 +64,7 @@ from robot_sf.scenario_certification.v1 import (
     _polyline_length,
     _route_start_goal,
     certify_scenario,
+    measure_planned_path_clearance,
 )
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -840,6 +840,7 @@ def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner
         horizon: int | None,
         algo: str,
     ) -> Mapping[str, Any]:
+        """Return the result of one actor-free diagnostic rollout run via ``_run_map_episode``."""
         scenario_payload = deepcopy(dict(scenario))
         scenario_payload["seeds"] = [int(seed)]
         return _run_map_episode(
@@ -1022,12 +1023,14 @@ def _scenario_rollout_seed(scenario: Mapping[str, Any], *, override: int | None)
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return a human-readable scenario identifier resolved from ``id``/``name``/``scenario_id``."""
     return str(
         scenario.get("id") or scenario.get("name") or scenario.get("scenario_id") or "unknown"
     )
 
 
 def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
+    """Return the scenario family resolved from metadata archetype/family keys or ``obstacle``/``flow``."""
     metadata = scenario.get("metadata")
     if isinstance(metadata, Mapping):
         for key in ("archetype", "family", "scenario_family", "family_id"):
@@ -1038,6 +1041,7 @@ def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _scenario_horizon(scenario: Mapping[str, Any]) -> int | None:
+    """Return the configured ``max_episode_steps`` if positive, else ``None``."""
     sim_cfg = scenario.get("simulation_config")
     if not isinstance(sim_cfg, Mapping):
         return None
@@ -1085,6 +1089,7 @@ def _optional_int(value: Any) -> int | None:
 
 
 def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
+    """Return a :class:`GeometricMargin` serialized into a JSON-ready dict."""
     return {
         "envelope_radius_m": margin.envelope_radius_m,
         "envelope_diameter_m": margin.envelope_diameter_m,
@@ -1099,6 +1104,7 @@ def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
 
 
 def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
+    """Return a :class:`CompletionMargin` serialized into a JSON-ready dict."""
     return {
         "route_completion_feasible": margin.route_completion_feasible,
         "min_completion_steps": margin.min_completion_steps,
@@ -1633,26 +1639,17 @@ def _measure_planned_path_clearance(
 ) -> tuple[int, float | None, float | None]:
     """Measure vertex and full-polyline clearance of a planned A* path.
 
+    Thin compatibility wrapper over the canonical
+    :func:`robot_sf.scenario_certification.v1.measure_planned_path_clearance` so the
+    certifier (issue #6139) and this diagnostic oracle share one continuous
+    swept-envelope implementation.
+
     Returns:
         Tuple of (clipped_vertex_count, minimum_vertex_clearance_m,
         minimum_path_clearance_m). Any non-finite measurement returns ``None``
         clearances so the caller can fail closed without emitting non-standard JSON.
     """
-    clipped = 0
-    min_vertex_clearance: float | None = None
-    for vertex in path:
-        vertex_clearance = float(Point(vertex).distance(obstacle_union) - robot_radius)
-        if not math.isfinite(vertex_clearance):
-            return clipped, None, None
-        if vertex_clearance < 0.0:
-            clipped += 1
-        if min_vertex_clearance is None or vertex_clearance < min_vertex_clearance:
-            min_vertex_clearance = vertex_clearance
-
-    path_clearance = float(LineString(path).distance(obstacle_union) - robot_radius)
-    if not math.isfinite(path_clearance):
-        return clipped, None, None
-    return clipped, min_vertex_clearance, path_clearance
+    return measure_planned_path_clearance(path, obstacle_union, robot_radius)
 
 
 def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915

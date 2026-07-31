@@ -222,6 +222,13 @@ def _sonic_import_context(repo_root: Path) -> Iterator[None]:
     original_modules = dict(sys.modules)
     sys.path.insert(0, repo_str)
     try:
+        # Evict stale upstream packages so importlib resolves against repo_root
+        # rather than a cached __path__ left by an earlier test or adapter load.
+        for key in list(sys.modules):
+            if key == "rl" or key.startswith("rl."):
+                sys.modules.pop(key, None)
+            elif key == "trained_models" or key.startswith("trained_models."):
+                sys.modules.pop(key, None)
         sys.modules["gym"] = gymnasium
         fake_envs = types.ModuleType("rl.networks.envs")
 
@@ -524,6 +531,7 @@ class SonicCrowdNavAdapter:
         if not math.isfinite(time_step) or time_step <= 0.0:
             raise ValueError(f"Invalid SoNIC time_step: {time_step}")
         obs_tensors, meta = self._build_model_inputs(observation, time_step=float(time_step))
+        # Hidden state must be initialized after reset()
         assert self._hidden_state is not None
         with torch.no_grad():
             _value, action, _log_prob, self._hidden_state = self._policy.act(

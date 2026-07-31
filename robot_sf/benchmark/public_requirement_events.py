@@ -116,6 +116,11 @@ def _base_event(
     speed_limit_m_s: float | None = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
+    """Build the versioned base event payload with default trigger and speed fields.
+
+    Returns:
+        The base event payload dict with schema, status, trigger, and speed fields populated.
+    """
     event = {
         "schema_version": EVENT_SCHEMA_VERSION,
         "category": category,
@@ -145,6 +150,11 @@ def _evaluate_actor_at_conflict_point(
     actor_key: str,
     dt: float,
 ) -> dict[str, Any]:
+    """Detect when a named actor reaches the conflict point, optionally gated by robot distance.
+
+    Returns:
+        The updated event payload with the actor conflict-point trigger status recorded.
+    """
     actor_id = _string_or_none(contract.get(actor_key))
     actor_idx = _single_pedestrian_index(scenario, actor_id)
     conflict_point = _xy_array(contract.get("conflict_point") or contract.get("hold_ref_point"))
@@ -180,6 +190,11 @@ def _evaluate_turn_or_start_stop_near_pedestrian(
     contract: Mapping[str, Any],
     dt: float,
 ) -> dict[str, Any]:
+    """Detect robot steps within the trigger radius of a conflict or turn point.
+
+    Returns:
+        The updated event payload with the conflict- or turn-point trigger status recorded.
+    """
     conflict_point = _xy_array(contract.get("conflict_point") or contract.get("turn_point"))
     if conflict_point is None:
         base["status"] = "unavailable"
@@ -197,6 +212,11 @@ def _evaluate_speed_limit(
     contract: Mapping[str, Any],
     dt: float,
 ) -> dict[str, Any]:
+    """Count robot speed-limit violations and record the first offending step.
+
+    Returns:
+        The updated event payload with speed-limit violation counts and trigger fields recorded.
+    """
     speed_limit = _optional_float(base.get("speed_limit_m_s"))
     if speed_limit is None:
         base["status"] = "unavailable"
@@ -229,6 +249,11 @@ def _evaluate_speed_limit(
 
 
 def _triggered_from_steps(event: dict[str, Any], steps: np.ndarray, *, dt: float) -> dict[str, Any]:
+    """Mark an event triggered from candidate steps, recording the first trigger step and time.
+
+    Returns:
+        The event payload with trigger flag, first trigger step, and trigger time recorded.
+    """
     event["triggered"] = bool(steps.size)
     if steps.size:
         trigger_step = int(steps[0])
@@ -238,6 +263,11 @@ def _triggered_from_steps(event: dict[str, Any], steps: np.ndarray, *, dt: float
 
 
 def _single_pedestrian_index(scenario: Mapping[str, Any], pedestrian_id: str | None) -> int | None:
+    """Return the list index of the single pedestrian matching ``pedestrian_id``, if any.
+
+    Returns:
+        The list index of the matching single pedestrian, or ``None`` when no match exists.
+    """
     if not pedestrian_id:
         return None
     single_pedestrians = scenario.get("single_pedestrians")
@@ -250,6 +280,11 @@ def _single_pedestrian_index(scenario: Mapping[str, Any], pedestrian_id: str | N
 
 
 def _xy_array(value: Any) -> np.ndarray | None:
+    """Coerce ``value`` into a finite two-element float array, or return ``None`` when invalid.
+
+    Returns:
+        A finite two-element float array, or ``None`` when ``value`` is invalid.
+    """
     try:
         arr = np.asarray(value, dtype=float)
     except (TypeError, ValueError):
@@ -260,10 +295,20 @@ def _xy_array(value: Any) -> np.ndarray | None:
 
 
 def _string_or_none(value: Any) -> str | None:
+    """Return ``value`` when it is a non-empty string, otherwise ``None``.
+
+    Returns:
+        ``value`` when it is a non-empty string, otherwise ``None``.
+    """
     return value if isinstance(value, str) and value else None
 
 
 def _optional_float(value: Any) -> float | None:
+    """Parse ``value`` into a finite float, returning ``None`` when absent or non-finite.
+
+    Returns:
+        The parsed finite float, or ``None`` when ``value`` is absent or non-finite.
+    """
     if value is None:
         return None
     try:
@@ -274,6 +319,11 @@ def _optional_float(value: Any) -> float | None:
 
 
 def _positive_float(value: Any, *, default: float, allow_zero: bool = False) -> float:
+    """Parse ``value`` into a positive float, falling back to ``default`` when absent or invalid.
+
+    Returns:
+        The parsed positive float, or ``default`` when ``value`` is absent or invalid.
+    """
     parsed = _optional_float(value)
     if parsed is None:
         return default

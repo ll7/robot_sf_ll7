@@ -281,6 +281,46 @@ def test_pagination_collects_all_pages() -> None:
     assert files[-1]["filename"] == "c.py"
 
 
+def test_per_page_above_github_max_does_not_truncate_pagination() -> None:
+    """Regression for issue #5924: requesting ``per_page`` above GitHub's 100 cap
+    must not terminate pagination early.
+
+    GitHub silently caps ``per_page`` at 100, so each response page carries at
+    most 100 entries regardless of the request. Without clamping, the
+    ``len(files) < per_page`` termination check is always true for a requested
+    ``per_page`` above the cap, pagination stops after the first page, and the
+    collected file list is truncated. ``fetch_all_pr_files`` must clamp to the
+    effective maximum so the comparison reflects the page size the server
+    honors, and the clamped size must flow through to the page fetcher.
+    """
+    seen_per_page: list[int] = []
+    full_page = [_entry(f"a{i}.py", "modified") for i in range(100)]
+    last_page = [_entry("b.py", "added")]
+
+    def run_page(repo, pr_number, page, per_page, *, timeout):
+        seen_per_page.append(per_page)
+        if page == 1:
+            return _proc(stdout=json.dumps(full_page))
+        if page == 2:
+            return _proc(stdout=json.dumps(last_page))
+        return _proc(stdout="[]")
+
+    files = fetch_all_pr_files(
+        "o/r",
+        "5924",
+        per_page=500,  # above GitHub's 100 cap
+        run_page=run_page,
+        sleep=lambda _d: None,
+        rng=lambda: 0.0,
+    )
+
+    # The clamped page size (100) is what the fetcher actually requests, and
+    # pagination continued past the first full page to collect every entry.
+    assert seen_per_page == [100, 100]
+    assert len(files) == 101
+    assert files[-1]["filename"] == "b.py"
+
+
 # ── outputs: changed / status TSV / added ────────────────────────────────────
 
 

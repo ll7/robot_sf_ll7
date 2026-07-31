@@ -24,6 +24,12 @@ def helper_repo(tmp_path: Path) -> Path:
         REPO_ROOT / "scripts" / "dev" / "clean_generated_output.py",
         scripts_dir / "clean_generated_output.py",
     )
+    support_dir = repo / "tests" / "support"
+    support_dir.mkdir(parents=True)
+    shutil.copy2(
+        REPO_ROOT / "tests" / "support" / "pytest_temproot.py",
+        support_dir / "pytest_temproot.py",
+    )
     (repo / "output" / "coverage").mkdir(parents=True)
     (repo / "output" / "coverage" / "tracked.txt").write_text("tracked", encoding="utf-8")
     (repo / "bin").mkdir()
@@ -53,6 +59,7 @@ def helper_repo(tmp_path: Path) -> Path:
             "scripts/dev/run_focused_tests.sh",
             "scripts/dev/common_setup.sh",
             "scripts/dev/clean_generated_output.py",
+            "tests/support/pytest_temproot.py",
             "bin/uv",
             "output/coverage/tracked.txt",
         ],

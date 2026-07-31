@@ -25,6 +25,8 @@ from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.nav.occupancy import is_circle_circle_intersection
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
+_DEFAULT_MAX_ANGULAR_SPEED = 1.2
+
 
 class PrimitiveKind(Enum):
     """Categorization of kinodynamic lattice primitives."""
@@ -102,7 +104,7 @@ class SippLatticePrimitiveSet:
     """
 
     max_linear_speed: float = 1.0
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
     max_linear_acceleration: float = 0.8
     max_steering_rate: float = 2.0
     primitive_duration: float = 0.2
@@ -489,7 +491,7 @@ class SippLatticeConfig:
     """Tunable parameters for the kinodynamic state-time lattice planner."""
 
     max_linear_speed: float = 1.0
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
     max_linear_acceleration: float = 0.8
     max_steering_rate: float = 2.0
     primitive_duration: float = 0.2
@@ -830,14 +832,17 @@ def build_sipp_lattice_config(cfg: dict[str, Any] | None) -> SippLatticeConfig:
     defaults = SippLatticeConfig()
 
     def _get_float(key: str) -> float:
+        """Return config ``key`` as a float, falling back to the default when omitted."""
         value = cfg.get(key)
         return float(getattr(defaults, key, 0.0) if value is None else value)
 
     def _get_int(key: str) -> int:
+        """Return config ``key`` as an int, falling back to the default when omitted."""
         value = cfg.get(key)
         return int(getattr(defaults, key, 1) if value is None else value)
 
     def _get_bool(key: str) -> bool:
+        """Return config ``key`` as a bool, coercing truthy strings and defaulting when omitted."""
         v = cfg.get(key)
         if v is None:
             v = getattr(defaults, key, False)

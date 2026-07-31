@@ -38,6 +38,7 @@ import numpy as np
 
 from robot_sf.models.registry import resolve_model_path
 from robot_sf.planner.chance_constrained_mpc import GaussianMixturePedestrianForecast
+from robot_sf.planner.constants import DEFAULT_GMM_MODE_COUNT
 from robot_sf.planner.nmpc_social import _parse_bool
 
 GRAPH_NODE_FEATURE_DIM: int = 4
@@ -166,7 +167,7 @@ class LearnedGmmPredictorConfig:
     horizon_steps: int = 6
     rollout_dt: float = 0.25
     hidden_dim: int = 128
-    mode_count: int = 3
+    mode_count: int = DEFAULT_GMM_MODE_COUNT
     model_type: str = "mlp"
     allow_untrained_smoke: bool = False
 
@@ -391,6 +392,7 @@ class _TinyGraphGmmGru:
             """Torch implementation kept local so importing this module stays lazy."""
 
             def __init__(self) -> None:
+                """Build the node/global encoders, recurrent GRU decoder, and linear head."""
                 super().__init__()
                 self.node_encoder = nn.Sequential(
                     nn.Linear(node_feature_dim, hidden_dim),
@@ -413,6 +415,14 @@ class _TinyGraphGmmGru:
                 node_mask: Any,
                 global_features: Any,
             ) -> Any:
+                """Mask-pool encoded nodes, fuse with global features, and decode GMM parameters.
+
+                Runs each node's context through the GRU decoder and projects it to the
+                per-node Gaussian mixture parameters via the linear head.
+
+                Returns:
+                    The per-node Gaussian mixture parameter tensor.
+                """
                 mask = node_mask.float().clamp(0.0, 1.0)
                 encoded = self.node_encoder(node_features) * mask.unsqueeze(-1)
                 pooled = encoded.sum(dim=1) / mask.sum(dim=1, keepdim=True).clamp(min=1.0)

@@ -17,7 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -204,6 +204,35 @@ def _record_has_benchmark_caveat(record: dict[str, Any]) -> bool:
         if isinstance(candidate, str) and candidate.strip().lower() in _CAVEAT_STATUSES:
             return True
     return False
+
+
+def _record_is_evidence_eligible(record: dict[str, Any]) -> bool:
+    """Return whether a record may contribute to benchmark aggregation.
+
+    A foresight planner that substituted constant-velocity prediction records
+    ``evidence_eligible=false`` in its structured provenance. Its diagnostics
+    remain available in episode JSONL, but its metrics must not enter aggregate
+    evidence summaries (issue #6190). Records without that explicit marker keep
+    the legacy eligible behavior.
+    """
+    algorithm_metadata = record.get("algorithm_metadata")
+    if not isinstance(algorithm_metadata, dict):
+        return True
+    foresight = algorithm_metadata.get("foresight_prediction")
+    return not isinstance(foresight, dict) or foresight.get("evidence_eligible") is not False
+
+
+def filter_evidence_eligible_records(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Return aggregation-eligible records and the number structurally excluded.
+
+    The filter is intentionally narrow: only an explicit ``False`` provenance
+    marker excludes a row, so historical records and other diagnostic metadata
+    remain backward compatible.
+    """
+    eligible = [record for record in records if _record_is_evidence_eligible(record)]
+    return eligible, len(records) - len(eligible)
 
 
 def build_observation_track_meta(
@@ -424,6 +453,68 @@ def _flatten_human_interaction_proxy_block(
             base[source_key] = reductions.get(source_key)
 
 
+def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
+    """Flatten social-compliance values while retaining status/support metadata."""
+    if not isinstance(block, dict):
+        return
+    metrics = block.get("metrics") or {}
+    if not isinstance(metrics, dict):
+        return
+    for metric_id, row in metrics.items():
+        if not isinstance(metric_id, str) or not isinstance(row, dict):
+            continue
+        prefix = f"social_compliance.{metric_id}"
+        base[f"{prefix}.status"] = row.get("status")
+        base[f"{prefix}.support_count"] = row.get("support_count", 0)
+        if row.get("status") == "available" and row.get("value") is not None:
+            base[prefix] = row["value"]
+
+
+def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Summarize status and support metadata for one aggregate group.
+
+    Returns:
+        The grouped contract summary, or ``None`` when no social block is present.
+    """
+    metric_ids = [
+        key.removeprefix("social_compliance.").removesuffix(".status")
+        for row in rows
+        for key in row
+        if key.startswith("social_compliance.") and key.endswith(".status")
+    ]
+    if not metric_ids:
+        return None
+    result: dict[str, Any] = {
+        "schema_version": "social-compliance-metric-contract.v1",
+        "metrics": {},
+    }
+    for metric_id in dict.fromkeys(metric_ids):
+        status_key = f"social_compliance.{metric_id}.status"
+        support_key = f"social_compliance.{metric_id}.support_count"
+        value_key = f"social_compliance.{metric_id}"
+        statuses = [row.get(status_key) or "unavailable" for row in rows]
+        values = [row[value_key] for row in rows if isinstance(row.get(value_key), int | float)]
+        support = [
+            row.get(support_key, 0) if status == "available" else 0
+            for row, status in zip(rows, statuses, strict=True)
+        ]
+        metric_summary: dict[str, Any] = {
+            "status_counts": dict(Counter(str(status) for status in statuses)),
+            "support_count": int(sum(value for value in support if isinstance(value, int | float))),
+        }
+        if values:
+            arr = np.asarray(values, dtype=float)
+            metric_summary.update(
+                {
+                    "mean": float(np.mean(arr)),
+                    "median": float(np.median(arr)),
+                    "p95": float(np.percentile(arr, 95)),
+                }
+            )
+        result["metrics"][metric_id] = metric_summary
+    return result
+
+
 def _flatten_social_mini_game_block(base: dict[str, Any], social_mini_game: Any) -> None:
     """Flatten available Social Mini-Game row values with a stable prefix."""
     if not isinstance(social_mini_game, dict) or not social_mini_game:
@@ -489,6 +580,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     ped_impact = metrics.pop("pedestrian_impact", {}) or {}
     social_acceptability = metrics.pop("social_acceptability", {}) or {}
     human_interaction_proxy = metrics.pop("human_interaction_proxy", {}) or {}
+    social_compliance = metrics.pop("social_compliance", {}) or {}
     social_mini_game = metrics.pop("social_mini_game", {}) or {}
     clear_tracking = metrics.pop("clear_tracking_uncertainty", {}) or {}
     inter_robot = metrics.pop("inter_robot", {}) or {}
@@ -501,6 +593,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     _flatten_pedestrian_impact_block(base, ped_impact)
     _flatten_social_acceptability_block(base, social_acceptability)
     _flatten_human_interaction_proxy_block(base, human_interaction_proxy)
+    _flatten_social_compliance_block(base, social_compliance)
     _flatten_social_mini_game_block(base, social_mini_game)
     _flatten_clear_tracking_block(base, clear_tracking)
     if isinstance(inter_robot, dict):
@@ -630,6 +723,7 @@ def compute_aggregates(  # noqa: PLR0913
     Returns:
         Nested dict of group -> metric -> summary statistics.
     """
+    records, excluded_evidence_records = filter_evidence_eligible_records(records)
     for rec in records:
         _ensure_snqi(
             rec,
@@ -672,6 +766,9 @@ def compute_aggregates(  # noqa: PLR0913
                 "median": float(np.nanmedian(arr)),
                 "p95": float(np.nanpercentile(arr, 95)),
             }
+        social_summary = _social_compliance_group_summary(rows)
+        if social_summary is not None:
+            agg["social_compliance"] = social_summary
         summary[g] = agg
 
     meta: dict[str, Any] = {
@@ -686,6 +783,15 @@ def compute_aggregates(  # noqa: PLR0913
             "explicit_profile_records": threshold_meta["explicit_profile_records"],
         },
         "observation_tracks": observation_track_meta,
+        "evidence_eligibility": {
+            "input_record_count": len(records) + excluded_evidence_records,
+            "eligible_record_count": len(records),
+            "excluded_record_count": excluded_evidence_records,
+            "policy": (
+                "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false "
+                "are excluded from benchmark evidence aggregation."
+            ),
+        },
     }
 
     if expected_algorithms:
@@ -1028,6 +1134,11 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
         observation_track_mode=observation_track_mode,
         logger_ctx=logger_ctx,
     )
+    # Apply the same evidence gate before bootstrap resampling; otherwise an
+    # ineligible row could re-enter through CI groups. Keep the base call above
+    # on the original input so its audit metadata retains the true input and
+    # excluded-record counts.
+    records, _ = filter_evidence_eligible_records(records)
     if not return_ci or bootstrap_samples <= 0:
         # Upcast type to Any container for compatibility, but keep content unchanged
         return cast("dict[str, dict[str, dict[str, Any]]]", base)
@@ -1083,6 +1194,7 @@ __all__ = [
     "compute_aggregates",
     "compute_aggregates_with_ci",
     "ensure_observation_track_policy",
+    "filter_evidence_eligible_records",
     "flatten_metrics",
     "normalize_observation_track_mode",
     "observation_track_group_label",

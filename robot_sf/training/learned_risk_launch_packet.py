@@ -119,11 +119,17 @@ def validate_launch_packet(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
+    """Resolve a learned-risk packet path from ``repo_root`` or directly when it is absolute.
+
+    Returns:
+        Normalized absolute path for the packet value.
+    """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
+    """Add a learned-risk validation error when a requested mapping value is not usable text."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -135,6 +141,7 @@ def _require_existing_path(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Report a learned-risk path field when it is blank or resolves to a missing target."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty path string")
@@ -144,6 +151,7 @@ def _require_existing_path(
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
+    """Require learned-risk provenance to declare a full 40-character Git SHA."""
     commit = packet.get("generating_commit")
     if not isinstance(commit, str) or not _GIT_SHA_RE.match(commit.strip()):
         errors.append("generating_commit must be a 40-character git SHA")
@@ -154,6 +162,11 @@ def _validate_trace_contract(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate the trace input contract and return a label/fixture-count summary.
+
+    Returns:
+        Summary of label targets and trace-fixture count.
+    """
     contract = packet.get("trace_input_contract")
     if not isinstance(contract, dict):
         errors.append("trace_input_contract must be a mapping")
@@ -184,6 +197,11 @@ def _validate_baseline_packet(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate the baseline comparison arm and return a candidate/scenario/seed summary.
+
+    Returns:
+        Summary of the baseline candidate, scenario slices, and seeds.
+    """
     baseline = packet.get("baseline_comparison")
     if not isinstance(baseline, dict):
         errors.append("baseline_comparison must be a mapping")
@@ -202,6 +220,11 @@ def _validate_baseline_packet(
 
 
 def _validate_safety_policy(packet: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    """Validate safety-policy constraints and return an output-role/diagnostics summary.
+
+    Returns:
+        Summary of the learned output role and required diagnostics.
+    """
     safety = packet.get("safety_policy")
     if not isinstance(safety, dict):
         errors.append("safety_policy must be a mapping")
@@ -218,6 +241,7 @@ def _validate_safety_policy(packet: dict[str, Any], errors: list[str]) -> dict[s
 
 
 def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> None:
+    """Require the learned-risk packet to defer SLURM and full training while naming both commands."""
     execution = packet.get("execution_boundary")
     if not isinstance(execution, dict):
         errors.append("execution_boundary must be a mapping")
@@ -231,6 +255,11 @@ def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> N
 
 
 def _validate_slurm_execution(packet: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    """Validate the deferred SLURM execution shape and return its command summary.
+
+    Returns:
+        Summary of the deferred SLURM execution command shape.
+    """
     slurm_execution = packet.get("slurm_execution")
     if not isinstance(slurm_execution, dict):
         errors.append("slurm_execution must be mapping")
@@ -273,6 +302,7 @@ def _validate_required_list(
     required_values: tuple[str, ...],
     errors: list[str],
 ) -> None:
+    """Check that a learned-risk list is non-empty and covers every caller-supplied requirement."""
     values = mapping.get(key)
     if not isinstance(values, list) or not values:
         errors.append(f"{key} must be a non-empty list")
@@ -284,6 +314,7 @@ def _validate_required_list(
 
 
 def _validate_seed_list(baseline: dict[str, Any], errors: list[str]) -> None:
+    """Validate the baseline ``seeds`` list is a non-empty list of integer seeds."""
     seeds = baseline.get("seeds")
     if not isinstance(seeds, list) or not seeds:
         errors.append("baseline_comparison.seeds must be a non-empty list")
@@ -300,6 +331,11 @@ def _validate_artifacts(
     repo_root: Path,
     errors: list[str],
 ) -> list[Path]:
+    """Validate local and durable artifact paths (with checksums) and return the local paths.
+
+    Returns:
+        List of resolved local artifact paths.
+    """
     raw_paths = mapping.get(key)
     checksums = mapping.get("checksums", {})
     if not isinstance(raw_paths, list) or not raw_paths:
@@ -335,6 +371,7 @@ def _validate_checksum(
     checksums: dict[str, Any],
     errors: list[str],
 ) -> None:
+    """Record learned-risk artifact errors for a missing file, checksum entry, or SHA-256 mismatch."""
     if not local_path.is_file():
         errors.append(f"local artifact is missing: {path_text}")
         return
@@ -352,6 +389,7 @@ def _validate_trace_fixtures(
     required_fields: list[Any],
     errors: list[str],
 ) -> None:
+    """Validate JSONL trace fixtures carry every required field on each record."""
     required = [str(field) for field in required_fields]
     for fixture_path in fixture_paths:
         with open(fixture_path, encoding="utf-8") as f:

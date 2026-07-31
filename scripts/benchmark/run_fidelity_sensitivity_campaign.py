@@ -19,7 +19,7 @@ import json
 import math
 import pathlib
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +28,7 @@ import yaml
 
 from robot_sf.baselines.interface import Observation
 from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
+from robot_sf.benchmark.baseline_stats import compute_baseline_stats_from_records
 from robot_sf.benchmark.fidelity_fixed_scope_preflight import build_fixed_scope_preflight
 from robot_sf.benchmark.fidelity_rank_stability import (
     analyze_fidelity_sensitivity,
@@ -37,6 +38,10 @@ from robot_sf.benchmark.fidelity_rank_stability import (
 from robot_sf.benchmark.fidelity_sensitivity import (
     DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY,
     validate_fidelity_sensitivity_config,
+)
+from robot_sf.benchmark.snqi.compute import (
+    SNQI_SCORE_VERSION_V0,
+    compute_snqi,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.hybrid_rule_local_planner import (
@@ -62,6 +67,10 @@ DEFAULT_EVIDENCE_DIR = (
 )
 PLANNERS = ("goal_seek", "baseline_social_force")
 METRICS = (
+    # ``snqi`` is the canonical, provenance-bound ranking metric emitted from the
+    # runtime rows (see ``attach_canonical_snqi``); it leads the tuple so it is the
+    # authoritative first column in aggregated CSV/JSON evidence.
+    "snqi",
     "success_rate",
     "collision_rate",
     "min_clearance",
@@ -70,6 +79,40 @@ METRICS = (
     "comfort_exposure_mean",
     "time_to_goal_norm",
 )
+
+# Canonical SNQI (Social Navigation Quality Index) contract for the fixed-scope
+# fidelity-sensitivity runtime/report path. The score is computed with the
+# repository-canonical :func:`robot_sf.benchmark.snqi.compute.compute_snqi` so the
+# fixed-scope launch packet ranks by the same index the rest of the benchmark uses
+# (issue #3207), instead of the deprecated ``success_rate`` fallback.
+SNQI_SCORE_VERSION = SNQI_SCORE_VERSION_V0
+SNQI_CANONICAL_WEIGHTS: dict[str, float] = {
+    "w_success": 1.0,
+    "w_time": 0.8,
+    "w_collisions": 2.0,
+    "w_near": 1.0,
+    "w_comfort": 0.5,
+    "w_force_exceed": 1.5,
+    "w_jerk": 0.3,
+}
+# Baseline-normalized penalty metrics whose median/p95 statistics are derived from
+# the nominal (baseline) variant rows of the same run.
+SNQI_BASELINE_METRICS = ("collisions", "near_misses")
+# Runtime metric name -> canonical SNQI input name. The fixed-scope runtime emits
+# per-episode indicators (``collision_rate``/``near_miss_rate`` are 0/1-scale
+# per-episode signals; ``comfort_exposure_mean`` is the episode comfort exposure);
+# they map onto the SNQI input contract here in one auditable place.
+SNQI_INPUT_FROM_RUNTIME_METRIC = {
+    "success": "success_rate",
+    "time_to_goal_norm": "time_to_goal_norm",
+    "collisions": "collision_rate",
+    "near_misses": "near_miss_rate",
+    "comfort_exposure": "comfort_exposure_mean",
+}
+# SNQI penalty terms with non-zero canonical weight that the fixed-scope runtime
+# does not currently emit. Under the SNQI-v0 contract an absent baseline metric is
+# a neutral (zero) contribution; recording them keeps the provenance honest.
+SNQI_UNMODELED_PENALTY_TERMS = ("force_exceed_events", "jerk_mean")
 CLAIM_BOUNDARY = (
     "bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF "
     "episodes for a compact two-planner local fidelity-sensitivity slice. It measures "
@@ -494,6 +537,7 @@ def write_fixed_scope_run_plan(
 # resolves to them stays unbound and fails closed rather than silently running a
 # substitute planner (no silent fallback).
 RUNNER_ALGORITHM_PLANNERS: Mapping[str, str] = {
+    "goal": "goal_seek",
     "orca": "orca",
     "social_force": "baseline_social_force",
     "hybrid_rule_local_planner": "hybrid_rule_v0_minimal",
@@ -1337,10 +1381,131 @@ def aggregate_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, dic
     return summary
 
 
+def _snqi_input_metrics(metrics: Mapping[str, Any]) -> dict[str, float]:
+    """Map one runtime metric row onto the canonical SNQI input contract.
+
+    Returns:
+        SNQI input metrics keyed by canonical name.
+    """
+    resolved: dict[str, float] = {}
+    for snqi_name, runtime_name in SNQI_INPUT_FROM_RUNTIME_METRIC.items():
+        value = _finite_or_none(metrics.get(runtime_name))
+        if value is None:
+            continue
+        resolved[snqi_name] = value
+    return resolved
+
+
+def _hash_json(payload: Any) -> str:
+    """Return a short deterministic hash of a JSON-serializable payload."""
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+
+
+def attach_canonical_snqi(
+    rows: Sequence[MutableMapping[str, Any]],
+    *,
+    variants: Sequence[VariantSpec],
+) -> dict[str, Any]:
+    """Emit canonical, provenance-bound SNQI onto every runtime row in place.
+
+    Baseline normalization statistics are derived from the nominal (baseline)
+    variant rows of this same run, so the score is anchored to the campaign's own
+    nominal fidelity rather than an external baseline file. Rows that cannot
+    supply the SNQI input contract (e.g. missing ``success``/``time`` signals) are
+    left without an ``snqi`` metric so the report path can fail closed instead of
+    ranking on a fabricated score.
+
+    Returns:
+        SNQI provenance block for the compact evidence report.
+    """
+    baseline_keys = {variant.key for variant in variants if variant.baseline}
+    baseline_inputs = [
+        {"metrics": _snqi_input_metrics(metrics)}
+        for row in rows
+        if str(row.get("variant")) in baseline_keys
+        and isinstance((metrics := row.get("metrics")), Mapping)
+    ]
+    baseline_stats = compute_baseline_stats_from_records(
+        baseline_inputs, metrics=SNQI_BASELINE_METRICS
+    )
+    required_inputs = ("success", "time_to_goal_norm")
+    emitted = 0
+    for row in rows:
+        metrics = row.get("metrics")
+        if not isinstance(metrics, MutableMapping):
+            continue
+        snqi_inputs = _snqi_input_metrics(metrics)
+        if any(name not in snqi_inputs for name in required_inputs):
+            # Fail closed: do not fabricate a score from an incomplete row.
+            continue
+        metrics["snqi"] = compute_snqi(
+            snqi_inputs,
+            SNQI_CANONICAL_WEIGHTS,
+            baseline_stats,
+            score_version=SNQI_SCORE_VERSION,
+        )
+        emitted += 1
+    return {
+        "metric": "snqi",
+        "score_version": SNQI_SCORE_VERSION,
+        "weights": dict(SNQI_CANONICAL_WEIGHTS),
+        "weights_hash": _hash_json(SNQI_CANONICAL_WEIGHTS),
+        "baseline_source": "nominal_baseline_variant_rows",
+        "baseline_metrics": list(SNQI_BASELINE_METRICS),
+        "baseline_stats": baseline_stats,
+        "baseline_stats_hash": _hash_json(baseline_stats),
+        "runtime_metric_mapping": dict(SNQI_INPUT_FROM_RUNTIME_METRIC),
+        "unmodeled_penalty_terms": list(SNQI_UNMODELED_PENALTY_TERMS),
+        "rows_scored": emitted,
+        "rows_total": len(rows),
+    }
+
+
+def _resolve_ranking(config: Mapping[str, Any]) -> tuple[str, bool]:
+    """Resolve the authoritative ranking metric and direction from ``config``.
+
+    Returns:
+        The primary ranking metric name and ``higher_is_better`` flag.
+    """
+    ranking = config.get("ranking") if isinstance(config, Mapping) else None
+    if isinstance(ranking, Mapping):
+        primary = ranking.get("primary_metric") or ranking.get("metric")
+        higher_is_better = bool(ranking.get("higher_is_better", True))
+        if primary:
+            return str(primary), higher_is_better
+    # Back-compat only for configs that predate the authoritative ranking block.
+    return "success_rate", True
+
+
+def _require_primary_metric_emitted(
+    primary_metric: str,
+    baseline_table: Mapping[str, Mapping[str, Any]],
+    axis_tables: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> None:
+    """Fail closed when the selected ranking metric is absent from the rows.
+
+    Accepting a launch packet whose runtime never emits the configured
+    ``ranking.primary_metric`` would silently rank on nothing; raise instead so
+    the fixed-scope execute/report path never promotes an unranked result.
+    """
+    labeled_tables: list[tuple[str, Mapping[str, Mapping[str, Any]]]] = [
+        ("nominal", baseline_table),
+        *axis_tables.items(),
+    ]
+    for label, table in labeled_tables:
+        for planner, metrics in table.items():
+            if primary_metric not in metrics:
+                raise ValueError(
+                    f"ranking.primary_metric '{primary_metric}' was not emitted by the "
+                    f"fixed-scope runtime for {label}/{planner}; the execute/report path "
+                    "fails closed rather than ranking on an absent metric"
+                )
+
+
 def build_report(
     *,
     config: Mapping[str, Any],
-    rows: Sequence[Mapping[str, Any]],
+    rows: Sequence[MutableMapping[str, Any]],
     variants: Sequence[VariantSpec],
     scenario_set: str,
     horizon: int,
@@ -1349,6 +1514,8 @@ def build_report(
     date: str,
 ) -> dict[str, Any]:
     """Build compact JSON evidence from actual episode rows."""
+    primary_metric, higher_is_better = _resolve_ranking(config)
+    snqi_provenance = attach_canonical_snqi(rows, variants=variants)
     aggregates = aggregate_rows(rows)
     baseline_variant = next(variant.key for variant in variants if variant.baseline)
     axis_tables = {
@@ -1356,10 +1523,12 @@ def build_report(
         for variant in variants
         if not variant.baseline and variant.key in aggregates
     }
+    _require_primary_metric_emitted(primary_metric, aggregates[baseline_variant], axis_tables)
     rank_report = analyze_fidelity_sensitivity(
         aggregates[baseline_variant],
         axis_tables,
-        primary_metric="success_rate",
+        primary_metric=primary_metric,
+        higher_is_better=higher_is_better,
         drift_metrics=METRICS,
     ).to_dict()
     all_success_rates = [
@@ -1420,6 +1589,8 @@ def build_report(
             }
             for variant in variants
         ],
+        "primary_metric": primary_metric,
+        "snqi_provenance": snqi_provenance,
         "aggregates": aggregates,
         "rank_stability": rank_report,
         "result_caveats": result_caveats,
@@ -1461,6 +1632,8 @@ def format_markdown(report: Mapping[str, Any]) -> str:
         "",
         "## Rank Stability",
         "",
+        f"- Ranking metric: `{report.get('primary_metric', 'success_rate')}` "
+        f"(SNQI score version `{report.get('snqi_provenance', {}).get('score_version', 'NA')}`)",
         f"- {nominal_label}: `{', '.join(rank_stability['nominal_ranking'])}`",
         f"- Rank evidence status: `{rank_status}`",
         f"- Rank identifiability reason: `{rank_reason}`",

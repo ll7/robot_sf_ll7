@@ -101,6 +101,8 @@ def extract_critical_segment(
 
 
 def _validate_margin(name: str, value: float) -> None:
+    """Validate that a segment margin is a finite, non-negative number, raising with ``name`` otherwise."""
+
     if not isinstance(value, int | float) or isinstance(value, bool) or not math.isfinite(value):
         raise ValueError(f"{name} must be a finite number")
     if value < 0.0:
@@ -108,6 +110,8 @@ def _validate_margin(name: str, value: float) -> None:
 
 
 def _required_string(payload: Mapping[str, Any], name: str) -> str:
+    """Return a non-empty stripped string from ``payload[name]``, raising with the field name otherwise."""
+
     value = payload.get(name)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"episode.{name} must be a non-empty string")
@@ -115,6 +119,8 @@ def _required_string(payload: Mapping[str, Any], name: str) -> str:
 
 
 def _required_seed(episode: Mapping[str, Any]) -> int:
+    """Return the episode seed as a non-boolean integer, raising if absent or invalid."""
+
     seed = episode.get("seed")
     if not isinstance(seed, int) or isinstance(seed, bool):
         raise ValueError("episode.seed must be an integer")
@@ -122,6 +128,11 @@ def _required_seed(episode: Mapping[str, Any]) -> int:
 
 
 def _normalize_frames(raw_steps: object) -> list[dict[str, Any]]:
+    """Return validated frames normalized from raw trace steps.
+
+    Enforces strictly increasing timestamps and finite robot/pedestrian states.
+    """
+
     if not isinstance(raw_steps, Sequence) or isinstance(raw_steps, str | bytes) or not raw_steps:
         raise ValueError("episode.steps must be a non-empty sequence")
 
@@ -147,6 +158,8 @@ def _normalize_frames(raw_steps: object) -> list[dict[str, Any]]:
 
 
 def _state(raw_state: object, path: str) -> dict[str, list[float]]:
+    """Return a robot or pedestrian state normalized to a two-coordinate position, raising with ``path`` otherwise."""
+
     if not isinstance(raw_state, Mapping):
         raise ValueError(f"{path} must be a mapping")
     raw_position = raw_state.get("position")
@@ -165,12 +178,19 @@ def _state(raw_state: object, path: str) -> dict[str, list[float]]:
 
 
 def _finite_number(value: object, path: str) -> float:
+    """Return ``value`` as a finite number, raising with ``path`` otherwise."""
+
     if not isinstance(value, int | float) or isinstance(value, bool) or not math.isfinite(value):
         raise ValueError(f"{path} must be a finite number")
     return float(value)
 
 
 def _critical_frame(frames: list[dict[str, Any]]) -> tuple[int, float]:
+    """Return the index and clearance of the closest robot--pedestrian frame.
+
+    Raises when the trace contains no pedestrian positions.
+    """
+
     best: tuple[int, float] | None = None
     for frame_index, frame in enumerate(frames):
         robot_position = frame["robot"]["position"]
@@ -187,10 +207,14 @@ def _critical_frame(frames: list[dict[str, Any]]) -> tuple[int, float]:
 
 
 def _first_frame_at_or_after(frames: list[dict[str, Any]], threshold_s: float) -> int:
+    """Return the first frame index at or after ``threshold_s`` seconds."""
+
     return next(index for index, frame in enumerate(frames) if frame["time_s"] >= threshold_s)
 
 
 def _last_frame_at_or_before(frames: list[dict[str, Any]], threshold_s: float) -> int:
+    """Return the last frame index at or before ``threshold_s`` seconds."""
+
     return next(
         index for index in reversed(range(len(frames))) if frames[index]["time_s"] <= threshold_s
     )
@@ -203,6 +227,8 @@ def _stable_scenario_id(
     end_s: float,
     observed_at_s: float,
 ) -> str:
+    """Return a deterministic scenario id hashed from episode identity and segment timing."""
+
     identity = json.dumps(
         [episode_id, seed, start_s, end_s, observed_at_s], separators=(",", ":"), ensure_ascii=True
     )

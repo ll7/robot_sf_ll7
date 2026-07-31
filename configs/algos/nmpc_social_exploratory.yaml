@@ -1,5 +1,7 @@
 # Native NMPC-style local planner.
 allow_testing_algorithms: true
+planner_variant: nmpc_social
+native_occupancy_resolution: 0.1
 max_linear_speed: 0.95
 max_angular_speed: 1.15
 horizon_steps: 6
@@ -25,3 +27,18 @@ avoidance_turn_bias_weight: 0.25
 symmetry_break_bias: 0.2
 solver_ftol: 0.001
 solver_max_iterations: 32
+
+native_command:
+  command:
+    - python3
+    - scripts/benchmark/frozen_comparator_native_command.py
+    - --planner-id
+    - nmpc_social
+    - --config
+    - configs/algos/nmpc_social_exploratory.yaml
+  entrypoint_path: scripts/benchmark/frozen_comparator_native_command.py
+  mode: persistent
+  # SciPy imports and the first constrained solve are part of the persistent
+  # process's first request on a cold interpreter.
+  step_timeout_sec: 30.0
+  require_static_geometry: true

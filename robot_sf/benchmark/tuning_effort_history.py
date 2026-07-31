@@ -42,12 +42,18 @@ class ArmSignature:
 
 
 def _mapping(value: Any, *, context: str) -> dict[str, Any]:
+    """Return ``value`` if it is a dict, else raise ``ValueError`` naming ``context``."""
     if not isinstance(value, dict):
         raise ValueError(f"{context} must be a mapping")
     return value
 
 
 def _signature(value: Any, *, context: str) -> ArmSignature:
+    """Validate a planner record and return its normalized :class:`ArmSignature`.
+
+    Returns:
+        The normalized arm signature.
+    """
     raw = _mapping(value, context=context)
     key = raw.get("key")
     algo = raw.get("algo")
@@ -160,12 +166,18 @@ def _validate_record_evidence(
 
 
 def _validate_tuning_record(record: dict[str, Any], *, context: str, repo_root: Path) -> None:
+    """Validate one tuning record's shape and its declared evidence."""
     tuning = _mapping(record.get("tuning"), context=f"{context}.tuning")
     source = _validate_tuning_shape(tuning, context=context)
     _validate_record_evidence(record, tuning, source=source, context=context, repo_root=repo_root)
 
 
 def _load_records(raw_records: Any, *, repo_root: Path) -> dict[ArmSignature, dict[str, Any]]:
+    """Load and validate the registry records list into a dict keyed by arm signature.
+
+    Returns:
+        Validated records keyed by arm signature.
+    """
     if not isinstance(raw_records, list) or not raw_records:
         raise ValueError("registry.records must be a non-empty list")
     records: dict[ArmSignature, dict[str, Any]] = {}
@@ -185,6 +197,11 @@ def _validate_manifest_coverage(
     *,
     repo_root: Path,
 ) -> tuple[set[ArmSignature], dict[str, int], int]:
+    """Validate that campaign manifests cover the records, returning used arms and source counts.
+
+    Returns:
+        Used arm signatures, source counts, and arm occurrences.
+    """
     used: set[ArmSignature] = set()
     source_counts = dict.fromkeys(sorted(_SOURCES), 0)
     arm_occurrences = 0

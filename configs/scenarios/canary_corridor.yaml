@@ -1,0 +1,12 @@
+scenarios:
+  - name: canary-corridor-uni-low-open
+    map_file: "atomic_corridor_test.svg"
+    robot_config:
+      max_robot_speed: 1.2
+      robot_radius: 0.3
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    seeds: [0]
+map_search_paths:
+  - ../../maps/svg_maps

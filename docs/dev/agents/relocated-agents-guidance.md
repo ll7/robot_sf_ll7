@@ -118,10 +118,11 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   `ln -s "$MAIN_REPO_ROOT/local.machine.md" .`
 - After the machine-context symlink is in place, run `uv sync --all-extras`, then
   `source .venv/bin/activate` before using Python tooling.
-- For quick targeted validation from a sibling worktree that intentionally reuses the main
-  checkout virtualenv, prefer `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>` so
-  `PYTHONPATH` is pinned to the active worktree while `UV_PROJECT_ENVIRONMENT` points at the shared
-  `.venv`. Use a full local `.venv` and final PR readiness for merge proof.
+- For quick targeted validation from a sibling worktree, prefer
+  `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>` so `PYTHONPATH` is pinned to the
+  active worktree while `UV_PROJECT_ENVIRONMENT` points at an initialized current-worktree `.venv`
+  when available, otherwise the shared main-checkout `.venv`. Use a full local `.venv` and final PR
+  readiness for merge proof.
 - Do not add CARLA to the routine `--all-extras` bootstrap. For CARLA-capable worktrees, opt into
   the host-side Python client with `uv sync --all-extras --group carla`, then prove the local
   runtime with `scripts/dev/check_carla_runtime.sh` or `scripts/dev/check_carla_runtime.sh --smoke`
@@ -447,7 +448,10 @@ When working issue batches or Project #5 updates:
 - prefer REST endpoints for simple label/comment publication writes even before quota is low when
   `gh` routes through brittle GraphQL surfaces; PR #2520 hit a classic Projects deprecation error
   via `gh pr edit --add-label merge-ready` while the REST issue-label endpoint worked immediately,
-- for labels, use `gh api repos/:owner/:repo/issues/<number>/labels -f labels[]=<label>` to add
+- for labels, use the reusable helper
+  `uv run python scripts/dev/gh_pr_label_rest.py add <number> --label <name> --repo ll7/robot_sf_ll7`
+  or the remove variant, which wraps the same REST endpoints as
+  `gh api repos/:owner/:repo/issues/<number>/labels -f labels[]=<label>` to add
   and `gh api -X DELETE repos/:owner/:repo/issues/<number>/labels/<label>` to remove,
 - for comment creation or patching, use body files or JSON payloads such as
   `gh api repos/:owner/:repo/issues/<number>/comments -F body=@body.md` and

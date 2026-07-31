@@ -1,0 +1,383 @@
+{
+  "capsules": [
+    {
+      "archetype": "hard_vs_easy_seed",
+      "capsule_id": "ch7::hard_vs_easy_seed",
+      "causal_label": "descriptive-only",
+      "evidence_grade": "descriptive-only",
+      "figure_spec": {
+        "actor_footprints_at_marked_times_required": true,
+        "marked_times": "AUTHOR_REQUIRED",
+        "metre_scale_required": true,
+        "shared_axis_spec": {
+          "axes_limits": "AUTHOR_REQUIRED",
+          "map_crop": "AUTHOR_REQUIRED",
+          "metric_risk_scale": "AUTHOR_REQUIRED",
+          "palette": "AUTHOR_REQUIRED",
+          "time_markers": "AUTHOR_REQUIRED"
+        },
+        "static_map_required": true,
+        "trajectory_sources_required": true,
+        "why_this_time_matters": "AUTHOR_REQUIRED"
+      },
+      "is_pair": true,
+      "narrative": {
+        "competing_explanation": "AUTHOR_REQUIRED",
+        "evidence_grade": "descriptive-only",
+        "generalization_limits": "AUTHOR_REQUIRED",
+        "selection_rationale": "hard versus easy seed for the same planner/scenario: sourced from seed_flip candidate seed_flip::classic_doorway_medium::ppo (scenario=classic_doorway_medium, planner=ppo, selected=True, triage_only=False).",
+        "what_failed": "AUTHOR_REQUIRED",
+        "what_went_well": "AUTHOR_REQUIRED"
+      },
+      "optional": false,
+      "planner": "ppo",
+      "probability_panel": null,
+      "risk_report_ref": null,
+      "scenario_id": "classic_doorway_medium",
+      "source_archetype": "seed_flip",
+      "source_candidate_id": "seed_flip::classic_doorway_medium::ppo",
+      "source_provenance": {
+        "candidate_id": "seed_flip::classic_doorway_medium::ppo",
+        "planner": "ppo",
+        "reproducibility": {
+          "n_seeds": 30,
+          "raw_seed_outcomes": {
+            "111": 0,
+            "112": 0,
+            "113": 1,
+            "114": 0,
+            "115": 1,
+            "116": 1,
+            "117": 0,
+            "118": 0,
+            "119": 1,
+            "120": 0,
+            "121": 1,
+            "122": 0,
+            "123": 0,
+            "124": 1,
+            "125": 0,
+            "126": 0,
+            "127": 1,
+            "128": 1,
+            "129": 0,
+            "130": 1,
+            "131": 1,
+            "132": 0,
+            "133": 1,
+            "134": 1,
+            "135": 1,
+            "136": 0,
+            "137": 0,
+            "138": 0,
+            "139": 1,
+            "140": 1
+          }
+        },
+        "scenario_id": "classic_doorway_medium",
+        "seed_flip": {
+          "effective_denominator": 30,
+          "entropy_bits": 1.0,
+          "interval": [
+            0.33154125640533766,
+            0.6684587435946623
+          ],
+          "interval_method": "wilson_score",
+          "posterior_mean": 0.5,
+          "posterior_prior": "jeffreys_beta_0.5_0.5",
+          "posterior_variance": 0.0078125,
+          "raw_failure_seeds": 15,
+          "raw_success_seeds": 15
+        },
+        "upset_outcome": null
+      },
+      "status": "admitted",
+      "title": "hard versus easy seed for the same planner/scenario",
+      "triage_only": false
+    },
+    {
+      "archetype": "strong_fail_weak_success",
+      "capsule_id": "ch7::strong_fail_weak_success",
+      "causal_label": "descriptive-only",
+      "evidence_grade": "descriptive-only",
+      "figure_spec": {
+        "actor_footprints_at_marked_times_required": true,
+        "marked_times": "AUTHOR_REQUIRED",
+        "metre_scale_required": true,
+        "shared_axis_spec": {
+          "axes_limits": "AUTHOR_REQUIRED",
+          "map_crop": "AUTHOR_REQUIRED",
+          "metric_risk_scale": "AUTHOR_REQUIRED",
+          "palette": "AUTHOR_REQUIRED",
+          "time_markers": "AUTHOR_REQUIRED"
+        },
+        "static_map_required": true,
+        "trajectory_sources_required": true,
+        "why_this_time_matters": "AUTHOR_REQUIRED"
+      },
+      "is_pair": true,
+      "narrative": {
+        "competing_explanation": "AUTHOR_REQUIRED",
+        "evidence_grade": "descriptive-only",
+        "generalization_limits": "AUTHOR_REQUIRED",
+        "selection_rationale": "held-out strong-planner failure versus weak-planner success: sourced from planner_upset candidate planner_upset::classic_realworld_double_bottleneck_high::goal>ppo (scenario=classic_realworld_double_bottleneck_high, planner=goal, selected=True, triage_only=False).",
+        "what_failed": "AUTHOR_REQUIRED",
+        "what_went_well": "AUTHOR_REQUIRED"
+      },
+      "optional": false,
+      "planner": "goal",
+      "probability_panel": null,
+      "risk_report_ref": null,
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "source_archetype": "planner_upset",
+      "source_candidate_id": "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo",
+      "source_provenance": {
+        "candidate_id": "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo",
+        "planner": "goal",
+        "reproducibility": {
+          "favorite_n_seeds": 30,
+          "underdog_n_seeds": 30
+        },
+        "scenario_id": "classic_realworld_double_bottleneck_high",
+        "seed_flip": null,
+        "upset_outcome": {
+          "favorite_cell_success": 0.0,
+          "favorite_heldout_cells": 47,
+          "favorite_heldout_strength": 0.7312056737588652,
+          "favorite_planner": "ppo",
+          "outcome_gap": 0.23333333333333334,
+          "raw_paired_outcomes": {
+            "goal": {
+              "111": 0,
+              "112": 0,
+              "113": 0,
+              "114": 0,
+              "115": 0,
+              "116": 0,
+              "117": 0,
+              "118": 1,
+              "119": 1,
+              "120": 0,
+              "121": 0,
+              "122": 1,
+              "123": 0,
+              "124": 1,
+              "125": 0,
+              "126": 0,
+              "127": 0,
+              "128": 0,
+              "129": 0,
+              "130": 1,
+              "131": 0,
+              "132": 0,
+              "133": 0,
+              "134": 0,
+              "135": 0,
+              "136": 1,
+              "137": 1,
+              "138": 0,
+              "139": 0,
+              "140": 0
+            },
+            "ppo": {
+              "111": 0,
+              "112": 0,
+              "113": 0,
+              "114": 0,
+              "115": 0,
+              "116": 0,
+              "117": 0,
+              "118": 0,
+              "119": 0,
+              "120": 0,
+              "121": 0,
+              "122": 0,
+              "123": 0,
+              "124": 0,
+              "125": 0,
+              "126": 0,
+              "127": 0,
+              "128": 0,
+              "129": 0,
+              "130": 0,
+              "131": 0,
+              "132": 0,
+              "133": 0,
+              "134": 0,
+              "135": 0,
+              "136": 0,
+              "137": 0,
+              "138": 0,
+              "139": 0,
+              "140": 0
+            }
+          },
+          "underdog_cell_success": 0.23333333333333334,
+          "underdog_heldout_cells": 47,
+          "underdog_heldout_strength": 0.400709219858156,
+          "underdog_planner": "goal"
+        }
+      },
+      "status": "admitted",
+      "title": "held-out strong-planner failure versus weak-planner success",
+      "triage_only": false
+    },
+    {
+      "archetype": "paired_first_unsafe_action",
+      "capsule_id": "ch7::paired_first_unsafe_action",
+      "evidence_grade": "unavailable",
+      "optional": false,
+      "reason": "causal_report_unavailable",
+      "status": "unavailable",
+      "title": "paired approach with different first unsafe action and counterfactual"
+    },
+    {
+      "archetype": "near_miss_online_risk",
+      "capsule_id": "ch7::near_miss_online_risk",
+      "evidence_grade": "unavailable",
+      "optional": false,
+      "reason": "risk_report_unavailable",
+      "status": "unavailable",
+      "title": "near miss where online risk distinguishes candidate actions early"
+    },
+    {
+      "archetype": "unexpected_recovery",
+      "capsule_id": "ch7::unexpected_recovery",
+      "causal_label": "descriptive-only",
+      "evidence_grade": "descriptive-only",
+      "figure_spec": {
+        "actor_footprints_at_marked_times_required": true,
+        "marked_times": "AUTHOR_REQUIRED",
+        "metre_scale_required": true,
+        "shared_axis_spec": null,
+        "static_map_required": true,
+        "trajectory_sources_required": true,
+        "why_this_time_matters": "AUTHOR_REQUIRED"
+      },
+      "is_pair": false,
+      "narrative": {
+        "competing_explanation": "AUTHOR_REQUIRED",
+        "evidence_grade": "descriptive-only",
+        "generalization_limits": "AUTHOR_REQUIRED",
+        "selection_rationale": "unexpected recovery or critical-interval/aggregate disagreement: sourced from seed_flip candidate seed_flip::classic_cross_trap_high::ppo (scenario=classic_cross_trap_high, planner=ppo, selected=False, triage_only=False).",
+        "what_failed": "AUTHOR_REQUIRED",
+        "what_went_well": "AUTHOR_REQUIRED"
+      },
+      "optional": false,
+      "planner": "ppo",
+      "probability_panel": null,
+      "risk_report_ref": null,
+      "scenario_id": "classic_cross_trap_high",
+      "source_archetype": "seed_flip",
+      "source_candidate_id": "seed_flip::classic_cross_trap_high::ppo",
+      "source_provenance": {
+        "candidate_id": "seed_flip::classic_cross_trap_high::ppo",
+        "planner": "ppo",
+        "reproducibility": {
+          "n_seeds": 30,
+          "raw_seed_outcomes": {
+            "111": 0,
+            "112": 0,
+            "113": 1,
+            "114": 1,
+            "115": 0,
+            "116": 1,
+            "117": 1,
+            "118": 1,
+            "119": 0,
+            "120": 1,
+            "121": 1,
+            "122": 0,
+            "123": 1,
+            "124": 1,
+            "125": 1,
+            "126": 1,
+            "127": 1,
+            "128": 0,
+            "129": 0,
+            "130": 1,
+            "131": 1,
+            "132": 1,
+            "133": 1,
+            "134": 1,
+            "135": 1,
+            "136": 1,
+            "137": 1,
+            "138": 1,
+            "139": 0,
+            "140": 1
+          }
+        },
+        "scenario_id": "classic_cross_trap_high",
+        "seed_flip": {
+          "effective_denominator": 30,
+          "entropy_bits": 0.8366407419411672,
+          "interval": [
+            0.555520383048111,
+            0.8581733668040368
+          ],
+          "interval_method": "wilson_score",
+          "posterior_mean": 0.7258064516129032,
+          "posterior_prior": "jeffreys_beta_0.5_0.5",
+          "posterior_variance": 0.006219107700312175,
+          "raw_failure_seeds": 8,
+          "raw_success_seeds": 22
+        },
+        "upset_outcome": null
+      },
+      "status": "admitted",
+      "title": "unexpected recovery or critical-interval/aggregate disagreement",
+      "triage_only": false
+    },
+    {
+      "archetype": "ambiguous_abstention",
+      "capsule_id": "ch7::ambiguous_abstention",
+      "evidence_grade": "unavailable",
+      "optional": true,
+      "reason": "causal_report_unavailable",
+      "status": "unavailable",
+      "title": "optional ambiguous multi-actor case whose correct causal output is abstention"
+    }
+  ],
+  "claim_boundary": "Synthesis/selection tooling: assembles Chapter 7 case-capsule slots from a validated #5446 candidate manifest. Not a benchmark metric, not a figure renderer, not a planner-ranking claim. Capsules are descriptive-only unless a validated causal report is supplied; unavailable archetypes are labelled unavailable, never substituted. Author-pending narrative/figure fields must be completed and an independent pinned-SHA review recorded before dissertation use.",
+  "inputs": {
+    "candidate_manifest_issue": "#5446",
+    "candidate_manifest_schema": "seed_flip_inversion_candidates.v1",
+    "candidate_manifest_sha256": "cf9caa96b88c47908ac2b3c63cc8dae21f0b20d39c44f5c48cd9b77225984f45",
+    "causal_reports_provided": false,
+    "n_candidates": 50,
+    "risk_reports_provided": false
+  },
+  "issue": "#5447",
+  "params": {
+    "allow_triage": false,
+    "max_capsules": 6,
+    "min_capsules": 4,
+    "n_archetypes_requested": 6
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "ch7_case_capsule_manifest.v1",
+  "status": "insufficient_evidence",
+  "stop_rule": "Stop at a smaller honest set if fewer than 4 archetypes pass the evidence gates; do not broaden claims or substitute unvalidated rows.",
+  "summary": {
+    "admitted_archetypes": [
+      "hard_vs_easy_seed",
+      "strong_fail_weak_success",
+      "unexpected_recovery"
+    ],
+    "evidence_grades": {
+      "hard_vs_easy_seed": "descriptive-only",
+      "strong_fail_weak_success": "descriptive-only",
+      "unexpected_recovery": "descriptive-only"
+    },
+    "meets_min_capsules": false,
+    "n_admitted": 3,
+    "n_capsules_requested": 6,
+    "n_unavailable": 3,
+    "unavailable_archetypes": [
+      "paired_first_unsafe_action",
+      "near_miss_online_risk",
+      "ambiguous_abstention"
+    ]
+  }
+}

@@ -17,11 +17,14 @@ pedestrian-filled environments.
 
 | I want to... | Go to |
 | --- | --- |
+| **Install and use Robot SF (newcomer path)** | [`docs/user-guide.md`](docs/user-guide.md) — task-oriented: install, run a demo, load a map, choose a planner, run a benchmark, visualize results, troubleshoot |
 | Understand the project quickly | [Why Robot SF?](#why-robot-sf) |
 | Decode an acronym or project term | [`docs/glossary.md`](docs/glossary.md) |
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |
 | Browse runnable examples | [`examples/README.md`](examples/README.md) |
-| Find architecture, benchmark, and workflow docs | [`docs/README.md`](docs/README.md) |
+| Use benchmarks with evidence discipline | [`docs/research-guide.md`](docs/research-guide.md) |
+| Find architecture, contribution, and CI docs | [`docs/developer-guide.md`](docs/developer-guide.md) |
+| Browse all docs by audience | [`docs/README.md`](docs/README.md) |
 | Follow the contributor workflow | [`docs/dev_guide.md`](docs/dev_guide.md) |
 | Contribute docs, planners, scenarios, or fixes | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Review repository conventions for agents and contributors | [`AGENTS.md`](AGENTS.md) |
@@ -90,11 +93,17 @@ The smoke installs the built wheel into a temporary venv, then verifies a minima
 with a small bootstrap dependency set (`loguru`, `numba`, `matplotlib`). This is a
 `clean install + import` guardrail, not a full runtime benchmark install.
 
-Training and experiment tooling is optional for core imports. Install it explicitly when
-running PPO/SB3, Optuna, TensorBoard, or W&B workflows:
+Core simulation imports and basic environment creation are lightweight by default. Optional feature stacks can be installed via extras:
 
 ```bash
-uv sync --extra training
+# Individual feature extras
+uv sync --extra viz         # PyGame, Matplotlib, MoviePy, Seaborn
+uv sync --extra maps        # OSMnx, GeoPandas, PyProj map tooling
+uv sync --extra benchmark   # Pandas, SciPy benchmark & reporting tools
+uv sync --extra training    # Stable-Baselines3, PyTorch, Optuna, W&B, TensorBoard
+
+# Or install all feature extras
+uv sync --extra all
 ```
 
 CARLA is not installed by `uv sync --all-extras`. On CARLA-capable Linux x86_64 hosts, opt into

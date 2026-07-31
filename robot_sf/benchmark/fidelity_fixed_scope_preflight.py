@@ -300,7 +300,7 @@ def _check_primary_metric(
         Primary-metric identifiability record.
     """
     ranking = validated["ranking"]
-    primary = str(ranking["metric"])
+    primary = str(ranking["primary_metric"])
     metric_entries = {
         str(entry.get("name")): entry
         for entry in validated["metrics"]
@@ -355,6 +355,7 @@ def _declared_non_identifiable_reason(entry: Mapping[str, Any]) -> str:
 
 
 def _in_map(mapping: Mapping[str, Any] | None, key: str) -> bool:
+    """Return ``True`` when ``key`` is present in a Mapping (treating ``None`` as absent)."""
     return isinstance(mapping, Mapping) and key in mapping
 
 

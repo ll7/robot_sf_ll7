@@ -57,13 +57,55 @@ launch_packet_builder = _load_launch_packet_builder()
 smoke_report_builder = _load_smoke_report_builder()
 
 
+def test_authorized_full_fixed_scope_contract_is_exact() -> None:
+    """The authorized campaign freezes four axes, three planners, and SNQI."""
+    config = load_fidelity_sensitivity_config(
+        "configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml"
+    )
+
+    assert config["ranking"]["primary_metric"] == "snqi"
+    assert config["fixed_scope"]["seeds"] == [111, 112, 113]
+    assert config["fixed_scope"]["planner_groups"] == ["goal", "social_force", "orca"]
+    assert [axis["key"] for axis in config["axes"]] == [
+        "integration_timestep",
+        "social_force_speed_archetypes",
+        "observation_noise",
+        "clearance_radius",
+    ]
+
+
 def test_load_repo_config_validates_three_or_more_axes() -> None:
     """The tracked issue #3207 config should satisfy the launch-packet contract."""
     config = load_fidelity_sensitivity_config("configs/research/fidelity_sensitivity_v1.yaml")
 
     assert config["schema_version"] == "fidelity-sensitivity.v1"
     assert len(config["axes"]) >= 3
+    assert config["ranking"]["primary_metric"] == "snqi"
     assert config["ranking"]["metric"] == "snqi"
+    assert config["primary_metric"] == "snqi"
+
+
+def test_validate_config_rejects_primary_metric_alias_mismatch() -> None:
+    """Deprecated ranking aliases cannot silently change the rank contract."""
+    config = load_fidelity_sensitivity_config("configs/research/fidelity_sensitivity_v1.yaml")
+    config["primary_metric"] = "success_rate"
+
+    with pytest.raises(
+        ValueError,
+        match="primary_metric must match ranking.primary_metric",
+    ):
+        validate_fidelity_sensitivity_config(config)
+
+
+def test_validate_config_isolates_nested_ranking_metadata() -> None:
+    """Normalized ranking metadata must not alias the caller's nested mappings."""
+    config = load_fidelity_sensitivity_config("configs/research/fidelity_sensitivity_v1.yaml")
+    config["ranking"]["review"] = {"notes": ["original"]}
+
+    validated = validate_fidelity_sensitivity_config(config)
+    validated["ranking"]["review"]["notes"].append("normalized-only")
+
+    assert config["ranking"]["review"]["notes"] == ["original"]
 
 
 def test_validate_config_rejects_too_few_axes() -> None:

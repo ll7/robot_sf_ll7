@@ -122,6 +122,18 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17/`: generated
+  `scenario_evidence_crosswalk.v1` instance (issue #5602 tooling) over the full
+  48-scenario matrix pinned by release 0.0.3 / 0.0.3.post1
+  (`configs/scenarios/classic_interactions_francis2023.yaml`, checksum-matched
+  to the release manifest). Schema/report generation only, no new simulation.
+  Predicate availability (issue #5593 lane) is explicit `unavailable` for all
+  48 rows because the only locally present campaign spanning this matrix
+  (job 13378) is itself recorded as artifact-integrity blocked; evidence
+  eligibility is explicit `excluded` because no evidence catalog was supplied.
+  Both the repo validator and independent `jsonschema.validate` pass with zero
+  errors. Not benchmark, ranking, or paper-facing evidence.
+
 - `issue_5247_job_13274_rank_stability/`: diagnostic-only analysis of the verified, completed
   8,640-episode S20 headline campaign. Preserves per-cell confidence intervals, constraints-first
   success-rank resampling, adjacent-rank decision labels, exact SNQI contract failure, and hashes;

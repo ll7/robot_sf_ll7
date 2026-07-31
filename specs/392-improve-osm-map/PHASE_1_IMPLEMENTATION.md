@@ -168,16 +168,12 @@ uv add osmnx pyosmium geopandas shapely pyproj pyyaml
 @dataclass
 class OSMTagFilters:
     """Configuration for semantic OSM tag filtering."""
-    
+
     driveable_highways: list[str] = field(
-        default_factory=lambda: [
-            "footway", "path", "cycleway", "bridleway", "pedestrian"
-        ]
+        default_factory=lambda: ["footway", "path", "cycleway", "bridleway", "pedestrian"]
     )
     driveable_areas: list[str] = field(
-        default_factory=lambda: [
-            "pedestrian", "footway", "residential", "service"
-        ]
+        default_factory=lambda: ["pedestrian", "footway", "residential", "service"]
     )
     obstacle_tags: list[tuple[str, str]] = field(
         default_factory=lambda: [
@@ -213,6 +209,7 @@ class OSMTagFilters:
 ```python
 import osmnx as ox
 import geopandas as gpd
+
 
 def load_pbf(pbf_file: str, bbox: Optional[tuple] = None) -> gpd.GeoDataFrame:
     """Load OSM PBF file."""
@@ -268,6 +265,7 @@ def load_pbf(pbf_file: str, bbox: Optional[tuple] = None) -> gpd.GeoDataFrame:
 import pyproj
 from shapely.geometry import Point
 
+
 def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
     """Project to local UTM zone."""
     # Get centroid
@@ -296,6 +294,7 @@ def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
 ```python
 from shapely.geometry import LineString, Polygon
 from shapely.ops import unary_union
+
 
 def buffer_ways(gdf: gpd.GeoDataFrame, half_width_m: float = 1.5) -> list[Polygon]:
     """Buffer line ways to polygons."""
@@ -354,6 +353,7 @@ def cleanup_polygons(polys: list[Polygon]) -> list[Polygon]:
 ```python
 from shapely.geometry import box
 from shapely.ops import unary_union
+
 
 def compute_obstacles(bounds_box: tuple, walkable_union: Polygon) -> list[Polygon]:
     """Compute obstacles as complement of walkable areas."""
@@ -443,6 +443,7 @@ from dataclasses import dataclass, field
 from shapely.geometry import Polygon
 from typing import Optional
 
+
 @dataclass
 class MapDefinition:
     bounds: Polygon
@@ -451,7 +452,7 @@ class MapDefinition:
     goal_zones: list[GoalZone] = field(default_factory=list)
     crowded_zones: list[CrowdedZone] = field(default_factory=list)
     routes: list[Route] = field(default_factory=list)
-    
+
     # NEW FIELD:
     allowed_areas: Optional[list[Polygon]] = None
 ```
@@ -475,8 +476,9 @@ class MapDefinition:
 def is_point_in_driveable_area(self, point: tuple[float, float]) -> bool:
     """Check if point is in driveable area."""
     from shapely.geometry import Point
+
     p = Point(point)
-    
+
     if self.allowed_areas is not None:
         # Use explicit walkable areas
         return any(poly.contains(p) for poly in self.allowed_areas)
@@ -509,6 +511,7 @@ from typing import Any, Dict
 import json
 from pathlib import Path
 
+
 def render_osm_background(
     pbf_file: str,
     output_dir: str = "output/maps/",
@@ -517,35 +520,36 @@ def render_osm_background(
     """Render OSM PBF to PNG background."""
     # Load PBF
     import osmnx as ox
+
     gdf = ox.features_from_file(pbf_file)
-    
+
     # Get bounds
     bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
-    
+
     # Create figure
     fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
-    
+
     # Plot layers
     # ... (buildings, water, streets)
-    
+
     # Compute affine transform
     width_m = bounds[2] - bounds[0]
     height_m = bounds[3] - bounds[1]
     pixel_width = int(width_m * pixels_per_meter)
     pixel_height = int(height_m * pixels_per_meter)
-    
+
     affine = {
         "pixel_origin": [0, 0],
         "pixel_per_meter": pixels_per_meter,
         "bounds_meters": [bounds[0], bounds[1], bounds[2], bounds[3]],
     }
-    
+
     # Save PNG
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     png_path = f"{output_dir}/background.png"
     fig.savefig(png_path, bbox_inches="tight", dpi=100)
     plt.close(fig)
-    
+
     return {
         "png_path": png_path,
         "affine_transform": affine,

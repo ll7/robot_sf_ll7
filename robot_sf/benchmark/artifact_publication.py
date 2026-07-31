@@ -9,11 +9,13 @@ This module provides reusable logic for:
 from __future__ import annotations
 
 import json
+import math
 import mimetypes
 import shutil
 import tarfile
 import tempfile
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,6 +25,13 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.benchmark.metrics import snqi as _curvature_aware_snqi
+from robot_sf.benchmark.snqi_scalarization_sensitivity import (
+    load_baseline_mapping as _load_snqi_baseline_mapping,
+)
+from robot_sf.benchmark.snqi_scalarization_sensitivity import (
+    load_weight_mapping as _load_snqi_weight_mapping,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 
 PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v2"
@@ -40,6 +49,15 @@ _CAMPAIGN_PREFLIGHT_REQUIRED = (
     "preflight/validate_config.json",
     "preflight/preview_scenarios.json",
 )
+# Canonical curvature-aware SNQI weights/baseline (issue #5580 release gate). The per-episode
+# ``metrics.snqi`` field is baked with the campaign-aware scalarizer
+# (``robot_sf.benchmark.metrics.snqi``); the release-gate self-check recomputes every stored
+# field with this same basis so the per-episode surface and ``snqi_diagnostics.json`` cannot
+# drift silently (see ``scripts/validation/check_release_snqi_field_consistency.py``).
+_SNQI_DEFAULT_WEIGHTS_NAME = "snqi_weights_camera_ready_v3.json"
+_SNQI_DEFAULT_BASELINE_NAME = "snqi_baseline_camera_ready_v3.json"
+_SNQI_RECOMPUTE_RTOL = 1e-9
+_SNQI_RECOMPUTE_ATOL = 1e-9
 _RECOMMENDED_MANUSCRIPT_USES = {
     "results",
     "methodology",
@@ -958,6 +976,12 @@ def _compute_and_emit_badging_artifacts(  # noqa: C901
     rel_url = pub_channels.get("release_url")
 
     def is_valid_durable_id(val: str | None) -> bool:
+        """Return whether ``val`` is a durable public identifier.
+
+        Rejects empty values, default DOI/release-tag templates, localhost URIs,
+        and local or relative paths, so only resolved public identifiers count
+        toward the ``available`` badge level.
+        """
         if not val:
             return False
         v = val.strip()
@@ -1387,6 +1411,378 @@ def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
     return ambiguous, rejections
 
 
+def _snqi_planner_key(arm: str) -> str:
+    """Return the canonical ``planner_key::kinematics`` token for a per-arm run directory.
+
+    The bundle's per-arm directory is ``<planner>__<kinematics>``; the diagnostics
+    ``planner_ordering`` enumerates the same arms as ``planner_key`` / ``kinematics``.
+    Mirrors ``scripts/validation/check_release_snqi_field_consistency.py``.
+    """
+    planner, _, kinematics = arm.partition("__")
+    return f"{planner}::{kinematics}"
+
+
+def _load_snqi_diagnostics(payload_dir: Path) -> dict[str, Any] | None:
+    """Return the ``payload/reports/snqi_diagnostics.json`` payload, or ``None`` if absent.
+
+    A bundle without SNQI diagnostics is not an SNQI-bearing release and skips the field
+    self-check; a malformed file raises ``ValueError`` so the caller can fail closed.
+
+    Returns:
+        The decoded diagnostics object, or ``None`` when the file is absent.
+    """
+    diagnostics_path = payload_dir / "reports" / "snqi_diagnostics.json"
+    if not diagnostics_path.is_file():
+        return None
+    try:
+        payload = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{diagnostics_path}: invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{diagnostics_path}: expected a JSON object")
+    return payload
+
+
+def _snqi_diagnostics_ordering(diagnostics: Mapping[str, Any]) -> dict[str, int]:
+    """Map ``planner_key::kinematics`` -> rank from the diagnostics ``planner_ordering``.
+
+    Returns:
+        Mapping of canonical planner key to the diagnostics-declared rank.
+    """
+    raw_ordering = diagnostics.get("planner_ordering")
+    if not isinstance(raw_ordering, list) or not raw_ordering:
+        raise ValueError(
+            "snqi_diagnostics.json planner_ordering must be a non-empty list for an "
+            "SNQI-bearing bundle"
+        )
+    ordering: dict[str, int] = {}
+    for index, row in enumerate(raw_ordering, start=1):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"planner_ordering row {index} must be an object")
+        planner = row.get("planner_key")
+        kinematics = row.get("kinematics")
+        if not isinstance(planner, str) or not planner.strip():
+            raise ValueError(f"planner_ordering row {index} planner_key must be a non-empty string")
+        if not isinstance(kinematics, str) or not kinematics.strip():
+            raise ValueError(f"planner_ordering row {index} kinematics must be a non-empty string")
+        rank = row.get("rank")
+        if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+            raise ValueError(f"planner_ordering row {index} rank must be a positive integer")
+        key = f"{planner}::{kinematics}"
+        if key in ordering:
+            raise ValueError(f"planner_ordering contains duplicate arm {key!r}")
+        ordering[key] = rank
+    expected_ranks = set(range(1, len(ordering) + 1))
+    if set(ordering.values()) != expected_ranks:
+        raise ValueError("planner_ordering ranks must be unique and contiguous from 1")
+    return ordering
+
+
+def _snqi_load_canonical_basis() -> dict[str, Any]:
+    """Load canonical SNQI weights and baseline files for consistency checking.
+
+    Returns:
+        A dict with either ``rejections`` (when files are missing or unreadable)
+        or ``weights``, ``baseline``, ``weights_sha256``, and ``baseline_sha256``.
+    """
+    repo_root = get_repository_root()
+    weights_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_WEIGHTS_NAME
+    baseline_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_BASELINE_NAME
+    rejections: list[str] = []
+    if not weights_path.is_file():
+        rejections.append(f"canonical SNQI weights file is missing: {weights_path}")
+    if not baseline_path.is_file():
+        rejections.append(f"canonical SNQI baseline file is missing: {baseline_path}")
+    if rejections:
+        return {"rejections": rejections}
+
+    weights_sha256 = _sha256_file(weights_path)
+    baseline_sha256 = _sha256_file(baseline_path)
+    try:
+        weights = _load_snqi_weight_mapping(weights_path)
+        baseline = _load_snqi_baseline_mapping(baseline_path)
+    except (OSError, TypeError, ValueError) as exc:
+        return {
+            "rejections": [f"canonical SNQI inputs cannot be loaded: {exc}"],
+            "integrity": {
+                "snqi_weights_sha256": weights_sha256,
+                "snqi_baseline_sha256": baseline_sha256,
+            },
+        }
+    return {
+        "weights": weights,
+        "baseline": baseline,
+        "weights_sha256": weights_sha256,
+        "baseline_sha256": baseline_sha256,
+    }
+
+
+def _snqi_validate_declared_hashes(
+    diagnostics: Mapping[str, Any],
+    weights_sha256: str,
+    baseline_sha256: str,
+) -> list[str]:
+    """Compare diagnostics-declared SHA256 values against canonical inputs.
+
+    Returns:
+        List of rejection messages for any hash mismatch (empty when all match).
+    """
+    rejections: list[str] = []
+    declared_weights_sha = diagnostics.get("weights_sha256")
+    declared_baseline_sha = diagnostics.get("baseline_sha256")
+    if not isinstance(declared_weights_sha, str) or declared_weights_sha.lower() != weights_sha256:
+        rejections.append(
+            "snqi_diagnostics.json weights_sha256 does not match the canonical "
+            f"{_SNQI_DEFAULT_WEIGHTS_NAME} (missing/invalid or {declared_weights_sha!r} != "
+            f"{weights_sha256})"
+        )
+    if (
+        not isinstance(declared_baseline_sha, str)
+        or declared_baseline_sha.lower() != baseline_sha256
+    ):
+        rejections.append(
+            "snqi_diagnostics.json baseline_sha256 does not match the canonical "
+            f"{_SNQI_DEFAULT_BASELINE_NAME} (missing/invalid or {declared_baseline_sha!r} != "
+            f"{baseline_sha256})"
+        )
+    return rejections
+
+
+def _snqi_validate_episode_record(  # noqa: C901
+    raw_line: str,
+    source: str,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Any],
+) -> tuple[str | None, bool, float | None]:
+    """Validate one episode JSONL record's ``metrics.snqi`` field and recompute.
+
+    Returns:
+        A tuple of ``(rejection, field_present, stored_snqi)`` where ``rejection``
+        is a message when validation fails, ``field_present`` is True when
+        ``metrics.snqi`` exists, and ``stored_snqi`` is the validated float when
+        the record is fully valid.
+    """
+    try:
+        record = json.loads(raw_line)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return f"{source}: invalid JSON: {exc}", False, None
+    if not isinstance(record, Mapping):
+        return f"{source}: expected a JSON object", False, None
+    metrics = record.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return f"{source}: metrics must be an object", False, None
+    if "snqi" not in metrics:
+        return f"{source}: metrics.snqi field is absent", False, None
+
+    raw_stored_snqi = metrics["snqi"]
+    if isinstance(raw_stored_snqi, bool) or not isinstance(raw_stored_snqi, (int, float)):
+        return f"{source}: metrics.snqi must be a finite JSON number", True, None
+    try:
+        stored_snqi = float(raw_stored_snqi)
+        if not math.isfinite(stored_snqi):
+            raise ValueError("value is not finite")
+    except (TypeError, ValueError) as exc:
+        return f"{source}: metrics.snqi is not a finite number: {exc}", True, None
+    metric_values = dict(metrics)
+    try:
+        recomputed_snqi = _curvature_aware_snqi(metric_values, weights, baseline_stats=baseline)
+        if not math.isfinite(recomputed_snqi):
+            raise ValueError("value is not finite")
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        return f"{source}: curvature-aware recompute failed: {exc}", True, None
+    if not math.isclose(
+        stored_snqi,
+        recomputed_snqi,
+        rel_tol=_SNQI_RECOMPUTE_RTOL,
+        abs_tol=_SNQI_RECOMPUTE_ATOL,
+    ):
+        mismatch_msg = (
+            f"{source}: stored SNQI {stored_snqi!r} != curvature-aware recompute "
+            f"{recomputed_snqi!r}"
+        )
+        return mismatch_msg, True, stored_snqi
+    return None, True, stored_snqi
+
+
+def _snqi_scan_episode_snqi_fields(
+    payload_dir: Path,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Scan all episode JSONL files and validate per-episode SNQI fields.
+
+    Returns:
+        Accumulated scan results with ``rejections``, ``rows``,
+        ``episode_field_present``, ``per_arm_field_sum``, ``per_arm_field_count``,
+        ``mismatch_sample``, and ``mismatch_total``.
+    """
+    rejections: list[str] = []
+    rows = 0
+    episode_field_present = 0
+    per_arm_field_sum: dict[str, float] = defaultdict(float)
+    per_arm_field_count: dict[str, int] = defaultdict(int)
+    mismatch_sample: list[str] = []
+    mismatch_total = 0
+    for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+        arm = episodes_path.parent.name
+        try:
+            lines = episodes_path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            rejections.append(f"cannot read {episodes_path}: {exc}")
+            continue
+        for line_number, raw_line in enumerate(lines, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            rows += 1
+            source = f"{episodes_path}:{line_number}"
+            rejection, field_present, stored_snqi = _snqi_validate_episode_record(
+                line, source, weights, baseline
+            )
+            if field_present:
+                episode_field_present += 1
+            if stored_snqi is not None:
+                per_arm_field_sum[arm] += stored_snqi
+                per_arm_field_count[arm] += 1
+            if rejection is not None:
+                # Every drift is counted; the per-episode rejection sample is capped so a
+                # large drift cannot balloon the report, but ``violation_count`` below
+                # accounts for every drifted episode so the evidence is not misleading.
+                if stored_snqi is not None:
+                    mismatch_total += 1
+                    if len(mismatch_sample) < 20:
+                        mismatch_sample.append(rejection)
+                else:
+                    rejections.append(rejection)
+    return {
+        "rejections": rejections,
+        "rows": rows,
+        "episode_field_present": episode_field_present,
+        "per_arm_field_sum": per_arm_field_sum,
+        "per_arm_field_count": per_arm_field_count,
+        "mismatch_sample": mismatch_sample,
+        "mismatch_total": mismatch_total,
+    }
+
+
+def _snqi_build_consistency_result(
+    scan: dict[str, Any],
+    diagnostics_ordering: dict[str, int],
+    rejections: list[str],
+    integrity: dict[str, str],
+) -> dict[str, Any]:
+    """Assemble the final SNQI consistency evidence dict from scan results.
+
+    Compares per-episode field ordering against diagnostics ordering and appends
+    any terminal rejection messages before building the result dict.
+
+    Returns:
+        The complete consistency evidence dict for the caller.
+    """
+    rejections.extend(scan["rejections"])
+    rejections.extend(scan["mismatch_sample"])
+    truncated_mismatches = max(scan["mismatch_total"] - len(scan["mismatch_sample"]), 0)
+
+    per_arm_field_sum = scan["per_arm_field_sum"]
+    per_arm_field_count = scan["per_arm_field_count"]
+    field_means = {
+        arm: (per_arm_field_sum[arm] / per_arm_field_count[arm])
+        if per_arm_field_count[arm]
+        else 0.0
+        for arm in per_arm_field_sum
+    }
+    field_ranked = sorted(field_means, key=lambda a: (-field_means[a], a))
+    field_ordering = {_snqi_planner_key(a): rank for rank, a in enumerate(field_ranked, start=1)}
+    if field_ordering != diagnostics_ordering:
+        rejections.append(
+            "per-episode metrics.snqi arm ordering disagrees with "
+            "snqi_diagnostics.json planner_ordering"
+        )
+    if scan["episode_field_present"] == 0 and scan["rows"] > 0:
+        rejections.append(
+            "no per-episode metrics.snqi fields found despite declaring snqi_diagnostics.json"
+        )
+
+    return {
+        "checked": True,
+        "violation_count": len(rejections) + truncated_mismatches,
+        "violations": rejections,
+        "ordering": {
+            "field_planner_ordering": field_ordering,
+            "diagnostics_planner_ordering": diagnostics_ordering,
+        },
+        "counts": {
+            "rows": scan["rows"],
+            "episode_field_present": scan["episode_field_present"],
+            "snqi_field_mismatches": scan["mismatch_total"],
+            "arms": len(per_arm_field_count),
+        },
+        "integrity": integrity,
+    }
+
+
+def _check_snqi_field_consistency(
+    payload_dir: Path,
+) -> dict[str, Any]:
+    """Release-gate self-check: per-episode SNQI field vs diagnostics basis (issue #5580).
+
+    Runs only when the bundle declares ``payload/reports/snqi_diagnostics.json`` (i.e. an
+    SNQI-bearing campaign bundle). It recomputes every stored ``metrics.snqi`` with the same
+    curvature-aware scalarizer the field was baked with and asserts the per-episode surface and
+    the ``snqi_diagnostics.json`` ``planner_ordering`` cannot drift silently. This is the
+    directory-level twin of the archive-level gate
+    ``scripts/validation/check_release_snqi_field_consistency.py`` and runs automatically inside
+    the publication preflight so a drifted bundle fails closed at build time.
+
+    Returns:
+        An evidence dict with ``checked`` (False when SNQI diagnostics are absent),
+        ``violation_count``, ``violations`` (rejection messages), ``ordering`` (field vs
+        diagnostics planner ordering), ``counts`` (rows/arms), and ``integrity`` (canonical
+        weights/baseline sha256). The caller appends ``violations`` to the preflight violation
+        list.
+    """
+    try:
+        diagnostics = _load_snqi_diagnostics(payload_dir)
+    except ValueError as exc:
+        return {"checked": True, "violation_count": 1, "violations": [str(exc)], "ordering": {}}
+    if diagnostics is None:
+        return {"checked": False, "violation_count": 0, "violations": [], "ordering": {}}
+
+    canonical = _snqi_load_canonical_basis()
+    if "rejections" in canonical:
+        result: dict[str, Any] = {
+            "checked": True,
+            "violation_count": len(canonical["rejections"]),
+            "violations": canonical["rejections"],
+            "ordering": {},
+        }
+        if "integrity" in canonical:
+            result["integrity"] = canonical["integrity"]
+        return result
+
+    weights_sha256 = canonical["weights_sha256"]
+    baseline_sha256 = canonical["baseline_sha256"]
+    integrity = {
+        "snqi_weights_sha256": weights_sha256,
+        "snqi_baseline_sha256": baseline_sha256,
+    }
+    rejections = _snqi_validate_declared_hashes(diagnostics, weights_sha256, baseline_sha256)
+
+    try:
+        diagnostics_ordering = _snqi_diagnostics_ordering(diagnostics)
+    except (TypeError, ValueError) as exc:
+        return {
+            "checked": True,
+            "violation_count": len(rejections) + 1,
+            "violations": [*rejections, f"invalid SNQI diagnostics ordering: {exc}"],
+            "ordering": {},
+            "integrity": integrity,
+        }
+
+    scan = _snqi_scan_episode_snqi_fields(payload_dir, canonical["weights"], canonical["baseline"])
+    return _snqi_build_consistency_result(scan, diagnostics_ordering, rejections, integrity)
+
+
 def _manifest_checksum_mapping(
     manifest_files: list[object],
     *,
@@ -1609,6 +2005,9 @@ def verify_publication_bundle_preflight(
        machine-readable non-runtime-diff explanation.
     4. ``publication_channels`` must not retain DOI/release-tag placeholders.
     5. ambiguous goal-reached + timeout rows must carry timing evidence or a note.
+    6. for SNQI-bearing bundles (those declaring ``snqi_diagnostics.json``), every per-episode
+       ``metrics.snqi`` field must match a curvature-aware recomputation and the field-derived
+       arm ordering must agree with ``snqi_diagnostics.json`` ``planner_ordering`` (issue #5580).
 
     Args:
         bundle_dir: Built bundle directory (containing ``payload/``,
@@ -1668,6 +2067,12 @@ def verify_publication_bundle_preflight(
     goal_timeout_rows, goal_timeout_rejections = _check_goal_timeout_boundary(payload_dir)
     violations.extend(goal_timeout_rejections)
 
+    # ---- Check 6: per-episode SNQI field vs diagnostics basis (issue #5580) --
+    # Runs only on SNQI-bearing bundles (those declaring snqi_diagnostics.json); other
+    # bundles report checked=False and are unaffected.
+    snqi_evidence = _check_snqi_field_consistency(payload_dir)
+    violations.extend(snqi_evidence.get("violations", []))
+
     status = "pass" if not violations else "fail"
     report = {
         "schema_version": "publication-preflight.v1",
@@ -1681,6 +2086,7 @@ def verify_publication_bundle_preflight(
             "episode_software_commits": dict(sorted(episode_commits.items())),
             "publication_commit": repository_commit,
             "goal_reached_timeout_rows": goal_timeout_rows,
+            "snqi_field_consistency": snqi_evidence,
         },
     }
     if status == "fail":

@@ -24,11 +24,15 @@
 #     --remote <name>           remote to fetch/push (default: origin)
 #     --no-local-fallback       fail instead of falling back to local rebase/push
 #     --dry-run                 verify and print the plan without mutating
+#     --gate-worktree-path      registered gate worktree path; a vanished worktree
+#                               fails closed before any branch-switch/conflict op
 #     --json                    emit machine-readable JSON (default behavior)
+#     -h, --help                print this help and exit 0
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LEASE_HELPER="${SCRIPT_DIR}/pr_gate_lease.py"
+GUARD_HELPER="${SCRIPT_DIR}/gate_worktree_guard.py"
 
 REPO=""
 PR=""
@@ -40,10 +44,33 @@ HEAD_REF=""
 REMOTE="origin"
 LOCAL_FALLBACK=1
 DRY_RUN=0
+GATE_WORKTREE_PATH=""
 
 usage() {
   echo "Usage: $0 <pr> --expected-head-sha <sha> [--repo OWNER/REPO] [options]" >&2
   exit 2
+}
+
+print_help() {
+  cat <<'HELP'
+Usage: scripts/dev/update_pr_branch_safely.sh <pr> \
+    --expected-head-sha <sha> [--repo OWNER/REPO] [options]
+
+Guarded PR branch updater with a lease-protected local fallback.
+
+Options:
+    --pr <n>                  PR number (positional also accepted)
+    --repo OWNER/REPO         owner/repo (default: detect from gh)
+    --expected-head-sha <sha> required guard; no mutation if the live head moved
+    --base <branch>           base branch to rebase onto (default: PR base ref)
+    --remote <name>           remote to fetch/push (default: origin)
+    --no-local-fallback       fail instead of falling back to local rebase/push
+    --dry-run                 verify and print the plan without mutating
+    --gate-worktree-path <p>  registered gate worktree path; a vanished worktree
+                              fails closed before any branch-switch/conflict op
+    --json                    emit machine-readable JSON (default behavior)
+    -h, --help                print this help and exit 0
+HELP
 }
 
 # --- argument parsing ---------------------------------------------------------
@@ -83,8 +110,17 @@ while [[ $# -gt 0 ]]; do
       DRY_RUN=1
       shift
       ;;
+    --gate-worktree-path)
+      [[ $# -ge 2 ]] || usage
+      GATE_WORKTREE_PATH="$2"
+      shift 2
+      ;;
     --json)
       shift
+      ;;
+    -h|--help)
+      print_help
+      exit 0
       ;;
     -*)
       echo "Unexpected option: $1" >&2
@@ -190,6 +226,17 @@ if [[ "$LIVE_HEAD" != "$EXPECTED" ]]; then
   exit 1
 fi
 
+# The update-branch endpoint is itself a write, so dry-run must exit before
+# probing it. The metadata read and exact-head guard above remain intentional.
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  printf 'dry-run: would request GitHub update-branch for %s#%s at %s; ' \
+    "$REPO" "$PR" "$EXPECTED" >&2
+  printf 'if unavailable, would use the guarded local fallback via %s\n' \
+    "$REMOTE" >&2
+  emit_result "dry_run" "false" "" "gh_rest_update_branch"
+  exit 0
+fi
+
 # --- attempt the supported remote branch-update path --------------------------
 set +e
 REST_STDERR="$(gh api "repos/${REPO}/pulls/${PR}/update-branch" \
@@ -200,6 +247,62 @@ set -e
 if [[ $REST_RC -eq 0 ]]; then
   emit_result "update_requested" "true" "" "gh_rest_update_branch"
   exit 0
+fi
+
+# --- gate worktree health check before any local branch-switch ----------------
+# The local fallback performs a git rebase and force-with-lease push inside the
+# registered gate worktree. If that worktree has vanished, fail closed and report
+# the lease cleanup owner rather than dying opaquely with
+# "CreateProcess ... No such file or directory" mid-rebase.
+if [[ -n "$GATE_WORKTREE_PATH" ]]; then
+  if [[ ! -f "$GUARD_HELPER" ]]; then
+    emit_result "error" "false" "gate worktree guard helper is missing; refusing unguarded local fallback" "local_fallback"
+    exit 2
+  fi
+  set +e
+  GUARD_JSON="$(python3 "$GUARD_HELPER" verify --path "$GATE_WORKTREE_PATH" --json 2>/dev/null)"
+  GUARD_RC=$?
+  set -e
+  if [[ -z "$GUARD_JSON" ]]; then
+    emit_result "error" "false" "could not verify gate worktree before local fallback" "local_fallback"
+    exit 2
+  fi
+  set +e
+  GUARD_RESULT="$(python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+    if not isinstance(payload, dict):
+        raise ValueError("guard output must be a JSON object")
+    if payload.get("exists"):
+        print("ok")
+    else:
+        print("missing:" + str(payload.get("cleanup_owner") or "unknown"))
+except Exception:
+    print("error")
+    raise SystemExit(2)
+' <<<"$GUARD_JSON")"
+  PARSE_RC=$?
+  set -e
+  if [[ $PARSE_RC -ne 0 ]] || [[ "$GUARD_RESULT" == "error" ]]; then
+    emit_result "error" "false" "could not parse gate worktree guard output before local fallback" "local_fallback"
+    exit 2
+  fi
+  if [[ "$GUARD_RC" -ne 0 && "$GUARD_RESULT" == "ok" ]]; then
+    emit_result "error" "false" "gate worktree guard failed despite reporting an existing path" "local_fallback"
+    exit 2
+  fi
+  if [[ "$GUARD_RESULT" == missing:* ]]; then
+    CLEANUP_OWNER="${GUARD_RESULT#missing:}"
+    emit_result "gate_worktree_missing" "false" "registered gate worktree vanished before local branch-switch; cleanup owner: ${CLEANUP_OWNER}" "local_fallback"
+    exit 1
+  fi
+  if [[ "$GUARD_RESULT" != "ok" ]]; then
+    emit_result "error" "false" "gate worktree guard returned an unrecognized result" "local_fallback"
+    exit 2
+  fi
 fi
 
 # --- fallback to local lease-protected rebase/push ----------------------------
@@ -225,12 +328,6 @@ LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
 if [[ "$LOCAL_HEAD" != "$EXPECTED" ]]; then
   emit_result "head_mismatch" "false" "local HEAD (${LOCAL_HEAD}) differs from expected SHA" "local_fallback"
   exit 1
-fi
-
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "dry-run: would fetch ${REMOTE} ${BASE_REF} ${HEAD_REF}, rebase onto ${REMOTE}/${BASE_REF}, then push --force-with-lease to ${REMOTE}/${HEAD_REF}" >&2
-  emit_result "dry_run" "false" "" "local_fallback"
-  exit 0
 fi
 
 if [[ ! -f "$LEASE_HELPER" ]]; then

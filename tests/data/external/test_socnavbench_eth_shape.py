@@ -56,6 +56,10 @@ def test_socnavbench_eth_shape_contract_with_synthetic_layout(tmp_path: Path) ->
     assert shape.resolution == 5.0
     assert shape.traversible_shape == (2, 2)
     assert shape.traversible_dtype == "bool"
+    resolution, traversible = socnavbench_eth.load_traversible(root)
+    assert resolution == 5.0
+    assert traversible.shape == (2, 2)
+    assert traversible.dtype == np.bool_
 
 
 def test_socnavbench_eth_shape_contract_rejects_malformed_pickle(tmp_path: Path) -> None:

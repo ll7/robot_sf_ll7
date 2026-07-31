@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import platform
 import subprocess
 from collections import defaultdict
@@ -67,7 +68,18 @@ MIXED_DISPOSITION = "mixed_runnability"
 # excludes it from the bitwise-identical claim, with a distinct ``degraded`` flag
 # and reason to distinguish a degraded run from a clean registry-unavailable planner.
 DEGRADED_DISPOSITION = "degraded_fallback"
-_DEGRADED_STATUS_PREFIXES = ("policy_step_timeout_fallback", "policy_step_error_fallback")
+_DEGRADED_STATUS_PREFIXES = (
+    "policy_step_timeout_fallback",
+    "policy_step_error_fallback",
+    # Issue #6190: the foresight-model-load fallback in PredictionPlannerAdapter
+    # silently degrades to constant-velocity prediction when the predictive model
+    # cannot be loaded with ``allow_fallback=True``. The benchmark metadata layer
+    # surfaces this as a degraded ``status`` prefix so a foresight-degraded run is
+    # dispositioned (and excluded from the bitwise-identical determinism claim)
+    # before the determinism assertion fires, rather than failing with a cryptic
+    # trajectory-fingerprint mismatch.
+    "predictive_foresight_model_fallback",
+)
 
 # A target whose repeats could not be produced *natively* because the planner-step
 # isolation boundary itself failed (for example an xdist-forked pytest worker that
@@ -85,7 +97,11 @@ def _record_is_degraded(record: Any) -> bool:
 
     A target is degraded when the planner step fell back to a zero-velocity action
     inside the isolation worker. The runner reports that through the planner status
-    and the explicit ``policy_step_timeout.fallback_actions`` counter. Episode-level
+    and the explicit ``policy_step_timeout.fallback_actions`` counter. It is also
+    degraded when a predictive-foresight planner silently fell back to
+    constant-velocity prediction because its model could not be loaded
+    (issue #6190): ``enrich_algorithm_metadata`` surfaces that as a
+    ``predictive_foresight_model_fallback`` status prefix. Episode-level
     ``outcome.timeout_event`` is deliberately not used: it also represents a native
     episode reaching its configured horizon and is not planner-degradation evidence.
     """
@@ -182,18 +198,29 @@ def canonical_sha256(value: Any) -> str:
 
 
 def _require_mapping(value: Any, label: str) -> Mapping[str, Any]:
+    """Return ``value`` if it is a Mapping, else raise ``ValueError`` naming ``label``."""
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be an object")
     return value
 
 
 def _require_text(value: Any, label: str) -> str:
+    """Validate ``value`` is a non-empty string and return it stripped.
+
+    Returns:
+        The validated non-empty string.
+    """
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} must be a non-empty string")
     return value
 
 
 def _require_sha256(value: Any, label: str) -> str:
+    """Validate ``value`` is a SHA-256 hex digest and return it lowercased.
+
+    Returns:
+        The validated lowercased SHA-256 digest.
+    """
     digest = _require_text(value, label)
     if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest.lower()):
         raise ValueError(f"{label} must be a lowercase-or-uppercase SHA-256 digest")
@@ -201,10 +228,12 @@ def _require_sha256(value: Any, label: str) -> str:
 
 
 def _planner(record: Mapping[str, Any]) -> str:
+    """Return the non-empty planner/algo label from an episode ``record``."""
     return _require_text(record.get("algo", record.get("planner")), "episode planner")
 
 
 def _target_key(target: Mapping[str, Any]) -> tuple[str, str, int]:
+    """Return a ``(scenario_id, planner, seed)`` key for a target, validating its seed."""
     seed = target.get("seed")
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("target seed must be an integer")
@@ -321,6 +350,7 @@ def build_manifest(  # noqa: C901 - validation branches make the fail-closed con
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return the non-empty scenario id from ``name``/``scenario_id``/``id``."""
     for key in ("name", "scenario_id", "id"):
         value = scenario.get(key)
         if isinstance(value, str) and value.strip():
@@ -329,6 +359,11 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _planner_index(planners: Sequence[Any]) -> dict[str, Any]:
+    """Index planners by key (and unique algo), raising on duplicate planner keys.
+
+    Returns:
+        Planners indexed by key and unique algo.
+    """
     indexed: dict[str, Any] = {}
     for planner in planners:
         identity = str(planner.key)
@@ -532,6 +567,11 @@ def resolve_runnable_definitions(  # noqa: C901 - fail-closed recovery validates
 def _check_manifest(
     manifest: Mapping[str, Any],
 ) -> tuple[dict[tuple[str, str, int], Mapping[str, Any]], int]:
+    """Validate manifest schema/contract/hash/targets, returning indexed targets and repeats.
+
+    Returns:
+        Indexed targets and the required repeat count.
+    """
     if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ValueError("manifest has an unsupported schema_version")
     contract = _require_mapping(manifest.get("execution_contract"), "manifest execution_contract")
@@ -563,6 +603,7 @@ def _check_manifest(
 
 
 def _repeat_fingerprint(repeat: Mapping[str, Any]) -> tuple[int, str, Any]:
+    """Return a ``(outcome, trajectory_sha256, near_misses)`` fingerprint for a repeat."""
     outcome = repeat.get("outcome")
     if isinstance(outcome, bool):
         outcome = int(outcome)
@@ -573,6 +614,7 @@ def _repeat_fingerprint(repeat: Mapping[str, Any]) -> tuple[int, str, Any]:
 
 
 def _first_divergence(repeats: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
+    """Return the first field where a repeat diverges from the first, or ``None`` if identical."""
     reference = _repeat_fingerprint(repeats[0])
     for index, repeat in enumerate(repeats[1:], start=1):
         current = _repeat_fingerprint(repeat)
@@ -818,6 +860,11 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     provenance_match = not provenance_mismatches
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
+        """Index a verified host report's targets by ``(scenario_id, planner, seed)`` key.
+
+        Returns:
+            Host-report targets keyed by ``(scenario_id, planner, seed)``.
+        """
         rows = report.get("targets")
         if not isinstance(rows, list):
             raise ValueError("verified host report targets must be a list")
@@ -1023,6 +1070,61 @@ def _finite_int_or_zero(value: Any) -> int:
     return int(numeric) if math.isfinite(numeric) else 0
 
 
+def _preflight_runtime_model_assets(
+    targets: Sequence[Mapping[str, Any]],
+    planner_definitions: Mapping[str, Any],
+) -> None:
+    """Stage every exact-repeat runtime model before any episode worker starts."""
+    from robot_sf.models.preflight import (  # noqa: PLC0415
+        preflight_models,
+        required_model_ids_for_config,
+    )
+
+    config_paths: set[Path] = set()
+    repository_root = get_repository_root()
+    for target in targets:
+        definition_id = _require_text(
+            target.get("planner_definition_id"), "target planner_definition_id"
+        )
+        planner_definition = _require_mapping(
+            planner_definitions.get(definition_id), f"planner_definition {definition_id!r}"
+        )
+        raw_path = planner_definition.get("planner_config_path")
+        if raw_path is not None:
+            config_path = repository_root / _require_text(raw_path, "planner_config_path")
+            config_paths.add(config_path.resolve())
+
+    model_ids: list[str] = []
+    for config_path in sorted(config_paths):
+        if not config_path.is_file():
+            raise FileNotFoundError(f"Algorithm config file not found: {config_path}")
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(config, Mapping):
+            raise TypeError(f"Algorithm config must be a mapping: {config_path}")
+        model_ids.extend(required_model_ids_for_config(config))
+    if model_ids:
+        preflight_models(model_ids)
+
+
+def _run_episode_with_downloads_disabled(
+    run_episode: Any, *args: Any, **kwargs: Any
+) -> dict[str, Any]:
+    """Run one timed episode while preventing any late model-cache download.
+
+    Returns:
+        Episode record from the injected runner.
+    """
+    previous = os.environ.get("ROBOT_SF_DISABLE_MODEL_DOWNLOADS")
+    os.environ["ROBOT_SF_DISABLE_MODEL_DOWNLOADS"] = "1"
+    try:
+        return run_episode(*args, **kwargs)
+    finally:
+        if previous is None:
+            os.environ.pop("ROBOT_SF_DISABLE_MODEL_DOWNLOADS", None)
+        else:
+            os.environ["ROBOT_SF_DISABLE_MODEL_DOWNLOADS"] = previous
+
+
 def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tracks each target state explicitly.
     resolved_bundle: Mapping[str, Any],
     *,
@@ -1083,6 +1185,15 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         from robot_sf.benchmark.runner import run_episode as _run_episode  # noqa: PLC0415
 
         run_episode = _run_episode
+
+    # The production runner must stage its complete model set before creating
+    # any episode/fork worker. Test doubles remain injectable without requiring
+    # real registry artifacts.
+    enforce_model_preflight = (
+        getattr(run_episode, "__module__", None) == "robot_sf.benchmark.runner"
+    )
+    if enforce_model_preflight:
+        _preflight_runtime_model_assets(targets, planner_defs)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = output_dir / "target_cache"
@@ -1211,14 +1322,20 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         records: list[dict[str, Any]] = []
         repeats: list[dict[str, Any]] = []
         for repeat_idx in range(repeats_per_target):
-            record = run_episode(
-                dict(scenario_params),
-                seed=seed,
-                algo=planner_algo,
-                algo_config_path=algo_config_path,
-                horizon=horizon,
-                dt=float(dt),
-                record_forces=scenario_params.get("record_forces", False),
+            run_kwargs = {
+                "seed": seed,
+                "algo": planner_algo,
+                "algo_config_path": algo_config_path,
+                "horizon": horizon,
+                "dt": float(dt),
+                "record_forces": scenario_params.get("record_forces", False),
+            }
+            record = (
+                _run_episode_with_downloads_disabled(
+                    run_episode, dict(scenario_params), **run_kwargs
+                )
+                if enforce_model_preflight
+                else run_episode(dict(scenario_params), **run_kwargs)
             )
             records.append(record)
             trajectory_sha = _compute_trajectory_hash(record)

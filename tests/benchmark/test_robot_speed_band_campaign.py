@@ -170,33 +170,55 @@ def test_robot_speed_cap_reader_is_drive_model_agnostic() -> None:
     ) == pytest.approx(2.5)
 
 
-def test_speed_band_variant_flows_to_real_bicycle_robot_action_space() -> None:
-    """The swept cap must reach the actual BicycleDriveRobot via make_robot_env."""
+@pytest.mark.parametrize(
+    ("variant_key", "cap", "max_accel", "max_decel"),
+    [
+        ("baseline", 2.0, 1.0, 2.0),
+        ("robot_speed_band__bicycle_3_0_mps_nominal", 3.0, 1.5, 3.0),
+        ("robot_speed_band__bicycle_4_0_mps_micromobility", 4.0, 2.0, 4.0),
+    ],
+)
+def test_each_speed_tier_flows_through_real_two_stage_bicycle_action_path(
+    variant_key: str,
+    cap: float,
+    max_accel: float,
+    max_decel: float,
+) -> None:
+    """Every tier must bind planner ``unicycle_vw`` to native bicycle actions."""
     pytest.importorskip("gymnasium")
     from robot_sf.gym_env.environment_factory import make_robot_env
 
     variants = _variant_map()
     config = _real_config()
-    campaign_runner.apply_variant(
-        config, variants["robot_speed_band__bicycle_4_0_mps_micromobility"], seed=111
-    )
+    campaign_runner.apply_variant(config, variants[variant_key], seed=111)
     env = make_robot_env(config=config, seed=111, debug=False)
     try:
         robot = env.simulator.robots[0]
         assert isinstance(robot, BicycleDriveRobot)
-        assert robot.config.max_velocity == pytest.approx(4.0)
-        # The bicycle action space is [acceleration, steering]; the accel bound
-        # carries the band-scaled braking-authority prerequisite (#4976).
-        assert env.action_space.high[0] == pytest.approx(robot.config.max_accel)
+        assert robot.config.max_velocity == pytest.approx(cap)
+        assert robot.config.max_accel == pytest.approx(max_accel)
+        assert robot.config.max_decel == pytest.approx(max_decel)
+        assert robot.config.wheelbase == pytest.approx(1.0)
+        assert robot.config.max_steer == pytest.approx(0.78)
+        assert config.sim_config.time_per_step_in_secs == pytest.approx(0.1)
+
+        planner = campaign_runner._planner("goal_seek", config, seed=111)
+        angular_cap = cap * math.tan(robot.config.max_steer) / robot.config.wheelbase
+        assert planner.max_linear_speed == pytest.approx(cap)
+        assert planner.max_angular_speed == pytest.approx(angular_cap)
+
+        # The native action is [acceleration, steering], with asymmetric
+        # acceleration/braking authority and steering bounds from the real env.
+        assert env.action_space.low.tolist() == pytest.approx([-max_decel, -0.78])
+        assert env.action_space.high.tolist() == pytest.approx([max_accel, 0.78])
         env.reset(seed=111)
-        action = campaign_runner._env_action(env, {"v": 2.0, "omega": 1.5})
-        # The runner consumes unicycle-style velocity commands, whereas the
-        # bicycle environment consumes [acceleration, steering_angle]. A direct
-        # omega-as-steering pass-through would be a different (and incorrect)
-        # value for this non-zero target speed.
-        assert action[0] == pytest.approx(robot.config.max_accel)
-        assert action[1] == pytest.approx(math.atan(1.5 * robot.config.wheelbase / 2.0))
-        assert action[1] != pytest.approx(1.5)
+        action = campaign_runner._env_action(env, {"v": cap, "omega": angular_cap})
+        assert action.tolist() == pytest.approx([max_accel, 0.78])
+
+        robot.state.velocity = cap
+        braking_action = campaign_runner._env_action(env, {"v": 0.0, "omega": 0.0})
+        assert braking_action.tolist() == pytest.approx([-max_decel, 0.0])
+
         obs, _reward, terminated, _truncated, _info = env.step(env.action_space.sample())
         assert obs is not None
         assert terminated is False

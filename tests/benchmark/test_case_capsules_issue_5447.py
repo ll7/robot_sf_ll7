@@ -9,6 +9,9 @@ author-pending narrative fields.
 
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -344,3 +347,183 @@ def test_case_capsule_cli_fails_closed_on_missing_json(tmp_path, capsys):
     missing = tmp_path / "missing.json"
     assert build_cli_main(["--candidates", str(missing)]) == 2
     assert "error:" in capsys.readouterr().err
+
+
+def test_materialize_issue_5447_writes_pinned_artifact_set(tmp_path, monkeypatch):
+    """The materialize driver writes a manifest + ledger + SHA sidecar from the
+    real frozen #5446 candidate manifest, without fabricating capsules.
+
+    Uses a tiny synthetic candidate manifest copied into the expected path so the
+    test is hermetic (no network / large evidence bundle needed), while still
+    exercising the read-gz-or-plain path and the full output contract.
+    """
+    from scripts.analysis.materialize_issue_5447_capsules import (
+        CANDIDATE_REL,
+        EVID_DIR,
+        materialize,
+    )
+
+    out_root = tmp_path
+    cand_rel = out_root / CANDIDATE_REL
+    cand_rel.parent.mkdir(parents=True, exist_ok=True)
+    # Plain (non-gz) candidate manifest to exercise the json branch.
+    cand_rel.write_text(
+        json.dumps(
+            _candidate_manifest(
+                [
+                    _seed_flip_candidate("sf1", "sA", "p1"),
+                    _upset_candidate("up1", "sB", "p2"),
+                    {"candidate_id": "missing-archetype"},
+                ]
+            )
+        ),
+        encoding="utf-8",
+    )
+    evid = out_root / EVID_DIR
+    monkeypatch.setattr("scripts.analysis.materialize_issue_5447_capsules.EVID_DIR", evid)
+    monkeypatch.setattr(
+        "scripts.analysis.materialize_issue_5447_capsules.CANDIDATE_REL", str(cand_rel)
+    )
+
+    n = materialize()
+    assert n == 2  # two descriptive-only admitted, no casual/risk reports supplied
+
+    manifest_path = evid / "ch7_case_capsule_manifest.v1.json"
+    ledger_path = evid / "pre_selection_ledger.v1.json"
+    sums_path = evid / "SHA256SUMS"
+    assert manifest_path.exists() and ledger_path.exists() and sums_path.exists()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "ch7_case_capsule_manifest.v1"
+    result = validate_ch7_case_capsule_manifest(manifest)
+    assert result.ok, result.structural_violations
+
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    # Pre-selection ledger retains the full candidate pool, not just chosen rows.
+    assert len(ledger["candidate_pool"]) == 3
+    assert ledger["candidate_manifest"]["archetypes"] == ["planner_upset", "seed_flip"]
+    assert ledger["selection_result"]["n_admitted"] == 2
+
+    # Sidecar uses strict per-directory sha256sum semantics: emitted files are
+    # listed next to a shell-style evidence marker, while the external input
+    # hash remains in the manifest and ledger provenance fields.
+    sums = sums_path.read_text(encoding="utf-8")
+    assert sums.startswith("# AI-GENERATED NEEDS-REVIEW\n")
+    assert "ch7_case_capsule_manifest.v1.json" in sums
+    assert "pre_selection_ledger.v1.json" in sums
+    assert "build_command.v1.txt" in sums
+    assert str(cand_rel) not in sums
+
+    import shutil
+    import subprocess
+
+    if shutil.which("sha256sum") is not None:
+        proc = subprocess.run(
+            ["sha256sum", "-c", "SHA256SUMS"],
+            cwd=evid,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+
+
+def test_materialize_issue_5447_is_deterministic(tmp_path, monkeypatch):
+    """Re-materializing the same frozen candidate manifest yields identical SHA."""
+    from scripts.analysis.materialize_issue_5447_capsules import (
+        CANDIDATE_REL,
+        materialize,
+    )
+
+    cand_rel = tmp_path / CANDIDATE_REL
+    cand_rel.parent.mkdir(parents=True, exist_ok=True)
+    cand_rel.write_text(
+        json.dumps(_candidate_manifest([_seed_flip_candidate("sf1", "sA", "p1")])),
+        encoding="utf-8",
+    )
+    evid_a = tmp_path / "run_a"
+    evid_b = tmp_path / "run_b"
+    for evid in (evid_a, evid_b):
+        monkeypatch.setattr("scripts.analysis.materialize_issue_5447_capsules.EVID_DIR", evid)
+        monkeypatch.setattr(
+            "scripts.analysis.materialize_issue_5447_capsules.CANDIDATE_REL", str(cand_rel)
+        )
+        materialize()
+    a = (evid_a / "ch7_case_capsule_manifest.v1.json").read_bytes()
+    b = (evid_b / "ch7_case_capsule_manifest.v1.json").read_bytes()
+    assert hashlib.sha256(a).hexdigest() == hashlib.sha256(b).hexdigest()
+
+
+def test_issue_5447_committed_sha256sums_verifies_with_sha256sum_c():
+    """The committed #5447 SHA256SUMS sidecar must verify with `sha256sum -c`.
+
+    Regression guard for the provenance sidecar contract required by issue
+    #5447's acceptance criteria ("machine-readable provenance sidecars pass the
+    repository publication style/provenance checks"). An earlier committed
+    sidecar failed this contract from every directory: it used an HTML
+    `<!-- AI-GENERATED -->` header (which `sha256sum -c` rejects as improperly
+    formatted) and a cross-directory candidate-manifest line (which fails
+    `No such file or directory` when verified from the sidecar's own
+    directory). This test asserts the committed sidecar parses as a strict
+    per-directory `sha256sum` manifest and that every listed file verifies, and
+    -- when the `sha256sum` binary is present -- additionally runs the real tool
+    so the exact user-facing provenance command cannot regress.
+
+    Note: the generating driver
+    (`scripts/analysis/materialize_issue_5447_capsules.py`) still emits the
+    legacy broken format and needs the same fix; `scripts/` is outside this
+    slice's allowed paths, so that generator fix is tracked as remaining work.
+    Until then, re-running the generator would re-introduce the defect, which
+    this test catches.
+    """
+    import re
+    import shutil
+    import subprocess
+
+    # Resolve the committed sidecar relative to the repo root regardless of cwd.
+    repo_root = Path(__file__).resolve().parents[2]
+    evid_dir = repo_root / "docs/context/evidence/issue_5447_ch7_case_capsules"
+    sums_path = evid_dir / "SHA256SUMS"
+    assert sums_path.is_file(), f"missing committed sidecar: {sums_path}"
+
+    text = sums_path.read_text(encoding="utf-8")
+    # Strict per-directory sha256sum semantics: the only acceptable non-checksum
+    # lines are blank lines and `#` comments. Any other line (e.g. an HTML
+    # `<!-- ... -->` marker) is a malformation that `sha256sum -c` rejects.
+    line_re = re.compile(r"^(?P<hash>[0-9a-fA-F]{64})\s+\*?(?P<path>.+)$")
+    checked = 0
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = line_re.match(stripped)
+        assert match, (
+            f"{sums_path}: line {line_no} is not a valid sha256sum line or `#` comment: {line!r}"
+        )
+        target = evid_dir / match.group("path")
+        # Per-directory resolution: a listed path must live inside the sidecar's
+        # own directory (no cross-directory lines that break `sha256sum -c`
+        # run from this dir).
+        assert target.is_file(), (
+            f"{sums_path}: line {line_no} target not found next to the sidecar: {target}"
+        )
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        assert actual == match.group("hash").lower(), (
+            f"{sums_path}: line {line_no} checksum mismatch for {target}"
+        )
+        checked += 1
+    assert checked > 0, f"{sums_path} listed no verifiable files"
+
+    # When the real tool is available, exercise the exact user-facing command.
+    if shutil.which("sha256sum") is not None:
+        proc = subprocess.run(
+            ["sha256sum", "-c", "SHA256SUMS"],
+            cwd=evid_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, (
+            f"`sha256sum -c SHA256SUMS` failed from {evid_dir}\n"
+            f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )

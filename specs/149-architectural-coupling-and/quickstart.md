@@ -33,7 +33,7 @@ config.backend = "fast-pysf"
 config.sensors = [
     {
         "type": "dummy_constant",  # registered sensor name
-        "name": "bias",            # observation key will be "custom.bias"
+        "name": "bias",  # observation key will be "custom.bias"
         "value": [0.5, 0.25],
         "shape": [2],
         "dtype": "float32",
@@ -141,6 +141,7 @@ validate_config(config, strict=True)  # Raises on any issue
 
 # Get resolved config dict for logging/debugging
 from robot_sf.gym_env.config_validation import get_resolved_config_dict
+
 resolved = get_resolved_config_dict(config)
 print(resolved)  # Full config as dict with all defaults resolved
 ```

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.evidence.writers import write_json, write_text
 
 SCHEMA_VERSION = "issue_2910_publication_suite_certification_report.v1"
 DEFAULT_SCENARIO_CERTIFICATION_SUMMARY = Path(
@@ -516,11 +516,8 @@ def main(argv: list[str] | None = None) -> int:
         publication_suite_policy=publication_suite_policy,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / "report.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (args.output_dir / "report.md").write_text(render_markdown(report), encoding="utf-8")
+    write_json(args.output_dir / "report.json", report)
+    write_text(args.output_dir / "report.md", render_markdown(report))
     return 0
 
 

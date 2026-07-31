@@ -61,6 +61,13 @@ except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
 
+def _require_observation(obs: object) -> Observation:
+    """Return a typed observation or reject an invalid planner input."""
+    if not isinstance(obs, Observation):
+        raise TypeError(f"PPOPolicy requires Observation, got {type(obs).__name__}")
+    return obs
+
+
 @dataclass
 class PPOPlannerConfig:
     """Configuration for the PPO planner adapter."""
@@ -303,7 +310,7 @@ class PPOPlanner:
 
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
-        assert isinstance(obs, Observation)
+        obs = _require_observation(obs)
 
         # Try model predict
         try:
@@ -484,6 +491,7 @@ class PPOPlanner:
         flattened: dict[str, Any] = dict(obs)
 
         def _flatten_recursive(payload: dict[str, Any], prefix: str = "") -> None:
+            """Recursively flatten ``payload`` into ``flattened`` using ``_``-joined prefixed keys."""
             for key, value in payload.items():
                 full_key = f"{prefix}_{key}" if prefix else str(key)
                 if isinstance(value, dict):
@@ -913,6 +921,12 @@ class PPOPlanner:
         }
 
     # --- Metadata ------------------------------------------------------
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Return live nested predictive-foresight provenance, when enabled."""
+        if self._predictive_foresight is None:
+            return {}
+        return self._predictive_foresight.foresight_diagnostics()
+
     def get_metadata(self) -> dict[str, Any]:
         """Return metadata describing the planner and load status.
 

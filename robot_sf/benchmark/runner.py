@@ -95,6 +95,7 @@ from robot_sf.benchmark.utils import (
     validate_episode_success_integrity,
 )
 from robot_sf.common.optional_import import try_import
+from robot_sf.common.seed import set_global_seed
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -314,16 +315,48 @@ NATIVE_COMMAND_RUNTIME_FIELD: str = "planner_step_runtime_seconds"
 _episode_identity_hash = episode_identity_hash
 
 
-def _planner_step_worker(conn: Any, planner: Any) -> None:
-    """Run planner steps in an isolated child process."""
+def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
+    """Return serializable live foresight diagnostics from a planner, when available.
+
+    PPO runs behind a forked process boundary. Its predictive-foresight encoder
+    therefore mutates only in the child, so each IPC response must carry the
+    child's diagnostics back to the parent episode runner.
+    """
+    diagnostics_fn = getattr(planner, "foresight_diagnostics", None)
+    if not callable(diagnostics_fn):
+        return None
     try:
-        torch = try_import("torch")
-        if torch is not None:
-            torch.set_num_threads(1)
+        diagnostics = diagnostics_fn()
+    except Exception:  # pragma: no cover - diagnostics must not break policy execution
+        return None
+    return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
+
+
+def _config_torch_worker(planner: Any) -> None:
+    """Configure torch for deterministic single-threaded execution in a forked worker."""
+    torch = try_import("torch")
+    if torch is None:
+        return
+    torch.set_num_threads(1)
+    seed = getattr(planner, "_seed", 0)
+    if seed is None:
+        seed = 0
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
+def _planner_step_worker(conn: Any, planner: Any) -> None:
+    """Run planner steps in an isolated child process and relay live diagnostics."""
+    try:
+        _config_torch_worker(planner)
         ensure_load = getattr(planner, "_ensure_model_loaded", None)
         if callable(ensure_load):
             ensure_load()
-        conn.send(("init_ok", None))
+        conn.send(("init_ok", _planner_foresight_diagnostics(planner)))
     except Exception as exc:
         try:
             conn.send(("init_error", (type(exc).__name__, str(exc))))
@@ -344,7 +377,8 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
                 conn.send(("error", ("RuntimeError", f"unknown command: {command!r}")))
                 continue
             try:
-                conn.send(("ok", planner.step(payload)))
+                action = planner.step(payload)
+                conn.send(("ok", (action, _planner_foresight_diagnostics(planner))))
             except Exception as exc:  # pragma: no cover - defensive child-process path
                 conn.send(("error", (type(exc).__name__, str(exc))))
     finally:
@@ -361,6 +395,7 @@ class _PlannerStepProcess:
         timeout_s: float,
         first_step_timeout_s: float | None = None,
     ) -> None:
+        """Initialize the fork-based planner-step worker process and its timeout state."""
         if "fork" not in mp.get_all_start_methods():
             raise RuntimeError(
                 "planner step timeout isolation requires multiprocessing fork support"
@@ -372,6 +407,7 @@ class _PlannerStepProcess:
         self._ctx = mp.get_context("fork")
         self._process: mp.Process | None = None
         self._conn: Any | None = None
+        self._latest_foresight_diagnostics: dict[str, Any] | None = None
 
     def step(self, obs: Any) -> Any:
         """Run one planner step or raise when timeout/isolation fails.
@@ -408,8 +444,10 @@ class _PlannerStepProcess:
                         "planner step worker exited before returning an action"
                     ) from exc
                 if status == "ok":
+                    action, diagnostics = payload
+                    self._set_foresight_diagnostics(diagnostics)
                     self._worker_needs_warmup = False
-                    return payload
+                    return action
                 error_type, message = payload
                 raise RuntimeError(f"Planner step failed in worker ({error_type}: {message})")
             if not self._process.is_alive():
@@ -464,7 +502,17 @@ class _PlannerStepProcess:
                 raise RuntimeError("planner step worker initialization timed out")
             error_type, msg = payload
             raise RuntimeError(f"planner step worker failed to initialize ({error_type}: {msg})")
+        self._set_foresight_diagnostics(payload)
         self._worker_needs_warmup = True
+
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Return foresight diagnostics most recently relayed from the child worker."""
+        return dict(self._latest_foresight_diagnostics or {})
+
+    def _set_foresight_diagnostics(self, diagnostics: Any) -> None:
+        """Store serializable diagnostics relayed by the child process."""
+        if isinstance(diagnostics, Mapping):
+            self._latest_foresight_diagnostics = dict(diagnostics)
 
     def _terminate_worker(self) -> None:
         """Terminate the current worker after a timeout."""
@@ -562,6 +610,9 @@ class _NativeCommandPolicy:
     diagnostics the issue #5416 analyzer probe requires: per-step runtime,
     runtime-bound exits, fallback count, and expansion/commitment counters
     (zero for the thin native-command wrapper; a real SIPP binary owns those).
+    Also records ``process_spawns`` (the count of subprocess launches), which makes
+    the persistent-mode respawn regression (#5957) directly observable: a healthy
+    persistent run reports exactly one spawn regardless of horizon.
     """
 
     def __init__(
@@ -572,6 +623,7 @@ class _NativeCommandPolicy:
         timeout_s: float,
         persistent: bool,
     ) -> None:
+        """Initialize a native-command arm, validating argv/timeout and seeding diagnostics."""
         if not argv:
             raise ValueError("native_command requires a non-empty argv")
         self._argv = [str(item) for item in argv]
@@ -590,6 +642,11 @@ class _NativeCommandPolicy:
             NATIVE_COMMAND_RUNTIME_FIELD: [],
             "exit_codes": [],
             "last_exit_code": None,
+            # How many times a subprocess was actually launched. Makes the
+            # persistent-mode respawn bug (issue #5957) directly observable in
+            # episode diagnostics: a healthy persistent run records exactly one
+            # spawn regardless of horizon, while per-episode mode records one per step.
+            "process_spawns": 0,
         }
 
     def _spawn(self) -> subprocess.Popen[bytes]:
@@ -600,7 +657,7 @@ class _NativeCommandPolicy:
         """
         child_env = dict(os.environ)
         child_env.update({str(k): str(v) for k, v in self._env.items()})
-        return subprocess.Popen(
+        process = subprocess.Popen(
             self._argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -608,6 +665,8 @@ class _NativeCommandPolicy:
             env=child_env,
             bufsize=0,
         )
+        self._diagnostics["process_spawns"] += 1
+        return process
 
     def _ensure_process(self) -> subprocess.Popen[bytes]:
         """Start the persistent child process if needed.
@@ -1022,6 +1081,11 @@ def _create_native_command_policy(
     }
 
     def render(value: Any) -> str:
+        """Substitute scenario tokens (``{scenario_id}``/``{seed}``/...) into a string value.
+
+        Returns:
+            The value with scenario tokens substituted in.
+        """
         rendered = str(value)
         for token, replacement in mapping.items():
             rendered = rendered.replace(token, replacement)
@@ -1079,135 +1143,218 @@ def _create_native_command_policy(
     return policy_fn, enriched
 
 
-def _create_robot_policy(  # noqa: C901, PLR0915
+def _clamp_speed(vel: np.ndarray) -> np.ndarray:
+    """Clamp velocity magnitude to maximum allowed speed.
+
+    Args:
+        vel: Velocity vector to clamp.
+
+    Returns:
+        Clamped velocity vector.
+    """
+    speed = float(np.linalg.norm(vel))
+    if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
+        return vel / speed * FINAL_SPEED_CLAMP
+    return vel
+
+
+def _action_to_velocity(
+    action: dict[str, float],
+    robot_pos: np.ndarray,
+    robot_vel: np.ndarray,
+    robot_goal: np.ndarray,
     algo: str,
-    algo_config_path: str | None,
-    seed: int,
+) -> np.ndarray:
+    """Convert planner action dict to velocity vector.
+
+    Args:
+        action: Action dict with either (vx, vy) or (v, omega) keys.
+        robot_pos: Current robot position.
+        robot_vel: Current robot velocity.
+        robot_goal: Target goal position.
+        algo: Algorithm name for error messages.
+
+    Returns:
+        Velocity vector as 2D array.
+    """
+    if "vx" in action and "vy" in action:
+        return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
+    if "v" in action and "omega" in action:
+        v = action["v"]
+        current_speed = np.linalg.norm(robot_vel)
+        if current_speed > 1e-6:
+            vel = robot_vel / current_speed * v
+        else:
+            goal_dir = robot_goal - robot_pos
+            if np.linalg.norm(goal_dir) > 1e-6:
+                vel = goal_dir / np.linalg.norm(goal_dir) * v
+            else:
+                vel = np.zeros(2)
+        return _clamp_speed(vel)
+    raise ValueError(f"Invalid action format from {algo}: {action}")
+
+
+def _step_planner_with_retry(
+    step_runner: _PlannerStepProcess | None,
+    obs: Any,
+    algo: str,
+    timeout_metadata: dict[str, Any],
+    metadata: dict[str, Any],
+    retry_budget: int,
+) -> dict[str, float]:
+    """Execute one planner step with timeout and transient-error retry.
+
+    Returns:
+        Action dict from the planner, or a zero-velocity fallback.
+    """
+    retries = 0
+    while True:
+        try:
+            if step_runner is None:
+                raise RuntimeError("policy step isolation unavailable")
+            return step_runner.step(obs)
+        except FuturesTimeoutError:
+            timeout_metadata["step_timeouts"] += 1
+            if retries < retry_budget:
+                retries += 1
+                timeout_metadata["step_retries"] += 1
+                logger.warning(
+                    "Retrying {} planner step after transient worker timeout ({}/{}).",
+                    algo,
+                    retries,
+                    retry_budget,
+                )
+                continue
+            timeout_metadata["fallback_actions"] += 1
+            metadata["status"] = "policy_step_timeout_fallback"
+            metadata["fallback_reason"] = "policy_step_timeout"
+            return {"vx": 0.0, "vy": 0.0}
+        except (RuntimeError, TypeError, ValueError) as exc:
+            timeout_metadata["worker_errors"] += 1
+            timeout_metadata["last_error"] = str(exc)
+            if retries < retry_budget and isinstance(exc, RuntimeError) and step_runner is not None:
+                retries += 1
+                timeout_metadata["step_retries"] += 1
+                logger.warning(
+                    "Retrying {} planner step after transient worker error ({}/{}): {}",
+                    algo,
+                    retries,
+                    retry_budget,
+                    exc,
+                )
+                continue
+            timeout_metadata["fallback_actions"] += 1
+            metadata["status"] = "policy_step_error_fallback"
+            metadata["fallback_reason"] = "policy_step_error"
+            logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
+            return {"vx": 0.0, "vy": 0.0}
+
+
+def _build_baseline_policy_fn(
     *,
-    scenario_params: dict[str, Any] | None = None,
-    horizon: int = 100,
-    dt: float = 0.1,
-    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
-    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+    algo: str,
+    observation_cls: type,
+    step_runner: _PlannerStepProcess | None,
+    timeout_metadata: dict[str, Any],
+    metadata: dict[str, Any],
+    retry_budget: int,
+    robot_radius: float,
+    ped_radius: float,
 ):
-    """Create a robot policy function based on the specified algorithm.
+    """Build the policy closure for a baseline planner.
+
+    Returns:
+        Policy function callable.
+    """
+
+    def policy_fn(
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt: float,
+    ) -> np.ndarray:
+        """Compute velocity via process-isolated planner step.
+
+        Returns:
+            Velocity command as 2D array.
+        """
+        obs = _build_observation(
+            observation_cls,
+            robot_pos,
+            robot_vel,
+            robot_goal,
+            ped_positions,
+            dt,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
+        action = _step_planner_with_retry(
+            step_runner, obs, algo, timeout_metadata, metadata, retry_budget
+        )
+        return _action_to_velocity(action, robot_pos, robot_vel, robot_goal, algo)
+
+    return policy_fn
+
+
+def _create_simple_policy(algo: str):
+    """Create a simple goal-directed policy.
 
     Returns:
         Tuple of (policy function, metadata dict).
     """
 
-    if algo == NATIVE_COMMAND_ARM:
-        return _create_native_command_policy(
-            scenario_params=scenario_params or {},
-            seed=seed,
-            scenario_id=str(
-                (scenario_params or {}).get(
-                    "scenario_id",
-                    (scenario_params or {}).get(
-                        "id", (scenario_params or {}).get("name", "unknown")
-                    ),
-                )
-            ),
-            horizon=horizon,
-            dt=dt,
-            robot_radius=robot_radius,
-            ped_radius=ped_radius,
-        )
-
-    def _simple_policy_adapter():
-        """Create simple policy that navigates directly toward goal.
-
-        Returns:
-            Tuple of (policy function, metadata dict).
-        """
-
-        def policy(
-            robot_pos: np.ndarray,
-            _robot_vel: np.ndarray,
-            robot_goal: np.ndarray,
-            _ped_positions: np.ndarray,
-            _dt: float,
-        ) -> np.ndarray:
-            """Compute velocity command toward goal.
-
-            Args:
-                robot_pos: Current robot position.
-                _robot_vel: Current robot velocity (unused).
-                robot_goal: Target goal position.
-                _ped_positions: Pedestrian positions (unused).
-                _dt: Timestep duration (unused).
-
-            Returns:
-                Velocity command as 2D array.
-            """
-            return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
-
-        return policy, {
-            "algorithm": "simple_policy",
-            "config": {},
-            "config_hash": "na",
-            "status": "ok",
-        }
-
-    if algo in SIMPLE_POLICY_ALIASES:
-        policy_fn, metadata = _simple_policy_adapter()
-        return (
-            policy_fn,
-            enrich_algorithm_metadata(
-                algo=algo,
-                metadata=metadata,
-                execution_mode="native",
-            ),
-        )
-
-    planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
-
-    def _clamp_speed(vel: np.ndarray) -> np.ndarray:
-        """Clamp velocity magnitude to maximum allowed speed.
-
-        Args:
-            vel: Velocity vector to clamp.
-
-        Returns:
-            Clamped velocity vector.
-        """
-        speed = float(np.linalg.norm(vel))
-        if speed > FINAL_SPEED_CLAMP and speed > 1e-9:
-            return vel / speed * FINAL_SPEED_CLAMP
-        return vel
-
-    def _action_to_velocity(
-        action: dict[str, float],
+    def policy(
         robot_pos: np.ndarray,
-        robot_vel: np.ndarray,
+        _robot_vel: np.ndarray,
         robot_goal: np.ndarray,
+        _ped_positions: np.ndarray,
+        _dt: float,
     ) -> np.ndarray:
-        """Convert planner action dict to velocity vector.
+        """Compute velocity command toward goal.
 
         Args:
-            action: Action dict with either (vx, vy) or (v, omega) keys.
             robot_pos: Current robot position.
-            robot_vel: Current robot velocity.
+            _robot_vel: Current robot velocity (unused).
             robot_goal: Target goal position.
+            _ped_positions: Pedestrian positions (unused).
+            _dt: Timestep duration (unused).
 
         Returns:
-            Velocity vector as 2D array.
+            Velocity command as 2D array.
         """
-        if "vx" in action and "vy" in action:
-            return _clamp_speed(np.array([action["vx"], action["vy"]], dtype=float))
-        if "v" in action and "omega" in action:
-            v = action["v"]
-            current_speed = np.linalg.norm(robot_vel)
-            if current_speed > 1e-6:
-                vel = robot_vel / current_speed * v
-            else:
-                goal_dir = robot_goal - robot_pos
-                if np.linalg.norm(goal_dir) > 1e-6:
-                    vel = goal_dir / np.linalg.norm(goal_dir) * v
-                else:
-                    vel = np.zeros(2)
-            return _clamp_speed(vel)
-        raise ValueError(f"Invalid action format from {algo}: {action}")
+        return _simple_robot_policy(robot_pos, robot_goal, speed=1.0)
+
+    metadata = {
+        "algorithm": "simple_policy",
+        "config": {},
+        "config_hash": "na",
+        "status": "ok",
+    }
+    return (
+        policy,
+        enrich_algorithm_metadata(
+            algo=algo,
+            metadata=metadata,
+            execution_mode="native",
+        ),
+    )
+
+
+def _create_baseline_planner_policy(
+    algo: str,
+    algo_config_path: str | None,
+    seed: int,
+    *,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+):
+    """Create a baseline planner policy with process-isolated step execution.
+
+    Returns:
+        Tuple of (policy function, metadata dict).
+    """
+    planner, Observation, algo_config = _load_baseline_planner(algo, algo_config_path, seed)
 
     metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {"algorithm": algo}
     timeout_metadata: dict[str, Any] = {
@@ -1239,96 +1386,86 @@ def _create_robot_policy(  # noqa: C901, PLR0915
         metadata["status"] = "policy_step_isolation_unavailable"
         metadata["fallback_reason"] = "policy_step_isolation_unavailable"
 
-    def policy_fn(
-        robot_pos: np.ndarray,
-        robot_vel: np.ndarray,
-        robot_goal: np.ndarray,
-        ped_positions: np.ndarray,
-        dt: float,
-    ) -> np.ndarray:
-        """Policy function that uses the baseline planner.
-
-        Returns:
-            Velocity command as 2D array.
-        """
-        obs = _build_observation(
-            Observation,
-            robot_pos,
-            robot_vel,
-            robot_goal,
-            ped_positions,
-            dt,
-            robot_radius=robot_radius,
-            ped_radius=ped_radius,
-        )
-
-        retries = 0
-        while True:
-            try:
-                if step_runner is None:
-                    raise RuntimeError("policy step isolation unavailable")
-                action = step_runner.step(obs)
-                break
-            except FuturesTimeoutError:
-                timeout_metadata["step_timeouts"] += 1
-                if retries < retry_budget:
-                    retries += 1
-                    timeout_metadata["step_retries"] += 1
-                    logger.warning(
-                        "Retrying {} planner step after transient worker timeout ({}/{}).",
-                        algo,
-                        retries,
-                        retry_budget,
-                    )
-                    continue
-                timeout_metadata["fallback_actions"] += 1
-                metadata["status"] = "policy_step_timeout_fallback"
-                metadata["fallback_reason"] = "policy_step_timeout"
-                action = {"vx": 0.0, "vy": 0.0}
-                break
-            except (RuntimeError, TypeError, ValueError) as exc:
-                timeout_metadata["worker_errors"] += 1
-                timeout_metadata["last_error"] = str(exc)
-                if (
-                    retries < retry_budget
-                    and isinstance(exc, RuntimeError)
-                    and step_runner is not None
-                ):
-                    retries += 1
-                    timeout_metadata["step_retries"] += 1
-                    logger.warning(
-                        "Retrying {} planner step after transient worker error ({}/{}): {}",
-                        algo,
-                        retries,
-                        retry_budget,
-                        exc,
-                    )
-                    continue
-                timeout_metadata["fallback_actions"] += 1
-                metadata["status"] = "policy_step_error_fallback"
-                metadata["fallback_reason"] = "policy_step_error"
-                logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
-                action = {"vx": 0.0, "vy": 0.0}
-                break
-
-        # Convert action to velocity (handle both action spaces)
-        return _action_to_velocity(action, robot_pos, robot_vel, robot_goal)
+    policy_fn = _build_baseline_policy_fn(
+        algo=algo,
+        observation_cls=Observation,
+        step_runner=step_runner,
+        timeout_metadata=timeout_metadata,
+        metadata=metadata,
+        retry_budget=retry_budget,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
 
     if step_runner is not None:
         policy_fn.close = step_runner.close  # type: ignore[attr-defined]
-    # Ensure consistent metadata schema
+    # Issue #6190: expose the predictive planner's live foresight-model-load
+    # provenance on the policy closure. PPO executes behind ``step_runner``;
+    # its encoder mutates in the forked child, so the parent planner is stale and
+    # diagnostics must be read from the IPC relay instead.
+    if step_runner is not None and callable(getattr(planner, "foresight_diagnostics", None)):
+        policy_fn.foresight_diagnostics = step_runner.foresight_diagnostics  # type: ignore[attr-defined]
     metadata.setdefault("algorithm", algo)
     metadata["config"] = algo_config
     metadata["config_hash"] = _config_hash(algo_config)
     metadata.setdefault("status", "ok")
     metadata["policy_step_timeout"] = timeout_metadata
-    metadata = enrich_algorithm_metadata(
-        algo=algo,
-        metadata=metadata,
-        execution_mode="native",
+    # Preserve this mapping so policy-step fallback updates remain observable.
+    metadata.update(
+        enrich_algorithm_metadata(
+            algo=algo,
+            metadata=metadata,
+            execution_mode="native",
+        )
     )
 
     return policy_fn, metadata
+
+
+def _create_robot_policy(
+    algo: str,
+    algo_config_path: str | None,
+    seed: int,
+    *,
+    scenario_params: dict[str, Any] | None = None,
+    horizon: int = 100,
+    dt: float = 0.1,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+):
+    """Create a robot policy function based on the specified algorithm.
+
+    Returns:
+        Tuple of (policy function, metadata dict).
+    """
+    if algo == NATIVE_COMMAND_ARM:
+        return _create_native_command_policy(
+            scenario_params=scenario_params or {},
+            seed=seed,
+            scenario_id=str(
+                (scenario_params or {}).get(
+                    "scenario_id",
+                    (scenario_params or {}).get(
+                        "id", (scenario_params or {}).get("name", "unknown")
+                    ),
+                )
+            ),
+            horizon=horizon,
+            dt=dt,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
+
+    if algo in SIMPLE_POLICY_ALIASES:
+        return _create_simple_policy(algo)
+
+    return _create_baseline_planner_policy(
+        algo,
+        algo_config_path,
+        seed,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+    )
 
 
 def _close_robot_policy(policy: Any) -> None:
@@ -1902,6 +2039,13 @@ def run_episode(  # noqa: PLR0913
     # Wall-clock start time for timestamps and perf accounting
     perf_start = time.perf_counter()
     ts_start = datetime.now(UTC).isoformat()
+
+    # Global seed reset: ensure deterministic RNG state across repeats.
+    # Without this, the global numpy/torch/random state drifts between
+    # execute_campaign repeats, which can cause identical scenario+seed
+    # pairs to produce divergent trajectories (#6183).
+    set_global_seed(seed)
+
     robot_radius = _scenario_robot_radius_m(scenario_params)
     ped_radius = _scenario_ped_radius_m(scenario_params)
     # Create robot policy based on algorithm
@@ -1976,6 +2120,17 @@ def run_episode(  # noqa: PLR0913
         live_diag = policy_diag()
         if isinstance(live_diag, dict):
             algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
+
+    # Issue #6190: refresh the predictive planner's foresight-model-load
+    # provenance (captured during the episode) so ``enrich_algorithm_metadata``
+    # can derive the degraded ``status``/``evidence_eligible`` for a silent
+    # constant-velocity fallback. Read after the episode because the model load
+    # (and any fallback) happens lazily during prediction.
+    foresight_diag = getattr(robot_policy, "foresight_diagnostics", None)
+    if callable(foresight_diag):
+        live_foresight = foresight_diag()
+        if isinstance(live_foresight, dict):
+            algo_metadata.update(live_foresight)
 
     collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
     route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)
@@ -2569,6 +2724,10 @@ def run_batch(  # noqa: PLR0913
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,
+    # Planner-agnostic safety-wrapper binding (issue #3501 / #4830). Forwarded to
+    # ``run_map_batch`` for map-based scenarios so the campaign can opt an arm into the
+    # runtime wrapper step logic. ``None`` keeps the wrapper off (the runtime default).
+    safety_wrapper: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -2631,6 +2790,7 @@ def run_batch(  # noqa: PLR0913
             record_simulation_step_trace=record_simulation_step_trace,
             workers=workers,
             resume=resume,
+            safety_wrapper=safety_wrapper,
         )
 
     # Expand jobs

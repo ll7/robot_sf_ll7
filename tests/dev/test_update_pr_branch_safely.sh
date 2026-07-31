@@ -59,6 +59,7 @@ make_gh() {
 #!/usr/bin/env bash
 # Minimal gh mock honoring `--jq '.head.sha'`, `.head.ref`, `.base.ref`,
 # and `repo view --json nameWithOwner --jq .nameWithOwner`.
+printf '%s\n' "$*" >> "${MOCK_DIR}/gh_calls"
 jq=""
 url=""
 prev=""
@@ -72,6 +73,10 @@ if [[ "$1 $2" == "repo view" ]]; then
 fi
 case "$url" in
   *"/pulls/1/update-branch")
+    if [[ "${MOCK_UPDATE_BRANCH_SUCCESS:-0}" -eq 1 ]]; then
+      printf 'Branch update scheduled\n'
+      exit 0
+    fi
     echo "gh: 'update-branch' is not a gh command" >&2
     exit 1
     ;;
@@ -150,29 +155,57 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 4. --dry-run must reach the local-fallback plan without mutating.
+# 4. --dry-run must stop after read-only metadata validation. In particular,
+#    it must not invoke the update-branch endpoint even when that mocked
+#    endpoint would succeed (issue #6439).
 make_gh
-# git stub that answers the read-only branch/HEAD queries the wrapper needs to
-# reach the dry-run plan, and blocks any mutating op (none should be reached).
+: > "${MOCK_DIR}/gh_calls"
+: > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/lease_calls"
+# A dry-run should not need any local Git operation after the remote metadata
+# guard. Fail if the helper reaches this stub.
 cat > "${MOCK_DIR}/git" <<'EOF'
 #!/usr/bin/env bash
-case "$*" in
-  "rev-parse --abbrev-ref HEAD") printf 'feature';;
-  "rev-parse HEAD") printf 'headsha';;
-  "ls-remote"*) exit 0;;
-  *) echo "git stub: refusing op $*" >&2; exit 1;;
-esac
+printf '%s\n' "$*" >> "${MOCK_DIR}/git_calls"
+echo "git stub: refusing dry-run op $*" >&2
+exit 1
 EOF
 chmod +x "${MOCK_DIR}/git"
+DRY_RUN_LEASE_HELPER="${MOCK_DIR}/dry_run_lease.py"
+cat > "$DRY_RUN_LEASE_HELPER" <<'EOF'
+#!/usr/bin/env python3
+import os
+import sys
+
+with open(os.path.join(os.environ["MOCK_DIR"], "lease_calls"), "a") as call_log:
+    call_log.write(" ".join(sys.argv[1:]) + "\n")
+EOF
+chmod +x "$DRY_RUN_LEASE_HELPER"
+# The helper resolves its lease helper relative to itself. Use a copied wrapper
+# so this regression can fail if dry-run reaches either lease action.
+DRY_RUN_SCRIPT="${MOCK_DIR}/update_pr_branch_safely_dry_run.sh"
+cp "$SCRIPT" "$DRY_RUN_SCRIPT"
+python3 - "$DRY_RUN_SCRIPT" "$DRY_RUN_LEASE_HELPER" <<'PY'
+import sys
+
+script_path, lease_helper = sys.argv[1:]
+source = open(script_path).read()
+source = source.replace(
+    'LEASE_HELPER="${SCRIPT_DIR}/pr_gate_lease.py"',
+    f'LEASE_HELPER="{lease_helper}"',
+)
+open(script_path, "w").write(source)
+PY
+chmod +x "$DRY_RUN_SCRIPT"
 RC=0
-OUT="$(PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" 1 --repo owner/repo \
+OUT="$(MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$DRY_RUN_SCRIPT" 1 --repo owner/repo \
   --expected-head-sha headsha --remote custom --dry-run 2>/dev/null)" || RC=$?
 assert_json "dry-run output is valid JSON" "$OUT"
-if echo "$OUT" | grep -q '"status":"dry_run"'; then
-  echo "PASS: dry-run reports plan without mutating"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "dry_run" and d["updated"] is False' <<<"$OUT"; then
+  echo "PASS: dry-run reports a non-mutating plan"
   PASS=$((PASS + 1))
 else
-  echo "FAIL: dry-run did not report plan"
+  echo "FAIL: dry-run did not report a non-mutating plan"
   FAIL=$((FAIL + 1))
 fi
 if python3 -c 'import json, sys; assert json.load(sys.stdin)["remote"] == "custom"' <<<"$OUT"; then
@@ -182,7 +215,59 @@ else
   echo "FAIL: configured remote was not preserved in the result"
   FAIL=$((FAIL + 1))
 fi
+if grep -q '/pulls/1/update-branch' "${MOCK_DIR}/gh_calls"; then
+  echo "FAIL: dry-run invoked the remote update-branch endpoint"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: dry-run skipped the remote update-branch endpoint"
+  PASS=$((PASS + 1))
+fi
+if [[ -s "${MOCK_DIR}/git_calls" ]]; then
+  echo "FAIL: dry-run invoked local Git"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: dry-run skipped local Git"
+  PASS=$((PASS + 1))
+fi
+if [[ -s "${MOCK_DIR}/lease_calls" ]]; then
+  echo "FAIL: dry-run invoked the PR-gate lease helper"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: dry-run skipped the PR-gate lease helper"
+  PASS=$((PASS + 1))
+fi
 assert_ok "dry-run exits 0" "$RC"
+
+# The same mocked successful endpoint must remain available to a non-dry-run
+# invocation, proving the safety guard did not disable the primary update path.
+: > "${MOCK_DIR}/gh_calls"
+: > "${MOCK_DIR}/git_calls"
+RC=0
+OUT="$(MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" 1 --repo owner/repo \
+  --expected-head-sha headsha 2>/dev/null)" || RC=$?
+assert_ok "non-dry-run REST update exits 0" "$RC"
+assert_json "non-dry-run REST output is valid JSON" "$OUT"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "update_requested" and d["updated"] is True' <<<"$OUT"; then
+  echo "PASS: non-dry-run retains the REST update path"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: non-dry-run did not report the REST update path"
+  FAIL=$((FAIL + 1))
+fi
+if grep -q '/pulls/1/update-branch' "${MOCK_DIR}/gh_calls"; then
+  echo "PASS: non-dry-run invoked the remote update-branch endpoint"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: non-dry-run skipped the remote update-branch endpoint"
+  FAIL=$((FAIL + 1))
+fi
+if [[ -s "${MOCK_DIR}/git_calls" ]]; then
+  echo "FAIL: successful REST update invoked local Git"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: successful REST update skipped local Git"
+  PASS=$((PASS + 1))
+fi
 
 # 5. The local fallback must exercise fetch, rebase, lease-protected push, and
 #    post-push verification with the configured remote.
@@ -247,10 +332,162 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# 6. --help / bad flag rejected.
+# 6. -h / --help print usage and exit 0 without touching GitHub; unknown flags
+# are still rejected. A deliberately failing stub keeps these checks offline and
+# proves the help branch exits before repository resolution.
+cat > "${MOCK_DIR}/gh" <<'EOF'
+#!/usr/bin/env bash
+echo "gh mock: help must not invoke gh ($*)" >&2
+exit 99
+EOF
+chmod +x "${MOCK_DIR}/gh"
+
+RC=0
+HELP_STDOUT="${MOCK_DIR}/help.stdout"
+HELP_STDERR="${MOCK_DIR}/help.stderr"
+PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --help >"$HELP_STDOUT" 2>"$HELP_STDERR" || RC=$?
+assert_ok "--help exits 0" "$RC"
+OUT="$(<"$HELP_STDOUT")"
+if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
+  echo "PASS: --help prints usage and option text"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: --help did not print usage and option text"
+  FAIL=$((FAIL + 1))
+fi
+if [[ ! -s "$HELP_STDERR" ]]; then
+  echo "PASS: --help writes help text to stdout"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: --help unexpectedly writes to stderr"
+  FAIL=$((FAIL + 1))
+fi
+
+RC=0
+HELP_STDOUT="${MOCK_DIR}/short-help.stdout"
+HELP_STDERR="${MOCK_DIR}/short-help.stderr"
+PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" -h >"$HELP_STDOUT" 2>"$HELP_STDERR" || RC=$?
+assert_ok "-h exits 0" "$RC"
+OUT="$(<"$HELP_STDOUT")"
+if echo "$OUT" | grep -q 'Usage:' && echo "$OUT" | grep -q 'Options:'; then
+  echo "PASS: -h prints usage and option text"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: -h did not print usage and option text"
+  FAIL=$((FAIL + 1))
+fi
+if [[ ! -s "$HELP_STDERR" ]]; then
+  echo "PASS: -h writes help text to stdout"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: -h unexpectedly writes to stderr"
+  FAIL=$((FAIL + 1))
+fi
+
 RC=0
 bash "$SCRIPT" --bogus 2>/dev/null || RC=$?
 assert_fail "unknown flag rejected" "$RC"
+
+# 7. A registered gate worktree that has vanished must fail closed before the
+#    local branch-switch/conflict-resolution path, reporting the lease cleanup
+#    owner (issue #5967). The guard helper is mocked to report exists=false with
+#    a cleanup owner; the local fallback must NOT run any git mutation.
+make_gh
+GONE_WT="${MOCK_DIR}/gone-gate-wt"
+mkdir -p "$GONE_WT"
+GUARD_DIR="${MOCK_DIR}/guard"
+mkdir -p "$GUARD_DIR"
+cat > "${GUARD_DIR}/gate_worktree_guard.py" <<'EOF'
+#!/usr/bin/env python3
+import json, sys
+# Mock of the gate worktree guard's `verify` subcommand.
+assert sys.argv[1] == "verify", sys.argv
+path = sys.argv[sys.argv.index("--path") + 1]
+print(json.dumps({
+    "schema": "gate_worktree_guard.v1",
+    "path": path,
+    "exists": False,
+    "classification": "missing",
+    "cleanup_owner": "owner=auto-smart-routing; pr=#5819; gate=gate-5819",
+}))
+sys.exit(1)
+EOF
+chmod +x "${GUARD_DIR}/gate_worktree_guard.py"
+# Point the script's helper resolution at the mock by shadowing via PATH is not
+# possible (it uses SCRIPT_DIR). Instead, write a tiny wrapper that injects the
+# mock path through PYTHONPATH is not honored; use a sed-free approach: copy the
+# real script but rewrite GUARD_HELPER to the mock.
+cp "$SCRIPT" "${MOCK_DIR}/update_pr_branch_safely_wg.sh"
+python3 - "$GONE_WT" "${GUARD_DIR}" "${MOCK_DIR}" <<'PY'
+import sys
+gone, guard_dir, mock_dir = sys.argv[1:]
+src = open(f"{mock_dir}/update_pr_branch_safely_wg.sh").read()
+src = src.replace(
+    'GUARD_HELPER="${SCRIPT_DIR}/gate_worktree_guard.py"',
+    f'GUARD_HELPER="{guard_dir}/gate_worktree_guard.py"',
+)
+open(f"{mock_dir}/update_pr_branch_safely_wg.sh", "w").write(src)
+PY
+chmod +x "${MOCK_DIR}/update_pr_branch_safely_wg.sh"
+RC=0
+OUT="$(PATH="${MOCK_DIR}:$PATH" bash "${MOCK_DIR}/update_pr_branch_safely_wg.sh" \
+  --pr 1 --repo owner/repo --expected-head-sha headsha --gate-worktree-path "$GONE_WT" 2>/dev/null)" || RC=$?
+assert_json "vanished-gate-worktree output is valid JSON" "$OUT"
+assert_fail "vanished gate worktree fails closed" "$RC"
+if echo "$OUT" | grep -q '"status":"gate_worktree_missing"'; then
+  echo "PASS: vanished gate worktree reports gate_worktree_missing"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: vanished gate worktree did not report gate_worktree_missing"
+  FAIL=$((FAIL + 1))
+fi
+if echo "$OUT" | grep -q 'auto-smart-routing'; then
+  echo "PASS: vanished gate worktree reports the lease cleanup owner"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: vanished gate worktree did not report the cleanup owner"
+  FAIL=$((FAIL + 1))
+fi
+# The local fallback must not have run git rebase/push; there is no git call that
+# would have mutated. The mock git (if any) is absent, so command-not-found would
+# have surfaced; ensure no git rebase reached the stub by checking exit closed.
+
+# 8. Malformed guard output must produce a deterministic JSON error rather than
+#    a second parser traceback or an unstructured shell failure.
+BAD_GUARD_DIR="${MOCK_DIR}/bad-guard"
+mkdir -p "$BAD_GUARD_DIR"
+cat > "${BAD_GUARD_DIR}/gate_worktree_guard.py" <<'EOF'
+#!/usr/bin/env python3
+print("not-json")
+raise SystemExit(1)
+EOF
+chmod +x "${BAD_GUARD_DIR}/gate_worktree_guard.py"
+cp "$SCRIPT" "${MOCK_DIR}/update_pr_branch_safely_bad_guard.sh"
+python3 - "$BAD_GUARD_DIR" "$MOCK_DIR" <<'PY'
+import sys
+
+bad_guard_dir, mock_dir = sys.argv[1:]
+script_path = f"{mock_dir}/update_pr_branch_safely_bad_guard.sh"
+source = open(script_path).read()
+source = source.replace(
+    'GUARD_HELPER="${SCRIPT_DIR}/gate_worktree_guard.py"',
+    f'GUARD_HELPER="{bad_guard_dir}/gate_worktree_guard.py"',
+)
+open(script_path, "w").write(source)
+PY
+chmod +x "${MOCK_DIR}/update_pr_branch_safely_bad_guard.sh"
+RC=0
+OUT="$(PATH="${MOCK_DIR}:$PATH" bash "${MOCK_DIR}/update_pr_branch_safely_bad_guard.sh" \
+  --pr 1 --repo owner/repo --expected-head-sha headsha --gate-worktree-path "$GONE_WT" 2>/dev/null)" || RC=$?
+assert_json "malformed guard output remains valid JSON" "$OUT"
+assert_fail "malformed guard output fails closed" "$RC"
+if echo "$OUT" | grep -q '"status":"error"'; then
+  echo "PASS: malformed guard output reports a deterministic error"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: malformed guard output did not report a deterministic error"
+  FAIL=$((FAIL + 1))
+fi
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

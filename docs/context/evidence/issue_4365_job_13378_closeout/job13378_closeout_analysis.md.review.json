@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_4365_job_13378_closeout/job13378_closeout_analysis.md",
+  "artifact_sha256": "ae7f859d34ce9488fa0f119e69d701726bc4d08b166d458bac1fbaa210dfd6e1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

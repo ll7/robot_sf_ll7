@@ -26,24 +26,31 @@ def test_env_settings_deprecated():
     """EnvSettings emits DeprecationWarning mentioning RobotSimulationConfig"""
     with pytest.warns(DeprecationWarning, match="RobotSimulationConfig"):
         from robot_sf.gym_env.env_config import EnvSettings
+
         config = EnvSettings()
-    
+
+
 def test_ped_env_settings_deprecated():
     """PedEnvSettings emits DeprecationWarning mentioning PedestrianSimulationConfig"""
     with pytest.warns(DeprecationWarning, match="PedestrianSimulationConfig"):
         from robot_sf.gym_env.env_config import PedEnvSettings
+
         config = PedEnvSettings()
+
 
 def test_robot_env_settings_deprecated():
     """RobotEnvSettings emits DeprecationWarning mentioning RobotSimulationConfig"""
     with pytest.warns(DeprecationWarning, match="RobotSimulationConfig"):
         from robot_sf.gym_env.env_config import RobotEnvSettings
+
         config = RobotEnvSettings()
+
 
 def test_base_env_settings_deprecated():
     """BaseEnvSettings emits DeprecationWarning mentioning BaseSimulationConfig"""
     with pytest.warns(DeprecationWarning, match="BaseSimulationConfig"):
         from robot_sf.gym_env.env_config import BaseEnvSettings
+
         config = BaseEnvSettings()
 ```
 
@@ -116,15 +123,16 @@ uv run pytest tests -v
 ```python
 import ast
 
+
 def test_migration_examples_valid_syntax():
     """Extract and validate all code examples from configuration.md"""
     doc_path = "docs/architecture/configuration.md"
     with open(doc_path) as f:
         content = f.read()
-    
+
     # Extract code blocks (simplified - actual implementation would be more robust)
     code_blocks = extract_python_code_blocks(content)
-    
+
     for i, code in enumerate(code_blocks):
         try:
             ast.parse(code)
@@ -157,16 +165,14 @@ def test_config_precedence_runtime_wins():
     # Code default: sim_time_in_secs = 200.0 (in SimulationSettings)
     # YAML override: sim_time_in_secs = 150.0 (hypothetical)
     # Runtime override: sim_time_in_secs = 100.0 (via config kwarg)
-    
+
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
     from robot_sf.sim.sim_config import SimulationSettings
-    
-    runtime_config = RobotSimulationConfig(
-        sim_config=SimulationSettings(sim_time_in_secs=100.0)
-    )
-    
+
+    runtime_config = RobotSimulationConfig(sim_config=SimulationSettings(sim_time_in_secs=100.0))
+
     env = make_robot_env(config=runtime_config)
-    
+
     # Verify runtime value is used
     assert env.config.sim_config.sim_time_in_secs == 100.0
 ```
@@ -198,16 +204,17 @@ def test_config_precedence_runtime_wins():
 def test_deprecation_message_format():
     """Deprecation warning includes all required information"""
     import warnings
-    
+
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         from robot_sf.gym_env.env_config import EnvSettings
+
         config = EnvSettings()
-        
+
         assert len(w) == 1
         assert issubclass(w[0].category, DeprecationWarning)
         message = str(w[0].message)
-        
+
         # Check required content
         assert "EnvSettings" in message
         assert "deprecated" in message.lower()

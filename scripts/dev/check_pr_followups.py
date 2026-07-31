@@ -80,6 +80,26 @@ _NEGATED_TRIGGER_RE = re.compile(r"\b(no|not|without|never|non)\b[\s\w-]{0,24}$"
 # "benchmark interpretation"), a weaker signal than a filled Research Result Guidance declaration.
 # Only free-form triggers may be opted out of with the documented docs-only/not-required branch.
 _FREEFORM_TRIGGER_PREFIX = "free-form evidence marker: "
+_TITLE_EVIDENCE_PREFIX = "title-based evidence signal: "
+_FILE_EVIDENCE_PREFIX = "file-based evidence signal: "
+
+# Title patterns that suggest evidence-changing work, including conventional scopes such as
+# "feat(benchmark): add metric".
+EVIDENCE_TITLE_PREFIX_RE = re.compile(
+    r"^(?:(?:\[(?:benchmark|validation|metric|eval|paper)\]\s*)|"
+    r"(?:[a-z][a-z0-9-]*\((?:benchmark|validation|metric|eval|paper)\)!?:\s*)|"
+    r"(?:benchmark|validation|metric|eval|paper)[:\s])",
+    re.IGNORECASE,
+)
+
+# File path prefixes suggesting evidence-changing work, including the canonical evidence context.
+EVIDENCE_PATH_PREFIXES = (
+    "robot_sf/benchmark/",
+    "scripts/benchmark/",
+    "configs/benchmark/",
+    "tests/benchmark/",
+    "docs/context/evidence/",
+)
 BOT_ONLY_MARKERS = (
     "auto-generated comment: release notes by coderabbit.ai",
     "auto-generated comment: summarize by coderabbit.ai",
@@ -180,6 +200,27 @@ def _is_substantive_file(path: str) -> bool:
     ):
         return False
     return not any(normalized.endswith(suffix) for suffix in NON_SUBSTANTIVE_SUFFIXES)
+
+
+def _evidence_signal_from_title(title: str) -> tuple[str, ...]:
+    """Return a trigger tuple when the PR title suggests evidence-changing work."""
+    if not title:
+        return ()
+    if EVIDENCE_TITLE_PREFIX_RE.search(title.strip()):
+        return (f"{_TITLE_EVIDENCE_PREFIX}{title.strip()}",)
+    return ()
+
+
+def _evidence_signal_from_files(changed_files: tuple[str, ...]) -> tuple[str, ...]:
+    """Return a trigger tuple when changed files touch evidence-related paths."""
+    if not changed_files:
+        return ()
+    for path in changed_files:
+        normalized = posixpath.normpath(path.strip().replace("\\", "/"))
+        for prefix in EVIDENCE_PATH_PREFIXES:
+            if normalized.startswith(prefix):
+                return (f"{_FILE_EVIDENCE_PREFIX}{prefix.rstrip('/')}",)
+    return ()
 
 
 def _read_changed_files(path: Path | None) -> tuple[str, ...]:
@@ -390,21 +431,31 @@ def _has_value_prefix(value: str, prefix: str) -> bool:
     return not rest or rest[0] in " -:,()"
 
 
-def _domain_approval_triggers(body: str) -> tuple[str, ...]:
+def _domain_approval_triggers(
+    body: str,
+    *,
+    title: str = "",
+    changed_files: tuple[str, ...] = (),
+) -> tuple[str, ...]:
     """Return template-field triggers that require domain-aware approval."""
     section = _extract_section(body, "Research Result Guidance")
     if not section:
-        return tuple(
+        body_triggers: tuple[str, ...] = tuple(
             f"{_FREEFORM_TRIGGER_PREFIX}{match.group(1)}"
             for match in FREEFORM_DOMAIN_TRIGGER_RE.finditer(body)
             if not _NEGATED_TRIGGER_RE.search(body[: match.start()])
         )
-    triggers: list[str] = []
-    for label in ("Evidence tier", "Result classification"):
-        value = _value_after_label(section, label)
-        if value and not _domain_value_not_required(value):
-            triggers.append(f"{label}: {value}")
-    return tuple(triggers)
+    else:
+        structured_triggers: list[str] = []
+        for label in ("Evidence tier", "Result classification"):
+            value = _value_after_label(section, label)
+            if value and not _domain_value_not_required(value):
+                structured_triggers.append(f"{label}: {value}")
+        body_triggers = tuple(structured_triggers)
+
+    title_signal = _evidence_signal_from_title(title)
+    file_signals = _evidence_signal_from_files(changed_files)
+    return body_triggers + title_signal + file_signals
 
 
 def _domain_checklist_errors(section: str) -> tuple[str, ...]:
@@ -588,9 +639,15 @@ def _domain_status_report(
     return None
 
 
-def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
+def analyze_domain_approval(
+    body: str,
+    *,
+    source: str,
+    title: str = "",
+    changed_files: tuple[str, ...] = (),
+) -> DomainApprovalReport:
     """Return whether domain-sensitive PR bodies carry explicit approval or blocker status."""
-    sensitive_terms = _domain_approval_triggers(body)
+    sensitive_terms = _domain_approval_triggers(body, title=title, changed_files=changed_files)
     if not sensitive_terms:
         return DomainApprovalReport(
             status="ok",
@@ -779,6 +836,40 @@ def analyze_body_quality(
     )
 
 
+def _read_event_title(path: Path) -> str | None:
+    """Extract the PR title from a GitHub event payload, if available."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    pull_request = payload.get("pull_request")
+    if isinstance(pull_request, dict) and isinstance(pull_request.get("title"), str):
+        return pull_request["title"]
+    return None
+
+
+def _resolve_title(args: argparse.Namespace) -> str:
+    """Resolve PR title from --title arg or GitHub event payload, or return empty string."""
+    if args.title:
+        return args.title
+
+    event_path: Path | None = args.github_event_path
+    if event_path:
+        event_title = _read_event_title(event_path)
+        if event_title is not None:
+            return event_title
+
+    env_event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if env_event_path:
+        event_title = _read_event_title(Path(env_event_path))
+        if event_title is not None:
+            return event_title
+
+    return ""
+
+
 def _read_event_body(path: Path) -> str | None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     pull_request = payload.get("pull_request")
@@ -858,6 +949,7 @@ def _format_body_quality_report(report: BodyQualityReport) -> str:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--body-file", type=Path, help="Markdown PR body to check.")
+    parser.add_argument("--title", type=str, help="PR title for evidence classification.")
     parser.add_argument(
         "--github-event-path",
         type=Path,
@@ -953,6 +1045,7 @@ def main(argv: list[str] | None = None) -> int:
         "PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES", ""
     ).lower() in {"1", "true", "yes", "on"}
     changed_files = _read_changed_files(args.changed_files_file)
+    title = _resolve_title(args)
     require_substantive_body = args.require_substantive_body or os.environ.get(
         "PR_READY_REQUIRE_SUBSTANTIVE_BODY", ""
     ).lower() in {"1", "true", "yes", "on"}
@@ -963,7 +1056,9 @@ def main(argv: list[str] | None = None) -> int:
         require_substantive_body=require_substantive_body,
     )
     report = analyze_body(body, source=source, require_open_issues=require_open)
-    domain_report = analyze_domain_approval(body, source=source)
+    domain_report = analyze_domain_approval(
+        body, source=source, title=title, changed_files=changed_files
+    )
     failing_statuses = {
         "missing_followup",
         "missing_section",

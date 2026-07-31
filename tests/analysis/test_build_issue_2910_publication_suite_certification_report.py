@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from scripts.analysis.build_issue_2910_publication_suite_certification_report import (
     DEFAULT_RELEASE_CLAIM_MATRIX,
@@ -153,3 +155,7 @@ def test_cli_writes_json_and_markdown(tmp_path) -> None:
     assert payload["summary"]["blocker_count"] == 0
     assert payload["summary"]["publication_suite_policy_status"] == "applied"
     assert "Publication Suite Certification Report" in markdown
+    assert (tmp_path / "report.json").read_text(encoding="utf-8") == (
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    )
+    assert markdown == render_markdown(payload)

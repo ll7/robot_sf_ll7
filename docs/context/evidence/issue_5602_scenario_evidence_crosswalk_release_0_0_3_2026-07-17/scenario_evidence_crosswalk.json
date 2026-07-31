@@ -1,0 +1,2563 @@
+{
+  "claim_boundary": "Benchmark-evidence metadata join only. Geometry groups are descriptive topology labels and never imply a causal failure mechanism; predicate availability is consumed from the #5593 export lane when present and is explicit 'unavailable' otherwise; validated mechanisms require a validated causal report and are not derived here. No private manuscript claims are encoded.",
+  "content_sha256": "20ecce670caea6d35ddd4f55af4e013dd3fb2ec823df26ded63df5bf990a79d6",
+  "evidence_catalog_consumed": false,
+  "generated_at_utc": "2026-07-17T10:45:53.644352+00:00",
+  "predicate_export_consumed": false,
+  "repo_commit": "f1aead3",
+  "rows": [
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "bottleneck (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_bottleneck_high.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_high",
+      "seeds": [
+        131,
+        132,
+        133
+      ],
+      "source_config_hash": "58ba0d39aa9e0eef"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "bottleneck (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_bottleneck.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_low",
+      "seeds": [
+        131,
+        132,
+        133
+      ],
+      "source_config_hash": "707e40cafbe857d0"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "bottleneck (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_bottleneck_medium.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_medium",
+      "seeds": [
+        131,
+        132,
+        133
+      ],
+      "source_config_hash": "488df820f5774565"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "cross_trap (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "classic_cross_trap",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "cross_trap",
+      "scenario_id": "classic_cross_trap_high",
+      "seeds": [
+        101,
+        102,
+        103
+      ],
+      "source_config_hash": "26ed69e5420a5940"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "cross_trap (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "classic_cross_trap",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "cross_trap",
+      "scenario_id": "classic_cross_trap_low",
+      "seeds": [
+        101,
+        102,
+        103
+      ],
+      "source_config_hash": "9288eea08102db81"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "cross_trap (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "classic_cross_trap",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "cross_trap",
+      "scenario_id": "classic_cross_trap_medium",
+      "seeds": [
+        101,
+        102,
+        103
+      ],
+      "source_config_hash": "4c698a720b69f064"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "doorway (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_doorway.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "doorway",
+      "scenario_id": "classic_doorway_high",
+      "seeds": [
+        141,
+        142,
+        143
+      ],
+      "source_config_hash": "477b972e75c3783a"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "doorway (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_doorway.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "doorway",
+      "scenario_id": "classic_doorway_low",
+      "seeds": [
+        141,
+        142,
+        143
+      ],
+      "source_config_hash": "91b5caf529482689"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "doorway (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_doorway.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "doorway",
+      "scenario_id": "classic_doorway_medium",
+      "seeds": [
+        141,
+        142,
+        143
+      ],
+      "source_config_hash": "422419ddbb65aaa2"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "group_crossing (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_group_crossing.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "group_crossing",
+      "scenario_id": "classic_group_crossing_high",
+      "seeds": [
+        171,
+        172,
+        173
+      ],
+      "source_config_hash": "8fa6eb038e13af1f"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "group_crossing (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_group_crossing.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "group_crossing",
+      "scenario_id": "classic_group_crossing_low",
+      "seeds": [
+        171,
+        172,
+        173
+      ],
+      "source_config_hash": "b64e47659836a1bb"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "group_crossing (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_group_crossing.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "group_crossing",
+      "scenario_id": "classic_group_crossing_medium",
+      "seeds": [
+        171,
+        172,
+        173
+      ],
+      "source_config_hash": "81e7681b50d4cbb6"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "head_on_corridor (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_head_on_corridor.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "head_on_corridor",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "source_config_hash": "7a4105a6c8f11222"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "head_on_corridor (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_head_on_corridor.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "head_on_corridor",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "source_config_hash": "2a63c2c2ed726415"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "merging (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_merging.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "merging",
+      "scenario_id": "classic_merging_low",
+      "seeds": [
+        151,
+        152,
+        153
+      ],
+      "source_config_hash": "cb6c8b929bcb8780"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "merging (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_merging.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "merging",
+      "scenario_id": "classic_merging_medium",
+      "seeds": [
+        151,
+        152,
+        153
+      ],
+      "source_config_hash": "8a51fbfc31d38ce6"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "overtaking (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_overtaking.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "overtaking",
+      "scenario_id": "classic_overtaking_low",
+      "seeds": [
+        121,
+        122,
+        123
+      ],
+      "source_config_hash": "a5a93cd06b627072"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "overtaking (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_overtaking.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "overtaking",
+      "scenario_id": "classic_overtaking_medium",
+      "seeds": [
+        121,
+        122,
+        123
+      ],
+      "source_config_hash": "c2a19b2f1caa15da"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "bottleneck (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_realworld_bottleneck.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "source_config_hash": "876ff651240d0297"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "station_platform (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_station_platform.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "station_platform",
+      "scenario_id": "classic_station_platform_medium",
+      "seeds": [
+        301,
+        302,
+        303
+      ],
+      "source_config_hash": "4d0526620abd0750"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "t_intersection (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_t_intersection.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "t_intersection",
+      "scenario_id": "classic_t_intersection_low",
+      "seeds": [
+        161,
+        162,
+        163
+      ],
+      "source_config_hash": "5f3a184b86f499e4"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "t_intersection (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_t_intersection.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "t_intersection",
+      "scenario_id": "classic_t_intersection_medium",
+      "seeds": [
+        161,
+        162,
+        163
+      ],
+      "source_config_hash": "6768ae0aec25992c"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "crossing (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/classic_urban_crossing.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "crossing",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seeds": [
+        101,
+        102,
+        103
+      ],
+      "source_config_hash": "7f03d8bdd99a7108"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "accompanying_peer (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "accompanying_peer",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seeds": [
+        252,
+        253,
+        254
+      ],
+      "source_config_hash": "279dddda28af88b5"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "blind_corner (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_blind_corner.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "blind_corner",
+      "scenario_id": "francis2023_blind_corner",
+      "seeds": [
+        219,
+        220,
+        221
+      ],
+      "source_config_hash": "c09a56f050e1307d"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "circular_crossing (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_circular_crossing.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "circular_crossing",
+      "scenario_id": "francis2023_circular_crossing",
+      "seeds": [
+        270,
+        271,
+        272
+      ],
+      "source_config_hash": "726008c6b3310310"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "crowd_navigation (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_crowd_navigation.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "crowd_navigation",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seeds": [
+        261,
+        262,
+        263
+      ],
+      "source_config_hash": "0ab355f50db5b135"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "down_path (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "down_path",
+      "scenario_id": "francis2023_down_path",
+      "seeds": [
+        213,
+        214,
+        215
+      ],
+      "source_config_hash": "99007a4baab8f8c5"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "entering_elevator (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_entering_elevator.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "entering_elevator",
+      "scenario_id": "francis2023_entering_elevator",
+      "seeds": [
+        234,
+        235,
+        236
+      ],
+      "source_config_hash": "6a3fe81a6770a589"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "entering_room (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_entering_room.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "entering_room",
+      "scenario_id": "francis2023_entering_room",
+      "seeds": [
+        228,
+        229,
+        230
+      ],
+      "source_config_hash": "2d30c2b400d7e053"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "exiting_elevator (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_exiting_elevator.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "exiting_elevator",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seeds": [
+        237,
+        238,
+        239
+      ],
+      "source_config_hash": "240bb0295584dda5"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "exiting_room (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_exiting_room.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "exiting_room",
+      "scenario_id": "francis2023_exiting_room",
+      "seeds": [
+        231,
+        232,
+        233
+      ],
+      "source_config_hash": "7d0740b04541bd86"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "following_human (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "following_human",
+      "scenario_id": "francis2023_following_human",
+      "seeds": [
+        246,
+        247,
+        248
+      ],
+      "source_config_hash": "c3e0523accbfdd67"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "frontal_approach (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_frontal_approach.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "frontal_approach",
+      "scenario_id": "francis2023_frontal_approach",
+      "seeds": [
+        201,
+        202,
+        203
+      ],
+      "source_config_hash": "0af9eb6163269cb0"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "intersection_no_gesture (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "intersection_no_gesture",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seeds": [
+        216,
+        217,
+        218
+      ],
+      "source_config_hash": "f078303df61ef618"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "intersection_proceed (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "intersection_proceed",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seeds": [
+        243,
+        244,
+        245
+      ],
+      "source_config_hash": "e8210c85d475757e"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "intersection_wait (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "intersection_wait",
+      "scenario_id": "francis2023_intersection_wait",
+      "seeds": [
+        240,
+        241,
+        242
+      ],
+      "source_config_hash": "9461231494c36f40"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "join_group (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_join_group.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "join_group",
+      "scenario_id": "francis2023_join_group",
+      "seeds": [
+        255,
+        256,
+        257
+      ],
+      "source_config_hash": "972a33c1ccfb65f7"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "leading_human (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_down_path.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "leading_human",
+      "scenario_id": "francis2023_leading_human",
+      "seeds": [
+        249,
+        250,
+        251
+      ],
+      "source_config_hash": "ccc0d34a8846947d"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "leave_group (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_leave_group.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "leave_group",
+      "scenario_id": "francis2023_leave_group",
+      "seeds": [
+        258,
+        259,
+        260
+      ],
+      "source_config_hash": "b903c3b5e6a5451c"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "narrow_doorway (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_narrow_doorway.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "narrow_doorway",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seeds": [
+        225,
+        226,
+        227
+      ],
+      "source_config_hash": "38f3238a7174805a"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "narrow_hallway (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_narrow_hallway.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "narrow_hallway",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seeds": [
+        222,
+        223,
+        224
+      ],
+      "source_config_hash": "c24e62317e71a107"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "parallel_traffic (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_parallel_traffic.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "parallel_traffic",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seeds": [
+        264,
+        265,
+        266
+      ],
+      "source_config_hash": "ed5889134c5a5fba"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "pedestrian_obstruction (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_ped_obstruction.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "pedestrian_obstruction",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seeds": [
+        204,
+        205,
+        206
+      ],
+      "source_config_hash": "7fd47a7f54c6a639"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "pedestrian_overtaking (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_ped_overtaking.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "pedestrian_overtaking",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seeds": [
+        207,
+        208,
+        209
+      ],
+      "source_config_hash": "47c0f1963085f03c"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "perpendicular_traffic (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "perpendicular_traffic",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seeds": [
+        267,
+        268,
+        269
+      ],
+      "source_config_hash": "98c48187d622bcc1"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "robot_crowding (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_robot_crowding.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "robot_crowding",
+      "scenario_id": "francis2023_robot_crowding",
+      "seeds": [
+        273,
+        274,
+        275
+      ],
+      "source_config_hash": "98fc5376611b16af"
+    },
+    {
+      "evidence": {
+        "case_capsule_ids": [],
+        "eligibility": "excluded",
+        "exclusion_reason": "no_evidence_bundle_provided",
+        "generated_candidate_ids": [],
+        "replay_ids": [],
+        "trace_ids": [],
+        "validated_mechanism": null,
+        "validated_mechanism_provenance": null
+      },
+      "geometry_group": "robot_overtaking (geometry_only)",
+      "geometry_group_note": "descriptive topology label; not a causal mechanism",
+      "geometry_group_provenance": "config_metadata",
+      "hazard_tag_source": "config_metadata",
+      "hazard_tags": [],
+      "interaction_class": "unknown",
+      "map_id": "../../maps/svg_maps/francis2023/francis2023_robot_overtaking.svg",
+      "predicate_availability": {
+        "export_status": "unavailable",
+        "export_status_reason": "predicate_export_unavailable",
+        "exported_predicates": [],
+        "missing_or_degraded_predicates": [],
+        "motivated_not_exported_predicates": [
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "oscillatory_control",
+            "schema_version": "safety_predicate.oscillatory_control.v1",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "late_evasive",
+            "schema_version": "safety_predicate.late_evasive.v2",
+            "status": "motivated_not_exported"
+          },
+          {
+            "motivated_by": "failure_taxonomy",
+            "predicate": "occlusion_near_miss",
+            "schema_version": "safety_predicate.occlusion_near_miss.v1",
+            "status": "motivated_not_exported"
+          }
+        ]
+      },
+      "scenario_family": "robot_overtaking",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seeds": [
+        210,
+        211,
+        212
+      ],
+      "source_config_hash": "c09775fd4fc4e2cd"
+    }
+  ],
+  "schema_version": "scenario_evidence_crosswalk.v1",
+  "source": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "summary": {
+    "eligible_scenarios": 0,
+    "excluded_scenarios": 48,
+    "predicate_export_available": 0,
+    "predicate_unavailable": 48,
+    "scenario_count": 48
+  }
+}

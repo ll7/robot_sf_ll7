@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
@@ -18,17 +19,23 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
+ISSUE_1436_POLICY = ROOT / "docs" / "context" / "issue_1436_reproducibility_flaky_acceptance.md"
+QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
+    "coverage-gate": 10,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
+    "reproducibility-check": 10,
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "notebooks-smoke": 30,
+    "determinism-gate": 30,
+    "exact-repeat-model-preflight": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(
@@ -103,19 +110,31 @@ def _workflow_text() -> str:
     return CI_WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_main_push_workflows_queue_while_pull_request_runs_supersede() -> None:
-    """Keep post-merge validation from being starved while retaining fast PR feedback.
+def test_workflows_cancel_superseded_in_progress_runs_latest_main_wins() -> None:
+    """Lock the latest-main-wins concurrency policy (issue #6399).
 
-    GitHub Actions groups all runs for ``refs/heads/main`` together.  The explicit
-    expression queues those main runs, but still cancels superseded pull-request runs.
+    A bounded merge burst can push several main SHAs in quick succession.  The
+    intermediate runs are superseded by the final aggregate SHA, which contains
+    every earlier commit, so retaining them only adds queue latency without
+    adding coverage.  Setting ``cancel-in-progress`` to ``true`` for every ref
+    makes a new main push cancel any superseded in-progress main run, so the
+    final aggregate SHA is validated without waiting behind stale runs.
+
+    The existing ``${{ github.workflow }}-${{ github.ref }}`` group keeps each
+    ref isolated, so this is safe for pull requests too: a new pull-request push
+    shares a group only with its own ref and still cancels only its own
+    superseded run, never a main run or another PR's run.
     """
 
-    expected = "${{ github.ref != 'refs/heads/main' }}"
+    expected_group = "${{ github.workflow }}-${{ github.ref }}"
     for workflow_file in (CI_WORKFLOW, CODEQL_WORKFLOW):
         workflow = yaml.safe_load(workflow_file.read_text(encoding="utf-8")) or {}
         concurrency = workflow.get("concurrency", {})
         assert isinstance(concurrency, dict)
-        assert concurrency.get("cancel-in-progress") == expected
+        # A boolean ``true`` literal, not the queue-main expression and not a
+        # string: both latest-main-wins and per-PR supersession must hold.
+        assert concurrency.get("group") == expected_group
+        assert concurrency.get("cancel-in-progress") is True
 
 
 def _workflow_files() -> list[Path]:
@@ -123,11 +142,20 @@ def _workflow_files() -> list[Path]:
     return sorted(WORKFLOWS_DIR.glob("*.yml"))
 
 
+def _workflow_display_path(workflow_file: Path) -> Path:
+    """Return a repository-relative workflow path when available."""
+    try:
+        return workflow_file.relative_to(ROOT)
+    except ValueError:
+        return workflow_file
+
+
 def _action_ref_failures_for_line(workflow_file: Path, line_number: int, line: str) -> list[str]:
     """Return action-ref pinning failures for one workflow line."""
+    display_path = _workflow_display_path(workflow_file)
     match = USES_PATTERN.match(line)
     if not match:
-        return [f"{workflow_file.relative_to(ROOT)}:{line_number}: malformed uses line"]
+        return [f"{display_path}:{line_number}: malformed uses line"]
 
     value = match.group("value")
     if value.startswith("./"):
@@ -136,16 +164,45 @@ def _action_ref_failures_for_line(workflow_file: Path, line_number: int, line: s
     failures: list[str] = []
     action, separator, ref = value.partition("@")
     if not separator:
-        return [f"{workflow_file.relative_to(ROOT)}:{line_number}: missing action ref"]
+        return [f"{display_path}:{line_number}: missing action ref"]
     if not PINNED_ACTION_SHA_PATTERN.fullmatch(ref):
-        failures.append(
-            f"{workflow_file.relative_to(ROOT)}:{line_number}: {action}@{ref} is not pinned"
-        )
+        failures.append(f"{display_path}:{line_number}: {action}@{ref} is not pinned")
 
     comment = match.group("comment")
     if comment is None or not READABLE_ACTION_TAG_PATTERN.fullmatch(comment):
-        failures.append(
-            f"{workflow_file.relative_to(ROOT)}:{line_number}: missing readable version comment"
+        failures.append(f"{display_path}:{line_number}: missing readable version comment")
+    return failures
+
+
+def _workflow_uses_line_numbers(workflow_file: Path) -> list[int]:
+    """Return source lines for structural ``uses`` keys in one workflow."""
+    root = yaml.compose(workflow_file.read_text(encoding="utf-8"))
+    if root is None:
+        return []
+
+    line_numbers: list[int] = []
+
+    def visit(node: yaml.Node) -> None:
+        if isinstance(node, yaml.MappingNode):
+            for key_node, value_node in node.value:
+                if isinstance(key_node, yaml.ScalarNode) and key_node.value == "uses":
+                    line_numbers.append(key_node.start_mark.line + 1)
+                visit(value_node)
+        elif isinstance(node, yaml.SequenceNode):
+            for child_node in node.value:
+                visit(child_node)
+
+    visit(root)
+    return line_numbers
+
+
+def _workflow_action_ref_failures(workflow_file: Path) -> list[str]:
+    """Return action-pin failures for structural ``uses`` keys in one workflow."""
+    lines = workflow_file.read_text(encoding="utf-8").splitlines()
+    failures: list[str] = []
+    for line_number in _workflow_uses_line_numbers(workflow_file):
+        failures.extend(
+            _action_ref_failures_for_line(workflow_file, line_number, lines[line_number - 1])
         )
     return failures
 
@@ -256,19 +313,41 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert "needs" not in workflow["jobs"]["fast-feedback"]
 
 
-def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> None:
-    """Block low full-suite coverage without changing pull-request fast feedback."""
+def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
+    """Keep main fast by combining complete coverage from four full-suite shards."""
     workflow = yaml.safe_load(_workflow_text())
     fast_feedback = workflow["jobs"]["fast-feedback"]
-    steps = fast_feedback["steps"]
+    coverage_gate = workflow["jobs"]["coverage-gate"]
+    fast_feedback_steps = fast_feedback["steps"]
+    coverage_steps = coverage_gate["steps"]
+    upload_step = next(
+        step for step in fast_feedback_steps if step.get("name") == "Upload coverage shard"
+    )
     floor_step = next(
-        step for step in steps if step.get("name") == "Enforce absolute coverage floor"
+        step for step in coverage_steps if step.get("name") == "Enforce absolute coverage floor"
     )
     baseline_step = next(
-        step for step in steps if step.get("name") == "Compare coverage with baseline"
+        step for step in coverage_steps if step.get("name") == "Compare coverage with baseline"
+    )
+    combine_step = next(
+        step for step in coverage_steps if step.get("name") == "Combine coverage shards"
     )
 
-    assert floor_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 4
+    assert (
+        "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
+    )
+    assert "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"]
+    assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
+    assert upload_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert upload_step["with"]["include-hidden-files"] is True
+    assert coverage_gate["needs"] == "fast-feedback"
+    assert "github.event_name != 'pull_request'" in coverage_gate["if"]
+    assert "coverage combine output/coverage" in combine_step["run"]
+    assert "coverage json" in combine_step["run"]
+    assert "coverage html" in combine_step["run"]
+    assert "if" not in floor_step
     assert "continue-on-error" not in floor_step
     assert "--minimum-total 85.0" in floor_step["run"]
     assert "--absolute-only" in floor_step["run"]
@@ -276,9 +355,19 @@ def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> No
     assert baseline_step["continue-on-error"] is True
     assert "--threshold 1.0" in baseline_step["run"]
     assert "--fail-on-decrease" not in baseline_step["run"]
-    assert fast_feedback["strategy"]["matrix"]["shard"] == (
-        "${{ github.event_name == 'pull_request' && fromJSON('[1, 2, 3, 4]') || fromJSON('[1]') }}"
-    )
+    assert "coverage-gate" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_parallel_test_driver_supports_full_sharded_coverage() -> None:
+    """Require explicit slow-test and coverage controls for main's sharded pass."""
+    script_text = (ROOT / "scripts" / "dev" / "run_tests_parallel.sh").read_text(encoding="utf-8")
+
+    assert "ROBOT_SF_SHARD_INCLUDE_SLOW" in script_text
+    assert '"$include_slow" != "1"' in script_text
+    assert '[[ "$coverage_enabled" == "1" ]]' in script_text
+    assert '[[ -z "${COVERAGE_FILE:-}" ]]' in script_text
+    assert 'mkdir -p "$(dirname "$COVERAGE_FILE")"' in script_text
+    assert 'cmd+=("--cov=robot_sf" "--cov-report=")' in script_text
 
 
 def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
@@ -301,7 +390,7 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     }
     assert setup_step["with"] == {
         "python-version": "${{ matrix.python }}",
-        "sync-args": "--frozen",
+        "sync-args": "--all-extras --frozen",
     }
     assert any(
         "pytest tests/common tests/contract tests/factories tests/gym_env tests/maps" in step
@@ -430,12 +519,7 @@ def test_workflow_action_refs_are_pinned_with_readable_version_comments() -> Non
     failures: list[str] = []
 
     for workflow_file in _workflow_files():
-        for line_number, line in enumerate(
-            workflow_file.read_text(encoding="utf-8").splitlines(), 1
-        ):
-            if "uses:" not in line:
-                continue
-            failures.extend(_action_ref_failures_for_line(workflow_file, line_number, line))
+        failures.extend(_workflow_action_ref_failures(workflow_file))
 
     assert not failures, "\n".join(failures)
 
@@ -457,6 +541,28 @@ def test_action_ref_parser_handles_list_items_and_local_actions() -> None:
         _action_ref_failures_for_line(workflow_file, 2, "      - uses: ./.github/actions/cache")
         == []
     )
+    assert _action_ref_failures_for_line(workflow_file, 3, "      - uses:") == [
+        ".github/workflows/ci.yml:3: malformed uses line"
+    ]
+
+
+def test_workflow_uses_scan_ignores_block_scalar_text(tmp_path: Path) -> None:
+    """Select structural action directives without matching block-scalar text."""
+    workflow_file = tmp_path / "workflow.yml"
+    workflow_file.write_text(
+        "jobs:\n"
+        "  verify:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          printf 'uses: actions/checkout@mutable'\n"
+        "      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n"
+        "      - uses:\n",
+        encoding="utf-8",
+    )
+
+    assert _workflow_action_ref_failures(workflow_file) == [
+        f"{workflow_file}:7: malformed uses line"
+    ]
 
 
 def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:
@@ -490,3 +596,140 @@ def test_ci_driver_artifact_policy_uses_no_sync() -> None:
     """
     driver_text = CI_DRIVER.read_text(encoding="utf-8")
     assert "uv run --no-sync python scripts/tools/check_artifact_root.py" in driver_text
+
+
+def test_ci_driver_lint_reports_all_failures_without_short_circuiting(tmp_path: Path) -> None:
+    """The lint phase must enumerate every failure, not stop at the first (issue #5960).
+
+    Reproduces the exact bug class from the issue: a branch with BOTH a format
+    violation (ruff format) and a new broad exception must report BOTH in one run.
+    We stub ``uv``/``python`` so the real ``run_lint_phase`` logic in ci_driver.sh
+    executes without a Python environment, then assert that all failing checks ran
+    and the phase still exits non-zero.
+    """
+
+    # Stub `uv` so `uv run <tool> <args>` proxies to the local interpreter (or a
+    # failing stub). We map each known lint check to a deterministic pass/fail so we
+    # can force BOTH ruff format AND broad-exception failures simultaneously.
+    stub_dir = tmp_path / "ci_driver_lint_stub"
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    uv_stub = stub_dir / "uv"
+    python_stub = stub_dir / "python"
+
+    # `uv run` forwards to our python stub. We detect which check is running via the
+    # args so we can make the broad-exception check fail.
+    uv_stub.write_text(
+        '#!/usr/bin/env bash\nset -- "${@:3}"\nexec "' + str(python_stub) + '" "$@"\n',
+        encoding="utf-8",
+    )
+    python_stub.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "# ruff format --check -> fail (format violation)\n"
+        "if 'format' in sys.argv and '--check' in sys.argv:\n"
+        "    sys.stderr.write('would reformat file.py\\n')\n"
+        "    sys.exit(1)\n"
+        "# check_broad_exceptions -> fail (new broad exception)\n"
+        "if 'check_broad_exceptions' in sys.argv[0] or sys.argv[-1].endswith('check_broad_exceptions.py'):\n"
+        "    sys.stderr.write('broad exception ratchet increased\\n')\n"
+        "    sys.exit(1)\n"
+        "# ruff check -> pass; version alignment -> pass\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    uv_stub.chmod(0o755)
+    python_stub.chmod(0o755)
+
+    env = dict(os.environ)
+    env["PATH"] = f"{stub_dir}:{env.get('PATH', '')}"
+    env["CI_DRIVER_GITHUB_REF"] = "refs/heads/feature"
+    env["CI_DRIVER_EVENT_NAME"] = "pull_request"
+
+    result = subprocess.run(
+        [str(CI_DRIVER), "lint"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=ROOT,
+        env=env,
+    )
+
+    combined = result.stdout + result.stderr
+    # Both independent failures must appear in a single run.
+    assert "would reformat" in combined, f"format failure not surfaced:\n{combined}"
+    assert "broad exception ratchet increased" in combined, (
+        f"broad-exception failure not surfaced:\n{combined}"
+    )
+    # The phase must still fail overall.
+    assert result.returncode != 0, f"lint phase exited zero despite failures:\n{combined}"
+
+
+def test_ci_driver_lint_passes_when_all_checks_pass(tmp_path: Path) -> None:
+    """The lint phase must exit zero when every check passes (issue #5960)."""
+
+    stub_dir = tmp_path / "ci_driver_lint_stub_pass"
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    uv_stub = stub_dir / "uv"
+    python_stub = stub_dir / "python"
+
+    uv_stub.write_text(
+        '#!/usr/bin/env bash\nset -- "${@:3}"\nexec "' + str(python_stub) + '" "$@"\n',
+        encoding="utf-8",
+    )
+    python_stub.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n", encoding="utf-8")
+    uv_stub.chmod(0o755)
+    python_stub.chmod(0o755)
+
+    env = dict(os.environ)
+    env["PATH"] = f"{stub_dir}:{env.get('PATH', '')}"
+    env["CI_DRIVER_GITHUB_REF"] = "refs/heads/main"
+    env["CI_DRIVER_EVENT_NAME"] = "push"
+
+    result = subprocess.run(
+        [str(CI_DRIVER), "lint"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=ROOT,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reproducibility_check_job_contract() -> None:
+    """Verify reproducibility-check trigger, fail-closed, and ci-aggregate exclusion.
+
+    The reproducibility-check job runs on pull_request and workflow_dispatch,
+    has no continue-on-error, and is intentionally excluded from the ci
+    aggregate's needs list so it provides visible diagnostic evidence without
+    blocking PR merges.
+    """
+    workflow = yaml.safe_load(_workflow_text())
+    repro_job = workflow["jobs"]["reproducibility-check"]
+    ci_job = workflow["jobs"]["ci"]
+
+    # Trigger is exclusively pull_request OR workflow_dispatch. Equality is
+    # intentional: containment would allow an undocumented third event.
+    assert repro_job["if"] == (
+        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+    )
+
+    # No continue-on-error on the job or any step
+    assert "continue-on-error" not in repro_job
+    for step in repro_job.get("steps", []):
+        assert "continue-on-error" not in step
+
+    # Excluded from ci aggregate needs
+    assert "reproducibility-check" not in ci_job["needs"]
+
+    policy_text = ISSUE_1436_POLICY.read_text(encoding="utf-8")
+    assert "cannot make that aggregate job fail" in policy_text
+    assert "no GitHub branch-protection required-status-check configuration" in policy_text
+    assert "reproducibility-check` is not presently merge-blocking" in policy_text
+    assert "If branch protection\nis added or changed" in policy_text
+
+    strategy_text = QA_TEST_STRATEGY.read_text(encoding="utf-8")
+    assert "no\nGitHub branch-protection required-status-check configuration" in strategy_text
+    assert "future branch-protection\nchange must explicitly decide" in strategy_text

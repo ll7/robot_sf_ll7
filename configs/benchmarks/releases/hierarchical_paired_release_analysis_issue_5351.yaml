@@ -1,37 +1,30 @@
-# Fail-closed prerequisite manifest for issue #5351.  It records the release
-# inputs and protocol deliverables before #4364 produces the successor release
-# tag and typed-ledger rows.  It does not define or change any benchmark metric.
+# Fail-closed prerequisite manifest for issue #5351.
 schema_version: hierarchical_paired_release_analysis_input_manifest.v1
 issue: 5351
-claim_boundary: >-
-  Input-contract and claim-gate declaration only. It does not compute the
-  hierarchical paired analysis, alter frozen metrics, or support a benchmark,
-  release, paper, or dissertation claim.
-
+claim_boundary: Deterministic diagnostic hierarchical paired analysis over the checksum-pinned
+  successor release input. It does not alter frozen metrics or support or promote
+  a benchmark, release, paper, or dissertation claim; result interpretation and claim
+  promotion remain blocked pending separate human review.
 successor_release:
-  # Filled only by the #4364 release cut; placeholders must remain blocked.
-  release_tag: null
-  commit: null
-  typed_ledger_rows: null
-  typed_ledger_rows_sha256: null
-
-# Each declared delivery maps a protocol requirement to the future analysis
-# artifact. All entries remain blocked until the successor release inputs exist
-# and the actual analysis is implemented and executed.
+  release_tag: 0.0.3.post1
+  commit: ded9027d2928512c14bc241397e0ab1d8f586654
+  typed_ledger_rows: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl
+  typed_ledger_rows_sha256: c45c2ed8defdadaf47c001277e6bf9ca0c2238c101570d1d64be8015060febea
 protocol:
-  - id: paired_effects
-    declared_delivery: paired risk-difference and odds-risk-ratio table on matched cells
-  - id: hierarchical_intervals
-    declared_delivery: scenario-family cluster hierarchical-bootstrap interval table
-  - id: sensitivity_analyses
-    declared_delivery: seed-level and family-level sensitivity table
-  - id: multiplicity_control
-    declared_delivery: predeclared planner-pair and family-comparison multiplicity table
-  - id: practical_effect_reporting
-    declared_delivery: practical-effect threshold comparison table
-  - id: censored_completion_time
-    declared_delivery: censored timeout-aware completion-time summary
-  - id: normalized_near_miss_exposure
-    declared_delivery: near-miss exposure normalization summary by time, distance, and opportunity
-  - id: claim_gate_and_conformance
-    declared_delivery: machine-readable claim gate and protocol conformance table
+- id: paired_effects
+  declared_delivery: paired risk-difference and odds-risk-ratio table on matched cells
+- id: hierarchical_intervals
+  declared_delivery: scenario-family cluster hierarchical-bootstrap interval table
+- id: sensitivity_analyses
+  declared_delivery: seed-level and family-level sensitivity table
+- id: multiplicity_control
+  declared_delivery: predeclared planner-pair and family-comparison multiplicity table
+- id: practical_effect_reporting
+  declared_delivery: practical-effect threshold comparison table
+- id: censored_completion_time
+  declared_delivery: censored timeout-aware completion-time summary
+- id: normalized_near_miss_exposure
+  declared_delivery: near-miss exposure normalization summary by time, distance, and
+    opportunity
+- id: claim_gate_and_conformance
+  declared_delivery: machine-readable claim gate and protocol conformance table

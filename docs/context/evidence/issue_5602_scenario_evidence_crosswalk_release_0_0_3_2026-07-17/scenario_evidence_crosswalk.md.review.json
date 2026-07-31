@@ -1,0 +1,8 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17/scenario_evidence_crosswalk.md",
+  "artifact_sha256": "ea53c2505644546fe4df0665502abc72c2100a5dcd96a322ad8e941a3e987e92",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "note": "Exact-byte data artifact (crosswalk); markers carried out-of-band via this sidecar to preserve SHA256SUMS-pinned bytes (robot_sf#5602/#5593)."
+}

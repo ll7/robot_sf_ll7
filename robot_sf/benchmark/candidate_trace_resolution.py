@@ -897,16 +897,199 @@ def load_episode_mapping(  # noqa: C901, PLR0912
     )
 
 
-def resolve_episode_requests(  # noqa: C901, PLR0915
+def _validate_request_trace_artifact(
+    mapped: Mapping[str, Any],
+    scenario_id: str,
+    planner: str,
+    seed: int,
+    episode_id: str,
+) -> tuple[dict[str, Any], str]:
+    """Validate the trace artifact for a mapped episode request.
+
+    Checks trace file existence, schema validity, content hash, and embedded
+    source identity against the expected values.
+
+    Returns:
+        A tuple of ``(trace_fields, status_key)`` where ``trace_fields`` contains
+        the trace-related row fields to merge and ``status_key`` is the resolution
+        status label.
+    """
+    trace_uri = str(mapped["trace_artifact_uri"])
+    trace_path = Path(trace_uri)
+    if not trace_path.is_file():
+        return (
+            {"reason_code": "trace_artifact_not_found", "resolution_status": "trace-missing"},
+            "trace-missing",
+        )
+    trace = _validate_trace_file(trace_path)
+    trace_fields: dict[str, Any] = {
+        "trace_artifact_uri": trace["trace_artifact_uri"],
+        "trace_content_hash": trace["trace_content_hash"],
+        "trace_schema_version": trace["trace_schema_version"],
+    }
+    if trace["resolution_status"] != "resolved":
+        trace_fields["resolution_status"] = trace["resolution_status"]
+        trace_fields["reason_code"] = trace["reason_code"]
+        return trace_fields, trace["resolution_status"]
+    expected_trace_sha256 = str(mapped["trace_sha256"])
+    if trace["trace_content_hash"] != expected_trace_sha256:
+        trace_fields["resolution_status"] = "provenance-incomplete"
+        trace_fields["reason_code"] = (
+            "trace_sha256_mismatch:"
+            f"expected={expected_trace_sha256},observed={trace['trace_content_hash']}"
+        )
+        return trace_fields, "provenance-incomplete"
+    try:
+        typed_trace = load_simulation_trace_export(trace_path)
+    except (OSError, SimulationTraceExportValidationError) as exc:
+        trace_fields["resolution_status"] = "schema-mismatch"
+        trace_fields["reason_code"] = f"trace_load_failed:{exc}"
+        return trace_fields, "schema-mismatch"
+    source = typed_trace.source
+    source_mismatches = [
+        field
+        for field, actual, expected in (
+            ("scenario_id", source.scenario_id, scenario_id),
+            ("planner_id", source.planner_id, planner),
+            ("seed", source.seed, seed),
+            ("episode_id", source.episode_id, episode_id),
+        )
+        if actual != expected
+    ]
+    if source_mismatches:
+        trace_fields["resolution_status"] = "schema-mismatch"
+        trace_fields["reason_code"] = "trace_source_mismatch:" + ",".join(source_mismatches)
+        return trace_fields, "schema-mismatch"
+    observed_outcome = str(mapped["rerun_outcome"])
+    trace_fields.update(
+        {
+            "resolution_status": "resolved",
+            "reason_code": f"trace_schema_and_provenance_valid:outcome={observed_outcome}",
+            "exact_repeat_determinism": "pinned_artifact",
+        }
+    )
+    return trace_fields, "resolved"
+
+
+def _build_request_base_row(
+    request_id: str,
+    source_hash: str,
+    provenance: Mapping[str, str],
+    scenario_id: str,
+    planner: str,
+    seed: int,
+) -> dict[str, Any]:
+    """Build the base resolution row for one episode request.
+
+    Returns:
+        A row dict pre-populated with provenance fields and default
+        ``provenance-incomplete`` status.
+    """
+    return {
+        "candidate_id": request_id,
+        "source_manifest_hash": source_hash,
+        "campaign_id": provenance["release_tag"],
+        "campaign_row_reference": (
+            f"release_bundle_sha256={provenance['release_bundle_sha256']};"
+            f"report_commit={provenance['report_commit']};"
+            f"execution_commit={provenance['execution_commit']};"
+            f"scenario_matrix_sha256={provenance['scenario_matrix_sha256']};"
+            f"checkpoint_sha256={provenance['checkpoint_sha256']}"
+        ),
+        "artifact_uri": None,
+        "scenario_id": scenario_id,
+        "planner_id": planner,
+        "seed": seed,
+        "config_hash": provenance["canonical_campaign_config_sha256"],
+        "episode_id": None,
+        "trace_artifact_uri": None,
+        "trace_content_hash": None,
+        "trace_schema_version": None,
+        "resolution_status": "provenance-incomplete",
+        "reason_code": "missing_episode_mapping",
+        "predicate_rows_available": None,
+        "critical_intervals_available": None,
+        "exact_repeat_determinism": None,
+    }
+
+
+def _resolve_single_episode_request(
+    request: Mapping[str, Any],
+    episode_mapping: EpisodeMappingReceipt,
+    source_hash: str,
+    provenance: Mapping[str, str],
+) -> tuple[dict[str, Any], str]:
+    """Resolve one episode request against the mapping receipt and trace exports.
+
+    Checks mapping existence, identity, release/rerun outcomes, and trace
+    artifact validity. No row is silently dropped.
+
+    Returns:
+        A tuple of ``(row, status_key)`` where ``row`` is the resolution row dict
+        and ``status_key`` is one of the resolution status labels.
+    """
+    scenario_id = str(request["scenario_id"])
+    planner = str(request["planner"])
+    seed = int(request["seed"])
+    request_key = _episode_request_key(scenario_id, planner, seed)
+    request_id = f"trace_request::{scenario_id}::{planner}::{seed}"
+    requested_episode_id = _coerce_optional_text(request.get("episode_id"))
+    mapped = episode_mapping.get(requested_episode_id) if requested_episode_id else None
+    if mapped is None and requested_episode_id is None:
+        mapped = episode_mapping.get(request_key)
+    base = _build_request_base_row(request_id, source_hash, provenance, scenario_id, planner, seed)
+    if mapped is None:
+        return base, "provenance-incomplete"
+
+    identity_mismatches = [
+        field
+        for field, expected in (
+            ("scenario_id", scenario_id),
+            ("planner", planner),
+            ("seed", seed),
+            ("release_episode_id", requested_episode_id),
+        )
+        if expected is not None and mapped.get(field) != expected
+    ]
+    if identity_mismatches:
+        base["reason_code"] = "mapping_identity_mismatch:" + ",".join(identity_mismatches)
+        return base, "provenance-incomplete"
+
+    expected_outcome = str(mapped["expected_release_outcome"])
+    observed_outcome = str(mapped["rerun_outcome"])
+    request_expected_outcome = request.get("expected_outcome")
+    if request_expected_outcome is not None and request_expected_outcome != expected_outcome:
+        base["reason_code"] = (
+            "request_release_outcome_mismatch:"
+            f"request={request_expected_outcome},mapping={expected_outcome}"
+        )
+        return base, "provenance-incomplete"
+    if observed_outcome != expected_outcome:
+        base["reason_code"] = (
+            f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
+        )
+        return base, "provenance-incomplete"
+
+    episode_id = str(mapped["episode_id"])
+    trace_uri = str(mapped["trace_artifact_uri"])
+    row = {**base, "episode_id": episode_id, "artifact_uri": trace_uri}
+    trace_fields, status = _validate_request_trace_artifact(
+        mapped, scenario_id, planner, seed, episode_id
+    )
+    row.update(trace_fields)
+    return row, status
+
+
+def resolve_episode_requests(
     request_manifest: EpisodeRequestManifest,
     episode_mapping: EpisodeMappingReceipt,
 ) -> dict[str, Any]:
     """Resolve concrete #5756 requests against rerun rows and trace exports.
 
     This is the per-episode bridge from the #5446 request list to the existing
-    # candidate-trace resolver contract.  It checks identity and release-row
+    candidate-trace resolver contract. It checks identity and release-row
     outcome before accepting a trace, then validates the typed trace export and
-    its embedded source identity.  No row is silently dropped.
+    its embedded source identity. No row is silently dropped.
 
     Returns:
         A ``candidate_trace_resolution.v1`` manifest whose rows are keyed by
@@ -934,149 +1117,11 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
     )
     provenance = episode_mapping.provenance
     for request in request_manifest.rows:
-        scenario_id = str(request["scenario_id"])
-        planner = str(request["planner"])
-        seed = int(request["seed"])
-        request_key = _episode_request_key(scenario_id, planner, seed)
-        request_id = f"trace_request::{scenario_id}::{planner}::{seed}"
-        requested_episode_id = _coerce_optional_text(request.get("episode_id"))
-        mapped = episode_mapping.get(requested_episode_id) if requested_episode_id else None
-        if mapped is None and requested_episode_id is None:
-            mapped = episode_mapping.get(request_key)
-        base = {
-            "candidate_id": request_id,
-            "source_manifest_hash": source_hash,
-            "campaign_id": provenance["release_tag"],
-            "campaign_row_reference": (
-                f"release_bundle_sha256={provenance['release_bundle_sha256']};"
-                f"report_commit={provenance['report_commit']};"
-                f"execution_commit={provenance['execution_commit']};"
-                f"scenario_matrix_sha256={provenance['scenario_matrix_sha256']};"
-                f"checkpoint_sha256={provenance['checkpoint_sha256']}"
-            ),
-            "artifact_uri": None,
-            "scenario_id": scenario_id,
-            "planner_id": planner,
-            "seed": seed,
-            "config_hash": provenance["canonical_campaign_config_sha256"],
-            "episode_id": None,
-            "trace_artifact_uri": None,
-            "trace_content_hash": None,
-            "trace_schema_version": None,
-            "resolution_status": "provenance-incomplete",
-            "reason_code": "missing_episode_mapping",
-            "predicate_rows_available": None,
-            "critical_intervals_available": None,
-            "exact_repeat_determinism": None,
-        }
-        if mapped is None:
-            rows.append(base)
-            counts["provenance-incomplete"] += 1
-            continue
-
-        identity_mismatches = [
-            field
-            for field, expected in (
-                ("scenario_id", scenario_id),
-                ("planner", planner),
-                ("seed", seed),
-                ("release_episode_id", requested_episode_id),
-            )
-            if expected is not None and mapped.get(field) != expected
-        ]
-        if identity_mismatches:
-            base["reason_code"] = "mapping_identity_mismatch:" + ",".join(identity_mismatches)
-            rows.append(base)
-            counts["provenance-incomplete"] += 1
-            continue
-
-        expected_outcome = str(mapped["expected_release_outcome"])
-        observed_outcome = str(mapped["rerun_outcome"])
-        request_expected_outcome = request.get("expected_outcome")
-        if request_expected_outcome is not None and request_expected_outcome != expected_outcome:
-            base["reason_code"] = (
-                "request_release_outcome_mismatch:"
-                f"request={request_expected_outcome},mapping={expected_outcome}"
-            )
-            rows.append(base)
-            counts["provenance-incomplete"] += 1
-            continue
-        if observed_outcome != expected_outcome:
-            base["reason_code"] = (
-                f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
-            )
-            rows.append(base)
-            counts["provenance-incomplete"] += 1
-            continue
-
-        trace_uri = str(mapped["trace_artifact_uri"])
-        episode_id = str(mapped["episode_id"])
-        trace_path = Path(trace_uri)
-        row = {**base, "episode_id": episode_id, "artifact_uri": trace_uri}
-        if not trace_path.is_file():
-            row["reason_code"] = "trace_artifact_not_found"
-            row["resolution_status"] = "trace-missing"
-            rows.append(row)
-            counts["trace-missing"] += 1
-            continue
-        trace = _validate_trace_file(trace_path)
-        row.update(
-            {
-                "trace_artifact_uri": trace["trace_artifact_uri"],
-                "trace_content_hash": trace["trace_content_hash"],
-                "trace_schema_version": trace["trace_schema_version"],
-            }
-        )
-        if trace["resolution_status"] != "resolved":
-            row["resolution_status"] = trace["resolution_status"]
-            row["reason_code"] = trace["reason_code"]
-            rows.append(row)
-            counts[trace["resolution_status"]] += 1
-            continue
-        expected_trace_sha256 = str(mapped["trace_sha256"])
-        if trace["trace_content_hash"] != expected_trace_sha256:
-            row["resolution_status"] = "provenance-incomplete"
-            row["reason_code"] = (
-                "trace_sha256_mismatch:"
-                f"expected={expected_trace_sha256},observed={trace['trace_content_hash']}"
-            )
-            rows.append(row)
-            counts["provenance-incomplete"] += 1
-            continue
-        try:
-            typed_trace = load_simulation_trace_export(trace_path)
-        except (OSError, SimulationTraceExportValidationError) as exc:
-            row["resolution_status"] = "schema-mismatch"
-            row["reason_code"] = f"trace_load_failed:{exc}"
-            rows.append(row)
-            counts["schema-mismatch"] += 1
-            continue
-        source = typed_trace.source
-        source_mismatches = [
-            field
-            for field, actual, expected in (
-                ("scenario_id", source.scenario_id, scenario_id),
-                ("planner_id", source.planner_id, planner),
-                ("seed", source.seed, seed),
-                ("episode_id", source.episode_id, episode_id),
-            )
-            if actual != expected
-        ]
-        if source_mismatches:
-            row["resolution_status"] = "schema-mismatch"
-            row["reason_code"] = "trace_source_mismatch:" + ",".join(source_mismatches)
-            rows.append(row)
-            counts["schema-mismatch"] += 1
-            continue
-        row.update(
-            {
-                "resolution_status": "resolved",
-                "reason_code": (f"trace_schema_and_provenance_valid:outcome={observed_outcome}"),
-                "exact_repeat_determinism": "pinned_artifact",
-            }
+        row, status = _resolve_single_episode_request(
+            request, episode_mapping, source_hash, provenance
         )
         rows.append(row)
-        counts["resolved"] += 1
+        counts[status] += 1
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -1102,6 +1147,11 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
 
 
 def _episode_request_key(scenario_id: str, planner: str, seed: int) -> str:
+    """Build a stable ``scenario|planner|seed`` key identifying one episode request.
+
+    Returns:
+        The stable request key string.
+    """
     return f"scenario_id={scenario_id}|planner={planner}|seed={seed}"
 
 
@@ -1125,6 +1175,11 @@ def _canonical_outcome(value: Any) -> str | None:
 
 
 def _normalize_outcome(value: Any) -> str | None:
+    """Normalize a mapping or text outcome value into a canonical outcome label.
+
+    Returns:
+        The canonical outcome label, or ``None``.
+    """
     if isinstance(value, Mapping):
         for key in ("collision_event", "timeout_event", "route_complete", "success"):
             if value.get(key) is True:
@@ -1139,6 +1194,7 @@ def _normalize_outcome(value: Any) -> str | None:
 
 
 def _mapping_outcome(row: Mapping[str, Any]) -> str | None:
+    """Return the canonical outcome for ``row`` by probing its common outcome keys."""
     for key in ("outcome", "episode_outcome", "status"):
         if key in row:
             outcome = _normalize_outcome(row[key])

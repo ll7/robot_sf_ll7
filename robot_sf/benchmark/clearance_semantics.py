@@ -612,6 +612,11 @@ def _validate_threshold_monotonic(
 
 
 def _require_finite_non_negative(value: Any, *, key: str) -> float:
+    """Coerce ``value`` to a float, raising ``ValueError`` unless it is finite and non-negative.
+
+    Returns:
+        The coerced finite, non-negative float value.
+    """
     try:
         numeric = float(value)
     except (TypeError, ValueError) as exc:
@@ -624,6 +629,7 @@ def _require_finite_non_negative(value: Any, *, key: str) -> float:
 
 
 def _require_mapping(block: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+    """Return ``block[key]`` validated as a mapping, raising ``ValueError`` otherwise."""
     value = block.get(key)
     if not isinstance(value, Mapping):
         raise ValueError(f"{FOOTPRINT_CLEARANCE_CONFIG_KEY}.{key} must be a mapping")
@@ -643,12 +649,14 @@ def _require_optional_number_list(block: Mapping[str, Any], key: str) -> tuple[f
 
 
 def _require_number(block: Mapping[str, Any], key: str) -> float:
+    """Return the required ``block[key]`` as a finite, non-negative float."""
     if key not in block:
         raise ValueError(f"missing required numeric field {key!r}")
     return _require_finite_non_negative(block[key], key=key)
 
 
 def _require_number_list(block: Mapping[str, Any], key: str) -> tuple[float, ...]:
+    """Return ``block[key]`` as a non-empty tuple of finite, non-negative floats."""
     value = block.get(key)
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or not value:
         raise ValueError(f"{FOOTPRINT_CLEARANCE_CONFIG_KEY}.sweep.{key} must be a non-empty list")

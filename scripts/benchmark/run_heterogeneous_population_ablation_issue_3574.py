@@ -17,6 +17,7 @@ from robot_sf.benchmark.campaign_logging import (
     add_campaign_logging_argument,
     configure_campaign_logging,
 )
+from robot_sf.benchmark.orca_preflight import _has_orca_algo, check_rvo2_importable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_FSYNC_EVERY = 10
@@ -94,6 +95,8 @@ def main() -> int:
         manifest = json.load(f)
 
     manifest_rows = manifest.get("manifest_rows", [])
+    if any(_has_orca_algo(str(row.get("planner", ""))) for row in manifest_rows):
+        check_rvo2_importable()
     print(f"Loaded {len(manifest_rows)} manifest rows from {manifest_path}")
 
     # Build scenarios dynamically matching the manifest

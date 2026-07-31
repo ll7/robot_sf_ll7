@@ -907,6 +907,7 @@ class CrowdNavHeightAdapter:
                 f"of {expected_time_step:.6f}s, got {float(time_step):.6f}s"
             )
         obs_tensors, meta = self._build_model_inputs(observation)
+        # Hidden state must be initialized after reset()
         assert self._hidden_state is not None
         with torch.no_grad():
             _value, action, _log_prob, self._hidden_state = self._policy.act(

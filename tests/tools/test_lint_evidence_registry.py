@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 LINTER = ROOT / "scripts" / "tools" / "lint_evidence_registry.py"
 
@@ -109,6 +111,88 @@ def test_dangling_commit_is_classified(tmp_path: Path) -> None:
     assert {issue["code"] for issue in report["issues"]} >= {"dangling_commit"}
 
 
+def test_commit_on_unrelated_ref_stays_dangling_until_head_reaches_it(
+    tmp_path: Path,
+) -> None:
+    """Incidental branch or tag objects must not change provenance resolution."""
+    linter = _load_linter()
+    repo, evidence, base_commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+
+    _git(repo, "checkout", "-qb", "unrelated-provenance")
+    _git(repo, "commit", "--allow-empty", "-qm", "unrelated provenance")
+    unrelated_commit = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "tag", "unrelated-provenance-tag", unrelated_commit)
+    _git(repo, "checkout", "--detach", "-q", base_commit)
+
+    _write_entry(
+        evidence,
+        campaign_id="campaign-unrelated-ref",
+        commit=unrelated_commit,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="unrelated-ref.json",
+    )
+
+    unrelated_report = linter.lint_evidence_registry(repo, evidence)
+    assert any(
+        issue["code"] == "dangling_commit" and unrelated_commit in issue["message"]
+        for issue in unrelated_report["issues"]
+    )
+
+    _git(repo, "checkout", "--detach", "-q", unrelated_commit)
+    reachable_report = linter.lint_evidence_registry(repo, evidence)
+    assert not any(issue["code"] == "dangling_commit" for issue in reachable_report["issues"])
+
+
+def test_shallow_repository_fails_before_commit_classification(
+    tmp_path: Path,
+) -> None:
+    """Unknown shallow ancestors must not become misleading lint findings."""
+    linter = _load_linter()
+    source, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    _git(source, "commit", "--allow-empty", "-qm", "shallow clone tip")
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--quiet",
+            "--depth",
+            "1",
+            source.as_uri(),
+            str(shallow),
+        ],
+        check=True,
+    )
+    assert _git(shallow, "rev-parse", "--is-shallow-repository") == "true"
+    registry = shallow / "docs" / "context" / "evidence"
+
+    with pytest.raises(
+        linter.ShallowRepositoryError,
+        match=r"full-history Git repository.*git fetch --unshallow",
+    ):
+        linter.lint_evidence_registry(shallow, registry)
+
+    cli = subprocess.run(
+        [
+            sys.executable,
+            str(LINTER),
+            "--repo-root",
+            str(shallow),
+            "--registry-root",
+            "docs/context/evidence",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert cli.returncode == 2
+    assert cli.stdout == ""
+    assert "shallow repository detected" in cli.stderr
+    assert "git fetch --unshallow" in cli.stderr
+
+
 def test_hash_mismatch_is_classified(tmp_path: Path) -> None:
     """A hash next to a committed artifact must match its current tracked bytes."""
     linter = _load_linter()
@@ -125,6 +209,38 @@ def test_hash_mismatch_is_classified(tmp_path: Path) -> None:
     report = linter.lint_evidence_registry(repo, evidence)
 
     assert {issue["code"] for issue in report["issues"]} >= {"artifact_hash_mismatch"}
+
+
+def test_artifact_manifest_paths_are_repository_root_relative(tmp_path: Path) -> None:
+    """Ensure canonical paths prevent a bare filename from resolving ambiguously."""
+    linter = _load_linter()
+    repo, evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    root_readme = repo / "README.md"
+    bundle_readme = evidence / "package" / "README.md"
+    root_readme.write_text("root README\n", encoding="utf-8")
+    bundle_readme.parent.mkdir()
+    bundle_readme.write_text("bundle README\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "add distinct README files")
+    manifest_path = evidence / "package" / "artifact_manifest.yaml"
+    bundle_hash = hashlib.sha256(bundle_readme.read_bytes()).hexdigest()
+    manifest_path.write_text(
+        f"files:\n  - path: README.md\n    sha256: {bundle_hash}\n",
+        encoding="utf-8",
+    )
+
+    bare_filename_report = linter.lint_evidence_registry(repo, evidence)
+
+    assert {issue["code"] for issue in bare_filename_report["issues"]} == {"artifact_hash_mismatch"}
+
+    manifest_path.write_text(
+        f"files:\n  - path: docs/context/evidence/package/README.md\n    sha256: {bundle_hash}\n",
+        encoding="utf-8",
+    )
+
+    repository_relative_report = linter.lint_evidence_registry(repo, evidence)
+
+    assert repository_relative_report["issues"] == []
 
 
 def test_config_hash_mismatch_is_classified(tmp_path: Path) -> None:
@@ -551,3 +667,66 @@ def test_missing_placeholder_passes_synthetic_check(tmp_path: Path) -> None:
 
     synthetic = [i for i in report["issues"] if i["code"] == "synthetic_commit"]
     assert synthetic == []
+
+
+def test_committed_baseline_reproduces_from_write_baseline(tmp_path: Path) -> None:
+    """The committed ratchet baseline must reproduce from the live evidence set.
+
+    Issue #5971: the local readiness gate failed because the committed baseline
+    no longer matched the live tracked evidence set (a new evidence file drifted
+    in). The baseline at scripts/validation/evidence_registry_baseline.json must
+    be exactly what ``evidence_registry_ratchet.py --write-baseline`` would
+    regenerate against current ``origin/main``. This keeps the ratchet fail-closed
+    (net-new findings still fail) while proving the committed baseline and the
+    live evidence set are reconciled.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    baseline_path = repo_root / "scripts" / "validation" / "evidence_registry_baseline.json"
+    ratchet = repo_root / "scripts" / "dev" / "evidence_registry_ratchet.py"
+    assert baseline_path.is_file(), f"committed baseline missing: {baseline_path}"
+
+    repro_baseline = tmp_path / "evidence_registry_baseline_repro.json"
+    regenerated = subprocess.run(
+        [
+            sys.executable,
+            str(ratchet),
+            "--write-baseline",
+            "--baseline",
+            str(repro_baseline),
+        ],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert regenerated.returncode == 0, regenerated.stderr
+
+    left = json.loads(baseline_path.read_text(encoding="utf-8"))
+    right = json.loads(repro_baseline.read_text(encoding="utf-8"))
+    assert left["findings_by_path"] == right["findings_by_path"], (
+        "Committed evidence-registry baseline does not reproduce from the live tracked "
+        "evidence set. Refresh it with "
+        "`uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline` and add a "
+        "per-file disposition to scripts/validation/evidence_registry_baseline_review.yaml."
+    )
+    assert left["summary"]["total_findings"] == right["summary"]["total_findings"]
+
+
+def test_ratchet_gate_passes_against_committed_baseline() -> None:
+    """The fail-closed ratchet must hold on current origin/main after reconciliation.
+
+    Companion to test_committed_baseline_reproduces_from_write_baseline: once the
+    committed baseline reproduces from the live evidence set, the ``--check`` gate
+    must exit 0 (no net-new findings). This preserves the ratchet's fail-closed
+    contract from issue #5275 / #5952.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    ratchet = repo_root / "scripts" / "dev" / "evidence_registry_ratchet.py"
+    result = subprocess.run(
+        [sys.executable, str(ratchet), "--check"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

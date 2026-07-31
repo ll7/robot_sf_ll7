@@ -20,11 +20,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common_setup.sh"
 
 BASE_REF="${BASE_REF:-origin/main}"
-# Link anchors always selected for docs/context-only diffs so added-note
-# README/INDEX linkage proof runs. Intentionally excludes catalog.yaml: forcing
-# it here would re-validate every catalog row and surface unrelated baseline
-# debt on note-only PRs. catalog.yaml is validated when it is itself in the diff
-# or under the explicit --check-context-catalog flag.
+# Link anchors are selected for docs/context-only diffs when catalog.yaml is not
+# already in the diff, so added-note README/INDEX linkage proof runs. Do not add
+# synthetic README/INDEX paths to a catalog selection: those paths would make
+# the checker treat a catalog-only diff as a scoped row audit and bypass the
+# documented full-catalog audit. catalog.yaml is validated when it is itself in
+# the diff or under the explicit --check-context-catalog flag.
 DOCS_CONTEXT_PROOF_PATHS=(
   "docs/context/README.md"
   "docs/context/INDEX.md"
@@ -70,11 +71,13 @@ if [ "$docs_context_only" -eq 1 ]; then
     fi
   done <<<"$changed_files"
 
-  for required_path in "${DOCS_CONTEXT_PROOF_PATHS[@]}"; do
-    if ! path_selected "$required_path" "${paths[@]}"; then
-      paths+=("$required_path")
-    fi
-  done
+  if ! path_selected "docs/context/catalog.yaml" "${paths[@]}"; then
+    for required_path in "${DOCS_CONTEXT_PROOF_PATHS[@]}"; do
+      if ! path_selected "$required_path" "${paths[@]}"; then
+        paths+=("$required_path")
+      fi
+    done
+  fi
 
   path_args=()
   for selected in "${paths[@]}"; do

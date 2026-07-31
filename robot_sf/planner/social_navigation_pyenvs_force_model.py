@@ -95,6 +95,7 @@ def _build_socialforce_compat_module(backend_socialforce: Any) -> types.ModuleTy
             v0: float = 10.0,
             sigma: float = 0.3,
         ) -> None:
+            """Initialize the compatibility simulator and adapt ``state`` to the backend format."""
             self._sim = backend_socialforce.Simulator(delta_t=delta_t)
             self._state = _to_backend_state(state)
             self.state = np.asarray(state, dtype=float)

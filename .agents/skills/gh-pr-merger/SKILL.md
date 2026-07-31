@@ -17,11 +17,30 @@ aliases:
 
 # GH PR Merger
 
-Use this skill when a PR is `merge-ready` and needs guarded merge with preflight
-verification.
+Use this skill when a PR is `merge-ready` and the owner or parent orchestrator has authorized a
+bounded guarded-merge run.
 
 This skill is intentionally restricted: it never force-pushes, never rewrites
 history, and stops on any auth/permission/CI failure.
+
+## Merge Queue Gate Parity (issue #6274)
+
+The fail-closed preflight below governs guarded merges this skill performs. The
+same preflight is enforced **queue-side** by the `Merge Queue Gate` required
+status check (`.github/workflows/merge-queue-gate.yml`, backed by
+`scripts/dev/merge_queue_gate.py`), so the GitHub native merge queue and any
+external/parallel auto-merge dispatcher that routes through it cannot bypass
+`merge-ready`, the exact-head `gate-verdict: accepted` trailer, unresolved
+threads, or an explicitly requested reviewer. Comment or review verdict trailers count only when
+GitHub reports the author as a repository owner, member, or collaborator; an untrusted contributor
+cannot self-approve a new head under a retained label. The queue gate also fails closed
+unless the live queue uses GitHub's `ALLGREEN` ("Only merge non-failing pull
+requests") strategy, which prevents a
+passing tail entry from carrying an earlier ungated entry through a grouped
+merge. That workflow is the merge-queue entry point for this contract; this
+skill remains the binding authority for guarded merges it executes directly.
+See `docs/dev_guide.md` ("Merge queue gate") for the required-check toggle and
+the audit record shape (`merge_queue_gate.v1`).
 
 ## Trigger Boundary
 
@@ -39,6 +58,9 @@ Do not use it for:
 - `AGENTS.md`
 - `.agents/skills/goal-pr-review/SKILL.md`
 - `docs/code_review.md`
+- `docs/dev_guide.md` ("Merge queue gate", issue #6274)
+- `.github/workflows/merge-queue-gate.yml`
+- `scripts/dev/merge_queue_gate.py`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 
 ## Preflight
@@ -51,7 +73,9 @@ uv run python scripts/dev/check_skills.py --preflight gh-pr-merger
 
 Before each merge operation, verify:
 
-1. PR has the `merge-ready` label. If absent, skip and report.
+1. Current GitHub state has the `merge-ready` label. Labels are the source of truth; do not infer
+   merge authorization from Projects, dashboards, a local ledger, or a worker report. If absent,
+   skip and report.
 2. PR is not a draft. If draft, skip and report.
 3. PR targets `main` (or the explicitly allowed base branch).
 4. CI checks are passing (use `uv run python scripts/dev/check_pr_ci_status.py <number>`).
@@ -66,11 +90,28 @@ Before each merge operation, verify:
    Exit code `2` means the check could not determine staleness (API error, no
    workflow-run metadata); log a warning and continue with remaining preflight
    checks.  See issue #5389 for context.
-7. The PR has no unresolved review threads or pending/requested reviewers.
+7. The PR has no unresolved actionable review threads or outstanding explicitly requested external
+   reviewers. A distinct-account approval may be waived only under `goal-pr-review`'s documented
+   single-account internal-review waiver.
 8. Branch protection rules on `main` allow merges from the current actor.
+9. The current head SHA exactly matches the SHA named in the `merge-ready` review evidence. A
+   single-account waiver never waives exact-head evidence; any head change requires re-review.
 
 If any preflight check fails, report the specific failure and do not merge.
 Do not retry preflight on the same PR without a state change.
+
+## Autonomous Merge Authority And Deletion Boundary
+
+Starting this bounded merge run authorizes the merger to update merge-status labels, post preflight
+or outcome comments, and execute the guarded squash merge without another per-PR confirmation. The
+merger may delete the merged feature branch only after verifying it contains no unique unpreserved
+work. It must not force-push, rewrite history, resolve substantive review findings itself, or bypass
+branch protection.
+
+Owner approval is required before deleting durable scientific artifacts, experiment records or
+runs, or GitHub releases. A merge command, cleanup option, or stale local cache never implies that
+approval. Store merger/review control-plane artifacts outside git worktrees, and never commit
+`RESULT.md` or `REVIEW.json`.
 
 ## Merge Workflow
 
@@ -151,8 +192,12 @@ Do not merge multiple PRs in parallel. Process sequentially.
 
 - Before merge, verify the PR head SHA has not changed since the last review.
   If changed, skip and report that the PR needs re-review.
-- Do not merge a PR that has unresolved review threads.
-- Do not merge a PR that has pending or requested reviewers.
+- Do not merge a PR that has unresolved actionable review threads.
+- Honor explicitly requested external reviewers. Lack of a second internal account is not a blocker
+  only when the exact-head single-account waiver is recorded.
+- Multiple machines may prepare or review isolated PRs in parallel, but this merger must process
+  merges sequentially and re-read labels, base, checks, threads, and head SHA immediately before
+  each merge.
 
 ## Confidence
 

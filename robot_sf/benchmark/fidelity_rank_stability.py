@@ -49,6 +49,11 @@ def rank_planners(
     """
 
     def sort_key(planner: str) -> tuple[int, float, str]:
+        """Order finite metric values best-first and push missing values last.
+
+        Returns:
+            A sort key ordering finite metric values best-first and missing values last.
+        """
         value = _finite_metric_value(table[planner], metric)
         if value is None:
             return (1, 0.0, planner)

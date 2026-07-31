@@ -64,6 +64,11 @@ NOTES = {
     "AttributeError+ImportError+OSError": ("Blessed broad catch: optional registry boundary."),
     "AttributeError+ImportError+RuntimeError": ("Blessed broad catch: optional native boundary."),
     "AttributeError+ImportError+TypeError": ("Blessed broad catch: optional dispatch boundary."),
+    "AttributeError+ImportError+IndexError+KeyError+TypeError+ValueError": (
+        "Blessed broad catch: SocNavBench metric-runner boundary. The vendored runner may "
+        "be unavailable and malformed trajectory/map inputs must become a CanaryError; "
+        "keep the handler scoped to this fail-closed conversion."
+    ),
     "AttributeError+ImportError+OSError+RuntimeError+TypeError+ValueError": (
         "Blessed broad catches: defensive visualization ingest and "
         "authorization-gated episode execution boundaries."

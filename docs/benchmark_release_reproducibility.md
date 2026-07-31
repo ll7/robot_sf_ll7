@@ -184,6 +184,18 @@ step traces) but **not trajectory-stable across execution contexts**.
   `hostname`, `cpu_model` (from `/proc/cpuinfo`), and the resolved `thread_env`
   mapping, so divergent execution contexts are detectable after the fact.
 
+**Per-Context Determinism Smoke Test (issue #6126):**
+
+- Per-context step trace bit-reproducibility is guarded in CI by the fixed-episode smoke test
+  (`scripts/validation/run_per_context_determinism_smoke.py` and
+  `tests/benchmark/test_per_context_determinism_smoke.py`).
+- The test executes a fixed scenario/planner/seed/horizon episode twice in-process with forced
+  numerical thread pinning (`OMP_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`, `MKL_NUM_THREADS=1`)
+  and compares canonical step traces using `robot_sf.benchmark.step_trace_comparator`.
+- This smoke test verifies per-context determinism within a single execution context. It explicitly
+  does **not** claim bit-identical step traces across different CPU microarchitectures, OS versions,
+  or BLAS libraries (preserving the empirical 2/30 cross-context divergence result from #5817).
+
 ## What Counts As Comparable vs Non-Comparable
 
 Comparable:

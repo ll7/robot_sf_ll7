@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 _ISSUE = 4016
 _REQUIRED_METRICS = (
     "success_rate",
@@ -101,8 +103,8 @@ def write_acceptance_audit(
         else evidence_dir / "acceptance_audit.md"
     )
     output_json.parent.mkdir(parents=True, exist_ok=True)
-    output_json.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    output_markdown.write_text(_render_markdown(audit), encoding="utf-8")
+    write_json(output_json, audit)
+    write_text(output_markdown, _render_markdown(audit), issue_ref=f"robot_sf#{_ISSUE}")
     return audit
 
 

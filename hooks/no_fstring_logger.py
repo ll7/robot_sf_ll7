@@ -204,9 +204,43 @@ def _message_argument(node: ast.Call, method: str) -> ast.expr | None:
     return node.args[message_index] if len(node.args) > message_index else None
 
 
+def _serialize_fstring(node: ast.JoinedStr) -> str:
+    """Return a Python-version-independent canonical serialization of an f-string.
+
+    ``ast.dump`` and ``ast.unparse`` are not stable across interpreter versions
+    for f-strings: Python 3.13 omits empty ``Call.keywords`` in ``ast.dump``
+    and selects a different outer quote in ``ast.unparse`` when an interpolation
+    contains a literal quote (e.g. ``f"x {'; '.join(a['b'])}"``). A fingerprint
+    derived from either representation therefore drifted between the CI
+    interpreter (3.12) and developer interpreters (3.13), breaking the ratchet
+    baseline (issue #6575). This serializer is stable because it fingerprints
+    the f-string's semantic parts: each literal segment's string *value* and
+    each interpolation's expression text, conversion, and recursive format spec.
+    """
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(f"L\x00{value.value}")
+        elif isinstance(value, ast.FormattedValue):
+            expression = ast.unparse(value.value)
+            conversion = str(value.conversion)
+            format_spec = (
+                _serialize_fstring(value.format_spec)
+                if isinstance(value.format_spec, ast.JoinedStr)
+                else ""
+            )
+            parts.append(f"F\x00{expression}\x00{conversion}\x00{format_spec}")
+        elif isinstance(value, ast.JoinedStr):
+            # A nested f-string used directly as a literal segment (PEP 701).
+            parts.append(f"L\x00{_serialize_fstring(value)}")
+        else:  # pragma: no cover - defensive for unexpected JoinedStr children
+            parts.append(f"X\x00{ast.unparse(value)}")
+    return "\x00".join(parts)
+
+
 def _message_fingerprint(message: ast.JoinedStr) -> str:
-    """Return a location-independent fingerprint for one f-string expression."""
-    normalized = ast.dump(message, annotate_fields=True, include_attributes=False)
+    """Return a location- and Python-version-independent fingerprint for one f-string."""
+    normalized = _serialize_fstring(message)
     return sha256(normalized.encode("utf-8")).hexdigest()[:FINGERPRINT_LENGTH]
 
 

@@ -101,16 +101,31 @@ def test_preflight_rejects_search_space_without_pedestrian_id() -> None:
         assert probe.bound_to_pedestrian is False
 
 
-def test_preflight_explicit_pedestrian_override_binds_concrete_pedestrian() -> None:
-    """An explicit pedestrian_id override binds a pedestrian even if the space declares none."""
+def test_preflight_rejects_pedestrian_override_when_space_declares_none() -> None:
+    """An override cannot turn a search space without a pedestrian into a ready space."""
     result = evaluate_preflight(
         search_space=_space(pedestrian_id=None),
         template_scenario=_template(pedestrian_id="override_probe"),
         pedestrian_id="override_probe",
     )
 
-    assert result.status == "promotion_timing_ready"
-    assert result.materialized_pedestrian_id == "override_probe"
+    assert result.status == "blocked_no_pedestrian"
+    assert result.promotion_ready is False
+    assert result.materialized_pedestrian_id is None
+    assert any("must match the search-space" in blocker for blocker in result.blockers)
+
+
+def test_preflight_rejects_pedestrian_override_that_differs_from_space() -> None:
+    """An override cannot make the probe validate a different pedestrian than the writer uses."""
+    result = evaluate_preflight(
+        search_space=_space(pedestrian_id="declared_probe"),
+        template_scenario=_template(pedestrian_id="override_probe"),
+        pedestrian_id="override_probe",
+    )
+
+    assert result.status == "blocked_no_pedestrian"
+    assert result.promotion_ready is False
+    assert any("declared='declared_probe'" in blocker for blocker in result.blockers)
 
 
 def test_preflight_normalizes_template_pedestrian_id_like_runtime_loader() -> None:
@@ -160,6 +175,20 @@ def test_preflight_inspects_candidate_pedestrian_among_preexisting_entries() -> 
         assert probe.status == "effective"
         assert probe.bound_to_pedestrian is True
         assert probe.bound_value != pytest.approx(99.0)
+
+
+def test_preflight_rejects_duplicate_normalized_template_pedestrian_ids() -> None:
+    """Duplicate IDs that the canonical loader rejects cannot pass the readiness probe."""
+    template = _template()
+    duplicate = dict(template["single_pedestrians"][0])
+    duplicate["id"] = "  crossing_probe  "
+    template["single_pedestrians"].append(duplicate)
+
+    result = evaluate_preflight(search_space=_space(), template_scenario=template)
+
+    assert result.status == "blocked_no_pedestrian"
+    assert result.promotion_ready is False
+    assert any("duplicate normalized id" in blocker for blocker in result.blockers)
 
 
 def test_preflight_rejects_metadata_only_timing_dimensions(monkeypatch: pytest.MonkeyPatch) -> None:

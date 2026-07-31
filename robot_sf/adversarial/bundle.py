@@ -43,6 +43,54 @@ def _normalize_pedestrian_id(pedestrian_id: str | None) -> str | None:
     return normalized or None
 
 
+def validate_template_pedestrian_binding(
+    template_scenario: Mapping[str, Any],
+    pedestrian_id: str | None,
+) -> str | None:
+    """Return a loader-contract error for a declared template pedestrian, if any.
+
+    Scenario overrides are matched by normalized identity by the canonical loader. Validate the
+    complete override list here so a candidate cannot be written with duplicate, malformed, or
+    unbound pedestrian entries that the loader would reject later.
+
+    Returns:
+        str | None: A fail-closed validation message, or ``None`` when the declared pedestrian
+        binding is valid.
+    """
+    normalized_id = _normalize_pedestrian_id(pedestrian_id)
+    if normalized_id is None:
+        return None
+
+    entries = template_scenario.get("single_pedestrians")
+    if not isinstance(entries, list):
+        return (
+            f"search-space pedestrian.id={normalized_id!r} has no matching "
+            "single_pedestrians entry in the scenario template"
+        )
+
+    seen: dict[str, int] = {}
+    for entry_index, entry in enumerate(entries):
+        if not isinstance(entry, Mapping):
+            return f"single_pedestrians[{entry_index}] must be a mapping"
+        entry_id = _normalize_pedestrian_id(entry.get("id"))
+        if entry_id is None:
+            return f"single_pedestrians[{entry_index}] must define a non-empty id"
+        previous_index = seen.get(entry_id)
+        if previous_index is not None:
+            return (
+                f"single_pedestrians contains duplicate normalized id {entry_id!r} "
+                f"at indexes {previous_index} and {entry_index}"
+            )
+        seen[entry_id] = entry_index
+
+    if normalized_id not in seen:
+        return (
+            f"search-space pedestrian.id={normalized_id!r} has no matching "
+            "single_pedestrians entry in the scenario template"
+        )
+    return None
+
+
 def _load_template(path: Path) -> dict[str, Any]:
     """Load a scenario-template YAML file."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -232,16 +280,11 @@ def write_candidate_inputs(
     template = _load_template(config.scenario_template)
     pedestrian_id = _normalize_pedestrian_id(config.search_space.pedestrian_id)
     if pedestrian_id:
-        template_entries = template["scenarios"][0].get("single_pedestrians")
-        has_target = isinstance(template_entries, list) and any(
-            isinstance(entry, Mapping) and str(entry.get("id") or "").strip() == pedestrian_id
-            for entry in template_entries
+        binding_error = validate_template_pedestrian_binding(
+            template["scenarios"][0], pedestrian_id
         )
-        if not has_target:
-            raise ValueError(
-                f"search-space pedestrian.id={pedestrian_id!r} has no matching "
-                "single_pedestrians entry in the scenario template"
-            )
+        if binding_error is not None:
+            raise ValueError(binding_error)
 
     candidate_dir.mkdir(parents=True, exist_ok=True)
     route_path = candidate_dir / "route_overrides.yaml"

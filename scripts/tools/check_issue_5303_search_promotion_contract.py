@@ -183,7 +183,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--pedestrian-id",
         type=str,
         default=None,
-        help="Optional pedestrian identity override for a --search-space probe.",
+        help=(
+            "Optional pedestrian identity assertion for a --search-space probe; it must "
+            "match the ID declared in the search space."
+        ),
     )
     parser.add_argument(
         "--format",

@@ -25,7 +25,8 @@ Status semantics (fail-closed on any structural gap):
 
 - ``blocked_no_pedestrian`` -- the search space declares no ``pedestrian.id``, the scenario
   template does not expose the declared pedestrian identity, or the materialized payload lacks
-  a concrete pedestrian route or ``single_pedestrians`` entry.
+  a concrete pedestrian route or ``single_pedestrians`` entry. It also covers a pedestrian-id
+  override that does not exactly match the search-space declaration.
 - ``blocked_missing_dimension`` -- a frozen promotion timing dimension is not declared in the
   search space.
 - ``blocked_inert_dimensions`` -- at least one timing dimension is metadata-only: perturbing it
@@ -49,6 +50,7 @@ import yaml
 from robot_sf.adversarial.bundle import (
     build_candidate_payload,
     compute_effective_scenario_hash,
+    validate_template_pedestrian_binding,
 )
 from robot_sf.adversarial.config import (
     PROMOTION_TIMING_DIMENSIONS,
@@ -396,8 +398,9 @@ def evaluate_preflight(
         search_space: Validated adversarial search space whose timing dimensions are probed.
         template_scenario: The first scenario mapping from a scenario template, materialized
             in memory (no disk I/O required).
-        pedestrian_id: Pedestrian identity to bind. Defaults to ``search_space.pedestrian_id``;
-            when that is ``None`` the probe fails closed with ``blocked_no_pedestrian``.
+        pedestrian_id: Optional pedestrian identity assertion. When provided, it must match
+            ``search_space.pedestrian_id``; it cannot supply or replace a missing declaration.
+            A missing declaration or mismatch fails closed with ``blocked_no_pedestrian``.
         index: Candidate index used for materialization; held constant across perturbations so
             only the timing dimension varies.
 
@@ -405,15 +408,19 @@ def evaluate_preflight(
         Aggregate preflight with a fail-closed status and surfaced blockers.
     """
     raw_resolved_id = search_space.pedestrian_id if pedestrian_id is None else pedestrian_id
+    declared_id = str(search_space.pedestrian_id).strip() if search_space.pedestrian_id else None
     resolved_id = str(raw_resolved_id).strip() if raw_resolved_id is not None else None
     resolved_id = resolved_id or None
+    override_mismatch = pedestrian_id is not None and resolved_id != declared_id
     template = dict(template_scenario)
+    template_binding_error = validate_template_pedestrian_binding(template, declared_id)
+    materialization_id = declared_id if template_binding_error is None else None
     baseline = _baseline_candidate(search_space)
     baseline_scenario, baseline_route = build_candidate_payload(
         baseline,
         index=index,
         template_scenario=template,
-        pedestrian_id=resolved_id,
+        pedestrian_id=materialization_id,
     )
     baseline_hash = compute_effective_scenario_hash(baseline_scenario, baseline_route)
     (
@@ -426,10 +433,20 @@ def evaluate_preflight(
         template=template,
         scenario=baseline_scenario,
         route_payload=baseline_route,
-        pedestrian_id=resolved_id,
+        pedestrian_id=declared_id,
     )
 
-    probe_pedestrian_id = resolved_id if template_has_pedestrian else None
+    if template_binding_error is not None and template_binding_error not in blockers:
+        blockers.append(template_binding_error)
+    if override_mismatch:
+        blockers.append(
+            "pedestrian_id override must match the search-space pedestrian.id exactly; "
+            f"declared={declared_id!r}, requested={resolved_id!r}"
+        )
+
+    probe_pedestrian_id = (
+        declared_id if template_has_pedestrian and template_binding_error is None else None
+    )
 
     dimensions = tuple(
         _probe_dimension(
@@ -457,7 +474,12 @@ def evaluate_preflight(
                 f"bound_to_pedestrian={probe.bound_to_pedestrian})"
             )
 
-    if not resolved_id or not template_has_pedestrian:
+    if (
+        override_mismatch
+        or not declared_id
+        or not template_has_pedestrian
+        or template_binding_error
+    ):
         status = "blocked_no_pedestrian"
     elif any(probe.status == "missing" for probe in dimensions):
         status = "blocked_missing_dimension"
@@ -472,7 +494,7 @@ def evaluate_preflight(
 
     return SearchPromotionPreflight(
         schema_version=SCHEMA_VERSION,
-        pedestrian_id=resolved_id,
+        pedestrian_id=declared_id,
         materialized_pedestrian_id=materialized_id,
         single_pedestrian_populated=single_pedestrian_populated,
         pedestrian_route_populated=pedestrian_route_populated,

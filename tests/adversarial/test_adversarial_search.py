@@ -22,6 +22,7 @@ from robot_sf.adversarial.bundle import (
     build_candidate_payload,
     compute_effective_scenario_hash,
     effective_scenario_payload,
+    validate_template_pedestrian_binding,
     write_candidate_inputs,
     write_trajectory_csv,
 )
@@ -761,6 +762,21 @@ def test_bundle_normalizes_pedestrian_id_before_binding_template_entry() -> None
 
     assert route_payload["ped_routes"][0]["id"] == "crossing_probe"
     assert [entry["id"] for entry in scenario["single_pedestrians"]] == ["crossing_probe"]
+
+
+def test_template_pedestrian_binding_rejects_duplicate_normalized_ids() -> None:
+    """The candidate writer must reject duplicate IDs that the scenario loader rejects."""
+    template = {
+        "single_pedestrians": [
+            {"id": "crossing_probe"},
+            {"id": "  crossing_probe  "},
+        ]
+    }
+
+    error = validate_template_pedestrian_binding(template, "crossing_probe")
+
+    assert error is not None
+    assert "duplicate normalized id" in error
 
 
 def test_bundle_omits_pedestrian_route_and_single_pedestrian_without_id() -> None:

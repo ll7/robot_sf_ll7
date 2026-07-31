@@ -47,7 +47,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from shapely.geometry import Point, Polygon
@@ -313,7 +313,3 @@ class OmplGeometricAdapter:
             waypoints=waypoints,
             exact_solution=exact,
         )
-
-    def diagnostics(self) -> dict[str, Any]:
-        """Return execution diagnostics."""
-        return {"planner_type": "OmplGeometricAdapter"}

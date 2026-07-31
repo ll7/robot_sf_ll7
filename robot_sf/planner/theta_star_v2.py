@@ -22,7 +22,7 @@ Because Theta* calls LOS millions of times on large grids, removing these alloca
 from __future__ import annotations
 
 from types import MethodType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
@@ -201,10 +201,6 @@ class HighPerformanceThetaStar(ThetaStar):
             setattr(self.map_, "__fast_collision_bound", True)
 
         return super().plan()
-
-    def diagnostics(self) -> dict[str, Any]:
-        """Return execution diagnostics."""
-        return {"planner_type": "HighPerformanceThetaStar"}
 
 
 __all__ = ["HighPerformanceThetaStar"]

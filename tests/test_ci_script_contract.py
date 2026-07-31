@@ -152,10 +152,12 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     )
 
     assert duration_restore["uses"].startswith("actions/cache/restore@")
+    assert duration_restore["continue-on-error"] is True
     assert duration_restore["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_restore["with"]["key"]
     assert "test-durations-${{ runner.os }}-" in duration_restore["with"]["restore-keys"]
     assert duration_upload["if"] == "always()"
+    assert duration_upload["continue-on-error"] is True
     assert duration_upload["with"] == {
         "name": "pytest-durations-${{ matrix.shard }}",
         "path": ".test_durations",

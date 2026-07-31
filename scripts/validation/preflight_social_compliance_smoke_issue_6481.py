@@ -348,7 +348,10 @@ def _aggregate_metric_contract_is_ok(
         support
         for row, status in zip(rows, statuses, strict=True)
         for support in (row["support_counts"].get(metric_id, 0),)
-        if status == "available" and isinstance(support, (int, float))
+        if status == "available"
+        and isinstance(support, int)
+        and not isinstance(support, bool)
+        and support >= 0
     )
     expected_denominators = dict(
         sorted(

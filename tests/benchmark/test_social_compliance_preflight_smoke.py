@@ -20,6 +20,7 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.social_compliance import SOCIAL_COMPLIANCE_SCHEMA_VERSION
 from scripts.validation.preflight_social_compliance_smoke_issue_6481 import (
     _aggregate_contract_is_ok,
+    _aggregate_metric_contract_is_ok,
     _classify_row,
     build_receipt,
 )
@@ -326,6 +327,34 @@ def test_receipt_requires_completed_zero_exit_campaign() -> None:
     assert receipt["campaign_ok"] is False
     assert receipt["passed"] is False
     assert receipt["all_native"] is False
+
+
+@pytest.mark.parametrize("invalid_support_count", [True, -1, float("nan"), float("inf")])
+def test_aggregate_contract_ignores_invalid_support_counts(
+    invalid_support_count: object,
+) -> None:
+    """Receipt validation mirrors the aggregator's fail-closed support-count filter."""
+    metric_id = "comfort_exposure_person_s"
+    rows = [
+        {
+            "statuses": {metric_id: "available"},
+            "support_counts": {metric_id: invalid_support_count},
+            "denominators": {metric_id: "pedestrian_steps"},
+            "unavailable_reasons": {},
+            "values": {metric_id: 1.0},
+        }
+    ]
+    aggregate_metric = {
+        "status_counts": {"available": 1},
+        "support_count": 0,
+        "denominators": {"pedestrian_steps": 1},
+        "unavailable_reasons": {},
+        "mean": 1.0,
+        "median": 1.0,
+        "p95": 1.0,
+    }
+
+    assert _aggregate_metric_contract_is_ok(metric_id, aggregate_metric, rows) is True
 
 
 def test_scenario_matrix_selects_one_pedestrian_scenario() -> None:

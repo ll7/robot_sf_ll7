@@ -1276,6 +1276,20 @@ def write_snqi_analysis(packet: Mapping[str, Any], evidence_dir: str | Path) -> 
     write_json(analysis_path, public_packet)
 
     csv_path = out / "snqi_by_latency.csv"
+    csv_fields = [
+        "planner_group",
+        "planner",
+        "execution_mode",
+        "latency_steps",
+        "latency_ms_equivalent",
+        "paired_units",
+        "snqi_mean",
+        "snqi_delta_vs_zero",
+        "snqi_slope_per_100ms",
+        "snqi_slope_ci_low",
+        "snqi_slope_ci_high",
+        "point_estimate_robustness_rank",
+    ]
     csv_rows: list[dict[str, Any]] = []
     for row in packet["point_estimate_robustness_ranking"]:
         means = {
@@ -1301,7 +1315,16 @@ def write_snqi_analysis(packet: Mapping[str, Any], evidence_dir: str | Path) -> 
                     "point_estimate_robustness_rank": row["rank"],
                 }
             )
-    write_csv(csv_path, csv_rows)
+    if csv_rows:
+        write_csv(csv_path, csv_rows)
+    else:
+        # Preserve the historical header-only output for an empty ranking. The shared writer
+        # intentionally rejects empty row lists, while this public writer has always emitted
+        # the marker and schema header for that input.
+        with csv_path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(review_marker_comment() + "\n")
+            csv_writer = csv.DictWriter(handle, fieldnames=csv_fields, lineterminator="\n")
+            csv_writer.writeheader()
     return [analysis_path, csv_path]
 
 

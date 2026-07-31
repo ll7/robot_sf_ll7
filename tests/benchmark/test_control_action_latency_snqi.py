@@ -401,6 +401,27 @@ def test_write_snqi_analysis_uses_review_marked_shared_writers(tmp_path: Path) -
     assert len(csv_lines) == 5  # marker, header, and one row per latency step
 
 
+def test_write_snqi_analysis_empty_ranking_preserves_csv_header(tmp_path: Path) -> None:
+    """An empty ranking still emits the marked CSV schema header without raising."""
+    write_snqi_analysis(
+        {
+            "schema_version": ANALYSIS_SCHEMA_VERSION,
+            "point_estimate_robustness_ranking": [],
+        },
+        tmp_path,
+    )
+
+    csv_lines = (tmp_path / "snqi_by_latency.csv").read_text(encoding="utf-8").splitlines()
+    assert csv_lines == [
+        "# AI-GENERATED NEEDS-REVIEW",
+        (
+            "planner_group,planner,execution_mode,latency_steps,latency_ms_equivalent,"
+            "paired_units,snqi_mean,snqi_delta_vs_zero,snqi_slope_per_100ms,"
+            "snqi_slope_ci_low,snqi_slope_ci_high,point_estimate_robustness_rank"
+        ),
+    ]
+
+
 def test_load_input_rows_rejects_missing_columns(tmp_path: Path) -> None:
     """A durable input missing a required column fails closed."""
     input_path = tmp_path / "inputs.csv"

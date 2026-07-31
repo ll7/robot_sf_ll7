@@ -9,7 +9,8 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from pathlib import Path  # noqa: TC003 - runtime type-hint consumers resolve Path
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -179,9 +180,6 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.

@@ -58,9 +58,9 @@ class FastPysfPlannerPolicy:
         self._wrapper = FastPysfWrapper(simulator.pysf_sim)
         self._warned_missing_goal = False
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset planner state (noop for now)."""
-        return None
+        del seed
 
     def predict(self, _obs=None, **_kwargs):
         """Return a diff-drive action compatible with Gym predict signatures."""

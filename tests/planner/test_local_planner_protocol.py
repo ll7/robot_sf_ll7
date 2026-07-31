@@ -102,13 +102,27 @@ class _RecordingInner:
 
 
 class _SeedlessInner:
-    """Stub native inner planner with a seedless ``reset`` signature."""
+    """Nonconforming native inner planner with a legacy seedless reset."""
 
     def __init__(self) -> None:
         self.reset_calls = 0
 
     def reset(self) -> None:
         self.reset_calls += 1
+
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        del observation
+        return 0.0, 0.0
+
+
+class _StandardInnerWithoutClose:
+    """Conforming native inner planner without an optional close hook."""
+
+    def __init__(self) -> None:
+        self.reset_seeds: list[int | None] = []
+
+    def reset(self, *, seed: int | None = None) -> None:
+        self.reset_seeds.append(seed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         del observation
@@ -161,7 +175,7 @@ class _SeedlessBaseline:
 
 def test_native_lidar_adapter_satisfies_protocol() -> None:
     """The native LiDAR adapter must be recognized as a LocalPlannerProtocol."""
-    adapter = LidarOccupancyPlannerAdapter(_SeedlessInner(), _lidar_config())
+    adapter = LidarOccupancyPlannerAdapter(_StandardInnerWithoutClose(), _lidar_config())
     assert isinstance(adapter, LocalPlannerProtocol)
 
 
@@ -263,12 +277,13 @@ def test_native_lidar_adapter_reset_forwards_seed_when_used() -> None:
     assert inner.reset_calls == [((), {"seed": 123})]
 
 
-def test_native_lidar_adapter_reset_ignores_seed_when_not_used() -> None:
-    """Native adapter must still reset a seedless inner planner without crashing."""
+def test_native_lidar_adapter_reset_surfaces_nonconforming_inner() -> None:
+    """Native adapter must reject a local planner without the standardized reset signature."""
     inner = _SeedlessInner()
     adapter = LidarOccupancyPlannerAdapter(inner, _lidar_config())
-    adapter.reset(seed=123)
-    assert inner.reset_calls == 1
+    with pytest.raises(TypeError):
+        adapter.reset(seed=123)
+    assert inner.reset_calls == 0
 
 
 def test_baseline_adapter_reset_forwards_seed_when_used() -> None:
@@ -401,7 +416,7 @@ def test_normalize_rejects_invalid_fallback_planner_type(fallback: Any) -> None:
 
 def test_native_lidar_adapter_diagnostics_include_minimum_schema() -> None:
     """The native adapter diagnostics must include the protocol planner type."""
-    adapter = LidarOccupancyPlannerAdapter(_SeedlessInner(), _lidar_config())
+    adapter = LidarOccupancyPlannerAdapter(_StandardInnerWithoutClose(), _lidar_config())
     raw = adapter.diagnostics()
     assert raw[PLANNER_TYPE_KEY] == "LidarOccupancyPlannerAdapter"
     assert "lidar_occupancy_adapter" in raw
@@ -409,7 +424,7 @@ def test_native_lidar_adapter_diagnostics_include_minimum_schema() -> None:
 
 def test_native_lidar_diagnostics_normalize_without_synthesis() -> None:
     """Valid native diagnostics must normalize without unavailable fields."""
-    adapter = LidarOccupancyPlannerAdapter(_SeedlessInner(), _lidar_config())
+    adapter = LidarOccupancyPlannerAdapter(_StandardInnerWithoutClose(), _lidar_config())
     normalized = normalize_planner_diagnostics(
         adapter.diagnostics(), fallback_planner_type="LidarOccupancyPlannerAdapter"
     )
@@ -443,11 +458,13 @@ def test_baseline_adapter_explicit_planner_type_overrides_default() -> None:
 
 def test_native_lidar_adapter_close_is_idempotent_noop() -> None:
     """The native adapter close is idempotent when its planner has no close hook."""
-    adapter = LidarOccupancyPlannerAdapter(_SeedlessInner(), _lidar_config())
+    inner = _StandardInnerWithoutClose()
+    adapter = LidarOccupancyPlannerAdapter(inner, _lidar_config())
     adapter.close()
     adapter.close()  # second call must not raise
     # plan/reset/diagnostics still work after close (close is terminal but harmless).
     adapter.reset(seed=0)
+    assert inner.reset_seeds == [0]
     assert adapter.plan(_lidar_observation()) == (0.0, 0.0)
 
 

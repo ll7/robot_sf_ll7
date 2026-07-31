@@ -178,6 +178,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -226,6 +229,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -274,6 +280,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -322,6 +331,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -370,6 +382,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -418,6 +433,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -466,6 +484,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -514,6 +535,9 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     },
     {
@@ -562,10 +586,13 @@
         "flow_disruption_delay_s": "matched pedestrian arrival baseline is unavailable",
         "legibility_progress_deficit_m": "reference robot progress profile is unavailable",
         "pedestrian_deviation_mean_m": "matched pedestrian reference trajectory is unavailable"
+      },
+      "values": {
+        "comfort_exposure_person_s": 0.0
       }
     }
   ],
   "scenario_matrix_sha256": "968a3b590c9547cefac177a543022cbba3ab600f915750fc0dd04dc370505376",
   "social_compliance_schema_version": "social-compliance-metric-contract.v1",
-  "source_sha": "451ab06c19734d8dd602b4288a05d5351f86a804"
+  "source_sha": "1c4607613714cdac8ac80e67a095f8af88ab904d"
 }

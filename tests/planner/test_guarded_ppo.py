@@ -781,3 +781,15 @@ def test_guarded_ppo_degenerate_blend_weight_never_emits_nan_command() -> None:
     )
     assert not any(math.isnan(value) for value in command)
     assert decision != "prior_blend_safe"
+
+
+def test_guarded_ppo_nan_goal_tolerance_preserves_normal_safety_selection() -> None:
+    """A NaN goal tolerance must not turn an unverified goal into a stop decision."""
+    guard = GuardedPPOAdapter(
+        config=GuardedPPOConfig(goal_tolerance=float("nan")),
+        fallback_adapter=_FallbackAdapter((0.1, 0.0)),
+    )
+
+    decision = guard.choose_command_decision(_obs(), (0.4, 0.1))
+
+    assert decision.decision_label == "ppo_clear"

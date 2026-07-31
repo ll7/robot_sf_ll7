@@ -603,7 +603,11 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         goal: np.ndarray,
     ) -> ShieldDecision | None:
         """Return a goal-reached shield decision when the robot is within tolerance."""
-        if float(np.linalg.norm(goal - robot_pos)) > float(self.config.goal_tolerance):
+        goal_distance = float(np.linalg.norm(goal - robot_pos))
+        goal_tolerance = float(self.config.goal_tolerance)
+        # Preserve the original ``distance <= tolerance`` polarity: its NaN behavior
+        # is intentionally different from the negated ``distance > tolerance`` form.
+        if not goal_distance <= goal_tolerance:
             return None
         return self._shield_decision(
             ppo_command=ppo_command,

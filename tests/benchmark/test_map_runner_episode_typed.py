@@ -16,6 +16,8 @@ from robot_sf.benchmark.types import (
     OutcomePayload,
     PlannerDecisionTrace,
     PlannerDecisionTraceEntry,
+    PlannerDynamicWindow,
+    PlannerTargetGoal,
     TrackingPrecisionSpec,
     TrackingPrecisionSpeedContract,
 )
@@ -135,6 +137,29 @@ def test_planner_decision_trace_entry_with_topology() -> None:
     }
     assert entry["topology_lane_status"] == "active"
     assert entry["topology_guided"]["hypothesis_count"] == 3
+
+
+def test_planner_decision_trace_entry_with_dwa_payload() -> None:
+    """PlannerDecisionTraceEntry matches the serialized DWA diagnostic shape."""
+    target_goal: PlannerTargetGoal = {"kind": "next", "x": 5.0, "y": 3.0}
+    dynamic_window: PlannerDynamicWindow = {
+        "v_min": 0.0,
+        "v_max": 1.0,
+        "w_min": -0.3,
+        "w_max": 0.3,
+    }
+    entry: PlannerDecisionTraceEntry = {
+        "step": 1,
+        "selected_command": [0.5, 0.1],
+        "selected_score": 2.5,
+        "feasible_score_min": 1.0,
+        "feasible_score_max": 2.5,
+        "dynamic_window": dynamic_window,
+        "target_goal": target_goal,
+        "global_route_probe_activated": True,
+    }
+    assert entry["target_goal"]["kind"] == "next"
+    assert entry["dynamic_window"]["v_max"] == 1.0
 
 
 def test_planner_decision_trace_envelope() -> None:

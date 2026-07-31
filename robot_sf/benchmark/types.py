@@ -139,6 +139,23 @@ class AlgoMeta(TypedDict, total=False):
     learned_checkpoint_observation_contract: dict[str, Any]
 
 
+class PlannerTargetGoal(TypedDict, total=False):
+    """DWA target-goal detail embedded in a planner-decision step."""
+
+    kind: str
+    x: float
+    y: float
+
+
+class PlannerDynamicWindow(TypedDict, total=False):
+    """Reachable linear/angular bounds embedded in a DWA trace step."""
+
+    v_min: float
+    v_max: float
+    w_min: float
+    w_max: float
+
+
 class PlannerDecisionTraceEntry(TypedDict, total=False):
     """Single step entry in the planner-decision trace."""
 
@@ -167,8 +184,8 @@ class PlannerDecisionTraceEntry(TypedDict, total=False):
     candidate_infeasible: int
     feasible_score_min: float
     feasible_score_max: float
-    dynamic_window: dict[str, Any]
-    target_goal: list[float]
+    dynamic_window: PlannerDynamicWindow
+    target_goal: PlannerTargetGoal
     global_route_probe_activated: bool
 
 
@@ -373,6 +390,8 @@ __all__ = [
     "OutcomePayload",
     "PlannerDecisionTrace",
     "PlannerDecisionTraceEntry",
+    "PlannerDynamicWindow",
+    "PlannerTargetGoal",
     "ResumeManifest",
     "SNQIWeights",
     "ScenarioSpec",

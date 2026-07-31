@@ -35,11 +35,14 @@ DENSE_TRAJECTORY_COLUMNS = [
 ]
 
 
-def _normalize_pedestrian_id(pedestrian_id: str | None) -> str | None:
-    """Normalize an optional pedestrian identity consistently with the scenario loader."""
-    if pedestrian_id is None:
-        return None
-    normalized = str(pedestrian_id).strip()
+def _normalize_pedestrian_id(pedestrian_id: object | None) -> str | None:
+    """Normalize an optional pedestrian identity consistently with the scenario loader.
+
+    The canonical loader treats falsy IDs (for example, numeric ``0``) as missing before
+    converting them to text. Keep the writer and its preflight validator on that same boundary
+    so malformed IDs cannot pass validation and fail only when the generated scenario loads.
+    """
+    normalized = str(pedestrian_id or "").strip()
     return normalized or None
 
 
@@ -186,7 +189,7 @@ def _apply_candidate_to_scenario(
             "wait_at": [{"waypoint_index": 0, "wait_s": float(candidate.pedestrian_delay_s)}],
         }
         for entry_index, entry in enumerate(entries):
-            if isinstance(entry, dict) and str(entry.get("id") or "").strip() == pedestrian_id:
+            if isinstance(entry, Mapping) and str(entry.get("id") or "").strip() == pedestrian_id:
                 merged = dict(entry)
                 # A template may carry a POI-based goal or trajectory. The generated candidate
                 # supplies explicit coordinates, so stale mutually-exclusive keys must not

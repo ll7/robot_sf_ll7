@@ -452,7 +452,11 @@ class SearchSpaceConfig:
             scenario_seed=_range("scenario_seed", (1.0, 1.0)),
             min_start_goal_distance_m=float(constraints.get("min_start_goal_distance_m", 0.25)),
             pedestrian_id=pedestrian_id,
-            _declared_variables=frozenset(variables),
+            # Explicit nulls use the same default parsing path as omitted optional variables,
+            # but they are not declarations that can satisfy the promotion preflight.
+            _declared_variables=frozenset(
+                name for name, value in variables.items() if value is not None
+            ),
         )
         if not config.scenario_seed.min.is_integer() or not config.scenario_seed.max.is_integer():
             raise ValueError("search-space scenario_seed bounds must be integers")

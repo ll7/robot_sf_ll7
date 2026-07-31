@@ -284,6 +284,44 @@ def test_preflight_rejects_omitted_declared_timing_dimension(tmp_path: Path) -> 
     assert delay_probe.status == "missing"
 
 
+def test_preflight_rejects_null_timing_dimension(tmp_path: Path) -> None:
+    """An explicit null timing range must fail closed like an omitted dimension."""
+    space_path = tmp_path / "space.yaml"
+    space_path.write_text(
+        yaml.safe_dump(
+            {
+                "variables": {
+                    "start_x": {"min": 1.0, "max": 1.0},
+                    "start_y": {"min": 2.0, "max": 2.0},
+                    "goal_x": {"min": 5.0, "max": 5.0},
+                    "goal_y": {"min": 2.0, "max": 2.0},
+                    "spawn_time_s": {"min": 0.0, "max": 2.0},
+                    "pedestrian_speed_mps": {"min": 1.0, "max": 1.0},
+                    "pedestrian_delay_s": None,
+                    "scenario_seed": {"min": 7, "max": 7},
+                },
+                "pedestrian": {"id": "crossing_probe"},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    template_path = tmp_path / "template.yaml"
+    template_path.write_text(
+        yaml.safe_dump({"scenarios": [_template()]}, sort_keys=False), encoding="utf-8"
+    )
+
+    result = evaluate_preflight_from_files(
+        search_space_path=space_path,
+        scenario_template_path=template_path,
+    )
+
+    assert result.status == "blocked_missing_dimension"
+    delay_probe = next(probe for probe in result.dimensions if probe.name == "pedestrian_delay_s")
+    assert delay_probe.declared is False
+    assert delay_probe.status == "missing"
+
+
 def test_preflight_perturbations_stay_inside_declared_ranges() -> None:
     """Timing probes must use values the configured search space can actually sample."""
     space = _space()

@@ -779,6 +779,16 @@ def test_template_pedestrian_binding_rejects_duplicate_normalized_ids() -> None:
     assert "duplicate normalized id" in error
 
 
+def test_template_pedestrian_binding_rejects_falsy_ids_like_loader() -> None:
+    """Falsy IDs accepted by string coercion must still fail like the scenario loader."""
+    error = validate_template_pedestrian_binding(
+        {"single_pedestrians": [{"id": 0}]},
+        "0",
+    )
+
+    assert error == "single_pedestrians[0] must define a non-empty id"
+
+
 def test_bundle_omits_pedestrian_route_and_single_pedestrian_without_id() -> None:
     """Without a declared pedestrian id the generic bundle stays metadata-only."""
     scenario, route_payload = build_candidate_payload(

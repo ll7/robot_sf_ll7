@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from robot_sf.benchmark.types import PlannerDecisionTraceEntry
+# Keep the trace alias available to runtime annotation consumers such as schema tooling.
+from robot_sf.benchmark.types import PlannerDecisionTraceEntry  # noqa: TC001
 
 _STATIC_DEADLOCK_SUITE_ID = "static_deadlock_recovery"
 _STATIC_DEADLOCK_LOW_PROGRESS_WINDOW_STEPS = 10

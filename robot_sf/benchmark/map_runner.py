@@ -201,6 +201,9 @@ from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
 )
+
+# Keep the return alias available for runtime annotation consumers such as schema tooling.
+from robot_sf.benchmark.types import EpisodeRecordDict  # noqa: TC001
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -284,8 +287,6 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from robot_sf.benchmark.types import EpisodeRecordDict
 
 
 @dataclass(frozen=True)

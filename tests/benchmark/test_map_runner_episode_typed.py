@@ -6,6 +6,8 @@ serialization of the TypedDicts used in map_runner_episode.py.
 
 from __future__ import annotations
 
+import typing
+
 from robot_sf.benchmark.types import (
     AdapterImpact,
     AlgoMeta,
@@ -248,3 +250,17 @@ def test_episode_record_partial_defaults() -> None:
     }
     assert record.get("benchmark_track") is None
     assert record.get("integrity") is None
+
+
+def test_episode_boundary_annotations_resolve_at_runtime() -> None:
+    """Episode-boundary annotations remain usable by runtime schema tooling."""
+    from robot_sf.benchmark import map_runner, map_runner_static_deadlock, map_runner_worker
+
+    assert typing.get_type_hints(map_runner._run_map_episode)["return"] is EpisodeRecordDict
+    assert typing.get_type_hints(map_runner_worker.execute_map_job)["return"] is EpisodeRecordDict
+    assert (
+        typing.get_type_hints(map_runner_static_deadlock.static_deadlock_trace_fields)[
+            "planner_decision_trace"
+        ]
+        == list[PlannerDecisionTraceEntry]
+    )

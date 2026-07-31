@@ -6,8 +6,11 @@ serialization of the TypedDicts used in map_runner_episode.py.
 
 from __future__ import annotations
 
+import json
 import typing
 
+from robot_sf.benchmark.observation_noise import normalize_observation_noise_spec
+from robot_sf.benchmark.tracking_precision_contract import normalize_tracking_precision_spec
 from robot_sf.benchmark.types import (
     AdapterImpact,
     AlgoMeta,
@@ -52,6 +55,20 @@ def test_noise_spec_optional_keys() -> None:
     spec: NoiseSpec = {"enabled": True}
     assert spec.get("profile") is None
     assert spec.get("nonexistent", "fallback") == "fallback"
+
+
+def test_normalized_specs_match_typed_dict_keys_and_serialize() -> None:
+    """Canonical normalizers stay aligned with their TypedDict payload contracts."""
+    noise_spec = normalize_observation_noise_spec(None)
+    assert set(noise_spec) == set(typing.get_type_hints(NoiseSpec))
+
+    tracking_spec = normalize_tracking_precision_spec(None)
+    assert set(tracking_spec) == set(typing.get_type_hints(TrackingPrecisionSpec))
+    assert set(tracking_spec["speed_contract"]) == set(
+        typing.get_type_hints(TrackingPrecisionSpeedContract)
+    )
+    json.dumps(noise_spec)
+    json.dumps(tracking_spec)
 
 
 def test_tracking_precision_spec_structural() -> None:
@@ -229,6 +246,7 @@ def test_episode_record_dict_structural() -> None:
     assert record["metrics"]["success"] is True
     assert record["metrics"]["force_quantiles"]["q50"] == 0.1
     assert record["observation_noise"]["enabled"] is False
+    assert json.loads(json.dumps(record)) == record
 
 
 def test_episode_record_carries_typed_metadata() -> None:

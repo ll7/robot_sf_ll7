@@ -2103,28 +2103,31 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         collision_radius: float,
         min_dynamic_clearance: float,
         t: float,
-    ) -> dict[str, Any] | None:
+    ) -> tuple[dict[str, Any] | None, float]:
         """Check predicted dynamic collision at a rollout step.
 
         Returns:
-            dict[str, Any] | None: Rejection dict on collision, else None.
+            tuple[dict[str, Any] | None, float]: Rejection dict on collision (else None)
+            and the running minimum dynamic clearance after this step.
         """
         if ped_pos.size == 0:
-            return None
+            return None, min_dynamic_clearance
         ped_future = ped_pos + ped_vel * t
         distances = np.linalg.norm(ped_future - robot_pos[None, :], axis=1)
-        step_min = float(np.min(distances))
-        updated_clearance = min(min_dynamic_clearance, step_min)
+        updated_clearance = min(min_dynamic_clearance, float(np.min(distances)))
         if t <= float(self.config.hard_collision_horizon) and updated_clearance <= collision_radius:
-            return {
-                "accepted": False,
-                "reason": "dynamic_collision",
-                "candidate": candidate,
-                "min_dynamic_clearance": float(updated_clearance),
-                "collision_radius": float(collision_radius),
-                "time": float(t),
-            }
-        return None
+            return (
+                {
+                    "accepted": False,
+                    "reason": "dynamic_collision",
+                    "candidate": candidate,
+                    "min_dynamic_clearance": float(updated_clearance),
+                    "collision_radius": float(collision_radius),
+                    "time": float(t),
+                },
+                updated_clearance,
+            )
+        return None, updated_clearance
 
     def _rollout_step_static_check(  # noqa: PLR0913
         self,
@@ -2139,11 +2142,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         strict_static_clearance: bool,
         progress_windows: dict[str, float] | None,
         t: float,
-    ) -> tuple[dict[str, Any] | None, float]:
+    ) -> tuple[dict[str, Any] | None, float, bool]:
         """Run static collision and clearance checks for one rollout step.
 
         Returns:
-            Tuple of (rejection dict or None, updated min_static_clearance).
+            Tuple of (rejection dict or None, updated min_static_clearance, skip_dynamic).
+            ``skip_dynamic`` is True when continuous static checking accepts a clearance
+            violation, mirroring the original monolithic loop's ``continue`` that skipped
+            the per-step dynamic collision check for that step.
         """
         static_rejection = self._static_collision_rejection(
             candidate=candidate,
@@ -2154,12 +2160,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             t=t,
         )
         if static_rejection is not None:
-            return static_rejection, min_static_clearance
+            return static_rejection, min_static_clearance, False
         min_static_clearance = min(
             min_static_clearance,
             self._min_obstacle_clearance(robot_pos, observation),
         )
-        clearance_rejection = self._check_static_clearance_violation(
+        clearance_rejection, skip_dynamic = self._check_static_clearance_violation(
             candidate=candidate,
             min_static_clearance=min_static_clearance,
             required_static_clearance=ctx["required_static_clearance"],
@@ -2175,7 +2181,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             static_clearance_exception_terms=static_clearance_exception_terms,
             t=t,
         )
-        return clearance_rejection, min_static_clearance
+        return clearance_rejection, min_static_clearance, skip_dynamic
 
     def _execute_rollout_collision_check(
         self,
@@ -2213,7 +2219,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             if ctx["proxemic_enabled"] and ctx["rollout_points"] is not None:
                 ctx["rollout_points"].append(np.array(robot_pos, dtype=float))
 
-            static_result, min_static_clearance = self._rollout_step_static_check(
+            static_result, min_static_clearance, skip_dynamic = self._rollout_step_static_check(
                 candidate=candidate,
                 observation=observation,
                 ctx=ctx,
@@ -2227,8 +2233,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             if static_result is not None:
                 return static_result
+            if skip_dynamic:
+                continue
 
-            dynamic_rejection = self._check_dynamic_collision(
+            dynamic_rejection, min_dynamic_clearance = self._check_dynamic_collision(
                 candidate=candidate,
                 ped_pos=ctx["ped_pos"],
                 ped_vel=ctx["ped_vel"],
@@ -2239,10 +2247,6 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             if dynamic_rejection is not None:
                 return dynamic_rejection
-            if ctx["ped_pos"].size > 0:
-                ped_future = ctx["ped_pos"] + ctx["ped_vel"] * t
-                distances = np.linalg.norm(ped_future - robot_pos[None, :], axis=1)
-                min_dynamic_clearance = min(min_dynamic_clearance, float(np.min(distances)))
 
         ctx["robot_pos"] = robot_pos
         ctx["heading"] = heading
@@ -2269,16 +2273,19 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         progress_windows: dict[str, float] | None,
         static_clearance_exception_terms: set[str],
         t: float,
-    ) -> dict[str, Any] | None:
-        """Check static clearance violation and return rejection dict or None.
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """Check static clearance violation and return rejection dict or skip flag.
 
         Returns:
-            dict[str, Any] | None: Rejection dict if clearance is violated, else None.
+            tuple[dict[str, Any] | None, bool]: Rejection dict if clearance is violated
+            (else None) and whether the remainder of this rollout step should be skipped.
+            The skip flag mirrors the original monolithic loop's ``continue`` used when
+            continuous static checking accepts a clearance violation without returning.
         """
         if min_static_clearance > required_static_clearance:
-            return None
+            return None, False
         if use_continuous_static_check:
-            return None
+            return None, True
         static_violation_policy = (
             None
             if strict_static_clearance or corridor_clearance_buffer > 0.0
@@ -2292,15 +2299,18 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         )
         if static_violation_policy is None:
-            return {
-                "accepted": False,
-                "reason": "static_clearance",
-                "candidate": candidate,
-                "min_static_clearance": float(min_static_clearance),
-                "hard_static_clearance": float(hard_static_clearance),
-                "required_static_clearance": float(required_static_clearance),
-                "time": float(t),
-            }
+            return (
+                {
+                    "accepted": False,
+                    "reason": "static_clearance",
+                    "candidate": candidate,
+                    "min_static_clearance": float(min_static_clearance),
+                    "hard_static_clearance": float(hard_static_clearance),
+                    "required_static_clearance": float(required_static_clearance),
+                    "time": float(t),
+                },
+                False,
+            )
         static_clearance_exception_terms.add(static_violation_policy)
 
         if (
@@ -2309,15 +2319,18 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             and min_static_clearance + float(self.config.static_clearance_escape_tolerance)
             < initial_static_clearance
         ):
-            return {
-                "accepted": False,
-                "reason": "static_clearance",
-                "candidate": candidate,
-                "min_static_clearance": float(min_static_clearance),
-                "hard_static_clearance": float(hard_static_clearance),
-                "time": float(t),
-            }
-        return None
+            return (
+                {
+                    "accepted": False,
+                    "reason": "static_clearance",
+                    "candidate": candidate,
+                    "min_static_clearance": float(min_static_clearance),
+                    "hard_static_clearance": float(hard_static_clearance),
+                    "time": float(t),
+                },
+                False,
+            )
+        return None, False
 
     def _compute_post_rollout_metrics(
         self,

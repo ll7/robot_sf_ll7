@@ -388,6 +388,7 @@ def test_materialized_timing_controls_load_into_runtime_single_pedestrian(tmp_pa
     map_def = next(iter(config.map_pool.map_defs.values()))
     pedestrian = next(ped for ped in map_def.single_pedestrians if ped.id == "h1")
 
+    assert pedestrian.start == (14.0, 17.5)
     assert pedestrian.goal is None
     assert pedestrian.trajectory == [(14.0, 17.5), (14.0, 4.0)]
     assert pedestrian.start_delay_s == pytest.approx(1.0)

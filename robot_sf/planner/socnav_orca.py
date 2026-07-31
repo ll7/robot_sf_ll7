@@ -1286,6 +1286,10 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             observation=observation,
         )
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "ORCAPlannerAdapter"}
+
 
 class HRVOPlannerAdapter(ORCAPlannerAdapter):
     """Hybrid Reciprocal Velocity Obstacles local planner.

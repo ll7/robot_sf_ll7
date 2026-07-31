@@ -740,6 +740,29 @@ def test_bundle_materializes_pedestrian_route_and_single_pedestrian_when_id_decl
     assert pedestrian["wait_at"][0]["wait_s"] == pytest.approx(candidate.pedestrian_delay_s)
 
 
+def test_bundle_normalizes_pedestrian_id_before_binding_template_entry() -> None:
+    """Whitespace-padded identities must bind the existing loader-normalized entry."""
+    template = _bundle_template_scenario()
+    template["single_pedestrians"] = [
+        {
+            "id": "  crossing_probe  ",
+            "start": [0.0, 0.0],
+            "goal": None,
+            "trajectory": [[0.0, 0.0], [1.0, 1.0]],
+        }
+    ]
+
+    scenario, route_payload = build_candidate_payload(
+        _candidate(7),
+        index=0,
+        template_scenario=template,
+        pedestrian_id="  crossing_probe  ",
+    )
+
+    assert route_payload["ped_routes"][0]["id"] == "crossing_probe"
+    assert [entry["id"] for entry in scenario["single_pedestrians"]] == ["crossing_probe"]
+
+
 def test_bundle_omits_pedestrian_route_and_single_pedestrian_without_id() -> None:
     """Without a declared pedestrian id the generic bundle stays metadata-only."""
     scenario, route_payload = build_candidate_payload(

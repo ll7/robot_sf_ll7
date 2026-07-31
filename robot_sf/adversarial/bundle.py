@@ -35,6 +35,14 @@ DENSE_TRAJECTORY_COLUMNS = [
 ]
 
 
+def _normalize_pedestrian_id(pedestrian_id: str | None) -> str | None:
+    """Normalize an optional pedestrian identity consistently with the scenario loader."""
+    if pedestrian_id is None:
+        return None
+    normalized = str(pedestrian_id).strip()
+    return normalized or None
+
+
 def _load_template(path: Path) -> dict[str, Any]:
     """Load a scenario-template YAML file."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -60,6 +68,7 @@ def _candidate_route_payload(
     start/goal and ``spawn_time_s`` is emitted so the frozen timing dimension changes the
     effective runtime route instead of remaining candidate metadata only.
     """
+    pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
     route_id = 100_000 + int(index)
     waypoints = [candidate.start.as_waypoint(), candidate.goal.as_waypoint()]
     ped_routes: list[dict[str, Any]] = []
@@ -94,6 +103,7 @@ def _apply_candidate_to_scenario(
     pedestrian_id: str | None,
 ) -> dict[str, Any]:
     """Return a scenario dictionary specialized for one candidate."""
+    pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
     updated = deepcopy(scenario)
     base_name = str(updated.get("name") or updated.get("scenario_id") or "scenario")
     updated["name"] = f"{base_name}_adversarial_{index:04d}"
@@ -163,6 +173,7 @@ def build_candidate_payload(
         tuple[dict[str, Any], dict[str, Any]]: The specialized scenario mapping and the
         route-override payload.
     """
+    pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
     route_payload = _candidate_route_payload(candidate, index=index, pedestrian_id=pedestrian_id)
     scenario = _apply_candidate_to_scenario(
         dict(template_scenario),
@@ -219,7 +230,7 @@ def write_candidate_inputs(
 ) -> tuple[Path, Path]:
     """Write replayable scenario and route-override files for a candidate."""
     template = _load_template(config.scenario_template)
-    pedestrian_id = config.search_space.pedestrian_id
+    pedestrian_id = _normalize_pedestrian_id(config.search_space.pedestrian_id)
     if pedestrian_id:
         template_entries = template["scenarios"][0].get("single_pedestrians")
         has_target = isinstance(template_entries, list) and any(

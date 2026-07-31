@@ -379,8 +379,10 @@ def _resolve_loader_settings(
 
     ``persistent_workers`` and ``prefetch_factor`` are only valid on the
     multi-worker path, so they are forced off when ``num_workers == 0``.
-    Non-blocking host-to-device transfer is enabled only when pinned memory is
-    active and the target device is CUDA; on CPU the transfer stays blocking.
+    Pinned memory is enabled only for a CUDA target. On CPU, a requested
+    ``pin_memory`` flag is normalized off so PyTorch does not attempt an
+    unavailable accelerator pinning path or report a misleading manifest value.
+    Non-blocking host-to-device transfer is enabled only on that CUDA path.
     """
     if num_workers < 0:
         raise ValueError(f"--num-workers must be >= 0, got {num_workers}")
@@ -395,13 +397,13 @@ def _resolve_loader_settings(
         effective_prefetch = (
             _DEFAULT_PREFETCH_FACTOR if prefetch_factor is None else int(prefetch_factor)
         )
-    non_blocking = bool(pin_memory) and device.type == "cuda"
+    effective_pin_memory = bool(pin_memory) and device.type == "cuda"
     return LoaderSettings(
         num_workers=int(num_workers),
-        pin_memory=bool(pin_memory),
+        pin_memory=effective_pin_memory,
         persistent_workers=bool(persistent_workers and use_workers),
         prefetch_factor=effective_prefetch,
-        non_blocking=non_blocking,
+        non_blocking=effective_pin_memory,
         device=str(device),
     )
 

@@ -88,10 +88,11 @@ def test_resolve_defaults_preserve_single_process_blocking_cpu_path() -> None:
 def test_non_blocking_gated_on_pinned_memory_and_cuda(
     pin_memory: bool, device: str, expected_non_blocking: bool
 ) -> None:
-    """non_blocking must be True only when pin_memory AND CUDA; never on CPU."""
+    """Pinning and non-blocking transfer must be enabled only for CUDA."""
     settings = _resolve(num_workers=2, pin_memory=pin_memory, device=device)
 
     assert settings.non_blocking is expected_non_blocking
+    assert settings.pin_memory is (pin_memory and device == "cuda")
     if device == "cpu":
         assert settings.non_blocking is False
 
@@ -166,7 +167,7 @@ def test_loader_settings_manifest_is_json_serializable() -> None:
     }
     assert serialized == {
         "num_workers": 2,
-        "pin_memory": True,
+        "pin_memory": False,
         "persistent_workers": True,
         "prefetch_factor": 3,
         "non_blocking": False,
@@ -218,7 +219,7 @@ def test_prepare_loaders_positive_workers_attach_seeded_init_and_generator() -> 
 
     for loader in (train_loader, val_loader):
         assert loader.num_workers == 2
-        assert loader.pin_memory is True
+        assert loader.pin_memory is False
         assert loader.persistent_workers is True
         assert loader.prefetch_factor == 3
         assert loader.worker_init_fn is trainer._seeded_worker_init_fn

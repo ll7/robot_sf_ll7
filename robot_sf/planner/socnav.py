@@ -1852,6 +1852,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         )
         return best
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "PredictionPlannerAdapter"}
+
 
 def make_prediction_policy(
     config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False
@@ -1897,6 +1901,10 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             use_upstream=True,
             allow_fallback=allow_fallback,
         )
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SocNavBenchSamplingAdapter"}
 
 
 __all__ = [

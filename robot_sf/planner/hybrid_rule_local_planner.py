@@ -2282,7 +2282,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             The skip flag mirrors the original monolithic loop's ``continue`` used when
             continuous static checking accepts a clearance violation without returning.
         """
-        if min_static_clearance > required_static_clearance:
+        if not min_static_clearance <= required_static_clearance:
             return None, False
         if use_continuous_static_check:
             return None, True

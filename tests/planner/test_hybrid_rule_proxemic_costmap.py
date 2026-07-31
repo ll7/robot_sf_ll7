@@ -86,6 +86,41 @@ def test_hybrid_rule_continuous_static_clearance_skips_dynamic_check_on_violatio
     assert evaluation["min_dynamic_clearance"] == pytest.approx(float("inf"))
 
 
+def test_hybrid_rule_nonfinite_clearance_preserves_dynamic_collision_check(monkeypatch) -> None:
+    """Non-finite clearance follows the legacy dynamic-collision path.
+
+    The original evaluator only entered static-clearance policy when
+    ``min_static_clearance <= required_static_clearance``. In particular, a NaN
+    clearance did not activate the continuous-static ``continue`` and therefore
+    still allowed the dynamic-collision check to reject the candidate.
+    """
+    cfg = HybridRuleLocalPlannerConfig(
+        rollout_horizon=0.2,
+        continuous_static_clearance_enabled=True,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+    planner._continuous_static_context = object()
+    observation = _obs(ped_positions=[(0.05, 0.0)])
+    state = planner._extract_state(observation)
+    candidate = HybridRuleCandidate(0.2, 0.0, "dynamic_window")
+
+    monkeypatch.setattr(planner, "_static_collision_rejection", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        planner, "_min_obstacle_clearance", lambda _point, _observation: float("nan")
+    )
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=cfg.max_linear_speed,
+        nearest_ped=float("inf"),
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "dynamic_collision"
+
+
 def test_hybrid_rule_records_proxemic_costmap_metadata_and_cost_term() -> None:
     """Opt-in proxemic layer contributes a soft score term and metadata hash."""
     cfg = HybridRuleLocalPlannerConfig(

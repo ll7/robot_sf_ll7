@@ -8,6 +8,9 @@ from typing import Any
 
 import numpy as np
 
+# Keep the trace alias available to runtime annotation consumers such as schema tooling.
+from robot_sf.benchmark.types import PlannerDecisionTraceEntry  # noqa: TC001
+
 _STATIC_DEADLOCK_SUITE_ID = "static_deadlock_recovery"
 _STATIC_DEADLOCK_LOW_PROGRESS_WINDOW_STEPS = 10
 _STATIC_DEADLOCK_LOW_PROGRESS_THRESHOLD_M = 0.05
@@ -36,7 +39,7 @@ def _mechanism_row_status(termination_reason: str) -> str:
     return "failed" if str(termination_reason).strip().lower() == "error" else "completed"
 
 
-def _recenter_activation_count(planner_decision_trace: list[dict[str, Any]]) -> int:
+def _recenter_activation_count(planner_decision_trace: list[PlannerDecisionTraceEntry]) -> int:
     """Count planner-decision steps whose static-recenter term was active.
 
     Returns:
@@ -58,7 +61,7 @@ def static_deadlock_trace_fields(
     initial_goal_distance: float,
     termination_reason: str,
     outcome: Mapping[str, bool],
-    planner_decision_trace: list[dict[str, Any]],
+    planner_decision_trace: list[PlannerDecisionTraceEntry],
 ) -> dict[str, Any]:
     """Build static-deadlock mechanism trace fields for suite-tagged episode rows.
 

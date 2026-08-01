@@ -533,10 +533,12 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
         derive_fit_payload_from_recertification,
         load_issue_3275_contract,
         validate_fit_payload_integrity,
+        validate_frozen_contract_study_design,
     )
 
     contract = load_issue_3275_contract(contract_path)
     try:
+        validate_frozen_contract_study_design(contract)
         outcome_metadata = _contract_outcome_metadata(contract)
         null_test_params = _contract_null_test_params(contract)
     except ValueError as exc:

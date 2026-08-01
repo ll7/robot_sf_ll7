@@ -316,6 +316,54 @@ def load_issue_3275_contract(path_or_data: str | Path | dict[str, Any]) -> dict[
     return data
 
 
+def validate_frozen_contract_study_design(contract: dict[str, Any]) -> None:
+    """Reject planner or family drift within the frozen #3275 study design.
+
+    The fit side, held-out evaluation side, and top-level planner declaration
+    intentionally repeat the same-planner design.  Those fields must agree:
+    otherwise a modified config could still initialize the social-force fit
+    model while reporting a different evaluation planner.
+    """
+    fit_cfg = contract.get("fit")
+    evaluation_cfg = contract.get("evaluation")
+    planner_cfg = contract.get("target_planner")
+    exclusions_cfg = contract.get("exclusions")
+    if not all(
+        isinstance(section, dict)
+        for section in (fit_cfg, evaluation_cfg, planner_cfg, exclusions_cfg)
+    ):
+        raise ValueError("frozen contract study-design sections must be objects")
+
+    target_planner = planner_cfg.get("id")
+    fit_planner = fit_cfg.get("target_planner")
+    evaluation_planner = evaluation_cfg.get("target_planner")
+    if not isinstance(target_planner, str) or not target_planner:
+        raise ValueError("frozen contract target_planner.id must be a non-empty string")
+    if fit_planner != target_planner or evaluation_planner != target_planner:
+        raise ValueError(
+            "frozen contract planner drift: fit and evaluation target planners "
+            "must both match target_planner.id"
+        )
+    if (
+        planner_cfg.get("both_arms_use_same_planner") is not True
+        or evaluation_cfg.get("same_planner_both_arms") is not True
+    ):
+        raise ValueError("frozen contract must explicitly require the same planner in both arms")
+
+    fit_family = fit_cfg.get("scenario_family")
+    evaluation_family = evaluation_cfg.get("scenario_family")
+    if not isinstance(fit_family, str) or not fit_family:
+        raise ValueError("frozen contract fit.scenario_family must be a non-empty string")
+    if not isinstance(evaluation_family, str) or not evaluation_family:
+        raise ValueError("frozen contract evaluation.scenario_family must be a non-empty string")
+    if fit_family == evaluation_family:
+        raise ValueError("frozen contract fit and evaluation families must be held out")
+    if exclusions_cfg.get("scenario_family") != evaluation_family:
+        raise ValueError(
+            "frozen contract exclusion family must match the held-out evaluation family"
+        )
+
+
 def attach_robot_geometry(
     payload: FitPayload,
     recertification_data: dict[str, Any],
@@ -688,6 +736,7 @@ class FailureArchiveProposalModel:
         if feature_view != "family_invariant":
             raise ValueError("the frozen #3275 contract requires the family_invariant feature view")
         contract = load_issue_3275_contract(contract_path_or_data)
+        validate_frozen_contract_study_design(contract)
         root = Path(repo_root) if repo_root is not None else Path.cwd()
         source = contract["source_lineage"]
         recertification_path = root / source["corrected_recertification_path"]

@@ -138,6 +138,28 @@ def test_contract_metadata_rejects_unfrozen_outcome_semantics(
         _contract_outcome_metadata(contract)
 
 
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("fit", "target_planner", "goal"),
+        ("evaluation", "target_planner", "goal"),
+        ("evaluation", "scenario_family", "classic_group_crossing_medium"),
+    ],
+)
+def test_check_contract_rejects_planner_or_held_out_family_drift(
+    section: str, field: str, value: str
+) -> None:
+    """The repeated study-design fields cannot silently change the estimand."""
+    contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    contract[section][field] = value
+
+    exit_code, verdict = run_check_contract(contract, repo_root=_REPO_ROOT)
+
+    assert exit_code == 1
+    assert verdict["ok"] is False
+    assert "frozen contract" in verdict["failures"][0]
+
+
 def test_check_contract_rejects_pre_correction_archive_hash_drift(tmp_path: Path) -> None:
     """The side-effect-free check validates the archive source lineage it consumes."""
     contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))

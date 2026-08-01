@@ -319,7 +319,7 @@ def _load_arm_algo_config(
                 ),
             ),
         )
-    if path is None:
+    if path is None:  # pragma: no cover
         raise RuntimeError("admitted planner config path was not resolved")  # pragma: no cover
     if not path.is_file():
         # A missing config file is a FileNotFoundError, not a shape error -- it is not an

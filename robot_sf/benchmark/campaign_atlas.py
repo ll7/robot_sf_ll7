@@ -319,7 +319,7 @@ def _validate_arm_identity(rows: Sequence[EpisodeInventoryRow]) -> None:
         )
     arm_to_planners: dict[str, set[str]] = {}
     for row in rows:
-        if row.release_arm_id is None:
+        if row.release_arm_id is None:  # pragma: no cover
             raise RuntimeError("release arm identity was not established")  # pragma: no cover
         arm_to_planners.setdefault(row.release_arm_id, set()).add(row.planner)
     inconsistent = {

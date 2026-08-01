@@ -287,7 +287,7 @@ def check_false_positive_injection_readiness(
         )
 
     # Malformed construction always records a blocker and returns above.
-    if perturbation_spec is None:
+    if perturbation_spec is None:  # pragma: no cover
         raise RuntimeError(  # pragma: no cover
             "false-positive perturbation specification was not constructed"
         )

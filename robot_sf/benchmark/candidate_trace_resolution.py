@@ -889,19 +889,19 @@ def load_episode_mapping(  # noqa: C901, PLR0912, PLR0915
             )
         # The fail-closed checks above reject every missing identity, trace, digest,
         # or outcome before this point. Keep those guarantees under Python -O.
-        if episode_id is None:
+        if episode_id is None:  # pragma: no cover
             raise ValueError(
                 f"episode mapping row {index} is missing episode_id"
             )  # pragma: no cover
-        if release_episode_id is None:
+        if release_episode_id is None:  # pragma: no cover
             raise ValueError(  # pragma: no cover
                 f"episode mapping row {index} is missing release_episode_id"
             )
-        if scenario_id is None or planner is None or seed is None:
+        if scenario_id is None or planner is None or seed is None:  # pragma: no cover
             raise ValueError(  # pragma: no cover
                 f"episode mapping row {index} has incomplete request identity"
             )
-        if trace_uri is None or trace_sha256 is None:
+        if trace_uri is None or trace_sha256 is None:  # pragma: no cover
             raise ValueError(
                 f"episode mapping row {index} is missing trace provenance"
             )  # pragma: no cover

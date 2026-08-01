@@ -177,7 +177,7 @@ def validate_threshold_parameter_consistency(records: list[dict[str, Any]]) -> d
                 ),
             )
 
-    if reference_profile is None:
+    if reference_profile is None:  # pragma: no cover
         raise RuntimeError("threshold profile reference was not selected")  # pragma: no cover
     return {
         "threshold_profile": reference_profile,

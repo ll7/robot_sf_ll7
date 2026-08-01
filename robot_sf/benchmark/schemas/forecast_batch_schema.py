@@ -92,7 +92,7 @@ class ForecastBatchSchema:
 
     def _extract_version(self) -> None:
         """Extract version information from schema."""
-        if self._schema_data is None:
+        if self._schema_data is None:  # pragma: no cover
             raise RuntimeError(
                 "Schema data must be loaded before version extraction"
             )  # pragma: no cover

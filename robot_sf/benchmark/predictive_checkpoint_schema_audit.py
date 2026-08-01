@@ -422,7 +422,7 @@ def audit_predictive_checkpoint_schema(
             )
             continue
 
-        if resolved is None:
+        if resolved is None:  # pragma: no cover
             raise RuntimeError(
                 "successful checkpoint resolution produced no path"
             )  # pragma: no cover

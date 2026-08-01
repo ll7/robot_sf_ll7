@@ -418,7 +418,7 @@ class _PlannerStepProcess:
         """
         self._ensure_worker()
         # Internal worker invariants established by _ensure_worker().
-        if self._conn is None or self._process is None:
+        if self._conn is None or self._process is None:  # pragma: no cover
             raise RuntimeError("planner step worker did not initialize")  # pragma: no cover
         try:
             self._conn.send(("step", obs))
@@ -718,7 +718,7 @@ class _NativeCommandPolicy:
         Returns:
             Decoded response text without the line terminator.
         """
-        if process.stdout is None:
+        if process.stdout is None:  # pragma: no cover
             raise RuntimeError(  # pragma: no cover
                 "persistent native-command worker has no stdout pipe"
             )
@@ -782,7 +782,7 @@ class _NativeCommandPolicy:
         try:
             if self._persistent:
                 process = self._ensure_process()
-                if process.stdin is None:
+                if process.stdin is None:  # pragma: no cover
                     raise RuntimeError(  # pragma: no cover
                         "persistent native-command worker has no stdin pipe"
                     )

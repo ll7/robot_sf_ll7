@@ -64,6 +64,7 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.ped_npc.ped_population import populate_single_pedestrians
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 from scripts.tools.compare_adversarial_samplers import (
     _comparison_row_from_manifest,
     render_durable_comparison_table,
@@ -916,6 +917,61 @@ def test_write_candidate_inputs_materializes_pedestrian_when_id_declared(tmp_pat
     assert scenario["single_pedestrians"][0]["wait_at"][0]["wait_s"] == pytest.approx(0.25)
     assert route_payload["ped_routes"][0]["id"] == "crossing_probe"
     assert route_payload["ped_routes"][0]["spawn_time_s"] == pytest.approx(0.5)
+
+
+def test_write_candidate_inputs_rebases_template_map_for_runtime_loader(tmp_path: Path) -> None:
+    """Generated bundles should resolve template-relative maps from their candidate directory."""
+    template_path = Path("configs/scenarios/single/francis2023_intersection_wait.yaml").resolve()
+    search_space_path = tmp_path / "space.yaml"
+    search_space_path.write_text(
+        yaml.safe_dump(
+            {
+                "variables": {
+                    "start_x": {"min": 14.0, "max": 14.0},
+                    "start_y": {"min": 17.5, "max": 17.5},
+                    "goal_x": {"min": 14.0, "max": 14.0},
+                    "goal_y": {"min": 4.0, "max": 4.0},
+                    "spawn_time_s": {"min": 1.0, "max": 1.0},
+                    "pedestrian_speed_mps": {"min": 1.0, "max": 1.0},
+                    "pedestrian_delay_s": {"min": 0.75, "max": 0.75},
+                    "scenario_seed": {"min": 240, "max": 240},
+                },
+                "pedestrian": {"id": "h1"},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template_path,
+        search_space=search_space_path,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+        budget=1,
+        seed=123,
+    )
+
+    scenario_path, _route_path = write_candidate_inputs(
+        config=config,
+        candidate=config.search_space.sample_candidate(Random(123)),
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    scenario = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"][0]
+
+    expected_map = Path(
+        "maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg"
+    ).resolve()
+    assert (scenario_path.parent / scenario["map_file"]).resolve() == expected_map
+
+    runtime_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    map_def = next(iter(runtime_config.map_pool.map_defs.values()))
+    pedestrian = next(ped for ped in map_def.single_pedestrians if ped.id == "h1")
+    assert pedestrian.start == (14.0, 17.5)
+    assert pedestrian.start_delay_s == pytest.approx(1.0)
+    assert pedestrian.wait_at is not None
+    assert pedestrian.wait_at[0].wait_s == pytest.approx(0.75)
 
 
 def test_multi_ped_config_converts_to_runtime_single_pedestrians_with_metadata() -> None:

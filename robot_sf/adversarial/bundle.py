@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
@@ -272,6 +273,36 @@ def compute_effective_scenario_hash(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _rebase_template_map_file(
+    scenario: dict[str, Any],
+    *,
+    template_path: Path,
+    candidate_dir: Path,
+) -> dict[str, Any]:
+    """Rebase a template-relative map reference for the generated scenario file.
+
+    Scenario-loader map paths are resolved relative to the scenario YAML that contains them.
+    Candidate bundles live in a different directory from their template, so copying a relative
+    ``map_file`` verbatim would point at the wrong location and make the generated bundle
+    unloadable. Leave unresolved references untouched so this helper does not hide an existing
+    template-resolution problem.
+    """
+    map_file = scenario.get("map_file")
+    if not isinstance(map_file, str) or not map_file.strip():
+        return scenario
+    source_reference = Path(map_file)
+    if source_reference.is_absolute():
+        return scenario
+    source_path = (template_path.parent / source_reference).resolve()
+    if not source_path.exists():
+        return scenario
+    updated = dict(scenario)
+    updated["map_file"] = Path(
+        os.path.relpath(source_path, start=candidate_dir.resolve())
+    ).as_posix()
+    return updated
+
+
 def write_candidate_inputs(
     *,
     config: SearchConfig,
@@ -298,6 +329,11 @@ def write_candidate_inputs(
         template_scenario=template["scenarios"][0],
         pedestrian_id=pedestrian_id,
         route_file_name=route_path.name,
+    )
+    scenario = _rebase_template_map_file(
+        scenario,
+        template_path=config.scenario_template,
+        candidate_dir=candidate_dir,
     )
     route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")
     scenario_payload = {"scenarios": [scenario]}

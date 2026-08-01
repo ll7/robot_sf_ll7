@@ -111,6 +111,11 @@ def test_algo_meta_structural_compatibility() -> None:
         "config_hash": "abc123",
         "kinematics_feasibility": {"status": "available"},
         "safety_shield_contract": {"enabled": False},
+        "fallback_or_degraded": False,
+        "_native_run_state": {
+            "deadlock_field": {},
+            "planner_diagnostics": {"fallback_count": 0},
+        },
         "adapter_impact": {
             "requested": True,
             "native_steps": 10,
@@ -124,6 +129,9 @@ def test_algo_meta_structural_compatibility() -> None:
     assert meta["algorithm"] == "orca"
     assert meta["adapter_impact"]["adapter_fraction"] == 0.9
     assert meta["tracking_precision"]["contract_honored"] is True
+    assert meta["fallback_or_degraded"] is False
+    assert meta["_native_run_state"]["deadlock_field"] == {}
+    assert {"fallback_or_degraded", "_native_run_state"} <= set(typing.get_type_hints(AlgoMeta))
 
 
 def test_algo_meta_partial_dict() -> None:

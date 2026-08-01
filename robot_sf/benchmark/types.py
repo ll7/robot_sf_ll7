@@ -139,6 +139,8 @@ class AlgoMeta(TypedDict, total=False):
     shield_stats: dict[str, Any]
     native_command: dict[str, Any]
     planner_diagnostics: dict[str, Any]
+    fallback_or_degraded: bool
+    _native_run_state: dict[str, Any]
     upstream_reference: dict[str, Any]
     stochastic_reference: bool
     distinct_from_goal_baseline: bool

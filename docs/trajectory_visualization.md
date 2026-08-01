@@ -106,7 +106,7 @@ analyzer overlay.
 ```python
 # Trajectory storage
 robot_trajectory: Deque[Tuple[float, float]]
-ped_trajectories: Dict[int, Deque[Tuple[float, float]]]  
+ped_trajectories: Dict[int, Deque[Tuple[float, float]]]
 ego_ped_trajectory: Deque[Tuple[float, float]]
 ```
 

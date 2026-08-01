@@ -64,10 +64,12 @@ The following files were updated to use the new module structure:
 ```python
 # Old code (still works)
 from robot_sf.planner import GlobalPlanner, PlannerConfig
+
 planner = GlobalPlanner(map_def)
 
 # New code (recommended)
 from robot_sf.planner import VisibilityPlanner, PlannerConfig
+
 planner = VisibilityPlanner(map_def)
 ```
 
@@ -114,7 +116,7 @@ planner = VisibilityPlanner(
         robot_radius=0.4,
         min_safe_clearance=0.3,
         enable_smoothing=True,
-    )
+    ),
 )
 path = planner.plan(start=(5.0, 5.0), goal=(45.0, 25.0))
 ```
@@ -132,7 +134,7 @@ planner = ClassicGlobalPlanner(
         cells_per_meter=2.0,
         inflate_radius_cells=2,
         algorithm="theta_star",
-    )
+    ),
 )
 path = planner.plan(start=(5.0, 5.0), goal=(45.0, 25.0))
 ```

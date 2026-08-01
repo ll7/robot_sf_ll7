@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
+from robot_sf.evidence.writers import write_json
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3653_snqi_decision_disagreement_packet.yaml")
 SCHEMA_VERSION = "issue-3653-snqi-decision-disagreement-application-packet.v1"
@@ -580,7 +581,7 @@ def export_if_ready(
     )
     if preflight_output is not None:
         preflight_output.parent.mkdir(parents=True, exist_ok=True)
-        preflight_output.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n")
+        write_json(preflight_output, preflight)
 
     provenance = {
         "episodes": input_file_provenance(episodes),

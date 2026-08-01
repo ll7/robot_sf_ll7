@@ -95,16 +95,13 @@ code output/research_reports/demo/report.md
 # scripts/research/compare_ablations.py
 from robot_sf.research.orchestrator import AblationOrchestrator
 
-ablation_params = {
-    "bc_epochs": [5, 10, 20],
-    "dataset_size": [100, 200, 300]
-}
+ablation_params = {"bc_epochs": [5, 10, 20], "dataset_size": [100, 200, 300]}
 
 orchestrator = AblationOrchestrator(
     experiment_name="BC_Ablation_Study",
     seeds=[42, 43, 44],
     ablation_params=ablation_params,
-    hypothesis_threshold=40.0
+    hypothesis_threshold=40.0,
 )
 
 # Run all 9 variants (3 BC epochs × 3 dataset sizes)
@@ -127,12 +124,7 @@ orchestrator.generate_report(output_dir="output/research_reports/ablation")
 ### Manual Report Generation
 
 ```python
-from robot_sf.research import (
-    MetricAggregator,
-    StatisticalAnalyzer,
-    FigureGenerator,
-    ReportRenderer
-)
+from robot_sf.research import MetricAggregator, StatisticalAnalyzer, FigureGenerator, ReportRenderer
 from pathlib import Path
 
 # 1. Load episode data
@@ -148,7 +140,7 @@ metrics_pretrained = aggregator.aggregate(episodes_pretrained, group_by="seed")
 analyzer = StatisticalAnalyzer()
 comparison = analyzer.paired_t_test(
     baseline=metrics_baseline["timesteps_to_convergence"],
-    treatment=metrics_pretrained["timesteps_to_convergence"]
+    treatment=metrics_pretrained["timesteps_to_convergence"],
 )
 effect_size = analyzer.cohen_d(metrics_baseline, metrics_pretrained)
 
@@ -157,12 +149,12 @@ hypothesis_result = analyzer.evaluate_hypothesis(
     baseline_mean=metrics_baseline["mean"],
     treatment_mean=metrics_pretrained["mean"],
     threshold=40.0,
-    metric_name="timesteps_to_convergence"
+    metric_name="timesteps_to_convergence",
 )
 
 # 5. Generate figures
 fig_gen = FigureGenerator(output_dir=Path("output/research_reports/manual/figures"))
-fig_gen.learning_curve(episodes_baseline, episodes_pretrained, seeds=[42,43,44])
+fig_gen.learning_curve(episodes_baseline, episodes_pretrained, seeds=[42, 43, 44])
 fig_gen.sample_efficiency_bar(metrics_baseline, metrics_pretrained)
 fig_gen.distribution_comparison(metrics_baseline, metrics_pretrained, metric="success_rate")
 
@@ -170,13 +162,10 @@ fig_gen.distribution_comparison(metrics_baseline, metrics_pretrained, metric="su
 renderer = ReportRenderer(template="default")
 report_md = renderer.render(
     experiment_name="Manual Imitation Report",
-    metrics={
-        "baseline": metrics_baseline,
-        "pretrained": metrics_pretrained
-    },
+    metrics={"baseline": metrics_baseline, "pretrained": metrics_pretrained},
     hypothesis=hypothesis_result,
     statistical_tests=comparison,
-    figures=fig_gen.get_artifact_list()
+    figures=fig_gen.get_artifact_list(),
 )
 
 # Save

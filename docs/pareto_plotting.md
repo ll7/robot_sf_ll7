@@ -37,7 +37,7 @@ meta = save_pareto_png(
     out_path="output/benchmarks/pareto.png",
     x_metric="collisions",
     y_metric="comfort_exposure",
-    title="Collisions vs Comfort"
+    title="Collisions vs Comfort",
 )
 print(meta)
 ```

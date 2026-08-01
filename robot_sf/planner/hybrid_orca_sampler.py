@@ -68,8 +68,9 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
         """Return typed hybrid config view."""
         return cast("HybridORCASamplerConfig", self.config)
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset child planners that keep per-episode state."""
+        del seed
         self._reset_diagnostics()
         for planner in (self.primary_adapter, self.sampler_adapter):
             reset = getattr(planner, "reset", None)

@@ -103,7 +103,8 @@ Phase 2 foundational infrastructure is **100% complete** with all 9 tasks implem
 - **Implementation**:
   ```python
   from robot_sf.nav.occupancy_grid import GridConfig
-  
+
+
   @dataclass
   class RobotSimulationConfig(BaseSimulationConfig):
       # Occupancy grid configuration
@@ -128,15 +129,17 @@ Phase 2 foundational infrastructure is **100% complete** with all 9 tasks implem
   def __post_init__(self):
       """Validate robot-specific configuration."""
       super().__post_init__()
-      
+
       # Auto-initialize grid_config when enabled
       if self.use_occupancy_grid and self.grid_config is None:
           self.grid_config = GridConfig()
-      
+
       # Validate grid_config type
       if self.grid_config is not None:
           if not isinstance(self.grid_config, GridConfig):
-              raise ValueError(f"grid_config must be GridConfig instance, got {type(self.grid_config)}")
+              raise ValueError(
+                  f"grid_config must be GridConfig instance, got {type(self.grid_config)}"
+              )
   ```
 - **Features**:
   - **Auto-initialization**: `use_occupancy_grid=True` → `grid_config = GridConfig()` (developer convenience)

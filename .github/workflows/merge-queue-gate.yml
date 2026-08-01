@@ -1,0 +1,184 @@
+name: Merge Queue Gate
+
+# Required status check for the GitHub native merge queue (issue #6274).
+#
+# After a maintainer activates this required check, the native merge queue must
+# not auto-merge a PR until this gate passes. It enforces the same fail-closed
+# preflight as the in-repository `gh-pr-merger` skill:
+# non-draft state, current `merge-ready` label, a current exact-head
+# `gate-verdict: accepted @ <head_sha>` trailer, no unresolved actionable
+# review threads, and no outstanding explicitly requested reviewers. It also
+# requires the merge queue's "Only merge non-failing
+# pull requests" (`ALLGREEN`) strategy so a passing tail entry cannot carry an
+# earlier ungated entry through a grouped merge. The audit record (evaluated
+# head/base SHAs, queue strategy, label set, gate-verdict status, staleness
+# verdict, CI conclusion, thread resolution, and requested-reviewer status) is
+# emitted to the job summary and stdout.
+#
+# Source-PR runs are advisory audits: they preserve failed reasons in the JSON
+# and job summary while exiting successfully, so admission readiness is not
+# misreported as failing implementation CI. Only `merge_group` runs fail closed.
+# To activate that queue-time behavior, add this job's status check ("Merge
+# Queue Gate / merge-queue-gate") to the merge queue's required status checks,
+# enable "Only merge non-failing pull requests", and enable "Require
+# conversation resolution before merging" in the branch-protection rules for
+# `main`. The workflow does not locate or control direct merge dispatchers that
+# can bypass GitHub branch protection.
+# See docs/dev_guide.md ("Merge queue gate") for the exact configuration and
+# residual issue #6274 acceptance proof.
+
+on:
+  pull_request:
+    # Refresh the advisory audit only when merge-ready changes or a labeled
+    # source head changes. Queue-time enforcement is handled by merge_group.
+    types:
+      - labeled
+      - unlabeled
+      - synchronize
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open PR number to evaluate (advisory; does not gate a merge)"
+        required: true
+        type: string
+
+permissions:
+  checks: read
+  contents: read
+  issues: read
+  pull-requests: read
+  statuses: read
+
+concurrency:
+  group: merge-queue-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  merge-queue-gate:
+    # Ordinary source PRs publish an advisory audit. Only native merge-group
+    # execution is fail-closed. Skip unrelated label and head churn.
+    if: >-
+      github.event_name == 'merge_group' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+        (((github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+          github.event.label.name == 'merge-ready') ||
+         (github.event.action == 'synchronize' &&
+          contains(github.event.pull_request.labels.*.name, 'merge-ready'))))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Select trusted gate revision
+        id: trusted-gate
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          resolve_branch_sha() {
+            local branch="$1"
+            local encoded_branch
+            encoded_branch="$(jq -rn --arg value "$branch" '$value|@uri')"
+            gh api "repos/$REPOSITORY/branches/$encoded_branch" --jq '.commit.sha'
+          }
+
+          case "$EVENT_NAME" in
+            merge_group)
+              trusted_ref="$MERGE_GROUP_BASE_SHA"
+              ;;
+            pull_request)
+              trusted_ref="$(resolve_branch_sha "$PULL_REQUEST_BASE_REF")"
+              ;;
+            workflow_dispatch)
+              trusted_ref="$(resolve_branch_sha "$DEFAULT_BRANCH")"
+              ;;
+            *)
+              echo "Unsupported event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          if [[ -z "$trusted_ref" ]]; then
+            echo "Trusted gate revision is empty for event $EVENT_NAME" >&2
+            exit 1
+          fi
+          if [[ ! "$trusted_ref" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Trusted gate revision is not a commit SHA: $trusted_ref" >&2
+            exit 1
+          fi
+          echo "::notice::Trusted gate revision: $trusted_ref"
+          printf 'ref=%s\n' "$trusted_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Never execute gate code from the PR or synthetic merge-group tree:
+          # the evaluated change must not be able to weaken its own gate.
+          ref: ${{ steps.trusted-gate.outputs.ref }}
+          persist-credentials: false
+
+      - name: Verify trusted gate source
+        id: gate-source
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ -f scripts/dev/merge_queue_gate.py ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == "merge_group" ]]; then
+            echo "::error::Trusted base does not contain scripts/dev/merge_queue_gate.py; refusing the merge-group gate."
+            exit 1
+          fi
+          echo "::notice::Trusted base does not contain scripts/dev/merge_queue_gate.py; source-head evaluation is advisory and was skipped."
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Run merge-queue gate (merge_group)
+        if: github.event_name == 'merge_group' && steps.gate-source.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/merge_queue_gate.py \
+            --from-event "$GITHUB_EVENT_PATH" \
+            --repo "${{ github.repository }}" \
+            --json
+
+      - name: Run merge-admission audit (source PR head)
+        if: github.event_name == 'pull_request' && steps.gate-source.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          echo "::notice::Source-PR admission is advisory; merge_group remains fail-closed."
+          python scripts/dev/merge_queue_gate.py \
+            --pr "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --advisory \
+            --json
+
+      - name: Run merge-queue gate (advisory, workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch' && steps.gate-source.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/merge_queue_gate.py \
+            --pr "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --advisory \
+            --json

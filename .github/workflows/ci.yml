@@ -72,6 +72,15 @@ jobs:
           restore-keys: |
             pytest-${{ runner.os }}-
 
+      - name: Restore test durations for pytest-split balancing
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .test_durations
+          key: test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
       # Lint and typecheck are shard-independent; run them once (shard 1 only)
       # to avoid quadruplicated annotations on pull-request shard matrices.
       - name: Lint
@@ -84,6 +93,16 @@ jobs:
 
       - name: Unit tests
         run: scripts/dev/ci_driver.sh test
+
+      - name: Upload test durations
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pytest-durations-${{ matrix.shard }}
+          path: .test_durations
+          if-no-files-found: ignore
+          include-hidden-files: true
 
       - name: Upload coverage shard
         if: ${{ github.event_name != 'pull_request' }}
@@ -211,7 +230,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.11.21"
           enable-cache: true
@@ -558,3 +577,70 @@ jobs:
             echo "exact-repeat-model-preflight finished with ${{ needs.exact-repeat-model-preflight.result }}" >&2
             exit 1
           fi
+
+      - name: Checkout for duration-cache update
+        id: checkout_duration_cache
+        if: ${{ always() && needs.fast-feedback.result == 'success' }}
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download test-duration shards
+        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pytest-durations-*
+          path: .duration-artifacts
+
+      - name: Merge test durations
+        id: merge-test-durations
+        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import json
+          import math
+          from pathlib import Path
+
+          expected_names = {f"pytest-durations-{index}" for index in range(1, 5)}
+          files = sorted(Path(".duration-artifacts").glob("*/.test_durations"))
+          actual_names = {path.parent.name for path in files}
+          if actual_names != expected_names:
+              missing = sorted(expected_names - actual_names)
+              unexpected = sorted(actual_names - expected_names)
+              raise SystemExit(
+                  "Expected exactly one pytest duration store from each of four shards; "
+                  f"missing={missing or 'none'} unexpected={unexpected or 'none'}."
+              )
+
+          merged = {}
+          for path in files:
+              durations = json.loads(path.read_text(encoding="utf-8"))
+              if not isinstance(durations, dict) or any(
+                  not isinstance(nodeid, str)
+                  or not isinstance(duration, (int, float))
+                  or isinstance(duration, bool)
+                  or not math.isfinite(duration)
+                  or duration < 0
+                  for nodeid, duration in durations.items()
+              ):
+                  raise SystemExit(f"Invalid pytest duration store: {path}")
+              overlap = set(merged).intersection(durations)
+              if overlap:
+                  raise SystemExit(f"Overlapping pytest duration stores: {path}")
+              merged.update(durations)
+
+          Path(".test_durations").write_text(
+              json.dumps(merged, indent=4, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(f"Merged {len(files)} shard stores with {len(merged)} test durations.")
+          PY
+
+      - name: Save merged test durations
+        if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .test_durations
+          key: test-durations-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}

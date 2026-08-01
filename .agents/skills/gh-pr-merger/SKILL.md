@@ -23,6 +23,25 @@ bounded guarded-merge run.
 This skill is intentionally restricted: it never force-pushes, never rewrites
 history, and stops on any auth/permission/CI failure.
 
+## Merge Queue Gate Parity (issue #6274)
+
+The fail-closed preflight below governs guarded merges this skill performs. The
+same preflight is enforced **queue-side** by the `Merge Queue Gate` required
+status check (`.github/workflows/merge-queue-gate.yml`, backed by
+`scripts/dev/merge_queue_gate.py`), so the GitHub native merge queue and any
+external/parallel auto-merge dispatcher that routes through it cannot bypass
+`merge-ready`, the exact-head `gate-verdict: accepted` trailer, unresolved
+threads, or an explicitly requested reviewer. Comment or review verdict trailers count only when
+GitHub reports the author as a repository owner, member, or collaborator; an untrusted contributor
+cannot self-approve a new head under a retained label. The queue gate also fails closed
+unless the live queue uses GitHub's `ALLGREEN` ("Only merge non-failing pull
+requests") strategy, which prevents a
+passing tail entry from carrying an earlier ungated entry through a grouped
+merge. That workflow is the merge-queue entry point for this contract; this
+skill remains the binding authority for guarded merges it executes directly.
+See `docs/dev_guide.md` ("Merge queue gate") for the required-check toggle and
+the audit record shape (`merge_queue_gate.v1`).
+
 ## Trigger Boundary
 
 Use this skill when the user asks to merge approved, `merge-ready` PRs.
@@ -39,6 +58,9 @@ Do not use it for:
 - `AGENTS.md`
 - `.agents/skills/goal-pr-review/SKILL.md`
 - `docs/code_review.md`
+- `docs/dev_guide.md` ("Merge queue gate", issue #6274)
+- `.github/workflows/merge-queue-gate.yml`
+- `scripts/dev/merge_queue_gate.py`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 
 ## Preflight
@@ -90,6 +112,40 @@ Owner approval is required before deleting durable scientific artifacts, experim
 runs, or GitHub releases. A merge command, cleanup option, or stale local cache never implies that
 approval. Store merger/review control-plane artifacts outside git worktrees, and never commit
 `RESULT.md` or `REVIEW.json`.
+
+## Label, Comment Read, And Publication Helpers (REST-backed)
+
+On affected GitHub CLI versions, `gh pr edit <number> --add-label` and
+`gh pr view <number> --comments` fail inside the GraphQL client with the retired
+Projects Classic field (`repository.pullRequest.projectCards`) and can even
+exit `0` while emitting the error and no usable content (issue #6496). Neither
+operation needs Projects Classic data. When this merger updates labels or reads
+conversation comments, use the REST-only helpers instead of the broad `gh pr`
+commands:
+
+```bash
+# add/remove a label (verify-on-write, pure REST issues-labels endpoint)
+uv run python scripts/dev/gh_pr_label_rest.py add <number> \
+    --label <label> --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
+    --label <label> --repo ll7/robot_sf_ll7
+
+# PR conversation comments, drop-in for `gh pr view <number> --comments`
+# (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
+uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7
+
+# publish a PR conversation comment (REST; body file avoids shell quoting)
+scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
+```
+
+This skill verifies the `merge-ready` label rather than applying it, but any
+post-merge status-label cleanup or preflight/outcome comment context that needs
+the conversation thread must go through these REST paths. Publish ordinary PR
+conversation comments with `gh_comment.sh pr`, which resolves the target through
+local/REST state and posts to the REST issues-comments endpoint. Read-only PR
+header fields still use `gh pr view <number> --json ...`; only the label-edit
+and `--comments` paths hit the deprecated field. The REST helpers fail closed on
+auth, malformed, or truncated payloads.
 
 ## Merge Workflow
 

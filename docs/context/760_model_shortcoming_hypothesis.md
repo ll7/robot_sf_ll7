@@ -37,9 +37,17 @@ The HEIGHT model shows poor performance (1.42% success rate) on the Robot SF ben
 
 1. **Discrete Action Space** (`output/repos/CrowdNav_HEIGHT/crowd_sim/envs/crowd_sim_tb2.py`):
    ```python
-   self.action_convert = {0: [0.05, 0.1], 1: [0.05, 0], 2: [0.05, -0.1],
-                          3: [0, 0.1], 4: [0, 0], 5: [0, -0.1],
-                          6: [-0.05, 0.1], 7: [-0.05, 0], 8: [-0.05, -0.1]}
+   self.action_convert = {
+       0: [0.05, 0.1],
+       1: [0.05, 0],
+       2: [0.05, -0.1],
+       3: [0, 0.1],
+       4: [0, 0],
+       5: [0, -0.1],
+       6: [-0.05, 0.1],
+       7: [-0.05, 0],
+       8: [-0.05, -0.1],
+   }
    ```
    - Only 9 discrete actions with small increments (±0.05 m/s, ±0.1 rad/s)
    - Maximum linear acceleration: 0.05 m/s per timestep
@@ -48,8 +56,9 @@ The HEIGHT model shows poor performance (1.42% success rate) on the Robot SF ben
 2. **Stateful Velocity Accumulation** (Upstream vs Adapter):
    - **Upstream** (`crowd_sim_tb2.py`):
      ```python
-     self.desiredVelocity[0] = np.clip(self.desiredVelocity[0] + delta_v, 
-                                      self.config.robot.v_min, self.config.robot.v_max)
+     self.desiredVelocity[0] = np.clip(
+         self.desiredVelocity[0] + delta_v, self.config.robot.v_min, self.config.robot.v_max
+     )
      ```
    - **Adapter** (`crowdnav_height.py:738-749`): Identical logic but with additional clipping
 

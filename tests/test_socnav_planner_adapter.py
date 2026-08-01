@@ -1392,6 +1392,19 @@ def test_social_force_compute_empty_peds_returns_zero():
 
 
 @_sf_available
+def test_social_force_clip_force_caps_oversized_vector():
+    """An oversized force must be capped without losing its direction."""
+    cfg = SocNavPlannerConfig(social_force_max_force=5.0)
+    adapter = SocialForcePlannerAdapter(cfg)
+
+    clipped = adapter._clip_force(np.array([6.0, 8.0]))
+
+    assert clipped is not None
+    assert np.linalg.norm(clipped) == pytest.approx(5.0)
+    assert clipped == pytest.approx(np.array([3.0, 4.0]), abs=1e-6)
+
+
+@_sf_available
 def test_social_force_obstacle_vectorized_parity():
     """Vectorized point-obstacle force must match the scalar loop within the parity gate."""
     cfg = SocNavPlannerConfig(social_force_obstacle_range=12.0)

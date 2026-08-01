@@ -320,22 +320,12 @@ def _registry_includes_package_b_manifest(
     return False
 
 
-def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
-    manifest_path: Path = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml"),
-    *,
-    repo_root: Path | None = None,
-) -> PackageBPreflightResult:
-    """Validate the package-B manifest readiness contract without executing it.
+def _load_manifest_payload(manifest_path: Path, root: Path, blockers: list[str]) -> dict[str, Any]:
+    """Load and validate the manifest YAML payload, returning an empty dict on failure.
 
     Returns:
-        Fail-closed readiness result with per-check booleans and blockers.
+        The parsed manifest payload as a mapping.
     """
-    root = (repo_root or Path.cwd()).resolve()
-    manifest_path = manifest_path if manifest_path.is_absolute() else root / manifest_path
-    blockers: list[str] = []
-    warnings: list[str] = []
-    checks: dict[str, bool] = {}
-
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Manifest file not found: {_repo_relative(manifest_path, root)}")
 
@@ -348,7 +338,21 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not isinstance(payload, dict):
         blockers.append("manifest payload must be a mapping")
         payload = {}
+    return payload
 
+
+def _check_schema_and_provenance(
+    payload: dict[str, Any],
+    root: Path,
+    manifest_path: Path,
+    checks: dict[str, bool],
+    blockers: list[str],
+) -> tuple[Path, Path | None]:
+    """Validate schema version, issue binding, registry provenance, and runner existence.
+
+    Returns:
+        ``(registry_path, runner_path)`` for downstream metadata assembly.
+    """
     checks["schema_version"] = payload.get("schema_version") == MANIFEST_SCHEMA_VERSION
     if not checks["schema_version"]:
         blockers.append(
@@ -374,6 +378,20 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not checks["runner_exists"]:
         blockers.append("runner must point at an existing repository file")
 
+    return registry_path, runner_path
+
+
+def _check_base_config_section(
+    payload: dict[str, Any],
+    root: Path,
+    checks: dict[str, bool],
+    blockers: list[str],
+) -> dict[str, Any]:
+    """Validate base_config mapping, input file existence, policy, and objective.
+
+    Returns:
+        The validated base_config mapping (empty dict on invalid input).
+    """
     base_config = payload.get("base_config")
     checks["base_config_mapping"] = isinstance(base_config, dict)
     if not isinstance(base_config, dict):
@@ -394,6 +412,19 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not checks["objective_expected"]:
         blockers.append(f"base_config.objective must be {EXPECTED_OBJECTIVE!r}")
 
+    return base_config
+
+
+def _check_grids_and_contract(
+    payload: dict[str, Any],
+    checks: dict[str, bool],
+    blockers: list[str],
+) -> tuple[tuple[int, ...], tuple[int, ...], tuple[str, ...], frozenset[str]]:
+    """Validate budget grid, repeated seeds, samplers, and reporting contract.
+
+    Returns:
+        ``(budgets, seeds, samplers, reporting_contract)`` for downstream checks.
+    """
     budgets = _as_int_tuple(payload.get("budget_grid"))
     checks["budget_grid"] = budgets == EXPECTED_BUDGETS
     if not checks["budget_grid"]:
@@ -417,6 +448,21 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if missing_reporting:
         blockers.append(f"reporting_contract missing required fields: {missing_reporting}")
 
+    return budgets, seeds, samplers, reporting_contract
+
+
+def _check_runner_schema_section(
+    runner_path: Path | None,
+    reporting_contract: frozenset[str],
+    checks: dict[str, bool],
+    blockers: list[str],
+    warnings: list[str],
+) -> frozenset[str]:
+    """Validate that the runner's SamplerComparisonRow emits the reporting contract.
+
+    Returns:
+        The set of field names declared by the runner's SamplerComparisonRow.
+    """
     try:
         runner_row_fields = _runner_row_fields(runner_path)
     except (OSError, SyntaxError, ValueError) as exc:
@@ -429,7 +475,15 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
             "runner SamplerComparisonRow missing reporting_contract fields: "
             f"{missing_runner_fields}"
         )
+    return runner_row_fields
 
+
+def _check_exclusions_and_scope(
+    payload: dict[str, Any],
+    checks: dict[str, bool],
+    blockers: list[str],
+) -> None:
+    """Validate explicit exclusions, claim scope, and diagnostic status."""
     exclusions = payload.get("explicit_exclusions")
     checks["explicit_exclusions_mapping"] = isinstance(exclusions, dict)
     if not isinstance(exclusions, dict):
@@ -457,6 +511,18 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not checks["status_diagnostic"]:
         blockers.append("status must stay diagnostic_local_nominal")
 
+
+def _check_output_artifacts_section(
+    payload: dict[str, Any],
+    root: Path,
+    checks: dict[str, bool],
+    blockers: list[str],
+) -> tuple[Path | None, Path | None]:
+    """Validate output artifact declarations and path constraints.
+
+    Returns:
+        ``(artifact_output_dir, artifact_report_json)`` resolved paths.
+    """
     output_artifacts = payload.get("output_artifacts")
     checks["output_artifacts_mapping"] = isinstance(output_artifacts, dict)
     if not isinstance(output_artifacts, dict):
@@ -502,14 +568,22 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not checks["output_artifacts_report_json_in_output_dir"]:
         blockers.append("output_artifacts.report_json must be inside output_artifacts.output_dir")
 
-    example_command = payload.get("example_command")
-    checks["example_command_declared"] = isinstance(example_command, str) and bool(
-        example_command.strip()
-    )
-    if not checks["example_command_declared"]:
-        blockers.append("example_command must be a non-empty string")
-        example_command = ""
+    return artifact_output_dir, artifact_report_json
 
+
+def _check_command_safety_and_seeds(
+    example_command: str,
+    seeds: tuple[int, ...],
+    samplers: tuple[str, ...],
+    checks: dict[str, bool],
+    blockers: list[str],
+    warnings: list[str],
+) -> tuple[int, ...]:
+    """Validate forbidden tokens, budget grid mode, seed presence, and sampler set.
+
+    Returns:
+        The parsed command seed tuple for downstream metadata.
+    """
     lower_command = example_command.lower()
     forbidden_hits = sorted(token for token in FORBIDDEN_COMMAND_TOKENS if token in lower_command)
     checks["example_command_no_forbidden_actions"] = not forbidden_hits
@@ -555,6 +629,24 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
             f"{list(samplers)}, got {list(command_samplers)}"
         )
 
+    return command_seeds
+
+
+def _check_command_inputs_and_outputs(
+    example_command: str,
+    root: Path,
+    base_config: dict[str, Any],
+    artifact_output_dir: Path | None,
+    artifact_report_json: Path | None,
+    checks: dict[str, bool],
+    blockers: list[str],
+    warnings: list[str],
+) -> tuple[Path | None, Path | None]:
+    """Validate command input flags and output path constraints.
+
+    Returns:
+        ``(output_dir, out_json)`` parsed from the example command.
+    """
     command_scenario_templates, scenario_warnings = _extract_option_values(
         example_command, "--scenario-template"
     )
@@ -611,7 +703,73 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not checks["example_command_matches_output_artifacts"]:
         blockers.append("example_command output paths must match output_artifacts metadata")
 
-    metadata = {
+    return output_dir, out_json
+
+
+def _check_example_command_section(  # noqa: PLR0913
+    payload: dict[str, Any],
+    root: Path,
+    base_config: dict[str, Any],
+    seeds: tuple[int, ...],
+    samplers: tuple[str, ...],
+    artifact_output_dir: Path | None,
+    artifact_report_json: Path | None,
+    checks: dict[str, bool],
+    blockers: list[str],
+    warnings: list[str],
+) -> tuple[Path | None, Path | None, tuple[int, ...]]:
+    """Validate the example_command against manifest metadata and safety constraints.
+
+    Returns:
+        ``(output_dir, out_json, command_seeds)`` parsed from the example command.
+    """
+    example_command = payload.get("example_command")
+    checks["example_command_declared"] = isinstance(example_command, str) and bool(
+        example_command.strip()
+    )
+    if not checks["example_command_declared"]:
+        blockers.append("example_command must be a non-empty string")
+        example_command = ""
+
+    command_seeds = _check_command_safety_and_seeds(
+        example_command, seeds, samplers, checks, blockers, warnings
+    )
+    output_dir, out_json = _check_command_inputs_and_outputs(
+        example_command,
+        root,
+        base_config,
+        artifact_output_dir,
+        artifact_report_json,
+        checks,
+        blockers,
+        warnings,
+    )
+
+    return output_dir, out_json, command_seeds
+
+
+def _build_preflight_metadata(  # noqa: PLR0913
+    payload: dict[str, Any],
+    root: Path,
+    registry_path: Path,
+    runner_path: Path | None,
+    runner_row_fields: frozenset[str],
+    base_config: dict[str, Any],
+    budgets: tuple[int, ...],
+    seeds: tuple[int, ...],
+    command_seeds: tuple[int, ...],
+    samplers: tuple[str, ...],
+    artifact_output_dir: Path | None,
+    artifact_report_json: Path | None,
+    output_dir: Path | None,
+    out_json: Path | None,
+) -> dict[str, Any]:
+    """Assemble the stable metadata payload for the preflight result.
+
+    Returns:
+        The metadata mapping included in the preflight result payload.
+    """
+    return {
         "issue": EXPECTED_ISSUE,
         "budget_grid": list(budgets),
         "repeated_seeds": list(seeds),
@@ -640,6 +798,68 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         "does_not_submit_slurm_or_gpu": True,
         "does_not_edit_paper_claims": True,
     }
+
+
+def preflight_package_b_manifest(
+    manifest_path: Path = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml"),
+    *,
+    repo_root: Path | None = None,
+) -> PackageBPreflightResult:
+    """Validate the package-B manifest readiness contract without executing it.
+
+    Returns:
+        Fail-closed readiness result with per-check booleans and blockers.
+    """
+    root = (repo_root or Path.cwd()).resolve()
+    manifest_path = manifest_path if manifest_path.is_absolute() else root / manifest_path
+    blockers: list[str] = []
+    warnings: list[str] = []
+    checks: dict[str, bool] = {}
+
+    payload = _load_manifest_payload(manifest_path, root, blockers)
+    registry_path, runner_path = _check_schema_and_provenance(
+        payload, root, manifest_path, checks, blockers
+    )
+    base_config = _check_base_config_section(payload, root, checks, blockers)
+    budgets, seeds, samplers, reporting_contract = _check_grids_and_contract(
+        payload, checks, blockers
+    )
+    runner_row_fields = _check_runner_schema_section(
+        runner_path, reporting_contract, checks, blockers, warnings
+    )
+    _check_exclusions_and_scope(payload, checks, blockers)
+    artifact_output_dir, artifact_report_json = _check_output_artifacts_section(
+        payload, root, checks, blockers
+    )
+    output_dir, out_json, command_seeds = _check_example_command_section(
+        payload,
+        root,
+        base_config,
+        seeds,
+        samplers,
+        artifact_output_dir,
+        artifact_report_json,
+        checks,
+        blockers,
+        warnings,
+    )
+    metadata = _build_preflight_metadata(
+        payload,
+        root,
+        registry_path,
+        runner_path,
+        runner_row_fields,
+        base_config,
+        budgets,
+        seeds,
+        command_seeds,
+        samplers,
+        artifact_output_dir,
+        artifact_report_json,
+        output_dir,
+        out_json,
+    )
+
     ready = not blockers
     return PackageBPreflightResult(
         manifest_path=_repo_relative(manifest_path, root),

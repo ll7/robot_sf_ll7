@@ -38,6 +38,7 @@ import numpy as np
 
 from robot_sf.models.registry import resolve_model_path
 from robot_sf.planner.chance_constrained_mpc import GaussianMixturePedestrianForecast
+from robot_sf.planner.constants import DEFAULT_GMM_MODE_COUNT
 from robot_sf.planner.nmpc_social import _parse_bool
 
 GRAPH_NODE_FEATURE_DIM: int = 4
@@ -166,7 +167,7 @@ class LearnedGmmPredictorConfig:
     horizon_steps: int = 6
     rollout_dt: float = 0.25
     hidden_dim: int = 128
-    mode_count: int = 3
+    mode_count: int = DEFAULT_GMM_MODE_COUNT
     model_type: str = "mlp"
     allow_untrained_smoke: bool = False
 
@@ -860,8 +861,9 @@ class LearnedGmmPedestrianPredictor:
             ),
         }
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset per-episode diagnostics."""
+        del seed
         self._calls = 0
         self._last_source = "not_run"
 

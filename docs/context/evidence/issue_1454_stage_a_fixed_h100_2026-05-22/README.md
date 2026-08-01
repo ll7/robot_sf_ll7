@@ -2,6 +2,13 @@
 
 Date: 2026-05-22
 
+> **Loss notice (2026-07-28):** The raw campaign tree (`output/` from commit
+> `17b179007e6292dd0365c53cff719cccea1276a9`) is confirmed unretrievable on all accessible
+> machines. The campaign ran locally, the tree was ephemeral, and no copy survived on any
+> reachable host. Per the maintainer's [Domain-Aware Approval decision (#6410)](https://github.com/ll7/robot_sf_ll7/issues/6410), this campaign remains
+> **unindexed**: no derived manifest, atlas entry, prerelease, or rerun is performed. Existing
+> aggregate evidence and caveats are unchanged.
+
 This bundle preserves the compact, reviewable outputs from the issue #1454 Stage A S10 fixed-h100
 broader-baseline campaign.
 
@@ -60,9 +67,9 @@ asset blocker exposed by this Stage A gate.
 - `runs/*/summary.json`
 - `manifest.sha256`
 
-Raw episode JSONL, videos, and full `output/` campaign contents are intentionally not mirrored here.
-They remain worktree-local and reproducible from the tracked config, seed schedule, commit, and
-commands.
+Raw episode JSONL, videos, and full `output/` campaign contents were worktree-local and are now
+**confirmed unretrievable** on all accessible machines (2026-07-28). The aggregate reports above
+are the surviving evidence. See the loss notice at the top of this document.
 
 ## Gate Decision
 

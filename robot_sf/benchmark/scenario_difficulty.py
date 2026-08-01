@@ -629,45 +629,45 @@ def _verified_simple_assessment(
     }
 
 
-def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
-    *,
+def _unavailable_analysis(
     planner_rows: Sequence[Mapping[str, Any]],
-    scenario_breakdown_rows: Sequence[Mapping[str, Any]],
-    seed_variability_payload: Mapping[str, Any] | None = None,
-    preview_payload: Mapping[str, Any] | None = None,
-    verified_simple_manifest_path: Path | None = None,
+    verified_simple_manifest_path: Path | None,
 ) -> dict[str, Any]:
-    """Build scenario-difficulty diagnostics from existing campaign artifacts.
+    """Return the canonical unavailable payload when no scenario breakdown rows exist."""
+    return {
+        "schema_version": "benchmark-scenario-difficulty-analysis.v1",
+        "status": "unavailable",
+        "primary_proxy": {
+            "name": "consensus_outcome_rank_v1",
+            "description": (
+                "Weighted consensus score across core benchmark-success planners using "
+                "success, collisions, near-misses, and normalized time-to-goal."
+            ),
+            "eligible_planner_selection": "core benchmark-success planners",
+        },
+        "scenario_rows": [],
+        "family_rows": [],
+        "planner_family_rows": [],
+        "planner_residual_rows": [],
+        "planner_summary_rows": [],
+        "verified_simple_assessment": _verified_simple_assessment(
+            [],
+            _planner_row_index(planner_rows),
+            manifest_path=verified_simple_manifest_path,
+        ),
+        "findings": [],
+    }
+
+
+def _resolve_consensus_planners(
+    planner_index: Mapping[str, Mapping[str, Any]],
+    scenario_breakdown_rows: Sequence[Mapping[str, Any]],
+) -> tuple[set[str], str, str, list[str]]:
+    """Determine which planners participate in consensus difficulty scoring.
 
     Returns:
-        JSON-serializable scenario difficulty payload.
+        Consensus planner keys, selection label, proxy description, and initial findings.
     """
-    if not scenario_breakdown_rows:
-        return {
-            "schema_version": "benchmark-scenario-difficulty-analysis.v1",
-            "status": "unavailable",
-            "primary_proxy": {
-                "name": "consensus_outcome_rank_v1",
-                "description": (
-                    "Weighted consensus score across core benchmark-success planners using "
-                    "success, collisions, near-misses, and normalized time-to-goal."
-                ),
-                "eligible_planner_selection": "core benchmark-success planners",
-            },
-            "scenario_rows": [],
-            "family_rows": [],
-            "planner_family_rows": [],
-            "planner_residual_rows": [],
-            "planner_summary_rows": [],
-            "verified_simple_assessment": _verified_simple_assessment(
-                [],
-                _planner_row_index(planner_rows),
-                manifest_path=verified_simple_manifest_path,
-            ),
-            "findings": [],
-        }
-
-    planner_index = _planner_row_index(planner_rows)
     configured_consensus_planners = {
         planner_key for planner_key, row in planner_index.items() if _is_consensus_planner(row)
     }
@@ -693,14 +693,20 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
             "No eligible core benchmark-success planners were available; difficulty consensus fell "
             "back to all planners in the scenario breakdown."
         )
+    return consensus_planners, consensus_selection, consensus_description, findings
 
-    seed_index = _build_seed_index(seed_variability_payload)
-    metadata_lookup, preview_truncated = _preview_metadata_lookup(preview_payload)
-    if preview_truncated:
-        findings.append(
-            "Preflight preview is truncated, so static metadata may be missing for some scenarios."
-        )
 
+def _normalize_scenario_rows(
+    scenario_breakdown_rows: Sequence[Mapping[str, Any]],
+    planner_index: Mapping[str, Mapping[str, Any]],
+    seed_index: Mapping[tuple[str, str], Mapping[str, Any]],
+    metadata_lookup: Mapping[str, Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    """Normalize raw scenario breakdown rows into analysis-ready records.
+
+    Returns:
+        Flat normalized rows and rows grouped by scenario id.
+    """
     normalized_rows: list[dict[str, Any]] = []
     scenario_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for raw_row in scenario_breakdown_rows:
@@ -750,7 +756,34 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
         }
         normalized_rows.append(normalized)
         scenario_groups[scenario_id].append(normalized)
+    return normalized_rows, scenario_groups
 
+
+def _template_metadata_fields(template: Mapping[str, Any]) -> dict[str, Any]:
+    """Return static metadata fields copied from a template row."""
+    return {
+        "archetype": template.get("archetype"),
+        "flow": template.get("flow"),
+        "behavior": template.get("behavior"),
+        "primary_capability": template.get("primary_capability"),
+        "target_failure_mode": template.get("target_failure_mode"),
+        "determinism": template.get("determinism"),
+        "ped_density": _safe_float(template.get("ped_density")),
+        "route_clearance_warning": bool(template.get("route_clearance_warning", False)),
+        "route_clearance_scope": template.get("route_clearance_scope"),
+        "min_clearance_margin_m": _safe_float(template.get("min_clearance_margin_m")),
+        "initial_difficulty_band": template.get("initial_difficulty_band"),
+        "initial_difficulty_score": _safe_float(template.get("initial_difficulty_score")),
+        "initial_difficulty_schema_version": template.get("initial_difficulty_schema_version"),
+        "initial_difficulty_components": template.get("initial_difficulty_components"),
+    }
+
+
+def _build_consensus_rows(
+    scenario_groups: Mapping[str, Sequence[Mapping[str, Any]]],
+    consensus_planners: set[str],
+) -> list[dict[str, Any]]:
+    """Return one consensus row per scenario with pooled metrics."""
     consensus_rows: list[dict[str, Any]] = []
     for scenario_id, grouped_rows in scenario_groups.items():
         eligible_rows = [
@@ -809,23 +842,20 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
             "seed_snqi_cv_mean": _mean(
                 _safe_float(row.get("seed_snqi_cv")) for row in eligible_rows
             ),
-            "archetype": template.get("archetype"),
-            "flow": template.get("flow"),
-            "behavior": template.get("behavior"),
-            "primary_capability": template.get("primary_capability"),
-            "target_failure_mode": template.get("target_failure_mode"),
-            "determinism": template.get("determinism"),
-            "ped_density": _safe_float(template.get("ped_density")),
-            "route_clearance_warning": bool(template.get("route_clearance_warning", False)),
-            "route_clearance_scope": template.get("route_clearance_scope"),
-            "min_clearance_margin_m": _safe_float(template.get("min_clearance_margin_m")),
-            "initial_difficulty_band": template.get("initial_difficulty_band"),
-            "initial_difficulty_score": _safe_float(template.get("initial_difficulty_score")),
-            "initial_difficulty_schema_version": template.get("initial_difficulty_schema_version"),
-            "initial_difficulty_components": template.get("initial_difficulty_components"),
+            **_template_metadata_fields(template),
         }
         consensus_rows.append(consensus_row)
+    return consensus_rows
 
+
+def _score_and_rank_scenarios(
+    consensus_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Compute difficulty scores, rank scenarios, and build a scenario index.
+
+    Returns:
+        Difficulty-ranked consensus rows and a scenario-id to row lookup.
+    """
     component_ranks: dict[str, dict[str, float]] = {}
     for metric_name, higher_is_harder, _weight in _PRIMARY_PROXY_METRICS:
         values_by_scenario = {}
@@ -865,7 +895,18 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
     for index, row in enumerate(ranked_rows, start=1):
         row["difficulty_rank"] = index
     scenario_index = {str(row.get("scenario_id")): row for row in ranked_rows}
+    return ranked_rows, scenario_index
 
+
+def _build_residual_rows(
+    normalized_rows: Sequence[Mapping[str, Any]],
+    scenario_index: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Compute per-planner residual deviations from scenario consensus.
+
+    Returns:
+        list[dict[str, Any]]: Per-planner residual rows with scored deviations.
+    """
     residual_rows: list[dict[str, Any]] = []
     for row in normalized_rows:
         scenario_id = str(row.get("scenario_id"))
@@ -923,7 +964,14 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
 
         residual["residual_score"] = _mean(components)
         residual_rows.append(residual)
+    return residual_rows
 
+
+def _flag_easy_underperformance(
+    residual_rows: list[dict[str, Any]],
+    ranked_rows: Sequence[Mapping[str, Any]],
+) -> None:
+    """Flag residual rows where a planner underperforms on easy scenarios."""
     residual_threshold = _percentile(
         [
             float(row["residual_score"])
@@ -953,7 +1001,14 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
             and float(row["difficulty_score"]) <= easy_difficulty_limit
         )
 
-    family_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+def _build_family_rows(ranked_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate ranked scenario rows into scenario-family summaries.
+
+    Returns:
+        list[dict[str, Any]]: Family rows sorted by family name with pooled metrics.
+    """
+    family_groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in ranked_rows:
         family_groups[str(row.get("scenario_family", "unknown"))].append(row)
     family_rows: list[dict[str, Any]] = []
@@ -999,13 +1054,21 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
                 ],
             }
         )
+    return family_rows
 
-    planner_summary_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    planner_family_groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+
+def _build_planner_summary_rows(
+    residual_rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Aggregate residual rows into per-planner summary statistics.
+
+    Returns:
+        list[dict[str, Any]]: Planner summary rows sorted by planner key.
+    """
+    planner_summary_groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in residual_rows:
         planner_key = str(row.get("planner_key", "unknown"))
         planner_summary_groups[planner_key].append(row)
-        planner_family_groups[(planner_key, str(row.get("scenario_family", "unknown")))].append(row)
 
     planner_summary_rows: list[dict[str, Any]] = []
     for planner_key, rows in sorted(planner_summary_groups.items()):
@@ -1033,6 +1096,22 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
                 "worst_scenarios": [row.get("scenario_id") for row in worst_rows[:3]],
             }
         )
+    return planner_summary_rows
+
+
+def _build_planner_family_rows(
+    residual_rows: Sequence[Mapping[str, Any]],
+    family_rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Aggregate residual rows into per-planner per-family summaries.
+
+    Returns:
+        list[dict[str, Any]]: Planner-family rows sorted by planner key and family.
+    """
+    planner_family_groups: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    for row in residual_rows:
+        planner_key = str(row.get("planner_key", "unknown"))
+        planner_family_groups[(planner_key, str(row.get("scenario_family", "unknown")))].append(row)
 
     family_index = {str(row.get("scenario_family")): row for row in family_rows}
     planner_family_rows: list[dict[str, Any]] = []
@@ -1057,6 +1136,47 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
                 ),
             }
         )
+    return planner_family_rows
+
+
+def build_scenario_difficulty_analysis(
+    *,
+    planner_rows: Sequence[Mapping[str, Any]],
+    scenario_breakdown_rows: Sequence[Mapping[str, Any]],
+    seed_variability_payload: Mapping[str, Any] | None = None,
+    preview_payload: Mapping[str, Any] | None = None,
+    verified_simple_manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Build scenario-difficulty diagnostics from existing campaign artifacts.
+
+    Returns:
+        JSON-serializable scenario difficulty payload.
+    """
+    if not scenario_breakdown_rows:
+        return _unavailable_analysis(planner_rows, verified_simple_manifest_path)
+
+    planner_index = _planner_row_index(planner_rows)
+    consensus_planners, consensus_selection, consensus_description, findings = (
+        _resolve_consensus_planners(planner_index, scenario_breakdown_rows)
+    )
+
+    seed_index = _build_seed_index(seed_variability_payload)
+    metadata_lookup, preview_truncated = _preview_metadata_lookup(preview_payload)
+    if preview_truncated:
+        findings.append(
+            "Preflight preview is truncated, so static metadata may be missing for some scenarios."
+        )
+
+    normalized_rows, scenario_groups = _normalize_scenario_rows(
+        scenario_breakdown_rows, planner_index, seed_index, metadata_lookup
+    )
+    consensus_rows = _build_consensus_rows(scenario_groups, consensus_planners)
+    ranked_rows, scenario_index = _score_and_rank_scenarios(consensus_rows)
+    residual_rows = _build_residual_rows(normalized_rows, scenario_index)
+    _flag_easy_underperformance(residual_rows, ranked_rows)
+    family_rows = _build_family_rows(ranked_rows)
+    planner_summary_rows = _build_planner_summary_rows(residual_rows)
+    planner_family_rows = _build_planner_family_rows(residual_rows, family_rows)
 
     verified_simple_ids, _manifest_path_text = _load_verified_simple_ids(
         verified_simple_manifest_path

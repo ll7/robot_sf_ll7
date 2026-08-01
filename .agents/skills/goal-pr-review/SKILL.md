@@ -89,6 +89,43 @@ Owner approval is required before deleting durable scientific artifacts, experim
 runs, or GitHub releases. Routine scratch cleanup and deletion of a fully preserved merged feature
 branch do not waive that durable-deletion boundary.
 
+## PR Label, Conversation-Comment, And Publication Helpers (REST-backed)
+
+On affected GitHub CLI versions, both `gh pr edit <number> --add-label` and
+`gh pr view <number> --comments` fail inside the GraphQL client with the retired
+Projects Classic field (`repository.pullRequest.projectCards`) and, worse, can
+exit `0` while emitting the error and no usable content (issue #6496). Neither
+operation needs Projects Classic data, so perform them through the REST-only
+helpers instead of the broad `gh pr` commands:
+
+```bash
+# merge-ready label add/remove (verify-on-write, pure REST issues-labels endpoint)
+uv run python scripts/dev/gh_pr_label_rest.py add <number> \
+    --label merge-ready --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
+    --label merge-ready --repo ll7/robot_sf_ll7
+
+# PR conversation comments, drop-in for `gh pr view <number> --comments`
+# (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
+uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7 --plain
+
+# PR conversation comment publication (REST issues-comments endpoint)
+scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
+scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
+```
+
+Use the label helper whenever the review loop applies, reapplies, or removes
+`merge-ready` (including the remove-and-reapply gate refresh in step 8 below).
+Use the comment helper to re-read the conversation thread after a fix push
+before resolving review threads. Use `gh_comment.sh pr` for ordinary top-level
+PR conversation comments; it resolves the target through local/REST state and
+posts through `issues/{number}/comments`. The COMMENTED review event in step 8
+is a separate review-verdict operation. PR header/title fields that do not
+involve comments can still use `gh pr view <number> --json ...`; only the
+label-edit and `--comments` paths hit the deprecated field. The REST helpers
+fail closed on auth, malformed, or truncated payloads.
+
 ## State Machine
 
 Each PR is in one state:
@@ -174,8 +211,12 @@ helper is route evidence only and does not perform GitHub-visible writes.
    when moving draft PRs to ready or when bot reviewers were previously pending or skipped.
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
-8. After the full proof bar closes, post an exact-head review-evidence comment naming the reviewed
-   SHA, validation, findings disposition, and any single-account waiver; then update `merge-ready`.
+8. After the full proof bar closes, post an exact-head review-evidence comment by submitting a GitHub
+   COMMENTED review (`gh pr review --comment --body-file <path>`) naming the reviewed SHA,
+   validation, findings disposition, and any single-account waiver; then update `merge-ready`. The
+   review event refreshes the source-head queue gate after the verdict. A top-level PR comment alone
+   does not; if review submission is unavailable, remove and reapply `merge-ready` after posting the
+   comment or record the gate-refresh blocker.
 9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use compact,
    bounded one-shot polling in non-TTY agent sessions instead of `gh pr checks --watch`:
    `uv run python scripts/dev/watch_pr_ci_status.py <number> --once --json --expected-head-sha <sha>`.

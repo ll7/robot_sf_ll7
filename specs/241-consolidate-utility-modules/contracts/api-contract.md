@@ -19,26 +19,26 @@ The following imports are **guaranteed stable** and will not change in future MI
 
 ```python
 from robot_sf.common.types import (
-    Vec2D,           # Type alias: NDArray[np.float64] for 2D vectors
-    Line2D,          # Type alias: tuple[Vec2D, Vec2D] for line segments
-    RobotPose,       # Type alias: tuple[Vec2D, float] for robot state
-    normalize_angle, # Function: normalize angle to [-π, π]
+    Vec2D,  # Type alias: NDArray[np.float64] for 2D vectors
+    Line2D,  # Type alias: tuple[Vec2D, Vec2D] for line segments
+    RobotPose,  # Type alias: tuple[Vec2D, float] for robot state
+    normalize_angle,  # Function: normalize angle to [-π, π]
 )
 
 from robot_sf.common.errors import (
     raise_fatal_with_remedy,  # Function: raise exception with remediation
-    ConfigurationError,        # Exception: configuration validation errors
+    ConfigurationError,  # Exception: configuration validation errors
 )
 
 from robot_sf.common.seed import (
-    set_global_seed,        # Function: set numpy/random/torch seeds
-    get_random_state,       # Function: capture RNG state
-    restore_random_state,   # Function: restore RNG state
+    set_global_seed,  # Function: set numpy/random/torch seeds
+    get_random_state,  # Function: capture RNG state
+    restore_random_state,  # Function: restore RNG state
 )
 
 from robot_sf.common.compat import (
-    get_gym_reset_info,     # Function: check Gym vs Gymnasium API
-    wrap_gymnasium_env,     # Function: add compatibility layer
+    get_gym_reset_info,  # Function: check Gym vs Gymnasium API
+    wrap_gymnasium_env,  # Function: add compatibility layer
 )
 ```
 
@@ -72,7 +72,7 @@ The following import paths are **no longer valid** as of version 2.1.0:
 from robot_sf.util.types import Vec2D
 from robot_sf.util.compatibility import get_gym_reset_info
 
-# ❌ REMOVED - utils/ directory deleted  
+# ❌ REMOVED - utils/ directory deleted
 from robot_sf.utils.seed_utils import set_global_seed
 
 # ❌ REMOVED - module renamed

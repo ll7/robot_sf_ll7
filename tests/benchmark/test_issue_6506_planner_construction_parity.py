@@ -7,10 +7,12 @@ planner ``plan(observation) -> tuple`` arm in ``robot_sf/benchmark/map_runner.py
 (SocNav-family adapter construction) -- with the single canonical adapter
 introduced by issue #6492 (``LocalPlannerProtocol``).
 
-That canonical adapter does not exist yet: #6492 is open with no merged PR and
-``robot_sf/planner/protocol.py`` is absent. The unification is therefore blocked
-on #6492, so this module captures the *current* contract the eventual refactor
-must preserve -- validation requirement #4 of the #6506 contract:
+The canonical protocol is now available from #6492, but that deliberately
+limited proof slice adapts only two representative planner families. The
+existing map-runner adapters do not yet all satisfy its full lifecycle contract,
+so #6506 must not add a second compatibility layer in the benchmark package.
+This module captures the *current* contract the eventual canonical wiring must
+preserve -- validation requirement #4 of the #6506 contract:
 
     "A parity assertion that native vs adapter execution-mode metadata and
     planner_diagnostics are unchanged for representative planners."
@@ -36,6 +38,7 @@ import sys
 import pytest
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+from robot_sf.benchmark.map_runner import build_map_policy
 from robot_sf.benchmark.runner import NATIVE_COMMAND_DIAGNOSTICS_KEY, run_episode
 
 # Representative planners spanning every execution-mode family the #6506
@@ -104,6 +107,21 @@ def test_execution_mode_classification_baseline(algo_key: str, expected_mode: st
     # True exactly for adapter/mixed modes and False for native. A flip here
     # would change the execution-mode classification surfaced to consumers.
     assert planner_kinematics["adapter_active"] is (expected_mode in {"adapter", "mixed"})
+
+
+def test_map_runner_socnav_adapter_preserves_adapter_metadata() -> None:
+    """The map-runner entry point retains its adapter classification baseline."""
+    policy, metadata = build_map_policy("social_force", {})
+    try:
+        planner_kinematics = metadata["planner_kinematics"]
+        assert planner_kinematics["execution_mode"] == "adapter"
+        assert planner_kinematics["adapter_active"] is True
+        assert planner_kinematics["adapter_name"] == "SocialForcePlannerAdapter"
+        assert getattr(policy, "_planner_adapter", None) is not None
+    finally:
+        close = getattr(policy, "_planner_close", None)
+        if callable(close):
+            close()
 
 
 def test_native_command_arm_propagates_native_mode_and_diagnostics() -> None:

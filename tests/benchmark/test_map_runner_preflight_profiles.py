@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import types
+from dataclasses import fields
+from inspect import Parameter, signature
 from typing import TYPE_CHECKING
 
 import pytest
@@ -102,6 +104,17 @@ def test_batch_config_forwards_scenario_path(tmp_path: Path, monkeypatch) -> Non
 
     assert summary["written"] == 1
     assert observed_paths == [scenario_path]
+
+
+def test_batch_config_matches_run_map_batch_keyword_surface() -> None:
+    """The grouped configuration must stay aligned with every legacy keyword."""
+    keyword_names = {
+        name
+        for name, parameter in signature(map_runner.run_map_batch).parameters.items()
+        if parameter.kind is Parameter.KEYWORD_ONLY and name != "batch_config"
+    }
+
+    assert {field.name for field in fields(MapBatchConfig)} == keyword_names
 
 
 def test_paper_baseline_requires_ppo_paper_gate(tmp_path: Path, monkeypatch) -> None:

@@ -817,14 +817,16 @@ def test_ci_step_timer_python_fallback_rejects_nonfinite_timeout_before_command(
 
 
 @pytest.mark.skipif(not _HAS_TIMEOUT, reason="GNU timeout(1) is required for this contract test")
-def test_ci_step_timer_gnu_backend_rejects_infinite_timeout_before_command(
+@pytest.mark.parametrize("timeout_value", ["inf", "0", "0e42"])
+def test_ci_step_timer_gnu_backend_rejects_invalid_timeout_before_command(
     tmp_path: Path,
+    timeout_value: str,
 ) -> None:
-    """Keep infinity fail-closed even on GNU timeout versions that accept it as unbounded."""
+    """Keep invalid GNU timeout values fail-closed before they can run unbounded."""
     script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"
     sentinel_path = tmp_path / "command-ran"
     env = os.environ.copy()
-    env["CI_STEP_TIMEOUT_SECONDS"] = "inf"
+    env["CI_STEP_TIMEOUT_SECONDS"] = timeout_value
     result = subprocess.run(
         [
             "bash",

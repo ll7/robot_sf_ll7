@@ -218,8 +218,9 @@ wait_for_python_timeout() {
   python_timeout_pid=""
 }
 
-timeout_value_is_nonfinite() {
-  [[ "$1" =~ ^[[:space:]]*[+-]?([nN][aA][nN]|[iI][nN][fF]([iI][nN][iI][tT][yY])?)[[:space:]]*$ ]]
+timeout_value_is_invalid() {
+  [[ "$1" =~ ^[[:space:]]*[+-]?([nN][aA][nN]|[iI][nN][fF]([iI][nN][iI][tT][yY])?)[[:space:]]*$ ]] \
+    || [[ "$1" =~ ^[[:space:]]*\+?0*(\.0*)?([eE][+-]?[0-9]+)?[[:space:]]*$ ]]
 }
 
 if [[ $# -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
@@ -246,7 +247,7 @@ echo "ci_step_timer step_start label=\"${label}\" started_at=${started_at}"
 set +e
 if [[ -n "${CI_STEP_TIMEOUT_SECONDS:-}" ]]; then
   if command -v timeout >/dev/null 2>&1; then
-    if timeout_value_is_nonfinite "${CI_STEP_TIMEOUT_SECONDS}"; then
+    if timeout_value_is_invalid "${CI_STEP_TIMEOUT_SECONDS}"; then
       echo "ci_step_timer: timeout must be finite and greater than zero" >&2
       status=125
     else

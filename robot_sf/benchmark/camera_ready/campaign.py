@@ -1708,6 +1708,7 @@ def _compute_campaign_status_metrics(
     kinematics_matrix: tuple[str, ...],
     campaign_integrity: dict[str, Any],
     campaign_root: Path,
+    orchestrator_started_at: float,
 ) -> _CampaignStatusMetrics:
     """Compute campaign outcome, status axes, and benchmark success.
 
@@ -1715,7 +1716,7 @@ def _compute_campaign_status_metrics(
         _CampaignStatusMetrics with outcome, status, and success counters.
     """
     campaign_finished_at_utc = _utc_now()
-    runtime_sec = float(max(1e-9, time.perf_counter() - _orchestrator_start_time))
+    runtime_sec = float(max(1e-9, time.perf_counter() - orchestrator_started_at))
 
     total_episodes = sum(
         int(
@@ -1796,12 +1797,6 @@ def _compute_campaign_status_metrics(
         confidence_settings=confidence_settings,
         seed_source_paths=seed_source_paths,
     )
-
-
-# Global variable used by _compute_campaign_status_metrics to compute runtime.
-# Set at the start of _run_campaign_orchestrator. Using a module-level variable
-# is simpler than threading it through all extracted helpers.
-_orchestrator_start_time: float = 0.0
 
 
 def _build_and_write_seed_variability(  # noqa: PLR0913
@@ -2559,8 +2554,7 @@ def _run_campaign_orchestrator(  # noqa: PLR0915
     arm_isolation: str | None = None,
 ) -> dict[str, Any]:
     """Execute the campaign orchestrator with optional arm isolation override."""  # noqa: DOC201
-    global _orchestrator_start_time
-    _orchestrator_start_time = time.perf_counter()
+    orchestrator_started_at = time.perf_counter()
     prepared = dependencies.prepare_campaign_preflight(
         cfg,
         output_root=output_root,
@@ -2673,6 +2667,7 @@ def _run_campaign_orchestrator(  # noqa: PLR0915
         kinematics_matrix,
         campaign_integrity,
         campaign_root,
+        orchestrator_started_at,
     )
 
     # Seed variability

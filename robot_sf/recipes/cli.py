@@ -23,6 +23,7 @@ from robot_sf.recipes.catalog import discover_recipes, load_recipe
 from robot_sf.recipes.recipe import CATEGORIES, Recipe, RecipeError
 
 if TYPE_CHECKING:  # pragma: no cover - static typing only
+    import argparse
     from collections.abc import Sequence
     from pathlib import Path
 
@@ -147,7 +148,7 @@ def _add_recipe_verbs(subparsers) -> None:  # type: ignore[no-untyped-def]
     )
 
 
-def build_subparser(subparsers):  # type: ignore[no-untyped-def]
+def build_subparser(subparsers) -> argparse.ArgumentParser:  # type: ignore[no-untyped-def]
     """Register the ``recipe`` subcommand on an argparse subparsers object.
 
     Returns:

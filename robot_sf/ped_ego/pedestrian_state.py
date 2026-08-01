@@ -78,7 +78,7 @@ class PedestrianState:
             or self.is_collision_robot_with_pedestrian
         )
 
-    def reset(self):
+    def reset(self) -> dict[str, np.ndarray]:
         """
         Resets the pedestrians state for a new simulation episode, incrementing the episode counter,
         resetting the timestep and elapsed time, clearing collision and goal flags, and refreshing
@@ -104,7 +104,7 @@ class PedestrianState:
         self.sensors.reset_cache()
         return self.sensors.next_obs()
 
-    def step(self):
+    def step(self) -> dict[str, np.ndarray]:
         """
         Advances the pedestrian's state by one simulation timestep, updating the elapsed time,
         checking for collisions, goal achievement, and timeout. Returns the next observation

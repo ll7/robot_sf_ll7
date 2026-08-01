@@ -861,8 +861,9 @@ class LearnedGmmPedestrianPredictor:
             ),
         }
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset per-episode diagnostics."""
+        del seed
         self._calls = 0
         self._last_source = "not_run"
 

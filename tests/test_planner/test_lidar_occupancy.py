@@ -89,26 +89,46 @@ def test_lidar_occupancy_ray_angles_reuse_immutable_cache() -> None:
         first[0] = 0.0
 
 
-def test_lidar_occupancy_wrapper_reset_tolerates_seedless_planners() -> None:
-    """Planner reset hooks without seed support should still be called."""
+def test_lidar_occupancy_wrapper_reset_forwards_seed_to_planner() -> None:
+    """The wrapper forwards keyword seed to a standard seed-accepting planner reset."""
 
-    class _SeedlessPlanner:
+    class _StandardPlanner:
         def __init__(self) -> None:
             self.reset_count = 0
+            self.last_seed: int | None = None
 
-        def reset(self) -> None:
+        def reset(self, *, seed: int | None = None) -> None:
             self.reset_count += 1
+            self.last_seed = seed
 
         def plan(self, observation):
             del observation
             return 0.0, 0.0
 
-    planner = _SeedlessPlanner()
+    planner = _StandardPlanner()
     wrapper = LidarOccupancyPlannerAdapter(planner, _raw_lidar_config())
 
     wrapper.reset(seed=123)
 
     assert planner.reset_count == 1
+    assert planner.last_seed == 123
+
+
+def test_lidar_occupancy_wrapper_reset_surfaces_non_conforming_planner() -> None:
+    """Non-seed-accepting planners surface TypeError now that every planner takes keyword seed."""
+
+    class _LegacySeedlessPlanner:
+        def reset(self) -> None:
+            """Legacy reset without the standardized keyword-only seed argument."""
+
+        def plan(self, observation):
+            del observation
+            return 0.0, 0.0
+
+    wrapper = LidarOccupancyPlannerAdapter(_LegacySeedlessPlanner(), _raw_lidar_config())
+
+    with pytest.raises(TypeError):
+        wrapper.reset(seed=123)
 
 
 def test_lidar_occupancy_wrapper_drives_safety_barrier_from_rays_only() -> None:

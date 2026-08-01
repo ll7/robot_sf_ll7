@@ -339,6 +339,8 @@ def test_benchmark_orchestration_annotations_resolve_at_runtime() -> None:
 
     batch_hints = typing.get_type_hints(map_runner.run_map_batch)
     loop_hints = typing.get_type_hints(map_runner_episode._run_episode_step_loop)
+    typing.get_type_hints(map_runner_episode._EpisodeRunContext)
+    typing.get_type_hints(map_runner_episode._prepare_policy_and_observation_contract)
     config_hints = typing.get_type_hints(MapBatchConfig)
     noise_hints = typing.get_type_hints(NoiseConfig)
     planner_hints = typing.get_type_hints(PlannerRuntime)

@@ -31,6 +31,8 @@ from loguru import logger
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import loguru
+
 
 def safe_sink(
     stream: Any,
@@ -136,7 +138,7 @@ def configure_logging(verbose: bool = False) -> None:
     logger.level("WARNING", color="<fg #ffff00><bold>", icon="⚠️")
 
 
-def get_logger(name: str):
+def get_logger(name: str) -> loguru.Logger:
     """Get a logger instance bound to a module.
 
     This is a convenience wrapper for binding module context to loguru.

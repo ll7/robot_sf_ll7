@@ -10,7 +10,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import fields
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import loguru
 import numpy as np
@@ -43,6 +43,9 @@ from robot_sf.render.sim_view import (
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
+
+if TYPE_CHECKING:
+    from robot_sf.nav.occupancy import EgoPedContinuousOccupancy
 
 logger = loguru.logger
 
@@ -356,7 +359,7 @@ class PedestrianEnv(SingleAgentEnv):
         # Setup pedestrian state
         self.ped_state = PedestrianState(
             robot_occupancy=occupancies[0],
-            ego_ped_occupancy=occupancies[1],
+            ego_ped_occupancy=cast("EgoPedContinuousOccupancy", occupancies[1]),
             sensors=sensors[1],
             d_t=self.config.sim_config.time_per_step_in_secs,
             sim_time_limit=self.config.sim_config.sim_time_in_secs,
@@ -383,7 +386,7 @@ class PedestrianEnv(SingleAgentEnv):
             show_lidar=True,  # Enable lidar visualization in debug mode
         )
 
-    def step(self, action):
+    def step(self, action) -> tuple[Any, float, bool, bool, dict[str, Any]]:
         """Execute one environment step.
 
         Returns:
@@ -440,7 +443,7 @@ class PedestrianEnv(SingleAgentEnv):
         info = _build_step_info(meta)
         return obs_ped, reward, terminated, False, info
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None) -> tuple[Any, dict[str, Any]]:
         """Reset the environment.
 
         Returns:
@@ -469,7 +472,7 @@ class PedestrianEnv(SingleAgentEnv):
             seed=getattr(self, "applied_seed", None),
         )
 
-    def render(self, **kwargs):
+    def render(self, **kwargs) -> None:
         """Render the environment."""
         if not self.sim_ui:
             raise RuntimeError("Debug mode is not activated! Set debug=True!")
@@ -547,12 +550,12 @@ class PedestrianEnv(SingleAgentEnv):
 
         return state
 
-    def record(self):
+    def record(self) -> None:
         """Record current state for later playback."""
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
 
-    def save_recording(self, filename: str | None = None):
+    def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to a pickle file.
 
         Args:

@@ -172,7 +172,7 @@ def build_replay_episode(  # noqa: PLR0913
     *,
     dt: float | None = None,
     map_path: str | None = None,
-):
+) -> ReplayEpisode:
     """Construct a ``ReplayEpisode`` from raw sequences.
 
     Args:
@@ -224,7 +224,7 @@ __all__ = [
 ]
 
 
-def extract_replay_episodes(records: list[dict], min_length: int = 2):
+def extract_replay_episodes(records: list[dict], min_length: int = 2) -> dict[str, ReplayEpisode]:
     """Extract replay episodes from raw episode records (T022 adapter).
 
     Returns mapping episode_id -> ReplayEpisode for those with a valid

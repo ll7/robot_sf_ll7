@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from math import ceil, dist
 from typing import Union
 
+import numpy as np
+
 from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot
@@ -84,7 +86,7 @@ class RobotState:
         """Indicates whether the entire planned route has been completed."""
         return self.nav.reached_destination
 
-    def reset(self):
+    def reset(self) -> dict[str, np.ndarray]:
         """
         Resets the robot's state for a new simulation episode, incrementing the episode counter,
         resetting the timestep and elapsed time, clearing collision and goal flags, and refreshing
@@ -106,7 +108,7 @@ class RobotState:
         self.sensors.reset_cache()
         return self.sensors.next_obs()
 
-    def step(self):
+    def step(self) -> dict[str, np.ndarray]:
         """
         Advances the robot's state by one simulation timestep, updating the elapsed time,
         checking for collisions, goal achievement, and timeout. Returns the next observation

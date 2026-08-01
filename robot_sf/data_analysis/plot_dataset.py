@@ -21,7 +21,7 @@ def plot_all_npc_ped_positions(
     interactive: bool = False,
     unique_id: str | None = None,
     map_def: MapDefinition | None = None,
-):
+) -> None:
     """
     Plot all NPC pedestrian positions from the given position array.
 
@@ -66,7 +66,7 @@ def plot_all_npc_ped_velocities(
     ped_actions: list,
     interactive: bool = False,
     unique_id: str | None = None,
-):
+) -> None:
     """
     Plot all NPC pedestrian velocities from the given list of actions.
     Based on the actions of the npc pedestrians.
@@ -105,7 +105,7 @@ def plot_ego_ped_acceleration(
     ego_ped_acceleration: list,
     interactive: bool = False,
     unique_id: str | None = None,
-):
+) -> None:
     """
     Plot the acceleration of the ego pedestrian.
 
@@ -133,7 +133,7 @@ def plot_ego_ped_velocity(
     ego_ped_acceleration: list,
     interactive: bool = False,
     unique_id: str | None = None,
-):
+) -> None:
     """
     Plot the velocity of the ego pedestrian based on the acceleration.
 

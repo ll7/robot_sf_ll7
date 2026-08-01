@@ -2890,11 +2890,9 @@ def _init_batch_context(  # noqa: PLR0913
     resume: bool,
     circuit_breaker_threshold: int | None,
 ) -> _BatchContext:
-    """Create and normalize the batch context from public parameters.
-
+    """Create the batch context and normalize controls preceding scenario validation.
     Returns:
-        Initialized batch context with normalized specs.
-    """
+        The initialized batch context."""
     ctx = _BatchContext(
         scenarios_or_path=scenarios_or_path,
         scenario_path_arg=scenario_path_arg,
@@ -2930,17 +2928,16 @@ def _init_batch_context(  # noqa: PLR0913
         resume=resume,
         circuit_breaker_threshold=normalize_circuit_breaker_threshold(circuit_breaker_threshold),
     )
-    _normalize_batch_specs(ctx)
-    return ctx
-
-
-def _normalize_batch_specs(ctx: _BatchContext) -> None:
-    """Normalize observation noise, tracking precision, and profile specs in-place."""
     ctx.ped_impact_radius_m, ctx.ped_impact_window_steps = _normalize_pedestrian_impact_controls(
         experimental_ped_impact=ctx.experimental_ped_impact,
         ped_impact_radius_m=ctx.ped_impact_radius_m,
         ped_impact_window_steps=ctx.ped_impact_window_steps,
     )
+    return ctx
+
+
+def _normalize_batch_specs(ctx: _BatchContext) -> None:
+    """Normalize specs that historically followed scenario validation in-place."""
     ctx.noise_spec = normalize_observation_noise_spec(ctx.observation_noise)
     ctx.noise_hash = observation_noise_hash(ctx.noise_spec)
     ctx.tracking_precision_spec = normalize_tracking_precision_spec(ctx.tracking_precision)
@@ -2972,6 +2969,7 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
 
     ctx.suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
     ctx.suite_key = _suite_key(ctx.scenario_path)
+    _normalize_batch_specs(ctx)
 
     filtered: list[dict[str, Any]] = []
     for scenario in ctx.scenarios:

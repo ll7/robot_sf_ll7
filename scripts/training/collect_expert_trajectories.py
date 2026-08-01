@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import yaml
 from loguru import logger
 
 try:  # pragma: no cover - module-level import used in production
@@ -41,6 +40,7 @@ from scripts.training.imitation_env_contract import (
     load_training_env_factory_kwargs,
     load_training_env_overrides,
     observation_contract_from_space,
+    resolve_scenario_config_path,
 )
 from scripts.training.train_ppo import _apply_env_overrides
 
@@ -74,15 +74,14 @@ def _resolve_scenario_config(
         return scenario_arg.resolve()
     if training_config is None:
         return Path("configs/scenarios/classic_interactions.yaml").resolve()
-    raw = yaml.safe_load(training_config.read_text(encoding="utf-8"))
-    scenario_raw = raw.get("scenario_config")
-    if scenario_raw is None:
+    scenario_path = resolve_scenario_config_path(
+        scenario_config_path=None,
+        training_config_path=training_config,
+    )
+    if scenario_path is None:
         raise ValueError(
             "Training config must define scenario_config when scenario path is omitted."
         )
-    scenario_path = Path(scenario_raw)
-    if not scenario_path.is_absolute():
-        scenario_path = (training_config.parent / scenario_path).resolve()
     return scenario_path
 
 

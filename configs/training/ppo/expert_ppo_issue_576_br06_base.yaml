@@ -1,0 +1,55 @@
+# Issue 576 (BR-06): shared base for the issue_576_br06 PPO expert config family.
+#
+# Variant configs (expert_ppo_issue_576_br06_v*.yaml) inherit these shared
+# settings via `base_config: expert_ppo_issue_576_br06_base.yaml` and override
+# only their per-run settings: policy_id, reward profile, seeds, num_envs,
+# worker_mode, total_timesteps, evaluation cadence, tracking metadata,
+# warm-start/resume ids, PPO hyperparameters, scenario sampling, and any
+# predictive-foresight env_overrides.
+#
+# The base holds only values that are byte-identical across every variant, so
+# each variant still resolves to exactly its pre-inheritance effective values.
+# The deterministic equivalence test in
+# tests/integration/test_train_expert_ppo.py guards that contract.
+#
+# Note: predictive-foresight env_overrides and the predictive-family shared
+# keys (ppo_hyperparams, resume_model_id, scenario_sampling,
+# best_checkpoint_metric) are NOT in this base because four v2/v3 variants do
+# not use them; pulling them in here would change those variants' effective
+# values. They remain explicit per variant.
+scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+feature_extractor: grid_socnav
+feature_extractor_kwargs:
+  grid_channels: [32, 64, 64]
+  grid_kernel_sizes: [5, 3, 3]
+  socnav_hidden_dims: [128, 128]
+  dropout_rate: 0.1
+policy_net_arch: [256, 256]
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels: [obstacles, pedestrians, combined]
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+# Convergence thresholds are shared by every BR-06 run; the per-variant
+# plateau_window remains explicit in each variant.
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+tracking:
+  tensorboard: true

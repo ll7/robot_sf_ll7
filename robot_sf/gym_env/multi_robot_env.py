@@ -34,11 +34,9 @@ from robot_sf.sim.simulator import init_simulators
 
 def _stack_box_space(space: spaces.Box, num_agents: int) -> spaces.Box:
     """Return a leading-agent-axis Box matching stacked per-agent observations."""
-    dtype = space.dtype
-    assert dtype is not None
-    low = np.stack([space.low for _ in range(num_agents)]).astype(dtype, copy=False)
-    high = np.stack([space.high for _ in range(num_agents)]).astype(dtype, copy=False)
-    return spaces.Box(low=low, high=high, dtype=dtype.type)
+    low = np.stack([space.low for _ in range(num_agents)]).astype(space.dtype, copy=False)
+    high = np.stack([space.high for _ in range(num_agents)]).astype(space.dtype, copy=False)
+    return spaces.Box(low=low, high=high, dtype=space.dtype)
 
 
 def _stack_observation_space(space: spaces.Space, num_agents: int) -> spaces.Space:
@@ -139,7 +137,7 @@ class MultiRobotEnv(MultiAgentEnv):
         self.action_space = spaces.Box(
             low=np.array([self.single_action_space.low for _ in range(resolved_num_robots)]),
             high=np.array([self.single_action_space.high for _ in range(resolved_num_robots)]),
-            dtype=self.single_action_space.low.dtype.type,
+            dtype=self.single_action_space.low.dtype,
         )
         self.observation_space = _stack_observation_space(
             self.single_observation_space,

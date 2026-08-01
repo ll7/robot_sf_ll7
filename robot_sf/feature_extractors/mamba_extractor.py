@@ -9,7 +9,9 @@ single observation, not hidden state across environment steps.
 
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass
+from importlib import import_module
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -41,8 +43,6 @@ class MambaFeatureExtractorConfig:
 
 
 def _init_classes() -> dict[str, Any]:  # noqa: C901
-    import importlib.util  # noqa: PLC0415
-    from importlib import import_module  # noqa: PLC0415
     from itertools import pairwise  # noqa: PLC0415
     from typing import cast  # noqa: PLC0415
 

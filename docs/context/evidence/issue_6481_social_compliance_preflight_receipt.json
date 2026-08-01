@@ -152,6 +152,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "goal",
       "readiness_status": "native",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -203,6 +204,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "goal",
       "readiness_status": "native",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -254,6 +256,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "goal",
       "readiness_status": "native",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -305,6 +308,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "orca",
       "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -356,6 +360,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "orca",
       "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -407,6 +412,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "orca",
       "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -458,6 +464,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "social_force",
       "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -509,6 +516,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "social_force",
       "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -560,6 +568,7 @@
         "legibility_progress",
         "pedestrian_deviation"
       ],
+      "identity_valid": true,
       "planner": "social_force",
       "readiness_status": "adapter",
       "scenario_id": "single_ped_crossing_orthogonal",
@@ -594,5 +603,5 @@
   ],
   "scenario_matrix_sha256": "968a3b590c9547cefac177a543022cbba3ab600f915750fc0dd04dc370505376",
   "social_compliance_schema_version": "social-compliance-metric-contract.v1",
-  "source_sha": "cab9ef57c462a348f5ffb38b7f11382bfc0fd117"
+  "source_sha": "dabe46c2fc76897ea39cd9b6afc3bd0943825b49"
 }

@@ -340,7 +340,8 @@ def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
         detail=(
             f"best min pairwise material_separation across {len(fixtures)} conflict "
             f"fixtures = {best_min_sep:.6g} m (epsilon={MATERIAL_SEP_EPS}); gate passes "
-            f"only if at least one fixture separates feasible hypotheses. "
+            f"only if at least one fixture separates every feasible hypothesis pair "
+            f"above epsilon. "
             "No fixture separated every feasible hypothesis pair above epsilon; "
             "topology identity is not established (label-only)."
             if not passed

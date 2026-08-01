@@ -263,3 +263,12 @@ def __getattr__(name: str) -> Any:
                 globals()[lazy_name] = value
         return _cache[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    """List lazy exports without importing optional ML dependencies.
+
+    Returns:
+        All module globals and deferred export names.
+    """
+    return sorted(set(globals()) | _LAZY_NAMES)

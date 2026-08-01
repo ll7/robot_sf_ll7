@@ -165,3 +165,43 @@ assert (
     )
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("module_name", "lazy_names"),
+    (
+        ("robot_sf.feature_extractor", ("DynamicsExtractor",)),
+        ("robot_sf.feature_extractors", ("AttentionFeatureExtractor", "MLPFeatureExtractor")),
+        ("robot_sf.feature_extractors.attention_extractor", ("AttentionFeatureExtractor",)),
+        ("robot_sf.feature_extractors.grid_socnav_extractor", ("GridSocNavExtractor",)),
+        ("robot_sf.feature_extractors.lightweight_cnn_extractor", ("LightweightCNNExtractor",)),
+        ("robot_sf.feature_extractors.lstm_extractor", ("LSTMFeatureExtractor",)),
+        ("robot_sf.feature_extractors.mamba_extractor", ("MambaFeatureExtractor",)),
+        ("robot_sf.feature_extractors.mlp_extractor", ("MLPFeatureExtractor",)),
+        ("robot_sf.planner.predictive_model", ("PredictiveTrajectoryModel",)),
+        ("robot_sf.tb_logging", ("AdversarialPedestrianMetricsCallback",)),
+        ("robot_sf.training.distributional_rl", ("QuantileQNetwork",)),
+        ("robot_sf.training.ppo_diagnostics", ("DiagnosticPPO",)),
+        ("robot_sf.training.ppo_policy", ("AsymmetricGridSocNavPolicy",)),
+        ("robot_sf.training.threaded_vec_env", ("ThreadedVecEnv",)),
+    ),
+)
+def test_lazy_module_dir_advertises_exports_without_loading_ml_dependencies(
+    module_name: str, lazy_names: tuple[str, ...]
+):
+    """Introspection must retain lazy public exports without paying the ML import cost."""
+    code = f"""\
+import importlib
+import sys
+
+module = importlib.import_module({module_name!r})
+
+assert set({lazy_names!r}).issubset(dir(module))
+assert "torch" not in sys.modules
+assert "stable_baselines3" not in sys.modules
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, check=False, text=True
+    )
+
+    assert result.returncode == 0, result.stderr

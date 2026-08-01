@@ -42,3 +42,12 @@ def __getattr__(name: str) -> Any:
     value = getattr(import_module(module_name), name)
     globals()[name] = value
     return value
+
+
+def __dir__() -> list[str]:
+    """List lazy package exports without importing their optional dependencies.
+
+    Returns:
+        All package globals and deferred export names.
+    """
+    return sorted(set(globals()) | set(_LAZY_EXPORTS))

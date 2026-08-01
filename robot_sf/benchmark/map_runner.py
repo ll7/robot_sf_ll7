@@ -10,7 +10,7 @@ from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolu
     BaseContext,
 )
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 import numpy as np
 from loguru import logger
@@ -2869,12 +2869,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ped_impact_window_steps=ped_impact_window_steps,
     )
     scenarios_is_path = isinstance(scenarios_or_path, (str, Path))
+    scenarios: list[dict[str, Any]]
     if scenarios_is_path:
         scenario_path = Path(scenarios_or_path)
-        scenarios = load_scenarios(scenario_path)
+        scenarios = cast("list[dict[str, Any]]", load_scenarios(scenario_path))
     else:
         scenario_path = Path(scenario_path) if scenario_path is not None else Path(".")
-        scenarios = list(scenarios_or_path)
+        scenarios = cast("list[dict[str, Any]]", list(scenarios_or_path))
 
     errors = validate_scenario_list([dict(s) for s in scenarios])
     if errors:
@@ -2882,9 +2883,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
 
     suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
     suite_key = _suite_key(scenario_path)
-    noise_spec = normalize_observation_noise_spec(observation_noise)
+    noise_spec = normalize_observation_noise_spec(cast("dict[str, Any] | None", observation_noise))
     noise_hash = observation_noise_hash(noise_spec)
-    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
+    tracking_precision_spec = normalize_tracking_precision_spec(
+        cast("dict[str, Any] | None", tracking_precision)
+    )
     tracking_precision_spec_hash = tracking_precision_hash(tracking_precision_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
     latency_profile = _load_latency_stress_profile(latency_stress_profile)

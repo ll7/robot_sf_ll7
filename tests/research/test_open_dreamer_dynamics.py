@@ -557,6 +557,17 @@ def test_from_episode_rejects_noncanonical_observation_contract(
         LatentDynamicsModel.from_episode(episode)
 
 
+def test_from_episode_rejects_malformed_first_observation_with_contract_error() -> None:
+    """A malformed first observation cannot leak an implementation AttributeError."""
+    episode = _make_structured_episode(with_rays=True)
+    malformed = replace(episode, observations=(object(), *episode.observations[1:]))
+
+    with pytest.raises(
+        OpenDreamerDynamicsError, match="step 0 must be a StructuredObservationStep"
+    ):
+        LatentDynamicsModel.from_episode(malformed)
+
+
 def test_imagine_rejects_non_mapping_episode_provenance() -> None:
     """Malformed source provenance cannot bypass the rollout provenance boundary."""
     episode = replace(_make_structured_episode(), provenance=[])

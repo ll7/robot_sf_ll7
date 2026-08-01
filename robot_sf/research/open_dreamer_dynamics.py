@@ -794,7 +794,12 @@ class LatentDynamicsModel:
             raise OpenDreamerDynamicsError(
                 "a rays-available episode must contain at least one step to read the ray width"
             )
-        ray_width = episode.observations[0].rays.size
+        first_observation = episode.observations[0]
+        if not isinstance(first_observation, StructuredObservationStep):
+            raise OpenDreamerDynamicsError(
+                "observation at step 0 must be a StructuredObservationStep"
+            )
+        ray_width = first_observation.rays.size
         if ray_width <= 0:
             raise OpenDreamerDynamicsError(
                 "a rays-available episode must expose a positive ray-vector width"

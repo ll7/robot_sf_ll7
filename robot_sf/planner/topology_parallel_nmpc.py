@@ -176,8 +176,9 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         self._last_results: dict[str, NMPCSolveResult] = {}
         self._deadline_exceeded_this_call = False
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear per-episode state including hypothesis selection history."""
+        del seed
         super().reset()
         self._current_hypothesis_index = 0
         self._ticks_at_hypothesis = 0

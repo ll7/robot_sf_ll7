@@ -224,8 +224,9 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
         super().__init__(_to_nmpc_config(self.prediction_config))
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear optimizer state and measured uncertainty-envelope telemetry."""
+        del seed
         super().reset()
         self._envelope_activation_count = 0
         self._effective_radius_used_by_planner = False

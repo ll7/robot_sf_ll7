@@ -4042,6 +4042,97 @@ def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> N
     assert row["readiness_status"] == "adapter"
 
 
+def test_planner_report_row_preserves_serialized_key_order() -> None:
+    """Planner-row JSON keeps the pre-refactor identity, metric, and metadata order."""
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 1.0,
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "pass"}},
+        "algorithm_metadata_contract": {},
+    }
+
+    row = _planner_report_row(
+        PlannerSpec(key="goal", algo="goal"),
+        summary,
+        aggregates=None,
+        kinematics="holonomic",
+    )
+
+    identity_keys = (
+        "planner_key",
+        "algo",
+        "human_model_variant",
+        "human_model_source",
+        "planner_group",
+        "kinematics",
+        "status",
+        "episodes",
+        "started_at_utc",
+        "finished_at_utc",
+        "runtime_sec",
+        "episodes_per_second",
+        "failed_jobs",
+    )
+    metric_keys = (
+        "success_mean",
+        "collisions_mean",
+        "ped_collision_count_mean",
+        "obstacle_collision_count_mean",
+        "total_collision_count_mean",
+        "near_misses_mean",
+        "min_clearance_mean",
+        "min_clearance_m",
+        "time_to_collision_min_mean",
+        "time_to_goal_norm_mean",
+        "failure_to_progress_mean",
+        "stalled_time_mean",
+        "path_efficiency_mean",
+        "velocity_max_mean",
+        "acceleration_max_mean",
+        "comfort_exposure_mean",
+        "proxemic_intrusion_rate",
+        "jerk_mean",
+        "jerk_max_mean",
+        "curvature_mean_mean",
+        "energy_mean",
+        "command_clip_fraction_mean",
+        "yaw_rate_saturation_fraction_mean",
+        "signed_braking_peak_m_s2_mean",
+        "snqi_mean",
+        "success_ci_low",
+        "success_ci_high",
+        "collision_ci_low",
+        "collision_ci_high",
+        "snqi_ci_low",
+        "snqi_ci_high",
+    )
+    metadata_keys = (
+        "execution_mode",
+        "execution_detail",
+        "planner_command_space",
+        "benchmark_command_space",
+        "projection_policy",
+        "readiness_status",
+        "availability_status",
+        "benchmark_success",
+        "availability_reason",
+        "most_likely_failure_reason",
+        "readiness_tier",
+        "preflight_status",
+        "socnav_prereq_policy",
+        "learned_policy_contract_status",
+        "learned_policy_contract_critical",
+        "learned_policy_contract_warnings",
+        "commands_evaluated",
+        "projection_rate",
+        "infeasible_rate",
+    )
+
+    assert tuple(row) == identity_keys + metric_keys + metadata_keys
+
+
 def test_planner_report_row_exposes_execution_detail_and_command_spaces() -> None:
     """Row builder should surface direct-world-velocity metadata explicitly."""
     planner = PlannerSpec(key="orca", algo="orca")

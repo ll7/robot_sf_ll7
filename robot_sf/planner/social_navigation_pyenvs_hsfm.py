@@ -335,6 +335,10 @@ class SocialNavigationPyEnvsHSFMAdapter:
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SocialNavigationPyEnvsHSFMAdapter"}
+
 
 __all__ = [
     "SocialNavigationPyEnvsHSFMAdapter",

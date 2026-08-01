@@ -11,13 +11,15 @@ import argparse
 import json
 import logging
 import random
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 import yaml
 
+from robot_sf import common
 from robot_sf.training.discrete_action_lattice import DiscreteUnicycleActionLattice
 from robot_sf.training.distributional_rl import (
     QuantileQNetwork,
@@ -27,6 +29,9 @@ from robot_sf.training.distributional_rl import (
     save_quantile_checkpoint,
 )
 from robot_sf.training.risk_objectives import RISK_OBJECTIVES, score_action_quantiles
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 LOGGER = logging.getLogger(__name__)
 
@@ -330,7 +335,7 @@ def _synthetic_transition(
 
 
 def _sample_replay(
-    replay: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
+    replay: Sequence[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
     batch_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     batch = random.sample(replay, k=batch_size)
@@ -394,8 +399,7 @@ def run_distributional_rl_training(
     if config.device != "cpu" and not torch.cuda.is_available():
         raise RuntimeError(f"requested device {config.device!r} unavailable")
     device = torch.device(config.device)
-    random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    common.set_global_seed(config.seed)
 
     config.output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = config.output_dir / f"{config.policy_id}.pt"
@@ -420,7 +424,9 @@ def run_distributional_rl_training(
 
     train_steps = 0
     final_loss: float | None = None
-    replay: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] = []
+    replay: deque[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] = (
+        deque(maxlen=config.dqn.replay_size)
+    )
 
     config.action_lattice.to_json_file(action_lattice_path)
     resolved_config_path.write_text(
@@ -437,8 +443,6 @@ def run_distributional_rl_training(
                         device=device,
                     )
                 )
-                if len(replay) > config.dqn.replay_size:
-                    replay.pop(0)
                 if step < config.dqn.learning_starts or len(replay) < config.dqn.batch_size:
                     continue
                 if step % config.dqn.train_freq != 0:

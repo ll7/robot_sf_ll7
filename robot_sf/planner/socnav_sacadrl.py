@@ -226,6 +226,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
 
     def _raise_cached_error(self) -> None:
         """Re-raise cached initialization error when fallback is disabled."""
+        # Load error must be cached before re-raise
         assert self._load_error is not None
         raise self._load_error
 

@@ -6,8 +6,11 @@ import math
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
+from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
+    BaseContext,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 import numpy as np
 from loguru import logger
@@ -202,8 +205,14 @@ from robot_sf.benchmark.tracking_precision_contract import (
     tracking_precision_hash,
 )
 
-# Keep the return alias available for runtime annotation consumers such as schema tooling.
-from robot_sf.benchmark.types import EpisodeRecordDict  # noqa: TC001
+# Keep the return and configuration aliases available for runtime annotation consumers such as
+# schema tooling.
+from robot_sf.benchmark.types import (  # noqa: TC001
+    EpisodeRecordDict,
+    MapBatchConfig,
+    NoiseSpec,
+    TrackingPrecisionSpec,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -2783,7 +2792,7 @@ class _BatchContext:
     """Mutable context accumulated during ``run_map_batch`` orchestration."""
 
     # Raw parameters forwarded from the public signature.
-    scenarios_or_path: Any
+    scenarios_or_path: list[dict[str, object]] | str | Path
     scenario_path_arg: str | Path | None
     out_path_arg: str | Path
     schema_path: str | Path
@@ -2812,7 +2821,7 @@ class _BatchContext:
     cbf_safety_filter: dict[str, Any] | None
     record_planner_decision_trace: bool
     record_simulation_step_trace: bool
-    multiprocessing_context: Any | None
+    multiprocessing_context: BaseContext | None
     workers: int
     resume: bool
     circuit_breaker_threshold: int | None
@@ -2820,7 +2829,7 @@ class _BatchContext:
     # Resolved during _init_batch_context.
     scenarios: list[dict[str, Any]] = field(default_factory=list)
     scenario_path: Path = field(default_factory=lambda: Path("."))
-    suite_seeds: list[int] = field(default_factory=list)
+    suite_seeds: dict[str, list[int]] = field(default_factory=dict)
     suite_key: str = ""
     noise_spec: dict[str, Any] | None = None
     noise_hash: str | None = None
@@ -2855,7 +2864,7 @@ class _BatchContext:
 
 
 def _init_batch_context(  # noqa: PLR0913
-    scenarios_or_path: list[dict[str, Any]] | str | Path,
+    scenarios_or_path: list[dict[str, object]] | str | Path,
     scenario_path_arg: str | Path | None,
     out_path_arg: str | Path,
     schema_path: str | Path,
@@ -2885,7 +2894,7 @@ def _init_batch_context(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-    multiprocessing_context: Any | None,
+    multiprocessing_context: BaseContext | None,
     workers: int,
     resume: bool,
     circuit_breaker_threshold: int | None,
@@ -2960,10 +2969,9 @@ def _normalize_batch_specs(ctx: _BatchContext) -> None:
 
 def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
     """Load scenarios, validate, and filter unsupported entries."""
-    scenarios_is_path = isinstance(ctx.scenarios_or_path, (str, Path))
-    if scenarios_is_path:
+    if isinstance(ctx.scenarios_or_path, (str, Path)):
         ctx.scenario_path = Path(ctx.scenarios_or_path)
-        ctx.scenarios = load_scenarios(ctx.scenario_path)
+        ctx.scenarios = cast("list[dict[str, Any]]", load_scenarios(ctx.scenario_path))
     else:
         ctx.scenario_path = (
             Path(ctx.scenario_path_arg) if ctx.scenario_path_arg is not None else Path(".")
@@ -3343,6 +3351,8 @@ def _dispatch_batch_execution(ctx: _BatchContext) -> Any:
     Returns:
         BatchExecutionResult with counters, records, and metadata.
     """
+    noise_spec = cast("dict[str, Any]", ctx.noise_spec)
+    tracking_precision_spec = cast("dict[str, Any]", ctx.tracking_precision_spec)
     fixed_params = _build_worker_fixed_params(
         horizon=ctx.horizon,
         dt=ctx.dt,
@@ -3357,8 +3367,8 @@ def _dispatch_batch_execution(ctx: _BatchContext) -> Any:
         experimental_ped_impact=ctx.experimental_ped_impact,
         ped_impact_radius_m=ctx.ped_impact_radius_m,
         ped_impact_window_steps=ctx.ped_impact_window_steps,
-        noise_spec=ctx.noise_spec,
-        tracking_precision_spec=ctx.tracking_precision_spec,
+        noise_spec=noise_spec,
+        tracking_precision_spec=tracking_precision_spec,
         batch_observation_mode=ctx.batch_observation_mode,
         observation_level=ctx.observation_level,
         benchmark_track=ctx.benchmark_track,
@@ -3417,6 +3427,10 @@ def _build_final_summary(ctx: _BatchContext, batch_execution: Any) -> dict[str, 
     Returns:
         Final summary dict with metrics, provenance, and availability.
     """
+    noise_spec = cast("dict[str, Any]", ctx.noise_spec)
+    noise_hash = cast("str", ctx.noise_hash)
+    tracking_precision_spec = cast("dict[str, Any]", ctx.tracking_precision_spec)
+    tracking_precision_hash = cast("str", ctx.tracking_precision_spec_hash)
     total_jobs = len(ctx.jobs)
     summary = _build_completed_batch_summary(
         algo_contract=ctx.algo_contract,
@@ -3440,10 +3454,10 @@ def _build_final_summary(ctx: _BatchContext, batch_execution: Any) -> dict[str, 
         readiness=ctx.readiness,
         algo=ctx.algo,
         benchmark_profile=ctx.benchmark_profile,
-        noise_spec=ctx.noise_spec,
-        noise_hash=ctx.noise_hash,
-        tracking_precision_spec=ctx.tracking_precision_spec,
-        tracking_precision_hash=ctx.tracking_precision_spec_hash,
+        noise_spec=noise_spec,
+        noise_hash=noise_hash,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_hash=tracking_precision_hash,
         active_observation_mode=ctx.active_observation_mode,
         active_observation_level=ctx.active_observation_level,
         actuation_profile_metadata=(
@@ -3500,10 +3514,11 @@ def _execute_and_summarize(ctx: _BatchContext) -> dict[str, Any]:
 
 
 def run_map_batch(  # noqa: PLR0913
-    scenarios_or_path: list[dict[str, Any]] | str | Path,
+    scenarios_or_path: list[dict[str, object]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
     *,
+    batch_config: MapBatchConfig | None = None,
     scenario_path: str | Path | None = None,
     horizon: int | None = None,
     dt: float | None = None,
@@ -3522,24 +3537,56 @@ def run_map_batch(  # noqa: PLR0913
     observation_level: str | None = None,
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
-    observation_noise: dict[str, Any] | None = None,
-    tracking_precision: dict[str, Any] | None = None,
-    synthetic_actuation_profile: dict[str, Any] | None = None,
-    latency_stress_profile: dict[str, Any] | None = None,
-    safety_wrapper: dict[str, Any] | None = None,
-    cbf_safety_filter: dict[str, Any] | None = None,
+    observation_noise: NoiseSpec | None = None,
+    tracking_precision: TrackingPrecisionSpec | None = None,
+    synthetic_actuation_profile: dict[str, object] | None = None,
+    latency_stress_profile: dict[str, object] | None = None,
+    safety_wrapper: dict[str, object] | None = None,
+    cbf_safety_filter: dict[str, object] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
-    multiprocessing_context: Any | None = None,
+    multiprocessing_context: BaseContext | None = None,
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Run map-based scenarios and append episode records.
 
     Returns:
         Summary payload with counts and failure details.
     """
+    if batch_config is not None:
+        scenario_path = batch_config.scenario_path
+        horizon = batch_config.horizon
+        dt = batch_config.dt
+        record_forces = batch_config.record_forces
+        snqi_weights = batch_config.snqi_weights
+        snqi_baseline = batch_config.snqi_baseline
+        algo = batch_config.algo
+        algo_config_path = batch_config.algo_config_path
+        benchmark_profile = batch_config.benchmark_profile
+        socnav_missing_prereq_policy = batch_config.socnav_missing_prereq_policy
+        adapter_impact_eval = batch_config.adapter_impact_eval
+        experimental_ped_impact = batch_config.experimental_ped_impact
+        ped_impact_radius_m = batch_config.ped_impact_radius_m
+        ped_impact_window_steps = batch_config.ped_impact_window_steps
+        observation_mode = batch_config.observation_mode
+        observation_level = batch_config.observation_level
+        benchmark_track = batch_config.benchmark_track
+        track_schema_version = batch_config.track_schema_version
+        observation_noise = batch_config.observation_noise
+        tracking_precision = batch_config.tracking_precision
+        synthetic_actuation_profile = batch_config.synthetic_actuation_profile
+        latency_stress_profile = batch_config.latency_stress_profile
+        safety_wrapper = batch_config.safety_wrapper
+        cbf_safety_filter = batch_config.cbf_safety_filter
+        record_planner_decision_trace = batch_config.record_planner_decision_trace
+        record_simulation_step_trace = batch_config.record_simulation_step_trace
+        multiprocessing_context = batch_config.multiprocessing_context
+        workers = batch_config.workers
+        resume = batch_config.resume
+        circuit_breaker_threshold = batch_config.circuit_breaker_threshold
+
     # fmt: off
     ctx = _init_batch_context(
         scenarios_or_path, scenario_path, out_path, schema_path,
@@ -3556,8 +3603,8 @@ def run_map_batch(  # noqa: PLR0913
         observation_level=observation_level,
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
-        observation_noise=observation_noise,
-        tracking_precision=tracking_precision,
+        observation_noise=cast("dict[str, Any] | None", observation_noise),
+        tracking_precision=cast("dict[str, Any] | None", tracking_precision),
         synthetic_actuation_profile=synthetic_actuation_profile,
         latency_stress_profile=latency_stress_profile,
         safety_wrapper=safety_wrapper,

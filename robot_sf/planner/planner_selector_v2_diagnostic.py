@@ -167,8 +167,9 @@ class PlannerSelectorV2DiagnosticAdapter:
             if callable(bind):
                 bind(env)
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear selector diagnostics and reset all child planners."""
+        del seed
         self._selected_candidate_counts.clear()
         self._trigger_reason_counts.clear()
         self._steps = 0

@@ -336,6 +336,10 @@ class SafetyBarrierPlannerAdapter(OccupancyAwarePlannerMixin):
             linear = min(linear, max(speed * 0.5, 0.15))
         return linear, angular
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SafetyBarrierPlannerAdapter"}
+
 
 def build_safety_barrier_config(cfg: dict[str, Any] | None) -> SafetyBarrierPlannerConfig:
     """Build :class:`SafetyBarrierPlannerConfig` from mapping payload.

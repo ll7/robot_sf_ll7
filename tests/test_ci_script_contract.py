@@ -32,6 +32,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
@@ -108,6 +109,106 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "-- tests fast-pysf/tests" in script_text
     assert 'append_unique_pytest_arg "$changed_test_path"' in script_text
     assert "Core pytest lane cannot run optional-extra path" in script_text
+
+
+def test_run_tests_parallel_emits_duration_store_flags_for_sharded_runs() -> None:
+    """Sharded runs must record pytest-split durations so CI can balance later shards."""
+
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    splits_line = 'cmd+=("--splits" "$shard_count" "--group" "$shard_index")'
+    store_line = 'cmd+=("--store-durations" "--durations-path" ".test_durations")'
+    assert splits_line in script_text
+    assert store_line in script_text
+    # Duration-store flags belong to the sharding block, not default unsharded runs.
+    assert script_text.find(splits_line) < script_text.find(store_line)
+
+    # ``--clean-durations`` keeps the CI cache fresh: each shard uploads only the
+    # tests it ran so the workflow-level merge unions disjoint stores instead of
+    # freezing on the restored aggregate's stale values. It must stay gated on
+    # ``CI=true`` so local sharded runs keep pytest-split's retain-and-update
+    # default behavior.
+    ci_gate = 'if [[ "${CI:-}" == "true" ]]; then'
+    clean_flag = 'cmd+=("--clean-durations")'
+    assert ci_gate in script_text
+    assert clean_flag in script_text
+    assert script_text.find(store_line) < script_text.find(ci_gate)
+    assert script_text.find(ci_gate) < script_text.find(clean_flag)
+
+
+def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
+    """Keep CI duration restore, per-shard upload, and aggregate-save wiring intact."""
+
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    fast_feedback = workflow["jobs"]["fast-feedback"]
+    fast_feedback_steps = fast_feedback["steps"]
+    duration_restore = next(
+        step
+        for step in fast_feedback_steps
+        if step.get("name") == "Restore test durations for pytest-split balancing"
+    )
+    duration_upload = next(
+        step for step in fast_feedback_steps if step.get("name") == "Upload test durations"
+    )
+
+    assert duration_restore["uses"].startswith("actions/cache/restore@")
+    assert duration_restore["continue-on-error"] is True
+    assert duration_restore["with"]["path"] == ".test_durations"
+    assert "${{ github.run_id }}" in duration_restore["with"]["key"]
+    assert "${{ github.run_attempt }}" in duration_restore["with"]["key"]
+    assert "test-durations-${{ runner.os }}-" in duration_restore["with"]["restore-keys"]
+    assert duration_upload["if"] == "always()"
+    assert duration_upload["continue-on-error"] is True
+    assert duration_upload["with"] == {
+        "name": "pytest-durations-${{ matrix.shard }}",
+        "path": ".test_durations",
+        "if-no-files-found": "ignore",
+        "include-hidden-files": True,
+    }
+
+    aggregate = workflow["jobs"]["ci"]
+    assert "fast-feedback" in aggregate["needs"]
+    duration_checkout = next(
+        step
+        for step in aggregate["steps"]
+        if step.get("name") == "Checkout for duration-cache update"
+    )
+    assert duration_checkout["id"] == "checkout_duration_cache"
+    assert "always()" in duration_checkout["if"]
+    assert duration_checkout["continue-on-error"] is True
+    duration_download = next(
+        step for step in aggregate["steps"] if step.get("name") == "Download test-duration shards"
+    )
+    duration_merge = next(
+        step for step in aggregate["steps"] if step.get("name") == "Merge test durations"
+    )
+    duration_save = next(
+        step for step in aggregate["steps"] if step.get("name") == "Save merged test durations"
+    )
+
+    assert duration_download["with"] == {
+        "pattern": "pytest-durations-*",
+        "path": ".duration-artifacts",
+    }
+    assert "always()" in duration_download["if"]
+    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_download["if"]
+    assert duration_merge["id"] == "merge-test-durations"
+    assert duration_merge["continue-on-error"] is True
+    assert "always()" in duration_merge["if"]
+    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_merge["if"]
+    assert (
+        "Expected exactly one pytest duration store from each of four shards"
+        in duration_merge["run"]
+    )
+    assert "Overlapping pytest duration stores" in duration_merge["run"]
+    assert "merged.update(durations)" in duration_merge["run"]
+    assert duration_save["continue-on-error"] is True
+    assert "always()" in duration_save["if"]
+    assert "steps.checkout_duration_cache.outcome == 'success'" in duration_save["if"]
+    assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
+    assert duration_save["with"]["path"] == ".test_durations"
+    assert "${{ github.run_id }}" in duration_save["with"]["key"]
+    assert "${{ github.run_attempt }}" in duration_save["with"]["key"]
 
 
 def test_pytest_coverage_is_explicit_opt_in() -> None:
@@ -1396,6 +1497,115 @@ def test_gh_comment_invalid_target_exits_2() -> None:
     assert result.returncode == 2
     assert "target must be 'pr' or 'issue'" in result.stderr
     assert "Usage:" in result.stdout
+
+
+def test_gh_comment_pr_uses_rest_api(tmp_path: Path) -> None:
+    """PR comment publication must use REST validation and issue comments, not ``gh pr comment``."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        "printf '%s\\n' '{\"id\": 1, \"number\": 6529}'\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST comment body\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "pr",
+            "6529",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert call_lines[0].startswith("api repos/ll7/robot_sf_ll7/pulls/6529")
+    assert "api --method POST repos/ll7/robot_sf_ll7/issues/6529/comments" in call_lines[1]
+    assert "-F body=@" in call_lines[1]
+    assert all("pr comment" not in call for call in call_lines)
+
+
+def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
+    """``--current`` must find the branch PR through REST instead of ``gh pr view``."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        'if [[ "$*" == *state=open* ]]; then\n'
+        "  printf '%s\\n' '6529'\n"
+        "else\n"
+        "  printf '%s\\n' '{\"id\": 1, \"number\": 6529}'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST current comment\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "pr",
+            "--current",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    tracked_branch = (
+        subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        .stdout.strip()
+        .split("/", maxsplit=1)[1]
+    )
+    assert len(call_lines) == 3
+    assert f"pulls?state=open&head=ll7:{tracked_branch}" in call_lines[0]
+    assert "pulls/6529" in call_lines[1]
+    assert "issues/6529/comments" in call_lines[2]
+    assert all("gh pr" not in call for call in call_lines)
 
 
 # Help-behaviour contract tests.

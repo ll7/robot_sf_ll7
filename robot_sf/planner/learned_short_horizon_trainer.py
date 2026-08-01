@@ -19,18 +19,14 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from robot_sf.data_ingestion.real_trajectory_contract import load_manifest, run_preflight
-from robot_sf.planner.learned_short_horizon_predictor import (
-    LearnedShortHorizonPredictorConfig,
-    build_predictor_module,
-    encode_predictor_features,
-    pedestrian_world_state,
-    predictor_io_dims,
-)
+
+if TYPE_CHECKING:
+    from robot_sf.planner.learned_short_horizon_predictor import LearnedShortHorizonPredictorConfig
 
 SCHEMA_VERSION = "issue_4013.short_horizon_predictor_training.v1"
 EVIDENCE_TIER = "diagnostic-only"
@@ -70,6 +66,10 @@ class ShortHorizonTrainerConfig:
         Returns:
             LearnedShortHorizonPredictorConfig: Config that loads the trained model.
         """
+
+        from robot_sf.planner.learned_short_horizon_predictor import (  # noqa: PLC0415
+            LearnedShortHorizonPredictorConfig,
+        )
 
         return LearnedShortHorizonPredictorConfig(
             checkpoint_path=checkpoint_path,
@@ -162,6 +162,12 @@ def generate_synthetic_training_batch(
     Returns:
         tuple[np.ndarray, np.ndarray]: Feature matrix ``[N, in]`` and target matrix ``[N, out]``.
     """
+
+    from robot_sf.planner.learned_short_horizon_predictor import (  # noqa: PLC0415
+        encode_predictor_features,
+        pedestrian_world_state,
+        predictor_io_dims,
+    )
 
     rng = np.random.default_rng(config.seed)
     input_dim, output_dim = predictor_io_dims(config.predictor_config())
@@ -318,6 +324,8 @@ def _examples_from_trajectory_rows(
         tuple[np.ndarray, np.ndarray]: Feature and residual target matrices.
     """
 
+    from robot_sf.planner.learned_short_horizon_predictor import predictor_io_dims  # noqa: PLC0415
+
     input_dim, output_dim = predictor_io_dims(config.predictor_config())
     examples_x: list[np.ndarray] = []
     examples_y: list[np.ndarray] = []
@@ -379,6 +387,11 @@ def _frame_example(
             when no current pedestrian has a complete future horizon.
     """
 
+    from robot_sf.planner.learned_short_horizon_predictor import (  # noqa: PLC0415
+        encode_predictor_features,
+        pedestrian_world_state,
+    )
+
     ped_positions: list[np.ndarray] = []
     ped_velocities: list[np.ndarray] = []
     residuals = np.zeros((config.max_pedestrians, config.horizon_steps, 2), dtype=float)
@@ -426,6 +439,11 @@ def train_short_horizon_predictor(config: ShortHorizonTrainerConfig) -> Training
         TrainingResult: Paths and loss metrics for the training run.
     """
     import torch  # noqa: PLC0415
+
+    from robot_sf.planner.learned_short_horizon_predictor import (  # noqa: PLC0415
+        build_predictor_module,
+        predictor_io_dims,
+    )
 
     torch.manual_seed(config.seed)
     features_np, targets_np = generate_training_batch(config)

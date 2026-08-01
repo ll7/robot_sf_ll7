@@ -80,6 +80,8 @@ from shapely.geometry import Point as _ShapelyPoint
 from shapely.geometry import Polygon as _ShapelyPolygon
 from shapely.prepared import PreparedGeometry, prep
 
+from robot_sf.common.validation import _require_finite
+
 if TYPE_CHECKING:
     from robot_sf.common.types import Circle2D, Line2D, RobotPose
 
@@ -108,12 +110,6 @@ def _load_pygame():
         pygame = None
         return None
     return pygame
-
-
-def _require_finite(name: str, value: float) -> None:
-    """Raise a clear error when a numeric grid parameter is not finite."""
-    if not math.isfinite(value):
-        raise ValueError(f"{name} must be finite, got {value}")
 
 
 class GridChannel(Enum):

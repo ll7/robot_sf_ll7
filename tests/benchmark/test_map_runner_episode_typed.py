@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 import typing
+from collections.abc import Callable
 from multiprocessing.context import BaseContext
+
+import numpy as np
 
 from robot_sf.benchmark.observation_noise import normalize_observation_noise_spec
 from robot_sf.benchmark.tracking_precision_contract import normalize_tracking_precision_spec
@@ -350,8 +353,8 @@ def test_benchmark_orchestration_annotations_resolve_at_runtime() -> None:
     assert loop_hints["planner_runtime"] is PlannerRuntime
     assert loop_hints["noise"] is NoiseConfig
     assert config_hints["multiprocessing_context"] == BaseContext | None
-    assert "rng" in noise_hints
-    assert "policy_fn" in planner_hints
+    assert noise_hints["rng"] is np.random.Generator
+    assert planner_hints["policy_fn"] == Callable[..., typing.Any]
 
 
 def test_episode_boundary_annotations_resolve_at_runtime() -> None:

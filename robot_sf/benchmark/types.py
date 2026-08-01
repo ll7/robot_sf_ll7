@@ -3,9 +3,8 @@
 
 These dataclasses and TypedDicts provide typed containers for scenario
 specifications, episode records, resume manifests, and episode payloads.
-They are deliberately minimal and avoid introducing runtime dependencies
-(pure typing + stdlib) so they can be imported in lightweight tooling
-(schema generation, hashing, etc.).
+The concrete runtime annotations are kept resolvable for schema and tooling
+consumers while the serialization helpers remain deliberately minimal.
 
 Serialization: writing to JSONL will typically convert instances to
 ``dict`` via ``dataclasses.asdict`` or explicit ``to_dict`` helpers.
@@ -13,22 +12,25 @@ Serialization: writing to JSONL will typically convert instances to
 
 from __future__ import annotations
 
+from collections.abc import (  # noqa: TC003 - runtime annotation resolution.
+    Callable,
+    Mapping,
+)
 from dataclasses import asdict, dataclass, field
 from datetime import (
     UTC,  # type: ignore[attr-defined]
     datetime,
 )
-from typing import TYPE_CHECKING, Any, TypedDict
+from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
+    BaseContext,
+)
+from pathlib import Path  # noqa: TC003 - runtime annotation resolution.
+from typing import Any, TypedDict
 
-if TYPE_CHECKING:
-    import multiprocessing as mp
-    from collections.abc import Callable, Mapping
-    from pathlib import Path
+import numpy as np  # noqa: TC002 - runtime type-hint consumers resolve fields.
 
-    import numpy as np
-
-    from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile
-    from robot_sf.benchmark.observation_noise import ObservationNoiseState
+from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile  # noqa: TC001
+from robot_sf.benchmark.observation_noise import ObservationNoiseState  # noqa: TC001
 
 # ---------------------------------------------------------------------------
 # TypedDicts for dict-based episode payloads
@@ -424,7 +426,7 @@ class NoiseConfig:
     ``noise_stats`` keyword arguments into a single typed object.
     """
 
-    spec: dict[str, Any]
+    spec: NoiseSpec
     rng: np.random.Generator
     state: ObservationNoiseState | None
     stats: dict[str, int]
@@ -466,7 +468,7 @@ class MapBatchConfig:
     cbf_safety_filter: dict[str, Any] | None = None
     record_planner_decision_trace: bool = False
     record_simulation_step_trace: bool = False
-    multiprocessing_context: mp.context.BaseContext | None = None
+    multiprocessing_context: BaseContext | None = None
     workers: int = 1
     resume: bool = True
     circuit_breaker_threshold: int | None = None

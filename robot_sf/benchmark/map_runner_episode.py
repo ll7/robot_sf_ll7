@@ -10,7 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003 - runtime type-hint consumers resolve Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -40,6 +40,7 @@ from robot_sf.benchmark.interaction_exposure import (
 )
 from robot_sf.benchmark.latency_stress import (
     LatencyMeasurementHarness,
+    LatencyStressProfile,
     not_available_latency_metrics,
 )
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
@@ -148,6 +149,7 @@ from robot_sf.benchmark.safety_wrapper_runtime import (
 )
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
+    SyntheticActuationProfile,
     not_available_saturation_metrics,
 )
 from robot_sf.benchmark.termination_reason import (
@@ -184,13 +186,9 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
-
-if TYPE_CHECKING:
-    from robot_sf.benchmark.latency_stress import LatencyStressProfile
-    from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
-    from robot_sf.gym_env.unified_config import RobotSimulationConfig
-    from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor
+from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.

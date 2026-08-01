@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import typing
+from multiprocessing.context import BaseContext
 
 from robot_sf.benchmark.observation_noise import normalize_observation_noise_spec
 from robot_sf.benchmark.tracking_precision_contract import normalize_tracking_precision_spec
@@ -15,11 +16,14 @@ from robot_sf.benchmark.types import (
     AdapterImpact,
     AlgoMeta,
     EpisodeRecordDict,
+    MapBatchConfig,
+    NoiseConfig,
     NoiseSpec,
     OutcomePayload,
     PlannerDecisionTrace,
     PlannerDecisionTraceEntry,
     PlannerDynamicWindow,
+    PlannerRuntime,
     PlannerTargetGoal,
     TrackingPrecisionSpec,
     TrackingPrecisionSpeedContract,
@@ -327,6 +331,25 @@ def test_episode_record_partial_defaults() -> None:
     }
     assert record.get("benchmark_track") is None
     assert record.get("integrity") is None
+
+
+def test_benchmark_orchestration_annotations_resolve_at_runtime() -> None:
+    """Typed orchestration boundaries remain inspectable by runtime tooling."""
+    from robot_sf.benchmark import map_runner, map_runner_episode
+
+    batch_hints = typing.get_type_hints(map_runner.run_map_batch)
+    loop_hints = typing.get_type_hints(map_runner_episode._run_episode_step_loop)
+    config_hints = typing.get_type_hints(MapBatchConfig)
+    noise_hints = typing.get_type_hints(NoiseConfig)
+    planner_hints = typing.get_type_hints(PlannerRuntime)
+
+    assert batch_hints["batch_config"] == MapBatchConfig | None
+    assert batch_hints["multiprocessing_context"] == BaseContext | None
+    assert loop_hints["planner_runtime"] is PlannerRuntime
+    assert loop_hints["noise"] is NoiseConfig
+    assert config_hints["multiprocessing_context"] == BaseContext | None
+    assert "rng" in noise_hints
+    assert "policy_fn" in planner_hints
 
 
 def test_episode_boundary_annotations_resolve_at_runtime() -> None:

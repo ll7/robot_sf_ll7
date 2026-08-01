@@ -6,13 +6,11 @@ import math
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, fields
+from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
+    BaseContext,
+)
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
-
-if TYPE_CHECKING:
-    import multiprocessing as mp
-
-    from robot_sf.benchmark.types import MapBatchConfig
 
 import numpy as np
 from loguru import logger
@@ -208,7 +206,7 @@ from robot_sf.benchmark.tracking_precision_contract import (
 )
 
 # Keep the return alias available for runtime annotation consumers such as schema tooling.
-from robot_sf.benchmark.types import EpisodeRecordDict  # noqa: TC001
+from robot_sf.benchmark.types import EpisodeRecordDict, MapBatchConfig  # noqa: TC001
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -2815,7 +2813,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
-    multiprocessing_context: mp.context.BaseContext | None = None,
+    multiprocessing_context: BaseContext | None = None,
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,

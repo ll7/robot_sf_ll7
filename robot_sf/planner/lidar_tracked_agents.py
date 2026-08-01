@@ -290,7 +290,7 @@ class LidarTrackedSocialForceAdapter:
         self._last_error: str | None = None
         self._last_track_count = 0
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset wrapped planner state when supported."""
         reset = getattr(self.social_force, "reset", None)
         if callable(reset):

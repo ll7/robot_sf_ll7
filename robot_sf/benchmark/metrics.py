@@ -2937,77 +2937,43 @@ METRIC_NAMES: list[str] = [
 ]
 
 
-def compute_all_metrics(  # noqa: PLR0913, PLR0915
+def _compute_signal_metrics_block(data: EpisodeData) -> dict[str, Any]:
+    """Compute signal metrics with fallback to unavailable defaults on failure.
+
+    Returns:
+        Mapping of signal metric names to computed values.
+    """
+    try:
+        return dict(calculate_signal_metrics(data))
+    except (ValueError, TypeError, KeyError, AttributeError, ShapelyError):
+        logger.exception("Failed to compute signal metrics; falling back to unavailable defaults.")
+        return {
+            "signal_red_phase_violations": 0,
+            "signal_stop_line_crossings_under_red": 0,
+            "signal_min_distance_to_stop_line_before_crossing_m": float("nan"),
+            "signal_delay_after_green_onset_s": float("nan"),
+            "signal_pedestrian_conflict_during_legal_crossing_count": 0,
+            "signal_unavailable_exclusion_count": 1,
+            "signal_metrics_denominator": 0,
+            "signal_metrics_evidence": {
+                "state": "unavailable",
+                "exclusion_reason": "signal_metrics_computation_failed",
+            },
+        }
+
+
+def _compute_core_navigation_block(
     data: EpisodeData,
     *,
     horizon: int,
-    shortest_path_len: float | None = None,
-    robot_max_speed: float | None = None,
-    experimental_ped_impact: bool = False,
-    experimental_human_interaction_proxy: bool = False,
-    experimental_near_miss_ttc: bool = False,
-    ped_impact_radius_m: float = 2.0,
-    ped_impact_window_steps: int = 5,
-    near_miss_ttc_threshold_s: float | None = None,
-    social_proxemic_radius_m: float = 1.2,
-    human_proxy_yield_speed_mps: float = 0.15,
-    social_compliance_comfort_radius_m: float = 1.2,
-    control_data: EpisodeData | None = None,
+    shortest_path_len: float,
+    robot_max_speed: float | None,
 ) -> dict[str, Any]:
-    """Compute all defined metrics for an episode and return them as a mapping.
-
-    Calls each metric implementation on the provided ``EpisodeData`` instance and collects scalar
-    outputs keyed by metric name.
-
-    Args:
-        data: Episode trajectory and auxiliary data consumed by the metric functions.
-        horizon: Episode horizon (number of timesteps) used by normalized metrics.
-        shortest_path_len: Optional precomputed shortest path length from start to goal. When
-            ``None``, the Euclidean distance between initial pose and goal acts as fallback.
-        robot_max_speed: Optional robot speed cap (m/s) for ideal-time normalization. When
-            ``None``, observed max speed (fallback ``1.0``) is used.
-        experimental_ped_impact: Enable optional experimental ``ped_impact_*`` metrics that
-            estimate near-vs-far pedestrian acceleration and turn-rate deltas.
-        experimental_human_interaction_proxy: Enable optional diagnostic ``human_proxy_*`` metrics
-            for mechanism reports. These are simulation proxies only.
-        experimental_near_miss_ttc: Enable the opt-in, diagnostic-only time-to-collision near-miss
-            surface (``near_misses_ttc`` plus ``near_miss_ttc__*`` status/threshold keys). The
-            legacy distance-based ``near_misses`` metric is unchanged and emitted regardless. When
-            inputs are unsupported the count key is omitted and a ``near_misses_ttc_status`` of
-            ``"unsupported-inputs"`` is reported (fail-closed, never a false zero).
-        ped_impact_radius_m: Near/far distance threshold in meters used by experimental pedestrian
-            impact metrics.
-        ped_impact_window_steps: Trailing smoothing window length (timesteps) used by
-            experimental pedestrian impact metrics.
-        near_miss_ttc_threshold_s: TTC threshold (seconds) for the opt-in near-miss count when
-            ``experimental_near_miss_ttc`` is enabled. ``None`` uses the uncalibrated diagnostic
-            placeholder ``DIAGNOSTIC_TTC_THRESHOLD_S``.
-        social_proxemic_radius_m: Personal-space radius used by exploratory social acceptability
-            metrics when ``experimental_ped_impact`` is enabled.
-        human_proxy_yield_speed_mps: Robot speed threshold used to detect proxy yielding.
-        social_compliance_comfort_radius_m: Diagnostic comfort radius used by the native
-            social-compliance episode block.
-        control_data: Optional robot-absent/control trajectory used to compute the schema-backed
-            ``distributional_disruption`` block.
+    """Compute core navigation, collision, and distance metrics for one episode.
 
     Returns:
-        dict[str, Any]: Mapping from metric name (e.g., ``success``, ``force_q50``,
-        ``force_gradient_norm_mean``) to the computed scalar value. When
-        ``experimental_ped_impact`` is enabled, additional ``ped_impact_*`` and
-        exploratory ``social_proxemic_*`` keys are included. When
-        ``experimental_near_miss_ttc`` is enabled, opt-in ``near_misses_ttc`` and
-        ``near_miss_ttc__*`` diagnostic keys are included (diagnostic-only, not benchmark
-        evidence).
+        Mapping of core navigation metric names to computed values.
     """
-    if shortest_path_len is None:
-        shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
-
-    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
-    if ped_count > 0 and not has_force_data(data):
-        logger.bind(pedestrians=ped_count, steps=int(data.peds_pos.shape[0])).warning(
-            "Missing pedestrian force data; force-based metrics will be NaN.",
-        )
-
     robot_ped_summary = _compute_robot_ped_distance_summary(data)
     obstacle_collision_count = wall_collisions(data)
     agent_collision_count = agent_collisions(data)
@@ -3020,27 +2986,6 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     )
 
     values: dict[str, Any] = {}
-    if isinstance(data.episode_metadata, dict):
-        values["_episode_metadata"] = dict(data.episode_metadata)
-    try:
-        values.update(calculate_signal_metrics(data))
-    except (ValueError, TypeError, KeyError, AttributeError, ShapelyError):
-        logger.exception("Failed to compute signal metrics; falling back to unavailable defaults.")
-        values.update(
-            {
-                "signal_red_phase_violations": 0,
-                "signal_stop_line_crossings_under_red": 0,
-                "signal_min_distance_to_stop_line_before_crossing_m": float("nan"),
-                "signal_delay_after_green_onset_s": float("nan"),
-                "signal_pedestrian_conflict_during_legal_crossing_count": 0,
-                "signal_unavailable_exclusion_count": 1,
-                "signal_metrics_denominator": 0,
-                "signal_metrics_evidence": {
-                    "state": "unavailable",
-                    "exclusion_reason": "signal_metrics_computation_failed",
-                },
-            }
-        )
     # Use collision-count-based success semantics for benchmark-facing outputs.
     values["success"] = 1.0 if episode_success else 0.0
     values["time_to_goal_norm"] = (
@@ -3091,6 +3036,16 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["socnavbench_path_length"] = socnavbench_path_length(data)
     values["socnavbench_path_length_ratio"] = socnavbench_path_length_ratio(data)
     values["socnavbench_path_irregularity"] = socnavbench_path_irregularity(data)
+    return values
+
+
+def _compute_force_smoothness_block(data: EpisodeData) -> dict[str, Any]:
+    """Compute force, comfort, smoothness, and stability metrics for one episode.
+
+    Returns:
+        Mapping of force/comfort/smoothness metric names to computed values.
+    """
+    values: dict[str, Any] = {}
     values.update(force_quantiles(data))
     values.update(per_ped_force_quantiles(data))
     values["ped_force_mean"] = ped_force_mean(data)
@@ -3105,14 +3060,26 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values.update(rollover_stability_metrics(data))
     values.update(clear_tracking_metrics(data))
     values.update(group_space_metrics(data))
-    if experimental_near_miss_ttc:
-        values.update(_compute_near_miss_ttc_metrics(data, t_thr=near_miss_ttc_threshold_s))
-    values["wall_collisions"] = values["obstacle_collision_count"]
-    values["clearing_distance_min"] = clearing_distance_min(data)
-    values["clearing_distance_avg"] = clearing_distance_avg(data)
-    values["failure_to_progress"] = failure_to_progress(data)
-    values["stalled_time"] = stalled_time(data)
-    _attach_deadlock_stall_block(values, data)
+    return values
+
+
+def _compute_experimental_metric_block(
+    data: EpisodeData,
+    *,
+    experimental_ped_impact: bool,
+    experimental_human_interaction_proxy: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+    social_proxemic_radius_m: float,
+    human_proxy_yield_speed_mps: float,
+) -> dict[str, Any]:
+    """Compute optional experimental metric blocks when their flags are enabled.
+
+    Returns:
+        Mapping of experimental metric names to computed values (empty when no
+        experimental flags are enabled).
+    """
+    values: dict[str, Any] = {}
     if experimental_ped_impact:
         values.update(
             experimental_ped_impact_metrics(
@@ -3135,6 +3102,77 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
                 yield_speed_mps=human_proxy_yield_speed_mps,
             )
         )
+    return values
+
+
+def compute_all_metrics(  # noqa: PLR0913
+    data: EpisodeData,
+    *,
+    horizon: int,
+    shortest_path_len: float | None = None,
+    robot_max_speed: float | None = None,
+    experimental_ped_impact: bool = False,
+    experimental_human_interaction_proxy: bool = False,
+    experimental_near_miss_ttc: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
+    near_miss_ttc_threshold_s: float | None = None,
+    social_proxemic_radius_m: float = 1.2,
+    human_proxy_yield_speed_mps: float = 0.15,
+    social_compliance_comfort_radius_m: float = 1.2,
+    control_data: EpisodeData | None = None,
+) -> dict[str, Any]:
+    """Compute all defined metrics for an episode and return them as a mapping.
+
+    Calls each metric implementation on the provided ``EpisodeData`` instance and collects scalar
+    outputs keyed by metric name. Experimental metric surfaces (``ped_impact_*``,
+    ``social_proxemic_*``, ``human_proxy_*``, ``near_miss_ttc__*``) are opt-in via the
+    ``experimental_*`` flags; see parameter names and helper docstrings for details.
+
+    Returns:
+        Mapping from metric name to the computed scalar value.
+    """
+    if shortest_path_len is None:
+        shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback
+
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    if ped_count > 0 and not has_force_data(data):
+        logger.bind(pedestrians=ped_count, steps=int(data.peds_pos.shape[0])).warning(
+            "Missing pedestrian force data; force-based metrics will be NaN.",
+        )
+
+    values: dict[str, Any] = {}
+    if isinstance(data.episode_metadata, dict):
+        values["_episode_metadata"] = dict(data.episode_metadata)
+    values.update(_compute_signal_metrics_block(data))
+    values.update(
+        _compute_core_navigation_block(
+            data,
+            horizon=horizon,
+            shortest_path_len=shortest_path_len,
+            robot_max_speed=robot_max_speed,
+        )
+    )
+    values.update(_compute_force_smoothness_block(data))
+    if experimental_near_miss_ttc:
+        values.update(_compute_near_miss_ttc_metrics(data, t_thr=near_miss_ttc_threshold_s))
+    values["wall_collisions"] = values["obstacle_collision_count"]
+    values["clearing_distance_min"] = clearing_distance_min(data)
+    values["clearing_distance_avg"] = clearing_distance_avg(data)
+    values["failure_to_progress"] = failure_to_progress(data)
+    values["stalled_time"] = stalled_time(data)
+    _attach_deadlock_stall_block(values, data)
+    values.update(
+        _compute_experimental_metric_block(
+            data,
+            experimental_ped_impact=experimental_ped_impact,
+            experimental_human_interaction_proxy=experimental_human_interaction_proxy,
+            ped_impact_radius_m=ped_impact_radius_m,
+            ped_impact_window_steps=ped_impact_window_steps,
+            social_proxemic_radius_m=social_proxemic_radius_m,
+            human_proxy_yield_speed_mps=human_proxy_yield_speed_mps,
+        )
+    )
     values["distributional_disruption"] = build_distributional_disruption_block(data, control_data)
     values["social_compliance"] = build_social_compliance_episode_block(
         data,

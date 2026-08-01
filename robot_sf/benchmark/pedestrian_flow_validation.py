@@ -19,6 +19,7 @@ from robot_sf.benchmark.ped_trajectory_quality import (
     TrajectoryQualityConfig,
     compute_trajectory_quality_distributions,
 )
+from robot_sf.common.validation import _require_finite_number
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
@@ -89,18 +90,6 @@ class PedFlowRunConfig:
             raise ValueError("pedestrian_counts must not be empty")
         if any(isinstance(count, bool) or count < 0 for count in self.pedestrian_counts):
             raise ValueError("pedestrian_counts must be non-negative integers")
-
-
-def _require_finite_number(
-    value: float, field_name: str, *, positive: bool = False, non_negative: bool = False
-) -> None:
-    """Raise ValueError when a run-control value is boolean, non-finite, or violates sign bounds."""
-    if isinstance(value, bool) or not math.isfinite(float(value)):
-        raise ValueError(f"{field_name} must be finite")
-    if positive and float(value) <= 0.0:
-        raise ValueError(f"{field_name} must be positive")
-    if non_negative and float(value) < 0.0:
-        raise ValueError(f"{field_name} must be non-negative")
 
 
 @dataclass(frozen=True)

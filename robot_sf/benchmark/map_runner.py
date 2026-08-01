@@ -10,7 +10,7 @@ from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolu
     BaseContext,
 )
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 import numpy as np
 from loguru import logger
@@ -2829,7 +2829,7 @@ class _BatchContext:
     # Resolved during _init_batch_context.
     scenarios: list[dict[str, Any]] = field(default_factory=list)
     scenario_path: Path = field(default_factory=lambda: Path("."))
-    suite_seeds: list[int] = field(default_factory=list)
+    suite_seeds: dict[str, list[int]] = field(default_factory=dict)
     suite_key: str = ""
     noise_spec: dict[str, Any] | None = None
     noise_hash: str | None = None
@@ -2972,7 +2972,7 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
     scenarios_is_path = isinstance(ctx.scenarios_or_path, (str, Path))
     if scenarios_is_path:
         ctx.scenario_path = Path(ctx.scenarios_or_path)
-        ctx.scenarios = load_scenarios(ctx.scenario_path)
+        ctx.scenarios = cast("list[dict[str, Any]]", load_scenarios(ctx.scenario_path))
     else:
         ctx.scenario_path = (
             Path(ctx.scenario_path_arg) if ctx.scenario_path_arg is not None else Path(".")
@@ -3352,6 +3352,8 @@ def _dispatch_batch_execution(ctx: _BatchContext) -> Any:
     Returns:
         BatchExecutionResult with counters, records, and metadata.
     """
+    noise_spec = cast("dict[str, Any]", ctx.noise_spec)
+    tracking_precision_spec = cast("dict[str, Any]", ctx.tracking_precision_spec)
     fixed_params = _build_worker_fixed_params(
         horizon=ctx.horizon,
         dt=ctx.dt,
@@ -3366,8 +3368,8 @@ def _dispatch_batch_execution(ctx: _BatchContext) -> Any:
         experimental_ped_impact=ctx.experimental_ped_impact,
         ped_impact_radius_m=ctx.ped_impact_radius_m,
         ped_impact_window_steps=ctx.ped_impact_window_steps,
-        noise_spec=ctx.noise_spec,
-        tracking_precision_spec=ctx.tracking_precision_spec,
+        noise_spec=noise_spec,
+        tracking_precision_spec=tracking_precision_spec,
         batch_observation_mode=ctx.batch_observation_mode,
         observation_level=ctx.observation_level,
         benchmark_track=ctx.benchmark_track,
@@ -3426,6 +3428,10 @@ def _build_final_summary(ctx: _BatchContext, batch_execution: Any) -> dict[str, 
     Returns:
         Final summary dict with metrics, provenance, and availability.
     """
+    noise_spec = cast("dict[str, Any]", ctx.noise_spec)
+    noise_hash = cast("str", ctx.noise_hash)
+    tracking_precision_spec = cast("dict[str, Any]", ctx.tracking_precision_spec)
+    tracking_precision_hash = cast("str", ctx.tracking_precision_spec_hash)
     total_jobs = len(ctx.jobs)
     summary = _build_completed_batch_summary(
         algo_contract=ctx.algo_contract,
@@ -3449,10 +3455,10 @@ def _build_final_summary(ctx: _BatchContext, batch_execution: Any) -> dict[str, 
         readiness=ctx.readiness,
         algo=ctx.algo,
         benchmark_profile=ctx.benchmark_profile,
-        noise_spec=ctx.noise_spec,
-        noise_hash=ctx.noise_hash,
-        tracking_precision_spec=ctx.tracking_precision_spec,
-        tracking_precision_hash=ctx.tracking_precision_spec_hash,
+        noise_spec=noise_spec,
+        noise_hash=noise_hash,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_hash=tracking_precision_hash,
         active_observation_mode=ctx.active_observation_mode,
         active_observation_level=ctx.active_observation_level,
         actuation_profile_metadata=(
@@ -3598,8 +3604,8 @@ def run_map_batch(  # noqa: PLR0913
         observation_level=observation_level,
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
-        observation_noise=observation_noise,
-        tracking_precision=tracking_precision,
+        observation_noise=cast("dict[str, Any] | None", observation_noise),
+        tracking_precision=cast("dict[str, Any] | None", tracking_precision),
         synthetic_actuation_profile=synthetic_actuation_profile,
         latency_stress_profile=latency_stress_profile,
         safety_wrapper=safety_wrapper,

@@ -20,9 +20,9 @@ change a metric or result. See `provenance` in `release_manifest.yaml`.
 
 | Candidate | Issue | Classification | Acceptance checker | Claim boundary |
 | --- | --- | --- | --- | --- |
-| `candidate_5034` | #5034 | metric evidence promotion | passed | Targeted-smoke metric evidence for eligible native/adapter latency cells only. |
-| `candidate_5305` | #5305 | certified adversarial archive | passed | 17 certified episode entries with stable failure-mechanism attributions and disjoint scenario splits. |
-| `candidate_5592` | #5592 | preregistration packet | passed | Generalization-check contract across two scenario matrices only; no paper/dissertation ranking. |
+| `candidate_5034` | #5034 | metric evidence promotion | passed | Control-action-latency metric-evidence promotion only: action latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell. Evidence tier: targeted smoke; result classification: diagnostic-only. |
+| `candidate_5305` | #5305 | certified adversarial archive | passed | Certified adversarial archive of 17 certified episode entries with stable failure mechanism attributions and disjoint scenario splits. |
+| `candidate_5592` | #5592 | preregistration packet | passed (status=ready) | Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking. |
 
 ## Excluded Candidates
 

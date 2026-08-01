@@ -49,10 +49,10 @@ candidates:
     source_commit: "484d3fd05a0e29da9e267fa18f817a1fe101de70"
     durable_artifact_uri: "docs/context/evidence/issue_5034_control_action_latency_sweep"
     evidence_classification: metric_evidence_promotion
-    allowed_claim: "Control-action-latency metric evidence for eligible native/adapter latency cells only; evidence_tier=targeted smoke and result_classification=diagnostic-only."
+    allowed_claim: "control-action-latency metric-evidence promotion only: action latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell. evidence_tier=targeted smoke; result_classification=diagnostic-only."
     fallback_degraded_excluded: true
     acceptance_checker_status: passed
-    acceptance_checker_detail: "fixed_scope_coverage.status=verified (1296 expected and observed rows); re-verified 2026-07-26."
+    acceptance_checker_detail: "fixed_scope_coverage.status=verified (expected_row_count=1296, observed_row_count=1296; 48 scenarios x 3 latency variants x 3 planner groups x 3 seeds); re-verified 2026-07-26"
     sha256_coverage:
       summary_json: caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba
       manifest: 7394e4348f72dca7e00e95e1ef6644a705bc9adfd699523af27260e0a133f0ae
@@ -64,10 +64,10 @@ candidates:
     source_commit: "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
     durable_artifact_uri: "docs/context/evidence/issue_5305_certified_archive"
     evidence_classification: certified_adversarial_archive
-    allowed_claim: "Certified adversarial archive of 17 certified episode entries with stable failure-mechanism attributions and disjoint scenario splits."
+    allowed_claim: "certified adversarial archive of 17 certified episode entries with stable failure mechanism attributions and disjoint scenario splits."
     fallback_degraded_excluded: true
     acceptance_checker_status: passed
-    acceptance_checker_detail: "repository_readiness.ready=true with 17 certified entries across two scenario families; re-verified 2026-07-26."
+    acceptance_checker_detail: "status=passed, repository_readiness.ready=true (entry_count=17 certified entries across 2 distinct scenario families; archive_id_overlap_count=0, seed_overlap_count=0); re-verified 2026-07-26, SHA256SUMS all OK"
     sha256_coverage:
       archive_json: 79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445
       acceptance_report: d297f759e5cb91d7c18a964c09162fd98091f8c38f9c30756431260a2dbb587c
@@ -79,10 +79,10 @@ candidates:
     source_commit: "96776636e797b16baa2be833ad957dd071a3b815"
     durable_artifact_uri: "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml"
     evidence_classification: preregistration_packet
-    allowed_claim: "Generalization-check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
+    allowed_claim: "Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
     fallback_degraded_excluded: true
     acceptance_checker_status: passed
-    acceptance_checker_detail: "status=ready, campaign_execution_allowed=false (23 reference scenarios, 3 candidate scenarios, 12 planners, 5 seeds); re-verified 2026-07-26."
+    acceptance_checker_detail: "status=ready, campaign_execution_allowed=false (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5); exit_code=0 at reverification 2026-07-26"
     sha256_coverage:
       scenario_set_config: 6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07
       preregistration_config: 04032c5d8a06e31487821ac7c9c563cea326b6c015ad50ab049faac5b9f051d4

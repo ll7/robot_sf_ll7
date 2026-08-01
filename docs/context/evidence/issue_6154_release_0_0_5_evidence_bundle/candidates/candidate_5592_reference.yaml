@@ -7,7 +7,7 @@ evidence_classification: preregistration_packet
 allowed_claim: "Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
 acceptance_checker:
   status: ready
-  detail: "status=ready (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5)"
+  detail: "status=ready, campaign_execution_allowed=false (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5); exit_code=0 at reverification 2026-07-26"
 sha256_verification:
   scenario_set_config: 6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07
   preregistration_config: 04032c5d8a06e31487821ac7c9c563cea326b6c015ad50ab049faac5b9f051d4

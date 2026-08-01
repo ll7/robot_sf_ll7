@@ -633,6 +633,66 @@ class TestVerificationScript:
         )
         assert report["overall_verdict"] == "pass"
 
+    def test_release_0_0_5_preserves_frozen_candidate_contract(self) -> None:
+        """The release cards must preserve the frozen membership and claim boundaries."""
+        frozen = _read_yaml(
+            ROOT / "docs" / "context" / "evidence" / "issue_6153_frozen_candidate_manifest.yaml"
+        )
+        bundle_root = (
+            ROOT / "docs" / "context" / "evidence" / "issue_6154_release_0_0_5_evidence_bundle"
+        )
+        release = _read_yaml(bundle_root / "release_manifest.yaml")
+
+        frozen_candidates = {
+            candidate["owning_issue"]: candidate for candidate in frozen["candidates"]
+        }
+        release_candidates = {
+            candidate["owning_issue"]: candidate for candidate in release["candidates"]
+        }
+        assert set(release_candidates) == set(frozen["summary"]["included"])
+        assert {candidate["owning_issue"] for candidate in release["excluded_reference"]} == set(
+            frozen["summary"]["excluded"]
+        )
+
+        reference_paths = {
+            issue: bundle_root / "candidates" / f"candidate_{issue}_reference.yaml"
+            for issue in release_candidates
+        }
+        for issue, release_candidate in release_candidates.items():
+            frozen_candidate = frozen_candidates[issue]
+            assert release_candidate["source_commit"] == frozen_candidate["source_commit"]
+            assert (
+                release_candidate["durable_artifact_uri"]
+                == frozen_candidate["durable_artifact_uri"]
+            )
+            assert (
+                release_candidate["evidence_classification"]
+                == frozen_candidate["evidence_classification"]
+            )
+            assert release_candidate["allowed_claim"] == frozen_candidate["allowed_claim"]
+            assert (
+                release_candidate["acceptance_checker_status"]
+                == frozen_candidate["acceptance_checker"]["gate_status"]
+            )
+            assert (
+                release_candidate["acceptance_checker_detail"]
+                == frozen_candidate["acceptance_checker"]["result"]
+            )
+
+            reference = _read_yaml(reference_paths[issue])
+            assert reference["source_commit"] == frozen_candidate["source_commit"]
+            assert reference["evidence_location"].rstrip("/") == frozen_candidate[
+                "durable_artifact_uri"
+            ].rstrip("/")
+            assert (
+                reference["evidence_classification"] == frozen_candidate["evidence_classification"]
+            )
+            assert reference["allowed_claim"] == frozen_candidate["allowed_claim"]
+            assert (
+                reference["acceptance_checker"]["detail"]
+                == frozen_candidate["acceptance_checker"]["result"]
+            )
+
     def test_verification_fails_closed_for_non_mapping_manifest(self, tmp_path: Path) -> None:
         from scripts.repro.verify_release_checksums import verify_release
 

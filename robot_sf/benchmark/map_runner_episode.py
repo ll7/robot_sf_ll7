@@ -9,7 +9,8 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from pathlib import Path  # noqa: TC003 - runtime type-hint consumers resolve Path
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -163,6 +164,14 @@ from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
 )
+from robot_sf.benchmark.types import (
+    AlgoMeta,
+    EpisodeRecordDict,
+    NoiseSpec,
+    PlannerDecisionTrace,
+    PlannerDecisionTraceEntry,
+    TrackingPrecisionSpec,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -172,10 +181,9 @@ from robot_sf.benchmark.utils import (
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
-PolicyBuilder = Callable[..., tuple[Any, dict[str, Any]]]
+# Policy builders are migrated incrementally; the episode boundary narrows the
+# legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
+PolicyBuilder = Callable[..., tuple[Any, AlgoMeta | dict[str, Any]]]
 PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
 
 
@@ -418,7 +426,7 @@ def _write_observed_pedestrian_positions(obs: Any, positions: np.ndarray) -> boo
 
 def _apply_tracking_precision_to_observation(
     obs: dict[str, Any],
-    spec: dict[str, Any],
+    spec: TrackingPrecisionSpec,
     rng: np.random.Generator,
 ) -> tuple[dict[str, Any], np.ndarray | None]:
     """Apply default-off MOTP drift mask to planner-facing tracked actors.
@@ -431,7 +439,11 @@ def _apply_tracking_precision_to_observation(
         return obs, None
     if not bool(spec.get("enabled", False)):
         return obs, positions
-    corrupted = apply_tracking_precision_spec(positions, spec, rng)
+    corrupted = apply_tracking_precision_spec(
+        positions,
+        cast("dict[str, Any]", spec),
+        rng,
+    )
     _write_observed_pedestrian_positions(obs, corrupted)
     return obs, corrupted
 
@@ -798,7 +810,7 @@ def _update_topology_candidate_availability_fields(
 def _update_topology_guided_episode_fields(
     accumulator: _TopologyGuidedEpisodeAccumulator,
     *,
-    step: dict[str, Any],
+    step: PlannerDecisionTraceEntry,
     topology: dict[str, Any],
 ) -> None:
     """Fold one topology-guided planner-step row into the episode accumulator."""
@@ -843,7 +855,7 @@ def _update_topology_guided_episode_fields(
 
 
 def _collect_topology_guided_episode_fields(
-    planner_decision_trace: list[dict[str, Any]],
+    planner_decision_trace: list[PlannerDecisionTraceEntry],
 ) -> _TopologyGuidedEpisodeAccumulator | None:
     """Collect topology-guided fields from reduced planner-step rows.
 
@@ -915,7 +927,7 @@ def _topology_route_progress_summary(
 
 
 def _topology_guided_episode_diagnostics(
-    planner_decision_trace: list[dict[str, Any]],
+    planner_decision_trace: list[PlannerDecisionTraceEntry],
 ) -> dict[str, Any] | None:
     """Aggregate topology-guided lane diagnostics from reduced planner-step rows.
 
@@ -1138,7 +1150,7 @@ def _min_finite_or_inf(values: list[float]) -> float:
 
 def _build_tracking_precision_summary(
     *,
-    spec: dict[str, Any],
+    spec: TrackingPrecisionSpec,
     records: list[dict[str, Any]],
     min_separation_corrupted_values: list[float],
 ) -> dict[str, Any]:
@@ -1155,7 +1167,7 @@ def _build_tracking_precision_summary(
     """
     summary: dict[str, Any] = {
         "spec": spec,
-        "hash": tracking_precision_hash(spec),
+        "hash": tracking_precision_hash(cast("dict[str, Any]", spec)),
         "step_count": len(records),
         "min_separation_corrupted_m": _min_finite_or_inf(min_separation_corrupted_values),
         "contract_honored": (
@@ -1192,11 +1204,11 @@ class _EpisodeRunContext:
     ped_impact_window_steps: int
     benchmark_track: str | None
     track_schema_version: str | None
-    noise_spec: dict[str, Any]
+    noise_spec: NoiseSpec
     noise_rng: Any
     noise_state: Any
     noise_stats: Any
-    tracking_precision_spec: dict[str, Any]
+    tracking_precision_spec: TrackingPrecisionSpec
     tracking_precision_rng: Any
     safety_wrapper_runtime: Any
     cbf_runtime: Any
@@ -1257,13 +1269,18 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         track_schema_version,
         field_name="track_schema_version",
     )
-    noise_spec = normalize_observation_noise_spec(observation_noise)
-    noise_rng = make_observation_noise_rng(noise_spec, seed=seed, scenario_id=scenario_id)
-    noise_state = make_observation_noise_state(noise_spec)
+    noise_spec = cast("NoiseSpec", normalize_observation_noise_spec(observation_noise))
+    noise_rng = make_observation_noise_rng(
+        cast("dict[str, Any]", noise_spec), seed=seed, scenario_id=scenario_id
+    )
+    noise_state = make_observation_noise_state(cast("dict[str, Any]", noise_spec))
     noise_stats = new_observation_noise_stats()
-    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
+    tracking_precision_spec = cast(
+        "TrackingPrecisionSpec",
+        normalize_tracking_precision_spec(tracking_precision),
+    )
     tracking_precision_rng = make_tracking_precision_rng(
-        tracking_precision_spec,
+        cast("dict[str, Any]", tracking_precision_spec),
         seed=seed,
         scenario_id=scenario_id,
     )
@@ -1514,7 +1531,7 @@ class _PolicyContract:
     """
 
     policy_fn: Any
-    algo_meta: dict[str, Any]
+    algo_meta: AlgoMeta
     planner_close: Any
     planner_reset: Any
     planner_bind_env: Any
@@ -1597,12 +1614,15 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
         adapter_impact_eval=adapter_impact_eval,
         **extra_kwargs,
     )
-    algo_meta = enrich_algorithm_metadata(
-        algo=algo,
-        metadata=algo_meta,
-        robot_kinematics=robot_kinematics,
-        observation_mode=active_observation_mode,
-        observation_level=resolved_observation_level,
+    algo_meta = cast(
+        "AlgoMeta",
+        enrich_algorithm_metadata(
+            algo=algo,
+            metadata=cast("dict[str, Any]", algo_meta),
+            robot_kinematics=robot_kinematics,
+            observation_mode=active_observation_mode,
+            observation_level=resolved_observation_level,
+        ),
     )
     # Latency instrumentation resolves the planner configuration hash from the callable so
     # cached policies remain provenance-bound when a new harness is activated per episode.
@@ -1610,7 +1630,7 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
     algo_meta["learned_checkpoint_observation_contract"] = learned_observation_contract
     active_observation_level = str(algo_meta["observation_level"]["key"])
     attach_track_metadata(
-        algo_meta,
+        cast("dict[str, Any]", algo_meta),
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
         observation_level=active_observation_level,
@@ -1684,7 +1704,7 @@ class _EpisodeStepLoopResult:
     ammv_command_actions: list[dict[str, Any]]
     synthetic_actuation_trace: list[dict[str, Any]]
     hybrid_command_sources: list[str | None] | None
-    planner_decision_trace: list[dict[str, Any]]
+    planner_decision_trace: list[PlannerDecisionTraceEntry]
     simulation_step_trace: list[dict[str, Any]]
     view_integrity: dict[str, Any] | None
     planner_runtime_snapshot: dict[str, Any] | None
@@ -1702,17 +1722,17 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_close: Any,
     planner_stats: Any,
     planner_native_action: bool,
-    noise_spec: dict[str, Any],
+    noise_spec: NoiseSpec,
     noise_rng: Any,
     noise_state: Any,
     noise_stats: Any,
-    tracking_precision_spec: dict[str, Any],
+    tracking_precision_spec: TrackingPrecisionSpec,
     tracking_precision_rng: Any,
     safety_wrapper_runtime: Any,
     safety_wrapper_deadlock_monitor: Any,
     cbf_runtime: Any,
     actuation_controller: Any,
-    algo_meta: dict[str, Any],
+    algo_meta: AlgoMeta,
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
@@ -1746,7 +1766,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     hybrid_command_sources: list[str | None] | None = (
         [] if hybrid_source_field is not None else None
     )
-    planner_decision_trace: list[dict[str, Any]] = []
+    planner_decision_trace: list[PlannerDecisionTraceEntry] = []
     simulation_step_trace: list[dict[str, Any]] = []
     visibility_trace: list[np.ndarray | None] = []
     track_confidence_trace: list[np.ndarray | None] = []
@@ -1841,7 +1861,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 active_harness.start_cycle()
             policy_obs, step_noise_stats = apply_observation_noise(
                 obs,
-                noise_spec,
+                cast("dict[str, Any]", noise_spec),
                 noise_rng,
                 noise_state,
             )
@@ -1926,7 +1946,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 applied_linear, tracking_record = apply_speed_contract(
                     float(policy_command[0]),
                     float(tracking_precision_spec["target_motp_m"]),
-                    tracking_precision_spec,
+                    cast("dict[str, Any]", tracking_precision_spec),
                 )
                 policy_command = (
                     applied_linear,
@@ -2176,7 +2196,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     _value = planner_step_decision.get(_dwa_key)
                     if _value is not None:
                         step_decision[_dwa_key] = deepcopy(_value)
-                planner_decision_trace.append(step_decision)
+                planner_decision_trace.append(cast("PlannerDecisionTraceEntry", step_decision))
 
             meta = info.get("meta", {}) if isinstance(info, dict) else {}
             step_collision = collision_event(info)
@@ -2284,7 +2304,7 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     ctx: _EpisodeRunContext,
     loop_result: _EpisodeStepLoopResult,
     post_loop: _EpisodePostLoopResult,
-    algo_meta: dict[str, Any],
+    algo_meta: AlgoMeta,
     actuation_controller: Any,
     active_observation_mode: str,
     active_observation_level: str,
@@ -2300,11 +2320,11 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Assemble the benchmark JSONL record from the step-loop and post-loop results.
 
     Returns:
-        dict[str, Any]: The finalized episode record with metrics, provenance, and
+        EpisodeRecordDict: The finalized episode record with metrics, provenance, and
         planner metadata, mirroring the prior inline metadata-finalization phase.
     """
     scenario = ctx.scenario
@@ -2371,16 +2391,19 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact["status"] = "complete"
             impact["execution_mode"] = execution_mode
             impact["adapter_fraction"] = float(adapted_steps / total)
-            algo_meta = enrich_algorithm_metadata(
-                algo=algo,
-                metadata=algo_meta,
-                execution_mode=execution_mode,
-                robot_kinematics=robot_kinematics,
-                observation_mode=active_observation_mode,
-                observation_level=active_observation_level,
+            algo_meta = cast(
+                "AlgoMeta",
+                enrich_algorithm_metadata(
+                    algo=algo,
+                    metadata=cast("dict[str, Any]", algo_meta),
+                    execution_mode=execution_mode,
+                    robot_kinematics=robot_kinematics,
+                    observation_mode=active_observation_mode,
+                    observation_level=active_observation_level,
+                ),
             )
             attach_track_metadata(
-                algo_meta,
+                cast("dict[str, Any]", algo_meta),
                 benchmark_track=benchmark_track,
                 track_schema_version=track_schema_version,
                 observation_level=active_observation_level,
@@ -2389,7 +2412,7 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
         else:
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
-    _finalize_feasibility_metadata(algo_meta)
+    _finalize_feasibility_metadata(cast("dict[str, Any]", algo_meta))
     algo_meta["ammv_feasibility"] = evaluate_artifact_command_feasibility(ammv_command_actions)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
@@ -2401,27 +2424,31 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
             # before enrichment so a model-load fallback becomes structurally
             # evidence-ineligible in map-runner records as well.
             algo_meta["foresight_prediction"] = dict(foresight)
-            algo_meta = enrich_algorithm_metadata(
-                algo=algo,
-                metadata=algo_meta,
-                robot_kinematics=robot_kinematics,
-                observation_mode=active_observation_mode,
-                observation_level=active_observation_level,
+            algo_meta = cast(
+                "AlgoMeta",
+                enrich_algorithm_metadata(
+                    algo=algo,
+                    metadata=cast("dict[str, Any]", algo_meta),
+                    robot_kinematics=robot_kinematics,
+                    observation_mode=active_observation_mode,
+                    observation_level=active_observation_level,
+                ),
             )
             attach_track_metadata(
-                algo_meta,
+                cast("dict[str, Any]", algo_meta),
                 benchmark_track=benchmark_track,
                 track_schema_version=track_schema_version,
                 observation_level=active_observation_level,
                 observation_mode=active_observation_mode,
             )
     if record_planner_decision_trace:
-        algo_meta["planner_decision_trace"] = {
+        planner_trace: PlannerDecisionTrace = {
             "schema_version": "planner-decision-trace.v1",
             "dt": float(config.sim_config.time_per_step_in_secs),
             "initial_goal_distance_m": initial_goal_distance,
             "steps": planner_decision_trace,
         }
+        algo_meta["planner_decision_trace"] = planner_trace
         topology_episode = _topology_guided_episode_diagnostics(planner_decision_trace)
         if topology_episode is not None:
             algo_meta["topology_guided_episode"] = topology_episode
@@ -2433,7 +2460,7 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "steps": simulation_step_trace,
         }
         attach_pedestrian_control_trace(
-            algo_meta,
+            cast("dict[str, Any]", algo_meta),
             scenario=scenario,
             ped_positions=ped_pos_arr,
             ped_forces=ped_forces_arr if record_forces else None,
@@ -2554,8 +2581,8 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
         observation_level=active_observation_level,
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
-        observation_noise=noise_spec,
-        tracking_precision=tracking_precision_spec,
+        observation_noise=cast("dict[str, Any]", noise_spec),
+        tracking_precision=cast("dict[str, Any]", tracking_precision_spec),
         synthetic_actuation_profile=(
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
@@ -2610,10 +2637,12 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "public_requirement": public_requirement_events,
         "algorithm_metadata": algo_meta,
         "observation_noise": noise_spec,
-        "observation_noise_hash": observation_noise_hash(noise_spec),
+        "observation_noise_hash": observation_noise_hash(cast("dict[str, Any]", noise_spec)),
         "observation_noise_stats": noise_stats,
         "tracking_precision": tracking_precision_spec,
-        "tracking_precision_hash": tracking_precision_hash(tracking_precision_spec),
+        "tracking_precision_hash": tracking_precision_hash(
+            cast("dict[str, Any]", tracking_precision_spec)
+        ),
         "algo": algo,
         "observation_mode": active_observation_mode,
         "observation_level": active_observation_level,
@@ -2645,7 +2674,9 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     # ``metrics.deadlock``/``metrics.deadlock_stall``; the native detector's typed
     # trace is nested under the native command metadata rather than emitted as a
     # misleading top-level replacement.
-    is_native_nc, deadlock_field, planner_diag = native_command_metadata_for_record(algo_meta)
+    is_native_nc, deadlock_field, planner_diag = native_command_metadata_for_record(
+        cast("dict[str, Any]", algo_meta)
+    )
     if is_native_nc:
         algo_meta["planner_diagnostics"] = planner_diag
         native_metadata = algo_meta.get("native_command")
@@ -2681,8 +2712,10 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
             record_forces=bool(record_forces),
             active_observation_mode=active_observation_mode,
             active_observation_level=active_observation_level,
-            noise_hash=observation_noise_hash(noise_spec),
-            tracking_precision_hash=tracking_precision_hash(tracking_precision_spec),
+            noise_hash=observation_noise_hash(cast("dict[str, Any]", noise_spec)),
+            tracking_precision_hash=tracking_precision_hash(
+                cast("dict[str, Any]", tracking_precision_spec)
+            ),
         ),
         "postprocessing": [
             {"step": "compute_all_metrics", "status": "completed"},
@@ -2690,7 +2723,7 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ],
     }
     ensure_metric_parameters(record)
-    return record
+    return cast("EpisodeRecordDict", record)
 
 
 def run_map_episode(  # noqa: PLR0913
@@ -2725,11 +2758,11 @@ def run_map_episode(  # noqa: PLR0913
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
     Returns:
-        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+        EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
     ctx = _resolve_episode_run_context(
         scenario=scenario,

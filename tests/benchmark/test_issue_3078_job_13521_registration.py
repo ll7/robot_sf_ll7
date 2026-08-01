@@ -201,6 +201,10 @@ def test_domain_decision_overlay_preserves_renderer_state_and_binds_receipt() ->
         == receipt_binding["review_sidecar_sha256"]
     )
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["schema_version"] == "evidence-review-marker.v1"
+    assert sidecar["artifact_path"] == receipt_binding["path"]
+    assert sidecar["artifact_sha256"] == receipt_binding["sha256"]
+    assert sidecar["preserved_exact_bytes"] is True
     assert "DOMAIN-APPROVED" in sidecar["review_marker"]
     assert sidecar["review_source"] == OVERLAY_NAME
 

@@ -570,6 +570,7 @@ def test_imagine_rejects_non_mapping_episode_provenance() -> None:
     [
         (np.zeros(_BASE_OBS_DIM + 1, dtype=float), "observation must have shape"),
         (np.full(_BASE_OBS_DIM, np.nan, dtype=float), "observation must contain only finite"),
+        (np.ones(_BASE_OBS_DIM, dtype=bool), "observation must not contain booleans"),
         ("not-a-vector", "observation must be a numeric vector"),
     ],
 )
@@ -585,6 +586,7 @@ def test_encode_rejects_malformed_observation(observation: object, message: str)
     [
         (np.zeros(ACTION_DIM + 1, dtype=float), "action must have shape"),
         (np.full(ACTION_DIM, np.inf, dtype=float), "action must contain only finite"),
+        (np.ones(ACTION_DIM, dtype=bool), "action must not contain booleans"),
     ],
 )
 def test_step_rejects_malformed_action(action: object, message: str) -> None:
@@ -694,6 +696,16 @@ def test_latent_rollout_rejects_continuation_out_of_range() -> None:
             np.full((2, _BASE_OBS_DIM), np.nan, dtype=float),
             np.zeros((2, ACTION_DIM), dtype=float),
             "observations must contain only finite",
+        ),
+        (
+            np.ones((2, _BASE_OBS_DIM), dtype=bool),
+            np.zeros((2, ACTION_DIM), dtype=float),
+            "observations must not contain booleans",
+        ),
+        (
+            np.zeros((2, _BASE_OBS_DIM), dtype=float),
+            np.ones((2, ACTION_DIM), dtype=bool),
+            "actions must not contain booleans",
         ),
     ],
 )

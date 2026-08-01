@@ -177,6 +177,26 @@ def _as_finite_float(value: Any, name: str) -> float:
     return numeric_value
 
 
+def _contains_boolean(value: Any) -> bool:
+    """Return whether a scalar or nested array-like value contains a boolean.
+
+    NumPy's float coercion silently converts booleans to ``0.0`` or ``1.0``.  That would weaken the
+    adapter's continuous-observation/action boundary, so vector and matrix inputs reject booleans
+    before coercion.
+    """
+    if isinstance(value, bool | np.bool_):
+        return True
+    if isinstance(value, np.ndarray):
+        if value.dtype.kind == "b":
+            return True
+        if value.dtype.kind != "O":
+            return False
+        return any(_contains_boolean(item) for item in value.flat)
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        return any(_contains_boolean(item) for item in value)
+    return False
+
+
 def _require_finite_array(
     value: Any,
     name: str,
@@ -1186,6 +1206,8 @@ def _as_finite_vector(value: Any, name: str, expected_width: int) -> np.ndarray:
         raise OpenDreamerDynamicsError(
             f"{name} must be a numeric vector, got {type(value).__name__}"
         )
+    if _contains_boolean(value):
+        raise OpenDreamerDynamicsError(f"{name} must not contain booleans")
     try:
         array = np.asarray(value, dtype=float)
     except (OverflowError, TypeError, ValueError) as exc:
@@ -1218,6 +1240,8 @@ def _as_finite_matrix(value: Any, name: str, expected_width: int) -> np.ndarray:
         raise OpenDreamerDynamicsError(
             f"{name} must be a numeric matrix, got {type(value).__name__}"
         )
+    if _contains_boolean(value):
+        raise OpenDreamerDynamicsError(f"{name} must not contain booleans")
     try:
         array = np.asarray(value, dtype=float)
     except (OverflowError, TypeError, ValueError) as exc:

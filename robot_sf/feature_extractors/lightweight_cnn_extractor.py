@@ -148,5 +148,8 @@ def __getattr__(name: str) -> Any:
         global _cache
         if _cache is None:
             _cache = _init_classes()
+            for lazy_name, value in _cache.items():
+                value.__qualname__ = lazy_name
+                globals()[lazy_name] = value
         return _cache[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

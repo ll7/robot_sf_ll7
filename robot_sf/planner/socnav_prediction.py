@@ -105,12 +105,15 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 ),
             )
             logger.info(
-                f"PredictionPlannerAdapter: built BaselineProbabilisticPredictor for variant {variant!r}"
+                "PredictionPlannerAdapter: built BaselineProbabilisticPredictor for variant {!r}",
+                variant,
             )
             return "native"
         except (TypeError, ValueError) as exc:
             logger.warning(
-                f"PredictionPlannerAdapter: failed to build baseline predictor for {variant!r}: {exc}"
+                "PredictionPlannerAdapter: failed to build baseline predictor for {!r}: {}",
+                variant,
+                exc,
             )
             if self._allow_fallback:
                 return "degraded"
@@ -119,7 +122,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             ) from exc
         except ImportError as exc:
             logger.warning(
-                f"PredictionPlannerAdapter: forecast predictor unavailable for {variant!r}: {exc}"
+                "PredictionPlannerAdapter: forecast predictor unavailable for {!r}: {}",
+                variant,
+                exc,
             )
             if self._allow_fallback:
                 return "degraded"
@@ -605,7 +610,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         try:
             prediction = self._baseline_predictor.predict(observation)
         except (FloatingPointError, TypeError, ValueError) as exc:
-            logger.warning(f"Baseline predictor failed: {exc}; using constant-velocity fallback")
+            logger.warning(
+                "Baseline predictor failed: {}; using constant-velocity fallback",
+                exc,
+            )
             return self._constant_velocity_prediction(state, mask)
 
         future = self._constant_velocity_prediction(state, mask)

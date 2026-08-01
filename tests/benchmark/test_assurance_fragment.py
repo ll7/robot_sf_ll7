@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,12 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _canonical_payload_digest(payload: dict[str, object]) -> str:
+    """Return a stable digest that pins every payload key and value."""
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def test_build_assurance_fragment_from_fixture(tmp_path: Path) -> None:
@@ -75,3 +82,20 @@ def test_build_assurance_fragment_from_fixture(tmp_path: Path) -> None:
     assert written["json"].exists()
     assert written["markdown"].exists()
     assert written["svg"].exists()
+
+
+def test_assurance_fragment_representative_payload_is_exact() -> None:
+    """Pin every stable field in the campaign fixture payload across refactors."""
+    repo_root = get_repository_root()
+    fixture_path = (
+        repo_root
+        / "docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json"
+    )
+    campaign_summary = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    payload = build_assurance_fragment(campaign_summary, repo_root=repo_root)
+    payload.pop("generated_at_utc")
+
+    assert _canonical_payload_digest(payload) == (
+        "7083dabe76a5ad5423a7ab17137b98b6019fc9ba39d7dc0aa7cc8809282f1a18"
+    )

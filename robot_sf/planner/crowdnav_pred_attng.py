@@ -350,7 +350,7 @@ class CrowdNavPredAttnGraphAdapter:
         self._policy.eval()
         self.reset()
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset the two SRNN recurrent hidden-state tensors to zeros."""
         del seed
         base = self._policy.base

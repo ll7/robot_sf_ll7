@@ -62,8 +62,9 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._rvo2_ped_ids: list[int] = []
         self.reset()
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear per-episode commitment and stall tracking state."""
+        del seed
         self._stall_cycles = 0
         self._last_goal_distance: float | None = None
         self._commit_side = 0

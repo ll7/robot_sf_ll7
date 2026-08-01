@@ -136,8 +136,9 @@ class PolicyStackV1Adapter:
         self._shield_intervention_count = 0
         self._last_step: dict[str, Any] | None = None
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear episode-local diagnostics and reset child proposals."""
+        del seed
         self._steps = 0
         self._status_counts = _empty_status_counts()
         self._selection_counts.clear()

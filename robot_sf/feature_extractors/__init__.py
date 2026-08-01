@@ -10,19 +10,35 @@ compatibility with Stable-Baselines3 and the sensor fusion system. The legacy
 All extractors implement the same interface and work with the same observation spaces.
 """
 
-from .attention_extractor import AttentionFeatureExtractor
-from .grid_socnav_extractor import GridSocNavExtractor
-from .lightweight_cnn_extractor import LightweightCNNExtractor
-from .lstm_extractor import LSTMFeatureExtractor
-from .mamba_extractor import MambaFeatureExtractor, MambaFeatureExtractorConfig
-from .mlp_extractor import MLPFeatureExtractor
+from __future__ import annotations
 
-__all__ = [
-    "AttentionFeatureExtractor",
-    "GridSocNavExtractor",
-    "LSTMFeatureExtractor",
-    "LightweightCNNExtractor",
-    "MLPFeatureExtractor",
-    "MambaFeatureExtractor",
-    "MambaFeatureExtractorConfig",
-]
+from importlib import import_module
+from typing import Any
+
+_LAZY_EXPORTS = {
+    "AttentionFeatureExtractor": "robot_sf.feature_extractors.attention_extractor",
+    "GridSocNavExtractor": "robot_sf.feature_extractors.grid_socnav_extractor",
+    "LightweightCNNExtractor": "robot_sf.feature_extractors.lightweight_cnn_extractor",
+    "LSTMFeatureExtractor": "robot_sf.feature_extractors.lstm_extractor",
+    "MambaFeatureExtractor": "robot_sf.feature_extractors.mamba_extractor",
+    "MambaFeatureExtractorConfig": "robot_sf.feature_extractors.mamba_extractor",
+    "MLPFeatureExtractor": "robot_sf.feature_extractors.mlp_extractor",
+}
+
+__all__ = list(_LAZY_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve extractor exports only when an extractor is requested.
+
+    Returns:
+        The requested extractor class or configuration type.
+    """
+    try:
+        module_name = _LAZY_EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value
+    return value

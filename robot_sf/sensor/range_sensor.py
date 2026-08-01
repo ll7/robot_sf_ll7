@@ -208,7 +208,7 @@ def raycast_pedestrians(
     ped_positions: np.ndarray,
     ped_radius: float,
     ray_angles: np.ndarray,
-):
+) -> None:
     """Perform raycasts to detect pedestrians within the scanner's range.
 
     Args:
@@ -239,7 +239,7 @@ def raycast_circles(
     max_scan_range: float,
     circles: np.ndarray,
     ray_angles: np.ndarray,
-):
+) -> None:
     """Update ray ranges with intersections against circular obstacles.
 
     Args:
@@ -285,7 +285,7 @@ def raycast_obstacles(
     scanner_pos: Vec2D,
     obstacles: np.ndarray,
     ray_angles: np.ndarray,
-):
+) -> None:
     """Update ray ranges with intersections against static obstacle segments.
 
     Args:
@@ -654,7 +654,9 @@ def _dynamic_objects_to_circle_array(occ: ContinuousOccupancy) -> np.ndarray | N
 
 
 @numba.njit(fastmath=True, nogil=True)
-def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_scan_dist: float):
+def range_postprocessing(
+    out_ranges: np.ndarray, scan_noise: np.ndarray, max_scan_dist: float
+) -> None:
     """Clip and optionally corrupt ray ranges in place.
 
     Args:

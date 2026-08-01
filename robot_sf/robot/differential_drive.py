@@ -116,7 +116,7 @@ class DifferentialDriveMotion:
 
     config: DifferentialDriveSettings
 
-    def move(self, state: DifferentialDriveState, action: PolarVec2D, d_t: float):
+    def move(self, state: DifferentialDriveState, action: PolarVec2D, d_t: float) -> None:
         """
         Updates the robot's state including position and velocity based on
         the action taken and elapsed time.
@@ -352,7 +352,7 @@ class DifferentialDriveRobot:
         """
         return self.state.velocity
 
-    def apply_action(self, action: DifferentialDriveAction, d_t: float):
+    def apply_action(self, action: DifferentialDriveAction, d_t: float) -> None:
         """
         Applies an action to the robot over a time interval.
 
@@ -363,7 +363,7 @@ class DifferentialDriveRobot:
         """
         self.movement.move(self.state, action, d_t)
 
-    def reset_state(self, new_pose: RobotPose):
+    def reset_state(self, new_pose: RobotPose) -> None:
         """
         Resets the robot's state to a new pose.
 

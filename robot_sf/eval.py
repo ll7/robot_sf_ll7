@@ -158,7 +158,7 @@ class EnvMetrics:
         """
         return self.pedestrian_collisions / self.total_routes
 
-    def update(self, meta: dict):
+    def update(self, meta: dict) -> None:
         """auto-generated docstring replacement Document this function.
 
         Args:
@@ -289,7 +289,7 @@ class VecEnvMetrics:
         """
         return sum(m.pedestrian_collision_rate for m in self.metrics) / len(self.metrics)
 
-    def update(self, metas: list[dict]):
+    def update(self, metas: list[dict]) -> None:
         """auto-generated docstring replacement Document this function.
 
         Args:
@@ -502,7 +502,7 @@ class PedEnvMetrics:
         """
         return mean(self.avg_distance) if self.avg_distance else 0.0
 
-    def update(self, meta: dict):
+    def update(self, meta: dict) -> None:
         """auto-generated docstring replacement Document this function.
 
         Args:
@@ -701,7 +701,7 @@ class PedVecEnvMetrics:
         """Backward-compatible alias for average collision impact angle."""
         return self.avg_collision_impact_angle_rad_at_collision
 
-    def update(self, metas: list[dict]):
+    def update(self, metas: list[dict]) -> None:
         """auto-generated docstring replacement Document this function.
 
         Args:

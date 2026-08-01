@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+# These aliases must remain available to runtime annotation consumers such as schema tooling.
+from collections.abc import Callable  # noqa: TC003
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from robot_sf.benchmark.types import EpisodeRecordDict  # noqa: TC001
 
 
 def _param_or_default(params: dict[str, Any], key: str, default: Any) -> Any:
@@ -34,12 +35,12 @@ def _required_path_param(params: dict[str, Any], key: str) -> Path:
 def execute_map_job(
     job: tuple[dict[str, Any], int, dict[str, Any]],
     *,
-    run_map_episode: Callable[..., dict[str, Any]],
-) -> dict[str, Any]:
+    run_map_episode: Callable[..., EpisodeRecordDict],
+) -> EpisodeRecordDict:
     """Execute one serialized map-runner job with the supplied episode runner.
 
     Returns:
-        dict[str, Any]: Episode record returned by ``run_map_episode``.
+        EpisodeRecordDict: Episode record returned by ``run_map_episode``.
     """
     scenario, seed, params = job
     algo = str(_param_or_default(params, "algo", "goal"))

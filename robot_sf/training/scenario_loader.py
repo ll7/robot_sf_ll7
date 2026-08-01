@@ -1915,6 +1915,23 @@ def _resolve_speed_override(
     return float(value) if value is not None else None
 
 
+def _resolve_start_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> tuple[float, float]:
+    """Resolve an optional coordinate override for a pedestrian start position.
+
+    Returns:
+        tuple[float, float]: Existing or overridden start position.
+    """
+    if "start" not in entry:
+        return ped.start
+    value = entry.get("start")
+    if value is None:
+        raise ValueError("'start' must be a 2-item list or tuple")
+    return _coerce_point(value, "start")
+
+
 def _resolve_wait_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
@@ -2087,6 +2104,7 @@ def _apply_single_pedestrian_override(
     Returns:
         SinglePedestrianDefinition: Updated pedestrian definition.
     """
+    start = _resolve_start_override(ped, entry)
     goal, trajectory, trajectory_labels = _resolve_goal_trajectory_override(ped, entry, map_def)
     speed = _resolve_speed_override(ped, entry)
     wait_at = _resolve_wait_override(
@@ -2107,7 +2125,7 @@ def _apply_single_pedestrian_override(
 
     return SinglePedestrianDefinition(
         id=ped.id,
-        start=ped.start,
+        start=start,
         goal=goal,
         trajectory=trajectory,
         speed_m_s=speed,

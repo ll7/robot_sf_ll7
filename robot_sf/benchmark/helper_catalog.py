@@ -51,7 +51,7 @@ def prepare_classic_env(
         raise RuntimeError(f"Environment preparation failed: {e}") from e
 
 
-def load_trained_policy(path: str):
+def load_trained_policy(path: str) -> Any:
     """Load and cache a trained PPO policy from the specified path.
 
     This function implements caching based on absolute path to ensure

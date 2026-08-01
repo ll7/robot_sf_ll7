@@ -559,6 +559,11 @@ entries:
   ready: true
   reasons: []
   configs:
+  - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_base.yaml
+    path: configs/training/ppo/expert_ppo_issue_576_br06_base.yaml
+    exists: true
+    sha256: 5d1a65b83f8fd183c76ed0587bb4c3a921bbe09a6ba9cc736bfc660c93b09fdc
+    sha256_matches: true
   - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     exists: true
@@ -766,6 +771,11 @@ entries:
   reasons:
   - missing launch/validation command
   configs:
+  - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_base.yaml
+    path: configs/training/ppo/expert_ppo_issue_576_br06_base.yaml
+    exists: true
+    sha256: 5d1a65b83f8fd183c76ed0587bb4c3a921bbe09a6ba9cc736bfc660c93b09fdc
+    sha256_matches: true
   - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
     exists: true

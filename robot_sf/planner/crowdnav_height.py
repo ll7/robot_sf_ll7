@@ -557,7 +557,7 @@ class CrowdNavHeightAdapter:
             return
         self._obstacle_segments = arr.reshape(-1, 4)[:, :4]
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset recurrent state and upstream Turtlebot desired velocities."""
         del seed
         import torch  # noqa: PLC0415
@@ -993,6 +993,10 @@ class CrowdNavHeightAdapter:
         dt = float(np.asarray(dt_source, dtype=float).reshape(-1)[0])
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "CrowdNavHeightAdapter"}
 
 
 __all__ = [

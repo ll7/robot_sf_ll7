@@ -247,6 +247,10 @@ class DummyLearnedLocalPolicyAdapter:
                 "forbidden evaluation-time observation inputs: " + ", ".join(forbidden)
             )
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "DummyLearnedLocalPolicyAdapter"}
+
 
 __all__ = [
     "DummyLearnedLocalPolicyAdapter",

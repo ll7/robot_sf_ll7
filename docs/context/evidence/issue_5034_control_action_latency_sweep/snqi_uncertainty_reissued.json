@@ -123,7 +123,7 @@
       "module": "robot_sf.benchmark.control_action_latency_snqi",
       "reissue_function": "build_uncertainty_reissue",
       "source_rel_path": "robot_sf/benchmark/control_action_latency_snqi.py",
-      "source_sha256": "75e52358770bd3c5b1bbd4c4397651e7bbd324a56b9e8be964509e9ea064d38a"
+      "source_sha256": "440d28c8508c99da8c26f2e02be7c8cd0f2618f63f87154c9f93d3b1b3d3eb15"
     },
     "job_id": 13516,
     "job_label": "5034c-issue5034-latency-sweep",

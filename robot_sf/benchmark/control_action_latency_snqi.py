@@ -51,12 +51,7 @@ from robot_sf.benchmark.control_action_latency_preflight import (
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.snqi.compute import compute_snqi
 from robot_sf.errors import RobotSfError
-from robot_sf.evidence.writers import (
-    review_marker_comment,
-    review_marker_json,
-    write_csv,
-    write_json,
-)
+from robot_sf.evidence.writers import review_marker_comment, review_marker_json
 
 #: Versioned schema for the generated SNQI analysis packet (issue #5912 DoD #1).
 ANALYSIS_SCHEMA_VERSION = "control-action-latency-snqi-analysis.v1"
@@ -617,7 +612,7 @@ def write_input_provenance(
             ),
         },
     }
-    write_json(path, payload)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
 
@@ -1273,8 +1268,9 @@ def write_snqi_analysis(packet: Mapping[str, Any], evidence_dir: str | Path) -> 
 
     public_packet = {key: value for key, value in packet.items() if not key.startswith("_")}
     analysis_path = out / "snqi_analysis.json"
-    # Keep the historical insertion order for this public diagnostic reference.
-    write_json(analysis_path, public_packet, sort_keys=False)
+    analysis_path.write_text(
+        json.dumps(public_packet, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
 
     csv_path = out / "snqi_by_latency.csv"
     csv_fields = [
@@ -1291,41 +1287,34 @@ def write_snqi_analysis(packet: Mapping[str, Any], evidence_dir: str | Path) -> 
         "snqi_slope_ci_high",
         "point_estimate_robustness_rank",
     ]
-    csv_rows: list[dict[str, Any]] = []
-    for row in packet["point_estimate_robustness_ranking"]:
-        means = {
-            0: row["snqi_mean_at_0_steps"],
-            1: row["snqi_mean_at_1_step"],
-            3: row["snqi_mean_at_3_steps"],
-        }
-        ci_lo, ci_hi = row["snqi_slope_95pct_ci"]
-        for step in EXPECTED_LATENCY_STEPS:
-            csv_rows.append(
-                {
-                    "planner_group": row["planner_group"],
-                    "planner": row["planner"],
-                    "execution_mode": row["execution_mode"],
-                    "latency_steps": step,
-                    "latency_ms_equivalent": step * MS_PER_LATENCY_STEP,
-                    "paired_units": row["paired_units"],
-                    "snqi_mean": means[step],
-                    "snqi_delta_vs_zero": (0.0 if step == 0 else means[step] - means[0]),
-                    "snqi_slope_per_100ms": row["snqi_slope_per_100ms"],
-                    "snqi_slope_ci_low": ci_lo,
-                    "snqi_slope_ci_high": ci_hi,
-                    "point_estimate_robustness_rank": row["rank"],
-                }
-            )
-    if csv_rows:
-        write_csv(csv_path, csv_rows)
-    else:
-        # Preserve the historical header-only output for an empty ranking. The shared writer
-        # intentionally rejects empty row lists, while this public writer has always emitted
-        # the marker and schema header for that input.
-        with csv_path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(review_marker_comment() + "\n")
-            csv_writer = csv.DictWriter(handle, fieldnames=csv_fields, lineterminator="\n")
-            csv_writer.writeheader()
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(review_marker_comment() + "\n")
+        writer = csv.DictWriter(handle, fieldnames=csv_fields, lineterminator="\n")
+        writer.writeheader()
+        for row in packet["point_estimate_robustness_ranking"]:
+            means = {
+                0: row["snqi_mean_at_0_steps"],
+                1: row["snqi_mean_at_1_step"],
+                3: row["snqi_mean_at_3_steps"],
+            }
+            ci_lo, ci_hi = row["snqi_slope_95pct_ci"]
+            for step in EXPECTED_LATENCY_STEPS:
+                writer.writerow(
+                    {
+                        "planner_group": row["planner_group"],
+                        "planner": row["planner"],
+                        "execution_mode": row["execution_mode"],
+                        "latency_steps": step,
+                        "latency_ms_equivalent": step * MS_PER_LATENCY_STEP,
+                        "paired_units": row["paired_units"],
+                        "snqi_mean": means[step],
+                        "snqi_delta_vs_zero": (0.0 if step == 0 else means[step] - means[0]),
+                        "snqi_slope_per_100ms": row["snqi_slope_per_100ms"],
+                        "snqi_slope_ci_low": ci_lo,
+                        "snqi_slope_ci_high": ci_hi,
+                        "point_estimate_robustness_rank": row["rank"],
+                    }
+                )
     return [analysis_path, csv_path]
 
 
@@ -1721,7 +1710,7 @@ def write_uncertainty_reissue(
     """
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_json(path, dict(reissue_packet))
+    path.write_text(json.dumps(reissue_packet, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
 

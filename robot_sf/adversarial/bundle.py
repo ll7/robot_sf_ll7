@@ -284,8 +284,9 @@ def _rebase_template_map_file(
     Scenario-loader map paths are resolved relative to the scenario YAML that contains them.
     Candidate bundles live in a different directory from their template, so copying a relative
     ``map_file`` verbatim would point at the wrong location and make the generated bundle
-    unloadable. Leave unresolved references untouched so this helper does not hide an existing
-    template-resolution problem.
+    unloadable. Template files also commonly use repository-root-relative paths such as
+    ``maps/svg_maps/debug_05.svg``; search the template's ancestor directories for those
+    references before leaving an unresolved path untouched.
     """
     map_file = scenario.get("map_file")
     if not isinstance(map_file, str) or not map_file.strip():
@@ -293,8 +294,15 @@ def _rebase_template_map_file(
     source_reference = Path(map_file)
     if source_reference.is_absolute():
         return scenario
-    source_path = (template_path.parent / source_reference).resolve()
-    if not source_path.exists():
+
+    template_root = template_path.resolve().parent
+    source_path: Path | None = None
+    for base_dir in (template_root, *template_root.parents):
+        candidate_path = (base_dir / source_reference).resolve()
+        if candidate_path.exists():
+            source_path = candidate_path
+            break
+    if source_path is None:
         return scenario
     updated = dict(scenario)
     updated["map_file"] = Path(

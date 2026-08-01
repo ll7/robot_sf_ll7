@@ -974,6 +974,39 @@ def test_write_candidate_inputs_rebases_template_map_for_runtime_loader(tmp_path
     assert pedestrian.wait_at[0].wait_s == pytest.approx(0.75)
 
 
+def test_write_candidate_inputs_rebases_repository_relative_map_for_runtime_loader(
+    tmp_path: Path,
+) -> None:
+    """Generated bundles should resolve repository-root-relative map references too."""
+    template_path = Path("configs/scenarios/debug_scenario.yaml").resolve()
+    search_space_path = tmp_path / "space.yaml"
+    _write_space(search_space_path)
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template_path,
+        search_space=search_space_path,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "out",
+        budget=1,
+        seed=123,
+    )
+
+    scenario_path, _route_path = write_candidate_inputs(
+        config=config,
+        candidate=config.search_space.sample_candidate(Random(123)),
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    scenario = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"][0]
+
+    expected_map = Path("maps/svg_maps/debug_05.svg").resolve()
+    assert (scenario_path.parent / scenario["map_file"]).resolve() == expected_map
+
+    runtime_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    map_def = next(iter(runtime_config.map_pool.map_defs.values()))
+    assert map_def.width > 0
+
+
 def test_multi_ped_config_converts_to_runtime_single_pedestrians_with_metadata() -> None:
     """Runtime definitions should preserve adversarial attribution metadata per pedestrian."""
     config = _runtime_multi_ped_config()

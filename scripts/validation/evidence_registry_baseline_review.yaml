@@ -14,12 +14,12 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 6109
-latest_reviewed_date: 2026-07-22
+latest_reconciliation_issue: 6156
+latest_reviewed_date: 2026-07-30
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 410
+refreshed_baseline_total_findings: 397
 refreshed_baseline_files_with_findings: 86
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
@@ -66,6 +66,14 @@ decision_summary: >-
   hash_without_artifact_path findings. Regenerating the baseline also locks in six resolved
   uncommitted-artifact findings from h600_source_reports_manifest.json, reducing the baseline
   from 414 findings across 87 files to 410 findings across 86 files.
+  Package A addendum (issue #6156 / PR #6423): the consolidated diagnostic bundle committed the
+  thirteen artifact-manifest paths that had previously been recorded as untracked, resolving all
+  thirteen uncommitted_artifact_missing_location findings on artifact_manifest.yaml. Regenerating
+  the baseline locks in that reduction from 410 to 397 findings across the same 86 files. The
+  source episode store remains external under private-campaign://, so its single
+  hash_without_artifact_path finding remains explicitly baselined below. This reconciliation
+  changes provenance bookkeeping only; the bundle remains diagnostic-only and both reported
+  analyses remain not_identifiable.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -83,13 +91,14 @@ reviewed_files:
       77 hash_without_artifact_path findings. Recovering the private dataset location is external
       maintainer action.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/artifact_manifest.yaml
-    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
+    codes: [hash_without_artifact_path]
     disposition: baseline
     reason: >-
       Package-a transfer manifest. The prior bare README.md path was repaired to use the intended
-      repository-relative artifact path, so it no longer produces artifact_hash_mismatch. The
-      uncommitted_artifact_missing_location rows are external campaign store / untracked table
-      artifacts; hash_without_artifact_path is the external episode-store checksum. All are
+      repository-relative artifact path, and PR #6423 committed every declared compact evidence
+      artifact, so neither artifact_hash_mismatch nor uncommitted_artifact_missing_location
+      remains. The sole remaining finding is hash_without_artifact_path for the external source
+      episode store under private-campaign://; recovering that private-store binding remains
       provenance-backfill legacy debt.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json
     codes: [hash_without_artifact_path]

@@ -1,12 +1,33 @@
+# Preliminary Package A claim card (issue #3078, job 13521 real held-out pilot).
+# REVIEWED
+# Mirrors the canonical campaign-claim-card.v1 shape. This card records the
+# final diagnostic classification for real-data diagnostics that are both
+# not_identifiable; it is not benchmark evidence and not paper-facing.
 schema_version: package-a-transfer-claim-card.v1
 issue: 3078
 claim_status: reviewed
 classification: diagnostic
-claim_boundary: Diagnostic-only evidence freeze. Single seed 111 prevents rank-stability
+evidence_tier: diagnostic
+decision_packet_classification: diagnostic
+issue_result_classification: diagnostic
+seed_rank_stability_classification: not_identifiable
+seed_rank_stability_reason: single evaluation seed (111); stability requires
+  multiple seeds per (cell, planner)
+heldout_transfer_delta_classification: not_identifiable
+heldout_transfer_delta_reason: no eligible benchmark-set comparator (frozen by
+  #6150 / merged PR #6166); held-out transfer delta empty, claim_eligible=false
+claim_boundary: >
+  Diagnostic-only evidence freeze. Single seed 111 prevents rank-stability
   inference; no eligible comparator prevents a transfer-delta claim; adapter rows
-  remain adapter-labeled. No benchmark, ranking, paper-facing, or adapter-to-native
-  promotion claim is approved.
+  (social_force, orca) remain adapter-labeled and are never relabeled native-only.
+  No benchmark, ranking, paper-facing, or adapter-to-native promotion claim is approved.
 eligible_row_statuses:
 - adapter
 - native
 non_promotable_row_status_counts: {}
+review_required_before_paper_use: true
+forbidden_actions_confirmed:
+  benchmark_campaign_run: false
+  compute_submit: false
+  ranking_claim_promotion: false
+  paper_claim_edits: false

@@ -87,6 +87,36 @@ def _pipeline_test_output_root(tmp_path: Path) -> str:
     return str(tmp_path / "predictive_pipeline_output")
 
 
+@pytest.mark.parametrize("key", ["pin_memory", "persistent_workers"])
+@pytest.mark.parametrize("value", ["false", 0, 1, None])
+def test_loader_boolean_config_rejects_non_boolean_values(key: str, value: object) -> None:
+    """New loader flags must not enable accidentally through Python truthiness."""
+    with pytest.raises(TypeError, match=rf"training\.{key} must be a boolean"):
+        pipeline._config_bool({key: value}, key=key, default=False)
+
+
+@pytest.mark.parametrize(
+    ("key", "minimum", "value"),
+    [
+        ("num_workers", 0, True),
+        ("num_workers", 0, 1.0),
+        ("num_workers", 0, -1),
+        ("prefetch_factor", 1, False),
+        ("prefetch_factor", 1, 2.0),
+        ("prefetch_factor", 1, 0),
+    ],
+)
+def test_loader_integer_config_rejects_coerced_or_out_of_range_values(
+    key: str,
+    minimum: int,
+    value: object,
+) -> None:
+    """Worker settings must reject YAML values that would silently change loader behavior."""
+    expected = "must be an integer" if isinstance(value, bool | float) else "must be >="
+    with pytest.raises((TypeError, ValueError), match=rf"training\.{key} {expected}"):
+        pipeline._config_int({key: value}, key=key, default=minimum, minimum=minimum)
+
+
 def _make_ego_pipeline_run_stub(invoked: list[list[str]]):
     """Return a pipeline stage stub that materializes ego-conditioned dataset artifacts."""
     ego_schema_json = _predictive_feature_schema_json(
@@ -293,7 +323,12 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
                     "ego_conditioning": True,
                 },
                 "mixing": {},
-                "training": {},
+                "training": {
+                    "num_workers": 3,
+                    "pin_memory": True,
+                    "persistent_workers": True,
+                    "prefetch_factor": 5,
+                },
                 "wandb": {"enabled": False},
                 "evaluation": {},
             },
@@ -342,8 +377,15 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     collector_cmds = [
         cmd for cmd in invoked if any("collect_predictive_hardcase_data.py" in part for part in cmd)
     ]
+    train_cmd = next(
+        cmd for cmd in invoked if any("train_predictive_planner.py" in part for part in cmd)
+    )
     assert len(collector_cmds) == 2
     assert all("--ego-conditioning" in cmd for cmd in collector_cmds)
+    assert train_cmd[train_cmd.index("--num-workers") + 1] == "3"
+    assert train_cmd[train_cmd.index("--prefetch-factor") + 1] == "5"
+    assert "--pin-memory" in train_cmd
+    assert "--persistent-workers" in train_cmd
     final_summary = json.loads(resolved_paths.final_summary.read_text(encoding="utf-8"))
     assert final_summary["producer_metadata_preflight"]["status"] == "ok"
     mixed_manifest = json.loads(

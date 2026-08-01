@@ -14,7 +14,7 @@
     },
     "tests": {
       "files": 181,
-      "occurrences": 1254
+      "occurrences": 1249
     }
   },
   "files": {
@@ -93,7 +93,7 @@
     "tests/ped_grouping_test.py": 21,
     "tests/perf/test_factory_creation_perf.py": 4,
     "tests/perf_utils/guidance.py": 3,
-    "tests/perf_utils/reporting.py": 12,
+    "tests/perf_utils/reporting.py": 7,
     "tests/perf_utils/test_guidance.py": 3,
     "tests/perf_utils/test_slow_report_fixture.py": 1,
     "tests/research/test_cli_help.py": 5,
@@ -229,6 +229,6 @@
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
     "files": 201,
-    "total_occurrences": 1716
+    "total_occurrences": 1711
   }
 }

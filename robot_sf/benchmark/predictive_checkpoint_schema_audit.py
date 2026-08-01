@@ -422,7 +422,8 @@ def audit_predictive_checkpoint_schema(
             )
             continue
 
-        assert resolved is not None  # Successful resolution with a file narrows to Path.
+        if resolved is None:
+            raise RuntimeError("successful checkpoint resolution produced no path")
         try:
             metadata = load_predictive_checkpoint_metadata(resolved)
         except (FileNotFoundError, RuntimeError, ValueError, OSError, EOFError) as exc:

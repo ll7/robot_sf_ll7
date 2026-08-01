@@ -92,7 +92,8 @@ class ForecastBatchSchema:
 
     def _extract_version(self) -> None:
         """Extract version information from schema."""
-        assert self._schema_data is not None, "Schema data must be loaded before version extraction"
+        if self._schema_data is None:
+            raise RuntimeError("Schema data must be loaded before version extraction")
         properties = self._schema_data.get("properties", {})
         version_prop = properties.get("schema_version", {})
 

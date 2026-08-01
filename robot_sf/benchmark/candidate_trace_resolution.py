@@ -779,7 +779,7 @@ def load_episode_requests(  # noqa: C901
     )
 
 
-def load_episode_mapping(  # noqa: C901, PLR0912
+def load_episode_mapping(  # noqa: C901, PLR0912, PLR0915
     path: Path,
     *,
     expected_count: int | None = ISSUE_5756_REQUEST_COUNT,
@@ -887,12 +887,16 @@ def load_episode_mapping(  # noqa: C901, PLR0912
             raise CandidateTraceResolutionError(
                 f"episode mapping row {index} marks an outcome mismatch with equal outcomes"
             )
-        # Internal type-narrowing invariants: the fail-closed checks above reject
-        # every missing identity, trace, digest, or outcome before this point.
-        assert episode_id is not None
-        assert release_episode_id is not None
-        assert scenario_id is not None and planner is not None and seed is not None
-        assert trace_uri is not None and trace_sha256 is not None
+        # The fail-closed checks above reject every missing identity, trace, digest,
+        # or outcome before this point. Keep those guarantees under Python -O.
+        if episode_id is None:
+            raise ValueError(f"episode mapping row {index} is missing episode_id")
+        if release_episode_id is None:
+            raise ValueError(f"episode mapping row {index} is missing release_episode_id")
+        if scenario_id is None or planner is None or seed is None:
+            raise ValueError(f"episode mapping row {index} has incomplete request identity")
+        if trace_uri is None or trace_sha256 is None:
+            raise ValueError(f"episode mapping row {index} is missing trace provenance")
         tuple_key = _episode_request_key(scenario_id, planner, seed)
         row = {
             **dict(raw_row),

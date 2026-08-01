@@ -81,7 +81,8 @@ class EpisodeSchema:
     def _extract_version(self) -> None:
         """Extract version information from schema."""
         # Try to extract from const version field
-        assert self._schema_data is not None, "Schema data must be loaded before version extraction"
+        if self._schema_data is None:
+            raise RuntimeError("Schema data must be loaded before version extraction")
         properties = self._schema_data.get("properties", {})
         version_prop = properties.get("version", {})
 

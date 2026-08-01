@@ -560,7 +560,8 @@ def _add_inferred_proxy_edge(
     entry: FieldBackfillEntry,
 ) -> None:
     """Add an inferred_from edge between a field and its proxy source."""
-    assert entry.inferred_from is not None  # Caller only routes inferred entries here.
+    if entry.inferred_from is None:
+        raise RuntimeError("inferred lineage entry has no proxy source")
     proxy_id = _proxy_node_id(rel_path, entry.inferred_from)
     if proxy_id not in nodes:
         nodes[proxy_id] = LineageNode(

@@ -177,7 +177,8 @@ def validate_threshold_parameter_consistency(records: list[dict[str, Any]]) -> d
                 ),
             )
 
-    assert reference_profile is not None  # Loop/fallback logic always selects a profile.
+    if reference_profile is None:
+        raise RuntimeError("threshold profile reference was not selected")
     return {
         "threshold_profile": reference_profile,
         "threshold_signature": threshold_profile_signature(reference_profile),

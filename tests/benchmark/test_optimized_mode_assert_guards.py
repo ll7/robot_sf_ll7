@@ -9,44 +9,49 @@ import sys
 import textwrap
 from pathlib import Path
 
+import numpy as np
 import pytest
 
+from robot_sf.benchmark import metrics as metrics_mod
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-EXPECTED_INTERNAL_ASSERT_COUNTS = {
-    "robot_sf/benchmark/campaign_arm_admission.py": 1,
-    "robot_sf/benchmark/campaign_atlas.py": 1,
-    "robot_sf/benchmark/candidate_trace_resolution.py": 4,
-    "robot_sf/benchmark/false_positive_injection_readiness.py": 1,
+EXPECTED_ASSERT_COUNTS = {
+    "robot_sf/benchmark/campaign_arm_admission.py": 0,
+    "robot_sf/benchmark/campaign_atlas.py": 0,
+    "robot_sf/benchmark/candidate_trace_resolution.py": 0,
+    "robot_sf/benchmark/false_positive_injection_readiness.py": 0,
     "robot_sf/benchmark/figure_qa.py": 0,
-    "robot_sf/benchmark/full_classic/encode.py": 1,
-    "robot_sf/benchmark/long_horizon_route.py": 1,
-    "robot_sf/benchmark/manifest_lineage_graph.py": 1,
-    "robot_sf/benchmark/map_runner_native_command.py": 5,
-    "robot_sf/benchmark/metrics.py": 2,
-    "robot_sf/benchmark/predictive_checkpoint_schema_audit.py": 1,
-    "robot_sf/benchmark/runner.py": 4,
-    "robot_sf/benchmark/schemas/episode_schema.py": 1,
-    "robot_sf/benchmark/schemas/forecast_batch_schema.py": 1,
-    "robot_sf/benchmark/snqi/weights_inventory.py": 1,
-    "robot_sf/benchmark/thresholds.py": 1,
+    "robot_sf/benchmark/full_classic/encode.py": 0,
+    "robot_sf/benchmark/long_horizon_route.py": 0,
+    "robot_sf/benchmark/manifest_lineage_graph.py": 0,
+    "robot_sf/benchmark/map_runner_native_command.py": 0,
+    "robot_sf/benchmark/metrics.py": 0,
+    "robot_sf/benchmark/predictive_checkpoint_schema_audit.py": 0,
+    "robot_sf/benchmark/runner.py": 0,
+    "robot_sf/benchmark/schemas/episode_schema.py": 0,
+    "robot_sf/benchmark/schemas/forecast_batch_schema.py": 0,
+    "robot_sf/benchmark/snqi/weights_inventory.py": 0,
+    "robot_sf/benchmark/thresholds.py": 0,
 }
 
 
 @pytest.mark.parametrize(
     ("relative_path", "expected_count"),
-    EXPECTED_INTERNAL_ASSERT_COUNTS.items(),
+    EXPECTED_ASSERT_COUNTS.items(),
 )
-def test_benchmark_assert_triage_matches_classification(
+def test_benchmark_runtime_asserts_are_eliminated(
     relative_path: str,
     expected_count: int,
 ) -> None:
-    """Keep the reviewed split between internal assertions and explicit guards."""
+    """Keep targeted benchmark runtime guards active under Python optimized mode."""
     source_path = REPO_ROOT / relative_path
     tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=relative_path)
     assert sum(isinstance(node, ast.Assert) for node in ast.walk(tree)) == expected_count
 
 
-def test_converted_guards_survive_python_optimized_mode(tmp_path: Path) -> None:
+def test_converted_guards_survive_python_optimized_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Exercise both converted guards with real ``-O``."""
     probe = textwrap.dedent(
         """
@@ -78,7 +83,7 @@ def test_converted_guards_survive_python_optimized_mode(tmp_path: Path) -> None:
         defect = figure_qa.FigureDefect("overlap", "error", "seeded defect")
         figure_qa.lint_figure = lambda *_args, **_kwargs: [defect]
         expect(
-            AssertionError,
+            ValueError,
             "Figure has 1 defect(s)",
             lambda: figure_qa.assert_clean(object()),
         )
@@ -99,3 +104,21 @@ def test_converted_guards_survive_python_optimized_mode(tmp_path: Path) -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+    # Exercise both metric guards in-process as well, so changed-line coverage uses
+    # the same test selected for the optimized-mode regression contract.
+    data = metrics_mod.EpisodeData(
+        robot_pos=np.zeros((2, 2)),
+        robot_vel=np.zeros((2, 2)),
+        robot_acc=np.zeros((2, 2)),
+        peds_pos=np.zeros((2, 0, 2)),
+        ped_forces=np.zeros((2, 0, 2)),
+        goal=np.array([1.0, 0.0]),
+        dt=0.1,
+        reached_goal_step=None,
+    )
+    monkeypatch.setattr(metrics_mod, "success_rate", lambda *_args, **_kwargs: 1.0)
+
+    for time_metric in (metrics_mod.time_to_goal_norm, metrics_mod.time_to_goal_norm_success_only):
+        with pytest.raises(RuntimeError, match="successful episode has no recorded goal step"):
+            time_metric(data, horizon=10)

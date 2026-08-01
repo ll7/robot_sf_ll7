@@ -102,9 +102,11 @@ def main(argv: list[str] | None = None) -> int:
     ``package`` arguments are accepted directly.
     """
     raw = list(argv if argv is not None else sys.argv[1:])
-    if raw and raw[0] == "to-resolver-mapping":
+    if raw and raw[0] in {"package", "to-resolver-mapping"}:
         args = _parser().parse_args(raw)
-        return _run_resolver_mapping(args)
+        if args.command == "to-resolver-mapping":
+            return _run_resolver_mapping(args)
+        return _run_package(args)
     args = _parser().parse_args(["package", *raw])
     return _run_package(args)
 

@@ -718,6 +718,40 @@ def test_resolver_cli_default_preserves_complete_package(
     assert _tree_digests(package) == package_before
 
 
+def test_package_cli_accepts_explicit_and_legacy_package_forms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both documented package forms dispatch to the unchanged packager call."""
+    from scripts.tools import package_issue_5756_trace_reexport as cli
+
+    calls: list[dict[str, Path]] = []
+
+    def package(**kwargs: Path) -> Path:
+        calls.append(kwargs)
+        return tmp_path / "package"
+
+    monkeypatch.setattr(cli, "package_trace_reexport", package)
+    arguments = [
+        "--release-bundle",
+        "release.tar",
+        "--request-manifest",
+        "requests.json",
+        "--canary-output",
+        "canary",
+        "--ppo-output",
+        "ppo",
+        "--goal-output",
+        "goal",
+        "--output-dir",
+        "package",
+    ]
+
+    assert cli.main(arguments) == 0
+    assert cli.main(["package", *arguments]) == 0
+    assert len(calls) == 2
+    assert calls[0] == calls[1]
+
+
 def test_resolver_mapping_receipt_fails_closed_on_incomplete_package(
     synthetic_inputs: SyntheticInputs,
 ) -> None:

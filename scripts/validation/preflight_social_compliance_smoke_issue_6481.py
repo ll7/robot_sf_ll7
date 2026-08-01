@@ -184,6 +184,13 @@ def _is_finite_number(value: Any) -> bool:
         return False
 
 
+def _is_valid_support_count(value: Any, *, require_positive: bool = False) -> bool:
+    """Return whether a support count has the contract type and range."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return False
+    return value > 0 if require_positive else value >= 0
+
+
 def _normalized_text(value: Any, *, default: str = "unknown") -> str:
     """Return a lower-case non-empty status label or a fail-closed default."""
     if not isinstance(value, str):
@@ -387,20 +394,18 @@ def _aggregate_metric_contract_is_ok(
         return False
 
     reducers = {"mean", "median", "p95"}
-    available_status_count = sum(status == "available" for status in statuses)
     available_values = [
         values[metric_id]
         for row, status in zip(rows, statuses, strict=True)
         for values in (row.get("values", {}),)
         if status == "available"
+        and _is_valid_support_count(row["support_counts"].get(metric_id), require_positive=True)
         and isinstance(values, dict)
         and metric_id in values
         and _is_finite_number(values[metric_id])
     ]
-    if available_status_count:
-        if len(available_values) != available_status_count or not reducers.issubset(
-            aggregate_metric
-        ):
+    if available_values:
+        if not reducers.issubset(aggregate_metric):
             return False
         expected_reducers = {
             "mean": float(np.mean(available_values)),

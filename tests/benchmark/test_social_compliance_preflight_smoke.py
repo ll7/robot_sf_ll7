@@ -366,10 +366,10 @@ def test_receipt_rejects_malformed_episode_identities(
 
 
 @pytest.mark.parametrize("invalid_support_count", [True, -1, float("nan"), float("inf")])
-def test_aggregate_contract_ignores_invalid_support_counts(
+def test_aggregate_contract_rejects_reducers_from_invalid_support_counts(
     invalid_support_count: object,
 ) -> None:
-    """Receipt validation mirrors the aggregator's fail-closed support-count filter."""
+    """Receipt validation rejects reducers the aggregator excludes for invalid support."""
     metric_id = "comfort_exposure_person_s"
     rows = [
         {
@@ -390,7 +390,14 @@ def test_aggregate_contract_ignores_invalid_support_counts(
         "p95": 1.0,
     }
 
-    assert _aggregate_metric_contract_is_ok(metric_id, aggregate_metric, rows) is True
+    assert _aggregate_metric_contract_is_ok(metric_id, aggregate_metric, rows) is False
+
+    no_reducer_aggregate = {
+        key: value
+        for key, value in aggregate_metric.items()
+        if key not in {"mean", "median", "p95"}
+    }
+    assert _aggregate_metric_contract_is_ok(metric_id, no_reducer_aggregate, rows) is True
 
     oversized_reducer = {**aggregate_metric, "mean": 10**1000}
     assert _aggregate_metric_contract_is_ok(metric_id, oversized_reducer, rows) is False

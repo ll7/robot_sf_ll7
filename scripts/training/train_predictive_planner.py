@@ -8,6 +8,7 @@ import json
 import os
 import random
 import subprocess
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -184,7 +185,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Allow training to continue even when dataset diagnostics detect degeneration.",
     )
+    parser.add_argument(
+        "--amp",
+        action="store_true",
+        help=(
+            "Opt-in automatic mixed-precision (AMP) training. When set and a CUDA device is "
+            "available, the forward/loss region runs under torch.autocast(float16) and the "
+            "backward/optimizer step runs through a CUDA GradScaler. No effect on CPU or when "
+            "CUDA is unavailable; defaults to off so the float32 path is unchanged."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _resolve_amp_enabled(*, requested: bool, device: torch.device) -> bool:
+    """Resolve the effective automatic mixed-precision (AMP) flag.
+
+    AMP is opt-in and CUDA-gated: it is active only when the operator explicitly requests it
+    (``--amp``) AND the selected device is CUDA AND ``torch.cuda.is_available()`` is True. On
+    CPU, or when CUDA is unavailable, this returns False so the training loop stays on the
+    float32 path with no GradScaler interaction.
+    """
+    if not requested:
+        return False
+    if device.type != "cuda":
+        return False
+    return bool(torch.cuda.is_available())
 
 
 def _git_commit() -> str:
@@ -506,12 +532,18 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer | None,
     device: torch.device,
     non_blocking: bool = False,
+    scaler: torch.amp.GradScaler | None = None,
 ) -> tuple[float, float, float]:
     """Run one train/eval epoch and return ``(loss, ade, fde)``.
 
     ``non_blocking`` is forwarded to every host-to-device batch transfer. It
     must be ``True`` only on the pinned-memory CUDA path; on CPU it stays
     ``False`` so transfers remain blocking and deterministic.
+
+    When ``scaler`` is provided (AMP enabled on CUDA), the forward/loss computation runs under
+    ``torch.autocast(device_type="cuda", dtype=torch.float16)`` and the backward/optimizer step
+    is routed through the ``GradScaler`` (with gradient clipping applied after ``unscale_``).
+    When ``scaler`` is ``None`` (AMP off or CPU), the loop is identical to the float32 path.
     """
     training = optimizer is not None
     if training:
@@ -524,6 +556,10 @@ def _run_epoch(
     fde_vals: list[float] = []
 
     horizon_weights = torch.linspace(1.5, 1.0, steps=model.config.horizon_steps, device=device)
+    amp_enabled = scaler is not None
+    autocast_ctx = (
+        torch.autocast(device_type="cuda", dtype=torch.float16) if amp_enabled else nullcontext()
+    )
 
     for state_b, target_b, mask_b, target_mask_b in loader:
         state_b = state_b.to(device, non_blocking=non_blocking)
@@ -536,19 +572,28 @@ def _run_epoch(
             optimizer.zero_grad(set_to_none=True)
 
         with torch.set_grad_enabled(training):
-            out = model(state_b, mask_b)
-            pred = out["future_positions"]
-            loss = masked_trajectory_loss(
-                pred,
-                target_b,
-                mask_b,
-                target_mask_b,
-                horizon_weights=horizon_weights,
-            )
+            with autocast_ctx:
+                out = model(state_b, mask_b)
+                pred = out["future_positions"]
+                loss = masked_trajectory_loss(
+                    pred,
+                    target_b,
+                    mask_b,
+                    target_mask_b,
+                    horizon_weights=horizon_weights,
+                )
             if training:
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
+                if amp_enabled:
+                    assert scaler is not None
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    optimizer.step()
 
         ade, fde = compute_ade_fde(
             pred.detach(),
@@ -999,6 +1044,15 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         weight_decay=float(args.weight_decay),
     )
 
+    use_amp = _resolve_amp_enabled(requested=bool(args.amp), device=device)
+    scaler = torch.amp.GradScaler("cuda") if use_amp else None
+    if use_amp:
+        logger.info("Mixed-precision (AMP) training enabled on CUDA with float16 autocast.")
+    elif bool(args.amp):
+        logger.warning(
+            "AMP requested via --amp but CUDA is unavailable; falling back to the float32 path.",
+        )
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = args.output_dir / "predictive_model.pt"
     wandb_run = _init_wandb(args, cfg)
@@ -1021,6 +1075,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             optimizer=optimizer,
             device=device,
             non_blocking=loader_settings.non_blocking,
+            scaler=scaler,
         )
         val_loss, val_ade, val_fde = _run_epoch(
             model=model,
@@ -1028,6 +1083,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             optimizer=None,
             device=device,
             non_blocking=loader_settings.non_blocking,
+            scaler=scaler,
         )
 
         row = {
@@ -1237,6 +1293,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         "checkpoint": str(checkpoint_path),
         "device": str(device),
         "data_loader": loader_settings.as_manifest(),
+        "amp": {
+            "enabled": use_amp,
+            "requested": bool(args.amp),
+            "dtype": "float16" if use_amp else None,
+        },
         "config": asdict(cfg),
         "feature_schema": feature_schema,
         "best": best,

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import cos, sin
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
@@ -58,11 +58,11 @@ class FastPysfPlannerPolicy:
         self._wrapper = FastPysfWrapper(simulator.pysf_sim)
         self._warned_missing_goal = False
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset planner state (noop for now)."""
-        return None
+        del seed
 
-    def predict(self, _obs=None, **_kwargs):
+    def predict(self, _obs=None, **_kwargs) -> tuple[np.ndarray, None]:
         """Return a diff-drive action compatible with Gym predict signatures."""
         return self.action(), None
 
@@ -128,6 +128,10 @@ class FastPysfPlannerPolicy:
         if norm <= self.config.max_force or norm < 1e-6:
             return force
         return force / norm * self.config.max_force
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "FastPysfPlannerPolicy"}
 
 
 __all__ = ["FastPysfPlannerConfig", "FastPysfPlannerPolicy"]

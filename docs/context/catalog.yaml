@@ -4732,3 +4732,35 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: configs/releases/release_0_0_5_checksum_manifest.yaml
+  status: evidence
+  freshness: evidence
+  area: release_evidence

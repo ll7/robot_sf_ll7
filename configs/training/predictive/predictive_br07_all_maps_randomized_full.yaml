@@ -37,6 +37,11 @@ training:
   weight_decay: 0.00001
   val_split: 0.2
   seed: 42
+  # Safe CPU defaults; set these explicitly on GPU hosts when worker transfer is desired.
+  num_workers: 0
+  pin_memory: false
+  persistent_workers: false
+  prefetch_factor: 2
   hidden_dim: 192
   message_passing_steps: 3
   max_val_ade: 1.0

@@ -57,7 +57,7 @@ class ImageSensor:
         self.settings = settings
         self.sim_view = sim_view
 
-    def set_sim_view(self, sim_view: SimulationView):
+    def set_sim_view(self, sim_view: SimulationView) -> None:
         """Set the simulation view to capture images from."""
         self.sim_view = sim_view
 

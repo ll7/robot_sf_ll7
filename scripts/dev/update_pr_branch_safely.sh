@@ -27,6 +27,7 @@
 #     --gate-worktree-path      registered gate worktree path; a vanished worktree
 #                               fails closed before any branch-switch/conflict op
 #     --json                    emit machine-readable JSON (default behavior)
+#     -h, --help                print this help and exit 0
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,6 +49,28 @@ GATE_WORKTREE_PATH=""
 usage() {
   echo "Usage: $0 <pr> --expected-head-sha <sha> [--repo OWNER/REPO] [options]" >&2
   exit 2
+}
+
+print_help() {
+  cat <<'HELP'
+Usage: scripts/dev/update_pr_branch_safely.sh <pr> \
+    --expected-head-sha <sha> [--repo OWNER/REPO] [options]
+
+Guarded PR branch updater with a lease-protected local fallback.
+
+Options:
+    --pr <n>                  PR number (positional also accepted)
+    --repo OWNER/REPO         owner/repo (default: detect from gh)
+    --expected-head-sha <sha> required guard; no mutation if the live head moved
+    --base <branch>           base branch to rebase onto (default: PR base ref)
+    --remote <name>           remote to fetch/push (default: origin)
+    --no-local-fallback       fail instead of falling back to local rebase/push
+    --dry-run                 verify and print the plan without mutating
+    --gate-worktree-path <p>  registered gate worktree path; a vanished worktree
+                              fails closed before any branch-switch/conflict op
+    --json                    emit machine-readable JSON (default behavior)
+    -h, --help                print this help and exit 0
+HELP
 }
 
 # --- argument parsing ---------------------------------------------------------
@@ -94,6 +117,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --json)
       shift
+      ;;
+    -h|--help)
+      print_help
+      exit 0
       ;;
     -*)
       echo "Unexpected option: $1" >&2
@@ -199,6 +226,17 @@ if [[ "$LIVE_HEAD" != "$EXPECTED" ]]; then
   exit 1
 fi
 
+# The update-branch endpoint is itself a write, so dry-run must exit before
+# probing it. The metadata read and exact-head guard above remain intentional.
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  printf 'dry-run: would request GitHub update-branch for %s#%s at %s; ' \
+    "$REPO" "$PR" "$EXPECTED" >&2
+  printf 'if unavailable, would use the guarded local fallback via %s\n' \
+    "$REMOTE" >&2
+  emit_result "dry_run" "false" "" "gh_rest_update_branch"
+  exit 0
+fi
+
 # --- attempt the supported remote branch-update path --------------------------
 set +e
 REST_STDERR="$(gh api "repos/${REPO}/pulls/${PR}/update-branch" \
@@ -290,12 +328,6 @@ LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
 if [[ "$LOCAL_HEAD" != "$EXPECTED" ]]; then
   emit_result "head_mismatch" "false" "local HEAD (${LOCAL_HEAD}) differs from expected SHA" "local_fallback"
   exit 1
-fi
-
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "dry-run: would fetch ${REMOTE} ${BASE_REF} ${HEAD_REF}, rebase onto ${REMOTE}/${BASE_REF}, then push --force-with-lease to ${REMOTE}/${HEAD_REF}" >&2
-  emit_result "dry_run" "false" "" "local_fallback"
-  exit 0
 fi
 
 if [[ ! -f "$LEASE_HELPER" ]]; then

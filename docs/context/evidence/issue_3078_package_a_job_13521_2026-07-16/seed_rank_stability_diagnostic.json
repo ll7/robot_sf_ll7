@@ -1,0 +1,112 @@
+{
+  "claim_boundary": "Preliminary diagnostic evidence only. Seed/rank-stability and held-out transfer-delta are both not_identifiable. Adapter rows (social_force, orca) remain labeled adapter and are never relabeled native-only. No benchmark, ranking, paper/dissertation, or promotion claim.",
+  "diagnostic_scope": "Real held-out-family pilot rows for job 13521; preliminary diagnostic evidence only.",
+  "forbidden_actions_confirmed": {
+    "benchmark_campaign_run": false,
+    "compute_submit": false,
+    "paper_claim_edits": false,
+    "ranking_claim_promotion": false
+  },
+  "generated_for": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16",
+  "headline_rank_stability_contract": {
+    "caveats": [
+      "Single evaluation seed (111); planner-rank stability cannot be estimated.",
+      "This is a result of the diagnostic, not a gap to fill through substitution or a new campaign (#6150 froze the comparator; #6156 Domain-Aware Approval).",
+      "No benchmark, ranking, paper, or dissertation claim is promoted."
+    ],
+    "claim_status": "not_identifiable_single_seed",
+    "contract_scope": "issue_3078_seed_rank_stability_real_data",
+    "label": "not_identifiable",
+    "labels": [
+      "not_identifiable"
+    ],
+    "max_seed_count": 1,
+    "metric_names": [
+      "snqi"
+    ],
+    "min_seed_budget": null,
+    "missing_durable_roots": [],
+    "pairwise": [],
+    "promotion_allowed": false,
+    "reason": "Planner-rank stability is not identifiable from a single evaluation seed (111); stability requires multiple seeds per (cell, planner).",
+    "seed_count": 1
+  },
+  "heldout_transfer_delta_classification": {
+    "baseline_table_empty": true,
+    "claim_eligible": false,
+    "claim_status": "not_identifiable_no_eligible_comparator",
+    "comparator_receipt": "no_eligible_comparator.json",
+    "label": "not_identifiable",
+    "reason": "No eligible benchmark-set comparator (frozen by #6150 / merged PR #6166); held-out transfer delta is empty with claim_eligible=false.",
+    "transfer_delta_snqi_empty": true
+  },
+  "issue": 3078,
+  "job_id": 13521,
+  "planner_rank_stability": [
+    {
+      "heldout_family_mean_snqi": -0.103835,
+      "planner": "goal",
+      "promotion_allowed": false,
+      "rank_stability": "not_identifiable",
+      "reason": "single evaluation seed (111)",
+      "row_status": "native",
+      "seed_count": 1,
+      "seeds": [
+        111
+      ]
+    },
+    {
+      "heldout_family_mean_snqi": -0.790247,
+      "planner": "social_force",
+      "promotion_allowed": false,
+      "rank_stability": "not_identifiable",
+      "reason": "single evaluation seed (111)",
+      "row_status": "adapter",
+      "seed_count": 1,
+      "seeds": [
+        111
+      ]
+    },
+    {
+      "heldout_family_mean_snqi": -0.326941,
+      "planner": "orca",
+      "promotion_allowed": false,
+      "rank_stability": "not_identifiable",
+      "reason": "single evaluation seed (111)",
+      "row_status": "adapter",
+      "seed_count": 1,
+      "seeds": [
+        111
+      ]
+    }
+  ],
+  "provenance": {
+    "cell_count": 6,
+    "execution_commit": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+    "fallback_degraded_rows": 0,
+    "row_status_counts": {
+      "adapter": 12,
+      "native": 6
+    },
+    "rows_per_planner": 6,
+    "source_episode_store": "private-campaign://job-13521/result_store/episodes.parquet",
+    "source_episode_store_sha256": "46466cd3db27d6f8a10181a8ec7c4676b24179bb97902aa8eec686d09a53942b",
+    "synthetic_fixture_used": false,
+    "unique_identity_count": 18
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "seed_sufficiency_analysis.v1",
+  "seed_basis": {
+    "note": "Sole evaluation seed is 111 across all 18 identities.",
+    "planners": [
+      "goal",
+      "social_force",
+      "orca"
+    ],
+    "seed_count": 1,
+    "seeds": [
+      111
+    ]
+  },
+  "target_issue": 6156
+}

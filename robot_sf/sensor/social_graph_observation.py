@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from gymnasium import spaces
 
 PEDESTRIAN_FEATURE_NAMES: tuple[str, ...] = (
     "rel_x",
@@ -50,8 +51,25 @@ FORBIDDEN_DEPLOYMENT_FIELD_FRAGMENTS: tuple[str, ...] = (
     "future",
     "trajectory_label",
     "future_trajectory",
+    "privileged",
 )
 """Input key fragments rejected by the deployment graph adapter."""
+
+
+_GRAPH_FEATURE_FLOAT_LIMIT = np.finfo(np.float32).max
+
+
+def _binary_observation_space(shape: tuple[int, ...]) -> spaces.Box:
+    """Create a fixed-shape boolean space, including valid zero-sized shapes.
+
+    Returns:
+        Boolean Box space with exactly ``shape``.
+    """
+    return spaces.Box(
+        low=np.zeros(shape, dtype=np.bool_),
+        high=np.ones(shape, dtype=np.bool_),
+        dtype=np.bool_,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +154,135 @@ class SocialGraphObservationAdapter:
         return graph
 
 
+class SocialGraphObservationFusion:
+    """Adapt a SocNav runtime sensor into a fixed-shape graph observation."""
+
+    def __init__(
+        self,
+        source_adapter: Any,
+        config: SocialGraphObservationConfig,
+    ) -> None:
+        """Create a graph adapter around a runtime SocNav sensor."""
+        if not callable(getattr(source_adapter, "next_obs", None)):
+            raise TypeError("source_adapter must provide next_obs()")
+        if not callable(getattr(source_adapter, "reset_cache", None)):
+            raise TypeError("source_adapter must provide reset_cache()")
+        self.source_adapter = source_adapter
+        self.adapter = SocialGraphObservationAdapter(config)
+        self.max_edges = config.max_pedestrians + config.max_static_obstacles
+
+    def reset_cache(self) -> None:
+        """Reset the source sensor and graph history at an episode boundary."""
+        self.source_adapter.reset_cache()
+        self.adapter.reset()
+
+    def next_obs(self) -> dict[str, np.ndarray]:
+        """Return one deployment-safe graph observation with padded edge tensors."""
+        graph = self.adapter.build(self.source_adapter.next_obs())
+        return pad_social_graph_observation(graph, max_edges=self.max_edges)
+
+
+def social_graph_observation_space(
+    config: SocialGraphObservationConfig | None = None,
+) -> spaces.Dict:
+    """Return the fixed Gymnasium space for a graph observation configuration."""
+    cfg = config or SocialGraphObservationConfig()
+    max_edges = cfg.max_pedestrians + cfg.max_static_obstacles
+    # Robot is node 0; the highest active pedestrian/static node is M + S.
+    max_node_id = max_edges
+    float_low = -np.full((1,), _GRAPH_FEATURE_FLOAT_LIMIT, dtype=np.float32)
+    float_high = np.full((1,), _GRAPH_FEATURE_FLOAT_LIMIT, dtype=np.float32)
+
+    def float_space(shape: tuple[int, ...]) -> spaces.Box:
+        """Build a finite float space with the requested shape.
+
+        Returns:
+            Float32 Box space with finite bounds and exactly ``shape``.
+        """
+        low = np.broadcast_to(float_low, shape).astype(np.float32, copy=True)
+        high = np.broadcast_to(float_high, shape).astype(np.float32, copy=True)
+        return spaces.Box(low=low, high=high, dtype=np.float32)
+
+    return spaces.Dict(
+        {
+            "robot_features": float_space((len(ROBOT_FEATURE_NAMES),)),
+            "pedestrian_features": float_space(
+                (cfg.max_pedestrians, len(PEDESTRIAN_FEATURE_NAMES))
+            ),
+            "pedestrian_mask": _binary_observation_space((cfg.max_pedestrians,)),
+            "pedestrian_count": spaces.Box(
+                low=np.array([0], dtype=np.int32),
+                high=np.array([cfg.max_pedestrians], dtype=np.int32),
+                dtype=np.int32,
+            ),
+            "pedestrian_history": float_space(
+                (cfg.history_steps, cfg.max_pedestrians, len(PEDESTRIAN_FEATURE_NAMES))
+            ),
+            "static_obstacle_features": float_space(
+                (cfg.max_static_obstacles, len(STATIC_OBSTACLE_FEATURE_NAMES))
+            ),
+            "static_obstacle_mask": _binary_observation_space((cfg.max_static_obstacles,)),
+            "static_obstacle_count": spaces.Box(
+                low=np.array([0], dtype=np.int32),
+                high=np.array([cfg.max_static_obstacles], dtype=np.int32),
+                dtype=np.int32,
+            ),
+            "edge_index": spaces.Box(
+                low=np.zeros((2, max_edges), dtype=np.int64),
+                high=np.full(
+                    (2, max_edges),
+                    max_node_id,
+                    dtype=np.int64,
+                ),
+                dtype=np.int64,
+            ),
+            "edge_type": spaces.Box(
+                low=np.zeros((max_edges,), dtype=np.int64),
+                high=np.ones((max_edges,), dtype=np.int64),
+                dtype=np.int64,
+            ),
+            "edge_mask": _binary_observation_space((max_edges,)),
+        }
+    )
+
+
+def pad_social_graph_observation(
+    graph: dict[str, np.ndarray],
+    *,
+    max_edges: int,
+) -> dict[str, np.ndarray]:
+    """Pad variable-length graph edges and fail closed on malformed overflow.
+
+    Returns:
+        Copy of ``graph`` with fixed-width ``edge_index``, ``edge_type``, and ``edge_mask``.
+    """
+    edge_index = np.asarray(graph["edge_index"], dtype=np.int64)
+    edge_type = np.asarray(graph["edge_type"], dtype=np.int64)
+    if edge_index.ndim != 2 or edge_index.shape[0] != 2:
+        raise ValueError("edge_index must have shape (2, edge_count)")
+    if edge_type.ndim != 1 or edge_type.shape[0] != edge_index.shape[1]:
+        raise ValueError("edge_type must match edge_index edge count")
+    if edge_index.shape[1] > max_edges:
+        raise ValueError(
+            f"graph edge count exceeds declared space: {edge_index.shape[1]} > {max_edges}"
+        )
+
+    padded_index = np.zeros((2, max_edges), dtype=np.int64)
+    padded_type = np.zeros((max_edges,), dtype=np.int64)
+    edge_mask = np.zeros((max_edges,), dtype=np.bool_)
+    edge_count = edge_index.shape[1]
+    if edge_count:
+        padded_index[:, :edge_count] = edge_index
+        padded_type[:edge_count] = edge_type
+        edge_mask[:edge_count] = True
+
+    padded = dict(graph)
+    padded["edge_index"] = padded_index
+    padded["edge_type"] = padded_type
+    padded["edge_mask"] = edge_mask
+    return padded
+
+
 def build_social_graph_observation(
     observation: dict[str, Any],
     *,
@@ -185,6 +332,7 @@ def build_social_graph_observation(
         "static_obstacle_count": np.array([int(np.count_nonzero(static_mask))], dtype=np.int32),
         "edge_index": edge_index,
         "edge_type": edge_type,
+        "edge_mask": np.ones(edge_type.shape, dtype=np.bool_),
     }
 
 

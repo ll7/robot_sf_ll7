@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.evidence.writers import write_json
 from robot_sf.training.orca_residual_lineage_packet import (
     OrcaResidualLineagePacketError,
     validate_smoke_nominal_gate,
@@ -508,7 +509,7 @@ def main() -> int:
     if args.write:
         output_path = repo_root / args.output
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(payload, encoding="utf-8")
+        write_json(output_path, report)
     else:
         sys.stdout.write(payload)
     return 0 if report["status"] in {"complete", "blocked"} else 1

@@ -14,6 +14,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.common.validation import _require_finite_position as _validate_finite_position
 from robot_sf.errors import RobotSfError
 
 CATALOG_ENTRY_SCHEMA_VERSION = "generated-scenario-catalog-entry.v1"
@@ -143,9 +144,10 @@ def _validate_trace_frames(entry: Mapping[str, Any]) -> None:
 
 def _require_finite_position(position: list[object]) -> None:
     """Validate that every component of a trace position is a finite number."""
-
-    if not all(isinstance(value, int | float) and math.isfinite(value) for value in position):
-        raise GeneratedScenarioCatalogValidationError("trace positions must be finite numbers")
+    try:
+        _validate_finite_position(position)
+    except ValueError as exc:
+        raise GeneratedScenarioCatalogValidationError(str(exc)) from exc
 
 
 __all__ = [

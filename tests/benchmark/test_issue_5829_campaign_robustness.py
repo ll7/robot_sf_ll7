@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark import campaign_logging
+from robot_sf.benchmark import heterogeneous_population_ablation_runner as runner_module
 from robot_sf.benchmark.heterogeneous_population_ablation_runner import (
     ManifestSpawnRealizabilityError,
     assert_manifest_spawn_realizable,
@@ -213,6 +214,106 @@ def test_runner_preserves_completed_jsonl_records_on_abort(
         {"scenario_id": "scenario_1", "completed": True},
     ]
     assert len(fsync_calls) == 1
+
+
+def test_orca_runner_preflights_before_episode_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The direct ORCA runner fails before assembling or executing an episode."""
+
+    preflight_calls: list[None] = []
+
+    def abort_for_missing_rvo2() -> None:
+        preflight_calls.append(None)
+        raise RuntimeError("rvo2 unavailable")
+
+    def unexpected_episode_setup(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("episode setup must not run before ORCA preflight")
+
+    monkeypatch.setattr(runner_module, "check_rvo2_importable", abort_for_missing_rvo2)
+    monkeypatch.setattr(runner_module, "build_episode_scenario", unexpected_episode_setup)
+
+    with pytest.raises(RuntimeError, match="rvo2 unavailable"):
+        runner_module.run_manifest_row(
+            {"planner": "orca"},
+            scenario_path=tmp_path / "manifest.json",
+        )
+
+    assert preflight_calls == [None]
+
+
+def test_orca_cli_preflights_before_output_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The campaign CLI checks ORCA before creating its episode-record output."""
+
+    module = _load_script(RUN_SCRIPT, "issue_5829_orca_campaign_runner")
+    manifest_path = tmp_path / "manifest.json"
+    output_path = tmp_path / "episode_records.jsonl"
+    manifest_path.write_text(json.dumps({"manifest_rows": [{"planner": "orca"}]}), encoding="utf-8")
+    preflight_calls: list[None] = []
+
+    def abort_for_missing_rvo2() -> None:
+        preflight_calls.append(None)
+        raise RuntimeError("rvo2 unavailable")
+
+    monkeypatch.setattr(module, "check_rvo2_importable", abort_for_missing_rvo2)
+    monkeypatch.setattr(module, "configure_campaign_logging", lambda **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match="rvo2 unavailable"):
+        _run_main(
+            module,
+            [
+                RUN_SCRIPT.name,
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(output_path),
+            ],
+        )
+
+    assert preflight_calls == [None]
+    assert not output_path.exists()
+
+
+def test_non_orca_runner_proceeds_without_rvo2_preflight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-ORCA row reaches episode execution without requiring rvo2."""
+
+    def unexpected_preflight() -> None:
+        raise AssertionError("non-ORCA rows must not require rvo2")
+
+    monkeypatch.setattr(runner_module, "check_rvo2_importable", unexpected_preflight)
+    monkeypatch.setattr(
+        runner_module,
+        "build_episode_scenario",
+        lambda *_args, **_kwargs: {
+            "name": "goal-row",
+            "map_file": "map.svg",
+            "simulation_config": {},
+            "robot_config": {},
+        },
+    )
+    monkeypatch.setattr(
+        runner_module,
+        "run_map_episode",
+        lambda **_kwargs: {"scenario_params": {}},
+    )
+
+    record = runner_module.run_manifest_row(
+        {
+            "scenario_id": "goal-row",
+            "planner": "goal",
+            "seed": 101,
+            "population_arm": "heterogeneous",
+            "response_law_fraction": 0.0,
+        },
+        scenario_path=tmp_path / "manifest.json",
+    )
+
+    assert record["planner"] == "goal"
+    assert record["scenario_id"] == "goal-row"
 
 
 @pytest.mark.parametrize("script_path", [BUILD_SCRIPT, RUN_SCRIPT])

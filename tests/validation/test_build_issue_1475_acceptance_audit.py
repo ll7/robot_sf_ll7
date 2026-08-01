@@ -75,6 +75,7 @@ def test_issue_1475_acceptance_audit_cli_writes_json_artifact(tmp_path: Path) ->
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert payload["issue"] == 1475
     assert payload["status"] == "blocked"
     assert payload["acceptance_evidence"]
@@ -95,3 +96,26 @@ def test_issue_1475_acceptance_audit_cli_writes_json_artifact(tmp_path: Path) ->
     assert payload["merged_pr_evidence"][-1]["closure_effect"] == "post_merge_audit_keep_open"
     assert "PR #4737 later merged" in payload["source_thread_summary"]
     assert "Slurm-capable host" in payload["next_empirical_action"]
+
+
+def test_issue_1475_acceptance_audit_is_byte_deterministic(tmp_path: Path) -> None:
+    """Re-running the audit writer with the same tracked evidence yields identical bytes."""
+    outputs = [tmp_path / f"audit{i}.json" for i in range(2)]
+    for output in outputs:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/validation/build_issue_1475_acceptance_audit.py",
+                "--repo-root",
+                str(REPO_ROOT),
+                "--output",
+                str(output),
+                "--write",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode == 0, result.stderr
+    assert outputs[0].read_bytes() == outputs[1].read_bytes()

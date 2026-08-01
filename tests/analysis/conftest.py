@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tests.support.script_loader import load_script_module
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 _AMMV_PANEL_SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
     / "scripts"
     / "analysis"
     / "build_ammv_mechanism_panel_issue_2227.py"
+)
+_ISSUE_3078_DIAGNOSTIC_SCRIPT_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "analysis"
+    / "build_issue_3078_job_13521_diagnostic.py"
 )
 
 
@@ -45,3 +55,12 @@ def panel_run(panel_module, tmp_path_factory):
     output_dir = tmp_path_factory.mktemp("ammv_panel")
     summary = panel_module.run(output_dir)
     return summary, output_dir
+
+
+@pytest.fixture(scope="session")
+def diagnostic_builder() -> ModuleType:
+    """Load the issue #3078 job-13521 diagnostic builder once per test session."""
+    return load_script_module(
+        _ISSUE_3078_DIAGNOSTIC_SCRIPT_PATH,
+        name="build_issue_3078_job_13521_diagnostic",
+    )

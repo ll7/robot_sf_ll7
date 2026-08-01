@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from robot_sf.benchmark.finite_checks import require_finite_fields
+from robot_sf.common.validation import require_finite_fields
 
 STREAM_GAP_CALIBRATION_SCHEMA = "stream_gap_gate_calibration.v1"
 

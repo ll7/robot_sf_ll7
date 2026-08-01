@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.errors import RobotSfError
+from robot_sf.planner.protocol import PLANNER_TYPE_KEY
 
 
 @dataclass(frozen=True)
@@ -232,21 +233,16 @@ class LidarOccupancyPlannerAdapter:
         self._converted_count = 0
         self._unavailable_count = 0
         self._last_error: str | None = None
+        self._closed = False
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset wrapper counters and the wrapped planner when supported."""
         self._converted_count = 0
         self._unavailable_count = 0
         self._last_error = None
         reset = getattr(self.planner, "reset", None)
         if callable(reset):
-            if seed is None:
-                reset()
-                return
-            try:
-                reset(seed=seed)
-            except TypeError:
-                reset()
+            reset(seed=seed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Convert rays to occupancy and delegate to the wrapped planner.
@@ -268,6 +264,7 @@ class LidarOccupancyPlannerAdapter:
     def diagnostics(self) -> dict[str, Any]:
         """Return adapter execution metadata for benchmark episode records."""
         return {
+            PLANNER_TYPE_KEY: type(self).__name__,
             "lidar_occupancy_adapter": {
                 "execution_mode": "adapter",
                 "source": "lidar_rays",
@@ -275,8 +272,17 @@ class LidarOccupancyPlannerAdapter:
                 "converted_observations": self._converted_count,
                 "unavailable_observations": self._unavailable_count,
                 "last_error": self._last_error,
-            }
+            },
         }
+
+    def close(self) -> None:
+        """Release wrapped planner resources once; idempotent thereafter."""
+        if self._closed:
+            return
+        self._closed = True
+        close = getattr(self.planner, "close", None)
+        if callable(close):
+            close()
 
 
 __all__ = [

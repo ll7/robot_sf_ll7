@@ -49,3 +49,29 @@ repos:
         language: system
         files: ^(docs/RELEASE\.md|CITATION\.cff|docs/context/evidence/issue_4683_release_assurance_case_example\.json)$
         pass_filenames: false
+      - id: check-ruff-version-parity
+        name: Check Ruff Version Parity
+        entry: uv run python scripts/dev/check_ruff_version_parity.py
+        language: system
+        files: ^(\.pre-commit-config\.yaml|pyproject\.toml|scripts/dev/check_ruff_version_parity\.py)$
+        pass_filenames: false
+      - id: no-fstring-logger
+        name: No f-string logger.*() calls (loguru structured-style guard)
+        entry: uv run python hooks/no_fstring_logger.py
+        language: system
+        # ruff G004 cannot see loguru; this hook flags logger.<method>(f"...")
+        # calls and is ratcheted via hooks/no_fstring_logger_allowlist.txt.
+        # Run a full scan when either source or the guard/baseline changes. Passing only
+        # staged filenames would let baseline-only edits bypass repository-wide validation.
+        files: ^(robot_sf/.*\.py|hooks/no_fstring_logger(?:_allowlist\.txt|\.py))$
+        pass_filenames: false
+      - id: ty-advisory-typecheck
+        name: Ty Advisory Type Check
+        # Advisory pre-commit mirror of CI's typecheck phase (scripts/dev/ci_driver.sh).
+        # Keep the ty pin in sync with that phase; --exit-zero surfaces pre-existing
+        # ty findings without blocking routine commits. The whole-repo downward
+        # ratchet still runs in CI via scripts/dev/ty_advisory_ratchet.py.
+        entry: uvx ty@0.0.58 check --exit-zero
+        language: system
+        files: \.py$
+        pass_filenames: true

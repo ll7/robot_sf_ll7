@@ -22,6 +22,7 @@ from robot_sf.benchmark.algorithm_metadata import (
 )
 from robot_sf.benchmark.ammv_feasibility import evaluate_artifact_command_feasibility
 from robot_sf.benchmark.cbf_safety_filter_runtime import (
+    CBFSafetyFilterRuntimeConfig,
     apply_runtime_cbf_safety_filter,
     ineligible_cbf_safety_filter_step_record,
     summarize_cbf_safety_filter_trace,
@@ -39,6 +40,7 @@ from robot_sf.benchmark.interaction_exposure import (
 )
 from robot_sf.benchmark.latency_stress import (
     LatencyMeasurementHarness,
+    LatencyStressProfile,
     not_available_latency_metrics,
 )
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
@@ -109,6 +111,7 @@ from robot_sf.benchmark.map_runner_view_integrity import (
 )
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.observation_noise import (
+    ObservationNoiseState,
     apply_observation_noise,
     make_observation_noise_rng,
     make_observation_noise_state,
@@ -137,6 +140,7 @@ from robot_sf.benchmark.safety_predicates import (
     oscillatory_control_predicate,
 )
 from robot_sf.benchmark.safety_wrapper_runtime import (
+    SafetyWrapperRuntimeConfig,
     apply_runtime_safety_wrapper,
     ineligible_safety_wrapper_step_record,
     make_deadlock_recovery_monitor,
@@ -145,6 +149,7 @@ from robot_sf.benchmark.safety_wrapper_runtime import (
 )
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
+    SyntheticActuationProfile,
     not_available_saturation_metrics,
 )
 from robot_sf.benchmark.termination_reason import (
@@ -167,9 +172,11 @@ from robot_sf.benchmark.tracking_precision_contract import (
 from robot_sf.benchmark.types import (
     AlgoMeta,
     EpisodeRecordDict,
+    NoiseConfig,
     NoiseSpec,
     PlannerDecisionTrace,
     PlannerDecisionTraceEntry,
+    PlannerRuntime,
     TrackingPrecisionSpec,
 )
 from robot_sf.benchmark.utils import (
@@ -179,7 +186,9 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
+from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
@@ -1205,20 +1214,20 @@ class _EpisodeRunContext:
     benchmark_track: str | None
     track_schema_version: str | None
     noise_spec: NoiseSpec
-    noise_rng: Any
-    noise_state: Any
-    noise_stats: Any
+    noise_rng: np.random.Generator
+    noise_state: ObservationNoiseState
+    noise_stats: dict[str, int]
     tracking_precision_spec: TrackingPrecisionSpec
-    tracking_precision_rng: Any
-    safety_wrapper_runtime: Any
-    cbf_runtime: Any
-    safety_wrapper_deadlock_monitor: Any
-    config: Any
+    tracking_precision_rng: np.random.Generator
+    safety_wrapper_runtime: SafetyWrapperRuntimeConfig
+    cbf_runtime: CBFSafetyFilterRuntimeConfig
+    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None
+    config: RobotSimulationConfig
     horizon_val: int
     robot_kinematics: str
     robot_command_mode: str
-    actuation_profile: Any
-    latency_profile: Any
+    actuation_profile: SyntheticActuationProfile | None
+    latency_profile: LatencyStressProfile | None
     algo: str
     policy_cfg: dict[str, Any]
 
@@ -1530,18 +1539,18 @@ class _PolicyContract:
     object instead of recomputing these inline.
     """
 
-    policy_fn: Any
+    policy_fn: Callable[..., Any]
     algo_meta: AlgoMeta
-    planner_close: Any
-    planner_reset: Any
-    planner_bind_env: Any
-    planner_stats: Any
+    planner_close: Callable[..., Any] | None
+    planner_reset: Callable[..., Any] | None
+    planner_bind_env: Callable[..., Any] | None
+    planner_stats: Callable[..., Any] | None
     planner_native_action: bool
-    actuation_controller: Any
+    actuation_controller: SyntheticActuationController | None
     active_observation_mode: str
     active_observation_level: str
-    single_pedestrian_intent_metadata: Any
-    single_pedestrian_vru_metadata: Any
+    single_pedestrian_intent_metadata: list[dict[str, Any] | None]
+    single_pedestrian_vru_metadata: list[dict[str, Any] | None]
 
 
 def _prepare_policy_and_observation_contract(  # noqa: PLR0913
@@ -1549,7 +1558,7 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
     scenario: dict[str, Any],
     algo: str,
     policy_cfg: dict[str, Any],
-    config: Any,
+    config: RobotSimulationConfig,
     observation_mode: str | None,
     observation_level: str | None,
     robot_kinematics: str,
@@ -1557,7 +1566,7 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
     adapter_impact_eval: bool,
     benchmark_track: str | None,
     track_schema_version: str | None,
-    actuation_profile: Any,
+    actuation_profile: SyntheticActuationProfile | None,
     policy_builder: PolicyBuilder,
 ) -> _PolicyContract:
     """Resolve the learned observation contract, build the policy, and derive hooks.
@@ -1713,31 +1722,23 @@ class _EpisodeStepLoopResult:
 def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     *,
     seed: int,
-    scenario: dict[str, Any] | None = None,
-    config: Any,
+    scenario: dict[str, object] | None = None,
+    config: RobotSimulationConfig,
     horizon_val: int,
-    policy_fn: Any,
-    planner_bind_env: Any,
-    planner_reset: Any,
-    planner_close: Any,
-    planner_stats: Any,
-    planner_native_action: bool,
-    noise_spec: NoiseSpec,
-    noise_rng: Any,
-    noise_state: Any,
-    noise_stats: Any,
+    planner_runtime: PlannerRuntime,
+    noise: NoiseConfig,
     tracking_precision_spec: TrackingPrecisionSpec,
-    tracking_precision_rng: Any,
-    safety_wrapper_runtime: Any,
-    safety_wrapper_deadlock_monitor: Any,
-    cbf_runtime: Any,
-    actuation_controller: Any,
+    tracking_precision_rng: np.random.Generator,
+    safety_wrapper_runtime: SafetyWrapperRuntimeConfig,
+    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None,
+    cbf_runtime: CBFSafetyFilterRuntimeConfig,
+    actuation_controller: SyntheticActuationController | None,
     algo_meta: AlgoMeta,
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-    single_pedestrian_intent_metadata: Any,
-    single_pedestrian_vru_metadata: Any,
+    single_pedestrian_intent_metadata: list[dict[str, object] | None],
+    single_pedestrian_vru_metadata: list[dict[str, object] | None],
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
 ) -> _EpisodeStepLoopResult:
@@ -1748,6 +1749,17 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
         outcome flag produced by the step loop, plus the planner runtime snapshot
         captured in the ``finally`` teardown.
     """
+    policy_fn = planner_runtime.policy_fn
+    planner_bind_env = planner_runtime.planner_bind_env
+    planner_reset = planner_runtime.planner_reset
+    planner_close = planner_runtime.planner_close
+    planner_stats = planner_runtime.planner_stats
+    planner_native_action = planner_runtime.planner_native_action
+    noise_spec = noise.spec
+    noise_rng = noise.rng
+    noise_state = noise.state
+    noise_stats = noise.stats
+
     # Per-episode instrumentation buffers (populated during the step loop below).
     tracking_precision_records: list[dict[str, Any]] = []
     safety_wrapper_trace: list[dict[str, Any]] = []
@@ -1899,13 +1911,13 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 planner_stats
             ):
                 try:
-                    planner_runtime = planner_stats()
+                    planner_stats_payload = planner_stats()
                 except (RuntimeError, ValueError, TypeError):
-                    planner_runtime = None
-                if isinstance(planner_runtime, dict) and isinstance(
-                    planner_runtime.get("last_decision"), dict
+                    planner_stats_payload = None
+                if isinstance(planner_stats_payload, dict) and isinstance(
+                    planner_stats_payload.get("last_decision"), dict
                 ):
-                    planner_step_decision = dict(planner_runtime["last_decision"])
+                    planner_step_decision = dict(planner_stats_payload["last_decision"])
             if hybrid_command_sources is not None:
                 source = (
                     planner_step_decision.get(hybrid_source_field)
@@ -2251,12 +2263,12 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     finally:
         if callable(planner_stats):
             try:
-                planner_runtime = planner_stats()
+                planner_stats_payload = planner_stats()
             except (RuntimeError, ValueError, TypeError):
                 logger.debug("Planner stats hook failed before close", exc_info=True)
-                planner_runtime = None
-            if isinstance(planner_runtime, dict):
-                planner_runtime_snapshot = dict(planner_runtime)
+                planner_stats_payload = None
+            if isinstance(planner_stats_payload, dict):
+                planner_runtime_snapshot = dict(planner_stats_payload)
         if callable(planner_close):
             try:
                 planner_close()
@@ -2508,7 +2520,7 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     if fast_bicycle_summary is not None:
         algo_meta["fast_bicycle_actor"] = fast_bicycle_summary
-    if actuation_controller is not None:
+    if actuation_controller is not None and actuation_profile is not None:
         actuation_summary = actuation_controller.summary()
         algo_meta["synthetic_actuation"] = {
             "profile": actuation_profile.to_metadata(),
@@ -2845,16 +2857,20 @@ def run_map_episode(  # noqa: PLR0913
         scenario=scenario,
         config=config,
         horizon_val=horizon_val,
-        policy_fn=policy_contract.policy_fn,
-        planner_bind_env=policy_contract.planner_bind_env,
-        planner_reset=policy_contract.planner_reset,
-        planner_close=policy_contract.planner_close if close_policy else None,
-        planner_stats=policy_contract.planner_stats,
-        planner_native_action=policy_contract.planner_native_action,
-        noise_spec=noise_spec,
-        noise_rng=noise_rng,
-        noise_state=noise_state,
-        noise_stats=noise_stats,
+        planner_runtime=PlannerRuntime(
+            policy_fn=policy_contract.policy_fn,
+            planner_bind_env=policy_contract.planner_bind_env,
+            planner_reset=policy_contract.planner_reset,
+            planner_close=policy_contract.planner_close if close_policy else None,
+            planner_stats=policy_contract.planner_stats,
+            planner_native_action=policy_contract.planner_native_action,
+        ),
+        noise=NoiseConfig(
+            spec=noise_spec,
+            rng=noise_rng,
+            state=noise_state,
+            stats=noise_stats,
+        ),
         tracking_precision_spec=tracking_precision_spec,
         tracking_precision_rng=tracking_precision_rng,
         safety_wrapper_runtime=safety_wrapper_runtime,

@@ -155,6 +155,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert duration_restore["continue-on-error"] is True
     assert duration_restore["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_restore["with"]["key"]
+    assert "${{ github.run_attempt }}" in duration_restore["with"]["key"]
     assert "test-durations-${{ runner.os }}-" in duration_restore["with"]["restore-keys"]
     assert duration_upload["if"] == "always()"
     assert duration_upload["continue-on-error"] is True
@@ -207,6 +208,7 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "steps.merge-test-durations.outcome == 'success'" in duration_save["if"]
     assert duration_save["with"]["path"] == ".test_durations"
     assert "${{ github.run_id }}" in duration_save["with"]["key"]
+    assert "${{ github.run_attempt }}" in duration_save["with"]["key"]
 
 
 def test_pytest_coverage_is_explicit_opt_in() -> None:

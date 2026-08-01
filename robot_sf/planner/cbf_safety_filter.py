@@ -533,22 +533,14 @@ class CbfSafetyFilterPlannerWrapper:
         """Return wrapped planner and filter diagnostics when available."""
 
         payload = {"cbf_safety_filter": self.filter.diagnostics()}
-        diagnostics = getattr(self.planner, "diagnostics", None)
-        if callable(diagnostics):
-            payload["wrapped_planner"] = diagnostics()
+        payload["wrapped_planner"] = self.planner.diagnostics()
         return payload
 
-    def reset(self, *args: Any, **kwargs: Any) -> Any:
-        """Forward reset to wrapped planner when supported.
-
-        Returns:
-            Wrapped planner reset result when available, otherwise ``None``.
-        """
-
+    def reset(self, *, seed: int | None = None) -> None:
+        """Forward reset to wrapped planner when supported."""
         reset = getattr(self.planner, "reset", None)
         if callable(reset):
-            return reset(*args, **kwargs)
-        return None
+            reset(seed=seed)
 
     def close(self) -> None:
         """Forward close to wrapped planner when supported."""

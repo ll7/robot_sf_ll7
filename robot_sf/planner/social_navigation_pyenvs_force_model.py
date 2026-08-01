@@ -378,6 +378,10 @@ class SocialNavigationPyEnvsForceModelAdapter:
         velocity_world, _meta = self.act_velocity_world(observation, time_step=dt)
         return velocity_world
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SocialNavigationPyEnvsForceModelAdapter"}
+
 
 __all__ = [
     "SocialNavigationPyEnvsForceModelAdapter",

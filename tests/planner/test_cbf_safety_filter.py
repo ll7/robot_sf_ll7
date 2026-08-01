@@ -233,6 +233,19 @@ def test_wrapper_disabled_returns_nominal_command_unchanged() -> None:
     assert wrapper.last_decision is None
 
 
+def test_wrapper_diagnostics_requires_protocol_member() -> None:
+    """The wrapper must fail loudly when the wrapped planner lacks diagnostics()."""
+
+    class _Planner:
+        def plan(self, _observation: dict[str, object]) -> tuple[float, float]:
+            return 0.8, 0.1
+
+    wrapper = CbfSafetyFilterPlannerWrapper(_Planner(), CbfSafetyFilterConfig(enabled=False))
+
+    with pytest.raises(AttributeError, match="diagnostics"):
+        wrapper.diagnostics()
+
+
 def test_build_cbf_config_accepts_dynamic_parabolic_variant() -> None:
     """Dynamic-parabolic CBF config builds the versioned DPCBF filter."""
 
@@ -346,7 +359,9 @@ def test_wrapper_enabled_forwards_diagnostics_reset_and_close() -> None:
     assert wrapper.plan(_head_on_observation())[0] < 0.8
     assert wrapper.last_decision is not None
     assert wrapper.diagnostics()["wrapped_planner"] == {"planner": "dummy"}
-    assert wrapper.reset(seed=7) == "reset"
+    # The standardized local-planner reset() contract returns None; the wrapper
+    # forwards keyword seed to the wrapped planner instead of passing the value through.
+    assert wrapper.reset(seed=7) is None
     assert planner.reset_seed == 7
     wrapper.close()
     assert planner.closed is True

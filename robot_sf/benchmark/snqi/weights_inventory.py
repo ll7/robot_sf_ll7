@@ -417,7 +417,7 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
         return record
 
     if spec.relpath is None:
-        raise RuntimeError("shipped JSON weight source has no relative path")
+        raise RuntimeError("shipped JSON weight source has no relative path")  # pragma: no cover
     path = repo_root / spec.relpath
     if not path.exists():
         record.load_error = "file not found"

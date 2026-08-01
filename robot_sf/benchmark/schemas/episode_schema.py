@@ -82,7 +82,9 @@ class EpisodeSchema:
         """Extract version information from schema."""
         # Try to extract from const version field
         if self._schema_data is None:
-            raise RuntimeError("Schema data must be loaded before version extraction")
+            raise RuntimeError(
+                "Schema data must be loaded before version extraction"
+            )  # pragma: no cover
         properties = self._schema_data.get("properties", {})
         version_prop = properties.get("version", {})
 

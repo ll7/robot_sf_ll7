@@ -320,7 +320,7 @@ def _load_arm_algo_config(
             ),
         )
     if path is None:
-        raise RuntimeError("admitted planner config path was not resolved")
+        raise RuntimeError("admitted planner config path was not resolved")  # pragma: no cover
     if not path.is_file():
         # A missing config file is a FileNotFoundError, not a shape error -- it is not an
         # apparently-valid packet. The caller's structural checker already owns that contract.

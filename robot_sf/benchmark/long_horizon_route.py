@@ -303,7 +303,7 @@ def _count(record: Mapping[str, Any], metric_name: str) -> float:
     """
     value = _numeric_from_aliases(record, _COUNT_ALIASES[metric_name], default=0.0)
     if value is None:
-        raise ValueError(f"{metric_name} count could not be resolved")
+        raise ValueError(f"{metric_name} count could not be resolved")  # pragma: no cover
     if value < 0:
         raise LongHorizonRouteError(f"{metric_name} count must not be negative")
     return value

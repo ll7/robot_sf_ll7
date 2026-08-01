@@ -75,8 +75,9 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         self._commit_gains: tuple[float, ...] = tuple(_gains)
         self.reset()
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear per-episode progress and commitment state."""
+        del seed
         self._last_goal_distance: float | None = None
         self._last_goal: np.ndarray | None = None
         self._commit_side = 0
@@ -441,6 +442,10 @@ class TEBCommitmentPlannerAdapter(OccupancyAwarePlannerMixin):
         return self._command_from_heading(
             forward=forward, robot_heading=robot_heading, blocked=blocked
         )
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "TEBCommitmentPlannerAdapter"}
 
 
 def build_teb_commitment_config(cfg: dict[str, Any] | None) -> TEBCommitmentConfig:

@@ -350,7 +350,7 @@ class CrowdNavPredAttnGraphAdapter:
         self._policy.eval()
         self.reset()
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset the two SRNN recurrent hidden-state tensors to zeros."""
         del seed
         base = self._policy.base
@@ -546,6 +546,10 @@ class CrowdNavPredAttnGraphAdapter:
         dt = float(np.asarray(observation.get("dt", self.config.time_step)).reshape(-1)[0])
         vx, vy, _meta = self.act(observation, time_step=dt)
         return vx, vy
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "CrowdNavPredAttnGraphAdapter"}
 
 
 def _clip_holonomic_to_v_pref(vx: float, vy: float, v_pref: float) -> tuple[float, float]:

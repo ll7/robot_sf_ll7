@@ -109,6 +109,11 @@ class AlgoMeta(TypedDict, total=False):
     baseline_category: str
     policy_semantics: str
     status: str
+    fallback_reason: str
+    benchmark_track: dict[str, Any]
+    config: dict[str, Any]
+    config_hash: str
+    kinematics_feasibility: dict[str, Any]
     observation_spec: dict[str, Any]
     observation_level: dict[str, Any]
     planner_kinematics: dict[str, Any]
@@ -130,6 +135,7 @@ class AlgoMeta(TypedDict, total=False):
     latency_stress: dict[str, Any]
     public_requirement: dict[str, Any]
     observation_visibility: dict[str, Any]
+    safety_shield_contract: dict[str, Any]
     shield_stats: dict[str, Any]
     native_command: dict[str, Any]
     planner_diagnostics: dict[str, Any]
@@ -243,6 +249,10 @@ class EpisodeRecordDict(TypedDict, total=False):
     track_schema_version: str
     result_provenance: dict[str, Any]
     metric_parameters: dict[str, Any]
+    notes: str
+    tags: list[str]
+    identity: dict[str, Any]
+    video: dict[str, Any]
     low_progress_window: dict[str, Any]
     recenter_activation_count: int
     distance_to_goal_delta: dict[str, Any]

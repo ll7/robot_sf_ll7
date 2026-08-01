@@ -105,6 +105,12 @@ def test_algo_meta_structural_compatibility() -> None:
         "baseline_category": "classical",
         "policy_semantics": "orca_adapter",
         "status": "ok",
+        "fallback_reason": "",
+        "benchmark_track": {"benchmark_track": "oracle"},
+        "config": {"horizon": 120},
+        "config_hash": "abc123",
+        "kinematics_feasibility": {"status": "available"},
+        "safety_shield_contract": {"enabled": False},
         "adapter_impact": {
             "requested": True,
             "native_steps": 10,
@@ -246,6 +252,26 @@ def test_episode_record_dict_structural() -> None:
     assert record["metrics"]["success"] is True
     assert record["metrics"]["force_quantiles"]["q50"] == 0.1
     assert record["observation_noise"]["enabled"] is False
+    assert json.loads(json.dumps(record)) == record
+
+
+def test_episode_record_schema_extensions_are_typed() -> None:
+    """EpisodeRecordDict includes optional schema-level runner extensions."""
+    record: EpisodeRecordDict = {
+        "notes": "diagnostic run",
+        "tags": ["smoke"],
+        "identity": {"robot": "r1"},
+        "video": {
+            "path": "output/recordings/episode.mp4",
+            "format": "mp4",
+            "filesize_bytes": 1,
+            "frames": 0,
+            "renderer": "none",
+        },
+    }
+
+    assert record["tags"] == ["smoke"]
+    assert record["identity"]["robot"] == "r1"
     assert json.loads(json.dumps(record)) == record
 
 

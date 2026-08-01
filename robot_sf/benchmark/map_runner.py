@@ -206,6 +206,9 @@ from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
 )
+
+# Keep the return alias available for runtime annotation consumers such as schema tooling.
+from robot_sf.benchmark.types import EpisodeRecordDict  # noqa: TC001
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -2500,11 +2503,11 @@ def _run_map_episode(  # noqa: PLR0913
     record_simulation_step_trace: bool = False,
     close_policy: bool = True,
     policy_builder: Any | None = None,
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Run one scenario/seed episode through the extracted episode executor.
 
     Returns:
-        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+        EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
     _sync_episode_compat_overrides()
     return _execute_map_episode(
@@ -2558,11 +2561,11 @@ def _write_validated_to_handle(
 
 def _run_map_job_worker(
     job: tuple[dict[str, Any], int, dict[str, Any]],
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Execute one serialized map-runner job.
 
     Returns:
-        dict[str, Any]: Episode record returned by ``_run_map_episode``.
+        EpisodeRecordDict: Episode record returned by ``_run_map_episode``.
     """
     return _execute_map_job(job, run_map_episode=_run_map_episode)
 
@@ -2626,7 +2629,7 @@ def _run_map_jobs_with_policy_cache(
                 policy_cache[key] = _build_policy(algo, algo_config)
         return policy_cache[key]
 
-    def run_cached_map_episode(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    def run_cached_map_episode(*args: Any, **kwargs: Any) -> EpisodeRecordDict:
         """Run one episode without closing the arm-owned cached policy.
 
         Returns:
@@ -2639,7 +2642,9 @@ def _run_map_jobs_with_policy_cache(
             policy_builder=cached_policy_builder,
         )
 
-    def run_cached_map_job(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
+    def run_cached_map_job(
+        job: tuple[dict[str, Any], int, dict[str, Any]],
+    ) -> EpisodeRecordDict:
         """Execute one map job through the cached-policy episode runner.
 
         Returns:

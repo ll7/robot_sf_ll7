@@ -163,8 +163,9 @@ class HybridPortfolioAdapter:
             "hold_remaining": int(self._hold_remaining),
         }
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear portfolio hysteresis and reset any stateful child heads."""
+        del seed
         self._active_head = "risk_dwa"
         self._hold_remaining = 0
         self._selected_head_counts.clear()

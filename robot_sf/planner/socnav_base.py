@@ -763,6 +763,10 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                         pass
                 os.chdir(prev_cwd)
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SamplingPlannerAdapter"}
+
     @staticmethod
     def _wrap_angle(angle: float) -> float:
         """

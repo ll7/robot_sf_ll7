@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 import numpy as np
 
+from robot_sf.common.validation import _require_finite_non_negative
+
 DecayFunction = Literal["linear", "gaussian"]
 
 
@@ -100,13 +102,6 @@ def proxemic_cost_at_points(
         if cfg.personal_radius > 0.0 and cfg.personal_weight > 0.0:
             costs += cfg.personal_weight * _decay(distance, cfg.personal_radius, cfg.decay_function)
     return np.minimum(costs, cfg.max_cost)
-
-
-def _require_finite_non_negative(name: str, value: float) -> None:
-    """Raise ValueError unless value is finite and >= 0."""
-    scalar = float(value)
-    if not np.isfinite(scalar) or scalar < 0.0:
-        raise ValueError(f"{name} must be finite and >= 0")
 
 
 def _as_points_array(name: str, values: np.ndarray) -> np.ndarray:

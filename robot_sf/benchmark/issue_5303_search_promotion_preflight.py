@@ -191,11 +191,18 @@ def _single_pedestrian_by_id(
     return None
 
 
-def _first_ped_route(route_payload: dict[str, Any]) -> dict[str, Any] | None:
-    """Return the first ``ped_routes`` mapping entry, if any."""
+def _pedestrian_route_by_id(
+    route_payload: dict[str, Any], pedestrian_id: str | None
+) -> dict[str, Any] | None:
+    """Return the ``ped_routes`` mapping entry bound to ``pedestrian_id``, if any."""
+    if not pedestrian_id:
+        return None
     entries = route_payload.get("ped_routes")
-    if isinstance(entries, list) and entries and isinstance(entries[0], dict):
-        return entries[0]
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if isinstance(entry, dict) and str(entry.get("id") or "").strip() == pedestrian_id:
+            return entry
     return None
 
 
@@ -214,7 +221,7 @@ def _materialized_binding_status(
     """
     template_bound_ped = _single_pedestrian_by_id(template, pedestrian_id)
     bound_ped = _single_pedestrian_by_id(scenario, pedestrian_id)
-    first_route = _first_ped_route(route_payload)
+    bound_route = _pedestrian_route_by_id(route_payload, pedestrian_id)
     materialized_id = (
         str(bound_ped["id"]).strip()
         if template_bound_ped and bound_ped and bound_ped.get("id")
@@ -224,10 +231,7 @@ def _materialized_binding_status(
         bool(template_bound_ped) and bool(pedestrian_id) and materialized_id == pedestrian_id
     )
     pedestrian_route_populated = (
-        bool(template_bound_ped)
-        and bool(pedestrian_id)
-        and bool(first_route)
-        and str(first_route.get("id") or "").strip() == pedestrian_id
+        bool(template_bound_ped) and bool(pedestrian_id) and bool(bound_route)
     )
 
     blockers: list[str] = []

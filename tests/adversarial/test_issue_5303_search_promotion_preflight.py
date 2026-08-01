@@ -206,6 +206,32 @@ def test_preflight_inspects_candidate_pedestrian_among_preexisting_entries() -> 
         assert probe.bound_value != pytest.approx(99.0)
 
 
+def test_preflight_binds_candidate_route_by_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unrelated pedestrian route before the candidate must not hide its route binding."""
+    real_builder = preflight_mod.build_candidate_payload
+
+    def _builder_with_preexisting_route(*args, **kwargs):
+        scenario, route = real_builder(*args, **kwargs)
+        route["ped_routes"].insert(
+            0,
+            {
+                "id": "aaa_preexisting",
+                "spawn_id": 99_998,
+                "goal_id": 99_998,
+                "spawn_time_s": 0.0,
+                "waypoints": [[9.0, 9.0], [10.0, 10.0]],
+            },
+        )
+        return scenario, route
+
+    monkeypatch.setattr(preflight_mod, "build_candidate_payload", _builder_with_preexisting_route)
+
+    result = evaluate_preflight(search_space=_space(), template_scenario=_template())
+
+    assert result.status == "promotion_timing_ready"
+    assert result.pedestrian_route_populated is True
+
+
 def test_preflight_rejects_duplicate_normalized_template_pedestrian_ids() -> None:
     """Duplicate IDs that the canonical loader rejects cannot pass the readiness probe."""
     template = _template()

@@ -1447,6 +1447,71 @@ def _write_target_cache(
     cache_file.write_text(json.dumps(cache_data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _execute_campaign_targets(  # noqa: PLR0913 - campaign state is intentionally explicit.
+    targets: Sequence[Mapping[str, Any]],
+    scenario_defs: Mapping[str, Any],
+    planner_defs: Mapping[str, Any],
+    resolved_bundle: Mapping[str, Any],
+    cache_dir: Path,
+    env_fingerprint: Mapping[str, Any],
+    selected_definition_ids: set[str] | None,
+    run_episode: Any,
+    repeats_per_target: int,
+    enforce_model_preflight: bool,
+) -> list[dict[str, Any]]:
+    """Execute targets in manifest order, preserving cache and disposition behavior.
+
+    Returns:
+        One result entry for every manifest target, in manifest order.
+    """
+    # The runnability predicate reflects current main's ``run_episode`` registry
+    # and is applied even when a runner is injected, so the disposition records a
+    # property of the codebase rather than of the test harness.
+    from robot_sf.baselines import is_runnable_algo  # noqa: PLC0415
+
+    results: list[dict[str, Any]] = []
+    for target in targets:
+        key = _target_key(target)
+        scenario_def_id = _require_text(
+            target.get("scenario_definition_id"), "target scenario_definition_id"
+        )
+        cache_file = cache_dir / f"{key[0]}_{key[1]}_{key[2]}.json"
+        cached_result = _cached_result_if_compatible(cache_file, env_fingerprint)
+        if cached_result is not None:
+            results.append(cached_result)
+            continue
+        if selected_definition_ids is not None and scenario_def_id not in selected_definition_ids:
+            raise ValueError(
+                "target_filter requires compatible cached results for omitted targets; "
+                f"missing {key[0]!r}/{key[1]!r}/{key[2]}"
+            )
+
+        scenario_params, planner_def, planner_algo = _resolve_target_definitions(
+            target, scenario_defs, planner_defs
+        )
+        if not is_runnable_algo(planner_algo):
+            result_entry = _build_unrunnable_result(key, target, planner_algo)
+        else:
+            dt = _resolve_campaign_dt(scenario_params, resolved_bundle)
+            records, repeats = _execute_target_repeats(
+                run_episode,
+                scenario_params,
+                planner_algo,
+                planner_def,
+                seed=key[2],
+                horizon=int(target["horizon"]),
+                dt=dt,
+                repeats_per_target=repeats_per_target,
+                enforce_model_preflight=enforce_model_preflight,
+            )
+            result_entry = _build_executed_target_result(
+                key, target, records, repeats, planner_algo
+            )
+        results.append(result_entry)
+        _write_target_cache(cache_file, env_fingerprint, result_entry)
+    return results
+
+
 def execute_campaign(
     resolved_bundle: Mapping[str, Any],
     *,
@@ -1485,57 +1550,18 @@ def execute_campaign(
     cache_dir, env_fingerprint, selected_definition_ids = _prepare_campaign_environment(
         output_dir, resolved_bundle, target_filter, targets
     )
-
-    # The runnability predicate reflects current main's ``run_episode`` registry
-    # and is applied even when a runner is injected, so the disposition records a
-    # property of the codebase rather than of the test harness.
-    from robot_sf.baselines import is_runnable_algo  # noqa: PLC0415
-
-    results: list[dict[str, Any]] = []
-    for target in targets:
-        key = _target_key(target)
-        scenario_def_id = _require_text(
-            target.get("scenario_definition_id"), "target scenario_definition_id"
-        )
-        cache_file = cache_dir / f"{key[0]}_{key[1]}_{key[2]}.json"
-
-        cached_result = _cached_result_if_compatible(cache_file, env_fingerprint)
-        if cached_result is not None:
-            results.append(cached_result)
-            continue
-
-        if selected_definition_ids is not None and scenario_def_id not in selected_definition_ids:
-            raise ValueError(
-                "target_filter requires compatible cached results for omitted targets; "
-                f"missing {key[0]!r}/{key[1]!r}/{key[2]}"
-            )
-
-        scenario_params, planner_def, planner_algo = _resolve_target_definitions(
-            target, scenario_defs, planner_defs
-        )
-
-        # Fail closed on planners the run_episode path cannot construct.
-        if not is_runnable_algo(planner_algo):
-            result_entry = _build_unrunnable_result(key, target, planner_algo)
-            results.append(result_entry)
-            _write_target_cache(cache_file, env_fingerprint, result_entry)
-            continue
-
-        dt = _resolve_campaign_dt(scenario_params, resolved_bundle)
-        records, repeats = _execute_target_repeats(
-            run_episode,
-            scenario_params,
-            planner_algo,
-            planner_def,
-            seed=key[2],
-            horizon=int(target["horizon"]),
-            dt=dt,
-            repeats_per_target=repeats_per_target,
-            enforce_model_preflight=enforce_model_preflight,
-        )
-        result_entry = _build_executed_target_result(key, target, records, repeats, planner_algo)
-        results.append(result_entry)
-        _write_target_cache(cache_file, env_fingerprint, result_entry)
+    results = _execute_campaign_targets(
+        targets,
+        scenario_defs,
+        planner_defs,
+        resolved_bundle,
+        cache_dir,
+        env_fingerprint,
+        selected_definition_ids,
+        run_episode,
+        repeats_per_target,
+        enforce_model_preflight,
+    )
 
     host_result = {
         "schema_version": HOST_REPORT_SCHEMA_VERSION,

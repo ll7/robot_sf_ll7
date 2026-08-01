@@ -2890,9 +2890,11 @@ def _init_batch_context(  # noqa: PLR0913
     resume: bool,
     circuit_breaker_threshold: int | None,
 ) -> _BatchContext:
-    """Create the batch context and normalize controls preceding scenario validation.
+    """Create the batch context and normalize controls before scenario validation.
+
     Returns:
-        The initialized batch context."""
+        The initialized batch context.
+    """
     ctx = _BatchContext(
         scenarios_or_path=scenarios_or_path,
         scenario_path_arg=scenario_path_arg,
@@ -2928,12 +2930,17 @@ def _init_batch_context(  # noqa: PLR0913
         resume=resume,
         circuit_breaker_threshold=normalize_circuit_breaker_threshold(circuit_breaker_threshold),
     )
+    _normalize_pedestrian_impact_context(ctx)
+    return ctx
+
+
+def _normalize_pedestrian_impact_context(ctx: _BatchContext) -> None:
+    """Normalize pedestrian-impact controls without changing validation precedence."""
     ctx.ped_impact_radius_m, ctx.ped_impact_window_steps = _normalize_pedestrian_impact_controls(
         experimental_ped_impact=ctx.experimental_ped_impact,
         ped_impact_radius_m=ctx.ped_impact_radius_m,
         ped_impact_window_steps=ctx.ped_impact_window_steps,
     )
-    return ctx
 
 
 def _normalize_batch_specs(ctx: _BatchContext) -> None:

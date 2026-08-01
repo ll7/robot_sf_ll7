@@ -68,6 +68,24 @@ def _config_bool(config: dict[str, Any], *, key: str, default: bool) -> bool:
     return value
 
 
+def _config_int(
+    config: dict[str, Any],
+    *,
+    key: str,
+    default: int,
+    minimum: int,
+) -> int:
+    """Read a bounded integer config value without coercing booleans or floats."""
+    value = config.get(key, default)
+    # ``bool`` is a subclass of ``int``; reject it so YAML ``true`` cannot
+    # silently turn into one DataLoader worker or one prefetched batch.
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"training.{key} must be an integer, got {type(value).__name__}: {value!r}")
+    if value < minimum:
+        raise ValueError(f"training.{key} must be >= {minimum}, got {value}")
+    return value
+
+
 def _resolve(path_raw: str | Path, *, base: Path) -> Path:
     """Resolve ``path_raw`` against ``base`` and return an absolute ``Path``."""
     path = Path(path_raw)
@@ -649,6 +667,18 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         key="persistent_workers",
         default=False,
     )
+    num_workers = _config_int(
+        training_cfg_for_schema,
+        key="num_workers",
+        default=0,
+        minimum=0,
+    )
+    prefetch_factor = _config_int(
+        training_cfg_for_schema,
+        key="prefetch_factor",
+        default=2,
+        minimum=1,
+    )
     model_family = str(
         cfg.get("model_family")
         or base_collection.get("model_family")
@@ -902,9 +932,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "--seed",
         str(int(train_cfg.get("seed", 42))),
         "--num-workers",
-        str(int(train_cfg.get("num_workers", 0))),
+        str(num_workers),
         "--prefetch-factor",
-        str(int(train_cfg.get("prefetch_factor", 2))),
+        str(prefetch_factor),
         "--model-family",
         str(train_cfg.get("model_family", model_family)),
         "--hidden-dim",

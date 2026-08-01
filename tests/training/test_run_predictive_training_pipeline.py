@@ -95,6 +95,28 @@ def test_loader_boolean_config_rejects_non_boolean_values(key: str, value: objec
         pipeline._config_bool({key: value}, key=key, default=False)
 
 
+@pytest.mark.parametrize(
+    ("key", "minimum", "value"),
+    [
+        ("num_workers", 0, True),
+        ("num_workers", 0, 1.0),
+        ("num_workers", 0, -1),
+        ("prefetch_factor", 1, False),
+        ("prefetch_factor", 1, 2.0),
+        ("prefetch_factor", 1, 0),
+    ],
+)
+def test_loader_integer_config_rejects_coerced_or_out_of_range_values(
+    key: str,
+    minimum: int,
+    value: object,
+) -> None:
+    """Worker settings must reject YAML values that would silently change loader behavior."""
+    expected = "must be an integer" if isinstance(value, bool | float) else "must be >="
+    with pytest.raises((TypeError, ValueError), match=rf"training\.{key} {expected}"):
+        pipeline._config_int({key: value}, key=key, default=minimum, minimum=minimum)
+
+
 def _make_ego_pipeline_run_stub(invoked: list[list[str]]):
     """Return a pipeline stage stub that materializes ego-conditioned dataset artifacts."""
     ego_schema_json = _predictive_feature_schema_json(

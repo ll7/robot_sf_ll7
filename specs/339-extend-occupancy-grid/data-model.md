@@ -278,6 +278,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional, Tuple
 import numpy as np
 
+
 @dataclass
 class GridConfig:
     size_m: Tuple[float, float] = (10.0, 10.0)
@@ -288,12 +289,14 @@ class GridConfig:
     include_static_obstacles: bool = True
     include_pedestrians: bool = True
 
+
 @dataclass
 class GridChannel:
     name: str
     data: np.ndarray  # shape (height, width), dtype float32
     occupancy_type: Literal["binary", "continuous"] = "binary"
     valid: bool = True
+
 
 @dataclass
 class OccupancyGrid:
@@ -303,6 +306,7 @@ class OccupancyGrid:
     timestamp: float
     robot_pose: "RobotPose"  # (x, y, theta)
     channels: Dict[str, GridChannel]
+
 
 @dataclass
 class POIQuery:
@@ -314,6 +318,7 @@ class POIQuery:
     height_m: Optional[float] = None
     grid_frame: Literal["ego", "world"] = "world"
     channel_names: Optional[List[str]] = None
+
 
 @dataclass
 class POIResult:

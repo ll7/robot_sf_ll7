@@ -86,7 +86,7 @@ env = make_robot_env(debug=True)
 # Robot with image observations
 env = make_image_robot_env(debug=True)
 
-# Pedestrian environment  
+# Pedestrian environment
 env = make_pedestrian_env(robot_model=model, debug=True)
 
 # Robot-free Social Force crowd simulation
@@ -98,7 +98,7 @@ env = make_crowd_sim_env(render_mode=None)
 from robot_sf.gym_env.unified_config import (
     RobotSimulationConfig,
     ImageRobotConfig,
-    PedestrianSimulationConfig
+    PedestrianSimulationConfig,
 )
 
 config = RobotSimulationConfig()
@@ -123,9 +123,9 @@ The refactoring created these new core files:
 | Tool | Purpose |
 |------|---------|
 | [`utilities/migrate_environments.py`](../../utilities/migrate_environments.py) | Automated migration script |
-| [`examples/demo_refactored_environments.py`](../../examples/demo_refactored_environments.py) | Working demonstration |
+| *None — removed* | Working demonstration (removed) |
 | [`tests/test_pedestrian_env_compat.py`](../../tests/test_pedestrian_env_compat.py) | Pedestrian env compatibility tests |
-| [`examples/demo_pedestrian_updated.py`](../../examples/demo_pedestrian_updated.py) | Migration example |
+| *None — removed* | Migration example (removed) |
 
 ## 🎯 Key Benefits Achieved
 

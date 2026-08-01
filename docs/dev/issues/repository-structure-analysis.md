@@ -251,7 +251,7 @@ tmp/                      # Transient (fully .gitignored)
 1. Create `/output/` directory with subdirectories
 2. Update scripts to write to new locations (search for hardcoded paths)
 3. Update `.gitignore` to ignore `/output/`
-4. Add migration script: `scripts/migrate_outputs.sh`
+4. Add migration script under `scripts/` (e.g. `migrate_outputs.sh`)
 5. Update documentation references
 6. Add `output/.gitkeep` for empty subdirs
 
@@ -285,11 +285,11 @@ Configuration exists in multiple places with unclear hierarchy:
 **Current State Analysis:**
 ```python
 # Multiple config classes:
-- BaseSimulationConfig       # unified_config.py
-- RobotSimulationConfig      # unified_config.py
-- SimulationSettings         # sim_config.py (legacy?)
-- EnvSettings                # env_config.py (legacy?)
-- MapDefinition              # map_config.py
+-BaseSimulationConfig  # unified_config.py
+-RobotSimulationConfig  # unified_config.py
+-SimulationSettings  # sim_config.py (legacy?)
+-EnvSettings  # env_config.py (legacy?)
+-MapDefinition  # map_config.py
 ```
 
 **Proposed Solution:**
@@ -317,13 +317,15 @@ Add deprecation warnings:
 # In env_config.py and sim_config.py
 import warnings
 
+
 class SimulationSettings:
     """DEPRECATED: Use unified_config.RobotSimulationConfig instead."""
+
     def __init__(self, *args, **kwargs):
         warnings.warn(
             "SimulationSettings is deprecated, use RobotSimulationConfig",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
 ```
 
@@ -493,13 +495,13 @@ tests/
 
 **Script:**
 ```python
-# scripts/extract_todos.py
+# Proposed helper: extract_todos.py (under scripts/)
 import re
 from pathlib import Path
 
-for py_file in Path('robot_sf').rglob('*.py'):
+for py_file in Path("robot_sf").rglob("*.py"):
     content = py_file.read_text()
-    for match in re.finditer(r'# TODO: (.+)', content):
+    for match in re.finditer(r"# TODO: (.+)", content):
         print(f"{py_file}:{match.group(1)}")
 ```
 

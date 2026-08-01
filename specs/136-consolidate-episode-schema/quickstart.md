@@ -101,6 +101,7 @@ Run this script to validate the implementation:
 import sys
 from pathlib import Path
 
+
 def main():
     print("🔍 Validating Schema Consolidation Feature")
     print("=" * 50)
@@ -120,6 +121,7 @@ def main():
     # Check 2: Schema loads correctly
     try:
         from robot_sf.benchmark.schema_loader import load_schema
+
         schema = load_schema("episode.schema.v1.json")
         if schema.get("title") == "RobotSF Benchmark Episode (v1)":
             print("✅ Schema loads correctly via new API")
@@ -145,6 +147,7 @@ def main():
 
     print("\n🎉 Schema consolidation validation complete!")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -47,10 +47,10 @@ ped_actions = zip(
     self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,  # ❌ Artificial 2x
 )
 
-# After  
+# After
 ped_actions = zip(
     self.simulator.pysf_sim.peds.pos(),
-    self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel(),      # ✅ Actual velocity
+    self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel(),  # ✅ Actual velocity
 )
 ```
 
@@ -60,7 +60,7 @@ ped_actions = zip(
 velocity = velocity / 2  # ❌ Compensating division
 
 # After (working with correct source data)
-velocity = velocity      # ✅ No manipulation needed
+velocity = velocity  # ✅ No manipulation needed
 ```
 
 ### Files Modified
@@ -100,9 +100,10 @@ def _augment_ped_actions(self, ped_actions: np.ndarray):
         if self.enhanced_velocity_display:
             direction = np.array(p2) - np.array(p1)
             p2 = np.array(p1) + direction * 2
-            
-        pygame.draw.line(self.screen, PED_ACTION_COLOR, 
-                        self._scale_tuple(p1), self._scale_tuple(p2), width=3)
+
+        pygame.draw.line(
+            self.screen, PED_ACTION_COLOR, self._scale_tuple(p1), self._scale_tuple(p2), width=3
+        )
 ```
 
 ### Best Practices Established

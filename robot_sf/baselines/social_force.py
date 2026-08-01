@@ -262,7 +262,10 @@ class SocialForcePlanner(BasePolicy):
         """
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
-        assert isinstance(obs, Observation)
+        if not isinstance(obs, Observation):
+            raise TypeError(
+                f"SocialForcePlanner requires Observation, got {type(obs).__name__}",
+            )
 
         robot_pos = np.asarray(obs.robot["position"], dtype=float)
         robot_vel = np.asarray(obs.robot["velocity"], dtype=float)

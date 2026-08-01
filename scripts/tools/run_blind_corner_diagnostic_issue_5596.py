@@ -14,10 +14,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
+from robot_sf.evidence.writers import write_json
 from robot_sf.scenario_certification.feasibility_oracle import (
     ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
     build_issue_5596_blind_corner_diagnostic,
@@ -72,8 +72,7 @@ def main() -> None:
         sys.exit(2)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2, ensure_ascii=False)
+    write_json(args.output, report)
 
     print(f"Report written to {args.output}")
 

@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Sequence, Optional, Dict, List, Tuple
 
+
 @dataclass
 class BenchmarkConfig:
     output_root: str
@@ -42,6 +43,7 @@ class BenchmarkConfig:
     horizon_override: Optional[int] = None
     effect_size_reference_density: str = "low"  # baseline for Glass Δ
 
+
 @dataclass
 class ScenarioDescriptor:
     scenario_id: str
@@ -53,6 +55,7 @@ class ScenarioDescriptor:
     max_episode_steps: int
     hash_fragment: str  # deterministic hash of defining fields
 
+
 @dataclass
 class EpisodeJob:
     job_id: str  # hash of scenario_id + seed + algo + horizon
@@ -62,6 +65,7 @@ class EpisodeJob:
     density: str
     horizon: int
 
+
 @dataclass
 class EpisodeRecord:
     episode_id: str
@@ -69,12 +73,13 @@ class EpisodeRecord:
     seed: int
     archetype: str
     density: str
-    status: Literal["success","collision","timeout","error"]
+    status: Literal["success", "collision", "timeout", "error"]
     metrics: Dict[str, float]
     steps: int
     wall_time_sec: float
     algo: str
     created_at: float  # epoch
+
 
 @dataclass
 class AggregateMetric:
@@ -82,8 +87,9 @@ class AggregateMetric:
     mean: float
     median: float
     p95: float
-    mean_ci: Tuple[float,float] | None
-    median_ci: Tuple[float,float] | None
+    mean_ci: Tuple[float, float] | None
+    median_ci: Tuple[float, float] | None
+
 
 @dataclass
 class AggregateMetricsGroup:
@@ -91,6 +97,7 @@ class AggregateMetricsGroup:
     density: str
     count: int
     metrics: Dict[str, AggregateMetric]
+
 
 @dataclass
 class EffectSizeEntry:
@@ -100,10 +107,12 @@ class EffectSizeEntry:
     diff: float  # absolute difference (high - low)
     standardized: float  # Cohen h or Glass Δ
 
+
 @dataclass
 class EffectSizeReport:
     archetype: str
     comparisons: List[EffectSizeEntry]
+
 
 @dataclass
 class PrecisionEntry:
@@ -111,6 +120,7 @@ class PrecisionEntry:
     half_width: float
     target: float
     passed: bool
+
 
 @dataclass
 class ScenarioPrecisionStatus:
@@ -121,11 +131,13 @@ class ScenarioPrecisionStatus:
     metric_status: List[PrecisionEntry]
     all_pass: bool
 
+
 @dataclass
 class StatisticalSufficiencyReport:
     evaluations: List[ScenarioPrecisionStatus]
     final_pass: bool
     scaling_efficiency: Dict[int, float]  # worker_count -> efficiency
+
 
 @dataclass
 class PlotArtifact:
@@ -133,9 +145,10 @@ class PlotArtifact:
     kind: str  # distribution|trajectory|kde|pareto|force_heatmap
     path_pdf: str
     path_png: Optional[str]
-    groups: Dict[str,str]
-    status: Literal["generated","skipped"]
+    groups: Dict[str, str]
+    status: Literal["generated", "skipped"]
     note: Optional[str] = None
+
 
 @dataclass
 class VideoArtifact:
@@ -145,8 +158,9 @@ class VideoArtifact:
     episode_id: str
     selection_reason: str
     path_mp4: str
-    status: Literal["generated","skipped","error"]
+    status: Literal["generated", "skipped", "error"]
     note: Optional[str] = None
+
 
 @dataclass
 class BenchmarkManifest:

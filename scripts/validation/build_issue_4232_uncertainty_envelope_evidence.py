@@ -9,8 +9,6 @@ deployment, paper, or dissertation claims.
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import importlib.util
 import json
 import math
@@ -21,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from robot_sf.evidence.writers import write_csv, write_json, write_sha256sums, write_text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PACKET = Path("configs/benchmarks/issue_4232_uncertainty_envelope_claim_packet.yaml")
@@ -428,24 +428,9 @@ def _runtime_cost_report(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]
     return report
 
 
-def _csv_text(fieldnames: Sequence[str], rows: Sequence[Mapping[str, Any]]) -> str:
-    from io import StringIO
-
-    buffer = StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames, lineterminator="\n")
-    writer.writeheader()
-    for row in rows:
-        writer.writerow({field: row.get(field, "") for field in fieldnames})
-    return buffer.getvalue()
-
-
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    _write(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+def _write_marked(path: Path, content: str) -> None:
+    """Write a Markdown evidence file through the shared writer with the issue marker."""
+    write_text(path, content, issue_ref="robot_sf#4232")
 
 
 def _write_outputs(
@@ -476,22 +461,13 @@ def _write_outputs(
         ),
         "raw_artifact_policy": "raw JSONL, videos, logs, checkpoints, and model caches are not copied",
     }
-    _write_json(output_dir / "metadata.json", metadata)
-    _write_json(output_dir / "pre_registration_packet.json", dict(packet))
-    _write(
-        output_dir / "alpha_arm_metric_table.csv",
-        _csv_text(list(metric_rows[0].keys()), metric_rows),
-    )
-    _write(
-        output_dir / "paired_alpha_delta_table.csv",
-        _csv_text(list(delta_rows[0].keys()), delta_rows),
-    )
-    _write(
-        output_dir / "row_status_audit.csv",
-        _csv_text(list(audit_rows[0].keys()), audit_rows),
-    )
-    _write_json(output_dir / "envelope_activation_diagnostics.json", activation)
-    _write(
+    write_json(output_dir / "metadata.json", metadata)
+    write_json(output_dir / "pre_registration_packet.json", dict(packet))
+    write_csv(output_dir / "alpha_arm_metric_table.csv", metric_rows)
+    write_csv(output_dir / "paired_alpha_delta_table.csv", delta_rows)
+    write_csv(output_dir / "row_status_audit.csv", audit_rows)
+    write_json(output_dir / "envelope_activation_diagnostics.json", activation)
+    _write_marked(
         output_dir / "envelope_activation_diagnostics.md",
         "\n".join(
             [
@@ -511,11 +487,8 @@ def _write_outputs(
         )
         + "\n",
     )
-    _write(
-        output_dir / "runtime_cost_report.csv",
-        _csv_text(list(runtime_rows[0].keys()), runtime_rows),
-    )
-    _write(
+    write_csv(output_dir / "runtime_cost_report.csv", runtime_rows)
+    _write_marked(
         output_dir / "claim_boundary.md",
         "\n".join(
             [
@@ -533,7 +506,7 @@ def _write_outputs(
         )
         + "\n",
     )
-    _write(
+    _write_marked(
         output_dir / "claim_readiness.md",
         "\n".join(
             [
@@ -555,7 +528,7 @@ def _write_outputs(
         )
         + "\n",
     )
-    _write(
+    _write_marked(
         output_dir / "README.md",
         "\n".join(
             [
@@ -569,14 +542,7 @@ def _write_outputs(
         )
         + "\n",
     )
-    checksum_lines = []
-    for path in sorted(output_dir.iterdir()):
-        if path.name == "SHA256SUMS":
-            continue
-        checksum_lines.append(
-            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {_repo_relative(path)}"
-        )
-    _write(output_dir / "SHA256SUMS", "\n".join(checksum_lines) + "\n")
+    write_sha256sums(output_dir)
     return {
         "ok": True,
         "issue": 4232,

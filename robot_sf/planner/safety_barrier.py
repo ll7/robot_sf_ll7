@@ -17,13 +17,15 @@ import numpy as np
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
+_DEFAULT_MAX_ANGULAR_SPEED = 1.2
+
 
 @dataclass
 class SafetyBarrierPlannerConfig:
     """Configuration for :class:`SafetyBarrierPlannerAdapter`."""
 
     max_linear_speed: float = 0.8
-    max_angular_speed: float = 1.2
+    max_angular_speed: float = _DEFAULT_MAX_ANGULAR_SPEED
     goal_tolerance: float = 0.25
     safe_distance: float = 1.0
     stop_distance: float = 0.35
@@ -334,6 +336,10 @@ class SafetyBarrierPlannerAdapter(OccupancyAwarePlannerMixin):
             linear = min(linear, max(speed * 0.5, 0.15))
         return linear, angular
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SafetyBarrierPlannerAdapter"}
+
 
 def build_safety_barrier_config(cfg: dict[str, Any] | None) -> SafetyBarrierPlannerConfig:
     """Build :class:`SafetyBarrierPlannerConfig` from mapping payload.
@@ -346,7 +352,7 @@ def build_safety_barrier_config(cfg: dict[str, Any] | None) -> SafetyBarrierPlan
 
     return SafetyBarrierPlannerConfig(
         max_linear_speed=float(cfg.get("max_linear_speed", 0.8)),
-        max_angular_speed=float(cfg.get("max_angular_speed", 1.2)),
+        max_angular_speed=float(cfg.get("max_angular_speed", _DEFAULT_MAX_ANGULAR_SPEED)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
         safe_distance=float(cfg.get("safe_distance", 1.0)),
         stop_distance=float(cfg.get("stop_distance", 0.35)),

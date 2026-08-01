@@ -96,6 +96,7 @@ inflated_obstacles = [
 ```python
 _graph_cache: dict[str, VisibilityGraph] = {}
 
+
 def _get_or_build_graph(map_def: MapDefinition) -> VisibilityGraph:
     map_hash = hashlib.md5(repr(map_def.obstacles).encode()).hexdigest()
     if map_hash not in _graph_cache:
@@ -131,12 +132,13 @@ class MapDefinition:
     poi_positions: list[Vec2D] = field(default_factory=list)
     poi_labels: dict[str, str] = field(default_factory=dict)  # id -> label
 
+
 # Parser logic
 circles = svg_root.findall(".//circle[@class='poi']")
 for circle in circles:
-    cx, cy = float(circle.get('cx')), float(circle.get('cy'))
-    poi_id = circle.get('id', f'poi_{len(map_def.poi_positions)}')
-    label = circle.get('label', '')
+    cx, cy = float(circle.get("cx")), float(circle.get("cy"))
+    poi_id = circle.get("id", f"poi_{len(map_def.poi_positions)}")
+    label = circle.get("label", "")
     map_def.poi_positions.append(Vec2D(cx, cy))
     if label:
         map_def.poi_labels[poi_id] = label
@@ -237,22 +239,24 @@ env = make_robot_env(config=config)
 map_sizes = [10, 25, 50, 75, 100]  # obstacle counts
 for num_obstacles in map_sizes:
     map_def = generate_test_map(num_obstacles)
-    
+
     # Time graph build (one-time)
     start = time.perf_counter()
     planner = GlobalPlanner(map_def)
     build_time = time.perf_counter() - start
-    
+
     # Time 100 path queries
     times = []
     for _ in range(100):
         start = time.perf_counter()
         path = planner.plan(sample_start(), sample_goal())
         times.append(time.perf_counter() - start)
-    
-    print(f"{num_obstacles} obstacles: "
-          f"build={build_time*1000:.1f}ms, "
-          f"query_median={np.median(times)*1000:.1f}ms")
+
+    print(
+        f"{num_obstacles} obstacles: "
+        f"build={build_time * 1000:.1f}ms, "
+        f"query_median={np.median(times) * 1000:.1f}ms"
+    )
 ```
 
 **Expected Targets**:

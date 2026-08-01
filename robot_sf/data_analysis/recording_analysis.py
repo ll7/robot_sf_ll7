@@ -2,13 +2,18 @@
 Anaylsis of the data recorded from the simulation.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import matplotlib.pyplot as plt
 import numpy as np
 from loguru import logger
 from scipy.stats import gaussian_kde
 
-from robot_sf.nav.map_config import MapDefinition
-from robot_sf.render.sim_view import VisualizableSimState
+if TYPE_CHECKING:
+    from robot_sf.nav.map_config import MapDefinition
+    from robot_sf.render.sim_view import VisualizableSimState
 
 
 def extract_pedestrian_positions(states: list[VisualizableSimState]) -> np.ndarray:
@@ -41,7 +46,11 @@ def extract_pedestrian_positions(states: list[VisualizableSimState]) -> np.ndarr
     if len(pedestrian_positions) == 0:
         logger.error("No pedestrian positions found in states")
         return np.array([])
-    if not all(len(pos) == 2 for pos in pedestrian_positions):
+    try:
+        all_positions_are_2d = all(np.asarray(pos).shape == (2,) for pos in pedestrian_positions)
+    except (TypeError, ValueError):
+        all_positions_are_2d = False
+    if not all_positions_are_2d:
         logger.error("Invalid pedestrian positions found in states")
         return np.array([])
     logger.info(f"Extracted {len(pedestrian_positions)} pedestrian positions")

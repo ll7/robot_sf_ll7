@@ -50,6 +50,11 @@ from robot_sf.robot.robot_state import RobotState
 from robot_sf.robot.rollover_proxy import RolloverProxyParams, rollover_proxy_telemetry
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.sensor_fusion import OBS_IMAGE, SensorFusion
+from robot_sf.sensor.social_graph_observation import (
+    SocialGraphObservationConfig,
+    SocialGraphObservationFusion,
+    social_graph_observation_space,
+)
 from robot_sf.sensor.socnav_observation import (
     DEFAULT_MAX_PEDS,
     SocNavObservationFusion,
@@ -544,6 +549,8 @@ class RobotEnv(BaseEnv):
         # Configure observation space and sensor adapter per observation mode
         if env_config.observation_mode == ObservationMode.SOCNAV_STRUCT:
             sensor_adapter = self._setup_socnav_observation(env_config)
+        elif env_config.observation_mode == ObservationMode.SOCIAL_GRAPH:
+            sensor_adapter = self._setup_social_graph_observation(env_config)
         else:
             sensor_adapter = self._setup_default_observation(env_config, sensors)
 
@@ -819,6 +826,39 @@ class RobotEnv(BaseEnv):
         if self._flatten_obs_space:
             return _FlatteningObservationWrapper(socnav_fusion)
         return socnav_fusion
+
+    def _setup_social_graph_observation(self, env_config: EnvSettings):
+        """Configure the fixed-shape social graph observation path.
+
+        Returns:
+            SocialGraphObservationFusion: Runtime adapter for graph observations.
+        """
+        if self.include_grid_in_observation and self.occupancy_grid is not None:
+            raise ValueError("SOCIAL_GRAPH does not support occupancy-grid observations")
+        if self._asymmetric_critic_enabled:
+            raise ValueError("SOCIAL_GRAPH does not support asymmetric critic observations")
+        if getattr(env_config, "predictive_foresight_enabled", False):
+            raise ValueError("SOCIAL_GRAPH does not support predictive foresight observations")
+
+        ped_count = getattr(self.simulator, "ped_pos", np.zeros((0, 2))).shape[0]
+        max_peds = getattr(env_config.sim_config, "max_total_pedestrians", None)
+        if max_peds is None:
+            max_peds = max(DEFAULT_MAX_PEDS, ped_count)
+        max_peds = int(max_peds)
+        if max_peds < 0:
+            raise ValueError("sim_config.max_total_pedestrians must be >= 0")
+
+        graph_config = SocialGraphObservationConfig(max_pedestrians=max_peds)
+        self.observation_space = social_graph_observation_space(graph_config)
+        self._flatten_obs_space = False
+        self._wrap_obs_as_dict = False
+        socnav_fusion = SocNavObservationFusion(
+            simulator=self.simulator,
+            env_config=env_config,
+            max_pedestrians=max_peds,
+            robot_index=0,
+        )
+        return SocialGraphObservationFusion(socnav_fusion, graph_config)
 
     def _setup_default_observation(
         self, env_config: EnvSettings, sensors: list[Any]

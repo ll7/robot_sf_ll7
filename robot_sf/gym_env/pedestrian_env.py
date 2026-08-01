@@ -166,7 +166,10 @@ class PedestrianEnv(SingleAgentEnv):
 
         # Store reward function
         self.reward_func = reward_func or simple_ped_reward
-        logger.info(f"Using reward function: {_reward_function_name(self.reward_func)}")
+        logger.info(
+            "Using reward function: {name}",
+            name=f"{_reward_function_name(self.reward_func)}",
+        )
 
         self.robot_action_space = None
         self._robot_action_space_valid = True
@@ -235,7 +238,7 @@ class PedestrianEnv(SingleAgentEnv):
             try:
                 self.robot_model.set_action_space(self.robot_action_space)
             except (AttributeError, TypeError, ValueError) as exc:  # pragma: no cover - defensive
-                logger.warning(f"Failed to set robot model action space: {exc}")
+                logger.warning("Failed to set robot model action space: {exc}", exc=f"{exc}")
 
         self._robot_action_space_valid = self._validate_robot_model_action_space()
 
@@ -257,9 +260,10 @@ class PedestrianEnv(SingleAgentEnv):
         if isinstance(self.robot_action_space, spaces.Box) and isinstance(model_space, spaces.Box):
             if model_space.shape != self.robot_action_space.shape:
                 logger.warning(
-                    "Robot model action space shape "
-                    f"{model_space.shape} does not match env shape "
-                    f"{self.robot_action_space.shape}. Falling back to null actions."
+                    "Robot model action space shape {model_shape} does not match env shape "
+                    "{env_shape}. Falling back to null actions.",
+                    model_shape=f"{model_space.shape}",
+                    env_shape=f"{self.robot_action_space.shape}",
                 )
                 return False
             if not np.allclose(model_space.low, self.robot_action_space.low) or not np.allclose(
@@ -276,9 +280,10 @@ class PedestrianEnv(SingleAgentEnv):
         if hasattr(model_space, "shape") and hasattr(self.robot_action_space, "shape"):
             if model_space.shape != self.robot_action_space.shape:
                 logger.warning(
-                    "Robot model action space shape "
-                    f"{model_space.shape} does not match env shape "
-                    f"{self.robot_action_space.shape}. Falling back to null actions."
+                    "Robot model action space shape {model_shape} does not match env shape "
+                    "{env_shape}. Falling back to null actions.",
+                    model_shape=f"{model_space.shape}",
+                    env_shape=f"{self.robot_action_space.shape}",
                 )
                 return False
         return True
@@ -401,7 +406,10 @@ class PedestrianEnv(SingleAgentEnv):
                     deterministic=True,
                 )
             except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
-                logger.warning(f"Robot model predict failed ({exc}); using null action.")
+                logger.warning(
+                    "Robot model predict failed ({exc}); using null action.",
+                    exc=f"{exc}",
+                )
                 action_robot = self._null_robot_action()
             else:
                 formatted = self._format_robot_action(action_robot)
@@ -568,7 +576,7 @@ class PedestrianEnv(SingleAgentEnv):
 
         with target_path.open("wb") as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
-            logger.info(f"Recording saved to {target_path}")
+            logger.info("Recording saved to {target_path}", target_path=f"{target_path}")
             logger.info("Reset state list")
             self.recorded_states = []
 

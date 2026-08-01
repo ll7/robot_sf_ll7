@@ -370,10 +370,12 @@ def test_csv_round_trip_preserves_inputs(tmp_path: Path) -> None:
     assert all(entry.classification == "result" for entry in reloaded)
 
 
-def test_write_snqi_analysis_uses_review_marked_shared_writers(tmp_path: Path) -> None:
-    """Generated JSON and CSV outputs carry canonical review markers."""
+def test_write_snqi_analysis_preserves_public_packet_order(tmp_path: Path) -> None:
+    """The diagnostic writer preserves its established JSON order and review marker."""
     packet = {
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "schema_version": ANALYSIS_SCHEMA_VERSION,
+        "issue": 5892,
         "_unit_keys": {"orca": ["scenario_00:111"]},
         "point_estimate_robustness_ranking": [
             {
@@ -395,6 +397,7 @@ def test_write_snqi_analysis_uses_review_marked_shared_writers(tmp_path: Path) -
 
     analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
     assert analysis["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert list(analysis)[:3] == ["review_marker", "schema_version", "issue"]
     assert "_unit_keys" not in analysis
     csv_lines = csv_path.read_text(encoding="utf-8").splitlines()
     assert csv_lines[0] == "# AI-GENERATED NEEDS-REVIEW"

@@ -1273,7 +1273,8 @@ def write_snqi_analysis(packet: Mapping[str, Any], evidence_dir: str | Path) -> 
 
     public_packet = {key: value for key, value in packet.items() if not key.startswith("_")}
     analysis_path = out / "snqi_analysis.json"
-    write_json(analysis_path, public_packet)
+    # Keep the historical insertion order for this public diagnostic reference.
+    write_json(analysis_path, public_packet, sort_keys=False)
 
     csv_path = out / "snqi_by_latency.csv"
     csv_fields = [

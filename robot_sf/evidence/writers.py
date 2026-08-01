@@ -127,8 +127,9 @@ def write_json(
     catalog_area: str | None = None,
     catalog_status: str = "evidence",
     catalog_freshness: str = "evidence",
+    sort_keys: bool = True,
 ) -> None:
-    """Write deterministic JSON with review marker.
+    """Write JSON with a review marker and explicit key-order policy.
 
     Paths written under ``docs/context/evidence/`` register their evidence
     bundle automatically in ``docs/context/catalog.yaml`` via
@@ -136,9 +137,11 @@ def write_json(
     unless ``catalog_area`` overrides it. Paths outside the evidence tree
     remain unaffected.
     """
-    # Add review marker at top level
+    # Add review marker at top level.
     marked_payload = {"review_marker": review_marker_json(), **payload}
-    path.write_text(json.dumps(marked_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(marked_payload, indent=2, sort_keys=sort_keys) + "\n", encoding="utf-8"
+    )
     _maybe_register(
         path,
         catalog_area=catalog_area,

@@ -329,6 +329,42 @@ def test_receipt_requires_completed_zero_exit_campaign() -> None:
     assert receipt["all_native"] is False
 
 
+@pytest.mark.parametrize(
+    "identity_overrides",
+    [
+        {"scenario_params": {"algo": []}},
+        {"scenario_id": []},
+        {"seed": {}},
+        {"seed": 111.0},
+        {"seed": True},
+    ],
+)
+def test_receipt_rejects_malformed_episode_identities(
+    identity_overrides: dict[str, Any],
+) -> None:
+    """Malformed identity fields fail the receipt without crashing classification."""
+    record = {
+        "scenario_params": {"algo": "goal"},
+        "scenario_id": "single_ped_crossing_orthogonal",
+        "seed": 111,
+        "metrics": {},
+        **identity_overrides,
+    }
+    receipt = build_receipt(
+        {
+            "_runner_returncode": 0,
+            "campaign_root": "output/unused",
+            "campaign_execution_status": "completed",
+            "exit_code": 0,
+        },
+        [record],
+        Path("output/unused"),
+    )
+
+    assert receipt["passed"] is False
+    assert receipt["identities_ok"] is False
+
+
 @pytest.mark.parametrize("invalid_support_count", [True, -1, float("nan"), float("inf")])
 def test_aggregate_contract_ignores_invalid_support_counts(
     invalid_support_count: object,

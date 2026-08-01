@@ -420,6 +420,25 @@ def _aggregate_metric_contract_is_ok(
     return not reducers & aggregate_metric.keys()
 
 
+def _normalize_identity_text(value: Any) -> tuple[str, bool]:
+    """Normalize a required planner or scenario identity field fail-closed."""
+    if isinstance(value, str) and value.strip():
+        return value.strip(), True
+    return "unknown", False
+
+
+def _normalize_identity_seed(value: Any) -> tuple[int | None, bool]:
+    """Normalize a required seed without accepting bools or float-equal integers."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value, True
+    return None, False
+
+
+def _identity_sort_key(identity: tuple[Any, Any, Any]) -> tuple[str, str, str]:
+    """Return a total-order key for possibly malformed identity tuples."""
+    return tuple(str(value) for value in identity)
+
+
 def _run_campaign(output_root: Path) -> dict[str, Any]:
     """Execute the camera-ready campaign and return the JSON result."""
     cmd = [
@@ -474,9 +493,10 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
     scenario_params = record.get("scenario_params", {})
     if not isinstance(scenario_params, dict):
         scenario_params = {}
-    algo = scenario_params.get("algo", record.get("algo", "unknown"))
-    scenario_id = record.get("scenario_id", "unknown")
-    seed = record.get("seed")
+    raw_algo = scenario_params.get("algo") if "algo" in scenario_params else record.get("algo")
+    planner, planner_identity_valid = _normalize_identity_text(raw_algo)
+    scenario_id, scenario_identity_valid = _normalize_identity_text(record.get("scenario_id"))
+    seed, seed_identity_valid = _normalize_identity_seed(record.get("seed"))
     metrics = record.get("metrics", {})
     social = metrics.get("social_compliance", {}) if isinstance(metrics, dict) else {}
     raw_social_metrics = social.get("metrics", {}) if isinstance(social, dict) else {}
@@ -546,9 +566,12 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
     execution_mode = _resolve_row_execution_mode(record)
 
     return {
-        "planner": algo,
+        "planner": planner,
         "scenario_id": scenario_id,
         "seed": seed,
+        "identity_valid": (
+            planner_identity_valid and scenario_identity_valid and seed_identity_valid
+        ),
         "execution_mode": execution_mode,
         "social_compliance_schema_version": schema_version,
         "families_present": sorted(families_present),
@@ -662,10 +685,12 @@ def build_receipt(
     for row in row_classifications:
         _attach_campaign_status(row, planner_statuses)
     observed_identities = sorted(
-        {(r["planner"], r["scenario_id"], r["seed"]) for r in row_classifications}
+        {(r["planner"], r["scenario_id"], r["seed"]) for r in row_classifications},
+        key=_identity_sort_key,
     )
     expected_identities = sorted(
-        (p, EXPECTED_SCENARIO, s) for p in EXPECTED_PLANNERS for s in EXPECTED_SEEDS
+        ((p, EXPECTED_SCENARIO, s) for p in EXPECTED_PLANNERS for s in EXPECTED_SEEDS),
+        key=_identity_sort_key,
     )
 
     all_native = bool(row_classifications) and all(
@@ -690,7 +715,10 @@ def build_receipt(
     all_families = all(r["all_families_present"] for r in row_classifications)
     aggregation_contract_ok = _aggregate_contract_is_ok(campaign_result, row_classifications)
     row_count_ok = len(episodes) == EXPECTED_ROW_COUNT
-    identities_ok = observed_identities == expected_identities
+    identities_ok = (
+        all(row["identity_valid"] for row in row_classifications)
+        and observed_identities == expected_identities
+    )
     campaign_returncode = campaign_result.get("_runner_returncode")
     campaign_exit_code = campaign_result.get("exit_code")
     campaign_ok = _campaign_result_is_ok(campaign_result)

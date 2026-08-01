@@ -1,5 +1,8 @@
-"""Adapter: convert re-exported PPO episode rows (job-13483 doorway re-execution) into
-the ``trace_series.json`` / ``metadata.json`` bundle schema consumed by
+"""Convert worked-example re-export rows into renderer-ready trace bundles.
+
+The adapter supports the pinned doorway PPO arm and the pinned double-bottleneck
+goal/PPO arms selected with ``--arm``. It writes the ``trace_series.json`` /
+``metadata.json`` bundle schema consumed by
 ``scripts/repro/butterfly_hinge_figure_proto.py`` (via
 ``robot_sf.benchmark.trace_scene_figure.load_episode`` and that script's own
 ``EpisodeTrace`` loader).
@@ -9,8 +12,8 @@ STATUS: adapter for Stage 5-6 of the butterfly worked-example pipeline (see
 this module only performs the schema conversion plus a small provenance-sidecar
 augmentation step -- it renders nothing itself.
 
-Source data
------------
+Doorway source data
+-------------------
 ``output/benchmarks/doorway_butterfly_trace_reexport/job-13483/doorway_butterfly_ppo_a307/
 runs/ppo__differential_drive/episodes.jsonl`` -- one row per episode (``paper_eval_s30``
 seed set, seeds 111-140), produced by a pinned-commit re-execution (exec commit
@@ -19,6 +22,9 @@ seed set, seeds 111-140), produced by a pinned-commit re-execution (exec commit
 the release for 28/30 seeds -- see
 ``output/benchmarks/doorway_butterfly_trace_reexport/job-13483/PER_SEED_DIFF.md`` for the
 full release-vs-rerun diff this adapter's provenance augmentation quotes from.
+The two double-bottleneck arms use the same row-level contract but carry their
+own source provenance; the adapter deliberately does not invent doorway campaign
+or fidelity metadata for them.
 
 Each row's per-episode step trace lives at
 ``row["algorithm_metadata"]["simulation_step_trace"]`` (schema
@@ -69,8 +75,8 @@ Fields OMITTED vs. the issue-4891 reference (no source in this row, or not appli
 NOT silently dropped; see ``_build_metadata`` for where each decision is made):
 
 - ``selection_metric`` / ``selection_metric_value`` / ``selection_mode``: the issue-4891
-  bundles were picked from a campaign by a best/worst/median path-efficiency rule; these
-  two seeds (113, 114) were picked directly (113 = success repro, 114 = collision repro),
+  bundles were picked from a campaign by a best/worst/median path-efficiency rule; the
+  worked-example episodes are selected directly (for example, doorway seeds 113 and 114),
   not by that selection rule. Neither field is read by any loader in this repo (grepped
   ``trace_scene_figure.py`` and ``butterfly_hinge_figure_proto.py``), so omitting them
   loses no required information.

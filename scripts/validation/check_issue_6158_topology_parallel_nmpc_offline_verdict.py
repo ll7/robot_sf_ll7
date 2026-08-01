@@ -180,34 +180,54 @@ def _raw_config(config_path: Path) -> dict[str, Any]:
 
 def gate_1_k1_legacy_parity(nmpc_config: NMPCSocialConfig) -> GateResult:
     """K=1 (default hypothesis) must match legacy NMPCSocialPlannerAdapter.plan()."""
-    obs = _build_obs(goal=(3.0, 0.0))  # no pedestrians -> preferred_turn == 0.0 on both paths
-    topo_cfg = TopologyParallelNMPCConfig(
-        max_hypotheses=1,
-        hypothesis_labels=("default",),
-        nmpc_config=nmpc_config,
-        switch_hysteresis_ticks=0,
-    )
-    topo = TopologyParallelNMPCPlannerAdapter(topo_cfg)
-    legacy = NMPCSocialPlannerAdapter(nmpc_config)
-    v_topo, w_topo = topo.plan(obs)
-    v_leg, w_leg = legacy.plan(obs)
-    dv = abs(v_topo - v_leg)
-    dw = abs(w_topo - w_leg)
-    passed = (dv <= PARITY_ATOL + PARITY_RTOL * abs(v_leg)) and (
-        dw <= PARITY_ATOL + PARITY_RTOL * abs(w_leg)
-    )
+    fixtures = [
+        ("open_space", _build_obs(goal=(3.0, 0.0))),
+        (
+            "pedestrian_conflict",
+            _build_obs(
+                goal=(3.0, 0.0),
+                ped_positions=[(1.2, 0.0)],
+                ped_velocities=[(0.0, 0.0)],
+            ),
+        ),
+    ]
+    case_evidence: list[dict[str, Any]] = []
+    for fixture, obs in fixtures:
+        topo_cfg = TopologyParallelNMPCConfig(
+            max_hypotheses=1,
+            hypothesis_labels=("default",),
+            nmpc_config=nmpc_config,
+            switch_hysteresis_ticks=0,
+        )
+        topo = TopologyParallelNMPCPlannerAdapter(topo_cfg)
+        legacy = NMPCSocialPlannerAdapter(nmpc_config)
+        v_topo, w_topo = topo.plan(obs)
+        v_leg, w_leg = legacy.plan(obs)
+        dv = abs(v_topo - v_leg)
+        dw = abs(w_topo - w_leg)
+        case_evidence.append(
+            {
+                "fixture": fixture,
+                "topology_command": [v_topo, w_topo],
+                "legacy_command": [v_leg, w_leg],
+                "abs_delta": [dv, dw],
+                "passed": (dv <= PARITY_ATOL + PARITY_RTOL * abs(v_leg))
+                and (dw <= PARITY_ATOL + PARITY_RTOL * abs(w_leg)),
+            }
+        )
+    passed = all(case["passed"] for case in case_evidence)
+    max_dv = max(case["abs_delta"][0] for case in case_evidence)
+    max_dw = max(case["abs_delta"][1] for case in case_evidence)
     return GateResult(
         name="gate_1_k1_legacy_parity",
         passed=passed,
         detail=(
-            f"K=1 default command ({v_topo:.9g},{w_topo:.9g}) vs legacy "
-            f"({v_leg:.9g},{w_leg:.9g}); |dv|={dv:.3e}, |dw|={dw:.3e} "
+            f"K=1 default parity across {len(case_evidence)} fixtures; "
+            f"max |dv|={max_dv:.3e}, |dw|={max_dw:.3e} "
             f"(rtol={PARITY_RTOL}, atol={PARITY_ATOL})."
         ),
         evidence={
-            "topology_command": [v_topo, w_topo],
-            "legacy_command": [v_leg, w_leg],
-            "abs_delta": [dv, dw],
+            "fixtures": case_evidence,
             "rtol": PARITY_RTOL,
             "atol": PARITY_ATOL,
             "hypothesis_labels": ["default"],

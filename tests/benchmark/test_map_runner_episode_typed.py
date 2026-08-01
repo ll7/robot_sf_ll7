@@ -6,6 +6,8 @@ serialization of the TypedDicts used in map_runner_episode.py.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 import typing
 from collections.abc import Callable
@@ -355,6 +357,31 @@ def test_benchmark_orchestration_annotations_resolve_at_runtime() -> None:
     assert config_hints["multiprocessing_context"] == BaseContext | None
     assert noise_hints["rng"] is np.random.Generator
     assert planner_hints["policy_fn"] == Callable[..., typing.Any]
+
+
+def test_orchestration_boundaries_do_not_expose_any_annotations() -> None:
+    """Issue #6461 boundaries must not regress to nested ``Any`` annotations."""
+    from robot_sf.benchmark import map_runner, map_runner_episode
+
+    for function in (map_runner.run_map_batch, map_runner_episode._run_episode_step_loop):
+        definition = ast.parse(inspect.getsource(function)).body[0]
+        assert isinstance(definition, ast.FunctionDef)
+        annotations = [
+            argument.annotation
+            for argument in (
+                *definition.args.posonlyargs,
+                *definition.args.args,
+                *definition.args.kwonlyargs,
+            )
+            if argument.annotation is not None
+        ]
+        if definition.returns is not None:
+            annotations.append(definition.returns)
+        assert not any(
+            isinstance(node, ast.Name) and node.id == "Any"
+            for annotation in annotations
+            for node in ast.walk(annotation)
+        )
 
 
 def test_episode_boundary_annotations_resolve_at_runtime() -> None:

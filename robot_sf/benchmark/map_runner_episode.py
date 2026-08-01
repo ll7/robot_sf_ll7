@@ -1722,7 +1722,7 @@ class _EpisodeStepLoopResult:
 def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     *,
     seed: int,
-    scenario: dict[str, Any] | None = None,
+    scenario: dict[str, object] | None = None,
     config: RobotSimulationConfig,
     horizon_val: int,
     planner_runtime: PlannerRuntime,
@@ -1737,8 +1737,8 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-    single_pedestrian_intent_metadata: list[dict[str, Any] | None],
-    single_pedestrian_vru_metadata: list[dict[str, Any] | None],
+    single_pedestrian_intent_metadata: list[dict[str, object] | None],
+    single_pedestrian_vru_metadata: list[dict[str, object] | None],
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
 ) -> _EpisodeStepLoopResult:

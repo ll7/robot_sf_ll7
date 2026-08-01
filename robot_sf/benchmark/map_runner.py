@@ -206,7 +206,12 @@ from robot_sf.benchmark.tracking_precision_contract import (
 )
 
 # Keep the return alias available for runtime annotation consumers such as schema tooling.
-from robot_sf.benchmark.types import EpisodeRecordDict, MapBatchConfig  # noqa: TC001
+from robot_sf.benchmark.types import (  # noqa: TC001
+    EpisodeRecordDict,
+    MapBatchConfig,
+    NoiseSpec,
+    TrackingPrecisionSpec,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -2782,7 +2787,7 @@ def _record_result_provenance_manifest(  # noqa: PLR0913
 
 
 def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
-    scenarios_or_path: list[dict[str, Any]] | str | Path,
+    scenarios_or_path: list[dict[str, object]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
     *,
@@ -2805,19 +2810,19 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     observation_level: str | None = None,
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
-    observation_noise: dict[str, Any] | None = None,
-    tracking_precision: dict[str, Any] | None = None,
-    synthetic_actuation_profile: dict[str, Any] | None = None,
-    latency_stress_profile: dict[str, Any] | None = None,
-    safety_wrapper: dict[str, Any] | None = None,
-    cbf_safety_filter: dict[str, Any] | None = None,
+    observation_noise: NoiseSpec | None = None,
+    tracking_precision: TrackingPrecisionSpec | None = None,
+    synthetic_actuation_profile: dict[str, object] | None = None,
+    latency_stress_profile: dict[str, object] | None = None,
+    safety_wrapper: dict[str, object] | None = None,
+    cbf_safety_filter: dict[str, object] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
     multiprocessing_context: BaseContext | None = None,
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Run map-based scenarios and append episode records.
 
     Accepts ``batch_config`` as an alternative to the individual keyword-only

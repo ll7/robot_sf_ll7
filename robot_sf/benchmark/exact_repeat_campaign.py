@@ -1519,27 +1519,10 @@ def execute_campaign(
     run_episode: Any | None = None,
     target_filter: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Execute the exact-repeat campaign and return a host_result.json payload.
-
-    Consumes a resolved definitions bundle (from ``resolve_runnable_definitions``),
-    runs each target the declared number of times (3), and emits a host result
-    conforming to ``scenario_exact_repeat_host_result.v1``.  Supports resume: if
-    a cached result file exists for a target, that target is skipped unless its
-    environment fingerprint has changed.
-
-    Args:
-        resolved_bundle: Output of ``resolve_runnable_definitions()`` containing
-            runnable scenario/planner definitions and manifest metadata.
-        output_dir: Directory for per-target result cache and the final
-            ``host_result.json``.
-        run_episode: Optional injected episode runner for testability.  Defaults
-            to ``robot_sf.benchmark.runner.run_episode``.
-        target_filter: Optional list of ``"scenario_id--seed"`` strings to execute
-            a subset of targets.
+    """Run resolved targets and write the schema-compatible host result.
 
     Returns:
-        A host report dict conforming to the ``scenario_exact_repeat_host_result.v1``
-        schema, also written to ``output_dir/host_result.json``.
+        The payload also written to ``output_dir/host_result.json``.
     """
     targets, scenario_defs, planner_defs, repeats_per_target, expected_manifest_hash = (
         _validate_resolved_bundle(resolved_bundle)

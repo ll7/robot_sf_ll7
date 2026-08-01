@@ -118,24 +118,39 @@ build-backend = "hatchling.build"
 # --- Single-source version: git tag -> package version (hatch-vcs) ---------
 # The git tag/release line is the canonical version source. Release tags are
 # plain "X.Y.Z" (e.g. 0.0.2) and release-candidate tags are "rcX.Y.Z"
-# (e.g. rc0.0.3); tag_regex maps both to the numeric X.Y.Z. For non-tag builds
-# (sdists, untagged CI checkouts) hatch-vcs derives a PEP 440 dev version and
-# falls back to fallback_version so builds never break.
+# (e.g. rc0.0.3); tag_regex maps both to the numeric X.Y.Z. Artifact provenance
+# tags are intentionally not package versions, so git describe must filter them
+# before tag_regex runs. For non-tag builds (sdists, untagged CI checkouts)
+# hatch-vcs derives a PEP 440 dev version and falls back to fallback_version.
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.version.raw-options]
 tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
-# Restrict `git describe` to dotted-numeric tags so non-version tags never win
-# the "nearest tag" race. Model-registry tags such as
-# `artifact/legacy-models-2026-07-registry-v1` contain digits but no dotted
-# version, so the default `--match '*[0-9]*'` glob returned them as the nearest
-# tag and hatch-vcs raised `Can't parse version from tag ...`, breaking
-# `uv sync` (and thus all of CI). The glob below is equivalent to vcs_versioning's
-# `tag.strict = true` (`*[0-9]*.*[0-9]*`): it still matches every real release
-# tag (0.0.2, 0.0.3, rc0.0.3, camera-ready-v0.0.1a) while rejecting artifact tags.
-git_describe_command = "git describe --dirty --tags --long --abbrev=40 --match *[0-9]*.*[0-9]*"
 fallback_version = "0.0.3.dev0"
+
+[tool.hatch.version.raw-options.scm.git]
+# Keep non-version tags such as artifact/* and unrelated camera-ready-* tags out
+# of package version discovery. The published camera-ready-vX.Y.Z family is a
+# release line and remains eligible. hatch-vcs passes this current configuration to
+# setuptools-scm; do not add the deprecated top-level `git_describe_command`,
+# because Hatch rejects both settings together.
+describe_command = [
+    "git",
+    "describe",
+    "--dirty",
+    "--tags",
+    "--long",
+    "--abbrev=40",
+    "--match",
+    "[0-9]*.[0-9]*.[0-9]*",
+    "--match",
+    "v[0-9]*.[0-9]*.[0-9]*",
+    "--match",
+    "rc[0-9]*.[0-9]*.[0-9]*",
+    "--match",
+    "camera-ready-v[0-9]*.[0-9]*.[0-9]*",
+]
 
 [tool.hatch.build.hooks.vcs]
 # Build hook writes the resolved version to an importable module so

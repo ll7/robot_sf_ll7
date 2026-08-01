@@ -545,19 +545,26 @@ def gate_4_selection_and_hysteresis(nmpc_config: NMPCSocialConfig) -> GateResult
     ]
     r2 = hys._select_hypothesis(diag_c2)
     reason_c2 = {d.label: d.switch_reason for d in diag_c2}
-    # Let current be best once more to reach the threshold (ticks -> 2).
-    hys._ticks_at_hypothesis = 2  # current has now been best for >= threshold ticks
+    # Tick 3: current is best once more, accumulating the required second tick.
     diag_c3 = [
+        _synth_diag("pass_left", True, 1.0),
+        _synth_diag("yield_straight", True, 2.0),
+        _synth_diag("pass_right", True, 3.0),
+    ]
+    r3 = hys._select_hypothesis(diag_c3)
+    reason_c3 = {d.label: d.switch_reason for d in diag_c3}
+    # Tick 4: a different hypothesis is now best and may switch after two real ticks.
+    diag_c4 = [
         _synth_diag("pass_left", True, 3.0),
         _synth_diag("yield_straight", True, 1.0),
         _synth_diag("pass_right", True, 2.0),
     ]
-    r3 = hys._select_hypothesis(diag_c3)
-    reason_c3 = {d.label: d.switch_reason for d in diag_c3}
+    r4 = hys._select_hypothesis(diag_c4)
+    reason_c4 = {d.label: d.switch_reason for d in diag_c4}
     suppressed_ok = (
         r1 == 0 and r2 == 0 and reason_c2.get("yield_straight") == "suppressed_by_hysteresis"
     )
-    switch_ok = r3 == 1 and reason_c3.get("yield_straight") == "new_best_selected"
+    switch_ok = r3 == 0 and r4 == 1 and reason_c4.get("yield_straight") == "new_best_selected"
     switches_recorded = int(hys._topo_stats.get("hypothesis_switches", 0))
     evidence["hysteresis"] = {
         "switch_hysteresis_ticks": 2,
@@ -567,6 +574,8 @@ def gate_4_selection_and_hysteresis(nmpc_config: NMPCSocialConfig) -> GateResult
         "tick2_reasons": reason_c2,
         "tick3_selected": r3,
         "tick3_reasons": reason_c3,
+        "tick4_selected": r4,
+        "tick4_reasons": reason_c4,
         "suppressed_before_threshold": suppressed_ok,
         "switched_at_or_after_threshold": switch_ok,
         "hypothesis_switches_recorded": switches_recorded,

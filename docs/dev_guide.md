@@ -429,16 +429,14 @@ before the queue auto-merges a PR:
 
 - **Workflow**: `.github/workflows/merge-queue-gate.yml` (checks out the gate implementation from
   the trusted base revision rather than the evaluated PR or synthetic merge-group tree, with
-  checkout credentials disabled; enforces the required check fail-closed on source-head PR
-  lifecycle and review events, as well as queue-time `merge_group`, and supports
-  `workflow_dispatch` with a PR number for advisory evaluation). Source-head events include label,
-  draft-state, requested-reviewer, review, and review-comment changes, so a prior pass cannot stay
-  valid after one of those admission conditions changes. If a source-head base predates this new
-  gate file, the run records a notice and skips the evaluation so this bootstrap PR can merge; a
-  queue-time run fails closed when the trusted implementation is unavailable. Requiring the
-  source-head check as well prevents a direct path that still obeys branch protection from treating
-  an advisory success as approval. The queue-time invocation independently validates the synthetic
-  merge group.
+  checkout credentials disabled; enforces the required check fail-closed at queue-time on
+  `merge_group`, and publishes non-blocking source-PR and `workflow_dispatch` audits). Source-PR
+  audits refresh when `merge-ready` is added or removed and when a labeled source head changes.
+  They preserve a truthful failed `passed` value and reasons in their audit while exiting zero, so
+  admission readiness is not misreported as failing implementation CI. If a source-head base
+  predates this gate file, the run records a notice and skips evaluation so the bootstrap PR can
+  merge; a queue-time run fails closed when the trusted implementation is unavailable. The
+  queue-time invocation independently validates the synthetic merge group.
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
   `gate-verdict: accepted @ <head_sha>` trailer (reuses
@@ -471,10 +469,9 @@ required status checks, enables **Only merge non-failing pull requests** (`ALLGR
 fails closed if the queue is configured as `HEADGREEN`. GitHub does not reliably create a fresh
 source-head Actions check when a reviewer resolves or reopens a thread; requiring conversation
 resolution therefore makes the gate's no-unresolved-threads condition binding at merge time.
-Exact-head review evidence should be submitted as a COMMENTED GitHub review so the
-`pull_request_review` event refreshes the required source-head gate. A top-level PR comment does
-not refresh that check; workflows unable to submit a review must remove and reapply `merge-ready`
-after publishing the comment.
+The source-PR audit is observational and is deliberately not a required status check; exact-head
+review evidence and all other admission conditions are re-evaluated by the fail-closed
+`merge_group` run.
 Until these toggles are applied, the workflow does not provide the queue-side contract; the
 in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
@@ -706,6 +703,50 @@ For GitHub issue batches and Project #5 updates, follow the batch-first workflow
   PR creation, commit check-run polling, issue comments, labels, merge, and branch cleanup. Treat
   remote branch deletion reporting a missing ref after merge as a cleanup caveat to record, not as
   evidence that the merge failed; verify the merged PR or base branch SHA instead.
+
+#### PR labels, conversation comments, and publication (REST-backed)
+
+On affected GitHub CLI versions, `gh pr edit <number> --add-label <label>` and
+`gh pr view <number> --comments` fail inside the GraphQL client with the retired
+Projects Classic field (`repository.pullRequest.projectCards`) and can even exit
+`0` while emitting the error and no usable content (issue #6496, observed while
+reviewing #6454). Neither operation needs Projects Classic data, so perform them
+through the REST-only helpers instead of the broad `gh pr` commands:
+
+```bash
+# add/remove a PR label (verify-on-write, pure REST issues-labels endpoint)
+uv run python scripts/dev/gh_pr_label_rest.py add <number> \
+    --label merge-ready --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
+    --label merge-ready --repo ll7/robot_sf_ll7
+
+# PR conversation comments, drop-in for `gh pr view <number> --comments`
+# (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
+uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll7 --plain
+
+# publish a PR conversation comment without the GraphQL `gh pr comment` path
+scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
+scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
+```
+
+The label helper covers `merge-ready` add/remove (and any PR or issue label)
+through `repos/{repo}/issues/{number}/labels`, which GitHub treats as the PR
+label endpoint. The comment helper reads the conversation thread through
+`repos/{repo}/issues/{number}/comments` (GitHub treats PR numbers as issue
+numbers), returning the PR header plus the same conversation-level comments
+`gh pr view --comments` would show. Inline review comments
+(`pulls/{number}/comments`) are intentionally out of scope. The existing
+`gh_comment.sh pr` wrapper resolves an explicit or current PR through REST and
+posts the body file to `issues/{number}/comments`, so it does not require a
+GraphQL PR-comment lookup. Read-only PR header fields still use `gh pr view
+<number> --json ...`; only the label-edit and `--comments` paths hit the
+deprecated field. The PR-review and guarded-merger skills (`goal-pr-review`,
+`gh-pr-merger`) reference these helpers for label, read, and publication
+operations, and the REST reads fail closed on auth, malformed, or truncated
+payloads. Focused offline tests live in `tests/dev/test_gh_pr_label_rest.py`
+and `tests/dev/test_gh_pr_comments_rest.py`; the production comment wrapper is
+covered by `tests/test_ci_script_contract.py`.
 
 ### REST-first publication snippets for low-GraphQL autopilot
 

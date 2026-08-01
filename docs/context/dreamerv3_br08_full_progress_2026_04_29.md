@@ -34,7 +34,7 @@ Two independent failure modes hit the same run:
 
 1. **Host RAM leak.** `MaxRSS = 106 GB` against a 64 GB cgroup. Slurm killed the
    batch step; immediately before, 20 Ray worker `oom_kill` events are logged in
-   [output/slurm/12159-dreamer-br08-full.out](../../output/slurm/12159-dreamer-br08-full.out)
+    output/slurm/12159-dreamer-br08-full.out
    and the env runners died en masse. The terminal Python traceback
    (`ZeroDivisionError: division by zero` in
    `ray/rllib/algorithms/dreamerv3/dreamerv3.py:591` —

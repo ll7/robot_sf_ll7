@@ -9,6 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from robot_sf.planner.constants import (
+    DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M,
+    DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED,
+    DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED,
+    DEFAULT_STREAM_GAP_SAMPLE_HORIZON_S,
+)
 from robot_sf.planner.socnav import PredictionPlannerAdapter, SocNavPlannerConfig
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, StreamGapPlannerConfig
 
@@ -52,6 +58,10 @@ class GapAwarePredictionAdapter:
 
         return float(pred_v), float(pred_w)
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "GapAwarePredictionAdapter"}
+
 
 def build_gap_prediction_config(cfg: dict[str, Any] | None) -> GapPredictionConfig:
     """Build :class:`GapPredictionConfig` from a mapping payload.
@@ -65,17 +75,23 @@ def build_gap_prediction_config(cfg: dict[str, Any] | None) -> GapPredictionConf
     pred_raw = {key: value for key, value in cfg.items() if key in pred_allowed}
     pred_cfg = SocNavPlannerConfig(**pred_raw)
     gap_cfg = StreamGapPlannerConfig(
-        max_linear_speed=float(gap_raw.get("max_linear_speed", 1.2)),
-        max_angular_speed=float(gap_raw.get("max_angular_speed", 1.2)),
+        max_linear_speed=float(
+            gap_raw.get("max_linear_speed", DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED)
+        ),
+        max_angular_speed=float(
+            gap_raw.get("max_angular_speed", DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED)
+        ),
         goal_tolerance=float(gap_raw.get("goal_tolerance", 0.25)),
         heading_gain=float(gap_raw.get("heading_gain", 1.6)),
         turn_in_place_angle=float(gap_raw.get("turn_in_place_angle", 0.7)),
-        forward_lookahead=float(gap_raw.get("forward_lookahead", 4.0)),
+        forward_lookahead=float(
+            gap_raw.get("forward_lookahead", DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M)
+        ),
         rear_margin=float(gap_raw.get("rear_margin", 0.5)),
         corridor_half_width=float(gap_raw.get("corridor_half_width", 0.85)),
         emergency_clearance=float(gap_raw.get("emergency_clearance", 0.55)),
         sample_dt=float(gap_raw.get("sample_dt", 0.2)),
-        sample_horizon=float(gap_raw.get("sample_horizon", 4.0)),
+        sample_horizon=float(gap_raw.get("sample_horizon", DEFAULT_STREAM_GAP_SAMPLE_HORIZON_S)),
         safe_gap_time=float(gap_raw.get("safe_gap_time", 1.0)),
         approach_gap_time=float(gap_raw.get("approach_gap_time", 0.8)),
         wait_speed=float(gap_raw.get("wait_speed", 0.0)),

@@ -23,6 +23,7 @@ from typing import Any, Literal, Protocol
 import numpy as np
 from scipy.optimize import NonlinearConstraint
 
+from robot_sf.planner.constants import DEFAULT_GMM_MODE_COUNT
 from robot_sf.planner.nmpc_social import NMPCSocialPlannerAdapter, _parse_bool, _RolloutContext
 from robot_sf.planner.prediction_mpc import PredictionMPCConfig, _to_nmpc_config
 
@@ -119,7 +120,7 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
     learned_gmm_checkpoint_path: str | None = None
     learned_gmm_model_id: str | None = None
     learned_gmm_hidden_dim: int = 128
-    learned_gmm_mode_count: int = 3
+    learned_gmm_mode_count: int = DEFAULT_GMM_MODE_COUNT
     learned_gmm_model_type: str = "mlp"
     learned_gmm_allow_untrained_smoke: bool = False
 
@@ -170,9 +171,9 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         self._last_constraint_count = 0
         super().__init__(_to_nmpc_config(self.chance_config))
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear solver and forecast diagnostics at an episode boundary."""
-
+        del seed
         super().reset()
         self._last_forecast = None
         self._last_constraint_count = 0

@@ -8,6 +8,7 @@ command. The executed control is the first action of the best sampled sequence.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from typing import Any
 
 import numpy as np
 
@@ -139,6 +140,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             float: Minimum obstacle distance in meters, ``0.0`` when occupied.
         """
         if grid_payload is None:
+            # Observation required when grid_payload not provided
             assert observation is not None
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:
@@ -645,6 +647,10 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 if forced_cost < float(self.config.invalid_sequence_cost):
                     action = forced_action
         return float(action[0]), float(action[1])
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "PredictiveMPPIAdapter"}
 
 
 def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPPIConfig:

@@ -12,13 +12,13 @@ This document serves as the release manifest gating the ready status of the `rel
 
 The checklist is declaratively configured in `configs/benchmarks/releases/release_july_2026_preflight_issue_3081.yaml`. It maps acceptance criteria to the following required durable artifacts:
 
-1. **Reproduction Record**: [reproduction_record.md](file:///home/luttkule/git/robot_sf_ll7/docs/context/evidence/release_july_2026/reproduction_record.md)
+1. **Reproduction Record**: `docs/context/evidence/release_july_2026/reproduction_record.md`
    Tracks the clean-worktree reproduction commands and verification details.
-2. **Tables & Figures Manifest**: [tables_figures_manifest.json](file:///home/luttkule/git/robot_sf_ll7/docs/context/evidence/release_july_2026/tables_figures_manifest.json)
+2. **Tables & Figures Manifest**: `docs/context/evidence/release_july_2026/tables_figures_manifest.json`
    Checksum manifest mapping generated publication assets to their canonical source digests.
-3. **Claim Cards**: [claim_cards.yaml](file:///home/luttkule/git/robot_sf_ll7/docs/context/evidence/release_july_2026/claim_cards.yaml)
+3. **Claim Cards**: `docs/context/evidence/release_july_2026/claim_cards.yaml`
    Contains the verified research claims, auditing them to ensure no claims rely on degraded or fallback execution rows.
-4. **Sprint Issue Ledger**: [sprint_issue_ledger.yaml](file:///home/luttkule/git/robot_sf_ll7/docs/context/evidence/release_july_2026/sprint_issue_ledger.yaml)
+4. **Sprint Issue Ledger**: `docs/context/evidence/release_july_2026/sprint_issue_ledger.yaml`
    Assures every sprint issue in the release scope is closed or has an approved terminal classification.
 
 ## Validation

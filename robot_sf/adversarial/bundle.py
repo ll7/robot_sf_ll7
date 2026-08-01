@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import os
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
@@ -16,6 +18,11 @@ import yaml
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, SearchConfig
 
 MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
+
+#: Metadata key holding per-candidate search provenance. This block records the sampled
+#: controls for reproducibility but does not by itself change runtime behavior, so it is
+#: stripped when hashing the runtime-effective scenario.
+CANDIDATE_PROVENANCE_KEY = "adversarial_candidate"
 DENSE_TRAJECTORY_COLUMNS = [
     "episode_id",
     "seed",
@@ -27,6 +34,65 @@ DENSE_TRAJECTORY_COLUMNS = [
     "y",
     "theta",
 ]
+
+
+def _normalize_pedestrian_id(pedestrian_id: object | None) -> str | None:
+    """Normalize an optional pedestrian identity consistently with the scenario loader.
+
+    The canonical loader treats falsy IDs (for example, numeric ``0``) as missing before
+    converting them to text. Keep the writer and its preflight validator on that same boundary
+    so malformed IDs cannot pass validation and fail only when the generated scenario loads.
+    """
+    normalized = str(pedestrian_id or "").strip()
+    return normalized or None
+
+
+def validate_template_pedestrian_binding(
+    template_scenario: Mapping[str, Any],
+    pedestrian_id: str | None,
+) -> str | None:
+    """Return a loader-contract error for a declared template pedestrian, if any.
+
+    Scenario overrides are matched by normalized identity by the canonical loader. Validate the
+    complete override list here so a candidate cannot be written with duplicate, malformed, or
+    unbound pedestrian entries that the loader would reject later.
+
+    Returns:
+        str | None: A fail-closed validation message, or ``None`` when the declared pedestrian
+        binding is valid.
+    """
+    normalized_id = _normalize_pedestrian_id(pedestrian_id)
+    if normalized_id is None:
+        return None
+
+    entries = template_scenario.get("single_pedestrians")
+    if not isinstance(entries, list):
+        return (
+            f"search-space pedestrian.id={normalized_id!r} has no matching "
+            "single_pedestrians entry in the scenario template"
+        )
+
+    seen: dict[str, int] = {}
+    for entry_index, entry in enumerate(entries):
+        if not isinstance(entry, Mapping):
+            return f"single_pedestrians[{entry_index}] must be a mapping"
+        entry_id = _normalize_pedestrian_id(entry.get("id"))
+        if entry_id is None:
+            return f"single_pedestrians[{entry_index}] must define a non-empty id"
+        previous_index = seen.get(entry_id)
+        if previous_index is not None:
+            return (
+                f"single_pedestrians contains duplicate normalized id {entry_id!r} "
+                f"at indexes {previous_index} and {entry_index}"
+            )
+        seen[entry_id] = entry_index
+
+    if normalized_id not in seen:
+        return (
+            f"search-space pedestrian.id={normalized_id!r} has no matching "
+            "single_pedestrians entry in the scenario template"
+        )
+    return None
 
 
 def _load_template(path: Path) -> dict[str, Any]:
@@ -42,18 +108,41 @@ def _load_template(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _candidate_route_payload(candidate: CandidateSpec, *, index: int) -> dict[str, Any]:
-    """Build a route-overrides payload for the candidate start and goal."""
+def _candidate_route_payload(
+    candidate: CandidateSpec,
+    *,
+    index: int,
+    pedestrian_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a route-overrides payload for the candidate start and goal.
+
+    When ``pedestrian_id`` is supplied, a pedestrian route bound to the candidate's
+    start/goal and ``spawn_time_s`` is emitted so the frozen timing dimension changes the
+    effective runtime route instead of remaining candidate metadata only.
+    """
+    pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
     route_id = 100_000 + int(index)
+    waypoints = [candidate.start.as_waypoint(), candidate.goal.as_waypoint()]
+    ped_routes: list[dict[str, Any]] = []
+    if pedestrian_id:
+        ped_routes.append(
+            {
+                "id": pedestrian_id,
+                "spawn_id": route_id,
+                "goal_id": route_id,
+                "spawn_time_s": float(candidate.spawn_time_s),
+                "waypoints": waypoints,
+            }
+        )
     return {
         "robot_routes": [
             {
                 "spawn_id": route_id,
                 "goal_id": route_id,
-                "waypoints": [candidate.start.as_waypoint(), candidate.goal.as_waypoint()],
+                "waypoints": waypoints,
             }
         ],
-        "ped_routes": [],
+        "ped_routes": ped_routes,
     }
 
 
@@ -66,6 +155,7 @@ def _apply_candidate_to_scenario(
     pedestrian_id: str | None,
 ) -> dict[str, Any]:
     """Return a scenario dictionary specialized for one candidate."""
+    pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
     updated = deepcopy(scenario)
     base_name = str(updated.get("name") or updated.get("scenario_id") or "scenario")
     updated["name"] = f"{base_name}_adversarial_{index:04d}"
@@ -76,7 +166,7 @@ def _apply_candidate_to_scenario(
     sim_config["peds_speed_mult"] = float(candidate.pedestrian_speed_mps)
     updated["simulation_config"] = sim_config
     metadata = dict(updated.get("metadata") or {})
-    metadata["adversarial_candidate"] = {
+    metadata[CANDIDATE_PROVENANCE_KEY] = {
         **candidate.to_json(),
         "candidate_index": int(index),
         "spawn_time_s_note": "stored for search provenance; route-spawn timing support is adapter-dependent",
@@ -87,18 +177,137 @@ def _apply_candidate_to_scenario(
         entries = list(updated.get("single_pedestrians") or [])
         replacement = {
             "id": pedestrian_id,
+            "start": candidate.start.as_waypoint(),
+            # ``wait_at`` is a trajectory-only runtime control. Keep the generated override
+            # loader-valid even when the template entry previously used a goal-only behavior.
+            "goal": None,
+            "trajectory": [
+                candidate.start.as_waypoint(),
+                candidate.goal.as_waypoint(),
+            ],
             "speed_m_s": float(candidate.pedestrian_speed_mps),
+            "start_delay_s": float(candidate.spawn_time_s),
             "wait_at": [{"waypoint_index": 0, "wait_s": float(candidate.pedestrian_delay_s)}],
         }
         for entry_index, entry in enumerate(entries):
-            if isinstance(entry, dict) and entry.get("id") == pedestrian_id:
+            if isinstance(entry, Mapping) and str(entry.get("id") or "").strip() == pedestrian_id:
                 merged = dict(entry)
+                # A template may carry a POI-based goal or trajectory. The generated candidate
+                # supplies explicit coordinates, so stale mutually-exclusive keys must not
+                # survive the merge and make the scenario loader reject the override.
+                merged.pop("goal_poi", None)
+                merged.pop("trajectory_poi", None)
                 merged.update(replacement)
                 entries[entry_index] = merged
                 break
         else:
             entries.append(replacement)
         updated["single_pedestrians"] = entries
+    return updated
+
+
+def build_candidate_payload(
+    candidate: CandidateSpec,
+    *,
+    index: int,
+    template_scenario: Mapping[str, Any],
+    pedestrian_id: str | None,
+    route_file_name: str = "route_overrides.yaml",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the in-memory scenario and route-override payloads for one candidate.
+
+    Pure and side-effect-free: performs no disk I/O, search, planner execution, replay,
+    campaign, or outcome inspection. Shared by :func:`write_candidate_inputs` and the
+    side-effect-free #5303 search-promotion preflight probe so both materialize candidates
+    through one code path.
+
+    Returns:
+        tuple[dict[str, Any], dict[str, Any]]: The specialized scenario mapping and the
+        route-override payload.
+    """
+    pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
+    route_payload = _candidate_route_payload(candidate, index=index, pedestrian_id=pedestrian_id)
+    scenario = _apply_candidate_to_scenario(
+        dict(template_scenario),
+        candidate,
+        index=index,
+        route_file_name=route_file_name,
+        pedestrian_id=pedestrian_id,
+    )
+    return scenario, route_payload
+
+
+def effective_scenario_payload(
+    scenario: Mapping[str, Any],
+    route_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the runtime-effective subset of a materialized candidate scenario.
+
+    The per-candidate provenance block (``metadata.adversarial_candidate``) records the
+    sampled controls for reproducibility but does not by itself change runtime behavior, so
+    it is stripped. Everything else -- including ``single_pedestrians`` and the route
+    overrides -- is retained so the result reflects only fields that change what a run
+    actually executes.
+    """
+    effective = deepcopy(dict(scenario))
+    metadata = dict(effective.get("metadata") or {})
+    metadata.pop(CANDIDATE_PROVENANCE_KEY, None)
+    effective["metadata"] = metadata
+    effective["route_overrides"] = deepcopy(dict(route_payload))
+    return effective
+
+
+def compute_effective_scenario_hash(
+    scenario: Mapping[str, Any],
+    route_payload: Mapping[str, Any],
+) -> str:
+    """Return a canonical SHA-256 hash of the runtime-effective scenario content.
+
+    Provenance-only metadata is excluded (see :func:`effective_scenario_payload`) so two
+    candidates that differ only in a timing dimension that is *not* bound to the runtime
+    scenario hash identically. The #5303 promotion preflight relies on this to reject inert
+    or metadata-only timing dimensions.
+    """
+    effective = effective_scenario_payload(scenario, route_payload)
+    raw = json.dumps(effective, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _rebase_template_map_file(
+    scenario: dict[str, Any],
+    *,
+    template_path: Path,
+    candidate_dir: Path,
+) -> dict[str, Any]:
+    """Rebase a template-relative map reference for the generated scenario file.
+
+    Scenario-loader map paths are resolved relative to the scenario YAML that contains them.
+    Candidate bundles live in a different directory from their template, so copying a relative
+    ``map_file`` verbatim would point at the wrong location and make the generated bundle
+    unloadable. Template files also commonly use repository-root-relative paths such as
+    ``maps/svg_maps/debug_05.svg``; search the template's ancestor directories for those
+    references before leaving an unresolved path untouched.
+    """
+    map_file = scenario.get("map_file")
+    if not isinstance(map_file, str) or not map_file.strip():
+        return scenario
+    source_reference = Path(map_file)
+    if source_reference.is_absolute():
+        return scenario
+
+    template_root = template_path.resolve().parent
+    source_path: Path | None = None
+    for base_dir in (template_root, *template_root.parents):
+        candidate_path = (base_dir / source_reference).resolve()
+        if candidate_path.exists():
+            source_path = candidate_path
+            break
+    if source_path is None:
+        return scenario
+    updated = dict(scenario)
+    updated["map_file"] = Path(
+        os.path.relpath(source_path, start=candidate_dir.resolve())
+    ).as_posix()
     return updated
 
 
@@ -110,20 +319,31 @@ def write_candidate_inputs(
     index: int,
 ) -> tuple[Path, Path]:
     """Write replayable scenario and route-override files for a candidate."""
+    template = _load_template(config.scenario_template)
+    pedestrian_id = _normalize_pedestrian_id(config.search_space.pedestrian_id)
+    if pedestrian_id:
+        binding_error = validate_template_pedestrian_binding(
+            template["scenarios"][0], pedestrian_id
+        )
+        if binding_error is not None:
+            raise ValueError(binding_error)
+
     candidate_dir.mkdir(parents=True, exist_ok=True)
     route_path = candidate_dir / "route_overrides.yaml"
     scenario_path = candidate_dir / "scenario.yaml"
-    route_payload = _candidate_route_payload(candidate, index=index)
-    route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")
-
-    template = _load_template(config.scenario_template)
-    scenario = _apply_candidate_to_scenario(
-        dict(template["scenarios"][0]),
+    scenario, route_payload = build_candidate_payload(
         candidate,
         index=index,
+        template_scenario=template["scenarios"][0],
+        pedestrian_id=pedestrian_id,
         route_file_name=route_path.name,
-        pedestrian_id=config.search_space.pedestrian_id,
     )
+    scenario = _rebase_template_map_file(
+        scenario,
+        template_path=config.scenario_template,
+        candidate_dir=candidate_dir,
+    )
+    route_path.write_text(yaml.safe_dump(route_payload, sort_keys=False), encoding="utf-8")
     scenario_payload = {"scenarios": [scenario]}
     scenario_path.write_text(yaml.safe_dump(scenario_payload, sort_keys=False), encoding="utf-8")
     return scenario_path, route_path

@@ -6,6 +6,9 @@
 *.pyc
 /.coverage
 .pytest_cache
+# pytest-split duration store written by sharded CI/dev runs (issue #6501).
+# CI-generated and cached via actions/cache; never commit machine-local values.
+.test_durations
 .scannerwork
 .github/cache/
 __pycache__/

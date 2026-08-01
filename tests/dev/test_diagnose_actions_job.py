@@ -283,6 +283,30 @@ def test_main_fails_closed_when_annotation_json_is_malformed(monkeypatch, capsys
     assert "Could not parse check-run annotations JSON" in capsys.readouterr().err
 
 
+def test_main_fails_closed_when_include_headers_are_missing(monkeypatch, capsys) -> None:
+    """A valid JSON body without ``--include`` headers cannot prove pagination ended."""
+    results = iter(
+        [
+            _result(
+                0,
+                json.dumps(
+                    {
+                        "run_id": 456,
+                        "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/789",
+                    }
+                ),
+            ),
+            _result(1, stderr="HTTP 404: Not Found"),
+            _result(0, json.dumps([{"message": "could be page one"}])),
+        ]
+    )
+
+    monkeypatch.setattr(diagnose_actions_job, "_gh", lambda _args: next(results))
+
+    assert diagnose_actions_job.main(["123", "--repo", "owner/repo"]) == 1
+    assert "expected HTTP headers from gh api --include" in capsys.readouterr().err
+
+
 def test_main_fails_closed_when_gh_is_missing(monkeypatch, capsys) -> None:
     """A missing gh binary fails closed at the first request instead of crashing."""
 

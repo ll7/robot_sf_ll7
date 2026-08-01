@@ -118,6 +118,12 @@ def _fetch_annotation_page(
         print(f"Could not recover check-run annotations: {detail}", file=sys.stderr)
         return None, None
     headers_block, body = _split_include_output(result.stdout)
+    if not headers_block:
+        print(
+            "Could not recover check-run annotations: expected HTTP headers from gh api --include",
+            file=sys.stderr,
+        )
+        return None, None
     try:
         page = json.loads(body)
     except json.JSONDecodeError as exc:

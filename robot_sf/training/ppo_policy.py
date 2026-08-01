@@ -12,6 +12,7 @@ from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtracto
 
 if TYPE_CHECKING:
     from gymnasium import spaces
+    from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
     from stable_baselines3.common.type_aliases import Schedule
 
 _PRIVILEGED_STATE_KEY = "critic_privileged_state"
@@ -71,7 +72,7 @@ class AsymmetricGridSocNavPolicy(MultiInputActorCriticPolicy):
             optimizer_kwargs=optimizer_kwargs,
         )
 
-    def make_features_extractor(self):  # type: ignore[override]
+    def make_features_extractor(self) -> BaseFeaturesExtractor:  # type: ignore[override]
         """Create actor and critic extractors, using privileged state only for the critic.
 
         Returns:

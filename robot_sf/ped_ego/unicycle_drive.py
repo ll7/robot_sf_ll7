@@ -70,7 +70,7 @@ class UnicycleMotion:
 
     config: UnicycleDriveSettings
 
-    def move(self, state: UnicycleDriveState, action: UnicycleAction, d_t: float):
+    def move(self, state: UnicycleDriveState, action: UnicycleAction, d_t: float) -> None:
         """Update the unicycle state by applying the provided action for ``d_t`` seconds.
 
         Args:
@@ -160,7 +160,7 @@ class UnicycleDrivePedestrian:
         """Current speed (m/s) and travel direction."""
         return self.state.current_speed
 
-    def apply_action(self, action: UnicycleAction, d_t: float):
+    def apply_action(self, action: UnicycleAction, d_t: float) -> None:
         """Integrate one control command for the configured time step.
 
         Args:
@@ -169,7 +169,7 @@ class UnicycleDrivePedestrian:
         """
         self.movement.move(self.state, action, d_t)
 
-    def reset_state(self, new_pose: PedPose):
+    def reset_state(self, new_pose: PedPose) -> None:
         """Reset internal state to a pose and zero speed.
 
         Args:

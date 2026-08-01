@@ -543,6 +543,36 @@ def test_cli_inventory_honors_explicit_repo_root_outside_checkout(
     assert ga3c_row["checksum_status"] == "verified"
 
 
+def test_repo_root_resolution_normalizes_downloaded_relative_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A downloaded relative cache path remains usable after repo-root resolution."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    registry_path = repo_root / "model" / "registry.yaml"
+    registry_path.parent.mkdir()
+    registry_path.write_text("version: 1\nmodels: []\n", encoding="utf-8")
+    caller_root = tmp_path / "caller"
+    caller_root.mkdir()
+    monkeypatch.chdir(caller_root)
+
+    monkeypatch.setattr(
+        checker,
+        "resolve_model_path",
+        lambda *args, **kwargs: Path("output/model_cache/model.zip"),
+    )
+
+    resolved = checker._resolve_model_path_from_repo_root(
+        "synthetic-model",
+        repo_root=repo_root,
+        registry_path=registry_path,
+        allow_download=True,
+    )
+
+    assert resolved == repo_root / "output/model_cache/model.zip"
+    assert resolved.is_absolute()
+
+
 def test_run_model_step_smoke_uses_factory_model_prediction_and_gymnasium_step(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

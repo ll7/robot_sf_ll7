@@ -235,12 +235,16 @@ def _resolve_model_path_from_repo_root(
     must temporarily use that selected checkout rather than the caller's directory.
     """
     with chdir(repo_root):
-        return resolve_model_path(
+        resolved = resolve_model_path(
             model_id,
             registry_path=registry_path,
             allow_download=allow_download,
             cache_dir=cache_dir,
         )
+        # The registry resolver may return a relative cache path after a download.
+        # Normalize it before leaving the temporary cwd so the optional smoke and
+        # callers using an explicit repo root can still open the artifact.
+        return resolved.resolve()
 
 
 def _resolve_single_file_release_hydration(

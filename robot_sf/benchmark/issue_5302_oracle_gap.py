@@ -998,81 +998,69 @@ def run_full_oracle_gap_analysis(
     }
 
 
-def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
-    analysis_result: dict[str, Any],
-    output_dir: Path,
-) -> list[Path]:
-    """Write all 10 required report files to output_dir and return list of written paths.
+def _ceiling_row_attr(ceiling_id: str) -> str:
+    """Map a ceiling ID to its row attribute name on CeilingEpisodeSelection.
 
     Returns:
-        list[Path]: List of absolute or relative paths to written report files.
+        str: Attribute name on CeilingEpisodeSelection for the given ceiling.
     """
-    reports_dir = output_dir / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
+    if ceiling_id == "best_fixed_planner":
+        return "fixed_row"
+    if ceiling_id == "best_planner_per_scenario_family":
+        return "family_row"
+    if ceiling_id == "best_planner_per_scenario_cell":
+        return "cell_row"
+    return "oracle_row"
 
-    written: list[Path] = []
 
-    # 1. reports/preflight.json
-    preflight_path = reports_dir / "preflight.json"
-    preflight_path.write_text(json.dumps(analysis_result["preflight"], indent=2), encoding="utf-8")
-    written.append(preflight_path)
+def _build_gap_entry(bs_cis: dict[str, Any], gap_name: str) -> dict[str, Any]:
+    """Build a gap summary entry from bootstrap confidence intervals.
 
-    # 2. reports/ceiling_summary.json
-    ceiling_json_path = reports_dir / "ceiling_summary.json"
+    Returns:
+        dict[str, Any]: Gap entry with point estimates and 95% CIs.
+    """
+    score_key = f"gap.{gap_name}.selection_score"
+    comp_key = f"gap.{gap_name}.completion_rate"
+    return {
+        "selection_score_delta": bs_cis.get(score_key, {}).get("point_estimate", 0.0),
+        "selection_score_delta_ci": bs_cis.get(score_key, {}).get("ci_95", [0.0, 0.0]),
+        "completion_rate_delta": bs_cis.get(comp_key, {}).get("point_estimate", 0.0),
+        "completion_rate_delta_ci": bs_cis.get(comp_key, {}).get("ci_95", [0.0, 0.0]),
+    }
+
+
+def _write_preflight_json(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/preflight.json.
+
+    Returns:
+        Path: Path to the written file.
+    """
+    path = reports_dir / "preflight.json"
+    path.write_text(json.dumps(analysis_result["preflight"], indent=2), encoding="utf-8")
+    return path
+
+
+def _write_ceiling_summary_json(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/ceiling_summary.json.
+
+    Returns:
+        Path: Path to the written file.
+    """
     bs_cis = analysis_result["bootstrap_intervals"]
-    ceiling_summary_payload = {
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "issue": ISSUE_NUMBER,
         "best_fixed_planner_id": analysis_result["best_fixed_planner"],
         "ceilings": {},
         "gaps": {
-            "family_gap": {
-                "selection_score_delta": bs_cis.get("gap.family_gap.selection_score", {}).get(
-                    "point_estimate", 0.0
-                ),
-                "selection_score_delta_ci": bs_cis.get("gap.family_gap.selection_score", {}).get(
-                    "ci_95", [0.0, 0.0]
-                ),
-                "completion_rate_delta": bs_cis.get("gap.family_gap.completion_rate", {}).get(
-                    "point_estimate", 0.0
-                ),
-                "completion_rate_delta_ci": bs_cis.get("gap.family_gap.completion_rate", {}).get(
-                    "ci_95", [0.0, 0.0]
-                ),
-            },
-            "cell_gap": {
-                "selection_score_delta": bs_cis.get("gap.cell_gap.selection_score", {}).get(
-                    "point_estimate", 0.0
-                ),
-                "selection_score_delta_ci": bs_cis.get("gap.cell_gap.selection_score", {}).get(
-                    "ci_95", [0.0, 0.0]
-                ),
-                "completion_rate_delta": bs_cis.get("gap.cell_gap.completion_rate", {}).get(
-                    "point_estimate", 0.0
-                ),
-                "completion_rate_delta_ci": bs_cis.get("gap.cell_gap.completion_rate", {}).get(
-                    "ci_95", [0.0, 0.0]
-                ),
-            },
-            "oracle_gap": {
-                "selection_score_delta": bs_cis.get("gap.oracle_gap.selection_score", {}).get(
-                    "point_estimate", 0.0
-                ),
-                "selection_score_delta_ci": bs_cis.get("gap.oracle_gap.selection_score", {}).get(
-                    "ci_95", [0.0, 0.0]
-                ),
-                "completion_rate_delta": bs_cis.get("gap.oracle_gap.completion_rate", {}).get(
-                    "point_estimate", 0.0
-                ),
-                "completion_rate_delta_ci": bs_cis.get("gap.oracle_gap.completion_rate", {}).get(
-                    "ci_95", [0.0, 0.0]
-                ),
-            },
+            "family_gap": _build_gap_entry(bs_cis, "family_gap"),
+            "cell_gap": _build_gap_entry(bs_cis, "cell_gap"),
+            "oracle_gap": _build_gap_entry(bs_cis, "oracle_gap"),
         },
         "claim_gate": analysis_result["claim_gate"],
     }
     for cid, metrics in analysis_result["ceiling_summary"].items():
-        ceiling_summary_payload["ceilings"][cid] = {
+        payload["ceilings"][cid] = {
             **metrics,
             "selection_score_ci": bs_cis.get(f"ceiling.{cid}.selection_score", {}).get(
                 "ci_95", [0.0, 0.0]
@@ -1081,12 +1069,20 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                 "ci_95", [0.0, 0.0]
             ),
         }
-    ceiling_json_path.write_text(json.dumps(ceiling_summary_payload, indent=2), encoding="utf-8")
-    written.append(ceiling_json_path)
+    path = reports_dir / "ceiling_summary.json"
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
 
-    # 3. reports/ceiling_summary.csv
-    ceiling_csv_path = reports_dir / "ceiling_summary.csv"
-    with ceiling_csv_path.open("w", newline="", encoding="utf-8") as f:
+
+def _write_ceiling_summary_csv(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/ceiling_summary.csv.
+
+    Returns:
+        Path: Path to the written file.
+    """
+    bs_cis = analysis_result["bootstrap_intervals"]
+    path = reports_dir / "ceiling_summary.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -1132,13 +1128,87 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                     m.get("compute_time_ms_p99", 0.0),
                 ]
             )
-    written.append(ceiling_csv_path)
+    return path
 
-    # 4. reports/family_breakdown.csv
-    family_csv_path = reports_dir / "family_breakdown.csv"
+
+def _write_family_planner_rows(
+    writer: csv.writer, eval_rows: list[dict[str, Any]], fams: list[str]
+) -> None:
+    """Write per-planner-per-family rows to a family breakdown CSV writer."""
+    for fam in fams:
+        fam_rows = [r for r in eval_rows if str(r["scenario_family"]) == fam]
+        for pid in EXPECTED_PLANNERS:
+            p_fam_rows = [r for r in fam_rows if str(r["planner_id"]) == pid]
+            if not p_fam_rows:
+                continue
+            n_ep = len(p_fam_rows)
+            times = sorted([float(r["compute_time_ms"]) for r in p_fam_rows])
+            writer.writerow(
+                [
+                    fam,
+                    "planner",
+                    pid,
+                    n_ep,
+                    sum(float(r["selection_score"]) for r in p_fam_rows) / n_ep,
+                    sum(float(r["collision_rate"]) for r in p_fam_rows) / n_ep,
+                    sum(float(r["severe_intrusion_rate"]) for r in p_fam_rows) / n_ep,
+                    sum(float(r["completion_rate"]) for r in p_fam_rows) / n_ep,
+                    sum(float(r["timeout_rate"]) for r in p_fam_rows) / n_ep,
+                    sum(float(r["tail_clearance"]) for r in p_fam_rows) / n_ep,
+                    sum(float(r["jerk"]) for r in p_fam_rows) / n_ep,
+                    sum(float(r["pedestrian_disturbance"]) for r in p_fam_rows) / n_ep,
+                    _percentile(times, 50),
+                    _percentile(times, 95),
+                    _percentile(times, 99),
+                ]
+            )
+
+
+def _write_family_ceiling_rows(
+    writer: csv.writer,
+    selections: list[CeilingEpisodeSelection],
+    fams: list[str],
+) -> None:
+    """Write per-ceiling-per-family rows to a family breakdown CSV writer."""
+    for fam in fams:
+        fam_sels = [s for s in selections if s.scenario_family == fam]
+        if not fam_sels:
+            continue
+        n_ep = len(fam_sels)
+        for cid in CEILING_IDS:
+            c_rows = [getattr(s, _ceiling_row_attr(cid)) for s in fam_sels]
+            times = sorted([float(r["compute_time_ms"]) for r in c_rows])
+            writer.writerow(
+                [
+                    fam,
+                    "ceiling",
+                    cid,
+                    n_ep,
+                    sum(float(r["selection_score"]) for r in c_rows) / n_ep,
+                    sum(float(r["collision_rate"]) for r in c_rows) / n_ep,
+                    sum(float(r["severe_intrusion_rate"]) for r in c_rows) / n_ep,
+                    sum(float(r["completion_rate"]) for r in c_rows) / n_ep,
+                    sum(float(r["timeout_rate"]) for r in c_rows) / n_ep,
+                    sum(float(r["tail_clearance"]) for r in c_rows) / n_ep,
+                    sum(float(r["jerk"]) for r in c_rows) / n_ep,
+                    sum(float(r["pedestrian_disturbance"]) for r in c_rows) / n_ep,
+                    _percentile(times, 50),
+                    _percentile(times, 95),
+                    _percentile(times, 99),
+                ]
+            )
+
+
+def _write_family_breakdown_csv(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/family_breakdown.csv.
+
+    Returns:
+        Path: Path to the written file.
+    """
     eval_rows = analysis_result["evaluation_rows"]
     fams = sorted({str(r["scenario_family"]) for r in eval_rows})
-    with family_csv_path.open("w", newline="", encoding="utf-8") as f:
+    path = reports_dir / "family_breakdown.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -1159,82 +1229,21 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                 "compute_time_ms_p99",
             ]
         )
+        _write_family_planner_rows(writer, eval_rows, fams)
+        _write_family_ceiling_rows(writer, analysis_result["selections"], fams)
+    return path
 
-        # Per planner per family
-        for fam in fams:
-            fam_rows = [r for r in eval_rows if str(r["scenario_family"]) == fam]
-            for pid in EXPECTED_PLANNERS:
-                p_fam_rows = [r for r in fam_rows if str(r["planner_id"]) == pid]
-                if not p_fam_rows:
-                    continue
-                n_ep = len(p_fam_rows)
-                times = sorted([float(r["compute_time_ms"]) for r in p_fam_rows])
-                writer.writerow(
-                    [
-                        fam,
-                        "planner",
-                        pid,
-                        n_ep,
-                        sum(float(r["selection_score"]) for r in p_fam_rows) / n_ep,
-                        sum(float(r["collision_rate"]) for r in p_fam_rows) / n_ep,
-                        sum(float(r["severe_intrusion_rate"]) for r in p_fam_rows) / n_ep,
-                        sum(float(r["completion_rate"]) for r in p_fam_rows) / n_ep,
-                        sum(float(r["timeout_rate"]) for r in p_fam_rows) / n_ep,
-                        sum(float(r["tail_clearance"]) for r in p_fam_rows) / n_ep,
-                        sum(float(r["jerk"]) for r in p_fam_rows) / n_ep,
-                        sum(float(r["pedestrian_disturbance"]) for r in p_fam_rows) / n_ep,
-                        _percentile(times, 50),
-                        _percentile(times, 95),
-                        _percentile(times, 99),
-                    ]
-                )
 
-        # Ceilings per family
-        selections: list[CeilingEpisodeSelection] = analysis_result["selections"]
-        for fam in fams:
-            fam_sels = [s for s in selections if s.scenario_family == fam]
-            if not fam_sels:
-                continue
-            n_ep = len(fam_sels)
-            for cid in CEILING_IDS:
-                attr = (
-                    "fixed_row"
-                    if cid == "best_fixed_planner"
-                    else (
-                        "family_row"
-                        if cid == "best_planner_per_scenario_family"
-                        else "cell_row"
-                        if cid == "best_planner_per_scenario_cell"
-                        else "oracle_row"
-                    )
-                )
-                c_rows = [getattr(s, attr) for s in fam_sels]
-                times = sorted([float(r["compute_time_ms"]) for r in c_rows])
-                writer.writerow(
-                    [
-                        fam,
-                        "ceiling",
-                        cid,
-                        n_ep,
-                        sum(float(r["selection_score"]) for r in c_rows) / n_ep,
-                        sum(float(r["collision_rate"]) for r in c_rows) / n_ep,
-                        sum(float(r["severe_intrusion_rate"]) for r in c_rows) / n_ep,
-                        sum(float(r["completion_rate"]) for r in c_rows) / n_ep,
-                        sum(float(r["timeout_rate"]) for r in c_rows) / n_ep,
-                        sum(float(r["tail_clearance"]) for r in c_rows) / n_ep,
-                        sum(float(r["jerk"]) for r in c_rows) / n_ep,
-                        sum(float(r["pedestrian_disturbance"]) for r in c_rows) / n_ep,
-                        _percentile(times, 50),
-                        _percentile(times, 95),
-                        _percentile(times, 99),
-                    ]
-                )
-    written.append(family_csv_path)
+def _write_cell_breakdown_csv(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/cell_breakdown.csv.
 
-    # 5. reports/cell_breakdown.csv
-    cell_csv_path = reports_dir / "cell_breakdown.csv"
+    Returns:
+        Path: Path to the written file.
+    """
+    eval_rows = analysis_result["evaluation_rows"]
     cells = sorted({(str(r["scenario_family"]), str(r["scenario_cell"])) for r in eval_rows})
-    with cell_csv_path.open("w", newline="", encoding="utf-8") as f:
+    path = reports_dir / "cell_breakdown.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -1288,11 +1297,19 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                         _percentile(times, 99),
                     ]
                 )
-    written.append(cell_csv_path)
+    return path
 
-    # 6. reports/failure_mechanism_map.csv
-    fail_csv_path = reports_dir / "failure_mechanism_map.csv"
-    with fail_csv_path.open("w", newline="", encoding="utf-8") as f:
+
+def _write_failure_mechanism_map_csv(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/failure_mechanism_map.csv.
+
+    Returns:
+        Path: Path to the written file.
+    """
+    eval_rows = analysis_result["evaluation_rows"]
+    fams = sorted({str(r["scenario_family"]) for r in eval_rows})
+    path = reports_dir / "failure_mechanism_map.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -1351,11 +1368,18 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                         to_cnt / n_ep,
                     ]
                 )
-    written.append(fail_csv_path)
+    return path
 
-    # 7. reports/runtime_tail.csv
-    runtime_csv_path = reports_dir / "runtime_tail.csv"
-    with runtime_csv_path.open("w", newline="", encoding="utf-8") as f:
+
+def _write_runtime_tail_csv(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/runtime_tail.csv.
+
+    Returns:
+        Path: Path to the written file.
+    """
+    eval_rows = analysis_result["evaluation_rows"]
+    path = reports_dir / "runtime_tail.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -1386,18 +1410,7 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                 ]
             )
         for cid in CEILING_IDS:
-            attr = (
-                "fixed_row"
-                if cid == "best_fixed_planner"
-                else (
-                    "family_row"
-                    if cid == "best_planner_per_scenario_family"
-                    else "cell_row"
-                    if cid == "best_planner_per_scenario_cell"
-                    else "oracle_row"
-                )
-            )
-            c_rows = [getattr(s, attr) for s in analysis_result["selections"]]
+            c_rows = [getattr(s, _ceiling_row_attr(cid)) for s in analysis_result["selections"]]
             times = sorted([float(r["compute_time_ms"]) for r in c_rows])
             n = len(times)
             writer.writerow(
@@ -1411,18 +1424,28 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                     max(times),
                 ]
             )
-    written.append(runtime_csv_path)
+    return path
 
-    # 8. reports/pareto_dominance.json
-    pareto_json_path = reports_dir / "pareto_dominance.json"
-    pareto_json_path.write_text(
-        json.dumps(analysis_result["pareto_dominance"], indent=2), encoding="utf-8"
-    )
-    written.append(pareto_json_path)
 
-    # 9. reports/normalized_regret.csv
-    regret_csv_path = reports_dir / "normalized_regret.csv"
-    with regret_csv_path.open("w", newline="", encoding="utf-8") as f:
+def _write_pareto_dominance_json(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/pareto_dominance.json.
+
+    Returns:
+        Path: Path to the written file.
+    """
+    path = reports_dir / "pareto_dominance.json"
+    path.write_text(json.dumps(analysis_result["pareto_dominance"], indent=2), encoding="utf-8")
+    return path
+
+
+def _write_normalized_regret_csv(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/normalized_regret.csv.
+
+    Returns:
+        Path: Path to the written file.
+    """
+    path = reports_dir / "normalized_regret.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
@@ -1445,13 +1468,41 @@ def write_report_artifacts(  # noqa: C901, PLR0915, PLR0912
                     row["max_normalized_regret"],
                 ]
             )
-    written.append(regret_csv_path)
+    return path
 
-    # 10. reports/bootstrap_intervals.json
-    bs_json_path = reports_dir / "bootstrap_intervals.json"
-    bs_json_path.write_text(
-        json.dumps(analysis_result["bootstrap_intervals"], indent=2), encoding="utf-8"
-    )
-    written.append(bs_json_path)
 
-    return written
+def _write_bootstrap_intervals_json(reports_dir: Path, analysis_result: dict[str, Any]) -> Path:
+    """Write reports/bootstrap_intervals.json.
+
+    Returns:
+        Path: Path to the written file.
+    """
+    path = reports_dir / "bootstrap_intervals.json"
+    path.write_text(json.dumps(analysis_result["bootstrap_intervals"], indent=2), encoding="utf-8")
+    return path
+
+
+def write_report_artifacts(
+    analysis_result: dict[str, Any],
+    output_dir: Path,
+) -> list[Path]:
+    """Write all 10 required report files to output_dir and return list of written paths.
+
+    Returns:
+        list[Path]: List of absolute or relative paths to written report files.
+    """
+    reports_dir = output_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    return [
+        _write_preflight_json(reports_dir, analysis_result),
+        _write_ceiling_summary_json(reports_dir, analysis_result),
+        _write_ceiling_summary_csv(reports_dir, analysis_result),
+        _write_family_breakdown_csv(reports_dir, analysis_result),
+        _write_cell_breakdown_csv(reports_dir, analysis_result),
+        _write_failure_mechanism_map_csv(reports_dir, analysis_result),
+        _write_runtime_tail_csv(reports_dir, analysis_result),
+        _write_pareto_dominance_json(reports_dir, analysis_result),
+        _write_normalized_regret_csv(reports_dir, analysis_result),
+        _write_bootstrap_intervals_json(reports_dir, analysis_result),
+    ]

@@ -11,13 +11,13 @@ with::
     ValueError: Error getting the version from source `vcs`:
     Can't parse version from tag 'artifact/legacy-models-2026-07-registry-v1'
 
-The fix lives entirely in ``pyproject.toml`` ``[tool.hatch.version.raw-options]``:
+The fix lives in ``pyproject.toml`` ``[tool.hatch.version.raw-options.scm.git]``:
 
-* ``git_describe_command`` restricts ``git describe`` to dotted-numeric tags via
-  ``--match *[0-9]*.*[0-9]*`` (vcs_versioning's ``tag.strict = true``
-  equivalent), so an artifact tag without a dotted version is never selected;
-* ``tag_regex`` maps release (``X.Y.Z``), ``v``-prefixed (``vX.Y.Z``) and
-  release-candidate (``rcX.Y.Z``) tags to the numeric ``X.Y.Z``;
+* ``scm.git.describe_command`` restricts ``git describe`` to release-line tags,
+  so an artifact tag without a dotted version is never selected;
+* ``tag_regex`` maps release (``X.Y.Z``), ``v``-prefixed (``vX.Y.Z``),
+  camera-ready (``camera-ready-vX.Y.Z``), and release-candidate (``rcX.Y.Z``)
+  tags to the numeric ``X.Y.Z``;
 * ``fallback_version`` is reached only when *no* tag matches the glob, so a
   checkout whose sole reachable tag is an artifact tag still derives a valid
   PEP 440 non-release version and the editable build never breaks.
@@ -57,7 +57,7 @@ ARTIFACT_TAG = "artifact/legacy-models-2026-07-registry-v1"
 OTHER_ARTIFACT_TAG = "artifact/models-2026-05-registry-v1"
 
 
-def _raw_options() -> Mapping[str, str]:
+def _raw_options() -> Mapping[str, object]:
     """Return the live ``[tool.hatch.version.raw-options]`` table."""
     data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
     return data["tool"]["hatch"]["version"]["raw-options"]
@@ -103,14 +103,28 @@ def _tag_head(root: Path, tag: str) -> None:
     subprocess.run(["git", "tag", tag], cwd=root, check=True)
 
 
-def _run_configured_describe(root: Path) -> subprocess.CompletedProcess[str]:
-    """Run the live configured ``git_describe_command`` in *root*.
+def _configured_describe_command() -> list[str]:
+    """Return the live current Hatch VCS describe command."""
+    raw = _raw_options()
+    scm = raw["scm"]
+    assert isinstance(scm, dict)
+    git = scm["git"]
+    assert isinstance(git, dict)
+    command = git["describe_command"]
+    if isinstance(command, str):
+        return shlex.split(command)
+    assert isinstance(command, list)
+    assert all(isinstance(part, str) for part in command)
+    return [part for part in command if isinstance(part, str)]
 
-    This is exactly what hatch-vcs / vcs_versioning executes (the string is
-    ``shlex.split`` and run as a list, mirroring
-    ``vcs_versioning._backends._git.version_from_describe``).
+
+def _run_configured_describe(root: Path) -> subprocess.CompletedProcess[str]:
+    """Run the live configured ``scm.git.describe_command`` in *root*.
+
+    Hatch-vcs passes this current option to setuptools-scm. Supporting both
+    string and list TOML forms keeps the regression check focused on behavior.
     """
-    cmd = shlex.split(_raw_options()["git_describe_command"])
+    cmd = _configured_describe_command()
     return subprocess.run(
         cmd,
         cwd=root,
@@ -120,16 +134,17 @@ def _run_configured_describe(root: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _describe_match_glob() -> str:
-    """Return the ``--match`` glob from the configured describe command."""
-    cmd = shlex.split(_raw_options()["git_describe_command"])
-    match_idx = cmd.index("--match")
-    return cmd[match_idx + 1]
+def _describe_match_globs() -> list[str]:
+    """Return all ``--match`` globs from the configured describe command."""
+    cmd = _configured_describe_command()
+    return [cmd[index + 1] for index, part in enumerate(cmd[:-1]) if part == "--match"]
 
 
 def _compiled_tag_regex() -> re.Pattern[str]:
     """Return the live ``tag_regex`` compiled, exactly as vcs_versioning does."""
-    return re.compile(_raw_options()["tag_regex"])
+    tag_regex = _raw_options()["tag_regex"]
+    assert isinstance(tag_regex, str)
+    return re.compile(tag_regex)
 
 
 def _extract_version(tag: str) -> str | None:
@@ -156,7 +171,7 @@ def _git_parse_describe(output: str) -> tuple[str, int]:
 def _derive_version(repo: Path) -> str:
     """Mirror vcs_versioning's documented derivation using the live config.
 
-    * Run the configured ``git_describe_command``.
+    * Run the configured ``scm.git.describe_command``.
     * If it fails (no tag matches the strict glob), vcs_versioning falls back to
       ``fallback_version`` (see ``_backends._git._git_parse_inner``); we return
       it verbatim, which is sufficient to assert the build survives with a
@@ -169,7 +184,9 @@ def _derive_version(repo: Path) -> str:
     raw = _raw_options()
     result = _run_configured_describe(repo)
     if result.returncode != 0:
-        return raw["fallback_version"]
+        fallback_version = raw["fallback_version"]
+        assert isinstance(fallback_version, str)
+        return fallback_version
     tag, distance = _git_parse_describe(result.stdout.strip())
     extracted = _extract_version(tag)
     assert extracted is not None, f"configured tag_regex could not parse selected tag {tag!r}"
@@ -195,13 +212,17 @@ def test_pyproject_version_source_resists_non_release_artifact_tags() -> None:
     """
     raw = _raw_options()
 
-    # The describe glob must require a digit, a literal dot, and another digit
-    # region, i.e. be at least as strict as vcs_versioning's ``tag.strict`` glob
-    # (``*[0-9]*.*[0-9]*``). The default glob ``*[0-9]*`` has no literal dot, so
-    # any digit-bearing tag -- including the artifact tag -- matched it.
-    glob = _describe_match_glob()
-    assert "[0-9]" in glob, glob
-    assert "." in glob, glob
+    # Hatch rejects a deprecated top-level command alongside the current nested
+    # setting. Its absence prevents the exact editable-build failure in CI.
+    assert "git_describe_command" not in raw
+
+    # The current patterns must only admit release-line tags; the default glob
+    # ``*[0-9]*`` has no literal dot, so it admits digit-bearing artifact tags.
+    globs = _describe_match_globs()
+    assert "[0-9]*.[0-9]*.[0-9]*" in globs, globs
+    assert "v[0-9]*.[0-9]*.[0-9]*" in globs, globs
+    assert "rc[0-9]*.[0-9]*.[0-9]*" in globs, globs
+    assert "camera-ready-v[0-9]*.[0-9]*.[0-9]*" in globs, globs
 
     # The tag regex must capture a named ``version`` group.
     assert "version" in _compiled_tag_regex().groupindex
@@ -209,6 +230,7 @@ def test_pyproject_version_source_resists_non_release_artifact_tags() -> None:
     # A fallback must exist and be a valid non-release PEP 440 version so an
     # artifact-tag-only checkout still builds.
     fallback = raw["fallback_version"]
+    assert isinstance(fallback, str)
     assert fallback, "fallback_version must be set"
     assert re.match(r"^\d+(\.\d+)+", fallback), fallback
     assert _is_non_release(fallback), f"fallback_version must be non-release: {fallback!r}"
@@ -335,6 +357,14 @@ def test_release_candidate_tag_derives_base_version(tmp_path: Path) -> None:
     _init_repo(repo)
     _tag_head(repo, "rc0.0.3")
     assert _derive_version(repo) == "0.0.3"
+
+
+def test_camera_ready_release_tag_derives_base_version(tmp_path: Path) -> None:
+    """A checkout tagged ``camera-ready-v0.0.1a`` derives package version ``0.0.1a``."""
+    repo = tmp_path / "camera-ready"
+    _init_repo(repo)
+    _tag_head(repo, "camera-ready-v0.0.1a")
+    assert _derive_version(repo) == "0.0.1a"
 
 
 def test_artifact_only_checkout_derives_valid_non_release_fallback(tmp_path: Path) -> None:

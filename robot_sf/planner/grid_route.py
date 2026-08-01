@@ -803,6 +803,10 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
             ),
         )
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "GridRoutePlannerAdapter"}
+
 
 def build_grid_route_config(cfg: dict[str, Any] | None) -> GridRoutePlannerConfig:
     """Build :class:`GridRoutePlannerConfig` from a mapping payload.

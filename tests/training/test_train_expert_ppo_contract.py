@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import pickle
 import subprocess
 import sys
 from pathlib import Path
+
+import yaml
 
 from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.training.imitation_config import (
@@ -686,6 +689,98 @@ def test_evaluate_policy_logs_compact_phase_progress(monkeypatch, tmp_path: Path
     assert len(progress_messages) == 2
     assert progress_messages[0].startswith("PPO evaluation progress step=60000 episode=10/12")
     assert progress_messages[-1].startswith("PPO evaluation progress step=60000 episode=12/12")
+
+
+def test_main_dry_run_manifest_records_config_sha256(tmp_path, monkeypatch) -> None:
+    """The CLI should hash the config bytes and persist that hash in dry-run notes."""
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
+
+    scenario_file = tmp_path / "scenarios.yaml"
+    scenario_file.write_text(
+        yaml.safe_dump([{"id": "test_scenario", "name": "test_scenario"}]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        train_ppo,
+        "load_scenarios",
+        lambda _path: [{"id": "test_scenario", "name": "test_scenario"}],
+    )
+    monkeypatch.setattr(
+        train_ppo,
+        "build_robot_config_from_scenario",
+        lambda scenario, *, scenario_path: object(),
+    )
+    monkeypatch.setattr(train_ppo, "_apply_env_overrides", lambda env_config, overrides: None)
+    monkeypatch.setattr(train_ppo, "make_robot_env", lambda **kwargs: object())
+
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=scenario_file,
+        seeds=(123,),
+        total_timesteps=32_000,
+        policy_id="ppo_config_sha256_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=4,
+            step_schedule=((None, 16_000),),
+            randomize_seeds=False,
+        ),
+    )
+    config_file = tmp_path / "train.yaml"
+    config_file.write_text("policy_id: ppo_config_sha256_test\n", encoding="utf-8")
+    expected_hash = hashlib.sha256(config_file.read_bytes()).hexdigest()
+
+    loaded_paths: list[Path] = []
+
+    def _load_config(path: Path) -> ExpertTrainingConfig:
+        loaded_paths.append(path)
+        return config
+
+    manifest_paths: list[Path] = []
+    write_manifest = train_ppo.write_training_run_manifest
+
+    def _write_manifest(artifact) -> Path:
+        path = write_manifest(artifact)
+        manifest_paths.append(path)
+        return path
+
+    log_calls: list[tuple[str, tuple[object, ...]]] = []
+    logger_info = train_ppo.logger.info
+
+    def _capture_info(message: str, *args: object, **kwargs: object) -> None:
+        if message == "Resolved config SHA-256: {}":
+            log_calls.append((message, args))
+        logger_info(message, *args, **kwargs)
+
+    monkeypatch.setattr(train_ppo, "load_expert_training_config", _load_config)
+    monkeypatch.setattr(train_ppo, "write_training_run_manifest", _write_manifest)
+    monkeypatch.setattr(train_ppo.logger, "info", _capture_info)
+
+    assert (
+        train_ppo.main(
+            [
+                "--config",
+                str(config_file),
+                "--dry-run",
+                "--log-level",
+                "INFO",
+            ]
+        )
+        == 0
+    )
+
+    assert loaded_paths == [config_file.resolve()]
+    assert log_calls == [("Resolved config SHA-256: {}", (expected_hash,))]
+    assert len(manifest_paths) == 1
+    run_manifest = json.loads(manifest_paths[0].read_text(encoding="utf-8"))
+    run_notes = run_manifest.get("notes", [])
+    assert f"config_sha256={expected_hash}" in run_notes, (
+        f"Expected config_sha256 in run manifest notes, got: {run_notes}"
+    )
 
 
 def test_evaluate_policy_logs_single_progress_marker_for_ten_episodes(

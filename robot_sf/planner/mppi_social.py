@@ -462,6 +462,10 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 )
         return float(action[0]), float(action[1])
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "MPPISocialPlannerAdapter"}
+
 
 def build_mppi_social_config(cfg: dict[str, Any] | None) -> MPPISocialConfig:
     """Build :class:`MPPISocialConfig` from mapping payload.

@@ -523,7 +523,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         """
         return self.choose_command_decision(observation, ppo_command).as_command_result()
 
-    def choose_command_decision(  # noqa: C901, PLR0912
+    def choose_command_decision(
         self, observation: dict[str, Any], ppo_command: tuple[float, float]
     ) -> ShieldDecision:
         """Choose a command and return structured safety-shield metadata.
@@ -531,6 +531,61 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         Returns:
             ShieldDecision: Proposed action, selected action, and shield decision metadata.
         """
+        self._init_action_adaptation(ppo_command)
+        cached_state = self._extract_state(observation)
+        cached_grid = self._cache_grid_payload(observation)
+        robot_pos, _heading, goal, ped_pos, _ped_vel = cached_state
+
+        goal_decision = self._goal_reached_decision(ppo_command, robot_pos, goal)
+        if goal_decision is not None:
+            return goal_decision
+
+        current_min_dist = self._min_pedestrian_distance(ped_pos, robot_pos)
+        prior_allowed = not bool(self.config.prior_near_field_only) or current_min_dist <= float(
+            self.config.near_field_distance
+        )
+        ppo_eval = self._evaluate_command(
+            observation,
+            ppo_command,
+            state=cached_state,
+            grid_payload=cached_grid,
+        )
+        prior_command = self._prior_command(observation) if prior_allowed else None
+
+        decision, prior_eval = self._try_prior_residual(
+            observation, ppo_command, ppo_eval, prior_command, cached_state, cached_grid
+        )
+        if decision is not None:
+            return decision
+
+        decision = self._try_prior_blend(
+            observation, ppo_command, ppo_eval, prior_command, cached_state, cached_grid
+        )
+        if decision is not None:
+            return decision
+
+        decision = self._try_uncertainty_fallback_decision(
+            observation, ppo_command, ppo_eval, cached_state, cached_grid
+        )
+        if decision is not None:
+            return decision
+
+        decision = self._try_ppo_passthrough(ppo_command, ppo_eval, current_min_dist)
+        if decision is not None:
+            return decision
+
+        decision, prior_eval = self._try_prior_safe(
+            observation, ppo_command, ppo_eval, prior_command, prior_eval, cached_state, cached_grid
+        )
+        if decision is not None:
+            return decision
+
+        return self._select_fallback_or_stop(
+            observation, ppo_command, ppo_eval, prior_eval, cached_state, cached_grid
+        )
+
+    def _init_action_adaptation(self, ppo_command: tuple[float, float]) -> None:
+        """Reset per-decision action adaptation metadata to direct pass-through."""
         self._last_action_adaptation = {
             "mode": "direct_policy_command",
             "raw_policy_action": [float(ppo_command[0]), float(ppo_command[1])],
@@ -542,54 +597,72 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "residual_clipped": False,
             "hard_guard_authoritative": True,
         }
-        cached_state = self._extract_state(observation)
-        cached_grid = self._cache_grid_payload(observation)
-        robot_pos, _heading, goal, ped_pos, _ped_vel = cached_state
-        if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
-            return self._shield_decision(
-                ppo_command=ppo_command,
-                filtered_command=(0.0, 0.0),
-                label="goal_reached",
-                reason="goal_within_tolerance",
-                ppo_eval={"safe": True},
-                selected_eval={"safe": True},
-                intervened=False,
-            )
 
-        if ped_pos.size > 0:
-            current_min_dist = float(np.min(np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)))
-        else:
-            current_min_dist = float("inf")
-
-        prior_allowed_by_scene = not bool(
-            self.config.prior_near_field_only
-        ) or current_min_dist <= float(self.config.near_field_distance)
-        ppo_eval = self._evaluate_command(
-            observation,
-            ppo_command,
-            state=cached_state,
-            grid_payload=cached_grid,
+    def _goal_reached_decision(
+        self,
+        ppo_command: tuple[float, float],
+        robot_pos: np.ndarray,
+        goal: np.ndarray,
+    ) -> ShieldDecision | None:
+        """Return a goal-reached shield decision when the robot is within tolerance."""
+        goal_distance = float(np.linalg.norm(goal - robot_pos))
+        goal_tolerance = float(self.config.goal_tolerance)
+        # Preserve the original ``distance <= tolerance`` polarity: its NaN behavior
+        # is intentionally different from the negated ``distance > tolerance`` form.
+        if not goal_distance <= goal_tolerance:
+            return None
+        return self._shield_decision(
+            ppo_command=ppo_command,
+            filtered_command=(0.0, 0.0),
+            label="goal_reached",
+            reason="goal_within_tolerance",
+            ppo_eval={"safe": True},
+            selected_eval={"safe": True},
+            intervened=False,
         )
-        prior_command = self._prior_command(observation) if prior_allowed_by_scene else None
-        prior_eval: dict[str, float | bool] | None = None
-        if (
+
+    @staticmethod
+    def _min_pedestrian_distance(ped_pos: np.ndarray, robot_pos: np.ndarray) -> float:
+        """Return the nearest pedestrian distance, or ``inf`` when none exist."""
+        if ped_pos.size > 0:
+            return float(np.min(np.linalg.norm(ped_pos - robot_pos[None, :], axis=1)))
+        return float("inf")
+
+    def _try_prior_residual(
+        self,
+        observation: dict[str, Any],
+        ppo_command: tuple[float, float],
+        ppo_eval: dict[str, float | bool],
+        prior_command: tuple[float, float] | None,
+        cached_state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray],
+        cached_grid: tuple[np.ndarray, dict[str, Any]] | None,
+    ) -> tuple[ShieldDecision | None, dict[str, float | bool] | None]:
+        """Try bounded prior residual when residual mode is enabled and PPO is unsafe.
+
+        Returns:
+            tuple[ShieldDecision | None, dict[str, float | bool] | None]:
+                Decision (or ``None``) and the prior evaluation computed along the way.
+        """
+        if not (
             bool(self.config.prior_residual_mode)
             and prior_command is not None
             and not bool(ppo_eval["safe"])
         ):
-            prior_eval = self._evaluate_command(
-                observation, prior_command, state=cached_state, grid_payload=cached_grid
-            )
-            residual_command = self._residual_prior_command(ppo_command, prior_command)
-            residual_eval = self._evaluate_command(
-                observation, residual_command, state=cached_state, grid_payload=cached_grid
-            )
-            residual_improves_ppo = self._blend_is_preferred(ppo_eval, residual_eval)
-            residual_improves_prior = not bool(prior_eval["safe"]) or self._blend_is_preferred(
-                prior_eval, residual_eval
-            )
-            if bool(residual_eval["safe"]) and residual_improves_ppo and residual_improves_prior:
-                return self._shield_decision(
+            return None, None
+        prior_eval = self._evaluate_command(
+            observation, prior_command, state=cached_state, grid_payload=cached_grid
+        )
+        residual_command = self._residual_prior_command(ppo_command, prior_command)
+        residual_eval = self._evaluate_command(
+            observation, residual_command, state=cached_state, grid_payload=cached_grid
+        )
+        residual_improves_ppo = self._blend_is_preferred(ppo_eval, residual_eval)
+        residual_improves_prior = not bool(prior_eval["safe"]) or self._blend_is_preferred(
+            prior_eval, residual_eval
+        )
+        if bool(residual_eval["safe"]) and residual_improves_ppo and residual_improves_prior:
+            return (
+                self._shield_decision(
                     ppo_command=ppo_command,
                     filtered_command=residual_command,
                     label="prior_residual_safe",
@@ -597,65 +670,107 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                     ppo_eval=ppo_eval,
                     selected_eval=residual_eval,
                     fallback_policy="prior_residual",
-                )
-
-        prior_weight = float(self.config.prior_blend_weight)
-        use_prior_in_scene = prior_command is not None and prior_weight > 0.0
-        if use_prior_in_scene and prior_command is not None:
-            blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)
-            blended_eval = self._evaluate_command(
-                observation, blended_command, state=cached_state, grid_payload=cached_grid
+                ),
+                prior_eval,
             )
-            if self._blend_is_preferred(ppo_eval, blended_eval):
-                return self._shield_decision(
-                    ppo_command=ppo_command,
-                    filtered_command=blended_command,
-                    label="prior_blend_safe",
-                    reason="prior_blend_improved_short_horizon_safety",
-                    ppo_eval=ppo_eval,
-                    selected_eval=blended_eval,
-                    fallback_policy=type(self.prior_adapter).__name__,
-                )
+        return None, prior_eval
 
+    def _try_prior_blend(
+        self,
+        observation: dict[str, Any],
+        ppo_command: tuple[float, float],
+        ppo_eval: dict[str, float | bool],
+        prior_command: tuple[float, float] | None,
+        cached_state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray],
+        cached_grid: tuple[np.ndarray, dict[str, Any]] | None,
+    ) -> ShieldDecision | None:
+        """Try prior-blend command when a weighted prior is configured.
+
+        Returns:
+            ShieldDecision | None: Blend decision when preferred, otherwise ``None``.
+        """
+        prior_weight = float(self.config.prior_blend_weight)
+        # Keep the original ``prior_weight > 0.0`` polarity rather than negating it to
+        # ``prior_weight <= 0.0``: the two differ for NaN, and a NaN weight must skip the
+        # blend instead of failing open into a NaN command labelled ``prior_blend_safe``.
+        if prior_command is None or not prior_weight > 0.0:
+            return None
+        blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)
+        blended_eval = self._evaluate_command(
+            observation, blended_command, state=cached_state, grid_payload=cached_grid
+        )
+        if not self._blend_is_preferred(ppo_eval, blended_eval):
+            return None
+        return self._shield_decision(
+            ppo_command=ppo_command,
+            filtered_command=blended_command,
+            label="prior_blend_safe",
+            reason="prior_blend_improved_short_horizon_safety",
+            ppo_eval=ppo_eval,
+            selected_eval=blended_eval,
+            fallback_policy=type(self.prior_adapter).__name__,
+        )
+
+    def _try_uncertainty_fallback_decision(
+        self,
+        observation: dict[str, Any],
+        ppo_command: tuple[float, float],
+        ppo_eval: dict[str, float | bool],
+        cached_state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray],
+        cached_grid: tuple[np.ndarray, dict[str, Any]] | None,
+    ) -> ShieldDecision | None:
+        """Try uncertainty-triggered fallback when diagnostic conditions fire.
+
+        Returns:
+            ShieldDecision | None: Fallback decision when triggered, otherwise ``None``.
+        """
         uncertainty_eval = self._evaluate_uncertainty_fallback(
             observation, ppo_command, ppo_eval, state=cached_state
         )
-        if bool(uncertainty_eval["triggered"]):
-            fallback_command, label, fallback_policy = self._uncertainty_fallback_command(
-                observation, ppo_command
-            )
-            fallback_eval = self._evaluate_command(
-                observation, fallback_command, state=cached_state, grid_payload=cached_grid
-            )
-            metrics = uncertainty_eval["metrics"]
-            uncertainty_metadata = {
-                "schema_version": "uncertainty-fallback.v1",
-                "mode": "conformal_buffer_intrusion",
-                "diagnostic_only": True,
-                "triggered": True,
-                "trigger_conditions": list(uncertainty_eval["trigger_conditions"]),
-                "intrusion_metrics": asdict(metrics),
-                "predicted_collision_probability_proxy": float(
-                    uncertainty_eval["predicted_collision_probability_proxy"]
-                ),
-                "conformal_radius_m": float(self.config.uncertainty_conformal_radius_m),
-            }
-            calibration_metadata = {
-                "status": "configured_static_radius",
-                "claim_boundary": "diagnostic_proxy_not_safety_guarantee",
-            }
-            return self._shield_decision(
-                ppo_command=ppo_command,
-                filtered_command=fallback_command,
-                label=label,
-                reason="uncertainty_triggered_fallback",
-                ppo_eval=ppo_eval,
-                selected_eval=fallback_eval,
-                fallback_policy=fallback_policy,
-                uncertainty_metadata=uncertainty_metadata,
-                calibration_metadata=calibration_metadata,
-            )
+        if not bool(uncertainty_eval["triggered"]):
+            return None
+        fallback_command, label, fallback_policy = self._uncertainty_fallback_command(
+            observation, ppo_command
+        )
+        fallback_eval = self._evaluate_command(
+            observation, fallback_command, state=cached_state, grid_payload=cached_grid
+        )
+        metrics = uncertainty_eval["metrics"]
+        uncertainty_metadata = {
+            "schema_version": "uncertainty-fallback.v1",
+            "mode": "conformal_buffer_intrusion",
+            "diagnostic_only": True,
+            "triggered": True,
+            "trigger_conditions": list(uncertainty_eval["trigger_conditions"]),
+            "intrusion_metrics": asdict(metrics),
+            "predicted_collision_probability_proxy": float(
+                uncertainty_eval["predicted_collision_probability_proxy"]
+            ),
+            "conformal_radius_m": float(self.config.uncertainty_conformal_radius_m),
+        }
+        calibration_metadata = {
+            "status": "configured_static_radius",
+            "claim_boundary": "diagnostic_proxy_not_safety_guarantee",
+        }
+        return self._shield_decision(
+            ppo_command=ppo_command,
+            filtered_command=fallback_command,
+            label=label,
+            reason="uncertainty_triggered_fallback",
+            ppo_eval=ppo_eval,
+            selected_eval=fallback_eval,
+            fallback_policy=fallback_policy,
+            uncertainty_metadata=uncertainty_metadata,
+            calibration_metadata=calibration_metadata,
+        )
 
+    def _try_ppo_passthrough(
+        self,
+        ppo_command: tuple[float, float],
+        ppo_eval: dict[str, float | bool],
+        current_min_dist: float,
+    ) -> ShieldDecision | None:
+        """Return a pass-through decision when the PPO command satisfies the shield."""
         if current_min_dist > float(self.config.near_field_distance) and bool(ppo_eval["safe"]):
             return self._shield_decision(
                 ppo_command=ppo_command,
@@ -676,23 +791,62 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 selected_eval=ppo_eval,
                 intervened=False,
             )
+        return None
 
-        if prior_command is not None:
-            if prior_eval is None:
-                prior_eval = self._evaluate_command(
-                    observation, prior_command, state=cached_state, grid_payload=cached_grid
-                )
-            if bool(prior_eval["safe"]):
-                return self._shield_decision(
-                    ppo_command=ppo_command,
-                    filtered_command=(float(prior_command[0]), float(prior_command[1])),
-                    label="prior_safe",
-                    reason="prior_command_satisfied_short_horizon_constraints",
-                    ppo_eval=ppo_eval,
-                    selected_eval=prior_eval,
-                    fallback_policy=type(self.prior_adapter).__name__,
-                )
+    def _try_prior_safe(
+        self,
+        observation: dict[str, Any],
+        ppo_command: tuple[float, float],
+        ppo_eval: dict[str, float | bool],
+        prior_command: tuple[float, float] | None,
+        prior_eval: dict[str, float | bool] | None,
+        cached_state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray],
+        cached_grid: tuple[np.ndarray, dict[str, Any]] | None,
+    ) -> tuple[ShieldDecision | None, dict[str, float | bool] | None]:
+        """Try the prior command when PPO is unsafe and a prior is available.
 
+        Returns:
+            tuple[ShieldDecision | None, dict[str, float | bool] | None]:
+                Decision (or ``None``) and the (possibly freshly computed) prior evaluation.
+        """
+        if prior_command is None:
+            return None, prior_eval
+        if prior_eval is None:
+            prior_eval = self._evaluate_command(
+                observation, prior_command, state=cached_state, grid_payload=cached_grid
+            )
+        if not bool(prior_eval["safe"]):
+            return None, prior_eval
+        return (
+            self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=(float(prior_command[0]), float(prior_command[1])),
+                label="prior_safe",
+                reason="prior_command_satisfied_short_horizon_constraints",
+                ppo_eval=ppo_eval,
+                selected_eval=prior_eval,
+                fallback_policy=type(self.prior_adapter).__name__,
+            ),
+            prior_eval,
+        )
+
+    def _select_fallback_or_stop(
+        self,
+        observation: dict[str, Any],
+        ppo_command: tuple[float, float],
+        ppo_eval: dict[str, float | bool],
+        prior_eval: dict[str, float | bool] | None,
+        cached_state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray],
+        cached_grid: tuple[np.ndarray, dict[str, Any]] | None,
+    ) -> ShieldDecision:
+        """Select the safest remaining command when no fully safe option exists.
+
+        Tries the fallback adapter, then stop, then picks the best-effort command
+        with the largest pedestrian clearance.
+
+        Returns:
+            ShieldDecision: Always returns a decision (never ``None``).
+        """
         fallback_command = self.fallback_adapter.plan(observation)
         fallback_eval = self._evaluate_command(
             observation, fallback_command, state=cached_state, grid_payload=cached_grid
@@ -851,6 +1005,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         if np.isfinite(min_ttc) and min_ttc < float(self.config.min_ttc):
             violations.append("time_to_collision")
         return tuple(violations)
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "GuardedPPOAdapter"}
 
 
 def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:

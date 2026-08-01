@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = REPO_ROOT / "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16"
@@ -80,14 +81,20 @@ def test_fullpilot_replaces_synthetic_heldout_input_fail_closed() -> None:
 def test_final_review_freezes_package_a_as_diagnostic_only() -> None:
     """The approved review cannot promote this narrow evidence bundle."""
     decision = _load_json("package_a_decision_packet.json")
-    claim_card = (BUNDLE / "claim_card.yaml").read_text(encoding="utf-8")
+    claim_card = yaml.safe_load((BUNDLE / "claim_card.yaml").read_text(encoding="utf-8"))
+
+    assert isinstance(claim_card, dict)
 
     assert decision["classification"] == "diagnostic"
     assert decision["issue_result_classification"] == "diagnostic"
     assert decision["review_marker"] == "REVIEWED"
-    assert "claim_status: reviewed" in claim_card
-    assert "classification: diagnostic" in claim_card
-    assert "No benchmark, ranking, paper-facing, or adapter-to-native" in claim_card
+    assert claim_card["claim_status"] == "reviewed"
+    assert claim_card["classification"] == "diagnostic"
+    assert claim_card["decision_packet_classification"] == "diagnostic"
+    assert claim_card["issue_result_classification"] == "diagnostic"
+    assert (
+        "No benchmark, ranking, paper-facing, or adapter-to-native" in claim_card["claim_boundary"]
+    )
 
 
 def test_heldout_table_contains_all_eighteen_real_rows() -> None:

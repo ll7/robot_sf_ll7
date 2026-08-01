@@ -2969,8 +2969,7 @@ def _normalize_batch_specs(ctx: _BatchContext) -> None:
 
 def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
     """Load scenarios, validate, and filter unsupported entries."""
-    scenarios_is_path = isinstance(ctx.scenarios_or_path, (str, Path))
-    if scenarios_is_path:
+    if isinstance(ctx.scenarios_or_path, (str, Path)):
         ctx.scenario_path = Path(ctx.scenarios_or_path)
         ctx.scenarios = cast("list[dict[str, Any]]", load_scenarios(ctx.scenario_path))
     else:

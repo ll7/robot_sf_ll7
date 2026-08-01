@@ -21,7 +21,16 @@ except ModuleNotFoundError:  # pragma: no cover - local lightweight validation p
     class _TorchTensor:
         """Marker class for SciPy optional torch-array detection."""
 
+    class _TorchCuda:
+        """CPU-only CUDA facade used by serial batch cleanup."""
+
+        @staticmethod
+        def is_available() -> bool:
+            """Report the lightweight test environment as CPU-only."""
+            return False
+
     _torch_stub.Tensor = _TorchTensor
+    _torch_stub.cuda = _TorchCuda
     sys.modules["torch"] = _torch_stub
 
 from robot_sf.benchmark import map_runner

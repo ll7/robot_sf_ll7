@@ -398,7 +398,7 @@ class SonicCrowdNavAdapter:
             }
         )
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset recurrent state and masks for one deterministic rollout."""
         del seed
         self._hidden_state = {
@@ -628,6 +628,10 @@ class SonicCrowdNavAdapter:
                 "SoNIC wrapper expected upstream_action_xy metadata with two components."
             )
         return float(velocity_world[0]), float(velocity_world[1])
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SonicCrowdNavAdapter"}
 
 
 __all__ = [

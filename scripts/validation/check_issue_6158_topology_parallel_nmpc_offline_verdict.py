@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import platform
 import subprocess
@@ -269,6 +268,49 @@ def _wall_obs(
     }
 
 
+def _assess_pairwise_distinctness(
+    diagnostics: list[HypothesisDiagnostics],
+    states: dict[str, np.ndarray],
+) -> tuple[list[str], list[dict[str, Any]], list[list[str]], float | None, bool]:
+    """Require captured rollouts for every feasible pair before proving distinctness."""
+    feasible_labels = [diagnostic.label for diagnostic in diagnostics if diagnostic.feasible]
+    pairwise: list[dict[str, Any]] = []
+    missing_rollout_pairs: list[list[str]] = []
+
+    for left_index, left in enumerate(diagnostics):
+        if not left.feasible:
+            continue
+        for right in diagnostics[left_index + 1 :]:
+            if not right.feasible:
+                continue
+            left_states = states.get(left.label)
+            right_states = states.get(right.label)
+            if left_states is None or right_states is None:
+                missing_rollout_pairs.append([left.label, right.label])
+                continue
+            pairwise.append(
+                {
+                    "pair": [left.label, right.label],
+                    "separation_m": _material_separation(left_states, right_states),
+                }
+            )
+
+    min_sep = min((row["separation_m"] for row in pairwise), default=None)
+    all_feasible_pairs_observed = len(feasible_labels) >= 2 and not missing_rollout_pairs
+    all_feasible_pairs_materially_distinct = (
+        all_feasible_pairs_observed
+        and bool(pairwise)
+        and all(row["separation_m"] > MATERIAL_SEP_EPS for row in pairwise)
+    )
+    return (
+        feasible_labels,
+        pairwise,
+        missing_rollout_pairs,
+        min_sep,
+        all_feasible_pairs_materially_distinct,
+    )
+
+
 def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
     """Feasible hypotheses must show nonzero pairwise material separation.
 
@@ -292,6 +334,7 @@ def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
     ]
     per_fixture: list[dict[str, Any]] = []
     best_min_sep = 0.0
+    any_fixture_proves_distinctness = False
     for name, obs in fixtures:
         topo = TopologyParallelNMPCPlannerAdapter(
             TopologyParallelNMPCConfig(
@@ -306,34 +349,30 @@ def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
         topo.plan(obs)
         diag = topo._last_hypothesis_diagnostics
         states = topo._last_result_states
-        feasible_labels = [d.label for d in diag if d.feasible]
-        pairwise: list[dict[str, Any]] = []
-        min_sep = float("inf")
-        for i in range(len(diag)):
-            if not diag[i].feasible:
-                continue
-            for j in range(i + 1, len(diag)):
-                if not diag[j].feasible:
-                    continue
-                si = states.get(diag[i].label)
-                sj = states.get(diag[j].label)
-                if si is None or sj is None:
-                    continue
-                sep = _material_separation(si, sj)
-                min_sep = min(min_sep, sep)
-                pairwise.append({"pair": [diag[i].label, diag[j].label], "separation_m": sep})
-        if math.isfinite(min_sep):
+        (
+            feasible_labels,
+            pairwise,
+            missing_rollout_pairs,
+            min_sep,
+            fixture_proves_distinctness,
+        ) = _assess_pairwise_distinctness(diag, states)
+        if min_sep is not None:
             best_min_sep = max(best_min_sep, min_sep)
+        any_fixture_proves_distinctness = (
+            any_fixture_proves_distinctness or fixture_proves_distinctness
+        )
         per_fixture.append(
             {
                 "fixture": name,
                 "feasible_hypotheses": feasible_labels,
-                "min_pairwise_separation_m": min_sep if math.isfinite(min_sep) else None,
+                "min_pairwise_separation_m": min_sep,
                 "pairwise_separations_m": pairwise,
+                "missing_rollout_pairs": missing_rollout_pairs,
+                "all_feasible_pairs_materially_distinct": fixture_proves_distinctness,
                 "rollout_signatures": {d.label: d.rollout_signature for d in diag},
             }
         )
-    passed = best_min_sep > MATERIAL_SEP_EPS
+    passed = any_fixture_proves_distinctness
     return GateResult(
         name="gate_2_material_distinctness",
         passed=passed,

@@ -9,6 +9,7 @@ import inspect
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import robot_sf
 from robot_sf.baselines.social_force import SocialForcePlanner
@@ -79,7 +80,8 @@ def test_public_procedure_annotations_are_runtime_visible(tmp_path: Path) -> Non
 
 
 def test_annotation_only_analysis_modules_import_cleanly() -> None:
-    """Ensure annotation-only modules produce coverage data in the core lane."""
+    """Import annotation-only analysis modules when their optional dependency is available."""
+    pytest.importorskip("sklearn")
     imported = [importlib.import_module(module_name) for module_name in ANNOTATED_ANALYSIS_MODULES]
 
     assert [module.__name__ for module in imported] == list(ANNOTATED_ANALYSIS_MODULES)

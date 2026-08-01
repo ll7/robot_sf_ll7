@@ -3,10 +3,10 @@
 Diagnostic-only validation of the merged #6170 prototype (`robot_sf/planner/topology_parallel_nmpc.py`) for parent #5310. The prototype was executed **unchanged**; this validator only imports/calls it and reads back diagnostics.
 ## Verdict
 **`label_only_or_objective_drift`** — gate 2 (material distinctness) failed.
-> ⚠️ **REAL-TIME BOUNDARY (prominent, independent of verdict):** the prototype's nominal `control_period_s` is **2.0 s (~20x the 100 ms real-time gate)**, so it is **offline-only and explicitly blocks downstream real-time use**. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. On this fixture, worst per-hypothesis solver p95 = 64.6 ms (under 100 ms, descriptive only; not a real-time qualification claim).
+> ⚠️ **REAL-TIME BOUNDARY (prominent, independent of verdict):** the prototype's nominal `control_period_s` is **2.0 s (~20x the 100 ms real-time gate)**, so it is **offline-only and explicitly blocks downstream real-time use**. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. On this fixture, worst per-hypothesis solver p95 = **136 ms** exceeded 100 ms, reinforcing the blocker.
 ## Provenance
-- Validated commit (`git rev-parse HEAD`): `44f92878030630028fca5f70a0b296f449c5c478`
-- Branch: `orchestrator/ll7-lease-6424-c54ddb8b6720`
+- Validated commit (`git rev-parse HEAD`): `c6756a259ef05039b7630c4a5fcdbc01562529bc`
+- Branch: `orchestrator/ll7-lease-6424-a2fd6a4bb4c1`
 - Source PR: #6170 (merge commit `894bdfe71e9c2686ebe63e165f15c739d12f721c`)
 - Config: `configs/algos/issue_5310_topology_parallel_nmpc.yaml`
 ## Exact commands
@@ -24,10 +24,10 @@ uv run ruff check scripts/validation/ && uv run ruff format --check scripts/vali
 | --- | --- |
 | platform_processor | `x86_64` |
 | platform_machine | `x86_64` |
-| platform_platform | `Linux-7.0.0-28-generic-x86_64-with-glibc2.39` |
-| os_cpu_count | `20` |
+| platform_platform | `Linux-6.8.0-87-generic-x86_64-with-glibc2.39` |
+| os_cpu_count | `32` |
 | cpu_freq_mhz_sample | `unavailable` |
-| python_version | `3.12.3` |
+| python_version | `3.13.14` |
 | numpy_version | `2.4.6` |
 | scipy_version | `1.17.1` |
 | cpu_pinning | `CPU 0 pinned for latency sampling; original affinity restored=True.` |
@@ -35,12 +35,12 @@ uv run ruff check scripts/validation/ && uv run ruff format --check scripts/vali
 ## Per-hypothesis solve latency (descriptive)
 | hypothesis | p50 (ms) | p95 (ms) | max (ms) | n |
 | --- | --- | --- | --- | --- |
-| pass_left | 41.84 | 47.21 | 48.43 | 30 |
-| yield_straight | 15.18 | 23.27 | 24.32 | 30 |
-| pass_right | 61.33 | 64.57 | 65.5 | 30 |
+| pass_left | 92.56 | 98.24 | 99.3 | 30 |
+| yield_straight | 37.33 | 49.67 | 53.44 | 30 |
+| pass_right | 135 | 136.2 | 137.4 | 30 |
 
-End-to-end `plan()` wall-clock (measurement-safe deadline): p50=65.83355204202235 ms, p95=68.20137194008566 ms, max=68.26437299605459 ms (n=30).
-End-to-end `plan()` wall-clock (real 2.0s deadline): p50=65.84779446711764 ms, p95=66.22744962805882 ms, max=66.34166091680527 ms; deadline fired 0 of 8 calls.
+End-to-end `plan()` wall-clock (measurement-safe deadline): p50=143.40606599580497 ms, p95=144.79667774867266 ms, max=145.53135199821554 ms (n=30).
+End-to-end `plan()` wall-clock (real 2.0s deadline): p50=143.08787899790332 ms, p95=143.95876064590993 ms, max=143.96911399671808 ms; deadline fired 0 of 8 calls.
 
 _Descriptive only on a single CPU-pinned fixture; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged._
 ## Gate-by-gate evidence
@@ -69,7 +69,7 @@ K=1 default command (0.9,-7.29807239e-07) vs legacy (0.9,-7.29807239e-07); |dv|=
 }
 ```
 ### gate_2_material_distinctness — FAIL
-best min pairwise material_separation across 6 conflict fixtures = 0.000186064 m (epsilon=0.001); gate passes only if at least one fixture separates feasible hypotheses. All fixtures collapsed to a single rollout -> topology identity fails (label-only).
+best min pairwise material_separation across 6 conflict fixtures = 0.000186064 m (epsilon=0.001); gate passes only if at least one fixture separates every feasible hypothesis pair above epsilon. No fixture separated every feasible hypothesis pair above epsilon; topology identity is not established (label-only).
 ```json
 {
   "fixtures_tested": [
@@ -414,7 +414,7 @@ best min pairwise material_separation across 6 conflict fixtures = 0.000186064 m
       }
     }
   ],
-  "root_cause_note": "objective_preferred_turn == 0.0 for every hypothesis (gate 3), so the shared objective is identical; the only per-hypothesis difference is the initial-guess preferred_turn bias (+/-0.5 -> +/-0.1 rad/s w-seed via symmetry_break_bias=0.2). Across the tested seeds and fixtures, SLSQP produced indistinguishable rollouts under the shared soft-penalty objective; this diagnostic does not establish global uniqueness. The 'topology-parallel' mechanism is label-only under this configuration."
+  "root_cause_note": "objective_preferred_turn == 0.0 for every hypothesis (gate 3), so the shared objective is identical; the only per-hypothesis difference is the initial-guess preferred_turn bias (+/-0.5 -> +/-0.1 rad/s w-seed via symmetry_break_bias=0.2). Across the tested seeds and fixtures, SLSQP left at least one feasible pair below the material-separation threshold on every fixture. Some individual pairs exceeded epsilon, but no fixture separated the full feasible hypothesis set under the shared soft-penalty objective; this diagnostic does not establish global uniqueness. The 'topology-parallel' mechanism is label-only under this configuration."
 }
 ```
 ### gate_3_objective_invariance — PASS
@@ -685,7 +685,7 @@ builder_ok=True, guard_reject_missing=True, guard_reject_false=True, registry_ok
 }
 ```
 ### gate_7_latency — PASS
-per-hypothesis solver p95 (ms): pass_left=47.2, yield_straight=23.3, pass_right=64.6; worst p95=64.6 ms; exceeds_100ms=False; cpu_pinned=True.
+per-hypothesis solver p95 (ms): pass_left=98.2, yield_straight=49.7, pass_right=136; worst p95=136 ms; exceeds_100ms=True; cpu_pinned=True.
 ```json
 {
   "cpu_affinity_fixture": {
@@ -711,46 +711,58 @@ per-hypothesis solver p95 (ms): pass_left=47.2, yield_straight=23.3, pass_right=
       16,
       17,
       18,
-      19
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31
     ],
     "restored": true,
     "error": null
   },
   "per_hypothesis_solver_runtime_ms": {
     "pass_left": {
-      "p50_ms": 41.84435703791678,
-      "p95_ms": 47.20847522257827,
-      "max_ms": 48.42649702914059,
+      "p50_ms": 92.56032449775375,
+      "p95_ms": 98.23846244689776,
+      "max_ms": 99.29955001280177,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 15.175155946053565,
-      "p95_ms": 23.267752875108272,
-      "max_ms": 24.32228100951761,
+      "p50_ms": 37.33422550430987,
+      "p95_ms": 49.67152459939824,
+      "max_ms": 53.44422999769449,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 61.329642485361546,
-      "p95_ms": 64.5736688748002,
-      "max_ms": 65.5035290401429,
+      "p50_ms": 135.0339820055524,
+      "p95_ms": 136.24076205160236,
+      "max_ms": 137.44750899786595,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 65.83355204202235,
-    "p95_ms": 68.20137194008566,
-    "max_ms": 68.26437299605459,
+    "p50_ms": 143.40606599580497,
+    "p95_ms": 144.79667774867266,
+    "max_ms": 145.53135199821554,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 65.84779446711764,
-    "p95_ms": 66.22744962805882,
-    "max_ms": 66.34166091680527,
+    "p50_ms": 143.08787899790332,
+    "p95_ms": 143.95876064590993,
+    "max_ms": 143.96911399671808,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 64.5736688748002,
-  "latency_exceeds_100ms": false,
+  "worst_hypothesis_p95_ms": 136.24076205160236,
+  "latency_exceeds_100ms": true,
   "measurement_note": "Descriptive only on a single CPU-pinned fixture; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
 }
 ```
@@ -917,8 +929,8 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   "parent_issue": 5310,
   "source_pr": 6170,
   "source_merge_commit": "894bdfe71e9c2686ebe63e165f15c739d12f721c",
-  "validated_commit": "44f92878030630028fca5f70a0b296f449c5c478",
-  "branch": "orchestrator/ll7-lease-6424-c54ddb8b6720",
+  "validated_commit": "c6756a259ef05039b7630c4a5fcdbc01562529bc",
+  "branch": "orchestrator/ll7-lease-6424-a2fd6a4bb4c1",
   "verdict": "label_only_or_objective_drift",
   "verdict_rationale": "gate 2 (material distinctness) failed.",
   "config": "configs/algos/issue_5310_topology_parallel_nmpc.yaml",
@@ -930,51 +942,51 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
   "hardware_context": {
     "platform_processor": "x86_64",
     "platform_machine": "x86_64",
-    "platform_platform": "Linux-7.0.0-28-generic-x86_64-with-glibc2.39",
-    "os_cpu_count": 20,
+    "platform_platform": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39",
+    "os_cpu_count": 32,
     "cpu_freq_mhz_sample": "unavailable",
-    "python_version": "3.12.3",
+    "python_version": "3.13.14",
     "numpy_version": "2.4.6",
     "scipy_version": "1.17.1",
     "cpu_pinning": "CPU 0 pinned for latency sampling; original affinity restored=True."
   },
   "per_hypothesis_solver_latency_ms": {
     "pass_left": {
-      "p50_ms": 41.84435703791678,
-      "p95_ms": 47.20847522257827,
-      "max_ms": 48.42649702914059,
+      "p50_ms": 92.56032449775375,
+      "p95_ms": 98.23846244689776,
+      "max_ms": 99.29955001280177,
       "n": 30
     },
     "yield_straight": {
-      "p50_ms": 15.175155946053565,
-      "p95_ms": 23.267752875108272,
-      "max_ms": 24.32228100951761,
+      "p50_ms": 37.33422550430987,
+      "p95_ms": 49.67152459939824,
+      "max_ms": 53.44422999769449,
       "n": 30
     },
     "pass_right": {
-      "p50_ms": 61.329642485361546,
-      "p95_ms": 64.5736688748002,
-      "max_ms": 65.5035290401429,
+      "p50_ms": 135.0339820055524,
+      "p95_ms": 136.24076205160236,
+      "max_ms": 137.44750899786595,
       "n": 30
     }
   },
   "plan_wall_clock_ms_measurement_safe_deadline": {
-    "p50_ms": 65.83355204202235,
-    "p95_ms": 68.20137194008566,
-    "max_ms": 68.26437299605459,
+    "p50_ms": 143.40606599580497,
+    "p95_ms": 144.79667774867266,
+    "max_ms": 145.53135199821554,
     "n": 30
   },
   "plan_wall_clock_ms_real_2s_deadline": {
-    "p50_ms": 65.84779446711764,
-    "p95_ms": 66.22744962805882,
-    "max_ms": 66.34166091680527,
+    "p50_ms": 143.08787899790332,
+    "p95_ms": 143.95876064590993,
+    "max_ms": 143.96911399671808,
     "n": 8
   },
   "real_deadline_fires_out_of_8": 0,
-  "worst_hypothesis_p95_ms": 64.5736688748002,
-  "latency_exceeds_100ms": false,
+  "worst_hypothesis_p95_ms": 136.24076205160236,
+  "latency_exceeds_100ms": true,
   "control_period_s": 2.0,
-  "real_time_blocking_notice": "NOT REAL-TIME QUALIFIED (prominent, independent of the per-solve number): the prototype's nominal control_period_s is 2.0 s, which is ~20x the 100 ms real-time gate, so the component is offline-only and explicitly blocks downstream real-time use. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. Per-hypothesis solver p95 was under 100 ms on this fixture, but this is descriptive only and does NOT establish real-time suitability.",
+  "real_time_blocking_notice": "NOT REAL-TIME QUALIFIED (prominent, independent of the per-solve number): the prototype's nominal control_period_s is 2.0 s, which is ~20x the 100 ms real-time gate, so the component is offline-only and explicitly blocks downstream real-time use. This is not a real-time qualification campaign; real-time/performance qualification stays in #5423. Additionally, worst per-hypothesis solver p95 exceeded 100 ms on this fixture, reinforcing the real-time blocker.",
   "claim_boundary": "No real-time-suitability, safety, benchmark-superiority, default-planner-promotion, or #5423/STKP-eligibility claim. Diagnostic-only offline mechanism evidence.",
   "gates": [
     {
@@ -1005,7 +1017,7 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
     {
       "name": "gate_2_material_distinctness",
       "passed": false,
-      "detail": "best min pairwise material_separation across 6 conflict fixtures = 0.000186064 m (epsilon=0.001); gate passes only if at least one fixture separates feasible hypotheses. All fixtures collapsed to a single rollout -> topology identity fails (label-only).",
+      "detail": "best min pairwise material_separation across 6 conflict fixtures = 0.000186064 m (epsilon=0.001); gate passes only if at least one fixture separates every feasible hypothesis pair above epsilon. No fixture separated every feasible hypothesis pair above epsilon; topology identity is not established (label-only).",
       "evidence": {
         "fixtures_tested": [
           "pedestrian_ahead_1p2",
@@ -1349,7 +1361,7 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
             }
           }
         ],
-        "root_cause_note": "objective_preferred_turn == 0.0 for every hypothesis (gate 3), so the shared objective is identical; the only per-hypothesis difference is the initial-guess preferred_turn bias (+/-0.5 -> +/-0.1 rad/s w-seed via symmetry_break_bias=0.2). Across the tested seeds and fixtures, SLSQP produced indistinguishable rollouts under the shared soft-penalty objective; this diagnostic does not establish global uniqueness. The 'topology-parallel' mechanism is label-only under this configuration."
+        "root_cause_note": "objective_preferred_turn == 0.0 for every hypothesis (gate 3), so the shared objective is identical; the only per-hypothesis difference is the initial-guess preferred_turn bias (+/-0.5 -> +/-0.1 rad/s w-seed via symmetry_break_bias=0.2). Across the tested seeds and fixtures, SLSQP left at least one feasible pair below the material-separation threshold on every fixture. Some individual pairs exceeded epsilon, but no fixture separated the full feasible hypothesis set under the shared soft-penalty objective; this diagnostic does not establish global uniqueness. The 'topology-parallel' mechanism is label-only under this configuration."
       }
     },
     {
@@ -1626,7 +1638,7 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
     {
       "name": "gate_7_latency",
       "passed": true,
-      "detail": "per-hypothesis solver p95 (ms): pass_left=47.2, yield_straight=23.3, pass_right=64.6; worst p95=64.6 ms; exceeds_100ms=False; cpu_pinned=True.",
+      "detail": "per-hypothesis solver p95 (ms): pass_left=98.2, yield_straight=49.7, pass_right=136; worst p95=136 ms; exceeds_100ms=True; cpu_pinned=True.",
       "evidence": {
         "cpu_affinity_fixture": {
           "pinned": true,
@@ -1651,46 +1663,58 @@ No real-time-suitability, safety, benchmark-superiority, default-planner-promoti
             16,
             17,
             18,
-            19
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31
           ],
           "restored": true,
           "error": null
         },
         "per_hypothesis_solver_runtime_ms": {
           "pass_left": {
-            "p50_ms": 41.84435703791678,
-            "p95_ms": 47.20847522257827,
-            "max_ms": 48.42649702914059,
+            "p50_ms": 92.56032449775375,
+            "p95_ms": 98.23846244689776,
+            "max_ms": 99.29955001280177,
             "n": 30
           },
           "yield_straight": {
-            "p50_ms": 15.175155946053565,
-            "p95_ms": 23.267752875108272,
-            "max_ms": 24.32228100951761,
+            "p50_ms": 37.33422550430987,
+            "p95_ms": 49.67152459939824,
+            "max_ms": 53.44422999769449,
             "n": 30
           },
           "pass_right": {
-            "p50_ms": 61.329642485361546,
-            "p95_ms": 64.5736688748002,
-            "max_ms": 65.5035290401429,
+            "p50_ms": 135.0339820055524,
+            "p95_ms": 136.24076205160236,
+            "max_ms": 137.44750899786595,
             "n": 30
           }
         },
         "plan_wall_clock_ms_measurement_safe_deadline": {
-          "p50_ms": 65.83355204202235,
-          "p95_ms": 68.20137194008566,
-          "max_ms": 68.26437299605459,
+          "p50_ms": 143.40606599580497,
+          "p95_ms": 144.79667774867266,
+          "max_ms": 145.53135199821554,
           "n": 30
         },
         "plan_wall_clock_ms_real_2s_deadline": {
-          "p50_ms": 65.84779446711764,
-          "p95_ms": 66.22744962805882,
-          "max_ms": 66.34166091680527,
+          "p50_ms": 143.08787899790332,
+          "p95_ms": 143.95876064590993,
+          "max_ms": 143.96911399671808,
           "n": 8
         },
         "real_deadline_fires_out_of_8": 0,
-        "worst_hypothesis_p95_ms": 64.5736688748002,
-        "latency_exceeds_100ms": false,
+        "worst_hypothesis_p95_ms": 136.24076205160236,
+        "latency_exceeds_100ms": true,
         "measurement_note": "Descriptive only on a single CPU-pinned fixture; not a controlled benchmark. max_runtime_s/control_period_s were raised to 300s during measurement so the runtime gate never truncates a solve; the shared NMPC config is unchanged."
       }
     },

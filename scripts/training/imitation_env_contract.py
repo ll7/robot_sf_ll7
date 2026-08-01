@@ -17,7 +17,10 @@ from robot_sf.training.scenario_loader import (
     load_scenarios,
     select_scenario,
 )
-from scripts.training.train_ppo import _apply_env_overrides
+from scripts.training.train_ppo import (
+    _apply_env_overrides,
+    _load_expert_training_config_mapping,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -35,7 +38,7 @@ def resolve_config_path(raw_value: object, *, base_dir: Path) -> Path | None:
 
 
 def _load_training_config_mapping(training_config_path: Path | None) -> dict[str, Any] | None:
-    """Load a training config file and require a mapping payload when provided."""
+    """Load a training config with the same inheritance semantics as PPO training."""
     if training_config_path is None:
         return None
     if not training_config_path.is_file():
@@ -45,7 +48,10 @@ def _load_training_config_mapping(training_config_path: Path | None) -> dict[str
         return {}
     if not isinstance(raw, dict):
         raise ValueError("training config must be a mapping")
-    return raw
+    # Imitation workflows consume the training config directly to reconstruct
+    # the observation and reward contract. Resolve base_config here so they
+    # observe the same effective mapping as train_ppo.py.
+    return _load_expert_training_config_mapping(training_config_path)
 
 
 def load_training_env_overrides(training_config_path: Path | None) -> dict[str, object]:

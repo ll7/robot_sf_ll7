@@ -1589,8 +1589,20 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     call_lines = calls.read_text(encoding="utf-8").splitlines()
+    tracked_branch = (
+        subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        .stdout.strip()
+        .split("/", maxsplit=1)[1]
+    )
     assert len(call_lines) == 3
-    assert "pulls?state=open&head=ll7:" in call_lines[0]
+    assert f"pulls?state=open&head=ll7:{tracked_branch}" in call_lines[0]
     assert "pulls/6529" in call_lines[1]
     assert "issues/6529/comments" in call_lines[2]
     assert all("gh pr" not in call for call in call_lines)

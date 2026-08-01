@@ -97,6 +97,12 @@ if [ "$use_current_pr" = true ]; then
     echo "Error: could not resolve the current branch for --current." >&2
     exit 1
   fi
+  # Review leases use a local branch name distinct from the PR source branch
+  # while tracking that source branch. Query the tracked branch when available
+  # so --current still finds the PR from an isolated review worktree.
+  if upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"; then
+    branch_name="${upstream_ref#*/}"
+  fi
   api_repo="{owner}/{repo}"
   head_owner="{owner}"
   if [ -n "$repo_arg" ]; then

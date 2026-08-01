@@ -2542,19 +2542,19 @@ def _export_publication_bundle_if_configured(  # noqa: PLR0913
     return publication_payload
 
 
-def _run_campaign_orchestrator(  # noqa: PLR0915
+def _prepare_campaign_execution_context(  # noqa: PLR0913
     cfg: CampaignConfig,
     *,
-    output_root: Path | None = None,
-    label: str | None = None,
-    campaign_id: str | None = None,
-    skip_publication_bundle: bool = False,
-    invoked_command: str | None = None,
+    output_root: Path | None,
+    label: str | None,
+    campaign_id: str | None,
+    invoked_command: str | None,
     dependencies: _CampaignRuntimeDependencies,
-    arm_isolation: str | None = None,
+    skip_publication_bundle: bool,
+    arm_isolation: str | None,
+    orchestrator_started_at: float,
 ) -> dict[str, Any]:
-    """Execute the campaign orchestrator with optional arm isolation override."""  # noqa: DOC201
-    orchestrator_started_at = time.perf_counter()
+    """Prepare immutable preflight state for a campaign execution."""  # noqa: DOC201
     prepared = dependencies.prepare_campaign_preflight(
         cfg,
         output_root=output_root,
@@ -2562,80 +2562,90 @@ def _run_campaign_orchestrator(  # noqa: PLR0915
         campaign_id=campaign_id,
         invoked_command=invoked_command,
     )
-    campaign_id = str(prepared["campaign_id"])
-    campaign_root = Path(prepared["campaign_root"])
-    reports_dir = Path(prepared["reports_dir"])
-    validate_config_path = Path(prepared["validate_config_path"])
-    preview_scenarios_path = Path(prepared["preview_scenarios_path"])
-    matrix_summary_json_path = Path(prepared["matrix_summary_json_path"])
-    matrix_summary_csv_path = Path(prepared["matrix_summary_csv_path"])
-    amv_coverage_json_path = Path(prepared["amv_coverage_json_path"])
-    amv_coverage_md_path = Path(prepared["amv_coverage_md_path"])
-    comparability_json_path = (
-        Path(path) if (path := prepared.get("comparability_json_path")) else None
-    )
-    comparability_md_path = Path(path) if (path := prepared.get("comparability_md_path")) else None
-    manifest_payload = dict(prepared["manifest_payload"])
-    amv_summary = dict(prepared["amv_summary"])
-    campaign_started_at_utc = str(prepared["created_at_utc"])
-    scenarios = list(prepared["scenarios"])
-    resolved_seeds = list(prepared["resolved_seeds"])
-    scenario_hash = str(prepared["scenario_hash"])
-    git_meta = dict(prepared["git_meta"])
-    config_hash = str(prepared["config_hash"])
-    snqi_weights = load_optional_json(str(cfg.snqi_weights_path) if cfg.snqi_weights_path else None)
-    snqi_baseline = load_optional_json(
-        str(cfg.snqi_baseline_path) if cfg.snqi_baseline_path else None
-    )
+    return {
+        "cfg": cfg,
+        "dependencies": dependencies,
+        "skip_publication_bundle": skip_publication_bundle,
+        "invoked_command": invoked_command,
+        "arm_isolation": arm_isolation,
+        "orchestrator_started_at": orchestrator_started_at,
+        "campaign_id": str(prepared["campaign_id"]),
+        "campaign_root": Path(prepared["campaign_root"]),
+        "reports_dir": Path(prepared["reports_dir"]),
+        "validate_config_path": Path(prepared["validate_config_path"]),
+        "preview_scenarios_path": Path(prepared["preview_scenarios_path"]),
+        "matrix_summary_json_path": Path(prepared["matrix_summary_json_path"]),
+        "matrix_summary_csv_path": Path(prepared["matrix_summary_csv_path"]),
+        "amv_coverage_json_path": Path(prepared["amv_coverage_json_path"]),
+        "amv_coverage_md_path": Path(prepared["amv_coverage_md_path"]),
+        "comparability_json_path": (
+            Path(value) if (value := prepared.get("comparability_json_path")) else None
+        ),
+        "comparability_md_path": (
+            Path(value) if (value := prepared.get("comparability_md_path")) else None
+        ),
+        "manifest_payload": dict(prepared["manifest_payload"]),
+        "amv_summary": dict(prepared["amv_summary"]),
+        "campaign_started_at_utc": str(prepared["created_at_utc"]),
+        "scenarios": list(prepared["scenarios"]),
+        "resolved_seeds": list(prepared["resolved_seeds"]),
+        "scenario_hash": str(prepared["scenario_hash"]),
+        "git_meta": dict(prepared["git_meta"]),
+        "config_hash": str(prepared["config_hash"]),
+        "snqi_weights": load_optional_json(
+            str(cfg.snqi_weights_path) if cfg.snqi_weights_path else None
+        ),
+        "snqi_baseline": load_optional_json(
+            str(cfg.snqi_baseline_path) if cfg.snqi_baseline_path else None
+        ),
+    }
 
+
+def _run_campaign_matrix_and_validate(state: dict[str, Any]) -> None:
+    """Run planner arms and attach validated, fairness-annotated results to state."""
+    cfg = state["cfg"]
+    campaign_root = state["campaign_root"]
     runs_dir = campaign_root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
-
     resume_verdicts = _emit_resume_plan_preflight(
         cfg=cfg,
-        campaign_id=campaign_id,
-        config_hash=str(config_hash),
+        campaign_id=state["campaign_id"],
+        config_hash=state["config_hash"],
         campaign_root=campaign_root,
         runs_dir=runs_dir,
-        scenarios=scenarios,
+        scenarios=state["scenarios"],
     )
-
-    kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
-
-    # Run planner matrix
+    state["kinematics_matrix"] = _kinematics_matrix_or_default(cfg.kinematics_matrix)
     planner_run_results = _run_campaign_planner_matrix(
         cfg=cfg,
-        scenarios=scenarios,
-        snqi_weights=snqi_weights,
-        snqi_baseline=snqi_baseline,
+        scenarios=state["scenarios"],
+        snqi_weights=state["snqi_weights"],
+        snqi_baseline=state["snqi_baseline"],
         runs_dir=runs_dir,
-        dependencies=dependencies,
-        arm_isolation=arm_isolation,
+        dependencies=state["dependencies"],
+        arm_isolation=state["arm_isolation"],
         resume_verdicts=resume_verdicts,
     )
-    run_entries = planner_run_results.run_entries
-    planner_rows = planner_run_results.planner_rows
-    warnings = planner_run_results.warnings
-    seed_variability_records = planner_run_results.seed_variability_records
-
-    # Post-process and validate
-    _finalize_checkpoint_provenance(manifest_payload, run_entries)
-    arm_rollup = _build_arm_rollup(run_entries)
+    state["run_entries"] = planner_run_results.run_entries
+    state["planner_rows"] = planner_run_results.planner_rows
+    state["warnings"] = planner_run_results.warnings
+    state["seed_variability_records"] = planner_run_results.seed_variability_records
+    _finalize_checkpoint_provenance(state["manifest_payload"], state["run_entries"])
+    state["arm_rollup"] = _build_arm_rollup(state["run_entries"])
     campaign_integrity = validate_campaign_integrity(
-        run_entries,
-        scenarios=scenarios,
-        resolved_seeds=resolved_seeds,
+        state["run_entries"],
+        scenarios=state["scenarios"],
+        resolved_seeds=state["resolved_seeds"],
         campaign_root=campaign_root,
-        campaign_manifest=manifest_payload,
+        campaign_manifest=state["manifest_payload"],
     )
+    state["campaign_integrity"] = campaign_integrity
     for blocker in campaign_integrity["blockers"]:
-        warnings.append(
+        state["warnings"].append(
             "Aggregate integrity blocker: "
             f"arm='{blocker['arm']}' invariant='{blocker['invariant']}'"
         )
-
-    # Sort and fairness
-    planner_rows.sort(
+    state["planner_rows"].sort(
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
     )
     fairness_report = build_fairness_report(
@@ -2649,194 +2659,202 @@ def _run_campaign_orchestrator(  # noqa: PLR0915
             if planner.enabled
         ]
     )
-    emit_fairness_annotations(fairness_report, planner_rows)
+    emit_fairness_annotations(fairness_report, state["planner_rows"])
+    state["fairness_report"] = fairness_report
 
-    # Write tables
-    summary_json_path = reports_dir / "campaign_summary.json"
-    report_md_path = reports_dir / "campaign_report.md"
-    credibility_scorecard_json_path = reports_dir / "campaign_credibility_scorecard.json"
-    table_paths = _write_campaign_matrix_tables(reports_dir, planner_rows, cfg)
-    scenario_table_paths = _write_scenario_breakdown_tables(reports_dir, run_entries, scenarios)
-    parity_table_paths = _write_parity_and_skipped_tables(reports_dir, planner_rows, run_entries)
 
-    # Compute status metrics
+def _build_campaign_reporting_artifacts(state: dict[str, Any]) -> None:
+    """Write table and variability artifacts, then calculate campaign status metrics."""
+    cfg = state["cfg"]
+    reports_dir = state["reports_dir"]
+    state["summary_json_path"] = reports_dir / "campaign_summary.json"
+    state["report_md_path"] = reports_dir / "campaign_report.md"
+    state["credibility_scorecard_json_path"] = reports_dir / "campaign_credibility_scorecard.json"
+    state["table_paths"] = _write_campaign_matrix_tables(reports_dir, state["planner_rows"], cfg)
+    state["scenario_table_paths"] = _write_scenario_breakdown_tables(
+        reports_dir, state["run_entries"], state["scenarios"]
+    )
+    state["parity_table_paths"] = _write_parity_and_skipped_tables(
+        reports_dir, state["planner_rows"], state["run_entries"]
+    )
     metrics = _compute_campaign_status_metrics(
         cfg,
-        run_entries,
-        planner_rows,
-        kinematics_matrix,
-        campaign_integrity,
-        campaign_root,
-        orchestrator_started_at,
+        state["run_entries"],
+        state["planner_rows"],
+        state["kinematics_matrix"],
+        state["campaign_integrity"],
+        state["campaign_root"],
+        state["orchestrator_started_at"],
     )
-
-    # Seed variability
-    seed_var_paths = _build_and_write_seed_variability(
+    state["metrics"] = metrics
+    state["seed_var_paths"] = _build_and_write_seed_variability(
         reports_dir,
-        seed_variability_records,
-        campaign_id,
+        state["seed_variability_records"],
+        state["campaign_id"],
         metrics.campaign_finished_at_utc,
-        config_hash,
-        git_meta,
-        resolved_seeds,
+        state["config_hash"],
+        state["git_meta"],
+        state["resolved_seeds"],
         metrics.confidence_settings,
         metrics.seed_source_paths,
         cfg.seed_policy,
     )
-
-    # Actuation envelope
-    actuation_paths = _build_and_write_actuation_envelope(
+    state["actuation_paths"] = _build_and_write_actuation_envelope(
         reports_dir,
         cfg,
-        campaign_id,
+        state["campaign_id"],
         metrics.campaign_finished_at_utc,
-        planner_rows,
-        amv_summary,
+        state["planner_rows"],
+        state["amv_summary"],
     )
 
-    # SNQI evaluation
-    release_tag_value = cfg.release_tag
+
+def _evaluate_campaign_snqi(state: dict[str, Any]) -> None:
+    """Evaluate SNQI, persist diagnostics, and record contract warnings in state."""
+    cfg = state["cfg"]
+    metrics = state["metrics"]
+    campaign_id = state["campaign_id"]
     repository_url = cfg.repository_url.rstrip("/")
-    release_url = f"{repository_url}/releases/tag/{release_tag_value}"
+    release_tag_value = cfg.release_tag
     expected_archive_name = f"{campaign_id}_publication_bundle.tar.gz"
-    release_asset_url = (
-        f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
+    state.update(
+        {
+            "release_tag_value": release_tag_value,
+            "repository_url": repository_url,
+            "release_url": f"{repository_url}/releases/tag/{release_tag_value}",
+            "release_asset_url": (
+                f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
+            ),
+            "doi_url": f"https://doi.org/{cfg.doi}",
+        }
     )
-    doi_url = f"https://doi.org/{cfg.doi}"
     snqi_result = _resolve_snqi_baseline_and_evaluate(
         cfg,
-        snqi_weights,
-        snqi_baseline,
-        run_entries,
-        planner_rows,
+        state["snqi_weights"],
+        state["snqi_baseline"],
+        state["run_entries"],
+        state["planner_rows"],
         campaign_id,
         metrics.campaign_finished_at_utc,
     )
-    warnings.extend(snqi_result.get("warnings", []))
-
-    snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
-        _write_snqi_diagnostics_artifacts(reports_dir, snqi_result["snqi_diagnostics_payload"])
+    state["snqi_result"] = snqi_result
+    state["warnings"].extend(snqi_result.get("warnings", []))
+    diagnostics_paths = _write_snqi_diagnostics_artifacts(
+        state["reports_dir"], snqi_result["snqi_diagnostics_payload"]
     )
-    snqi_diagnostics_paths = {
-        "snqi_diagnostics_json_path": snqi_diagnostics_json_path,
-        "snqi_diagnostics_md_path": snqi_diagnostics_md_path,
-        "snqi_sensitivity_csv_path": snqi_sensitivity_csv_path,
+    state["snqi_diagnostics_paths"] = {
+        "snqi_diagnostics_json_path": diagnostics_paths[0],
+        "snqi_diagnostics_md_path": diagnostics_paths[1],
+        "snqi_sensitivity_csv_path": diagnostics_paths[2],
     }
-    snqi_hard_fail = snqi_result["snqi_hard_fail"]
-    soft_contract_warning = snqi_result["soft_contract_warning"]
-    if snqi_hard_fail:
-        warnings.append(
+    state["snqi_hard_fail"] = snqi_result["snqi_hard_fail"]
+    state["soft_contract_warning"] = snqi_result["soft_contract_warning"]
+    if state["snqi_hard_fail"]:
+        state["warnings"].append(
             "SNQI contract status=fail with "
             f"snqi_contract.enforcement={cfg.snqi_contract.enforcement}; "
             "campaign marked with hard contract warning."
         )
-    elif soft_contract_warning:
-        warnings.append(
+    elif state["soft_contract_warning"]:
+        state["warnings"].append(
             "SNQI contract status="
             f"{snqi_result['contract_eval'].status} with snqi_contract.enforcement=warn; "
             "campaign marked with soft contract warning."
         )
 
-    # Build campaign summary
-    campaign_summary = _build_campaign_summary_dict(
-        cfg,
-        campaign_id,
-        campaign_started_at_utc,
+
+def _build_campaign_summary_from_state(state: dict[str, Any]) -> None:
+    """Build the campaign summary from already-produced execution state."""
+    metrics = state["metrics"]
+    state["campaign_summary"] = _build_campaign_summary_dict(
+        state["cfg"],
+        state["campaign_id"],
+        state["campaign_started_at_utc"],
         metrics.campaign_finished_at_utc,
-        scenario_hash,
-        git_meta,
-        invoked_command,
+        state["scenario_hash"],
+        state["git_meta"],
+        state["invoked_command"],
         metrics.runtime_sec,
         metrics.total_episodes,
-        run_entries,
-        planner_rows,
-        arm_rollup,
-        campaign_integrity,
-        warnings,
-        kinematics_matrix,
+        state["run_entries"],
+        state["planner_rows"],
+        state["arm_rollup"],
+        state["campaign_integrity"],
+        state["warnings"],
+        state["kinematics_matrix"],
         metrics,
-        snqi_result,
-        seed_var_paths,
-        actuation_paths,
-        snqi_diagnostics_paths,
-        table_paths,
-        scenario_table_paths,
-        parity_table_paths,
-        reports_dir,
-        campaign_root,
-        manifest_payload,
-        fairness_report,
-        release_tag_value,
-        repository_url,
-        release_url,
-        release_asset_url,
-        doi_url,
-        comparability_json_path,
-        comparability_md_path,
-        validate_config_path,
-        preview_scenarios_path,
-        matrix_summary_json_path,
-        matrix_summary_csv_path,
-        amv_coverage_json_path,
-        amv_coverage_md_path,
+        state["snqi_result"],
+        state["seed_var_paths"],
+        state["actuation_paths"],
+        state["snqi_diagnostics_paths"],
+        state["table_paths"],
+        state["scenario_table_paths"],
+        state["parity_table_paths"],
+        state["reports_dir"],
+        state["campaign_root"],
+        state["manifest_payload"],
+        state["fairness_report"],
+        state["release_tag_value"],
+        state["repository_url"],
+        state["release_url"],
+        state["release_asset_url"],
+        state["doi_url"],
+        state["comparability_json_path"],
+        state["comparability_md_path"],
+        state["validate_config_path"],
+        state["preview_scenarios_path"],
+        state["matrix_summary_json_path"],
+        state["matrix_summary_csv_path"],
+        state["amv_coverage_json_path"],
+        state["amv_coverage_md_path"],
     )
 
-    # Write output files
+
+def _write_campaign_state_outputs(state: dict[str, Any]) -> None:
+    """Persist run metadata and the fully evaluated campaign manifest."""
     _write_campaign_output_files(
-        campaign_root,
-        manifest_payload,
-        git_meta,
-        scenario_hash,
-        cfg,
-        run_entries,
-        resolved_seeds=resolved_seeds,
-        campaign_started_at_utc=campaign_started_at_utc,
-        invoked_command=invoked_command,
-        metrics=metrics,
-        seed_var_paths=seed_var_paths,
-        actuation_paths=actuation_paths,
-        snqi_diagnostics_paths=snqi_diagnostics_paths,
-        snqi_result=snqi_result,
-        campaign_summary=campaign_summary,
-        validate_config_path=validate_config_path,
-        preview_scenarios_path=preview_scenarios_path,
-        amv_coverage_json_path=amv_coverage_json_path,
-        amv_coverage_md_path=amv_coverage_md_path,
-        comparability_json_path=comparability_json_path,
-        comparability_md_path=comparability_md_path,
-        reports_dir=reports_dir,
+        state["campaign_root"],
+        state["manifest_payload"],
+        state["git_meta"],
+        state["scenario_hash"],
+        state["cfg"],
+        state["run_entries"],
+        resolved_seeds=state["resolved_seeds"],
+        campaign_started_at_utc=state["campaign_started_at_utc"],
+        invoked_command=state["invoked_command"],
+        metrics=state["metrics"],
+        seed_var_paths=state["seed_var_paths"],
+        actuation_paths=state["actuation_paths"],
+        snqi_diagnostics_paths=state["snqi_diagnostics_paths"],
+        snqi_result=state["snqi_result"],
+        campaign_summary=state["campaign_summary"],
+        validate_config_path=state["validate_config_path"],
+        preview_scenarios_path=state["preview_scenarios_path"],
+        amv_coverage_json_path=state["amv_coverage_json_path"],
+        amv_coverage_md_path=state["amv_coverage_md_path"],
+        comparability_json_path=state["comparability_json_path"],
+        comparability_md_path=state["comparability_md_path"],
+        reports_dir=state["reports_dir"],
     )
 
-    # Publication bundle
-    publication_payload = _export_publication_bundle_if_configured(
-        cfg,
-        skip_publication_bundle=skip_publication_bundle,
-        snqi_hard_fail=snqi_hard_fail,
-        benchmark_success=metrics.benchmark_success,
-        campaign_id=campaign_id,
-        campaign_root=campaign_root,
-        dependencies=dependencies,
-        campaign_summary=campaign_summary,
-        warnings=warnings,
-    )
-    if publication_payload:
-        campaign_summary["publication_bundle"] = publication_payload
 
-    # Final artifacts: credibility, integrity, summary, report, assurance
+def _write_campaign_assurance_artifacts(state: dict[str, Any]) -> None:
+    """Write final reports and best-effort assurance artifacts."""
+    campaign_summary = state["campaign_summary"]
+    reports_dir = state["reports_dir"]
     campaign_summary["credibility_scorecard"] = build_campaign_credibility_scorecard(
         campaign_summary
     )
-    _write_json(credibility_scorecard_json_path, campaign_summary["credibility_scorecard"])
-    _write_json(reports_dir / "campaign_integrity.json", campaign_integrity)
-    _write_json(summary_json_path, campaign_summary)
-    write_campaign_report(report_md_path, campaign_summary)
-
+    _write_json(state["credibility_scorecard_json_path"], campaign_summary["credibility_scorecard"])
+    _write_json(reports_dir / "campaign_integrity.json", state["campaign_integrity"])
+    _write_json(state["summary_json_path"], campaign_summary)
+    write_campaign_report(state["report_md_path"], campaign_summary)
     try:
         release_gate_report = None
         for gate_report_path in reports_dir.glob("*release_gate*.json"):
             try:
-                with gate_report_path.open("r", encoding="utf-8") as f:
-                    release_gate_report = json.load(f)
+                with gate_report_path.open("r", encoding="utf-8") as stream:
+                    release_gate_report = json.load(stream)
                 break
             except (OSError, json.JSONDecodeError):
                 continue
@@ -2848,39 +2866,31 @@ def _run_campaign_orchestrator(  # noqa: PLR0915
         validate_assurance_fragment(fragment)
         write_assurance_fragment(reports_dir, fragment, repo_root=get_repository_root())
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
-        warnings.append(f"Assurance fragment export failed: {exc}")
+        state["warnings"].append(f"Assurance fragment export failed: {exc}")
 
-    if snqi_hard_fail:
-        raise RuntimeError(
-            f"SNQI contract failed with enforcement={cfg.snqi_contract.enforcement}; "
-            f"rank_alignment={snqi_result['contract_eval'].rank_alignment_spearman:.4f}, "
-            f"outcome_separation={snqi_result['contract_eval'].outcome_separation:.4f}. "
-            f"See diagnostics: {_repo_relative(snqi_diagnostics_json_path)}"
-        )
 
-    logger.info(
-        "Camera-ready campaign finished id={} runs={} episodes={} out={}",
-        campaign_id,
-        len(run_entries),
-        metrics.total_episodes,
-        campaign_root,
-    )
-
+def _build_campaign_result(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the public campaign result payload from completed state."""
+    metrics = state["metrics"]
+    seed_var_paths = state["seed_var_paths"]
+    actuation_paths = state["actuation_paths"]
+    diagnostics_paths = state["snqi_diagnostics_paths"]
+    reports_dir = state["reports_dir"]
     return {
-        "campaign_id": campaign_id,
-        "campaign_root": str(campaign_root),
-        "summary_json": str(summary_json_path),
-        "table_csv": str(table_paths["csv_path"]),
-        "table_md": str(table_paths["md_table_path"]),
-        "report_md": str(report_md_path),
-        "snqi_diagnostics_json": str(snqi_diagnostics_json_path),
-        "snqi_diagnostics_md": str(snqi_diagnostics_md_path),
-        "snqi_sensitivity_csv": str(snqi_sensitivity_csv_path),
+        "campaign_id": state["campaign_id"],
+        "campaign_root": str(state["campaign_root"]),
+        "summary_json": str(state["summary_json_path"]),
+        "table_csv": str(state["table_paths"]["csv_path"]),
+        "table_md": str(state["table_paths"]["md_table_path"]),
+        "report_md": str(state["report_md_path"]),
+        "snqi_diagnostics_json": str(diagnostics_paths["snqi_diagnostics_json_path"]),
+        "snqi_diagnostics_md": str(diagnostics_paths["snqi_diagnostics_md_path"]),
+        "snqi_sensitivity_csv": str(diagnostics_paths["snqi_sensitivity_csv_path"]),
         "assurance_fragment_json": str(reports_dir / "assurance_fragment.json"),
         "assurance_fragment_md": str(reports_dir / "assurance_fragment.md"),
         "assurance_fragment_svg": str(reports_dir / "assurance_fragment.svg"),
-        "matrix_summary_json": str(matrix_summary_json_path),
-        "matrix_summary_csv": str(matrix_summary_csv_path),
+        "matrix_summary_json": str(state["matrix_summary_json_path"]),
+        "matrix_summary_csv": str(state["matrix_summary_csv_path"]),
         "seed_variability_json": str(seed_var_paths["seed_variability_json_path"]),
         "seed_variability_csv": str(seed_var_paths["seed_variability_csv_path"]),
         "seed_episode_rows_csv": str(seed_var_paths["seed_episode_rows_csv_path"]),
@@ -2895,7 +2905,7 @@ def _run_campaign_orchestrator(  # noqa: PLR0915
             if actuation_paths["actuation_envelope_md_path"] is not None
             else None
         ),
-        "total_runs": len(run_entries),
+        "total_runs": len(state["run_entries"]),
         "successful_runs": metrics.successful_runs,
         "non_success_runs": metrics.campaign_outcome.non_success_runs,
         "accepted_unavailable_runs": metrics.campaign_outcome.accepted_unavailable_runs,
@@ -2912,8 +2922,76 @@ def _run_campaign_orchestrator(  # noqa: PLR0915
         "core_total_runs": metrics.success_counters["core_total_runs"],
         "total_episodes": metrics.total_episodes,
         "runtime_sec": metrics.runtime_sec,
-        "publication_bundle": publication_payload,
-        "campaign_integrity": campaign_integrity,
-        "warnings": warnings,
-        "soft_contract_warning": soft_contract_warning,
+        "publication_bundle": state["publication_payload"],
+        "campaign_integrity": state["campaign_integrity"],
+        "warnings": state["warnings"],
+        "soft_contract_warning": state["soft_contract_warning"],
     }
+
+
+def _finalize_campaign_execution(state: dict[str, Any]) -> dict[str, Any]:
+    """Export optional publication data, final artifacts, and the public result."""  # noqa: DOC201
+    metrics = state["metrics"]
+    publication_payload = _export_publication_bundle_if_configured(
+        state["cfg"],
+        skip_publication_bundle=state["skip_publication_bundle"],
+        snqi_hard_fail=state["snqi_hard_fail"],
+        benchmark_success=metrics.benchmark_success,
+        campaign_id=state["campaign_id"],
+        campaign_root=state["campaign_root"],
+        dependencies=state["dependencies"],
+        campaign_summary=state["campaign_summary"],
+        warnings=state["warnings"],
+    )
+    state["publication_payload"] = publication_payload
+    if publication_payload:
+        state["campaign_summary"]["publication_bundle"] = publication_payload
+    _write_campaign_assurance_artifacts(state)
+    if state["snqi_hard_fail"]:
+        contract_eval = state["snqi_result"]["contract_eval"]
+        raise RuntimeError(
+            f"SNQI contract failed with enforcement={state['cfg'].snqi_contract.enforcement}; "
+            f"rank_alignment={contract_eval.rank_alignment_spearman:.4f}, "
+            f"outcome_separation={contract_eval.outcome_separation:.4f}. "
+            "See diagnostics: "
+            f"{_repo_relative(state['snqi_diagnostics_paths']['snqi_diagnostics_json_path'])}"
+        )
+    logger.info(
+        "Camera-ready campaign finished id={} runs={} episodes={} out={}",
+        state["campaign_id"],
+        len(state["run_entries"]),
+        metrics.total_episodes,
+        state["campaign_root"],
+    )
+    return _build_campaign_result(state)
+
+
+def _run_campaign_orchestrator(
+    cfg: CampaignConfig,
+    *,
+    output_root: Path | None = None,
+    label: str | None = None,
+    campaign_id: str | None = None,
+    skip_publication_bundle: bool = False,
+    invoked_command: str | None = None,
+    dependencies: _CampaignRuntimeDependencies,
+    arm_isolation: str | None = None,
+) -> dict[str, Any]:
+    """Execute the campaign as a thin coordinator over focused phases."""  # noqa: DOC201
+    state = _prepare_campaign_execution_context(
+        cfg,
+        output_root=output_root,
+        label=label,
+        campaign_id=campaign_id,
+        invoked_command=invoked_command,
+        dependencies=dependencies,
+        skip_publication_bundle=skip_publication_bundle,
+        arm_isolation=arm_isolation,
+        orchestrator_started_at=time.perf_counter(),
+    )
+    _run_campaign_matrix_and_validate(state)
+    _build_campaign_reporting_artifacts(state)
+    _evaluate_campaign_snqi(state)
+    _build_campaign_summary_from_state(state)
+    _write_campaign_state_outputs(state)
+    return _finalize_campaign_execution(state)

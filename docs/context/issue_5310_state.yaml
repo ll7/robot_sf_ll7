@@ -27,13 +27,13 @@ offline_validation:
   summary: >-
     Diagnostic-only offline validation (#6158) of the merged #6152 prototype exercised
     the eight required gates. Gate 2 (materially distinct x-y-t rollouts) FAILED: across
-    a diverse suite of controlled conflict fixtures the feasible hypotheses collapsed to
-    a single rollout (best min pairwise separation 1.9e-4 m vs epsilon 1e-3 m). Root cause:
-    objective_preferred_turn == 0.0 for every hypothesis (shared objective; gate 3 PASS)
-    and only a weak +/-0.1 rad/s initial-guess bias. Across the tested seeds and
-    fixtures, SLSQP produced indistinguishable rollouts; this diagnostic does not
-    establish global uniqueness. The topology-parallel mechanism is label-only under
-    this configuration. Gates 1 (K=1 legacy parity, exact), 3 (objective invariance),
+    a diverse suite of controlled conflict fixtures no fixture separated every feasible
+    hypothesis pair above epsilon (best minimum pairwise separation 1.9e-4 m vs epsilon
+    1e-3 m). Some individual pairs exceeded epsilon, but the shared objective and only a
+    weak +/-0.1 rad/s initial-guess bias did not produce a fully materially distinct
+    hypothesis set on the tested fixtures. This diagnostic does not establish global
+    uniqueness. The topology-parallel mechanism is label-only under this configuration.
+    Gates 1 (K=1 legacy parity, exact), 3 (objective invariance),
     4 (deterministic ordering / feasible-first selection / two-tick hysteresis),
     6 (allow_testing_algorithms registration guard + builder), 7 (per-hypothesis latency),
     and 8 (PR #6170 +1238/-9 net +1229 audit) all PASS. Gate 5 FAILS: infeasible,

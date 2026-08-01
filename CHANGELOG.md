@@ -53,11 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   required gates and records exactly one of the four issue verdicts to
   `docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md`.
   Recorded verdict: `label_only_or_objective_drift`. Gate 2 (materially distinct x-y-t
-  rollouts) failed: across a diverse suite of controlled conflict fixtures the feasible
-  hypotheses collapsed to a single rollout (best min pairwise separation ~1.9e-4 m vs
-  epsilon 1e-3 m), because `objective_preferred_turn == 0.0` is shared across hypotheses
-  (gate 3 PASS) and only a weak +/-0.1 rad/s initial-guess bias did not split basins on
-  the tested fixtures under the shared soft-penalty objective. Gates 1 (K=1 legacy parity,
+  rollouts) failed: across a diverse suite of controlled conflict fixtures, no fixture
+  separated every feasible hypothesis pair above epsilon (best minimum pairwise separation
+  ~1.9e-4 m vs epsilon 1e-3 m). Some individual pairs exceeded epsilon, but the shared
+  objective and only a weak +/-0.1 rad/s initial-guess bias did not produce a fully
+  materially distinct hypothesis set on the tested fixtures. Gates 1 (K=1 legacy parity,
   exact), 3 (objective
   invariance), 4 (deterministic ordering / feasible-first selection / two-tick
   hysteresis), 6 (registration guard + builder), 7 (per-hypothesis p50/p95/max latency),

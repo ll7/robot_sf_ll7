@@ -272,11 +272,11 @@ def _wall_obs(
 def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
     """Feasible hypotheses must show nonzero pairwise material separation.
 
-    A diverse SUITE of controlled conflict fixtures is exercised and the mechanism is
-    given every chance to diverge: the gate PASSES when ANY fixture produces feasible
-    hypotheses with pairwise separation above epsilon, and FAILS only when the
-    hypotheses collapse to the same rollout on EVERY fixture. Per-fixture results are
-    reported transparently so the verdict is auditable.
+    A diverse suite of controlled conflict fixtures is exercised and the mechanism is
+    given every chance to diverge: the gate passes when at least one fixture separates
+    every feasible hypothesis pair above epsilon, and fails when every fixture retains
+    at least one feasible pair below epsilon. Per-fixture results are reported
+    transparently so the verdict is auditable.
     """
     labels = ("pass_left", "yield_straight", "pass_right")
     fixtures: list[tuple[str, dict[str, Any]]] = [
@@ -341,10 +341,10 @@ def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
             f"best min pairwise material_separation across {len(fixtures)} conflict "
             f"fixtures = {best_min_sep:.6g} m (epsilon={MATERIAL_SEP_EPS}); gate passes "
             f"only if at least one fixture separates feasible hypotheses. "
-            "All fixtures collapsed to a single rollout -> topology identity fails "
-            "(label-only)."
+            "No fixture separated every feasible hypothesis pair above epsilon; "
+            "topology identity is not established (label-only)."
             if not passed
-            else f"at least one fixture separated feasible hypotheses "
+            else f"at least one fixture separated every feasible hypothesis pair "
             f"(best min sep={best_min_sep:.6g} m > epsilon={MATERIAL_SEP_EPS})."
         ),
         evidence={
@@ -357,8 +357,10 @@ def gate_2_material_distinctness(nmpc_config: NMPCSocialConfig) -> GateResult:
                 "shared objective is identical; the only per-hypothesis difference is the "
                 "initial-guess preferred_turn bias (+/-0.5 -> +/-0.1 rad/s w-seed via "
                 "symmetry_break_bias=0.2). Across the tested seeds and fixtures, SLSQP "
-                "produced indistinguishable rollouts under the shared soft-penalty objective; "
-                "this diagnostic does not establish global uniqueness. The "
+                "left at least one feasible pair below the material-separation threshold on "
+                "every fixture. Some individual pairs exceeded epsilon, but no fixture "
+                "separated the full feasible hypothesis set under the shared soft-penalty "
+                "objective; this diagnostic does not establish global uniqueness. The "
                 "'topology-parallel' mechanism is label-only under this configuration."
             ),
         },

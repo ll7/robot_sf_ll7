@@ -679,12 +679,12 @@ class Simulator:
         return list(getattr(self.map_def, "social_groups", ()) or ())
 
     @property
-    def ped_pos(self):
+    def ped_pos(self) -> np.ndarray:
         """Current (x, y) positions of all pedestrians."""
         return self.pysf_state.ped_positions
 
     @property
-    def ped_vel(self):
+    def ped_vel(self) -> np.ndarray:
         """Current (vx, vy) velocities of all pedestrians."""
         return self.pysf_state.ped_velocities
 
@@ -700,7 +700,7 @@ class Simulator:
                 f"{action_word}, got {actual}."
             )
 
-    def reset_state(self):
+    def reset_state(self) -> None:
         """Reset robot navigation and spawn positions.
 
         Reassigns routes and respawns robots when they collide or reach
@@ -716,7 +716,7 @@ class Simulator:
                 nav.new_route(waypoints[1:], start_pos=waypoints[0])
                 robot.reset_state((waypoints[0], nav.initial_orientation))
 
-    def step_once(self, actions: list[RobotAction]):
+    def step_once(self, actions: list[RobotAction]) -> None:
         """Advance simulation by one timestep.
 
         Updates pedestrian behaviors and physics (via PySocialForce), applies
@@ -897,19 +897,19 @@ class PedSimulator(Simulator):
         self.reset_state()
 
     @property
-    def ped_pos(self):
+    def ped_pos(self) -> np.ndarray:
         """
         Returns the current positions of all pedestrians.
         """
         return self.pysf_state.ped_positions[:-1]  # Exclude the ego pedestrian
 
     @property
-    def ped_and_ego_pos(self):
+    def ped_and_ego_pos(self) -> np.ndarray:
         """Return current NPC and ego pedestrian positions as one PySF-backed view."""
         return self.pysf_state.ped_positions
 
     @property
-    def ped_vel(self):
+    def ped_vel(self) -> np.ndarray:
         """Return current velocities for NPC pedestrians only."""
         return self.pysf_state.ped_velocities[:-1]
 
@@ -959,7 +959,7 @@ class PedSimulator(Simulator):
         ego_velocity[0] = ego_speed * cos(ego_heading)
         ego_velocity[1] = ego_speed * sin(ego_heading)
 
-    def reset_state(self):
+    def reset_state(self) -> None:
         """Reset robot and ego pedestrian state.
 
         Calls parent reset_state() to reassign robot routes, then spawns
@@ -997,7 +997,7 @@ class PedSimulator(Simulator):
             self.ego_ped.reset_state((ped_spawn, npc_orient))
         self._sync_ego_ped_social_force_state()
 
-    def step_once(self, actions: list[RobotAction], ego_ped_actions: list[UnicycleAction]):
+    def step_once(self, actions: list[RobotAction], ego_ped_actions: list[UnicycleAction]) -> None:
         """Advance simulation with robot and ego pedestrian actions.
 
         Updates pedestrian behaviors and physics, applies robot actions,

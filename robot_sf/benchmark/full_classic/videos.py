@@ -125,7 +125,7 @@ def _build_outcome(rec) -> str:
 ## Removed unused _make_skip_artifacts helper (original attempt to simplify skip path)
 
 
-def generate_videos(records, out_dir, cfg):  # noqa: C901
+def generate_videos(records, out_dir, cfg) -> list[_VideoArtifact]:  # noqa: C901
     """Generate representative episode videos.
 
     Config attributes used if present on cfg:
@@ -260,7 +260,9 @@ def generate_videos(records, out_dir, cfg):  # noqa: C901
     return artifacts
 
 
-def artifacts_to_manifest(artifacts: list[_VideoArtifact]):
+def artifacts_to_manifest(
+    artifacts: list[_VideoArtifact],
+) -> dict[str, list[dict[str, str | float | None]]]:
     """Convert internal artifacts list to manifest dict for JSON dumping.
 
     Returns:

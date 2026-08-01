@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import copy
+import hashlib
 import json
 import sys
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,6 +34,7 @@ from scripts.training.train_ppo import (
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
     _finalize_best_checkpoint,
+    _load_expert_training_config_mapping,
     _parse_num_envs,
     _persist_best_checkpoint_if_updated,
     _reapply_resumed_ppo_hyperparams,
@@ -730,6 +735,535 @@ def test_load_expert_training_config_merges_base_config(tmp_path) -> None:
     assert config.env_overrides["include_grid_in_observation"] is True
     assert config.tracking["wandb"]["project"] == "robot_sf"
     assert config.tracking["wandb"]["tags"] == ["base", "num-envs-14"]
+
+
+# Issue #6490: the issue_576_br06 PPO family was migrated to inherit shared
+# settings from a single base config. The constants below pin that contract.
+_ISSUE_576_BR06_FAMILY_DIR = Path("configs/training/ppo")
+_ISSUE_576_BR06_BASE_NAME = "expert_ppo_issue_576_br06_base.yaml"
+_ISSUE_576_BR06_VARIANTS = [
+    "expert_ppo_issue_576_br06_v2_15m_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml",
+    "expert_ppo_issue_576_br06_v2_sanity_500k_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml",
+    "expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml",
+    "expert_ppo_issue_576_br06_v4_validation_120k.yaml",
+    "expert_ppo_issue_576_br06_v5_predictive_foresight.yaml",
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml",
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml",
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml",
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml",
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml",
+]
+# The five variants that previously carried the deprecated
+# evaluation.frequency_episodes field (ignored by train_ppo.py in favor of
+# step_schedule). The migration drops it from exactly these files.
+_ISSUE_576_BR06_DROPPED_FREQUENCY_EPISODES = {
+    "expert_ppo_issue_576_br06_v2_15m_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml",
+    "expert_ppo_issue_576_br06_v2_sanity_500k_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml",
+    "expert_ppo_issue_576_br06_v4_validation_120k.yaml",
+}
+
+# Frozen pre-inheritance resolved-config baseline. It is the canonical JSON
+# (sorted keys, compact separators) of `_load_expert_training_config_mapping`
+# for every variant on origin/main BEFORE the base_config refactor, compressed
+# with zlib and base64-encoded so the regression oracle stays self-contained
+# (no git dependency, no opaque external fixture). Regenerate against a clean
+# origin/main checkout with:
+#   uv run python -c "import json,zlib,base64,pathlib;from scripts.training.train_ppo \
+#     import _load_expert_training_config_mapping as L;b=pathlib.Path('configs/training/ppo'); \
+#     d={p.name:L(b/p) for p in sorted(b.glob('expert_ppo_issue_576_br06_v*.yaml'))}; \
+#     print(base64.b64encode(zlib.compress(json.dumps(d,sort_keys=True,separators=(',',':')).encode(),9)).decode())"
+_ISSUE_576_BR06_PRECHANGE_BASELINE_B64 = (
+    "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"
+)
+_ISSUE_576_BR06_PRECHANGE_BASELINE_SHA256 = (
+    "a4a235f03e3eda8301d5194c9f201f713b1aa139020060c67b6ba508b88d4d7f"
+)
+
+# Per-variant family-specific overrides (captured from origin/main). Documents
+# that the inheritance refactor leaves every launch/reward/foresight/warm-start/
+# tracking override explicit. Tuple order:
+# (policy_id, num_envs, worker_mode, seeds, total_timesteps, reward_name,
+#  foresight_model_id, resume_model_id, wandb_group, wandb_tags)
+_ISSUE_576_BR06_EXPECTED_OVERRIDES = {
+    "expert_ppo_issue_576_br06_v2_15m_all_maps.yaml": (
+        "ppo_expert_br06_v2_15m_all_maps",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        15000000,
+        "route_completion_v2",
+        None,
+        None,
+        "issue-576-br06",
+        ["issue-576", "br-06", "ppo", "retrain-v2", "route-completion-v2"],
+    ),
+    "expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml": (
+        "ppo_expert_br06_v2_15m_all_maps_randomized",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        15000000,
+        "route_completion_v2",
+        None,
+        None,
+        "issue-576-br06-randomized",
+        ["issue-576", "br-06", "ppo", "retrain-v2", "route-completion-v2", "randomize-seeds"],
+    ),
+    "expert_ppo_issue_576_br06_v2_sanity_500k_all_maps.yaml": (
+        "ppo_expert_br06_v2_sanity_500k_all_maps",
+        "auto",
+        "auto",
+        (123,),
+        500000,
+        "route_completion_v2",
+        None,
+        None,
+        "issue-576-br06",
+        ["issue-576", "br-06", "ppo", "sanity", "route-completion-v2"],
+    ),
+    "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml": (
+        "ppo_expert_br06_v3_15m_all_maps_randomized",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        15000000,
+        "route_completion_v3",
+        None,
+        None,
+        "issue-576-br06-v3-randomized",
+        ["issue-576", "br-06", "ppo", "retrain-v3", "route-completion-v3", "randomize-seeds"],
+    ),
+    "expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml": (
+        "ppo_expert_br06_v4_overnight_safety_warmstart",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        None,
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v4-overnight",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "warmstart",
+            "route-completion-v3",
+            "safety-weighted",
+            "randomized",
+            "overnight",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v4_validation_120k.yaml": (
+        "ppo_expert_br06_v4_validation_120k",
+        4,
+        "subproc",
+        (123,),
+        15360000,
+        "route_completion_v3",
+        None,
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        None,
+        None,
+    ),
+    "expert_ppo_issue_576_br06_v5_predictive_foresight.yaml": (
+        "ppo_expert_br06_v5_predictive_foresight",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v5-predictive-foresight",
+        ["issue-576", "br-06", "ppo", "predictive-foresight", "route-completion-v3", "randomized"],
+    ),
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml": (
+        "ppo_expert_br06_v6_predictive_foresight_success_aligned",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v6-predictive-foresight-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-aligned-reward",
+            "v6",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml": (
+        "ppo_expert_br06_v6_predictive_foresight_success_aligned_auto_envs",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v6-predictive-foresight-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-aligned-reward",
+            "v6",
+            "route-completion-v3",
+            "randomized",
+            "auto-envs",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml": (
+        "ppo_expert_br06_v7_predictive_foresight_xl_ego_success_aligned",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v7-predictive-foresight-xl-ego-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-aligned-reward",
+            "v7",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml": (
+        "ppo_expert_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v7-predictive-foresight-xl-ego-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-aligned-reward",
+            "v7",
+            "route-completion-v3",
+            "randomized",
+            "auto-envs",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml": (
+        "ppo_expert_br06_v8_predictive_foresight_success_priority",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v8-predictive-foresight-success-priority",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-priority-reward",
+            "v8",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml": (
+        "ppo_expert_br06_v9_predictive_foresight_xl_ego_success_priority",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v9-predictive-foresight-xl-ego-success-priority",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-priority-reward",
+            "v9",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml": (
+        "ppo_expert_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v9-predictive-foresight-xl-ego-success-priority",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-priority-reward",
+            "v9",
+            "route-completion-v3",
+            "randomized",
+            "auto-envs",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml": (
+        "ppo_expert_br06_v10_predictive_foresight_success_priority_policy_analysis_select",
+        "auto_throughput",
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v10-predictive-foresight-policy-analysis-select",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-priority-reward",
+            "v10",
+            "policy-analysis-select",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+}
+
+
+def _issue_576_br06_prechange_baseline() -> dict:
+    """Decode and integrity-check the frozen pre-refactor resolved-config baseline."""
+    blob = zlib.decompress(base64.b64decode(_ISSUE_576_BR06_PRECHANGE_BASELINE_B64))
+    assert hashlib.sha256(blob).hexdigest() == _ISSUE_576_BR06_PRECHANGE_BASELINE_SHA256
+    return json.loads(blob)
+
+
+def _strip_frequency_episodes(mapping: dict) -> dict:
+    """Return a copy of ``mapping`` without the deprecated evaluation.frequency_episodes."""
+    cleaned = copy.deepcopy(mapping)
+    evaluation = cleaned.get("evaluation")
+    if isinstance(evaluation, dict):
+        evaluation.pop("frequency_episodes", None)
+    return cleaned
+
+
+@pytest.mark.parametrize("variant", _ISSUE_576_BR06_VARIANTS)
+def test_issue_576_br06_family_resolves_to_prechange_values(variant: str) -> None:
+    """Each migrated variant must resolve to its pre-refactor effective values.
+
+    The base_config deep-merge must preserve every resolved value. The only
+    intentional change is dropping the deprecated, ignored
+    evaluation.frequency_episodes field from the five variants that carried it
+    (it resolves to 0 everywhere now; cadence is controlled by step_schedule), so
+    it is stripped from both sides before the exhaustive mapping comparison.
+    """
+    path = (_ISSUE_576_BR06_FAMILY_DIR / variant).resolve()
+
+    resolved_mapping = _load_expert_training_config_mapping(path)
+    # Exercise the full construction path to confirm load_expert_training_config
+    # does not diverge from the resolver output.
+    config = load_expert_training_config(path)
+
+    expected_mapping = _issue_576_br06_prechange_baseline()[variant]
+    assert _strip_frequency_episodes(resolved_mapping) == _strip_frequency_episodes(
+        expected_mapping
+    )
+    # Cadence source is unchanged and the deprecated field now resolves to 0.
+    assert config.evaluation.step_schedule
+    assert config.evaluation.frequency_episodes == 0
+
+
+@pytest.mark.parametrize("variant", _ISSUE_576_BR06_VARIANTS)
+def test_issue_576_br06_family_overrides_remain_explicit(variant: str) -> None:
+    """Family-specific launch/reward/foresight/warm-start/tracking overrides stay explicit."""
+    (
+        policy_id,
+        num_envs,
+        worker_mode,
+        seeds,
+        total_timesteps,
+        reward_name,
+        foresight_model_id,
+        resume_model_id,
+        wandb_group,
+        wandb_tags,
+    ) = _ISSUE_576_BR06_EXPECTED_OVERRIDES[variant]
+
+    config = load_expert_training_config((_ISSUE_576_BR06_FAMILY_DIR / variant).resolve())
+    variant_yaml = yaml.safe_load(
+        (_ISSUE_576_BR06_FAMILY_DIR / variant).read_text(encoding="utf-8")
+    )
+
+    assert config.policy_id == policy_id
+    # num_envs is normalized by the loader (e.g. "auto" -> "auto_throughput"),
+    # so compare against the parsed form rather than the raw token.
+    assert config.num_envs == _parse_num_envs(num_envs)
+    assert config.worker_mode == worker_mode
+    assert config.seeds == seeds
+    assert config.total_timesteps == total_timesteps
+    assert config.env_factory_kwargs["reward_name"] == reward_name
+    assert config.env_overrides.get("predictive_foresight_model_id") == foresight_model_id
+    assert config.resume_model_id == resume_model_id
+    assert config.tracking["wandb"].get("group") == wandb_group
+    assert config.tracking["wandb"].get("tags") == wandb_tags
+    # Plateau window remains an explicit per-variant override (not in the base).
+    assert "plateau_window" in variant_yaml["convergence"]
+
+
+def test_issue_576_br06_base_inheritance_and_frequency_episodes_drop() -> None:
+    """Every variant inherits the base and no longer carries the deprecated field."""
+    base_path = (_ISSUE_576_BR06_FAMILY_DIR / _ISSUE_576_BR06_BASE_NAME).resolve()
+    base_text = base_path.read_text(encoding="utf-8")
+    base_yaml = yaml.safe_load(base_text)
+    # The base holds shared settings and must not self-inherit or carry the
+    # deprecated field.
+    assert "base_config" not in base_yaml
+    assert "frequency_episodes" not in base_yaml.get("evaluation", {})
+
+    for variant in _ISSUE_576_BR06_VARIANTS:
+        variant_path = (_ISSUE_576_BR06_FAMILY_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        assert variant_yaml["base_config"] == _ISSUE_576_BR06_BASE_NAME
+        # The deprecated field is dropped everywhere (it was only ever present
+        # in the five variants listed below, and ignored in favor of step_schedule).
+        assert "frequency_episodes" not in variant_yaml.get("evaluation", {})
+        # Cadence source remains explicit per variant.
+        assert variant_yaml["evaluation"]["step_schedule"]
+    assert len(_ISSUE_576_BR06_DROPPED_FREQUENCY_EPISODES) == 5
+
+
+def test_load_expert_training_config_base_config_cycle_raises_value_error(
+    tmp_path,
+) -> None:
+    """A base_config cycle (self-reference or mutual) must raise ValueError."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    self_ref = tmp_path / "self_cycle.yaml"
+    self_ref.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": "self_cycle.yaml",
+                "scenario_config": str(scenario_config),
+                "total_timesteps": 1000,
+                "seeds": [1],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="base_config cycle detected"):
+        _load_expert_training_config_mapping(self_ref)
+
+    mutual_a = tmp_path / "mutual_a.yaml"
+    mutual_b = tmp_path / "mutual_b.yaml"
+    mutual_a.write_text(
+        yaml.safe_dump({"base_config": "mutual_b.yaml", "policy_id": "a"}),
+        encoding="utf-8",
+    )
+    mutual_b.write_text(
+        yaml.safe_dump({"base_config": "mutual_a.yaml", "policy_id": "b"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="base_config cycle detected"):
+        _load_expert_training_config_mapping(mutual_a)
+
+
+def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> None:
+    """A missing/nonexistent base_config must fail closed.
+
+    The resolver raises FileNotFoundError (an OSError) for a missing base_config;
+    a cycle raises ValueError (covered above). Issue #6490 expected a ValueError
+    here as well, but the byte-frozen resolver in scripts/training/train_ppo.py
+    surfaces missing-base as FileNotFoundError. The run still fails closed
+    (no silent wrong values), so this asserts the actual fail-closed behavior;
+    narrowing missing-base to ValueError is tracked as a follow-up because
+    scripts/training/train_ppo.py is out of scope for this refactor.
+    """
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "missing_base.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": "does_not_exist_base.yaml",
+                "scenario_config": str(scenario_config),
+                "total_timesteps": 1000,
+                "seeds": [1],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(FileNotFoundError):
+        _load_expert_training_config_mapping(config_path)
 
 
 @pytest.mark.parametrize("num_envs", [8, 14, 16, 30, 32])

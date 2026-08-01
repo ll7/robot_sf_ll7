@@ -1105,6 +1105,28 @@ def _exact_commands(config_rel: str) -> list[str]:
     ]
 
 
+def _evidence_branch() -> str:
+    """Return the tracked PR branch when a lease worktree uses a local alias."""
+    local_branch = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=REPO_ROOT,
+    ).stdout.strip()
+    upstream = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+    )
+    if upstream.returncode != 0 or not upstream.stdout.strip():
+        return local_branch
+    upstream_branch = upstream.stdout.strip()
+    return upstream_branch.removeprefix("origin/")
+
+
 def _write_evidence_doc(
     *,
     verdict: str,
@@ -1305,13 +1327,7 @@ def main() -> int:
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, cwd=REPO_ROOT
     ).stdout.strip()
-    branch = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-        cwd=REPO_ROOT,
-    ).stdout.strip()
+    branch = _evidence_branch()
     hardware = _hardware_context(gates[6].evidence["cpu_affinity_fixture"])
 
     summary = _write_evidence_doc(

@@ -121,3 +121,47 @@ for exported in (_MessageBlock, PredictiveTrajectoryModel):
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_lazy_callback_alias_keeps_canonical_pickle_name():
+    """Keep the old callback spelling without changing the serialized class path."""
+    code = """\\
+import pickle
+import sys
+import types
+
+stable_baselines3 = types.ModuleType("stable_baselines3")
+stable_baselines3.__path__ = []
+common = types.ModuleType("stable_baselines3.common")
+common.__path__ = []
+callbacks = types.ModuleType("stable_baselines3.common.callbacks")
+callbacks.BaseCallback = type("BaseCallback", (), {})
+logger = types.ModuleType("stable_baselines3.common.logger")
+logger.TensorBoardOutputFormat = type("TensorBoardOutputFormat", (), {})
+
+sys.modules.update(
+    {
+        "stable_baselines3": stable_baselines3,
+        "stable_baselines3.common": common,
+        "stable_baselines3.common.callbacks": callbacks,
+        "stable_baselines3.common.logger": logger,
+    }
+)
+
+from robot_sf.tb_logging import (
+    AdversarialPedestrianMetricsCallback,
+    AdversialPedestrianMetricsCallback,
+)
+
+assert AdversialPedestrianMetricsCallback is AdversarialPedestrianMetricsCallback
+assert AdversarialPedestrianMetricsCallback.__qualname__ == "AdversarialPedestrianMetricsCallback"
+assert (
+    pickle.loads(pickle.dumps(AdversarialPedestrianMetricsCallback))
+    is AdversarialPedestrianMetricsCallback
+)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, check=False, text=True
+    )
+
+    assert result.returncode == 0, result.stderr

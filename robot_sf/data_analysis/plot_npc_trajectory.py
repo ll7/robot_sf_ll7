@@ -31,7 +31,7 @@ def plot_single_splitted_traj(
     interactive: bool = False,
     unique_id: str | None = None,
     map_def: MapDefinition | None = None,
-):
+) -> None:
     """
     Plot from position_array from a single pedestrian id the multiple trajectories.
     Split when the distance between two consecutive points is greater than normal.
@@ -96,7 +96,7 @@ def plot_all_splitted_traj(
     interactive: bool = False,
     unique_id: str | None = None,
     map_def: MapDefinition | None = None,
-):
+) -> None:
     """
     Plot from position_array all npc pedestrian trajectories.
     Split when the distance between two consecutive points is greater than normal.
@@ -220,7 +220,7 @@ def subplot_single_splitted_traj_acc(
     interactive: bool = False,
     unique_id: str | None = None,
     map_def: MapDefinition | None = None,
-):
+) -> None:
     """
     Plot from position_array for a single pedestrian id trajectories, velocity and acceleration.
 
@@ -304,7 +304,7 @@ def plot_acceleration_distribution(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
     unique_id: str | None = None,
-):
+) -> None:
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
@@ -369,7 +369,7 @@ def plot_velocity_distribution(
     ped_positions_array: np.ndarray,
     interactive: bool = False,
     unique_id: str | None = None,
-):
+) -> None:
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians.
 
@@ -433,7 +433,7 @@ def subplot_velocity_distribution_with_ego_ped(
     ego_positions: np.ndarray,
     interactive: bool = False,
     unique_id: str | None = None,
-):
+) -> None:
     """
     Calculate and plot the probability distribution of the velocity of all pedestrians
     in comparison to the ego pedestrian.
@@ -508,7 +508,7 @@ def subplot_acceleration_distribution(
     ego_positions: np.ndarray,
     interactive: bool = False,
     unique_id: str | None = None,
-):
+) -> None:
     """
     Calculate and plot the probability distribution of the acceleration of all pedestrians.
 
@@ -590,7 +590,7 @@ def velocity_colorcoded_with_positions(
     interactive: bool = False,
     unique_id: str | None = None,
     map_def: MapDefinition | None = None,
-):
+) -> None:
     """
     Plot the positions of NPC pedestrians color-coded by their velocities.
 

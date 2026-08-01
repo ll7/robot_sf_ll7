@@ -777,12 +777,12 @@ exec "$CI_TIMER_REAL_DATE" "$@"
             wrapper.wait(timeout=5)
 
 
-@pytest.mark.parametrize("timeout_value", ["nan", "inf", "-Infinity"])
-def test_ci_step_timer_python_fallback_rejects_nonfinite_timeout_before_command(
+@pytest.mark.parametrize("timeout_value", ["nan", "inf", "-Infinity", "0", "0e42"])
+def test_ci_step_timer_python_fallback_rejects_invalid_timeout_before_command(
     tmp_path: Path,
     timeout_value: str,
 ) -> None:
-    """Reject non-finite fallback durations with status 125 without launching the command."""
+    """Reject invalid fallback durations with status 125 without launching the command."""
     script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"
     bash_path = shutil.which("bash")
     assert bash_path, "bash is required by ci_step_timer.sh"

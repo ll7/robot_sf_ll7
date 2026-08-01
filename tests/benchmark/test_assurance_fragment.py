@@ -99,3 +99,34 @@ def test_assurance_fragment_representative_payload_is_exact() -> None:
     assert _canonical_payload_digest(payload) == (
         "7083dabe76a5ad5423a7ab17137b98b6019fc9ba39d7dc0aa7cc8809282f1a18"
     )
+
+
+def test_assurance_fragment_with_release_gates_payload_is_exact() -> None:
+    """Pin release-gate node attachment across assurance-fragment refactors."""
+    repo_root = get_repository_root()
+    fixture_path = (
+        repo_root
+        / "docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json"
+    )
+    campaign_summary = json.loads(fixture_path.read_text(encoding="utf-8"))
+    planner_key = next(row["planner_key"] for row in campaign_summary["planner_rows"])
+    release_gate_report = {
+        "provenance": {"input": {"path": str(fixture_path), "sha256": "gate-report-sha"}},
+        "matrix_rows": [
+            {
+                "planner_key": planner_key,
+                "safety_status": "pass",
+                "comfort_status": "pass",
+                "overall_status": "pass",
+            }
+        ],
+    }
+
+    payload = build_assurance_fragment(
+        campaign_summary, repo_root=repo_root, release_gate_report=release_gate_report
+    )
+    payload.pop("generated_at_utc")
+
+    assert _canonical_payload_digest(payload) == (
+        "dfca32a410cf7e1d1235098008518112572497f0fae34ca272178d936eb2a70b"
+    )

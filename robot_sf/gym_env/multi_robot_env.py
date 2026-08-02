@@ -269,7 +269,7 @@ class MultiRobotEnv(MultiAgentEnv):
             state = self._build_visualizable_state(binding)
             sim_view.render(state)
 
-    def close_extras(self, **kwargs):
+    def close_extras(self, **kwargs) -> None:
         """Close worker pools and render views with best-effort error handling.
 
         Args:
@@ -299,7 +299,7 @@ class MultiRobotEnv(MultiAgentEnv):
         self._sim_views = []
         self.sim_ui = None
 
-    def close(self):
+    def close(self) -> None:
         """Close pools and simulation views."""
         self.close_extras()
         super().close()

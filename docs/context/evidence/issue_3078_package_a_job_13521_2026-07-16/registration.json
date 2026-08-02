@@ -16,6 +16,7 @@
     "postrun_acceptance.json": "c14071a5180eeccdd6727c41156a646a97cd21d662c825367281ffbd008b565b",
     "row_acceptance.json": "1af7def9ede61ed63848a2677ea612ffba5ea1af49b91e1ef8ae056d3fcde5c0"
   },
+  "domain_decision_overlay": "package_a_domain_decision_overlay.json",
   "registration_transformation": {
     "description": "Private source path prefixes were replaced with private-campaign job URIs.",
     "row_or_metric_values_changed": false
@@ -27,6 +28,7 @@
   "episode_count": 18,
   "unique_identity_count": 18,
   "rows_per_planner": 6,
+  "review_state": "renderer_output_not_domain_approved",
   "fallback_degraded_rows": 0,
   "synthetic_fixture_used": false
 }

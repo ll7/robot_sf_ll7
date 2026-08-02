@@ -59,14 +59,14 @@ def _init_classes() -> dict[str, Any]:
 
             super().__init__(observation_space, features_dim=total_features)
 
-            def padding(kernel_size: int):
+            def padding(kernel_size: int) -> int:
                 if kernel_size % 2 == 0:
                     raise ValueError("kernel size must be odd!")
                 return int((kernel_size - 1) / 2)
 
             def conv_block(
                 in_channels: int, out_channels: int, kernel_size: int, dropout_rate: float
-            ):
+            ) -> list[nn.Module]:
                 return [
                     nn.Conv1d(in_channels, out_channels, kernel_size, 2, padding(kernel_size)),
                     nn.ReLU(),

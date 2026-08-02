@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import torch as th
     from gymnasium import spaces
+    from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
     from stable_baselines3.common.type_aliases import Schedule
     from torch import nn
 
@@ -74,7 +75,7 @@ def _init_classes() -> dict[str, Any]:
                 optimizer_kwargs=optimizer_kwargs,
             )
 
-        def make_features_extractor(self):
+        def make_features_extractor(self) -> BaseFeaturesExtractor:  # type: ignore[override]
             if not self._asymmetric_critic:
                 return super().make_features_extractor()
 

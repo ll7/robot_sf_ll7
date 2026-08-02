@@ -271,7 +271,7 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
                     self.observation_space = self.envs[0].observation_space
                     self.action_space = self.envs[0].action_space
 
-                def reset(self):
+                def reset(self) -> Any:
                     """Reset the first wrapped environment.
 
                     Returns:
@@ -279,11 +279,11 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
                     """
                     return self.envs[0].reset()
 
-                def step_async(self, _actions):
+                def step_async(self, _actions) -> None:
                     """Accept asynchronous-step calls without scheduling work."""
                     return None
 
-                def step_wait(self):
+                def step_wait(self) -> None:
                     """Raise because the import shim does not execute vector steps."""
                     raise NotImplementedError
 

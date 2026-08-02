@@ -546,7 +546,242 @@ class OccupancyGrid:
         self._static_obstacle_layer_cache = layer
         return layer
 
-    def generate(  # noqa: C901,PLR0912,PLR0915
+    @staticmethod
+    def _validate_generate_inputs(obstacles: list[Line2D], pedestrians: list[Circle2D]) -> None:
+        """Validate types of generate inputs.
+
+        Raises:
+            TypeError: If obstacles or pedestrians are not lists.
+        """
+        if not isinstance(obstacles, list):
+            logger.error(f"Invalid obstacles type: {type(obstacles).__name__}, expected list")
+            raise TypeError(f"obstacles must be list, got {type(obstacles)}")
+        if not isinstance(pedestrians, list):
+            logger.error(f"Invalid pedestrians type: {type(pedestrians).__name__}, expected list")
+            raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")
+
+    def _compute_grid_origin(
+        self, use_ego_frame: bool, robot_x: float, robot_y: float
+    ) -> tuple[float, float]:
+        """Compute grid origin based on frame mode and robot position.
+
+        Returns:
+            tuple[float, float]: Grid origin (x, y) in world coordinates.
+        """
+        if use_ego_frame:
+            grid_origin_x = -self.config.width / 2
+            grid_origin_y = -self.config.height / 2
+            logger.debug(f"Ego-frame grid origin: ({grid_origin_x:.2f}, {grid_origin_y:.2f})")
+        elif self.config.center_on_robot:
+            grid_origin_x = robot_x - self.config.width / 2
+            grid_origin_y = robot_y - self.config.height / 2
+            logger.debug(
+                "World-frame grid centered on robot: origin=(%.2f, %.2f)",
+                grid_origin_x,
+                grid_origin_y,
+            )
+        else:
+            grid_origin_x = 0.0
+            grid_origin_y = 0.0
+        return grid_origin_x, grid_origin_y
+
+    def _transform_to_ego_frame(
+        self,
+        obstacles: list[Line2D],
+        obstacle_polygons: list[Any] | None,
+        pedestrians: list[Circle2D],
+    ) -> tuple[list[Line2D], list[Any] | None, list[Circle2D]]:
+        """Transform obstacles, polygons, and pedestrians into the robot ego frame.
+
+        Returns:
+            Tuple of (transformed_obstacles, transformed_polygons, transformed_pedestrians).
+        """
+
+        def _to_ego_point(point: tuple[float, float]) -> tuple[float, float]:
+            """Transform one world point into the robot ego frame.
+
+            Returns:
+                tuple[float, float]: Ego-frame point coordinates.
+            """
+            return grid_utils.world_to_ego(point[0], point[1], self._last_robot_pose)  # type: ignore[arg-type]
+
+        def _to_ego_polygon(polygon: Any) -> Any:
+            """Transform polygonal obstacle geometry into the robot ego frame.
+
+            Returns:
+                Polygon-like geometry in ego-frame coordinates.
+            """
+            if isinstance(polygon, _ShapelyMultiPolygon):
+                return _ShapelyMultiPolygon(
+                    [_to_ego_polygon(poly) for poly in polygon.geoms if not poly.is_empty]
+                )
+            if isinstance(polygon, _ShapelyPolygon):
+                shape = polygon if polygon.is_valid else polygon.buffer(0)
+                if shape.is_empty:
+                    return shape
+                # buffer(0) can return a MultiPolygon for self-intersecting inputs
+                if isinstance(shape, _ShapelyMultiPolygon):
+                    return _ShapelyMultiPolygon(
+                        [_to_ego_polygon(poly) for poly in shape.geoms if not poly.is_empty]
+                    )
+                exterior = [_to_ego_point(vertex) for vertex in shape.exterior.coords[:-1]]
+                interiors = [
+                    [_to_ego_point(vertex) for vertex in ring.coords[:-1]]
+                    for ring in shape.interiors
+                ]
+                return _ShapelyPolygon(exterior, interiors)
+            return _ShapelyPolygon([_to_ego_point(vertex) for vertex in polygon])
+
+        transformed_obstacles: list[Line2D] = [
+            (_to_ego_point(start), _to_ego_point(end)) for start, end in obstacles
+        ]
+        transformed_polygons: list[Any] | None = None
+        if obstacle_polygons is not None:
+            transformed_polygons = [_to_ego_polygon(polygon) for polygon in obstacle_polygons]
+        transformed_pedestrians: list[Circle2D] = [
+            (_to_ego_point(center), radius) for center, radius in pedestrians
+        ]
+        return transformed_obstacles, transformed_polygons, transformed_pedestrians
+
+    def _rasterize_channels(
+        self,
+        transformed_obstacles: list[Line2D],
+        transformed_polygons: list[Any] | None,
+        transformed_pedestrians: list[Circle2D],
+        robot_pose: RobotPose,
+        use_ego_frame: bool,
+        grid_origin_x: float,
+        grid_origin_y: float,
+    ) -> None:
+        """Rasterize all configured channels into ``self._grid_data``."""
+        for channel_idx, channel in enumerate(self.config.channels):
+            if channel == GridChannel.COMBINED:
+                continue
+
+            if channel == GridChannel.OBSTACLES:
+                self._rasterize_obstacle_channel(
+                    channel_idx,
+                    transformed_obstacles,
+                    transformed_polygons,
+                    use_ego_frame,
+                    grid_origin_x,
+                    grid_origin_y,
+                )
+            elif channel == GridChannel.PEDESTRIANS:
+                num_rasterized = rasterization.rasterize_pedestrians(
+                    transformed_pedestrians,
+                    self._grid_data[channel_idx],
+                    self.config,
+                    grid_origin_x,
+                    grid_origin_y,
+                    value=1.0,
+                )
+                logger.debug(f"Rasterized {num_rasterized} pedestrians")
+            elif channel == GridChannel.ROBOT:
+                self._rasterize_robot_channel(
+                    channel_idx, robot_pose, use_ego_frame, grid_origin_x, grid_origin_y
+                )
+
+    def _rasterize_obstacle_channel(
+        self,
+        channel_idx: int,
+        transformed_obstacles: list[Line2D],
+        transformed_polygons: list[Any] | None,
+        use_ego_frame: bool,
+        grid_origin_x: float,
+        grid_origin_y: float,
+    ) -> None:
+        """Rasterize obstacle lines and polygons into one channel layer."""
+        if not use_ego_frame and not self.config.center_on_robot:
+            self._grid_data[channel_idx] = self._get_or_create_static_obstacle_layer(
+                transformed_obstacles,
+                transformed_polygons,
+                grid_origin_x,
+                grid_origin_y,
+            )
+        else:
+            num_rasterized = rasterization.rasterize_obstacles(
+                transformed_obstacles,
+                self._grid_data[channel_idx],
+                self.config,
+                grid_origin_x,
+                grid_origin_y,
+                value=1.0,
+            )
+            logger.debug(f"Rasterized {num_rasterized} obstacles")
+            if transformed_polygons:
+                filled = 0
+                for polygon in transformed_polygons:
+                    filled += rasterization.rasterize_polygon(
+                        polygon,
+                        self._grid_data[channel_idx],
+                        self.config,
+                        grid_origin_x,
+                        grid_origin_y,
+                        value=1.0,
+                    )
+                logger.debug("Filled {} obstacle cells via polygon rasterization", filled)
+
+    def _rasterize_robot_channel(
+        self,
+        channel_idx: int,
+        robot_pose: RobotPose,
+        use_ego_frame: bool,
+        grid_origin_x: float,
+        grid_origin_y: float,
+    ) -> None:
+        """Rasterize the robot as a circle into one channel layer."""
+        robot_radius = self.config.robot_radius
+        robot_pose_for_grid = robot_pose
+        if use_ego_frame and self._last_robot_pose is not None:
+            ego_x, ego_y = grid_utils.world_to_ego(
+                robot_pose[0][0], robot_pose[0][1], self._last_robot_pose
+            )  # type: ignore[arg-type]
+            robot_pose_for_grid = ((ego_x, ego_y), robot_pose[1])
+        success = rasterization.rasterize_robot(
+            robot_pose_for_grid,
+            robot_radius,
+            self._grid_data[channel_idx],
+            self.config,
+            grid_origin_x,
+            grid_origin_y,
+            value=1.0,
+        )
+        logger.debug(f"Rasterized robot: {success}")
+
+    def _compute_combined_channel(self) -> None:
+        """Compute the combined channel as the element-wise max of all other channels."""
+        if GridChannel.COMBINED not in self.config.channels:
+            return
+        combined_idx = self.config.channels.index(GridChannel.COMBINED)
+        source_indices = [
+            idx for idx, ch in enumerate(self.config.channels) if ch != GridChannel.COMBINED
+        ]
+        if source_indices:
+            np.maximum.reduce(
+                self._grid_data[source_indices],
+                axis=0,
+                out=self._grid_data[combined_idx],
+            )
+        else:
+            self._grid_data[combined_idx].fill(0)
+        logger.debug("Generated combined channel from {} indices", source_indices)
+
+    def _update_prepared_obstacle_cache(self, transformed_polygons: list[Any] | None) -> None:
+        """Cache prepared obstacle geometries, re-preparing only when input changes."""
+        new_polygons = transformed_polygons or []
+        new_polygons_key = self._polygon_cache_signature(transformed_polygons)
+        if new_polygons_key != self._obstacle_polygons_cache_key or (
+            new_polygons and self._prepared_obstacles is None
+        ):
+            self._obstacle_polygons = new_polygons
+            self._prepared_obstacles = self._prepare_obstacles(new_polygons)
+            self._obstacle_polygons_cache_key = new_polygons_key
+        else:
+            self._obstacle_polygons = new_polygons
+            logger.debug("Reused cached prepared obstacle geometries")
+
+    def generate(
         self,
         obstacles: list[Line2D],
         pedestrians: list[Circle2D],
@@ -574,37 +809,16 @@ class OccupancyGrid:
             - O(N*M) where N = grid cells, M = obstacles+pedestrians
             - Target: <5ms for typical 200x200 grid with 10-20 obstacles
         """
-        if not isinstance(obstacles, list):
-            logger.error(f"Invalid obstacles type: {type(obstacles).__name__}, expected list")
-            raise TypeError(f"obstacles must be list, got {type(obstacles)}")
-        if not isinstance(pedestrians, list):
-            logger.error(f"Invalid pedestrians type: {type(pedestrians).__name__}, expected list")
-            raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")
+        self._validate_generate_inputs(obstacles, pedestrians)
 
         use_ego_frame = ego_frame or self.config.use_ego_frame
         self._last_use_ego_frame = use_ego_frame
         robot_x, robot_y, robot_theta = self._parse_robot_pose(robot_pose)
         self._last_robot_pose = RobotPoseRecord((robot_x, robot_y), robot_theta)
 
-        # Determine grid bounds
-        if use_ego_frame:
-            grid_origin_x = -self.config.width / 2
-            grid_origin_y = -self.config.height / 2
-            logger.debug(f"Ego-frame grid origin: ({grid_origin_x:.2f}, {grid_origin_y:.2f})")
-        elif self.config.center_on_robot:
-            grid_origin_x = robot_x - self.config.width / 2
-            grid_origin_y = robot_y - self.config.height / 2
-            logger.debug(
-                "World-frame grid centered on robot: origin=(%.2f, %.2f)",
-                grid_origin_x,
-                grid_origin_y,
-            )
-        else:
-            grid_origin_x = 0.0
-            grid_origin_y = 0.0
+        grid_origin_x, grid_origin_y = self._compute_grid_origin(use_ego_frame, robot_x, robot_y)
         self._grid_origin = (grid_origin_x, grid_origin_y)
 
-        # Initialize grid
         shape = (
             self.config.num_channels,
             self.config.grid_height,
@@ -620,158 +834,26 @@ class OccupancyGrid:
             f"origin=({grid_origin_x:.2f}, {grid_origin_y:.2f})"
         )
 
-        # Transform coordinates to ego frame when requested
         if use_ego_frame:
-
-            def _to_ego_point(point: tuple[float, float]) -> tuple[float, float]:
-                """Transform one world point into the robot ego frame.
-
-                Returns:
-                    tuple[float, float]: Ego-frame point coordinates.
-                """
-                return grid_utils.world_to_ego(point[0], point[1], self._last_robot_pose)  # type: ignore[arg-type]
-
-            transformed_obstacles: list[Line2D] = [
-                (_to_ego_point(start), _to_ego_point(end)) for start, end in obstacles
-            ]
-            transformed_polygons: list[Any] | None = None
-
-            def _to_ego_polygon(polygon: Any) -> Any:
-                """Transform polygonal obstacle geometry into the robot ego frame.
-
-                Returns:
-                    Polygon-like geometry in ego-frame coordinates.
-                """
-                if isinstance(polygon, _ShapelyMultiPolygon):
-                    return _ShapelyMultiPolygon(
-                        [_to_ego_polygon(poly) for poly in polygon.geoms if not poly.is_empty]
-                    )
-                if isinstance(polygon, _ShapelyPolygon):
-                    shape = polygon if polygon.is_valid else polygon.buffer(0)
-                    if shape.is_empty:
-                        return shape
-                    # buffer(0) can return a MultiPolygon for self-intersecting inputs
-                    if isinstance(shape, _ShapelyMultiPolygon):
-                        return _ShapelyMultiPolygon(
-                            [_to_ego_polygon(poly) for poly in shape.geoms if not poly.is_empty]
-                        )
-                    exterior = [_to_ego_point(vertex) for vertex in shape.exterior.coords[:-1]]
-                    interiors = [
-                        [_to_ego_point(vertex) for vertex in ring.coords[:-1]]
-                        for ring in shape.interiors
-                    ]
-                    return _ShapelyPolygon(exterior, interiors)
-                return _ShapelyPolygon([_to_ego_point(vertex) for vertex in polygon])
-
-            if obstacle_polygons is not None:
-                transformed_polygons = [_to_ego_polygon(polygon) for polygon in obstacle_polygons]
-            transformed_pedestrians: list[Circle2D] = [
-                (_to_ego_point(center), radius) for center, radius in pedestrians
-            ]
+            transformed_obstacles, transformed_polygons, transformed_pedestrians = (
+                self._transform_to_ego_frame(obstacles, obstacle_polygons, pedestrians)
+            )
         else:
             transformed_obstacles = obstacles
             transformed_polygons = obstacle_polygons
             transformed_pedestrians = pedestrians
 
-        # Rasterize each channel
-        for channel_idx, channel in enumerate(self.config.channels):
-            if channel == GridChannel.COMBINED:
-                # Combine after base channels are processed
-                continue
-
-            if channel == GridChannel.OBSTACLES:
-                if not use_ego_frame and not self.config.center_on_robot:
-                    self._grid_data[channel_idx] = self._get_or_create_static_obstacle_layer(
-                        transformed_obstacles,
-                        transformed_polygons,
-                        grid_origin_x,
-                        grid_origin_y,
-                    )
-                else:
-                    # Rasterize obstacles into this channel
-                    num_rasterized = rasterization.rasterize_obstacles(
-                        transformed_obstacles,
-                        self._grid_data[channel_idx],
-                        self.config,
-                        grid_origin_x,
-                        grid_origin_y,
-                        value=1.0,
-                    )
-                    logger.debug(f"Rasterized {num_rasterized} obstacles")
-                    if transformed_polygons:
-                        filled = 0
-                        for polygon in transformed_polygons:
-                            filled += rasterization.rasterize_polygon(
-                                polygon,
-                                self._grid_data[channel_idx],
-                                self.config,
-                                grid_origin_x,
-                                grid_origin_y,
-                                value=1.0,
-                            )
-                        logger.debug("Filled {} obstacle cells via polygon rasterization", filled)
-
-            elif channel == GridChannel.PEDESTRIANS:
-                # Rasterize pedestrians into this channel
-                num_rasterized = rasterization.rasterize_pedestrians(
-                    transformed_pedestrians,
-                    self._grid_data[channel_idx],
-                    self.config,
-                    grid_origin_x,
-                    grid_origin_y,
-                    value=1.0,
-                )
-                logger.debug(f"Rasterized {num_rasterized} pedestrians")
-
-            elif channel == GridChannel.ROBOT:
-                # Rasterize robot as a circle
-                robot_radius = self.config.robot_radius
-                robot_pose_for_grid = robot_pose
-                if use_ego_frame and self._last_robot_pose is not None:
-                    ego_x, ego_y = grid_utils.world_to_ego(
-                        robot_pose[0][0], robot_pose[0][1], self._last_robot_pose
-                    )  # type: ignore[arg-type]
-                    robot_pose_for_grid = ((ego_x, ego_y), robot_pose[1])
-                success = rasterization.rasterize_robot(
-                    robot_pose_for_grid,
-                    robot_radius,
-                    self._grid_data[channel_idx],
-                    self.config,
-                    grid_origin_x,
-                    grid_origin_y,
-                    value=1.0,
-                )
-                logger.debug(f"Rasterized robot: {success}")
-
-        if GridChannel.COMBINED in self.config.channels:
-            combined_idx = self.config.channels.index(GridChannel.COMBINED)
-            source_indices = [
-                idx for idx, ch in enumerate(self.config.channels) if ch != GridChannel.COMBINED
-            ]
-            if source_indices:
-                np.maximum.reduce(
-                    self._grid_data[source_indices],
-                    axis=0,
-                    out=self._grid_data[combined_idx],
-                )
-            else:
-                self._grid_data[combined_idx].fill(0)
-            logger.debug("Generated combined channel from {} indices", source_indices)
-
-        # Cache prepared obstacle geometries, re-preparing only when effective
-        # polygon input changes (handles ego-frame transform invalidation via
-        # _polygon_cache_signature on the already-transformed polygons).
-        new_polygons = transformed_polygons or []
-        new_polygons_key = self._polygon_cache_signature(transformed_polygons)
-        if new_polygons_key != self._obstacle_polygons_cache_key or (
-            new_polygons and self._prepared_obstacles is None
-        ):
-            self._obstacle_polygons = new_polygons
-            self._prepared_obstacles = self._prepare_obstacles(new_polygons)
-            self._obstacle_polygons_cache_key = new_polygons_key
-        else:
-            self._obstacle_polygons = new_polygons
-            logger.debug("Reused cached prepared obstacle geometries")
+        self._rasterize_channels(
+            transformed_obstacles,
+            transformed_polygons,
+            transformed_pedestrians,
+            robot_pose,
+            use_ego_frame,
+            grid_origin_x,
+            grid_origin_y,
+        )
+        self._compute_combined_channel()
+        self._update_prepared_obstacle_cache(transformed_polygons)
 
         return self._grid_data
 

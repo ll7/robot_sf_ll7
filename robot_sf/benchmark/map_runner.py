@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
@@ -2208,9 +2209,9 @@ def _build_common_adapter_policy(  # noqa: C901
                 dict[str, Any]: Adapter diagnostic payload.
             """
             diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
-            runtime = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+            runtime = dict(diagnostics) if isinstance(diagnostics, Mapping) else {}
             foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
-            if isinstance(foresight, dict):
+            if isinstance(foresight, Mapping):
                 runtime.update(foresight)
             return normalize_planner_diagnostics(
                 runtime, fallback_planner_type=type(adapter).__name__

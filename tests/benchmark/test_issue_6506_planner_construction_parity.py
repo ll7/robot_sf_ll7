@@ -38,12 +38,18 @@ execution modes:
 from __future__ import annotations
 
 import sys
+from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 import pytest
 
+from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.map_runner import build_map_policy
 from robot_sf.benchmark.runner import NATIVE_COMMAND_DIAGNOSTICS_KEY, run_episode
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # Representative planners spanning every execution-mode family the #6506
 # unification must preserve. The ``algo_key`` values are the canonical keys the
@@ -227,3 +233,27 @@ def test_diagnostics_propagation_routes_through_canonical_adapter() -> None:
         close = getattr(policy, "_planner_close", None)
         if callable(close):
             close()
+
+
+def test_adapter_diagnostics_preserve_mapping_payloads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The canonical diagnostics path preserves non-dict Mapping payloads."""
+
+    class MappingDiagnosticsAdapter:
+        """Fixture adapter that exposes a valid immutable Mapping diagnostics payload."""
+
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def plan(self, _obs: dict[str, object]) -> tuple[float, float]:
+            """Return a no-op unicycle command for policy construction."""
+            return 0.0, 0.0
+
+        def diagnostics(self) -> Mapping[str, object]:
+            """Return counters through a Mapping implementation rather than dict."""
+            return MappingProxyType({"planner_type": "mapping_fixture", "preserved_counter": 7})
+
+    monkeypatch.setattr(map_runner, "SocialForcePlannerAdapter", MappingDiagnosticsAdapter)
+    policy, _meta = map_runner.build_map_policy("social_force", {})
+    stats_fn = getattr(policy, "_planner_stats", None)
+    assert callable(stats_fn), "SocNav adapter policy must expose _planner_stats"
+    assert stats_fn() == {"planner_type": "mapping_fixture", "preserved_counter": 7}

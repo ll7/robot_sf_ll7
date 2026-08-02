@@ -1,0 +1,98 @@
+# Continual-adaptation and revalidation protocol manifest -- Issue #6582
+#
+# Continual-RL research suggests rapid adaptation to changed surfaces, payloads, layouts, actuator
+# behavior, or pedestrian dynamics. Any policy update, however, changes the VALIDATED system and can
+# invalidate prior safety evidence. This file is the metadata-only PROTOCOL CONTRACT for the local,
+# buildable half: it declares what a bounded adaptation job would have to look like before it can be
+# trusted to preserve safety evidence.
+#
+# It is checked by:
+#   uv run python -c "from robot_sf.research.continual_adaptation_protocol import load_continual_adaptation_run, check_continual_adaptation_run; print(check_continual_adaptation_run(load_continual_adaptation_run('configs/training/continual_adaptation_run_issue_6582.yaml')).to_dict())"
+#
+# This manifest neither launches training, alters a checkpoint, mutates the safety wrapper, runs an
+# evaluation, nor promotes a policy, and it is NOT benchmark or paper evidence. The adapted-policy
+# identifier is DERIVED by the validator from the baseline identity plus a normalized adaptation
+# manifest; it is never pre-declared here.
+
+schema_version: continual_adaptation_run.v1
+run_id: continual_adaptation_run_issue_6582
+issue: 6582
+
+claim_boundary: >-
+  Metadata-only continual-adaptation protocol contract. Declares the immutable baseline identity, the
+  immutable safety-wrapper checksum, the bounded adaptation experience budget, the declared mutable
+  parameter prefixes, the disjoint adaptation/evaluation scenario IDs, the synthetic shift(s), and the
+  nominal/shift/forgetting thresholds. It does not launch training, alter a checkpoint, mutate the
+  safety wrapper, run an evaluation, or promote a policy. The initial promotion_decision is
+  'experimental'; this manifest is not benchmark or paper evidence.
+
+# Immutable baseline checkpoint identity. The validator derives a NEW adapted-policy identifier from
+# this plus the normalized adaptation manifest and must never overwrite it.
+baseline_policy:
+  identifier: ppo_ammv_baseline_v3
+  checksum:
+    algorithm: sha256
+    # Placeholder digest for the contract example only; a real run pins the baseline checkpoint hash.
+    digest: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+# Immutable safety wrapper. The adaptation job must not modify the wrapper; only this checksum may
+# reference it. mutation_permitted must be false.
+safety_wrapper:
+  identifier: robot_sf.gym_env.safety_vel_controller
+  checksum:
+    algorithm: sha256
+    # Placeholder digest for the contract example only; a real run pins the safety-wrapper hash.
+    digest: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+  mutation_permitted: false
+
+# Declared mutable parameter prefixes and the bounded experience budget.
+adaptation:
+  allowed_parameters:
+    - policy_net.head.
+    - value_net.head.
+  experience_budget:
+    bounded: true
+    steps: 200000
+    units: gradient_steps
+
+# Disjoint calibration/adaptation and held-out evaluation scenario IDs.
+scenarios:
+  adaptation:
+    - friction_low_train_a
+    - friction_low_train_b
+  evaluation:
+    - friction_low_eval_holdout_a
+    - friction_low_eval_holdout_b
+
+# At least one declared synthetic shift is required for revalidation.
+shifts:
+  - id: friction_low
+    kind: friction
+    description: >-
+      Lowered floor friction coefficient relative to the baseline calibration surface.
+    parameters:
+      friction_coefficient: 0.4
+
+# Pre-declared nominal/shift/forgetting acceptance thresholds.
+thresholds:
+  nominal:
+    metric: success_rate_delta
+    bound: -0.02
+    direction: at_most
+  shift:
+    metric: success_rate_delta
+    bound: 0.05
+    direction: at_least
+  forgetting:
+    metric: success_rate_delta
+    bound: -0.02
+    direction: at_most
+
+# Initial decision is 'experimental': this manifest is a contract example, not benchmark or paper
+# evidence. 'promote' is rejected by the validator unless results.nominal_result, results.shift_result,
+# results.forgetting_result, and results.evidence_bundle are all declared.
+promotion_decision:
+  decision: experimental
+  rationale: >-
+    Contract example only. Revalidation results and a new evidence bundle are not yet declared, so
+    promotion is not requested; this manifest is not benchmark or paper evidence.

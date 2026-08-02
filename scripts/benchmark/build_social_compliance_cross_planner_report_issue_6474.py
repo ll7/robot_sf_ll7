@@ -1301,6 +1301,37 @@ def run_self_test() -> int:
             pass
         else:  # pragma: no cover - defensive
             raise AssertionError(f"{reason} was not rejected by validate_rows")
+    # Accepted-unavailable-only gate (exit 3): a campaign whose rows are all
+    # benchmark-capable but whose every metric family is unavailable must reach
+    # no supported decision, so the run is diagnostic-only rather than evidence.
+    all_unavailable_rows = [
+        _synthetic_row(
+            planner,
+            scenario,
+            seed,
+            {},
+            unavailable=tuple(METRIC_CONTRACT),
+            execution_mode="native" if planner == "goal" else "adapter",
+        )
+        for scenario in scenarios
+        for seed in seeds
+        for planner in FROZEN_PLANNERS
+    ]
+    unavailable_valid_rows, unavailable_report = validate_rows(all_unavailable_rows)
+    assert unavailable_report["rejected"] == [], "all-unavailable rows must stay benchmark-capable"
+    unavailable_decisions = compute_decisions(
+        unavailable_valid_rows,
+        bootstrap_samples=DEFAULT_BOOTSTRAP_SAMPLES,
+        permutation_samples=DEFAULT_PERMUTATION_SAMPLES,
+        bootstrap_seed=DEFAULT_BOOTSTRAP_SEED,
+        confidence=DEFAULT_CONFIDENCE,
+    )
+    apply_multiplicity(unavailable_decisions, alpha=DEFAULT_ALPHA)
+    assert len(unavailable_decisions) == len(FROZEN_PLANNER_PAIRS) * len(METRIC_IDS)
+    assert not any(
+        decision["n_paired"] >= MIN_PAIRED_SUPPORT for decision in unavailable_decisions
+    ), "all-unavailable campaign must not reach the exit-3 support gate"
+    assert not any(decision["rejected_at_alpha"] for decision in unavailable_decisions)
     print(
         "self-test OK: recovered comfort_exposure social_force-goal mean diff "
         f"{sf_comfort['mean_difference']:.4f} (true {true_effect}), "

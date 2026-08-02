@@ -236,6 +236,9 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
   [issue_4360_adversarial_dispatchable_inventory.md](issue_4360_adversarial_dispatchable_inventory.md)
   records current adversarial pedestrian hooks, repeatable seeds/configs, runner assumptions,
   and runbook boundary for the dispatchable half only.
+* Issue #4360 reactive residual-adversary design:
+  [issue_4360_reactive_adversary_design.md](issue_4360_reactive_adversary_design.md)
+  records the capability-only bounded residual-control contract and deferred adversary slices.
 * Issue #3014 Evidence Catalog Backlog 2026-06-19:
   [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
   records the current uncovered evidence-bundle count and split strategy for catalog cleanup.

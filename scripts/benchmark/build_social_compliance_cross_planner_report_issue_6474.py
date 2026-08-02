@@ -87,15 +87,35 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 ARTIFACT_MANIFEST_SCHEMA_VERSION = "social-compliance-campaign-artifact-manifest.v1"
 MIN_PAIRED_SUPPORT = 5
-DEFAULT_BOOTSTRAP_SAMPLES = 10000
-DEFAULT_PERMUTATION_SAMPLES = 10000
-DEFAULT_BOOTSTRAP_SEED = 20260802
+DEFAULT_BOOTSTRAP_SAMPLES = 2000
+DEFAULT_PERMUTATION_SAMPLES = 2000
+DEFAULT_BOOTSTRAP_SEED = 123
 DEFAULT_CONFIDENCE = 0.95
 DEFAULT_ALPHA = 0.05
-DEFAULT_REFERENCE_PLANNER = "goal"
-DEFAULT_COMPARISON_PLANNERS = ("social_force", "orca")
 FROZEN_SEEDS = frozenset(range(111, 141))
-FROZEN_SCENARIO_COUNT = 6
+FROZEN_PLANNERS = ("goal", "social_force", "orca")
+FROZEN_PLANNER_PAIRS = (
+    ("goal", "social_force"),
+    ("goal", "orca"),
+    ("social_force", "orca"),
+)
+FROZEN_SCENARIOS = (
+    "classic_head_on_corridor_medium",
+    "classic_doorway_medium",
+    "classic_group_crossing_medium",
+    "classic_merging_medium",
+    "classic_overtaking_medium",
+    "classic_station_platform_medium",
+)
+FROZEN_SCENARIO_FAMILIES = {
+    "classic_head_on_corridor_medium": "head_on_corridor",
+    "classic_doorway_medium": "doorway",
+    "classic_group_crossing_medium": "group_crossing",
+    "classic_merging_medium": "merging",
+    "classic_overtaking_medium": "overtaking",
+    "classic_station_platform_medium": "station_platform",
+}
+FROZEN_CONFIG_SHA256 = "fed85cef7ac43817d0aa47a3ac10f9e7f4b50b4be6410e796fdf3d837e69811e"
 VALID_METRIC_STATUSES = frozenset({"available", "unavailable", "not_applicable"})
 
 # Canonical metric id -> (family, units, denominator) mirror of
@@ -167,12 +187,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="directory for report.md / summary.json / artifact_manifest.json",
     )
     parser.add_argument("--repo-root", type=Path, default=Path("."))
-    parser.add_argument("--reference-planner", default=DEFAULT_REFERENCE_PLANNER)
-    parser.add_argument(
-        "--comparison-planners",
-        nargs="+",
-        default=list(DEFAULT_COMPARISON_PLANNERS),
-    )
     parser.add_argument("--bootstrap-samples", type=int, default=DEFAULT_BOOTSTRAP_SAMPLES)
     parser.add_argument("--permutation-samples", type=int, default=DEFAULT_PERMUTATION_SAMPLES)
     parser.add_argument("--bootstrap-seed", type=int, default=DEFAULT_BOOTSTRAP_SEED)
@@ -385,18 +399,23 @@ def _is_non_negative_int(value: Any, *, require_positive: bool = False) -> bool:
 def validate_protocol_parameters(args: argparse.Namespace) -> None:
     """Reject CLI settings that would silently change the frozen analysis plan."""
 
-    if args.reference_planner != DEFAULT_REFERENCE_PLANNER or tuple(args.comparison_planners) != (
-        DEFAULT_COMPARISON_PLANNERS
-    ):
+    frozen_parameters = {
+        "bootstrap_samples": DEFAULT_BOOTSTRAP_SAMPLES,
+        "permutation_samples": DEFAULT_PERMUTATION_SAMPLES,
+        "bootstrap_seed": DEFAULT_BOOTSTRAP_SEED,
+        "confidence": DEFAULT_CONFIDENCE,
+        "alpha": DEFAULT_ALPHA,
+    }
+    for parameter, expected in frozen_parameters.items():
+        if getattr(args, parameter) != expected:
+            raise AnalysisError(
+                f"the preregistered analysis requires {parameter}={expected!r}",
+            )
+    config_sha256 = _file_sha256(args.config)
+    if config_sha256 != FROZEN_CONFIG_SHA256:
         raise AnalysisError(
-            "the preregistered analysis is frozen to goal versus social_force and orca",
+            "campaign config is absent or does not match the preregistered frozen SHA-256",
         )
-    if args.bootstrap_samples <= 0 or args.permutation_samples <= 0:
-        raise AnalysisError("bootstrap and permutation sample counts must be positive")
-    if not 0.0 < args.confidence < 1.0:
-        raise AnalysisError("confidence must be strictly between zero and one")
-    if not 0.0 < args.alpha < 1.0:
-        raise AnalysisError("alpha must be strictly between zero and one")
 
 
 def _row_schema_version(row: dict[str, Any]) -> str:
@@ -560,16 +579,16 @@ def _validate_campaign_matrix(
         }
         for planner in expected_planners
     }
-    reference_cells = planner_cells[DEFAULT_REFERENCE_PLANNER]
-    expected_cell_count = FROZEN_SCENARIO_COUNT * len(FROZEN_SEEDS)
+    reference_cells = planner_cells["goal"]
+    expected_cell_count = len(FROZEN_SCENARIOS) * len(FROZEN_SEEDS)
     if len(reference_cells) != expected_cell_count:
         raise AnalysisError(
             "goal rows do not cover the frozen six-scenario by 30-seed matrix "
             f"(got {len(reference_cells)}, expected {expected_cell_count})",
         )
-    if len({scenario for scenario, _seed in reference_cells}) != FROZEN_SCENARIO_COUNT:
+    if {scenario for scenario, _seed in reference_cells} != set(FROZEN_SCENARIOS):
         raise AnalysisError(
-            f"goal rows do not contain exactly {FROZEN_SCENARIO_COUNT} frozen scenarios",
+            "goal rows do not contain exactly the preregistered frozen scenarios",
         )
     for planner, cells in planner_cells.items():
         if cells != reference_cells:
@@ -591,7 +610,7 @@ def validate_rows(rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]],
         raise AnalysisError("no per-episode rows were supplied")
     schema_versions: dict[str, int] = {}
     execution_mode_counts: dict[str, int] = {}
-    expected_planners = {DEFAULT_REFERENCE_PLANNER, *DEFAULT_COMPARISON_PLANNERS}
+    expected_planners = set(FROZEN_PLANNERS)
     identities: set[tuple[str, str, int]] = set()
     for index, row in enumerate(rows):
         _validate_row_identity(
@@ -610,7 +629,7 @@ def validate_rows(rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]],
         "row_count": len(rows),
         "valid_row_count": len(rows),
         "expected_row_count": expected_cell_count * len(expected_planners),
-        "scenario_count": FROZEN_SCENARIO_COUNT,
+        "scenario_count": len(FROZEN_SCENARIOS),
         "seed_count": len(FROZEN_SEEDS),
         "schema_versions": schema_versions,
         "execution_mode_counts": execution_mode_counts,
@@ -684,23 +703,32 @@ def build_matched_cells(
     return matched
 
 
+def _paired_seed_blocks(cells: Sequence[dict[str, Any]]) -> list[np.ndarray]:
+    """Return per-seed paired-difference blocks in frozen seed order."""
+
+    by_seed: dict[int, list[float]] = {}
+    for cell in cells:
+        by_seed.setdefault(cell["seed"], []).append(cell["difference"])
+    return [np.asarray(by_seed[seed], dtype=np.float64) for seed in sorted(by_seed)]
+
+
 def percentile_bootstrap_ci(
-    diffs: np.ndarray,
+    seed_blocks: Sequence[np.ndarray],
     *,
     samples: int,
     confidence: float,
     seed: int,
 ) -> tuple[float, float]:
-    """Percentile-bootstrap CI for the mean of paired differences."""
+    """Bootstrap the mean paired difference by resampling whole seed blocks."""
 
-    if diffs.size == 0:
+    if not seed_blocks:
         return (float("nan"), float("nan"))
     rng = np.random.default_rng(seed)
-    n = diffs.size
+    n = len(seed_blocks)
     means = np.empty(samples, dtype=np.float64)
     for i in range(samples):
         draw = rng.integers(0, n, size=n)
-        means[i] = float(diffs[draw].mean())
+        means[i] = float(np.concatenate([seed_blocks[index] for index in draw]).mean())
     alpha = 1.0 - confidence
     low = float(np.percentile(means, 100.0 * alpha / 2.0))
     high = float(np.percentile(means, 100.0 * (1.0 - alpha / 2.0)))
@@ -708,56 +736,61 @@ def percentile_bootstrap_ci(
 
 
 def paired_permutation_pvalue(
-    diffs: np.ndarray,
+    seed_blocks: Sequence[np.ndarray],
     *,
     samples: int,
     seed: int,
 ) -> float:
-    """Two-sided Monte-Carlo sign-flip p-value for the mean paired difference."""
+    """Two-sided blockwise sign-flip p-value for the mean paired difference."""
 
-    if diffs.size == 0:
+    if not seed_blocks:
         return float("nan")
+    diffs = np.concatenate(seed_blocks)
     observed = float(np.abs(diffs.mean()))
     if not math.isfinite(observed):
         return float("nan")
     # Exact enumeration when feasible, otherwise Monte-Carlo sign-flipping.
-    n = diffs.size
+    n = len(seed_blocks)
     if n <= 12:
-        rng = np.random.default_rng(seed)
         total = 0
         extreme = 0
         for bits in range(1 << n):
-            signs = np.array([1.0 if (bits >> k) & 1 else -1.0 for k in range(n)])
-            stat = abs(float((diffs * signs).mean()))
+            signed = [
+                block if (bits >> index) & 1 else -block for index, block in enumerate(seed_blocks)
+            ]
+            stat = abs(float(np.concatenate(signed).mean()))
             total += 1
             if stat >= observed - 1e-15:
                 extreme += 1
         return (extreme + 1.0) / (total + 1.0)
     rng = np.random.default_rng(seed)
     signs = rng.choice([-1.0, 1.0], size=(samples, n))
-    stats = np.abs((diffs[None, :] * signs).mean(axis=1))
+    weighted_sums = np.asarray([block.sum() for block in seed_blocks], dtype=np.float64)
+    stats = np.abs((signs * weighted_sums).sum(axis=1) / diffs.size)
     extreme = int(np.count_nonzero(stats >= observed - 1e-15))
     return (extreme + 1.0) / (samples + 1.0)
 
 
 def holm_multiplicity(p_values: Sequence[float], *, alpha: float) -> list[float]:
-    """Holm step-down adjusted p-values (monotonized), mirroring the repo helper."""
+    """Holm-adjust finite p-values across the fixed declared decision family.
 
-    entries = sorted(range(len(p_values)), key=lambda i: p_values[i])
-    m = len(entries)
-    adjusted = [0.0] * m
+    Unsupported estimands carry ``NaN`` rather than a test result.  They remain
+    in the declared family size but must not perturb the ranks of tested
+    estimands merely because a metric was unavailable.
+    """
+
+    entries = sorted(
+        (index for index, value in enumerate(p_values) if math.isfinite(float(value))),
+        key=lambda index: float(p_values[index]),
+    )
+    m = len(p_values)
+    adjusted = [float("nan")] * m
     running_max = 0.0
     for rank, original_index in enumerate(entries):
         raw = float(p_values[original_index])
-        if not math.isfinite(raw):
-            correction = float("nan")
-        else:
-            correction = min(1.0, raw * (m - rank))
-        if math.isfinite(correction):
-            running_max = max(running_max, correction)
-            adjusted[original_index] = running_max
-        else:
-            adjusted[original_index] = float("nan")
+        correction = min(1.0, raw * (m - rank))
+        running_max = max(running_max, correction)
+        adjusted[original_index] = running_max
     return adjusted
 
 
@@ -766,29 +799,15 @@ def holm_multiplicity(p_values: Sequence[float], *, alpha: float) -> list[float]
 # --------------------------------------------------------------------------------------
 
 
-def _planner_pairs(reference: str, comparisons: Sequence[str]) -> list[tuple[str, str]]:
-    """Return the ordered (reference, comparison) planner pairs."""
-
-    return [(reference, comp) for comp in comparisons]
-
-
 def _scenario_family(scenario_id: str) -> str:
-    """Coarse scenario-family bucket used for stratified reporting.
+    """Return the preregistered scenario family for a frozen scenario id."""
 
-    The nominal campaign freezes six issue #6102 scenarios; the exact family
-    partition is defined by the preregistration sibling.  We group descriptively
-    by the recorded ``scenario_id`` so the analysis is robust to the sibling's
-    final naming while still reporting per-scenario support.
-    """
-
-    return scenario_id
+    return FROZEN_SCENARIO_FAMILIES[scenario_id]
 
 
 def compute_decisions(
     rows: Sequence[dict[str, Any]],
     *,
-    reference: str,
-    comparisons: Sequence[str],
     bootstrap_samples: int,
     permutation_samples: int,
     bootstrap_seed: int,
@@ -797,21 +816,22 @@ def compute_decisions(
     """Compute all planner-pair-by-metric-family paired-effect decisions."""
 
     decisions: list[dict[str, Any]] = []
-    for reference_planner, comparison_planner in _planner_pairs(reference, comparisons):
+    for reference_planner, comparison_planner in FROZEN_PLANNER_PAIRS:
         for metric_id in METRIC_IDS:
             family, units, denominator = METRIC_CONTRACT[metric_id]
             cells = build_matched_cells(rows, reference_planner, comparison_planner, metric_id)
             diffs = np.asarray([cell["difference"] for cell in cells], dtype=np.float64)
+            seed_blocks = _paired_seed_blocks(cells)
             if diffs.size >= MIN_PAIRED_SUPPORT:
                 mean_diff = float(diffs.mean())
                 ci_low, ci_high = percentile_bootstrap_ci(
-                    diffs,
+                    seed_blocks,
                     samples=bootstrap_samples,
                     confidence=confidence,
                     seed=bootstrap_seed,
                 )
                 raw_p = paired_permutation_pvalue(
-                    diffs,
+                    seed_blocks,
                     samples=permutation_samples,
                     seed=bootstrap_seed,
                 )
@@ -828,7 +848,7 @@ def compute_decisions(
                 per_scenario[bucket]["differences"].append(cell["difference"])
             scenario_support = [
                 {
-                    "scenario_id": scenario,
+                    "scenario_family": scenario,
                     "n_paired": data["n"],
                     "mean_difference": float(np.mean(data["differences"]))
                     if data["differences"]
@@ -892,8 +912,7 @@ def build_report_markdown(
     lines.append("")
     lines.append(
         "Simulator-defined social-compliance metric-family paired effects only, for the "
-        f"{provenance['reference_planner']} / "
-        f"{' / '.join(provenance['comparison_planners'])} planners. Effects are mean paired "
+        f"{', '.join(FROZEN_PLANNERS)} planner pairs. Effects are mean paired "
         f"differences (comparison - reference) with percentile-bootstrap "
         f"{int(confidence * 100)}% CI and two-sided paired-permutation p-values under Holm "
         f"step-down multiplicity control across the planner-pair-by-metric-family decisions "
@@ -965,11 +984,18 @@ def build_report_markdown(
     lines.append("## Scenario-family support")
     lines.append("")
     for decision in decisions:
+        scenario_support = ", ".join(
+            f"{item['scenario_family']}: n={item['n_paired']}, "
+            f"mean diff={item['mean_difference']:.6g}"
+            for item in decision["scenario_support"]
+        )
+        lines.append(
+            f"- {decision['comparison_planner']} vs {decision['reference_planner']} / "
+            f"{decision['metric_family']}: {scenario_support or 'no paired support'}.",
+        )
         if decision["n_paired"] < MIN_PAIRED_SUPPORT:
             lines.append(
-                f"- {decision['comparison_planner']} vs {decision['reference_planner']} / "
-                f"{decision['metric_family']}: diagnostic-only (n_paired="
-                f"{decision['n_paired']} < {MIN_PAIRED_SUPPORT}).",
+                f"  Diagnostic-only (n_paired={decision['n_paired']} < {MIN_PAIRED_SUPPORT}).",
             )
     lines.append("")
     lines.append("## Evidence classification")
@@ -1139,8 +1165,8 @@ def run_self_test() -> int:
     """
 
     rng = np.random.default_rng(20260802)
-    scenarios = [f"medium_band_scenario_{i}" for i in range(6)]
-    seeds = list(range(111, 141))
+    scenarios = list(FROZEN_SCENARIOS)
+    seeds = sorted(FROZEN_SEEDS)
     rows: list[dict[str, Any]] = []
     true_effect = 0.5
     for scenario in scenarios:
@@ -1189,12 +1215,10 @@ def run_self_test() -> int:
     assert validation_report["rejected"] == [], "no synthetic row should be rejected"
     decisions = compute_decisions(
         valid_rows,
-        reference="goal",
-        comparisons=["social_force", "orca"],
-        bootstrap_samples=2000,
-        permutation_samples=2000,
-        bootstrap_seed=20260802,
-        confidence=0.95,
+        bootstrap_samples=DEFAULT_BOOTSTRAP_SAMPLES,
+        permutation_samples=DEFAULT_PERMUTATION_SAMPLES,
+        bootstrap_seed=DEFAULT_BOOTSTRAP_SEED,
+        confidence=DEFAULT_CONFIDENCE,
     )
     apply_multiplicity(decisions, alpha=0.05)
     by_key = {
@@ -1202,6 +1226,8 @@ def run_self_test() -> int:
     }
     sf_comfort = by_key[("goal", "social_force", "comfort_exposure_person_s")]
     orca_comfort = by_key[("goal", "orca", "comfort_exposure_person_s")]
+    sf_orca_comfort = by_key[("social_force", "orca", "comfort_exposure_person_s")]
+    assert len(decisions) == len(FROZEN_PLANNER_PAIRS) * len(METRIC_IDS)
     assert sf_comfort["n_paired"] == 180, sf_comfort["n_paired"]
     assert abs(sf_comfort["mean_difference"] - true_effect) < 0.03, sf_comfort["mean_difference"]
     assert sf_comfort["ci95_low"] < true_effect < sf_comfort["ci95_high"], (
@@ -1216,6 +1242,7 @@ def run_self_test() -> int:
         sf_comfort["raw_p_value"],
     )
     assert orca_comfort["holm_adjusted_p_value"] >= sf_comfort["holm_adjusted_p_value"]
+    assert sf_orca_comfort["n_paired"] == 180, sf_orca_comfort["n_paired"]
     # Unavailable families are diagnostic-only.
     for metric_id in (
         "pedestrian_deviation_mean_m",
@@ -1249,6 +1276,7 @@ def run_self_test() -> int:
     for malformed_rows, reason in (
         (rows[:-1], "incomplete campaign matrix"),
         (rows + [rows[0]], "duplicate campaign identity"),
+        ([{**rows[0], "scenario_id": "unfrozen_scenario"}, *rows[1:]], "unfrozen scenario"),
         (
             [{**rows[0], "schema_valid": False}, *rows[1:]],
             "schema-invalid social-compliance block",
@@ -1295,8 +1323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_self_test()
     validate_protocol_parameters(args)
     policy = {
-        "reference_planner": args.reference_planner,
-        "comparison_planners": list(args.comparison_planners),
+        "planner_pairs": [list(pair) for pair in FROZEN_PLANNER_PAIRS],
         "bootstrap_samples": args.bootstrap_samples,
         "permutation_samples": args.permutation_samples,
         "bootstrap_seed": args.bootstrap_seed,
@@ -1307,8 +1334,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     valid_rows, validation_report = validate_rows(rows)
     decisions = compute_decisions(
         valid_rows,
-        reference=args.reference_planner,
-        comparisons=args.comparison_planners,
         bootstrap_samples=args.bootstrap_samples,
         permutation_samples=args.permutation_samples,
         bootstrap_seed=args.bootstrap_seed,
@@ -1324,8 +1349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "campaign_manifest_sha256": _file_sha256(args.campaign_manifest)
         if args.campaign_manifest
         else None,
-        "reference_planner": args.reference_planner,
-        "comparison_planners": list(args.comparison_planners),
+        "planner_pairs": [list(pair) for pair in FROZEN_PLANNER_PAIRS],
     }
     report_markdown = build_report_markdown(
         decisions=decisions,

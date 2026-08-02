@@ -369,6 +369,28 @@ def test_validate_record_rejects_reversed_onset_interval() -> None:
         validate_failure_diagnosis_record(payload)
 
 
+def test_reversed_predicate_interval_fails_closed_to_valid_unknown_record() -> None:
+    """Malformed predicate timing must not let the adapter emit an invalid record."""
+    predicate = _predicate(
+        "collision",
+        time_interval_s=[2.0, 1.0],
+        steps=[20, 10],
+        severity="critical",
+    )
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.failure_level == "interaction"
+    assert record.unknown_reason == "invalid_time_interval:end_precedes_start"
+    assert record.onset_time_s is None
+    assert record.onset_interval == [None, None]
+    # Raw malformed timing remains traceable in the source/evidence pointer.
+    assert record.source_predicate["time_interval_s"] == [2.0, 1.0]
+    assert record.causal_evidence[0]["time_interval_s"] == [2.0, 1.0]
+    validate_failure_diagnosis_record(record.to_dict())
+
+
 def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> None:
     """unknown_failure_diagnosis_record mirrors unknown_failure_mechanism_record."""
     predicate = _predicate("collision", validity_status=_NOT_AVAILABLE, severity="critical")

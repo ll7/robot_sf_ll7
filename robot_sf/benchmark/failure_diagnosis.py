@@ -319,6 +319,15 @@ def diagnose_from_trace_failure_predicate(
     mapping = _PREDICATE_DIAGNOSIS_MAP.get(predicate_id)
     failure_level = mapping[1] if mapping is not None else "analysis"
 
+    if _has_reversed_time_interval(predicate_dict.get("time_interval_s")):
+        return unknown_failure_diagnosis_record(
+            predicate_dict,
+            "invalid_time_interval:end_precedes_start",
+            failure_level=failure_level,
+            proposed_correction=proposed_correction,
+            correction_status=correction_status,
+        )
+
     if validity_status != _VALID_VALIDITY_STATUS:
         reason = f"predicate_validity_not_valid:{validity_status or 'empty'}"
         return unknown_failure_diagnosis_record(
@@ -726,7 +735,31 @@ def _onset_from_time_interval(
     end = time_interval_s[1] if len(time_interval_s) >= 2 else None
     start_value = _finite_or_none(start)
     end_value = _finite_or_none(end)
+    if start_value is not None and end_value is not None and end_value < start_value:
+        return None, [None, None]
     return start_value, [start_value, end_value]
+
+
+def _has_reversed_time_interval(time_interval_s: Any) -> bool:
+    """Return whether a finite predicate interval ends before its start.
+
+    A reversed interval cannot support deterministic onset localization. The adapter
+    preserves the raw predicate in its evidence pointer, but emits an ``unknown``
+    diagnosis with a schema-valid absent onset rather than a record that contradicts
+    :func:`validate_failure_diagnosis_record`.
+
+    Args:
+        time_interval_s: Candidate two-element predicate time interval.
+
+    Returns:
+        ``True`` only when both finite endpoints are present and the end precedes
+        the start.
+    """
+    if not isinstance(time_interval_s, (list, tuple)) or len(time_interval_s) < 2:
+        return False
+    start_value = _finite_or_none(time_interval_s[0])
+    end_value = _finite_or_none(time_interval_s[1])
+    return start_value is not None and end_value is not None and end_value < start_value
 
 
 def _diagnosis_severity(severity: Any, *, validity_status: str) -> str:

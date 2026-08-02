@@ -1,0 +1,70 @@
+# Issue #6481: frozen CPU-bounded social-compliance preflight smoke.
+#
+# Purpose:
+#   Prove the already-merged metrics.social_compliance diagnostic block
+#   (PR #6236) survives one small native-or-adapter cross-planner execution and
+#   aggregation path before any full campaign is preregistered.
+#
+# Evidence tier: smoke / preflight only.
+# Claim boundary:
+#   No planner ranking, fairness, ethics, safety, or real-world validity
+#   claim.  No SNQI weighting or headline metric change.  Fallback or
+#   degraded rows are unavailable and cannot count as successful evidence.
+# Execution-mode note:
+#   goal runs natively; social_force and orca are velocity-vector planners
+#   that execute through declared compatibility adapters (benchmark-capable
+#   per the issue #691 fallback policy and
+#   NATIVE_EXECUTION_MODES = {native, adapter}).  No row uses fallback or
+#   degraded execution.
+#
+# Canonical validation:
+#   robot_sf_bench validate-config --matrix configs/scenarios/issue_6481_social_compliance_preflight.yaml
+#   robot_sf_bench preview-scenarios --matrix configs/scenarios/issue_6481_social_compliance_preflight.yaml
+#
+# Canonical run (headless):
+#   DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+#     uv run python scripts/tools/run_camera_ready_benchmark.py \
+#       --config configs/benchmarks/issue_6481_social_compliance_preflight_smoke.yaml \
+#       --output-root output/benchmarks/issue_6481_preflight
+
+name: issue_6481_social_compliance_preflight_smoke
+paper_facing: false
+scenario_matrix: configs/scenarios/issue_6481_social_compliance_preflight.yaml
+
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112, 113]
+
+workers: 1
+horizon: 250
+dt: 0.1
+record_forces: false
+resume: false
+stop_on_failure: false
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+
+planners:
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast

@@ -1892,21 +1892,27 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
 
 
 def test_issue_2557_base_config_inheritance_equivalence() -> None:
-    """All 24 seed-fixed issue-2557 variants should resolve identically to pre-change baseline."""
+    """All issue-2557 variants must match their pre-refactor resolved-config fingerprints."""
     baseline_path = Path("tests/integration/_baseline_issue_2557_resolved.json").resolve()
     assert baseline_path.exists(), (
         "Pre-change baseline missing; re-run capture before changing configs"
     )
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-    assert len(baseline) == 24
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
 
     ablate_dir = Path("configs/training/ppo/ablations")
-    for name, expected in baseline.items():
-        config_path = (ablate_dir / name).resolve()
-        assert config_path.exists(), f"Variant {name} no longer exists"
+    variant_paths = sorted(ablate_dir.glob("expert_ppo_issue_2557_*_seed*_fixed.yaml"))
+    assert len(variant_paths) == 24
+    assert {path.name for path in variant_paths} == set(fingerprints)
+
+    for config_path in variant_paths:
         resolved = _load_expert_training_config_mapping(config_path)
-        actual = json.loads(json.dumps(resolved, default=str, sort_keys=True))
-        assert actual == expected, (
-            f"Resolved config {name} differs from baseline. "
-            "Regenerate baseline if the change is intentional."
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[config_path.name], (
+            f"Resolved config {config_path.name} differs from the baseline at "
+            f"{baseline['source_revision']}."
         )

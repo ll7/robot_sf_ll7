@@ -14,9 +14,12 @@ suite is falsification-oriented development triage, not nominal benchmark
 aggregation.
 
 Issue #4360 uses this page as the current inventory of dispatchable adversarial
-pedestrian machinery. The parked half of #4360 is deliberately not implemented
-here: no bounded adversary policy-interface redesign and no new stress-case
-metrics before the dissertation release window.
+pedestrian machinery. The separately implemented bounded residual-control
+policy interface is documented in
+[the reactive residual-adversary design note](../context/issue_4360_reactive_adversary_design.md).
+It is a capability-only runtime slice, not a manifest/search smoke lane, and it
+does not add a stress-case metric or any benchmark, planner-ranking, safety, or
+paper-facing claim.
 
 ## Current Hooks
 

@@ -8,6 +8,10 @@ from pysocialforce.scene import normalize_integration_scheme
 
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
+from robot_sf.ped_npc.residual_adversary import (
+    ResidualAdversaryConfig,
+    _normalize_residual_adversary_config,
+)
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
@@ -304,6 +308,15 @@ class SimulationSettings:
     apf_config: AdversarialPedForceConfig = field(default_factory=AdversarialPedForceConfig)
     """Adversarial pedestrian force configuration"""
 
+    residual_adversary: ResidualAdversaryConfig = field(default_factory=ResidualAdversaryConfig)
+    """Bounded residual-control reactive adversary configuration (issue #4360).
+
+    Opt-in and off by default. When ``is_active`` the simulator adds a bounded
+    residual acceleration to the nominal pedestrian forces every step, perturbing
+    (not replacing) the Social Force base law at a 0.5 s macro-action cadence.
+    Capability-only: no benchmark, metric, or paper-facing claim.
+    """
+
     ped_density_by_difficulty: list[float] = field(default_factory=lambda: [0.01, 0.02, 0.04, 0.08])
     """Pedestrian density by difficulty level"""
     max_total_pedestrians: int | None = None
@@ -499,6 +512,7 @@ class SimulationSettings:
             raise ValueError("Pedestrian-Robot-Force settings need to be specified!")
         if self.apf_config is None or not isinstance(self.apf_config, AdversarialPedForceConfig):
             raise ValueError("Adversarial-ped-force settings need to be specified!")
+        self.residual_adversary = _normalize_residual_adversary_config(self.residual_adversary)
         self._validate_route_spawn_config()
         self._validate_desired_speed_config()
 

@@ -12,6 +12,7 @@ claim calibrated real-world collision probability or planner improvement.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -44,17 +45,16 @@ DT_S = 0.1
 
 def _risk_config(**overrides) -> RiskEstimatorConfig:
     """Return a deterministic estimator config with the given overrides."""
-    base = {
-        "horizon_steps": HORIZON_STEPS,
-        "dt_s": DT_S,
-        "n_samples": 512,
-        "velocity_std_m_s": 0.0,
-        "robot_radius_m": 0.3,
-        "pedestrian_radius_m": 0.3,
-        "seed": 1,
-    }
-    base.update(overrides)
-    return RiskEstimatorConfig(**base)
+    base = RiskEstimatorConfig(
+        horizon_steps=HORIZON_STEPS,
+        dt_s=DT_S,
+        n_samples=512,
+        velocity_std_m_s=0.0,
+        robot_radius_m=0.3,
+        pedestrian_radius_m=0.3,
+        seed=1,
+    )
+    return replace(base, **overrides)
 
 
 def _ped(actor_id: int, x: float, y: float, vx: float = 0.0, vy: float = 0.0) -> PedestrianState:
@@ -447,7 +447,12 @@ def test_rank_rejects_nonintegral_peak_window() -> None:
     )
 
     with pytest.raises(ValueError, match="non-negative integer"):
-        rank_trajectories([action], [], risk_config=_risk_config(), peak_window_half_steps=0.5)
+        rank_trajectories(
+            [action],
+            [],
+            risk_config=_risk_config(),
+            peak_window_half_steps=0.5,  # ty: ignore
+        )
 
 
 def test_rank_reuses_candidate_action_schema_verbatim() -> None:

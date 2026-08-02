@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import csv
 import io
 import json
@@ -20,6 +21,7 @@ import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
 import robot_sf.benchmark.camera_ready._config_types as camera_ready_config_types_module
 import robot_sf.benchmark.camera_ready._legacy_campaign_facade as camera_ready_legacy_facade
 import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
+import robot_sf.benchmark.camera_ready.campaign as camera_ready_campaign_impl_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 import robot_sf.benchmark.camera_ready_campaign_config as camera_ready_campaign_config_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
@@ -116,6 +118,89 @@ def test_camera_ready_campaign_legacy_module_is_package_owned_facade() -> None:
     """Legacy campaign module resolves to the package-owned compatibility facade."""
     assert camera_ready_campaign_module is camera_ready_legacy_facade
     assert camera_ready_campaign_module.run_campaign is camera_ready_legacy_facade.run_campaign
+
+
+def test_campaign_refactor_functions_remain_focused() -> None:
+    """Issue #6535 keeps coordinators delegated and all focused functions under 80 lines."""
+    source_path = Path(camera_ready_campaign_impl_module.__file__)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    function_nodes = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    function_lengths = {
+        name: node.end_lineno - node.lineno + 1 for name, node in function_nodes.items()
+    }
+
+    focused_function_names = (
+        "_build_subprocess_arm_params",
+        "_parse_subprocess_output",
+        "_collect_subprocess_episodes",
+        "_build_subprocess_run_entry",
+        "_execute_subprocess_arm",
+        "_check_subprocess_stop_on_failure",
+        "_run_campaign_planner_variant_subprocess",
+        "_unpack_campaign_preflight",
+        "_post_run_integrity_and_fairness",
+        "_write_campaign_table_artifacts",
+        "_write_breakdown_and_parity_artifacts",
+        "_build_parity_rows",
+        "_write_parity_table",
+        "_compute_campaign_outcome_state",
+        "_resolve_snqi_baseline",
+        "_evaluate_campaign_snqi",
+        "_record_snqi_contract_warnings",
+        "_build_and_write_snqi_section",
+        "_compute_snqi_positioning",
+        "_build_snqi_diagnostics_payload",
+        "_write_seed_variability_section",
+        "_write_actuation_envelope_section",
+        "_build_campaign_execution_metadata",
+        "_build_campaign_metadata_section",
+        "_build_campaign_summary_dict",
+        "_build_release_artifact_metadata",
+        "_build_campaign_artifacts_section",
+        "_build_run_meta_preflight_artifacts",
+        "_optional_artifact_path",
+        "_build_seed_variability_metadata",
+        "_build_run_meta",
+        "_build_campaign_manifest_payload",
+        "_write_run_level_files",
+        "_export_publication_bundle_section",
+        "_write_final_campaign_artifacts",
+        "_prepare_campaign_execution",
+        "_write_campaign_tables",
+        "_write_campaign_analysis",
+        "_build_campaign_summary_and_write_manifest",
+        "_finalize_campaign_execution",
+        "_run_campaign_orchestrator",
+        "_build_orchestrator_return",
+    )
+    for function_name in focused_function_names:
+        assert function_lengths[function_name] <= 80, function_name
+
+    expected_phase_calls = {
+        "_run_campaign_planner_variant_subprocess": {
+            "_prepare_campaign_planner_variant_run",
+            "_execute_subprocess_arm",
+            "_parse_subprocess_output",
+            "_collect_subprocess_episodes",
+            "_build_subprocess_run_entry",
+            "_check_subprocess_stop_on_failure",
+        },
+        "_run_campaign_orchestrator": {
+            "_prepare_campaign_execution",
+            "_write_campaign_tables",
+            "_write_campaign_analysis",
+            "_build_campaign_summary_and_write_manifest",
+            "_finalize_campaign_execution",
+        },
+    }
+    for function_name, expected_calls in expected_phase_calls.items():
+        actual_calls = {
+            call.func.id
+            for call in ast.walk(function_nodes[function_name])
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+        }
+        missing_calls = expected_calls - actual_calls
+        assert not missing_calls, f"{function_name} is missing phase calls: {sorted(missing_calls)}"
 
 
 def test_camera_ready_config_types_keep_legacy_import_identity() -> None:

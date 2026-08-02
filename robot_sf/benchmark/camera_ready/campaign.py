@@ -974,9 +974,6 @@ def _build_subprocess_arm_params(
 
 def _parse_subprocess_output(
     proc: subprocess.CompletedProcess[str],
-    *,
-    planner_key: str,
-    kinematics: str,
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     """Parse subprocess stdout into structured result components.
 
@@ -1220,9 +1217,7 @@ def _run_campaign_planner_variant_subprocess(
         active_observation_mode=active_observation_mode,
         run=run,
     )
-    summary, cleanup_metrics, warnings = _parse_subprocess_output(
-        proc, planner_key=planner.key, kinematics=kinematics
-    )
+    summary, cleanup_metrics, warnings = _parse_subprocess_output(proc)
     status = summary.get("status", "unknown")
     records, seed_variability_records, aggregates = _collect_subprocess_episodes(
         run,
@@ -3214,7 +3209,7 @@ def _write_campaign_report_artifacts(  # noqa: PLR0913
     run_entries: list[dict[str, Any]],
     planner_rows: list[dict[str, Any]],
     campaign_integrity: dict[str, Any],
-    kinematics_matrix: dict[str, Any],
+    kinematics_matrix: tuple[str, ...],
     seed_variability_records: list[dict[str, Any]],
     snqi_weights: dict[str, Any] | None,
     snqi_baseline: dict[str, Any] | None,
@@ -3291,7 +3286,7 @@ def _build_summary_and_write_run_files(  # noqa: PLR0913
     arm_rollup: dict[str, Any],
     fairness_report: Any,
     warnings: list[str],
-    kinematics_matrix: dict[str, Any],
+    kinematics_matrix: tuple[str, ...],
     invoked_command: str | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build campaign summary and write run-level files.
@@ -3421,7 +3416,7 @@ def _finalize_campaign_outputs(  # noqa: PLR0913
     arm_rollup: dict[str, Any],
     fairness_report: Any,
     warnings: list[str],
-    kinematics_matrix: dict[str, Any],
+    kinematics_matrix: tuple[str, ...],
     invoked_command: str | None,
     skip_publication_bundle: bool,
     dependencies: _CampaignRuntimeDependencies,

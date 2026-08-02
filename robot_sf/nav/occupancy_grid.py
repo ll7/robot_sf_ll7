@@ -554,10 +554,10 @@ class OccupancyGrid:
             TypeError: If obstacles or pedestrians are not lists.
         """
         if not isinstance(obstacles, list):
-            logger.error(f"Invalid obstacles type: {type(obstacles).__name__}, expected list")
+            logger.error("Invalid obstacles type: {}, expected list", type(obstacles).__name__)
             raise TypeError(f"obstacles must be list, got {type(obstacles)}")
         if not isinstance(pedestrians, list):
-            logger.error(f"Invalid pedestrians type: {type(pedestrians).__name__}, expected list")
+            logger.error("Invalid pedestrians type: {}, expected list", type(pedestrians).__name__)
             raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")
 
     def _compute_grid_origin(
@@ -571,7 +571,7 @@ class OccupancyGrid:
         if use_ego_frame:
             grid_origin_x = -self.config.width / 2
             grid_origin_y = -self.config.height / 2
-            logger.debug(f"Ego-frame grid origin: ({grid_origin_x:.2f}, {grid_origin_y:.2f})")
+            logger.debug("Ego-frame grid origin: ({:.2f}, {:.2f})", grid_origin_x, grid_origin_y)
         elif self.config.center_on_robot:
             grid_origin_x = robot_x - self.config.width / 2
             grid_origin_y = robot_y - self.config.height / 2
@@ -676,7 +676,7 @@ class OccupancyGrid:
                     grid_origin_y,
                     value=1.0,
                 )
-                logger.debug(f"Rasterized {num_rasterized} pedestrians")
+                logger.debug("Rasterized {} pedestrians", num_rasterized)
             elif channel == GridChannel.ROBOT:
                 self._rasterize_robot_channel(
                     channel_idx, robot_pose, use_ego_frame, grid_origin_x, grid_origin_y
@@ -708,7 +708,7 @@ class OccupancyGrid:
                 grid_origin_y,
                 value=1.0,
             )
-            logger.debug(f"Rasterized {num_rasterized} obstacles")
+            logger.debug("Rasterized {} obstacles", num_rasterized)
             if transformed_polygons:
                 filled = 0
                 for polygon in transformed_polygons:
@@ -747,7 +747,7 @@ class OccupancyGrid:
             grid_origin_y,
             value=1.0,
         )
-        logger.debug(f"Rasterized robot: {success}")
+        logger.debug("Rasterized robot: {}", success)
 
     def _compute_combined_channel(self) -> None:
         """Compute the combined channel as the element-wise max of all other channels."""

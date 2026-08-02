@@ -413,6 +413,12 @@ def test_validate_record_rejects_tampered_adapter_provenance() -> None:
     with pytest.raises(FailureDiagnosisError, match="exact source_predicate pointer"):
         validate_failure_diagnosis_record(unrelated_pointer)
 
+    remapped_source = record.to_dict()
+    remapped_source["source_predicate"]["predicate_id"] = "future_unmodelled_predicate"
+    remapped_source["causal_evidence"][0]["predicate_id"] = "future_unmodelled_predicate"
+    with pytest.raises(FailureDiagnosisError, match="deterministic adapter result"):
+        validate_failure_diagnosis_record(remapped_source)
+
 
 def test_validate_record_rejects_non_two_element_onset_interval() -> None:
     """onset_interval must be a two-element list."""

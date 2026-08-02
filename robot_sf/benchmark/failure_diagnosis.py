@@ -748,6 +748,20 @@ def _require_adapter_provenance_consistency(record: Mapping[str, Any]) -> None:
                 "confidence, and evidence_mode"
             )
 
+    expected_record = diagnose_from_trace_failure_predicate(
+        source_predicate,
+        proposed_correction=record["proposed_correction"],
+        correction_status=record["correction_status"],
+    ).to_dict()
+    mismatched_fields = [
+        field for field in _REQUIRED_RECORD_FIELDS if record[field] != expected_record[field]
+    ]
+    if mismatched_fields:
+        raise FailureDiagnosisError(
+            "record fields must match the deterministic adapter result for source_predicate: "
+            f"{mismatched_fields}"
+        )
+
 
 def _normalize_record(record: Mapping[str, Any]) -> dict[str, Any]:
     """Return a shallow copy of ``record`` with vocabulary fields string-normalized.

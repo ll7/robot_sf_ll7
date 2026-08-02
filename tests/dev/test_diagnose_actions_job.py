@@ -283,6 +283,30 @@ def test_main_fails_closed_when_annotation_json_is_malformed(monkeypatch, capsys
     assert "Could not parse check-run annotations JSON" in capsys.readouterr().err
 
 
+def test_main_fails_closed_when_annotation_items_are_not_objects(monkeypatch, capsys) -> None:
+    """A JSON array containing a scalar is not a valid annotation page."""
+    results = iter(
+        [
+            _result(
+                0,
+                json.dumps(
+                    {
+                        "run_id": 456,
+                        "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/789",
+                    }
+                ),
+            ),
+            _result(1, stderr="HTTP 404: Not Found"),
+            _result(0, _include_page(json.dumps([{"message": "valid"}, "not an object"]))),
+        ]
+    )
+
+    monkeypatch.setattr(diagnose_actions_job, "_gh", lambda _args: next(results))
+
+    assert diagnose_actions_job.main(["123", "--repo", "owner/repo"]) == 1
+    assert "expected annotation objects" in capsys.readouterr().err
+
+
 def test_main_fails_closed_when_include_headers_are_missing(monkeypatch, capsys) -> None:
     """A valid JSON body without ``--include`` headers cannot prove pagination ended."""
     results = iter(

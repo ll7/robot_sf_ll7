@@ -135,7 +135,16 @@ def _fetch_annotation_page(
             file=sys.stderr,
         )
         return None, None
-    return page, _next_link(headers_block)
+    annotations: list[dict[str, Any]] = []
+    for annotation in page:
+        if not isinstance(annotation, dict):
+            print(
+                "Could not recover check-run annotations: expected annotation objects",
+                file=sys.stderr,
+            )
+            return None, None
+        annotations.append(annotation)
+    return annotations, _next_link(headers_block)
 
 
 def _collect_annotations(initial_path: str) -> list[dict[str, Any]] | None:

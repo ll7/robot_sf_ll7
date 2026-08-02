@@ -56,7 +56,7 @@ class EffectSizeReport:
     comparisons: list[EffectSizeEntry]
 
 
-def compute_effect_sizes(groups, cfg):  # T032
+def compute_effect_sizes(groups, cfg) -> list[EffectSizeReport]:  # T032
     """Compute effect sizes across densities for each archetype.
 
     Returns:

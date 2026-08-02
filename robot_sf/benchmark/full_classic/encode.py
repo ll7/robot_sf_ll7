@@ -65,7 +65,7 @@ def _iter_first(
     except StopIteration:  # empty generator
         return None, iter(())
 
-    def chain_first():  # local generator
+    def chain_first() -> Iterator[np.ndarray]:  # local generator
         """Yield the first frame followed by the remaining iterator."""
         yield first
         yield from it

@@ -169,7 +169,7 @@ def adversarial_ped_force(  # noqa: PLR0913
     offset: float,
     threshold: float,
     target_ped_idx: np.ndarray,
-):
+) -> None:
     """
     Compute the attractive force pulling the target pedestrian towards a point in front of the robot
       specified by the offset .

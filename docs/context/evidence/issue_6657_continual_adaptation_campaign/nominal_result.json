@@ -1,0 +1,8 @@
+{
+  "schema_version": "continual_adaptation_evidence.v1",
+  "result_type": "nominal",
+  "run_id": "continual_adaptation_campaign_issue_6657",
+  "issue": 6657,
+  "claim_boundary": "Metadata-only fixture; not benchmark or paper evidence.",
+  "evidence_boundary": "protocol_contract_only_no_training_no_checkpoint_write_no_safety_wrapper_mutation_no_policy_promotion_no_benchmark_or_paper_evidence"
+}

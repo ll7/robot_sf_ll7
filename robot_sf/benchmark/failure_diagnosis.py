@@ -496,8 +496,7 @@ def unknown_failure_diagnosis_record(
     _validate_correction_inputs(proposed_correction, correction_status)
     if failure_level not in FAILURE_LEVELS:
         raise FailureDiagnosisError(f"unsupported failure_level: {failure_level!r}")
-    normalized_reason = str(reason).strip()
-    if not normalized_reason:
+    if not isinstance(reason, str) or not (normalized_reason := reason.strip()):
         raise FailureDiagnosisError("unknown reason must be a non-empty string")
     predicate_dict = _predicate_to_dict(predicate)
     validity_status = _predicate_text(predicate_dict, "validity_status")

@@ -617,6 +617,9 @@ def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> N
     # Empty reason is rejected.
     with pytest.raises(FailureDiagnosisError, match="non-empty"):
         unknown_failure_diagnosis_record(predicate, "   ")
+    # Non-string values must not be silently converted into a schema reason.
+    with pytest.raises(FailureDiagnosisError, match="non-empty string"):
+        unknown_failure_diagnosis_record(predicate, None)  # type: ignore[arg-type]
 
 
 def test_explicit_unknown_helper_record_validates_and_wraps() -> None:

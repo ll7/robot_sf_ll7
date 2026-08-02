@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import torch
 
-from robot_sf.training.discrete_action_lattice import DiscreteUnicycleActionLattice
-from robot_sf.training.distributional_rl import QuantileQNetwork
-from robot_sf.training.risk_objectives import RISK_OBJECTIVES, score_action_quantiles
+from robot_sf.training.risk_objectives import RISK_OBJECTIVES
+
+if TYPE_CHECKING:
+    import torch
+
+    from robot_sf.training.discrete_action_lattice import DiscreteUnicycleActionLattice
+    from robot_sf.training.distributional_rl import QuantileQNetwork
 
 
 @dataclass
@@ -100,6 +103,13 @@ class DistributionalRLPlanner:
             if self.config.fallback_to_goal:
                 return
             raise FileNotFoundError(f"distributional RL checkpoint not found: {path}")
+        import torch  # noqa: PLC0415
+
+        from robot_sf.training.discrete_action_lattice import (  # noqa: PLC0415
+            DiscreteUnicycleActionLattice,
+        )
+        from robot_sf.training.distributional_rl import QuantileQNetwork  # noqa: PLC0415
+
         checkpoint = torch.load(path, map_location=self.config.device, weights_only=True)
         model_metadata = checkpoint["model_metadata"]
         lattice_payload = checkpoint["action_lattice"]
@@ -154,6 +164,10 @@ class DistributionalRLPlanner:
                 return {"v": 0.0, "omega": 0.0}
             raise RuntimeError("distributional RL model unavailable")
         observation = self._flatten_observation(obs, observation_dim=self._model.observation_dim)
+        import torch  # noqa: PLC0415
+
+        from robot_sf.training.risk_objectives import score_action_quantiles  # noqa: PLC0415
+
         with torch.no_grad():
             tensor = torch.as_tensor(
                 observation, dtype=torch.float32, device=self.config.device

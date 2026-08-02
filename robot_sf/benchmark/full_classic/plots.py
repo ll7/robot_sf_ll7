@@ -331,7 +331,7 @@ def _episode_length_histogram(out_dir: Path, records: Iterable[dict]) -> _PlotAr
     return _PlotArtifact("episode_lengths", str(pdf_path), status, note=note)
 
 
-def generate_plots(groups, records, out_dir, cfg):
+def generate_plots(groups, records, out_dir, cfg) -> list[_PlotArtifact]:
     """Generate plots returning artifact metadata list.
 
     Includes:

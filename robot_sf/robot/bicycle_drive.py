@@ -107,7 +107,7 @@ class BicycleMotion:
 
     config: BicycleDriveSettings
 
-    def move(self, state: BicycleDriveState, action: BicycleAction, d_t: float):
+    def move(self, state: BicycleDriveState, action: BicycleAction, d_t: float) -> None:
         """Update the bicycle state by applying the provided action for ``d_t`` seconds.
 
         Args:
@@ -219,7 +219,7 @@ class BicycleDriveRobot:
         """Return the last executed bicycle yaw rate in radians per second."""
         return self.state.current_yaw_rate
 
-    def apply_action(self, action: BicycleAction, d_t: float):
+    def apply_action(self, action: BicycleAction, d_t: float) -> None:
         """Apply action and advance simulation by dt.
 
         Args:
@@ -228,7 +228,7 @@ class BicycleDriveRobot:
         """
         self.movement.move(self.state, action, d_t)
 
-    def reset_state(self, new_pose: RobotPose):
+    def reset_state(self, new_pose: RobotPose) -> None:
         """Update vehicle state directly.
 
         Args:

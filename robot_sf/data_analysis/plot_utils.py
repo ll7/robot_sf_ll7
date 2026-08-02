@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from loguru import logger
 
 
-def ensure_plot_dir_exists(plot_path):
+def ensure_plot_dir_exists(plot_path) -> str:
     """
     Ensure the plot directory exists, creating it if necessary.
 
@@ -34,7 +34,7 @@ def ensure_plot_dir_exists(plot_path):
     return plot_path
 
 
-def save_plot(filename, title=None, interactive=False):
+def save_plot(filename, title=None, interactive=False) -> None:
     """
     Save a plot to file, ensuring the directory exists.
 

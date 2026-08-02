@@ -290,7 +290,7 @@ def cluster_robust_interval(
     return (low, high)
 
 
-def aggregate_metrics(records: Iterable[dict], cfg):  # T030
+def aggregate_metrics(records: Iterable[dict], cfg) -> list[AggregateMetricsGroup]:  # T030
     """Aggregate metrics grouped by archetype and density.
 
     Resampling mode is selected by ``cfg.bootstrap_mode``: ``"flat"`` (default,

@@ -397,6 +397,15 @@ def test_build_title_linked_index_matches_titles_locally() -> None:
     assert open_issue_closure_audit.build_title_linked_index([], [12, 13]) == {12: [], 13: []}
 
 
+def test_build_title_linked_index_deduplicates_repeated_issue_numbers() -> None:
+    """Repeated paginated issue rows must not duplicate a linked PR in the report."""
+    merged_row = open_issue_closure_audit._normalize_rest_pr_row(_rest_pr(91, "fix #12 contract"))
+
+    index = open_issue_closure_audit.build_title_linked_index([merged_row], [12, 12])
+
+    assert [pr["number"] for pr in index[12]] == [91]
+
+
 def test_build_title_linked_index_respects_digit_boundaries() -> None:
     """``#12`` must not match issue 1, 2, or 120; only standalone 12."""
     merged_rows = [

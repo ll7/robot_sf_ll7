@@ -291,12 +291,13 @@ def build_title_linked_index(
     function matches each PR title against every open issue number in-process so
     the audit never issues one search request per open issue.
     """
-    index: dict[int, list[dict[str, object]]] = {number: [] for number in issue_numbers}
-    if not issue_numbers:
+    unique_issue_numbers = tuple(dict.fromkeys(issue_numbers))
+    index: dict[int, list[dict[str, object]]] = {number: [] for number in unique_issue_numbers}
+    if not unique_issue_numbers:
         return index
     for pr_row in merged_pr_rows:
         title = _optional_str(pr_row.get("title"))
-        for number in issue_numbers:
+        for number in unique_issue_numbers:
             if _title_mentions_issue(title, number):
                 index[number].append(pr_row)
     return index

@@ -223,6 +223,12 @@ def test_receipt_preserves_contract_metadata_and_classifies_execution_modes() ->
     }
     assert _classify_row(invalid_contract_record)["schema_valid"] is False
 
+    oversized_support_record = deepcopy(record)
+    oversized_support_record["metrics"]["social_compliance"]["metrics"][
+        "comfort_exposure_person_s"
+    ]["support_count"] = 10**1000
+    assert _classify_row(oversized_support_record)["schema_valid"] is False
+
     aggregate = compute_aggregates([record])["goal"]
     campaign_with_aggregate = {
         "runs": [
@@ -365,7 +371,7 @@ def test_receipt_rejects_malformed_episode_identities(
     assert receipt["identities_ok"] is False
 
 
-@pytest.mark.parametrize("invalid_support_count", [True, -1, float("nan"), float("inf")])
+@pytest.mark.parametrize("invalid_support_count", [True, -1, float("nan"), float("inf"), 10**1000])
 def test_aggregate_contract_rejects_reducers_from_invalid_support_counts(
     invalid_support_count: object,
 ) -> None:

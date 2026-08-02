@@ -188,7 +188,12 @@ def _is_valid_support_count(value: Any, *, require_positive: bool = False) -> bo
     """Return whether a support count has the contract type and range."""
     if not isinstance(value, int) or isinstance(value, bool):
         return False
-    return value > 0 if require_positive else value >= 0
+    if value <= 0 if require_positive else value < 0:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
 
 
 def _normalized_text(value: Any, *, default: str = "unknown") -> str:
@@ -365,10 +370,7 @@ def _aggregate_metric_contract_is_ok(
         support
         for row, status in zip(rows, statuses, strict=True)
         for support in (row["support_counts"].get(metric_id, 0),)
-        if status == "available"
-        and isinstance(support, int)
-        and not isinstance(support, bool)
-        and support >= 0
+        if status == "available" and _is_valid_support_count(support)
     )
     expected_denominators = dict(
         sorted(
@@ -546,13 +548,15 @@ def _classify_row(record: dict[str, Any]) -> dict[str, Any]:
                 and denominator == expected_contract["denominator"]
                 and isinstance(status, str)
                 and status in VALID_STATUSES
-                and isinstance(support_count, int)
-                and not isinstance(support_count, bool)
-                and support_count >= 0
+                and _is_valid_support_count(support_count)
             )
             if status == "available":
                 raw_value = row.get("value")
-                row_valid = row_valid and support_count > 0 and _is_finite_number(raw_value)
+                row_valid = (
+                    row_valid
+                    and _is_valid_support_count(support_count, require_positive=True)
+                    and _is_finite_number(raw_value)
+                )
                 if row_valid:
                     values[metric_id] = float(raw_value)
             else:

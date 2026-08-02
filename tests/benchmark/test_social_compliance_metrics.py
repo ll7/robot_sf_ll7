@@ -240,7 +240,9 @@ def test_aggregate_excludes_invalid_available_social_values(invalid_value: objec
     assert "p95" not in summary
 
 
-@pytest.mark.parametrize("invalid_support_count", [True, 0, -1, float("nan"), float("inf")])
+@pytest.mark.parametrize(
+    "invalid_support_count", [True, 0, -1, float("nan"), float("inf"), 10**1000]
+)
 def test_aggregate_excludes_invalid_available_social_support_counts(
     invalid_support_count: object,
 ) -> None:

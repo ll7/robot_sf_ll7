@@ -457,7 +457,12 @@ def _is_valid_social_support_count(value: Any, *, require_positive: bool = False
     """Return whether a social-compliance support count has the contract type and range."""
     if not isinstance(value, int) or isinstance(value, bool):
         return False
-    return value > 0 if require_positive else value >= 0
+    if value <= 0 if require_positive else value < 0:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
 
 
 def _is_finite_social_value(value: Any) -> bool:
@@ -749,8 +754,12 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
         if isinstance(v, bool):
             out[k] = float(v)
             continue
-        if isinstance(v, int | float) and math.isfinite(float(v)):
-            out[k] = float(v)
+        if isinstance(v, int | float):
+            try:
+                if math.isfinite(float(v)):
+                    out[k] = float(v)
+            except (OverflowError, ValueError):
+                continue
     return out
 
 

@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.constants import COLLISION_DIST, NEAR_MISS_DIST
+from robot_sf.evidence.writers import write_json
 
 GATE0_DECISION_SCHEMA = "radius_sensitivity_gate0_decision.v1"
 GATE0_REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
@@ -825,7 +826,7 @@ def write_gate0_decision(output_path: str | Path) -> Path:
     decision = build_gate0_decision()
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(path, decision)
     return path
 
 

@@ -85,7 +85,7 @@ class TelemetryPane:
             except (TypeError, ValueError):
                 continue
 
-    def render_surface(self):
+    def render_surface(self) -> pygame.Surface | None:
         """Render the pane as a pygame.Surface, or return cached surface if throttled.
 
         Returns:
@@ -177,7 +177,7 @@ class TelemetrySession:
         with self.telemetry_path.open("a", encoding="utf-8") as handle:
             handle.write(f"{json.dumps(line)}\n")
 
-    def render_surface(self):
+    def render_surface(self) -> pygame.Surface | None:
         """Render the telemetry pane surface (may return None for throttling).
 
         Returns:

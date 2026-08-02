@@ -88,6 +88,27 @@ def test_referenced_config_paths_are_listed_in_checksums(packet: dict[str, objec
         assert rel_path in checksums, f"{key} not checksummed: {rel_path}"
 
 
+def test_br06_inherited_base_config_is_checksummed() -> None:
+    """Packets using the migrated BR-06 child must pin its inherited base bytes."""
+    packet_paths = (
+        _REPO_ROOT / "configs/training/ppo_curriculum_issue_3068_launch_packet.yaml",
+        _REPO_ROOT / "configs/training/shielded_ppo_issue_1396_launch_packet.yaml",
+    )
+    for packet_path in packet_paths:
+        packet = yaml.safe_load(packet_path.read_text(encoding="utf-8"))
+        starts = packet["training_starting_points"]
+        child_path = _REPO_ROOT / starts["base_ppo_training_config"]
+        child_config = yaml.safe_load(child_path.read_text(encoding="utf-8"))
+        base_path = (child_path.parent / child_config["base_config"]).resolve()
+        base_rel_path = base_path.relative_to(_REPO_ROOT).as_posix()
+
+        assert base_path.is_file(), f"inherited base config missing: {base_rel_path}"
+        assert base_rel_path in starts["checksums"], (
+            f"inherited base config not checksummed in {packet_path.name}: {base_rel_path}"
+        )
+        assert _sha256(base_path) == starts["checksums"][base_rel_path]
+
+
 def test_competing_explanations_have_discriminating_checks(packet: dict[str, object]) -> None:
     """The three competing explanations must each map to a discriminating check."""
     explanations = packet["hypothesis"]["competing_explanations"]

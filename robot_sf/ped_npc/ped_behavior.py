@@ -26,11 +26,11 @@ DEFAULT_HOLD_TIMEOUT_S = 6.0
 class PedestrianBehavior(Protocol):
     """Protocol implemented by pedestrian behavior controllers."""
 
-    def step(self):
+    def step(self) -> None:
         """Advance behavior state for one simulation timestep."""
         raise NotImplementedError()
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset behavior state at an episode boundary."""
         raise NotImplementedError()
 
@@ -84,7 +84,7 @@ class CrowdedZoneBehavior:
             rng=self.rng,
         )[0]
 
-    def step(self):
+    def step(self) -> None:
         """
         Update the goals of groups that are close to their current goal.
 
@@ -102,7 +102,7 @@ class CrowdedZoneBehavior:
                 new_goal = self._sample_goal(zone)
                 self.groups.redirect_group(gid, new_goal)
 
-    def reset(self):
+    def reset(self) -> None:
         """
         Reset the goals of all groups.
 
@@ -180,7 +180,7 @@ class FollowRouteBehavior:
                 group_pos,
             )
 
-    def step(self):
+    def step(self) -> None:
         """
         Update the positions of groups and respawn any groups that have reached their
         destination.
@@ -197,7 +197,7 @@ class FollowRouteBehavior:
             elif nav.reached_waypoint:
                 self.groups.redirect_group(gid, nav.current_waypoint)
 
-    def reset(self):
+    def reset(self) -> None:
         """
         Reset the behavior state.
 
@@ -216,7 +216,7 @@ class FollowRouteBehavior:
             for gid in self.navigators.keys():
                 self.respawn_group_at_start(gid)
 
-    def respawn_group_at_start(self, gid: int):
+    def respawn_group_at_start(self, gid: int) -> None:
         """
         Respawn a group at the start of its route.
 
@@ -301,7 +301,7 @@ class SinglePedestrianBehavior:
         """Set or update the robot pose provider callback."""
         self.robot_pose_provider = provider
 
-    def step(self):
+    def step(self) -> None:
         """Advance single-pedestrian behaviors for one timestep."""
         for runtime in self._runtimes:
             if self._tick_start_delay(runtime):
@@ -320,7 +320,7 @@ class SinglePedestrianBehavior:
                 self._apply_leave_role(runtime)
             self._advance_trajectory(runtime)
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset per-pedestrian runtime state for a new episode."""
         for runtime in self._runtimes:
             runtime.waypoint_index = 0

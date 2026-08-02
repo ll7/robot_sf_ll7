@@ -8,7 +8,9 @@ from pysocialforce.map_osm_converter import (
 )
 
 
-def import_svg_from_osm(input_osm_svg_file: str, output_svg_file: str, map_scale_factor: float):
+def import_svg_from_osm(
+    input_osm_svg_file: str, output_svg_file: str, map_scale_factor: float
+) -> None:
     """Extract building obstacles from an OSM SVG file and save to a new SVG file.
 
     Args:

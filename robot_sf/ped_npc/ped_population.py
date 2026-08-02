@@ -88,7 +88,7 @@ def _sample_points_near_anchor(
     attempts = 0
     max_attempts = num_samples * 50
 
-    def clip_spread(v):
+    def clip_spread(v) -> np.ndarray | np.floating:
         """Clamp lateral sample spread to the sidewalk half-width.
 
         Returns:

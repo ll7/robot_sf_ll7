@@ -14,6 +14,7 @@ on ``SimulationView``. Here we cover the split-specific contract directly:
 
 from __future__ import annotations
 
+import inspect
 import os
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,7 @@ import pytest
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame = pytest.importorskip("pygame")  # skip if pygame is missing
 
+from robot_sf.render.interactive_playback import InteractivePlayback  # noqa: E402
 from robot_sf.render.sim_view import (  # noqa: E402
     SimulationView,
     VisualizableAction,
@@ -168,6 +170,13 @@ class TestRenderingDelegation:
 
 class TestSubclassCompatibility:
     """The ``InteractivePlayback`` ``super()._add_text(...)`` chain still works."""
+
+    def test_interactive_playback_public_return_annotations(self) -> None:
+        """Keep playback procedures explicitly annotated as returning ``None``."""
+        assert issubclass(InteractivePlayback, SimulationView)
+        assert inspect.signature(InteractivePlayback.render_current_frame).return_annotation is None
+        assert inspect.signature(InteractivePlayback.update).return_annotation is None
+        assert inspect.signature(InteractivePlayback.run).return_annotation is None
 
     def test_subclass_super_add_text_still_works(self, view: SimulationView) -> None:
         """A subclass overriding ``_add_text`` and calling ``super()`` must not regress.

@@ -75,7 +75,8 @@ training_starting_points:
   # only modify density/complexity sampling; architecture, reward and seeds are held fixed.
   resume_policy_id: ppo_expert_br06_v3_15m_all_maps_randomized
   checksums:
-    configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml: 91f9d9a7c0bcb54f3628beef9140181a64277ab8bdf9b12dcdc37f0251a7d437
+    configs/training/ppo/expert_ppo_issue_576_br06_base.yaml: 5d1a65b83f8fd183c76ed0587bb4c3a921bbe09a6ba9cc736bfc660c93b09fdc
+    configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml: 90c29865a801c642253bb85b2eee225e61ae26d90979c362fabf431a08cea4d7
     configs/algos/ppo_v3_camera_ready.yaml: ee914f1167da5d8513b90f1e3d90adabc83420d993306be9885f49c83f5b2efc
     configs/algos/guarded_ppo_relaxed_v2.yaml: 666eda5a47de6e452eba9b2f3cb15bda16fc97abcd7137434661a87ac9ff85d8
     configs/scenarios/classic_interactions_francis2023.yaml: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5

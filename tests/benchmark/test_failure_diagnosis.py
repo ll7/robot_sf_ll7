@@ -573,6 +573,37 @@ def test_nonfinite_predicate_evidence_fails_closed_and_stays_strict_json() -> No
     validate_failure_diagnosis_record(record.to_dict())
 
 
+def test_non_string_predicate_mapping_keys_fail_closed() -> None:
+    """Non-string evidence keys must not be silently rewritten into valid evidence."""
+    predicate = _predicate("collision").to_dict()
+    predicate["evidence_fields"] = {1: "numeric-key"}
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "invalid_predicate_evidence:non_json_safe_value"
+    assert any(
+        str(key).startswith("__failure_diagnosis_invalid_json_value__:")
+        for key in record.source_predicate["evidence_fields"]
+    )
+    json.dumps(record.to_dict(), allow_nan=False)
+    validate_failure_diagnosis_record(record.to_dict())
+
+
+def test_predicate_to_dict_must_return_a_mapping() -> None:
+    """Malformed custom predicate adapters must raise the domain error, not TypeError."""
+
+    class InvalidPredicate:
+        """Expose a malformed non-mapping ``to_dict`` result."""
+
+        def to_dict(self) -> None:
+            """Return an invalid predicate representation."""
+            return None
+
+    with pytest.raises(FailureDiagnosisError, match=r"to_dict\(\).*mapping"):
+        diagnose_from_trace_failure_predicate(InvalidPredicate())
+
+
 def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> None:
     """unknown_failure_diagnosis_record mirrors unknown_failure_mechanism_record."""
     predicate = _predicate("collision", validity_status=_NOT_AVAILABLE, severity="critical")

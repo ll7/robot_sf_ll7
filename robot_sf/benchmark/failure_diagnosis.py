@@ -958,8 +958,11 @@ def _predicate_to_dict(predicate: TraceFailurePredicate | Mapping[str, Any]) -> 
     """
     if isinstance(predicate, Mapping):
         predicate_dict = dict(predicate)
-    elif hasattr(predicate, "to_dict"):
-        predicate_dict = dict(predicate.to_dict())
+    elif callable(getattr(predicate, "to_dict", None)):
+        raw_predicate = predicate.to_dict()
+        if not isinstance(raw_predicate, Mapping):
+            raise FailureDiagnosisError("predicate.to_dict() must return a mapping")
+        predicate_dict = dict(raw_predicate)
     # Defensive fallback for plain dataclasses without a ``to_dict`` method.
     elif is_dataclass(predicate) and not isinstance(predicate, type):
         predicate_dict = dict(asdict(predicate))
@@ -1183,7 +1186,17 @@ def _json_safe_value(value: Any) -> Any:
         number = float(value)
         return number if isfinite(number) else f"{_INVALID_JSON_VALUE_MARKER}non_finite"
     if isinstance(value, Mapping):
-        return {str(key): _json_safe_value(item) for key, item in value.items()}
+        safe_mapping: dict[str, Any] = {}
+        for key, item in value.items():
+            if isinstance(key, str):
+                safe_key = key
+            else:
+                safe_key = (
+                    f"{_INVALID_JSON_VALUE_MARKER}non_string_key:"
+                    f"{type(key).__module__}.{type(key).__qualname__}"
+                )
+            safe_mapping[safe_key] = _json_safe_value(item)
+        return safe_mapping
     if isinstance(value, (list, tuple)):
         return [_json_safe_value(item) for item in value]
     return f"{_INVALID_JSON_VALUE_MARKER}{type(value).__module__}.{type(value).__qualname__}"

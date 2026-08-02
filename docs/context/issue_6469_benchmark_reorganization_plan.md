@@ -25,7 +25,7 @@ checkout. The follow-up contract below includes a guard so the husks are not rei
 
 ## Current Benchmark State
 
-`robot_sf/benchmark/` has grown to **279 top-level non-`__init__.py` modules** (**280 top-level
+`robot_sf/benchmark/` has grown to **280 top-level non-`__init__.py` modules** (**281 top-level
 `.py` files including `__init__.py`**) plus existing subdirectories.
 The flat namespace mixes domain modules, issue-specific modules, cross-cutting preflight/readiness
 helpers, and schema/data directories. Existing subdirectories show that domain grouping is viable:
@@ -55,7 +55,7 @@ Two structural smells are already visible and should be resolved by the follow-u
 ## Proposed Domain Subdirectory Groupings
 
 The grouping below is illustrative and conservative. Counts are filename-prefix counts over the
-279 top-level non-`__init__.py` modules; some modules are cross-cutting and final assignment is a
+280 top-level non-`__init__.py` modules; some modules are cross-cutting and final assignment is a
 follow-up decision, not a claim made here. The issue-specific modules named in Issue #6469 (for
 example
 `issue_5302_oracle_gap.py`, `issue_4142_dpcbf_dense_runner.py`) are assigned to the domain they
@@ -93,7 +93,7 @@ non-`__init__.py` benchmark modules import from `robot_sf.benchmark`. Required d
 4. Resolve the `schema/` vs `schemas/` collision and the `map_runner` split as explicit, recorded
    decisions in the follow-up note.
 5. Keep each domain move independently reviewable: one domain (or one tightly coupled domain
-   cluster) per PR, not one 279-file rewrite.
+   cluster) per PR, not one 280-file rewrite.
 
 ### Proof plan for each move PR
 

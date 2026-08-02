@@ -617,3 +617,56 @@ class TestGridEdgeCases:
         result = grid.query(POIQuery(x=1.01, y=0.51))
 
         assert result.occupancy == pytest.approx(0.6)
+
+
+class TestGenerateStructuredLoggerPaths:
+    """Cover the diagnostic logger paths in generate()'s sub-functions.
+
+    These paths were migrated from f-string to structured Loguru style when
+    generate() was decomposed (issue #6631). The validation guards and every
+    rasterization channel are exercised so the migrated logger statements
+    remain covered by the test suite.
+    """
+
+    def test_generate_rejects_non_list_obstacles(self):
+        """Non-list obstacles log an error and raise TypeError."""
+        grid = OccupancyGrid(config=GridConfig(channels=[GridChannel.OBSTACLES]))
+        with pytest.raises(TypeError):
+            grid.generate(
+                obstacles="not-a-list",
+                pedestrians=[],
+                robot_pose=((0.0, 0.0), 0.0),
+            )
+
+    def test_generate_rejects_non_list_pedestrians(self):
+        """Non-list pedestrians log an error and raise TypeError."""
+        grid = OccupancyGrid(config=GridConfig(channels=[GridChannel.PEDESTRIANS]))
+        with pytest.raises(TypeError):
+            grid.generate(
+                obstacles=[],
+                pedestrians="not-a-list",
+                robot_pose=((0.0, 0.0), 0.0),
+            )
+
+    def test_ego_frame_generate_rasterizes_every_channel(self):
+        """Ego-frame generate exercises the obstacle, pedestrian, and robot channels."""
+        config = GridConfig(
+            resolution=0.5,
+            width=4.0,
+            height=4.0,
+            channels=[
+                GridChannel.OBSTACLES,
+                GridChannel.PEDESTRIANS,
+                GridChannel.ROBOT,
+            ],
+        )
+        grid = OccupancyGrid(config=config)
+        grid_data = grid.generate(
+            obstacles=[((0.0, 0.0), (2.0, 2.0))],
+            pedestrians=[((1.0, 1.0), 0.25)],
+            robot_pose=((2.0, 2.0), 0.0),
+            ego_frame=True,
+        )
+
+        assert grid_data.shape == grid.shape
+        assert grid.is_initialized

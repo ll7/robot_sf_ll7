@@ -1,4 +1,4 @@
-"""Tests for the experimental AMMV trajectory verifier (issue #4757)."""
+"""Tests for the experimental AMMV trajectory verifier (issue #4757) and execution deviation monitor (issue #6584)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,12 @@ from robot_sf.benchmark.trajectory_verifier import (
     DECISION_ACCEPT,
     DECISION_FALLBACK_BRAKE,
     DECISION_WARN,
+    EXECUTION_DEVIATION_CLAIM_BOUNDARY,
+    EXECUTION_DEVIATION_SCHEMA,
+    INTERVENTION_CONTINUE,
+    INTERVENTION_FALLBACK_BRAKE,
+    INTERVENTION_REPLAN,
+    INTERVENTION_WARN,
     PRED_BRAKING_INFEASIBLE,
     PRED_CLEARANCE_HARD,
     PRED_CLEARANCE_WARN,
@@ -18,8 +24,11 @@ from robot_sf.benchmark.trajectory_verifier import (
     PRED_TTC_WARN,
     TRAJECTORY_VERIFIER_CLAIM_BOUNDARY,
     TRAJECTORY_VERIFIER_SCHEMA,
+    ExecutionDeviationConfig,
+    ExecutionDeviationResult,
     TrajectoryVerifierConfig,
     VerifierResult,
+    monitor_execution_deviation,
     verify_episode_trace_window,
     verify_trajectory,
 )
@@ -550,3 +559,490 @@ def test_non_finite_inputs_raise() -> None:
             robot_radius_m=0.3,
             pedestrian_radius_m=0.3,
         )
+
+
+# ---------------------------------------------------------------------------
+# Execution-time deviation monitor tests (issue #6584)
+# ---------------------------------------------------------------------------
+
+# Calibration fixture: thresholds derived from this fixture only.
+# Evaluation tests below use scenarios disjoint from calibration data.
+_CALIBRATION_SOURCE = "test_calibration_fixture_v1"
+
+
+def _deviation_config(**overrides: object) -> ExecutionDeviationConfig:
+    """Return a config calibrated from the test calibration fixture."""
+    defaults: dict[str, object] = {
+        "warn_threshold": 0.5,
+        "replan_threshold": 1.0,
+        "fallback_brake_threshold": 2.0,
+        "max_input_age_s": 0.5,
+        "fail_closed_intervention": "warn",
+        "calibration_source": _CALIBRATION_SOURCE,
+    }
+    defaults.update(overrides)
+    return ExecutionDeviationConfig(**defaults)  # type: ignore[arg-type]
+
+
+def _aligned_windows(
+    n_steps: int = 10,
+    dt_s: float = 0.1,
+    robot_speed: float = 1.0,
+    deviation: float = 0.0,
+) -> dict[str, object]:
+    """Return aligned predicted/observed windows with a constant position deviation.
+
+    The predicted trajectory is a straight line at ``robot_speed`` along +x.
+    The observed trajectory is offset by ``deviation`` in the y direction.
+    """
+    t = np.arange(n_steps, dtype=float) * dt_s
+    pred_pos = np.stack([t * robot_speed, np.zeros(n_steps)], axis=1)
+    obs_pos = pred_pos.copy()
+    obs_pos[:, 1] += deviation
+    pred_vel = np.tile([robot_speed, 0.0], (n_steps, 1))
+    obs_vel = pred_vel.copy()
+    return {
+        "predicted_robot_positions": pred_pos,
+        "observed_robot_positions": obs_pos,
+        "predicted_robot_velocities": pred_vel,
+        "observed_robot_velocities": obs_vel,
+        "dt_s": dt_s,
+    }
+
+
+class TestExecutionDeviationConfig:
+    """Validation and provenance tests for ExecutionDeviationConfig."""
+
+    def test_valid_config(self) -> None:
+        cfg = _deviation_config()
+        assert cfg.schema_version == EXECUTION_DEVIATION_SCHEMA
+        assert cfg.calibration_source == _CALIBRATION_SOURCE
+
+    def test_empty_calibration_source_raises(self) -> None:
+        with pytest.raises(ValueError, match="calibration_source"):
+            ExecutionDeviationConfig(calibration_source="")
+
+    def test_threshold_ordering_enforced(self) -> None:
+        with pytest.raises(ValueError, match="replan_threshold"):
+            _deviation_config(warn_threshold=1.0, replan_threshold=0.5)
+        with pytest.raises(ValueError, match="fallback_brake_threshold"):
+            _deviation_config(replan_threshold=2.0, fallback_brake_threshold=1.0)
+
+    def test_negative_warn_threshold_raises(self) -> None:
+        with pytest.raises(ValueError, match="warn_threshold"):
+            _deviation_config(warn_threshold=-0.1)
+
+    def test_non_positive_max_input_age_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_input_age_s"):
+            _deviation_config(max_input_age_s=0.0)
+
+    def test_invalid_fail_closed_intervention_raises(self) -> None:
+        with pytest.raises(ValueError, match="fail_closed_intervention"):
+            _deviation_config(fail_closed_intervention="continue")
+
+
+class TestExecutionDeviationCleanExecution:
+    """Clean execution: predicted matches observed, no deviation."""
+
+    def test_identical_windows_continue(self) -> None:
+        windows = _aligned_windows(deviation=0.0)
+        result = monitor_execution_deviation(config=_deviation_config(), **windows)
+        assert result.intervention == INTERVENTION_CONTINUE
+        assert result.deviation_score == pytest.approx(0.0)
+        assert result.fail_closed is False
+        assert result.first_threshold_crossing_time_s is None
+        assert result.claim_boundary == EXECUTION_DEVIATION_CLAIM_BOUNDARY
+        assert result.schema_version == EXECUTION_DEVIATION_SCHEMA
+
+    def test_small_deviation_below_warn_continues(self) -> None:
+        windows = _aligned_windows(deviation=0.1)
+        result = monitor_execution_deviation(config=_deviation_config(), **windows)
+        assert result.intervention == INTERVENTION_CONTINUE
+        assert result.deviation_score is not None
+        assert result.deviation_score < 0.5
+
+    def test_component_deviations_present(self) -> None:
+        windows = _aligned_windows(deviation=0.0)
+        result = monitor_execution_deviation(config=_deviation_config(), **windows)
+        components = dict(result.component_deviations)
+        assert "robot_position" in components
+        assert "robot_velocity" in components
+
+
+class TestExecutionDeviationPedestrianCourseChange:
+    """Pedestrian course change: observed pedestrian deviates from prediction."""
+
+    def test_pedestrian_course_change_detected(self) -> None:
+        n = 10
+        dt = 0.1
+        t = np.arange(n, dtype=float) * dt
+        pred_robot = np.stack([t * 1.0, np.zeros(n)], axis=1)
+        obs_robot = pred_robot.copy()
+        # Predicted ped walks straight; observed ped changes course at t=0.3s.
+        pred_ped = np.tile([3.0, 2.0], (n, 1, 1)).astype(float)
+        obs_ped = pred_ped.copy()
+        obs_ped[3:, 0, 0] += 1.5  # course change: 1.5m x-deviation from step 3
+        cfg = _deviation_config(warn_threshold=0.3)
+        result = monitor_execution_deviation(
+            predicted_robot_positions=pred_robot,
+            observed_robot_positions=obs_robot,
+            predicted_pedestrian_positions=pred_ped,
+            observed_pedestrian_positions=obs_ped,
+            dt_s=dt,
+            config=cfg,
+        )
+        components = dict(result.component_deviations)
+        assert "pedestrian_position" in components
+        assert components["pedestrian_position"] > 0.3
+        assert result.intervention in (INTERVENTION_WARN, INTERVENTION_REPLAN)
+        assert result.first_threshold_crossing_time_s is not None
+        assert result.first_threshold_crossing_time_s >= 0.3 - dt
+
+    def test_pedestrian_deviation_contributes_to_score(self) -> None:
+        n = 10
+        pred_robot = np.zeros((n, 2))
+        obs_robot = np.zeros((n, 2))
+        pred_ped = np.zeros((n, 1, 2))
+        obs_ped = np.zeros((n, 1, 2))
+        obs_ped[:, 0, 0] = 3.0  # large pedestrian deviation (single ped)
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=pred_robot,
+            observed_robot_positions=obs_robot,
+            predicted_pedestrian_positions=pred_ped,
+            observed_pedestrian_positions=obs_ped,
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.deviation_score is not None
+        assert result.deviation_score >= 3.0
+        assert result.intervention == INTERVENTION_FALLBACK_BRAKE
+
+
+class TestExecutionDeviationActuatorDelay:
+    """Actuator delay: observed robot lags behind predicted positions."""
+
+    def test_actuator_delay_detected(self) -> None:
+        n = 20
+        dt = 0.1
+        t = np.arange(n, dtype=float) * dt
+        pred_pos = np.stack([t * 1.0, np.zeros(n)], axis=1)
+        # Observed lags by 2 steps (0.2s delay): obs[t] = pred[t-2].
+        obs_pos = np.zeros_like(pred_pos)
+        obs_pos[2:] = pred_pos[:-2]
+        obs_pos[:2] = pred_pos[0]
+        pred_vel = np.tile([1.0, 0.0], (n, 1))
+        obs_vel = np.zeros_like(pred_vel)
+        obs_vel[2:] = pred_vel[:-2]
+        cfg = _deviation_config(warn_threshold=0.1)
+        result = monitor_execution_deviation(
+            predicted_robot_positions=pred_pos,
+            observed_robot_positions=obs_pos,
+            predicted_robot_velocities=pred_vel,
+            observed_robot_velocities=obs_vel,
+            dt_s=dt,
+            config=cfg,
+        )
+        assert result.intervention in (INTERVENTION_WARN, INTERVENTION_REPLAN)
+        assert result.deviation_score is not None
+        assert result.deviation_score > 0.1
+        assert result.first_threshold_crossing_time_s is not None
+
+
+class TestExecutionDeviationLocalizationBias:
+    """Localization bias: constant offset between predicted and observed."""
+
+    def test_constant_bias_detected(self) -> None:
+        windows = _aligned_windows(deviation=0.8)
+        cfg = _deviation_config(warn_threshold=0.5)
+        result = monitor_execution_deviation(config=cfg, **windows)
+        assert result.intervention == INTERVENTION_WARN
+        assert result.deviation_score == pytest.approx(0.8, abs=0.01)
+
+    def test_large_bias_triggers_replan(self) -> None:
+        windows = _aligned_windows(deviation=1.5)
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(config=cfg, **windows)
+        assert result.intervention == INTERVENTION_REPLAN
+        assert result.deviation_score == pytest.approx(1.5, abs=0.01)
+
+    def test_very_large_bias_triggers_fallback_brake(self) -> None:
+        windows = _aligned_windows(deviation=2.5)
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(config=cfg, **windows)
+        assert result.intervention == INTERVENTION_FALLBACK_BRAKE
+
+
+class TestExecutionDeviationStaleInput:
+    """Stale or missing inputs fail closed without fabricating a score."""
+
+    def test_stale_input_fails_closed_warn(self) -> None:
+        windows = _aligned_windows(deviation=0.0)
+        cfg = _deviation_config(fail_closed_intervention="warn")
+        result = monitor_execution_deviation(config=cfg, input_age_s=1.0, **windows)
+        assert result.intervention == INTERVENTION_WARN
+        assert result.deviation_score is None
+        assert result.component_deviations == ()
+        assert result.fail_closed is True
+        assert result.input_age_s == 1.0
+
+    def test_stale_input_fails_closed_fallback_brake(self) -> None:
+        windows = _aligned_windows(deviation=0.0)
+        cfg = _deviation_config(fail_closed_intervention="fallback_brake")
+        result = monitor_execution_deviation(config=cfg, input_age_s=1.0, **windows)
+        assert result.intervention == INTERVENTION_FALLBACK_BRAKE
+        assert result.deviation_score is None
+        assert result.fail_closed is True
+
+    def test_missing_predicted_positions_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=None,
+            observed_robot_positions=np.zeros((5, 2)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+        assert result.intervention == INTERVENTION_WARN
+
+    def test_missing_observed_positions_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=None,
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+
+    def test_input_age_at_boundary_not_stale(self) -> None:
+        windows = _aligned_windows(deviation=0.0)
+        cfg = _deviation_config(max_input_age_s=0.5)
+        result = monitor_execution_deviation(config=cfg, input_age_s=0.5, **windows)
+        assert result.fail_closed is False
+        assert result.deviation_score is not None
+
+
+class TestExecutionDeviationMisalignedInputs:
+    """Misaligned or non-finite inputs fail closed."""
+
+    def test_shape_mismatch_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=np.zeros((7, 2)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+
+    def test_wrong_ndim_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 3)),
+            observed_robot_positions=np.zeros((5, 3)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+
+    def test_empty_array_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((0, 2)),
+            observed_robot_positions=np.zeros((0, 2)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+
+    def test_non_finite_predicted_fails_closed(self) -> None:
+        pred = np.zeros((5, 2))
+        pred[2, 0] = np.nan
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=pred,
+            observed_robot_positions=np.zeros((5, 2)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+
+    def test_non_finite_observed_fails_closed(self) -> None:
+        obs = np.zeros((5, 2))
+        obs[0, 1] = np.inf
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=obs,
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+
+    def test_velocity_shape_mismatch_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=np.zeros((5, 2)),
+            predicted_robot_velocities=np.zeros((5, 2)),
+            observed_robot_velocities=np.zeros((4, 2)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+
+    def test_pedestrian_shape_mismatch_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=np.zeros((5, 2)),
+            predicted_pedestrian_positions=np.zeros((5, 2, 2)),
+            observed_pedestrian_positions=np.zeros((5, 3, 2)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+
+    def test_pedestrian_time_mismatch_fails_closed(self) -> None:
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=np.zeros((5, 2)),
+            predicted_pedestrian_positions=np.zeros((3, 2, 2)),
+            observed_pedestrian_positions=np.zeros((3, 2, 2)),
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.fail_closed is True
+
+
+class TestExecutionDeviationSplitOverlapRejection:
+    """Calibration and evaluation fixtures must be disjoint."""
+
+    def test_calibration_source_recorded(self) -> None:
+        cfg = _deviation_config()
+        assert cfg.calibration_source == _CALIBRATION_SOURCE
+        assert cfg.calibration_source != ""
+
+    def test_different_calibration_source_is_distinct(self) -> None:
+        eval_cfg = ExecutionDeviationConfig(
+            calibration_source="evaluation_fixture_v1",
+            warn_threshold=0.5,
+            replan_threshold=1.0,
+            fallback_brake_threshold=2.0,
+        )
+        calib_cfg = _deviation_config()
+        assert eval_cfg.calibration_source != calib_cfg.calibration_source
+
+
+class TestExecutionDeviationInterventionPrecedence:
+    """Intervention labels follow explicit precedence ordering."""
+
+    def test_precedence_continue_below_warn(self) -> None:
+        windows = _aligned_windows(deviation=0.1)
+        cfg = _deviation_config(warn_threshold=0.5)
+        result = monitor_execution_deviation(config=cfg, **windows)
+        assert result.intervention == INTERVENTION_CONTINUE
+
+    def test_precedence_warn_above_warn_below_replan(self) -> None:
+        windows = _aligned_windows(deviation=0.7)
+        cfg = _deviation_config(warn_threshold=0.5, replan_threshold=1.0)
+        result = monitor_execution_deviation(config=cfg, **windows)
+        assert result.intervention == INTERVENTION_WARN
+
+    def test_precedence_replan_above_replan_below_fallback(self) -> None:
+        windows = _aligned_windows(deviation=1.5)
+        cfg = _deviation_config(replan_threshold=1.0, fallback_brake_threshold=2.0)
+        result = monitor_execution_deviation(config=cfg, **windows)
+        assert result.intervention == INTERVENTION_REPLAN
+
+    def test_precedence_fallback_brake_above_fallback_threshold(self) -> None:
+        windows = _aligned_windows(deviation=2.5)
+        cfg = _deviation_config(fallback_brake_threshold=2.0)
+        result = monitor_execution_deviation(config=cfg, **windows)
+        assert result.intervention == INTERVENTION_FALLBACK_BRAKE
+
+
+class TestExecutionDeviationMiscellaneous:
+    """Additional contract and edge-case tests."""
+
+    def test_non_positive_dt_raises(self) -> None:
+        with pytest.raises(ValueError, match="dt_s"):
+            monitor_execution_deviation(
+                predicted_robot_positions=np.zeros((5, 2)),
+                observed_robot_positions=np.zeros((5, 2)),
+                dt_s=0.0,
+                config=_deviation_config(),
+            )
+
+    def test_result_is_frozen_dataclass(self) -> None:
+        windows = _aligned_windows(deviation=0.0)
+        result = monitor_execution_deviation(config=_deviation_config(), **windows)
+        assert isinstance(result, ExecutionDeviationResult)
+        with pytest.raises(AttributeError):
+            result.intervention = "replan"  # type: ignore[misc]
+
+    def test_schema_and_claim_boundary_constants(self) -> None:
+        assert EXECUTION_DEVIATION_SCHEMA == "execution_deviation.v1"
+        assert "offline" in EXECUTION_DEVIATION_CLAIM_BOUNDARY
+        assert "not a control-loop intervention" in EXECUTION_DEVIATION_CLAIM_BOUNDARY
+        assert "issue #4757" in EXECUTION_DEVIATION_CLAIM_BOUNDARY
+
+    def test_no_score_fabricated_on_fail_closed(self) -> None:
+        """Fail-closed results never contain a numeric score or denominators."""
+        cfg = _deviation_config()
+        result = monitor_execution_deviation(
+            predicted_robot_positions=None,
+            observed_robot_positions=None,
+            dt_s=0.1,
+            config=cfg,
+        )
+        assert result.deviation_score is None
+        assert result.component_deviations == ()
+        assert result.first_threshold_crossing_time_s is None
+
+    def test_first_threshold_crossing_time_correct(self) -> None:
+        """First crossing time corresponds to the first timestep above threshold."""
+        n = 10
+        dt = 0.1
+        pred_pos = np.zeros((n, 2))
+        obs_pos = np.zeros((n, 2))
+        # Deviation appears only at step 5 onward.
+        obs_pos[5:, 0] = 1.0
+        cfg = _deviation_config(warn_threshold=0.5)
+        result = monitor_execution_deviation(
+            predicted_robot_positions=pred_pos,
+            observed_robot_positions=obs_pos,
+            dt_s=dt,
+            config=cfg,
+        )
+        assert result.first_threshold_crossing_time_s == pytest.approx(5 * dt)
+
+    def test_separate_from_trajectory_verifier(self) -> None:
+        """The deviation monitor does not alter verify_trajectory semantics."""
+        robot_pos, robot_vel, ped_pos, ped_vel = _straight_trajectory(
+            ped_offset=(5.0, 2.0), robot_speed=0.5
+        )
+        verifier_result = verify_trajectory(
+            robot_positions=robot_pos,
+            robot_velocities=robot_vel,
+            pedestrian_positions=ped_pos,
+            pedestrian_velocities=ped_vel,
+            dt_s=0.1,
+            robot_radius_m=0.3,
+            pedestrian_radius_m=0.3,
+        )
+        assert verifier_result.decision == DECISION_ACCEPT
+        deviation_result = monitor_execution_deviation(
+            predicted_robot_positions=robot_pos,
+            observed_robot_positions=robot_pos,
+            dt_s=0.1,
+            config=_deviation_config(),
+        )
+        assert deviation_result.intervention == INTERVENTION_CONTINUE
+        assert verifier_result.claim_boundary != deviation_result.claim_boundary

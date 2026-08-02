@@ -708,10 +708,357 @@ def verify_episode_trace_window(
     )
 
 
+# ---------------------------------------------------------------------------
+# Execution-time deviation monitor (issue #6584)
+# ---------------------------------------------------------------------------
+
+EXECUTION_DEVIATION_SCHEMA = "execution_deviation.v1"
+EXECUTION_DEVIATION_CLAIM_BOUNDARY = (
+    "offline execution-time deviation diagnostic; not an online model; "
+    "not a control-loop intervention; not a safety, detection-performance, "
+    "or real-world guarantee; intervention labels are offline diagnostic labels only; "
+    "separate from pre-execution trajectory acceptance (issue #4757)"
+)
+
+INTERVENTION_CONTINUE = "continue"
+INTERVENTION_WARN = "warn"
+INTERVENTION_REPLAN = "replan"
+INTERVENTION_FALLBACK_BRAKE = "fallback_brake"
+_INTERVENTION_RANK = {
+    INTERVENTION_CONTINUE: 0,
+    INTERVENTION_WARN: 1,
+    INTERVENTION_REPLAN: 2,
+    INTERVENTION_FALLBACK_BRAKE: 3,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionDeviationConfig:
+    """Thresholds and provenance for the execution-time deviation monitor.
+
+    This configuration is versioned and separate from
+    :class:`TrajectoryVerifierConfig`. Thresholds must be calibrated from an
+    explicitly separate calibration fixture; the ``calibration_source`` field
+    records provenance so that calibration and evaluation data remain disjoint.
+
+    Attributes:
+        schema_version: Schema identifier for forward compatibility.
+        warn_threshold: Aggregate deviation score above which ``warn`` is emitted.
+        replan_threshold: Score above which ``replan`` is emitted.
+        fallback_brake_threshold: Score above which ``fallback_brake`` is emitted.
+        max_input_age_s: Maximum tolerable input age in seconds. Inputs older
+            than this fail closed.
+        fail_closed_intervention: Intervention label emitted when inputs are
+            missing, stale, misaligned, or non-finite. Must be ``warn`` or
+            ``fallback_brake``.
+        calibration_source: Identifier for the calibration fixture used to set
+            thresholds. Must be non-empty for a valid configuration; must be
+            disjoint from evaluation data.
+    """
+
+    schema_version: str = EXECUTION_DEVIATION_SCHEMA
+    warn_threshold: float = 0.5
+    replan_threshold: float = 1.0
+    fallback_brake_threshold: float = 2.0
+    max_input_age_s: float = 0.5
+    fail_closed_intervention: Literal["warn", "fallback_brake"] = "warn"
+    calibration_source: str = ""
+
+    def __post_init__(self) -> None:
+        """Validate threshold ordering and fail-closed configuration."""
+        if self.warn_threshold < 0.0:
+            raise ValueError("ExecutionDeviationConfig.warn_threshold must be >= 0")
+        if self.replan_threshold < self.warn_threshold:
+            raise ValueError("ExecutionDeviationConfig.replan_threshold must be >= warn_threshold")
+        if self.fallback_brake_threshold < self.replan_threshold:
+            raise ValueError(
+                "ExecutionDeviationConfig.fallback_brake_threshold must be >= replan_threshold"
+            )
+        if self.max_input_age_s <= 0.0:
+            raise ValueError("ExecutionDeviationConfig.max_input_age_s must be > 0")
+        if self.fail_closed_intervention not in (INTERVENTION_WARN, INTERVENTION_FALLBACK_BRAKE):
+            raise ValueError(
+                "ExecutionDeviationConfig.fail_closed_intervention must be "
+                f"'{INTERVENTION_WARN}' or '{INTERVENTION_FALLBACK_BRAKE}'; "
+                f"got {self.fail_closed_intervention!r}"
+            )
+        if not self.calibration_source:
+            raise ValueError(
+                "ExecutionDeviationConfig.calibration_source must be non-empty; "
+                "thresholds must be calibrated from an explicitly separate fixture"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionDeviationResult:
+    """Outcome of :func:`monitor_execution_deviation`.
+
+    Attributes:
+        intervention: One of ``continue``, ``warn``, ``replan``, ``fallback_brake``.
+            These are offline diagnostic labels only.
+        deviation_score: Aggregate deviation score, or ``None`` when inputs were
+            invalid and the fail-closed path was taken (score is never fabricated).
+        component_deviations: Per-component deviation scores keyed by component
+            name (``robot_position``, ``robot_velocity``, ``pedestrian_position``).
+            Empty when inputs were invalid.
+        first_threshold_crossing_time_s: Time in seconds of the first timestep
+            where the per-timestep aggregate deviation exceeded the warn
+            threshold, or ``None`` if no crossing occurred or inputs were invalid.
+        input_age_s: The input age as provided, or ``None`` if not supplied.
+        fail_closed: ``True`` when the result was produced by the fail-closed
+            path due to invalid inputs.
+        schema_version: Schema identifier from the config.
+        claim_boundary: Explicit claim boundary string.
+    """
+
+    intervention: Literal["continue", "warn", "replan", "fallback_brake"]
+    deviation_score: float | None
+    component_deviations: tuple[tuple[str, float], ...]
+    first_threshold_crossing_time_s: float | None
+    input_age_s: float | None
+    fail_closed: bool
+    schema_version: str = EXECUTION_DEVIATION_SCHEMA
+    claim_boundary: str = EXECUTION_DEVIATION_CLAIM_BOUNDARY
+
+
+def _intervention_for_score(
+    score: float,
+    cfg: ExecutionDeviationConfig,
+) -> Literal["continue", "warn", "replan", "fallback_brake"]:
+    """Map an aggregate deviation score to an intervention label via precedence.
+
+    Returns:
+        The intervention label for the given score.
+    """
+    if score > cfg.fallback_brake_threshold:
+        return INTERVENTION_FALLBACK_BRAKE
+    if score > cfg.replan_threshold:
+        return INTERVENTION_REPLAN
+    if score > cfg.warn_threshold:
+        return INTERVENTION_WARN
+    return INTERVENTION_CONTINUE
+
+
+def _fail_closed_result(
+    cfg: ExecutionDeviationConfig,
+    input_age_s: float | None,
+) -> ExecutionDeviationResult:
+    """Produce a fail-closed result with no fabricated score or denominators.
+
+    Returns:
+        A fail-closed result with ``deviation_score=None`` and empty components.
+    """
+    return ExecutionDeviationResult(
+        intervention=cfg.fail_closed_intervention,
+        deviation_score=None,
+        component_deviations=(),
+        first_threshold_crossing_time_s=None,
+        input_age_s=input_age_s,
+        fail_closed=True,
+        schema_version=cfg.schema_version,
+    )
+
+
+def _validate_primary_windows(
+    predicted_robot_positions: np.ndarray | None,
+    observed_robot_positions: np.ndarray | None,
+    input_age_s: float | None,
+    cfg: ExecutionDeviationConfig,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Validate primary robot position windows for the deviation monitor.
+
+    Returns:
+        A tuple ``(pred_robot, obs_robot)`` of validated arrays, or ``None`` if
+        inputs are invalid and the caller should fail closed.
+    """
+    if predicted_robot_positions is None or observed_robot_positions is None:
+        return None
+    if input_age_s is not None and input_age_s > cfg.max_input_age_s:
+        return None
+    pred_robot = np.asarray(predicted_robot_positions, dtype=float)
+    obs_robot = np.asarray(observed_robot_positions, dtype=float)
+    if pred_robot.shape != obs_robot.shape:
+        return None
+    if pred_robot.ndim != 2 or pred_robot.shape[1] != 2:
+        return None
+    if pred_robot.shape[0] == 0:
+        return None
+    if not np.isfinite(pred_robot).all() or not np.isfinite(obs_robot).all():
+        return None
+    return pred_robot, obs_robot
+
+
+def _compute_velocity_deviation(
+    predicted_robot_velocities: np.ndarray | None,
+    observed_robot_velocities: np.ndarray | None,
+    reference_shape: tuple[int, ...],
+) -> np.ndarray | None:
+    """Validate and compute per-timestep robot velocity deviation.
+
+    Returns:
+        Per-timestep velocity deviation array, or ``None`` if the velocity
+        component is not provided. Returns a negative sentinel (empty array)
+        if inputs are invalid and the caller should fail closed.
+    """
+    if predicted_robot_velocities is None and observed_robot_velocities is None:
+        return None
+    if predicted_robot_velocities is None or observed_robot_velocities is None:
+        return np.array([])
+    pred_vel = np.asarray(predicted_robot_velocities, dtype=float)
+    obs_vel = np.asarray(observed_robot_velocities, dtype=float)
+    if pred_vel.shape != obs_vel.shape or pred_vel.shape != reference_shape:
+        return np.array([])
+    if not np.isfinite(pred_vel).all() or not np.isfinite(obs_vel).all():
+        return np.array([])
+    return np.linalg.norm(obs_vel - pred_vel, axis=-1)
+
+
+def _compute_pedestrian_deviation(
+    predicted_pedestrian_positions: np.ndarray | None,
+    observed_pedestrian_positions: np.ndarray | None,
+    expected_t: int,
+) -> np.ndarray | None:
+    """Validate and compute per-timestep pedestrian position deviation.
+
+    Returns:
+        Per-timestep pedestrian deviation array, or ``None`` if the pedestrian
+        component is not provided. Returns an empty array if inputs are invalid
+        and the caller should fail closed.
+    """
+    if predicted_pedestrian_positions is None and observed_pedestrian_positions is None:
+        return None
+    if predicted_pedestrian_positions is None or observed_pedestrian_positions is None:
+        return np.array([])
+    pred_ped = np.asarray(predicted_pedestrian_positions, dtype=float)
+    obs_ped = np.asarray(observed_pedestrian_positions, dtype=float)
+    if pred_ped.shape != obs_ped.shape:
+        return np.array([])
+    if pred_ped.ndim != 3 or pred_ped.shape[2] != 2 or pred_ped.shape[0] != expected_t:
+        return np.array([])
+    if not np.isfinite(pred_ped).all() or not np.isfinite(obs_ped).all():
+        return np.array([])
+    return np.mean(np.linalg.norm(obs_ped - pred_ped, axis=-1), axis=-1)
+
+
+def monitor_execution_deviation(
+    *,
+    predicted_robot_positions: np.ndarray | None,
+    observed_robot_positions: np.ndarray | None,
+    predicted_robot_velocities: np.ndarray | None = None,
+    observed_robot_velocities: np.ndarray | None = None,
+    predicted_pedestrian_positions: np.ndarray | None = None,
+    observed_pedestrian_positions: np.ndarray | None = None,
+    dt_s: float,
+    input_age_s: float | None = None,
+    config: ExecutionDeviationConfig | None = None,
+) -> ExecutionDeviationResult:
+    """Compare aligned predicted and observed state windows for execution deviation.
+
+    This is a pure, side-effect-free offline diagnostic. It does not alter
+    planner behavior, wire into a control loop, or make safety guarantees.
+    Intervention labels are offline diagnostic labels only.
+
+    The monitor is separate from pre-execution trajectory acceptance
+    (:func:`verify_trajectory`, issue #4757). It does not share predicates or
+    alter acceptance semantics.
+
+    Args:
+        predicted_robot_positions: Predicted robot positions, shape ``(T, 2)``.
+        observed_robot_positions: Observed robot positions, shape ``(T, 2)``.
+        predicted_robot_velocities: Predicted robot velocities, shape ``(T, 2)``,
+            or ``None`` to skip the velocity component.
+        observed_robot_velocities: Observed robot velocities, shape ``(T, 2)``,
+            or ``None`` to skip the velocity component.
+        predicted_pedestrian_positions: Predicted pedestrian positions, shape
+            ``(T, N, 2)``, or ``None`` to skip the pedestrian component.
+        observed_pedestrian_positions: Observed pedestrian positions, shape
+            ``(T, N, 2)``, or ``None`` to skip the pedestrian component.
+        dt_s: Timestep duration in seconds. Must be positive.
+        input_age_s: Age of the prediction input in seconds. If greater than
+            ``config.max_input_age_s``, the monitor fails closed.
+        config: Deviation monitor configuration. Defaults to
+            :class:`ExecutionDeviationConfig` (requires a calibration source).
+
+    Returns:
+        An :class:`ExecutionDeviationResult` with the intervention label,
+        component deviations, aggregate score, and timing information.
+
+    Raises:
+        ValueError: If ``dt_s`` is non-positive or config validation fails.
+    """
+    if dt_s <= 0.0:
+        raise ValueError(f"dt_s must be > 0; got {dt_s}")
+
+    cfg = (
+        config
+        if config is not None
+        else ExecutionDeviationConfig(calibration_source="default_test_fixture")
+    )
+
+    # --- Validate primary windows (missing, stale, misaligned, non-finite) ---
+    validated = _validate_primary_windows(
+        predicted_robot_positions, observed_robot_positions, input_age_s, cfg
+    )
+    if validated is None:
+        return _fail_closed_result(cfg, input_age_s)
+    pred_robot, obs_robot = validated
+
+    # --- Compute per-component deviations ---
+    component_scores: dict[str, float] = {}
+    per_timestep_scores: list[np.ndarray] = []
+
+    robot_per_t = np.linalg.norm(obs_robot - pred_robot, axis=-1)
+    component_scores["robot_position"] = float(np.mean(robot_per_t))
+    per_timestep_scores.append(robot_per_t)
+
+    vel_per_t = _compute_velocity_deviation(
+        predicted_robot_velocities, observed_robot_velocities, pred_robot.shape
+    )
+    if vel_per_t is not None:
+        if vel_per_t.size == 0:
+            return _fail_closed_result(cfg, input_age_s)
+        component_scores["robot_velocity"] = float(np.mean(vel_per_t))
+        per_timestep_scores.append(vel_per_t)
+
+    ped_per_t = _compute_pedestrian_deviation(
+        predicted_pedestrian_positions, observed_pedestrian_positions, pred_robot.shape[0]
+    )
+    if ped_per_t is not None:
+        if ped_per_t.size == 0:
+            return _fail_closed_result(cfg, input_age_s)
+        component_scores["pedestrian_position"] = float(np.mean(ped_per_t))
+        per_timestep_scores.append(ped_per_t)
+
+    # --- Aggregate score and first threshold-crossing time ---
+    deviation_score = max(component_scores.values()) if component_scores else 0.0
+    first_crossing: float | None = None
+    if per_timestep_scores:
+        aggregate_per_t = np.maximum.reduce(per_timestep_scores)
+        crossings = np.where(aggregate_per_t > cfg.warn_threshold)[0]
+        if crossings.size > 0:
+            first_crossing = float(crossings[0]) * dt_s
+
+    return ExecutionDeviationResult(
+        intervention=_intervention_for_score(deviation_score, cfg),
+        deviation_score=deviation_score,
+        component_deviations=tuple(sorted(component_scores.items())),
+        first_threshold_crossing_time_s=first_crossing,
+        input_age_s=input_age_s,
+        fail_closed=False,
+        schema_version=cfg.schema_version,
+    )
+
+
 __all__ = [
     "DECISION_ACCEPT",
     "DECISION_FALLBACK_BRAKE",
     "DECISION_WARN",
+    "EXECUTION_DEVIATION_CLAIM_BOUNDARY",
+    "EXECUTION_DEVIATION_SCHEMA",
+    "INTERVENTION_CONTINUE",
+    "INTERVENTION_FALLBACK_BRAKE",
+    "INTERVENTION_REPLAN",
+    "INTERVENTION_WARN",
     "PRED_BRAKING_INFEASIBLE",
     "PRED_CLEARANCE_HARD",
     "PRED_CLEARANCE_WARN",
@@ -721,8 +1068,11 @@ __all__ = [
     "PRED_TTC_WARN",
     "TRAJECTORY_VERIFIER_CLAIM_BOUNDARY",
     "TRAJECTORY_VERIFIER_SCHEMA",
+    "ExecutionDeviationConfig",
+    "ExecutionDeviationResult",
     "TrajectoryVerifierConfig",
     "VerifierResult",
+    "monitor_execution_deviation",
     "verify_episode_trace_window",
     "verify_trajectory",
 ]

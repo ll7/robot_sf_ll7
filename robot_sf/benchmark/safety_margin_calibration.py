@@ -534,6 +534,42 @@ def _effective_margins(
     return margins, violations
 
 
+def _validate_adaptive_config(
+    adaptive_config: AdaptiveConformalConfig,
+    *,
+    coverage_target: float,
+) -> None:
+    """Validate delegated ACI controls before building a report.
+
+    The shared primitive validates these values only when its streaming loop reaches a
+    corresponding operation. A short evaluation split can therefore otherwise let an
+    invalid value (for example, an infinite step size) reach report provenance without
+    being exercised.
+    """
+    config_target = require_finite_scalar(
+        "adaptive_config.coverage_target", adaptive_config.coverage_target
+    )
+    if config_target != coverage_target:
+        raise ValueError(
+            "adaptive_config.coverage_target must equal coverage_target so every reused "
+            "conformal primitive is recorded against the report's declared target"
+        )
+    step_size = require_finite_scalar("adaptive_config.step_size", adaptive_config.step_size)
+    if step_size <= 0.0:
+        raise ValueError("adaptive_config.step_size must be positive")
+    if isinstance(adaptive_config.min_history, bool) or not isinstance(
+        adaptive_config.min_history, int
+    ):
+        raise ValueError("adaptive_config.min_history must be a positive integer")
+    if adaptive_config.min_history < 1:
+        raise ValueError("adaptive_config.min_history must be a positive integer")
+    if adaptive_config.window is not None:
+        if isinstance(adaptive_config.window, bool) or not isinstance(adaptive_config.window, int):
+            raise ValueError("adaptive_config.window must be None or a positive integer")
+        if adaptive_config.window < 1:
+            raise ValueError("adaptive_config.window must be None or a positive integer")
+
+
 def _coverage_status(
     *,
     method: str,
@@ -790,11 +826,7 @@ def build_safety_margin_comparison(  # noqa: PLR0913
     aci_cfg = adaptive_config or AdaptiveConformalConfig(
         coverage_target=coverage_target, step_size=0.05, window=None, min_history=1
     )
-    if aci_cfg.coverage_target != coverage_target:
-        raise ValueError(
-            "adaptive_config.coverage_target must equal coverage_target so every reused "
-            "conformal primitive is recorded against the report's declared target"
-        )
+    _validate_adaptive_config(aci_cfg, coverage_target=coverage_target)
 
     fit_ids = _to_id_set("fit_split_ids", fit_split_ids)
     calibration_ids = _to_id_set("calibration_split_ids", calibration_split_ids)

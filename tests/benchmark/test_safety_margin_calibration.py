@@ -580,6 +580,29 @@ def test_adaptive_config_target_must_match_report_target() -> None:
         _build(adaptive_config=AdaptiveConformalConfig(coverage_target=0.8))
 
 
+@pytest.mark.parametrize("step_size", [float("nan"), float("inf"), -float("inf")])
+def test_non_finite_adaptive_step_size_rejected(step_size: float) -> None:
+    """Malformed ACI step sizes fail before a short evaluation can hide them."""
+    with pytest.raises(ValueError, match="adaptive_config.step_size"):
+        _build(
+            traces=_balanced_traces(evaluation_residuals=[0.1]),
+            adaptive_config=AdaptiveConformalConfig(step_size=step_size, min_history=2),
+        )
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        AdaptiveConformalConfig(min_history=1.5),  # type: ignore[arg-type]
+        AdaptiveConformalConfig(window=1.5),  # type: ignore[arg-type]
+    ],
+)
+def test_adaptive_history_controls_must_be_integral(config: AdaptiveConformalConfig) -> None:
+    """Non-integral ACI history controls fail at the comparison boundary."""
+    with pytest.raises(ValueError, match=r"adaptive_config\.(min_history|window)"):
+        _build(adaptive_config=config)
+
+
 def test_preferred_weights_must_match_default_keys() -> None:
     """An incomplete preferred-weights override fails closed."""
     with pytest.raises(ValueError, match="preferred_weights must provide exactly"):

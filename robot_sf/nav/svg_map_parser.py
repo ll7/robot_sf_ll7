@@ -468,6 +468,7 @@ class SvgMapConverter:
                 SvgMapConverter._append_point(state.points, point)
             state.current = p3
             state.last_cubic_ctrl = p2
+            state.last_quad_ctrl = None
 
     @staticmethod
     def _handle_smooth_cubic(state: _PathParseState) -> None:
@@ -494,6 +495,7 @@ class SvgMapConverter:
                 SvgMapConverter._append_point(state.points, point)
             state.current = p3
             state.last_cubic_ctrl = p2
+            state.last_quad_ctrl = None
 
     @staticmethod
     def _handle_quadratic(state: _PathParseState) -> None:
@@ -518,6 +520,7 @@ class SvgMapConverter:
                 SvgMapConverter._append_point(state.points, point)
             state.current = p2
             state.last_quad_ctrl = p1
+            state.last_cubic_ctrl = None
 
     @staticmethod
     def _handle_smooth_quadratic(state: _PathParseState) -> None:
@@ -539,6 +542,7 @@ class SvgMapConverter:
                 SvgMapConverter._append_point(state.points, point)
             state.current = p2
             state.last_quad_ctrl = control
+            state.last_cubic_ctrl = None
 
     @staticmethod
     def _handle_arc(state: _PathParseState) -> None:
@@ -569,10 +573,17 @@ class SvgMapConverter:
             ):
                 SvgMapConverter._append_point(state.points, point)
             state.current = end
+            state.last_cubic_ctrl = None
+            state.last_quad_ctrl = None
 
     @staticmethod
     def _dispatch_path_command(state: _PathParseState) -> None:
-        """Dispatch the current SVG path command to its handler and reset control points."""
+        """Dispatch the current SVG path command to its handler.
+
+        Line/move commands reset both control points here. Curve and arc handlers
+        reset control points inside their per-segment loop, so a command with no
+        parameters leaves control points unchanged (matching legacy behavior).
+        """
         command = state.command
         if command in {"M", "m"}:
             SvgMapConverter._handle_moveto(state)
@@ -588,19 +599,14 @@ class SvgMapConverter:
             state.last_cubic_ctrl = state.last_quad_ctrl = None
         elif command in {"C", "c"}:
             SvgMapConverter._handle_cubic(state)
-            state.last_quad_ctrl = None
         elif command in {"S", "s"}:
             SvgMapConverter._handle_smooth_cubic(state)
-            state.last_quad_ctrl = None
         elif command in {"Q", "q"}:
             SvgMapConverter._handle_quadratic(state)
-            state.last_cubic_ctrl = None
         elif command in {"T", "t"}:
             SvgMapConverter._handle_smooth_quadratic(state)
-            state.last_cubic_ctrl = None
         elif command in {"A", "a"}:
             SvgMapConverter._handle_arc(state)
-            state.last_cubic_ctrl = state.last_quad_ctrl = None
         else:
             raise ValueError(f"Unsupported SVG path command {command!r}.")
 

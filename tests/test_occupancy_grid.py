@@ -623,7 +623,7 @@ class TestGenerateStructuredLoggerPaths:
     """Cover the diagnostic logger paths in generate()'s sub-functions.
 
     These paths were migrated from f-string to structured Loguru style when
-    generate() was decomposed (issue #6631). The validation guards and every
+    generate() was decomposed (PR #6620). The validation guards and every
     rasterization channel are exercised so the migrated logger statements
     remain covered by the test suite.
     """

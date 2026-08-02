@@ -454,6 +454,35 @@ def test_malformed_predicate_evidence_fails_closed_to_unknown_record() -> None:
     validate_failure_diagnosis_record(record.to_dict())
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "expected_reason"),
+    [
+        (
+            "steps",
+            ["not-a-step", 15],
+            "invalid_predicate_evidence:steps_not_two_element_integer_or_none_sequence",
+        ),
+        (
+            "involved_actors",
+            ["robot", 7],
+            "invalid_predicate_evidence:involved_actors_not_string_sequence",
+        ),
+    ],
+)
+def test_malformed_predicate_pointer_fields_fail_closed_to_unknown_record(
+    field: str, value: list[Any], expected_reason: str
+) -> None:
+    """Malformed mapping pointer fields must not receive a known diagnosis label."""
+    predicate = _predicate("collision").to_dict()
+    predicate[field] = value
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == expected_reason
+    validate_failure_diagnosis_record(record.to_dict())
+
+
 def test_non_numeric_predicate_onset_fails_closed_to_unknown_record() -> None:
     """A valid-status predicate still needs finite onset evidence for a known label."""
     predicate = _predicate("collision").to_dict()

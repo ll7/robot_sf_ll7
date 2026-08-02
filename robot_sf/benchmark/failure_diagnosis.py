@@ -876,10 +876,21 @@ def _invalid_predicate_evidence_reason(predicate_dict: Mapping[str, Any]) -> str
         endpoint is not None and _finite_or_none(endpoint) is None for endpoint in time_interval_s
     ):
         return "invalid_predicate_evidence:time_interval_s_non_finite_or_non_numeric"
-    if not isinstance(predicate_dict.get("steps"), (list, tuple)):
-        return "invalid_predicate_evidence:steps_not_sequence"
-    if not isinstance(predicate_dict.get("involved_actors"), (list, tuple)):
-        return "invalid_predicate_evidence:involved_actors_not_sequence"
+    steps = predicate_dict.get("steps")
+    if (
+        not isinstance(steps, (list, tuple))
+        or len(steps) != 2
+        or any(
+            step is not None and (isinstance(step, bool) or not isinstance(step, int))
+            for step in steps
+        )
+    ):
+        return "invalid_predicate_evidence:steps_not_two_element_integer_or_none_sequence"
+    involved_actors = predicate_dict.get("involved_actors")
+    if not isinstance(involved_actors, (list, tuple)) or not all(
+        isinstance(actor, str) for actor in involved_actors
+    ):
+        return "invalid_predicate_evidence:involved_actors_not_string_sequence"
     if not isinstance(predicate_dict.get("evidence_fields"), Mapping):
         return "invalid_predicate_evidence:evidence_fields_not_mapping"
     return None

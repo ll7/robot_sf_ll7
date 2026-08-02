@@ -541,6 +541,7 @@ def validate_failure_diagnosis_record(record: Mapping[str, Any]) -> dict[str, An
         _require_scalar_value(record, field, allowed)
     _require_collection_shapes(record)
     _require_unknown_reason_invariant(record)
+    _require_adapter_provenance_consistency(record)
     return _normalize_record(record)
 
 
@@ -701,6 +702,51 @@ def _require_unknown_reason_invariant(record: Mapping[str, Any]) -> None:
         raise FailureDiagnosisError(
             "unknown_reason must be None when failure_type is not 'unknown'"
         )
+
+
+def _require_adapter_provenance_consistency(record: Mapping[str, Any]) -> None:
+    """Ensure a deterministic diagnosis remains tied to its source predicate.
+
+    The version-one schema has a single deterministic source: the trace failure
+    predicate retained in ``source_predicate``.  A valid record must therefore
+    retain that predicate's validity text and include its exact non-causal
+    evidence pointer.  Otherwise an externally edited record could present a
+    known diagnosis as supported after its source became unavailable, or cite a
+    different predicate as evidence.
+
+    Args:
+        record: A record that has already passed the structural validators.
+
+    Raises:
+        FailureDiagnosisError: If source provenance or fail-closed validity
+            invariants are contradicted.
+    """
+    source_predicate = record["source_predicate"]
+    source_validity_status = _predicate_text(source_predicate, "validity_status")
+    if record["validity_status"] != source_validity_status:
+        raise FailureDiagnosisError("validity_status must match source_predicate.validity_status")
+
+    source_pointer = _causal_evidence_from_predicate(source_predicate)[0]
+    if source_pointer not in record["causal_evidence"]:
+        raise FailureDiagnosisError(
+            "causal_evidence must include the exact source_predicate pointer"
+        )
+
+    if record["validity_status"] != _VALID_VALIDITY_STATUS:
+        invalid_fields = {
+            "failure_type": "unknown",
+            "severity": "unknown",
+            "confidence": "unknown",
+            "evidence_mode": "unknown",
+        }
+        mismatched = [
+            field for field, expected in invalid_fields.items() if record[field] != expected
+        ]
+        if mismatched:
+            raise FailureDiagnosisError(
+                "non-valid predicate evidence requires unknown failure_type, severity, "
+                "confidence, and evidence_mode"
+            )
 
 
 def _normalize_record(record: Mapping[str, Any]) -> dict[str, Any]:

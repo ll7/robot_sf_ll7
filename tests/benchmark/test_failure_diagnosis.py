@@ -389,6 +389,31 @@ def test_validate_record_rejects_non_pointer_causal_evidence() -> None:
         validate_failure_diagnosis_record(payload)
 
 
+def test_validate_record_rejects_tampered_adapter_provenance() -> None:
+    """External edits cannot detach a deterministic record from its source predicate."""
+    record = diagnose_from_trace_failure_predicate(_predicate("collision"))
+
+    mismatched_status = record.to_dict()
+    mismatched_status["validity_status"] = _NOT_AVAILABLE
+    with pytest.raises(FailureDiagnosisError, match="must match source_predicate"):
+        validate_failure_diagnosis_record(mismatched_status)
+
+    unavailable_known = record.to_dict()
+    unavailable_known["validity_status"] = _NOT_AVAILABLE
+    unavailable_known["source_predicate"]["validity_status"] = _NOT_AVAILABLE
+    with pytest.raises(
+        FailureDiagnosisError, match="non-valid predicate evidence requires unknown"
+    ):
+        validate_failure_diagnosis_record(unavailable_known)
+
+    unrelated_pointer = record.to_dict()
+    unrelated_pointer["causal_evidence"] = [
+        {**unrelated_pointer["causal_evidence"][0], "predicate_id": "unrelated"}
+    ]
+    with pytest.raises(FailureDiagnosisError, match="exact source_predicate pointer"):
+        validate_failure_diagnosis_record(unrelated_pointer)
+
+
 def test_validate_record_rejects_non_two_element_onset_interval() -> None:
     """onset_interval must be a two-element list."""
     record = diagnose_from_trace_failure_predicate(_predicate("collision"))

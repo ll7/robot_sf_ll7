@@ -11,7 +11,7 @@
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
-      "robot_sf/benchmark/radius_binding_canary.py": 5,
+      "robot_sf/benchmark/radius_binding_canary.py": 6,
       "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
@@ -106,7 +106,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 184
+    "total": 185
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -1765,6 +1765,15 @@
       "lineno": 486,
       "path": "robot_sf/benchmark/radius_binding_canary.py",
       "source": "except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors."
+    },
+    {
+      "col_offset": 4,
+      "context": "run_radius_binding_canary",
+      "fingerprint": "b16eed2575698cc4",
+      "handler": "Exception",
+      "lineno": 712,
+      "path": "robot_sf/benchmark/radius_binding_canary.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - a canary must fail closed on setup errors."
     }
   ],
   "patterns": [

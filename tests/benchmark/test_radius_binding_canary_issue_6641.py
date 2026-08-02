@@ -73,6 +73,18 @@ def test_canary_go_on_narrow_doorway(narrow_doorway_scenario: dict, radius: floa
         assert surface.observed_radius_m == pytest.approx(radius)
         assert surface.note == ""
 
+    by_surface = {surface.surface: surface for surface in verdict.surfaces}
+    assert by_surface["simulator_collision_geometry"].evidence["runtime_component"] == (
+        "Simulator.robots[0].config.radius"
+    )
+    assert by_surface["obstacle_pedestrian_contact_logic"].evidence["runtime_component"] == (
+        "ContinuousOccupancy.agent_radius/ped_radius + "
+        "is_obstacle_collision/is_pedestrian_collision"
+    )
+    assert by_surface["planner_inputs"].evidence["runtime_component"] == (
+        "Simulator.pysf_sim.forces[].config.robot_radius"
+    )
+
 
 def test_canary_verdict_serializes_to_json(narrow_doorway_scenario: dict) -> None:
     """The verdict is machine-readable (JSON-serializable) per the stop condition."""
@@ -157,6 +169,18 @@ def test_probe_fail_closed_when_surface_unobservable() -> None:
     assert verdict.note
 
 
+def test_canary_fail_closed_when_shared_config_is_unobservable() -> None:
+    """A shared setup failure emits five no-go surfaces instead of a usage exception."""
+    bogus_scenario = {"name": "bogus", "robot_config": {"type": "not_a_real_robot"}}
+
+    verdict = run_radius_binding_canary(bogus_scenario, 0.5, scenario_path=_SCENARIO_PATH)
+
+    assert verdict.go is False
+    assert len(verdict.surfaces) == len(BINDING_SURFACES)
+    assert all(surface.bound is False for surface in verdict.surfaces)
+    assert all("error" in surface.evidence for surface in verdict.surfaces)
+
+
 def test_metric_probe_binds_runner_and_orchestrator_paths(narrow_doorway_scenario: dict) -> None:
     """The metric surface verifies both the runner row and orchestrator metric bindings."""
     declared = make_envelope_scenario(narrow_doorway_scenario, envelope_radius_m=0.8)
@@ -165,7 +189,8 @@ def test_metric_probe_binds_runner_and_orchestrator_paths(narrow_doorway_scenari
 
     assert verdict.bound is True
     assert verdict.evidence["runner_row_robot_radius_m"] == pytest.approx(0.8)
-    assert verdict.evidence["orchestrator_metric_robot_radius_m"] == pytest.approx(0.8)
+    assert verdict.evidence["episode_data_robot_radius_m"] == pytest.approx(0.8)
+    assert verdict.evidence["simulation_config_robot_radius_m"] == pytest.approx(0.8)
 
 
 def test_canary_rejects_non_positive_target(narrow_doorway_scenario: dict) -> None:

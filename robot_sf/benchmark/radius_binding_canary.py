@@ -11,16 +11,19 @@ uses (:func:`robot_sf.scenario_certification.feasibility_oracle.make_envelope_sc
 which writes ``robot_config.radius``), then reads the *effective* radius each binding
 surface binds through that surface's own real code path:
 
-1. ``simulator_collision_geometry`` -- the robot collision envelope the simulator builds
-   (``robot.config.radius``, which also sizes the pedestrian reserved zone).
-2. ``obstacle_pedestrian_contact_logic`` -- the radius-aware contact boundary
+1. ``simulator_collision_geometry`` -- the robot collision envelope the initialized
+   simulator builds (``Simulator.robots[0].config.radius``, which also sizes the
+   pedestrian reserved zone).
+2. ``obstacle_pedestrian_contact_logic`` -- the initialized ``ContinuousOccupancy``
+   radius fields and collision properties, plus the radius-aware contact boundary
    (``robot_radius + ped_radius``) used by the benchmark clearance/contact regime.
 3. ``feasibility_oracle`` -- the planner-free oracle's envelope injection and geometric
    inflation (``envelope_radius_m`` / ``envelope_diameter_m``).
 4. ``metric_metadata_and_output_rows`` -- the radius the benchmark records in metric
-   metadata and output rows (runner row extraction + orchestrator metric-data binding).
-5. ``planner_inputs`` -- the radius injected into planner/force inputs that consume it
-   (ped-robot and adversarial-ped force configs, mirroring the simulator wiring).
+   metadata and output rows (runner row extraction plus the production ``EpisodeData``
+   builder).
+5. ``planner_inputs`` -- the radius injected into the initialized planner/force inputs
+   that consume it (active ped-robot and adversarial-ped force objects).
 
 Semantics are fail-closed: any surface that binds a radius differing from the declared
 target by more than the tolerance, or that cannot be observed, is a no-go. A single
@@ -87,6 +90,66 @@ BINDING_SURFACES: tuple[str, ...] = (
 #: Fixed radius treatment from the #6600 campaign (metres): 0.5, 0.8, and the 1.0 m
 #: release baseline.
 CAMPAIGN_ENVELOPE_RADII_M: tuple[float, ...] = (0.5, 0.8, 1.0)
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeBinding:
+    """Production runtime objects used by the simulator-facing probes."""
+
+    simulator: Any
+    occupancy: Any
+    force_radii_m: dict[str, tuple[float, ...]]
+
+
+def _build_runtime_binding(config: RobotSimulationConfig) -> _RuntimeBinding:
+    """Initialize the simulator surfaces that consume the configured radius.
+
+    Returns:
+        Runtime simulator, occupancy, and active force-radius observations.
+    """
+    from robot_sf.gym_env.env_util import (  # noqa: PLC0415
+        init_collision_and_sensors,
+        init_spaces,
+    )
+    from robot_sf.ped_npc.adversial_ped_force import (  # noqa: PLC0415
+        AdversarialPedForce,
+    )
+    from robot_sf.ped_npc.ped_robot_force import PedRobotForce  # noqa: PLC0415
+    from robot_sf.sim.simulator import init_simulators  # noqa: PLC0415
+
+    map_pool = getattr(config, "map_pool", None)
+    map_defs = getattr(map_pool, "map_defs", None)
+    if not map_defs:
+        raise ValueError("radius canary requires a configured map pool")
+    map_def = next(iter(map_defs.values()))
+    simulators = init_simulators(
+        config,
+        map_def,
+        num_robots=1,
+        random_start_pos=False,
+        peds_have_obstacle_forces=bool(getattr(config, "peds_have_static_obstacle_forces", True)),
+    )
+    if not simulators:
+        raise RuntimeError("radius canary simulator initialization returned no simulator")
+    simulator = simulators[0]
+    _, _, orig_obs_space = init_spaces(config, map_def)
+    occupancies, _ = init_collision_and_sensors(simulator, config, orig_obs_space)
+    if not occupancies:
+        raise RuntimeError("radius canary collision initialization returned no occupancy")
+
+    force_radii: dict[str, list[float]] = {}
+    for force in simulator.pysf_sim.forces:
+        if not isinstance(force, (PedRobotForce, AdversarialPedForce)):
+            continue
+        radius = getattr(getattr(force, "config", None), "robot_radius", None)
+        if radius is not None:
+            force_radii.setdefault(type(force).__name__, []).append(float(radius))
+
+    return _RuntimeBinding(
+        simulator=simulator,
+        occupancy=occupancies[0],
+        force_radii_m={name: tuple(radii) for name, radii in force_radii.items()},
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +230,15 @@ def _failed_verdict(
     )
 
 
+def _failed_surfaces(
+    surfaces: tuple[str, ...], target_radius_m: float, tolerance_m: float, exc: Exception
+) -> tuple[SurfaceVerdict, ...]:
+    """Return fail-closed verdicts for a shared initialization failure."""
+    return tuple(
+        _failed_verdict(surface, target_radius_m, tolerance_m, exc) for surface in surfaces
+    )
+
+
 def _robot_config(
     declared: Mapping[str, Any],
     scenario_path: Path,
@@ -185,21 +257,46 @@ def probe_sim_collision_geometry(
     scenario_path: Path,
     tolerance_m: float = DEFAULT_TOLERANCE_M,
     robot_config: RobotSimulationConfig | None = None,
+    runtime_binding: _RuntimeBinding | None = None,
+    require_runtime: bool = False,
 ) -> SurfaceVerdict:
     """Probe the simulator collision-geometry binding surface.
 
     The simulator's robot collision circle is ``robot.config.radius``; the same value
-    sizes the pedestrian reserved zone (``max(robot.config.radius)``). This probe builds
-    the robot config the simulator builds and reads the radius back.
+    sizes the pedestrian reserved zone. The top-level canary reads the radius back from
+    an initialized ``Simulator`` so a config-only default cannot produce a false pass.
 
     Returns:
         Verdict with ``observed_radius_m`` = the robot collision envelope radius.
     """
     surface = SURFACE_SIM_COLLISION_GEOMETRY
     try:
+        if require_runtime and runtime_binding is None:
+            raise RuntimeError("initialized simulator binding is unavailable")
         cfg = _robot_config(declared, scenario_path, robot_config)
-        observed = float(cfg.robot_config.radius)
-        bound = _radius_matches(observed, target_radius_m, tolerance_m)
+        config_radius = float(cfg.robot_config.radius)
+        if runtime_binding is None:
+            observed = config_radius
+            runtime_evidence = {
+                "binding": "robot.config.radius -> simulator collision circle + reserved zone",
+            }
+        else:
+            simulator = runtime_binding.simulator
+            if not simulator.robots:
+                raise RuntimeError("initialized simulator has no robot")
+            observed = float(simulator.robots[0].config.radius)
+            runtime_evidence = {
+                "runtime_component": "Simulator.robots[0].config.radius",
+                "simulator_goal_proximity_threshold_m": float(simulator.goal_proximity_threshold),
+                "reserved_zone_radius_input_m": max(observed, 0.0),
+                "binding": (
+                    "init_simulators -> Simulator.robots[0].config.radius -> "
+                    "_build_pysf_simulation reserved_zone_radius"
+                ),
+            }
+        bound = _radius_matches(config_radius, target_radius_m, tolerance_m) and _radius_matches(
+            observed, target_radius_m, tolerance_m
+        )
         return SurfaceVerdict(
             surface=surface,
             expected_radius_m=float(target_radius_m),
@@ -208,9 +305,9 @@ def probe_sim_collision_geometry(
             tolerance_m=float(tolerance_m),
             evidence={
                 "robot_config_type": type(cfg.robot_config).__name__,
-                "robot_config_radius_m": observed,
-                "reserved_zone_radius_m": max(observed, 0.0),
-                "binding": "robot.config.radius -> simulator collision circle + reserved zone",
+                "robot_config_radius_m": config_radius,
+                "runtime_robot_radius_m": observed,
+                **runtime_evidence,
             },
             note="" if bound else "simulator collision geometry did not bind the declared radius",
         )
@@ -225,13 +322,14 @@ def probe_contact_logic(
     scenario_path: Path,
     tolerance_m: float = DEFAULT_TOLERANCE_M,
     robot_config: RobotSimulationConfig | None = None,
+    runtime_binding: _RuntimeBinding | None = None,
+    require_runtime: bool = False,
 ) -> SurfaceVerdict:
     """Probe the obstacle/pedestrian contact-logic binding surface.
 
-    The benchmark contact regime treats robot-pedestrian contact as a collision when
-    ``clearance = center_distance - (robot_radius + ped_radius) < 0``. This probe reads
-    the robot envelope radius the simulator carries (the contact geometry), forms the
-    radius-aware contact boundary, and verifies the clearance classifier flips at that
+    The runtime contact surface is ``ContinuousOccupancy``. This probe reads its robot
+    and pedestrian radii, evaluates both runtime collision properties, then forms the
+    benchmark contact boundary and verifies the clearance classifier flips at that
     boundary -- proving the contact logic consumes the declared radius.
 
     Returns:
@@ -240,6 +338,8 @@ def probe_contact_logic(
     """
     surface = SURFACE_CONTACT_LOGIC
     try:
+        if require_runtime and runtime_binding is None:
+            raise RuntimeError("initialized contact binding is unavailable")
         from robot_sf.benchmark.collision_definition_inventory import (  # noqa: PLC0415
             LABEL_COLLISION,
             LABEL_NEAR_MISS,
@@ -248,8 +348,22 @@ def probe_contact_logic(
         from robot_sf.benchmark.constants import NEAR_MISS_DIST  # noqa: PLC0415
 
         cfg = _robot_config(declared, scenario_path, robot_config)
-        robot_radius = float(cfg.robot_config.radius)
-        ped_radius = float(cfg.sim_config.ped_radius)
+        if runtime_binding is None:
+            robot_radius = float(cfg.robot_config.radius)
+            ped_radius = float(cfg.sim_config.ped_radius)
+            runtime_evidence: dict[str, Any] = {}
+        else:
+            occupancy = runtime_binding.occupancy
+            robot_radius = float(occupancy.agent_radius)
+            ped_radius = float(occupancy.ped_radius)
+            runtime_evidence = {
+                "runtime_component": (
+                    "ContinuousOccupancy.agent_radius/ped_radius + "
+                    "is_obstacle_collision/is_pedestrian_collision"
+                ),
+                "runtime_obstacle_collision": bool(occupancy.is_obstacle_collision),
+                "runtime_pedestrian_collision": bool(occupancy.is_pedestrian_collision),
+            }
         radius_sum = robot_radius + ped_radius
 
         # The contact boundary must flip exactly at center_distance == radius_sum:
@@ -283,11 +397,11 @@ def probe_contact_logic(
                 "inside_label": inside_label,
                 "outside_label": outside_label,
                 "near_miss_dist_m": float(NEAR_MISS_DIST),
-                "reserved_zone_radius_m": max(robot_radius, 0.0),
                 "binding": "clearance = center_distance - (robot_radius + ped_radius)",
                 "expected_inside_label": LABEL_COLLISION,
                 "expected_outside_label_not": LABEL_COLLISION,
                 "near_miss_label": LABEL_NEAR_MISS,
+                **runtime_evidence,
             },
             note=note,
         )
@@ -394,24 +508,44 @@ def probe_metric_metadata(
 ) -> SurfaceVerdict:
     """Probe the metric-metadata / output-row binding surface.
 
-    The benchmark records the robot radius in metric metadata and output rows through two
-    real extraction paths: the runner's row-level scenario radius extraction
-    (``_scenario_robot_radius_m``) and the orchestrator's metric-data binding
-    (``getattr(robot_cfg, "radius", 1.0)``). This probe reads both and verifies each
-    records the declared radius.
+    The benchmark records the robot radius in metric metadata and output rows through the
+    runner's row-level scenario radius extraction (``_scenario_robot_radius_m``) and the
+    production ``_build_episode_data`` path that stores ``EpisodeData.robot_radius``.
+    The resolved simulation config is checked as the upstream source for both paths.
 
     Returns:
         Verdict with ``observed_radius_m`` = the runner-recorded output-row radius.
     """
     surface = SURFACE_METRIC_METADATA
     try:
-        from robot_sf.benchmark.runner import _scenario_robot_radius_m  # noqa: PLC0415
+        import numpy as np  # noqa: PLC0415
+
+        from robot_sf.benchmark.runner import (  # noqa: PLC0415
+            _build_episode_data,
+            _scenario_robot_radius_m,
+        )
 
         runner_radius = float(_scenario_robot_radius_m(dict(declared)))
         cfg = _robot_config(declared, scenario_path, robot_config)
-        orchestrator_radius = float(getattr(cfg.robot_config, "radius", 1.0))
-        bound = _radius_matches(runner_radius, target_radius_m, tolerance_m) and _radius_matches(
-            orchestrator_radius, target_radius_m, tolerance_m
+        config_radius = float(getattr(cfg.robot_config, "radius", math.nan))
+        ped_radius = float(getattr(cfg.sim_config, "ped_radius", math.nan))
+        episode = _build_episode_data(
+            [np.zeros((1, 2), dtype=float)],
+            [np.zeros((1, 2), dtype=float)],
+            [np.zeros((1, 2), dtype=float)],
+            [np.empty((0, 2), dtype=float)],
+            [np.empty((0, 2), dtype=float)],
+            None,
+            np.ones(2, dtype=float),
+            0.1,
+            None,
+            robot_radius=runner_radius,
+            ped_radius=ped_radius,
+        )
+        episode_radius = float(episode.robot_radius)
+        bound = all(
+            _radius_matches(observed, target_radius_m, tolerance_m)
+            for observed in (runner_radius, episode_radius, config_radius)
         )
         note = "" if bound else "metric metadata / output rows did not record the declared radius"
         return SurfaceVerdict(
@@ -422,8 +556,10 @@ def probe_metric_metadata(
             tolerance_m=float(tolerance_m),
             evidence={
                 "runner_row_robot_radius_m": runner_radius,
-                "orchestrator_metric_robot_radius_m": orchestrator_radius,
+                "episode_data_robot_radius_m": episode_radius,
+                "simulation_config_robot_radius_m": config_radius,
                 "output_row_key": "robot_radius",
+                "runtime_component": "runner._build_episode_data -> EpisodeData.robot_radius",
                 "binding": "robot_config.radius -> metric metadata + output rows",
             },
             note=note,
@@ -439,36 +575,82 @@ def probe_planner_inputs(
     scenario_path: Path,
     tolerance_m: float = DEFAULT_TOLERANCE_M,
     robot_config: RobotSimulationConfig | None = None,
+    runtime_binding: _RuntimeBinding | None = None,
+    require_runtime: bool = False,
 ) -> SurfaceVerdict:
     """Probe the planner-input binding surface.
 
-    The simulator injects ``robot.config.radius`` into the planner/force inputs that
-    consume the radius: the ped-robot force (``PedRobotForceConfig.robot_radius``) and the
-    adversarial-ped force (``AdversarialPedForceConfig.robot_radius``), via
-    ``replace(config, robot_radius=robot.config.radius)``. This probe reproduces that
-    binding from the declared robot config and verifies the planner inputs receive the
-    declared radius.
+    The simulator injects ``robot.config.radius`` into the active force inputs that consume
+    the radius: the ped-robot force (``PedRobotForceConfig.robot_radius``) and the
+    adversarial-ped force (``AdversarialPedForceConfig.robot_radius``). The top-level canary
+    reads the initialized force objects, so merely reproducing the ``replace`` expression
+    cannot produce a false pass. Direct callers without a runtime binding retain the small
+    config-level probe for focused unit tests.
 
     Returns:
         Verdict with ``observed_radius_m`` = the radius bound into the planner force inputs.
     """
     surface = SURFACE_PLANNER_INPUTS
     try:
+        if require_runtime and runtime_binding is None:
+            raise RuntimeError("initialized planner binding is unavailable")
         from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig  # noqa: PLC0415
         from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig  # noqa: PLC0415
 
         cfg = _robot_config(declared, scenario_path, robot_config)
-        robot_radius = float(cfg.robot_config.radius)
-        prf_radius = float(replace(PedRobotForceConfig(), robot_radius=robot_radius).robot_radius)
-        apf_radius = float(
-            replace(AdversarialPedForceConfig(), robot_radius=robot_radius).robot_radius
-        )
-        bound = (
-            _radius_matches(robot_radius, target_radius_m, tolerance_m)
-            and _radius_matches(prf_radius, target_radius_m, tolerance_m)
-            and _radius_matches(apf_radius, target_radius_m, tolerance_m)
-        )
+        if runtime_binding is None:
+            robot_radius = float(cfg.robot_config.radius)
+            prf_radius = float(
+                replace(PedRobotForceConfig(), robot_radius=robot_radius).robot_radius
+            )
+            apf_radius = float(
+                replace(AdversarialPedForceConfig(), robot_radius=robot_radius).robot_radius
+            )
+            active_force_types: list[str] = []
+            inactive_force_configs: list[str] = []
+            force_bound = _radius_matches(
+                prf_radius, target_radius_m, tolerance_m
+            ) and _radius_matches(apf_radius, target_radius_m, tolerance_m)
+            runtime_evidence: dict[str, Any] = {}
+        else:
+            simulator = runtime_binding.simulator
+            if not simulator.robots:
+                raise RuntimeError("initialized simulator has no robot")
+            robot_radius = float(simulator.robots[0].config.radius)
+            force_radii = runtime_binding.force_radii_m
+            prf_values = force_radii.get("PedRobotForce", ())
+            apf_values = force_radii.get("AdversarialPedForce", ())
+            prf_radius = float(prf_values[0]) if prf_values else None
+            apf_radius = float(apf_values[0]) if apf_values else None
+            active_force_types = sorted(force_radii)
+            configured_force_types = {
+                "PedRobotForce": bool(cfg.sim_config.prf_config.is_active),
+                "AdversarialPedForce": bool(cfg.sim_config.apf_config.is_active),
+            }
+            inactive_force_configs = sorted(
+                name for name, is_active in configured_force_types.items() if not is_active
+            )
+            required_force_types = [
+                name for name, is_active in configured_force_types.items() if is_active
+            ]
+            force_bound = bool(required_force_types) and all(
+                name in force_radii
+                and all(
+                    _radius_matches(value, target_radius_m, tolerance_m)
+                    for value in force_radii[name]
+                )
+                for name in required_force_types
+            )
+            runtime_evidence = {
+                "runtime_component": "Simulator.pysf_sim.forces[].config.robot_radius",
+                "active_force_types": active_force_types,
+                "inactive_force_configs": inactive_force_configs,
+                "configured_force_types": configured_force_types,
+            }
+        bound = _radius_matches(robot_radius, target_radius_m, tolerance_m) and force_bound
         note = "" if bound else "planner inputs did not consume the declared radius"
+        if runtime_binding is not None and not active_force_types:
+            note = "no active radius-consuming planner force was initialized"
         return SurfaceVerdict(
             surface=surface,
             expected_radius_m=float(target_radius_m),
@@ -479,7 +661,8 @@ def probe_planner_inputs(
                 "robot_config_radius_m": robot_radius,
                 "ped_robot_force_robot_radius_m": prf_radius,
                 "adversarial_ped_force_robot_radius_m": apf_radius,
-                "binding": "replace(force_config, robot_radius=robot.config.radius)",
+                "binding": "Simulator._make_ped_forces -> force.config.robot_radius",
+                **runtime_evidence,
             },
             note=note,
         )
@@ -519,45 +702,62 @@ def run_radius_binding_canary(
 
     # Build the robot config once and share it across the probes that consume it, avoiding
     # repeated map parsing. The oracle probe rebuilds internally via run_feasibility_oracle.
-    shared_config = build_robot_config_from_scenario(dict(declared), scenario_path=scenario_path)
-    surfaces = (
-        probe_sim_collision_geometry(
-            declared,
-            target_radius_m,
-            scenario_path=scenario_path,
-            tolerance_m=tolerance_m,
-            robot_config=shared_config,
-        ),
-        probe_contact_logic(
-            declared,
-            target_radius_m,
-            scenario_path=scenario_path,
-            tolerance_m=tolerance_m,
-            robot_config=shared_config,
-        ),
-        probe_feasibility_oracle(
-            declared,
-            target_radius_m,
-            scenario_path=scenario_path,
-            tolerance_m=tolerance_m,
-            certifier=certifier,
-            episode_runner=episode_runner,
-        ),
-        probe_metric_metadata(
-            declared,
-            target_radius_m,
-            scenario_path=scenario_path,
-            tolerance_m=tolerance_m,
-            robot_config=shared_config,
-        ),
-        probe_planner_inputs(
-            declared,
-            target_radius_m,
-            scenario_path=scenario_path,
-            tolerance_m=tolerance_m,
-            robot_config=shared_config,
-        ),
-    )
+    # Any shared initialization failure must become a machine-readable no-go rather than an
+    # exception that lets the runner report a usage error.
+    try:
+        shared_config = build_robot_config_from_scenario(
+            dict(declared), scenario_path=scenario_path
+        )
+        runtime_binding = _build_runtime_binding(shared_config)
+    except Exception as exc:  # noqa: BLE001 - a canary must fail closed on setup errors.
+        # The simulator-facing surfaces share this initialization. If it is not observable,
+        # report every surface as no-go instead of letting the runner emit a usage error.
+        surfaces = _failed_surfaces(BINDING_SURFACES, target_radius_m, tolerance_m, exc)
+    else:
+        surfaces = (
+            probe_sim_collision_geometry(
+                declared,
+                target_radius_m,
+                scenario_path=scenario_path,
+                tolerance_m=tolerance_m,
+                robot_config=shared_config,
+                runtime_binding=runtime_binding,
+                require_runtime=True,
+            ),
+            probe_contact_logic(
+                declared,
+                target_radius_m,
+                scenario_path=scenario_path,
+                tolerance_m=tolerance_m,
+                robot_config=shared_config,
+                runtime_binding=runtime_binding,
+                require_runtime=True,
+            ),
+            probe_feasibility_oracle(
+                declared,
+                target_radius_m,
+                scenario_path=scenario_path,
+                tolerance_m=tolerance_m,
+                certifier=certifier,
+                episode_runner=episode_runner,
+            ),
+            probe_metric_metadata(
+                declared,
+                target_radius_m,
+                scenario_path=scenario_path,
+                tolerance_m=tolerance_m,
+                robot_config=shared_config,
+            ),
+            probe_planner_inputs(
+                declared,
+                target_radius_m,
+                scenario_path=scenario_path,
+                tolerance_m=tolerance_m,
+                robot_config=shared_config,
+                runtime_binding=runtime_binding,
+                require_runtime=True,
+            ),
+        )
     go = all(verdict.bound for verdict in surfaces)
     scenario_id = str(
         scenario.get("name")

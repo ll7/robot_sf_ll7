@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md",
-  "artifact_sha256": "7c848c3c735b2bd7c6acf5eae9be8ae3b9311542b8a72093fb2088b42de711e9",
+  "artifact_sha256": "ba4e3dccfd1b0355ae5f169796a189ff6a3f462d66ce2dfc76efc5a82a66cfd7",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

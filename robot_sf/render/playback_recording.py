@@ -93,7 +93,7 @@ def load_states(filename: str) -> tuple[list[VisualizableSimState], MapDefinitio
     return states, map_def
 
 
-def visualize_states(states: list[VisualizableSimState], map_def: MapDefinition):
+def visualize_states(states: list[VisualizableSimState], map_def: MapDefinition) -> None:
     """
     use the SimulationView to render a list of states
     on the recorded map defintion
@@ -105,7 +105,7 @@ def visualize_states(states: list[VisualizableSimState], map_def: MapDefinition)
     sim_view.exit_simulation()  # to automatically close the window
 
 
-def load_states_and_visualize(filename: str):
+def load_states_and_visualize(filename: str) -> None:
     """
     load a list of states from a file and visualize them
     """
@@ -113,7 +113,9 @@ def load_states_and_visualize(filename: str):
     visualize_states(states, map_def)
 
 
-def load_states_and_record_video(state_file: str, video_save_path: str, video_fps: float = 10):
+def load_states_and_record_video(
+    state_file: str, video_save_path: str, video_fps: float = 10
+) -> None:
     """Create a video recording from serialized simulation states.
 
     Args:

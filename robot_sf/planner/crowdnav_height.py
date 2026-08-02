@@ -15,11 +15,12 @@ from typing import TYPE_CHECKING, Any
 
 import gymnasium
 import numpy as np
-import torch
 from gymnasium import spaces
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    import torch
 
 
 _DEFAULT_MODEL_DIR = Path("output/external_checkpoints/crowdnav_height_extracted/HEIGHT/HEIGHT")
@@ -270,7 +271,7 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
                     self.observation_space = self.envs[0].observation_space
                     self.action_space = self.envs[0].action_space
 
-                def reset(self):
+                def reset(self) -> Any:
                     """Reset the first wrapped environment.
 
                     Returns:
@@ -278,11 +279,11 @@ def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PL
                     """
                     return self.envs[0].reset()
 
-                def step_async(self, _actions):
+                def step_async(self, _actions) -> None:
                     """Accept asynchronous-step calls without scheduling work."""
                     return None
 
-                def step_wait(self):
+                def step_wait(self) -> None:
                     """Raise because the import shim does not execute vector steps."""
                     raise NotImplementedError
 
@@ -407,6 +408,8 @@ class CrowdNavHeightAdapter:
 
     def __init__(self, config: CrowdNavHeightConfig | None = None) -> None:
         """Initialize the adapter and load the upstream checkpoint."""
+        import torch  # noqa: PLC0415
+
         self.config = config or CrowdNavHeightConfig()
         self.repo_root = self.config.repo_root.resolve()
         self.model_dir = self.config.model_dir.resolve()
@@ -557,6 +560,8 @@ class CrowdNavHeightAdapter:
     def reset(self, *, seed: int | None = None) -> None:
         """Reset recurrent state and upstream Turtlebot desired velocities."""
         del seed
+        import torch  # noqa: PLC0415
+
         hidden_size = int(self._checkpoint_config.SRNN.human_node_rnn_size)
         self._hidden_state = {
             "rnn": torch.zeros((1, 1, hidden_size), dtype=torch.float32, device=self._device)
@@ -873,6 +878,8 @@ class CrowdNavHeightAdapter:
             "obstacle_num": np.asarray([float(obstacle_num)], dtype=np.float32),
             "point_clouds": np.asarray([point_clouds], dtype=np.float32),
         }
+        import torch  # noqa: PLC0415
+
         self._last_model_inputs = {
             key: np.array(value, copy=True) for key, value in payload.items()
         }
@@ -907,6 +914,8 @@ class CrowdNavHeightAdapter:
                 f"of {expected_time_step:.6f}s, got {float(time_step):.6f}s"
             )
         obs_tensors, meta = self._build_model_inputs(observation)
+        import torch  # noqa: PLC0415
+
         # Hidden state must be initialized after reset()
         assert self._hidden_state is not None
         with torch.no_grad():

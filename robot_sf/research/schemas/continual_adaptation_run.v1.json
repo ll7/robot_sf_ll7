@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf/schemas/continual_adaptation_run.v1.json",
+  "title": "Continual-adaptation run protocol contract (v1)",
+  "description": "Metadata-only protocol and manifest contract for a bounded continual-adaptation and revalidation run (issue #6582). It declares the immutable baseline checkpoint identity, the immutable safety-wrapper checksum, the bounded adaptation experience budget, the declared mutable parameter prefixes, the disjoint adaptation/evaluation scenario IDs, the synthetic shift(s), and the nominal/shift/forgetting thresholds. It describes the adaptation protocol only; it never launches training, alters a checkpoint, mutates the safety wrapper, or promotes a policy. The adapted-policy identifier is DERIVED by the validator from the baseline identity plus a normalized adaptation manifest; a manifest must never pre-declare an adapted identifier that could overwrite the baseline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "issue",
+    "claim_boundary",
+    "baseline_policy",
+    "safety_wrapper",
+    "adaptation",
+    "scenarios",
+    "shifts",
+    "thresholds",
+    "promotion_decision"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "continual_adaptation_run.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "issue": {
+      "type": "integer"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable statement that this manifest is metadata-only and makes no execution, checkpoint-write, or promotion claim."
+    },
+    "baseline_policy": {
+      "$ref": "#/$defs/baseline_policy"
+    },
+    "safety_wrapper": {
+      "$ref": "#/$defs/safety_wrapper"
+    },
+    "adaptation": {
+      "$ref": "#/$defs/adaptation"
+    },
+    "scenarios": {
+      "$ref": "#/$defs/scenarios"
+    },
+    "shifts": {
+      "$ref": "#/$defs/shifts"
+    },
+    "thresholds": {
+      "$ref": "#/$defs/thresholds"
+    },
+    "promotion_decision": {
+      "$ref": "#/$defs/promotion_decision"
+    },
+    "results": {
+      "$ref": "#/$defs/results",
+      "description": "Optional references to the nominal, shifted, and forgetting evaluation results plus the new evidence bundle. Completeness (all four refs with uri plus checksum) is required only when promotion_decision.decision is 'promote' and is enforced by the semantic checker, so a partial results block fails closed at the promotion gate rather than at schema validation."
+    }
+  },
+  "$defs": {
+    "checksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "digest"],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "enum": ["sha256", "sha384", "sha512", "blake2b"]
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8,}$",
+          "description": "Lowercase hexadecimal digest of the checksummed artifact. Required and non-trivial so a missing/empty hash fails closed at schema validation time."
+        }
+      }
+    },
+    "baseline_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "checksum"],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Immutable baseline checkpoint identifier. The validator derives a NEW adapted-policy identifier from this plus the normalized adaptation manifest and must never overwrite it."
+        },
+        "checksum": {
+          "$ref": "#/$defs/checksum",
+          "description": "Content checksum of the frozen baseline checkpoint so its identity is immutable across the adaptation run."
+        }
+      }
+    },
+    "safety_wrapper": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "checksum", "mutation_permitted"],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pointer to the safety-wrapper module/code whose immutability this contract declares (e.g. a dotted module path)."
+        },
+        "checksum": {
+          "$ref": "#/$defs/checksum",
+          "description": "Checksum of the frozen safety wrapper. The adaptation job must not modify the wrapper; only this checksum may reference it."
+        },
+        "mutation_permitted": {
+          "type": "boolean",
+          "description": "Must be false. The semantic checker fails closed when this is true so a manifest can never grant the adaptation job permission to mutate the safety wrapper."
+        }
+      }
+    },
+    "adaptation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_parameters", "experience_budget"],
+      "properties": {
+        "allowed_parameters": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Mutable parameter prefixes the adaptation job is allowed to update (e.g. 'policy_net.head.'). Parameters outside this list are frozen."
+        },
+        "experience_budget": {
+          "$ref": "#/$defs/experience_budget"
+        }
+      }
+    },
+    "experience_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bounded", "steps", "units"],
+      "properties": {
+        "bounded": {
+          "type": "boolean",
+          "description": "Must be true. The semantic checker fails closed when the budget is unbounded."
+        },
+        "steps": {
+          "type": ["integer", "null"],
+          "description": "Finite, positive step count for a bounded budget. Null/absent finite value for an unbounded declaration is rejected by the semantic checker."
+        },
+        "units": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Units of the step count, e.g. 'gradient_steps', 'env_steps', 'episodes'."
+        }
+      }
+    },
+    "scenarios": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adaptation", "evaluation"],
+      "properties": {
+        "adaptation": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Calibration/adaptation scenario IDs. Must be disjoint from evaluation IDs; enforced by the semantic checker."
+        },
+        "evaluation": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Held-out evaluation scenario IDs. Must be disjoint from adaptation IDs so adaptation data is never counted as evaluation evidence."
+        }
+      }
+    },
+    "shifts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/shift"
+      },
+      "description": "At least one declared synthetic shift (e.g. friction, payload, latency, pedestrian) tested under the revalidation protocol."
+    },
+    "shift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "description"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["friction", "payload", "latency", "pedestrian", "other"]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Optional free-form parameters describing the shift magnitude/direction."
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nominal", "shift", "forgetting"],
+      "properties": {
+        "nominal": {
+          "$ref": "#/$defs/threshold",
+          "description": "Acceptable nominal-performance delta threshold (catastrophic-forgetting guard on baseline conditions)."
+        },
+        "shift": {
+          "$ref": "#/$defs/threshold",
+          "description": "Required shifted-performance improvement threshold under the declared synthetic shift."
+        },
+        "forgetting": {
+          "$ref": "#/$defs/threshold",
+          "description": "Acceptable catastrophic-forgetting delta threshold on baseline conditions after adaptation."
+        }
+      }
+    },
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "bound", "direction"],
+      "properties": {
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bound": {
+          "type": "number"
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["at_most", "at_least"]
+        }
+      }
+    },
+    "promotion_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision"],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["reject", "experimental", "promote"]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "results": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Loosely typed at the schema level so a partial block fails closed at the semantic promotion gate. Each ref is expected to carry a 'uri' plus a 'checksum' of {algorithm, digest}; the semantic checker requires all of nominal_result, shift_result, forgetting_result, and evidence_bundle to be present and complete before 'promote' can pass.",
+      "properties": {
+        "nominal_result": {
+          "type": "object"
+        },
+        "shift_result": {
+          "type": "object"
+        },
+        "forgetting_result": {
+          "type": "object"
+        },
+        "evidence_bundle": {
+          "type": "object",
+          "description": "New immutable evidence bundle for the adapted policy; expected to carry a fresh identifier, uri, and checksum that do not equal the baseline policy identifier."
+        }
+      }
+    }
+  }
+}

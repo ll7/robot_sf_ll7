@@ -1175,17 +1175,39 @@ def _finite_or_none(value: Any) -> float | None:
     return number if isfinite(number) else None
 
 
-def _json_safe_value(value: Any) -> Any:
-    """Return a JSON-safe copy, marking values that invalidate predicate evidence."""
+def _json_safe_value(value: Any, *, _active_ids: set[int] | None = None) -> Any:
+    """Return a JSON-safe copy, marking values that invalidate predicate evidence.
+
+    The predicate adapter accepts mapping forms from outside the typed dataclass boundary.  Keep
+    that boundary fail closed when a numeric object cannot be converted to a finite float or when
+    nested evidence contains a reference cycle.
+    """
     if value is None or isinstance(value, (bool, str)):
         return value
     if isinstance(value, Integral):
         return int(value)
     if isinstance(value, Real):
-        number = float(value)
+        try:
+            number = float(value)
+        except (OverflowError, TypeError, ValueError):
+            return f"{_INVALID_JSON_VALUE_MARKER}numeric_conversion_error"
         return number if isfinite(number) else f"{_INVALID_JSON_VALUE_MARKER}non_finite"
+    active_ids = _active_ids if _active_ids is not None else set()
     if isinstance(value, Mapping):
-        safe_mapping: dict[str, Any] = {}
+        return _json_safe_mapping(value, active_ids)
+    if isinstance(value, (list, tuple)):
+        return _json_safe_sequence(value, active_ids)
+    return f"{_INVALID_JSON_VALUE_MARKER}{type(value).__module__}.{type(value).__qualname__}"
+
+
+def _json_safe_mapping(value: Mapping[Any, Any], active_ids: set[int]) -> dict[str, Any]:
+    """Return a JSON-safe mapping copy while marking cycles and invalid keys."""
+    value_id = id(value)
+    if value_id in active_ids:
+        return {"value": f"{_INVALID_JSON_VALUE_MARKER}cyclic_reference"}
+    active_ids.add(value_id)
+    safe_mapping: dict[str, Any] = {}
+    try:
         for key, item in value.items():
             if isinstance(key, str):
                 safe_key = key
@@ -1194,11 +1216,24 @@ def _json_safe_value(value: Any) -> Any:
                     f"{_INVALID_JSON_VALUE_MARKER}non_string_key:"
                     f"{type(key).__module__}.{type(key).__qualname__}"
                 )
-            safe_mapping[safe_key] = _json_safe_value(item)
+            safe_mapping[safe_key] = _json_safe_value(item, _active_ids=active_ids)
         return safe_mapping
-    if isinstance(value, (list, tuple)):
-        return [_json_safe_value(item) for item in value]
-    return f"{_INVALID_JSON_VALUE_MARKER}{type(value).__module__}.{type(value).__qualname__}"
+    finally:
+        active_ids.remove(value_id)
+
+
+def _json_safe_sequence(
+    value: list[Any] | tuple[Any, ...], active_ids: set[int]
+) -> list[Any] | str:
+    """Return a JSON-safe sequence copy while marking cycles."""
+    value_id = id(value)
+    if value_id in active_ids:
+        return f"{_INVALID_JSON_VALUE_MARKER}cyclic_reference"
+    active_ids.add(value_id)
+    try:
+        return [_json_safe_value(item, _active_ids=active_ids) for item in value]
+    finally:
+        active_ids.remove(value_id)
 
 
 def _contains_invalid_json_marker(value: Any) -> bool:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from fractions import Fraction
 from typing import Any
 
 import pytest
@@ -564,6 +565,34 @@ def test_nonfinite_predicate_evidence_fails_closed_and_stays_strict_json() -> No
     predicate = _predicate("collision").to_dict()
     predicate["time_interval_s"] = [math.nan, 1.5]
     predicate["evidence_fields"] = {"distance_m": math.inf}
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "invalid_predicate_evidence:non_json_safe_value"
+    json.dumps(record.to_dict(), allow_nan=False)
+    validate_failure_diagnosis_record(record.to_dict())
+
+
+def test_unrepresentable_numeric_predicate_evidence_fails_closed() -> None:
+    """Numeric values that overflow float conversion must not escape the adapter."""
+    predicate = _predicate("collision").to_dict()
+    predicate["evidence_fields"] = {"unrepresentable": Fraction(10**10000, 1)}
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "invalid_predicate_evidence:non_json_safe_value"
+    json.dumps(record.to_dict(), allow_nan=False)
+    validate_failure_diagnosis_record(record.to_dict())
+
+
+def test_cyclic_predicate_evidence_fails_closed() -> None:
+    """Cyclic mapping evidence must become a strict-JSON-safe unknown record."""
+    predicate = _predicate("collision").to_dict()
+    evidence_fields: dict[str, Any] = {}
+    evidence_fields["self"] = evidence_fields
+    predicate["evidence_fields"] = evidence_fields
 
     record = diagnose_from_trace_failure_predicate(predicate)
 

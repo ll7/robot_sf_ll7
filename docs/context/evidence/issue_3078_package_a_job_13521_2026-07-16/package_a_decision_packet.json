@@ -40,7 +40,7 @@
       "status": "satisfied"
     }
   ],
-  "classification": "diagnostic",
+  "classification": "diagnostic_review_ready",
   "forbidden_actions_confirmed": {
     "benchmark_campaign_run": false,
     "compute_submit": false,
@@ -75,7 +75,7 @@
       "path": "private-campaign://job-13521/result_store"
     }
   ],
-  "review_marker": "REVIEWED",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "package_a_decision_packet.v1",
   "seed_analysis_reports": [
     {

@@ -557,7 +557,7 @@ class InteractivePlayback(SimulationView):
                 ego_pos = state.ego_ped_pose[0]
                 self.ego_ped_trajectory.append((ego_pos[0], ego_pos[1]))
 
-    def render_current_frame(self):
+    def render_current_frame(self) -> None:
         """Render the current frame at a smooth UI framerate."""
         if 0 <= self.current_frame < len(self.states):
             current_state = self.states[self.current_frame]
@@ -729,7 +729,7 @@ class InteractivePlayback(SimulationView):
         """
         return self._metric_series.get(key, [])
 
-    def update(self):
+    def update(self) -> None:
         """Update the playback state and render the current frame."""
         current_time = pygame.time.get_ticks()
 
@@ -759,7 +759,7 @@ class InteractivePlayback(SimulationView):
         # Render the current frame - no sleep_time needed
         self.render_current_frame()
 
-    def run(self):
+    def run(self) -> None:
         """Run the interactive playback loop."""
         self.last_update_time = pygame.time.get_ticks()
 
@@ -817,7 +817,7 @@ class InteractivePlayback(SimulationView):
         self.screen.blit(text_surface, (pos_x, pos_y))
 
 
-def load_and_play_interactively(filename: str):
+def load_and_play_interactively(filename: str) -> None:
     """
     Load recorded states from a file and play them back interactively.
 
@@ -832,7 +832,7 @@ def load_and_play_interactively(filename: str):
     player.run()
 
 
-def load_and_play_jsonl_interactively(source: str | Path):
+def load_and_play_jsonl_interactively(source: str | Path) -> None:
     """
     Load JSONL recorded states and play them back interactively.
 

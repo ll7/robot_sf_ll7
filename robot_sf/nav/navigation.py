@@ -393,7 +393,7 @@ class RouteNavigator:
             self.waypoints[1][0] - self.waypoints[0][0],
         )
 
-    def update_position(self, pos: Vec2D):
+    def update_position(self, pos: Vec2D) -> None:
         """Update the robot position and advance the waypoint if reached.
 
         Args:

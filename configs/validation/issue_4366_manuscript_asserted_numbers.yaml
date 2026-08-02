@@ -73,14 +73,14 @@ entries:
     manuscript_locator: "audit finding F / reinforcement learning observation grid resolution"
     expected: 0.2
     source:
-      path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+      path: configs/training/ppo/expert_ppo_issue_576_br06_base.yaml
       pointer: env_overrides.grid_config.resolution
 
   - id: ppo_br06_v3_max_peds_per_group
     manuscript_locator: "audit finding F / pedestrian-module group-size cap"
     expected: 3
     source:
-      path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+      path: configs/training/ppo/expert_ppo_issue_576_br06_base.yaml
       pointer: env_overrides.sim_config.max_peds_per_group
 
   - id: heatmap_per_family_means_source

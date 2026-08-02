@@ -29,8 +29,12 @@ from . import videos as _legacy_videos
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from .videos import _VideoArtifact
 
-def generate_fallback_videos(records: list[dict[str, Any]], out_dir: Path, cfg):  # T032
+
+def generate_fallback_videos(
+    records: list[dict[str, Any]], out_dir: Path, cfg
+) -> list[_VideoArtifact]:  # T032
     """Delegate to legacy synthetic video generator.
 
     Parameters

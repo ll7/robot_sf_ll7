@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/claim_card.yaml",
-  "artifact_sha256": "dfea6c344f6ebea426f9b72d1c90c6c7293e9a83df3667ef877d169b5795dd10",
-  "review_marker": "REVIEWED",
+  "artifact_sha256": "0673eaef397a7d160e909f7a1e02713e2c1e3aedbd1c77c3ad91a2cbd10c95aa",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "preserved_exact_bytes": true
 }

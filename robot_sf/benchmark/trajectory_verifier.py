@@ -897,8 +897,8 @@ def _compute_velocity_deviation(
 
     Returns:
         Per-timestep velocity deviation array, or ``None`` if the velocity
-        component is not provided. Returns a negative sentinel (empty array)
-        if inputs are invalid and the caller should fail closed.
+        component is not provided. Returns an empty array if inputs are
+        invalid and the caller should fail closed.
     """
     if predicted_robot_velocities is None and observed_robot_velocities is None:
         return None

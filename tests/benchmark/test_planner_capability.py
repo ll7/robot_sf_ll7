@@ -7,6 +7,8 @@ missing-evidence failure, valid handoff, and rejected handoff.
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.benchmark.planner_capability import (
     PLANNER_CAPABILITY_SCHEMA_VERSION,
     EligibilityResult,
@@ -142,7 +144,7 @@ class TestHandoffEligibility:
         assert len(result.evidence_refs) > 0
         assert "explicit_opt_in" in result.preconditions_checked
 
-    def test_rejected_handoff_not_declared_target(self) -> None:
+    def test_valid_reverse_handoff_selector_to_goal(self) -> None:
         result = check_handoff_eligibility(
             from_planner_id="planner_selector_v2_diagnostic",
             to_planner_id="goal",
@@ -172,13 +174,29 @@ class TestHandoffEligibility:
         assert any("not found" in r for r in result.reasons)
         assert result.prior_planner_id == "goal"
 
-    def test_rejected_handoff_target_not_in_handoff_targets(self) -> None:
-        entry = PlannerCapabilityEntry(
+    def test_rejected_handoff_target_not_in_handoff_targets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        isolated = PlannerCapabilityEntry(
             planner_id="isolated",
+            supported_scenarios=("open_space",),
             handoff_targets=(),
             evidence_refs=("some/file.py",),
         )
-        assert entry.handoff_targets == ()
+        lookup = {"isolated": isolated, "goal": get_capability_entry("goal")}
+        monkeypatch.setattr(
+            "robot_sf.benchmark.planner_capability.get_capability_entry",
+            lookup.get,
+        )
+        result = check_handoff_eligibility(
+            from_planner_id="isolated",
+            to_planner_id="goal",
+            scenario="open_space",
+            preconditions_met={"goal_position_available": True},
+        )
+        assert result.eligible is False
+        assert any("handoff_targets" in r for r in result.reasons)
+        assert result.prior_planner_id == "isolated"
 
     def test_handoff_records_prior_planner(self) -> None:
         result = check_handoff_eligibility(

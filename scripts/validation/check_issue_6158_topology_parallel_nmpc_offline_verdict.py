@@ -1215,7 +1215,7 @@ def _write_evidence_doc(
     verdict: str,
     rationale: str,
     gates: list[GateResult],
-    commit: str,
+    generation_head: str,
     config_rel: str,
     hardware: dict[str, Any],
     branch: str,
@@ -1236,7 +1236,8 @@ def _write_evidence_doc(
         "parent_issue": PARENT_ISSUE,
         "source_pr": SOURCE_PR,
         "source_merge_commit": SOURCE_MERGE_COMMIT,
-        "validated_commit": commit,
+        "audited_prototype_commit": SOURCE_MERGE_COMMIT,
+        "evidence_generation_head": generation_head,
         "branch": branch,
         "verdict": verdict,
         "verdict_rationale": rationale,
@@ -1321,7 +1322,12 @@ def _write_evidence_doc(
         + "\n"
     )
     md.append("## Provenance\n")
-    md.append(f"- Validated commit (`git rev-parse HEAD`): `{commit}`\n")
+    md.append(f"- Audited prototype commit: `{SOURCE_MERGE_COMMIT}` (the immutable #6170 merge)\n")
+    md.append(
+        f"- Evidence-generation Git HEAD: `{generation_head}` (captured before this generated "
+        "document is committed; it is not a self-referential claim about the commit containing "
+        "this file)\n"
+    )
     md.append(f"- Branch: `{branch}`\n")
     md.append(f"- Source PR: #{SOURCE_PR} (merge commit `{SOURCE_MERGE_COMMIT}`)\n")
     md.append(f"- Config: `{config_rel}`\n")
@@ -1418,7 +1424,7 @@ def main() -> int:
     ]
 
     verdict, rationale = _derive_verdict(gates)
-    commit = subprocess.run(
+    generation_head = subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, cwd=REPO_ROOT
     ).stdout.strip()
     branch = _evidence_branch()
@@ -1433,7 +1439,7 @@ def main() -> int:
         verdict=verdict,
         rationale=rationale,
         gates=gates,
-        commit=commit,
+        generation_head=generation_head,
         config_rel=config_rel,
         hardware=hardware,
         branch=branch,

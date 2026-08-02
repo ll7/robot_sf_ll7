@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
+import scripts.validation.check_issue_6158_topology_parallel_nmpc_offline_verdict as validator
 from scripts.validation.check_issue_6158_topology_parallel_nmpc_offline_verdict import (
     GateResult,
     _assess_pairwise_distinctness,
@@ -92,3 +93,57 @@ def test_gate_runner_preserves_an_unexpected_error_as_evidence() -> None:
 
     assert not result.passed
     assert result.evidence == {"execution_error": "RuntimeError: fixture unavailable"}
+
+
+def test_evidence_provenance_separates_audited_commit_from_generation_head(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A generated document must not claim to validate its own future commit."""
+    evidence_doc = tmp_path / "issue_6158_verdict.md"
+    monkeypatch.setattr(validator, "EVIDENCE_DIR", tmp_path)
+    monkeypatch.setattr(validator, "EVIDENCE_DOC", evidence_doc)
+    gates = [GateResult(name=f"gate_{index}", passed=True, detail="ok") for index in range(1, 9)]
+    gates[6] = GateResult(
+        name="gate_7_latency",
+        passed=True,
+        detail="latency recorded",
+        evidence={
+            "latency_exceeds_100ms": False,
+            "worst_hypothesis_p95_ms": 12.0,
+            "per_hypothesis_solver_runtime_ms": {
+                "default": {"p50_ms": 10.0, "p95_ms": 12.0, "max_ms": 13.0, "n": 1}
+            },
+            "plan_wall_clock_ms_measurement_safe_deadline": {},
+            "plan_wall_clock_ms_real_2s_deadline": {},
+            "real_deadline_fires_out_of_8": 0,
+            "measurement_note": "descriptive",
+        },
+    )
+    gates[7] = GateResult(
+        name="gate_8_pr_audit",
+        passed=True,
+        detail="audit recorded",
+        evidence={
+            "files": [],
+            "head_post_merge_note": "prototype preserved",
+        },
+    )
+
+    generation_head = "a" * 40
+    summary = validator._write_evidence_doc(
+        verdict="invalid_regression",
+        rationale="parity failed",
+        gates=gates,
+        generation_head=generation_head,
+        config_rel="configs/algos/issue_5310_topology_parallel_nmpc.yaml",
+        hardware={},
+        branch="test",
+    )
+
+    contents = evidence_doc.read_text()
+    assert summary["audited_prototype_commit"] == validator.SOURCE_MERGE_COMMIT
+    assert summary["evidence_generation_head"] == generation_head
+    assert "validated_commit" not in summary
+    assert f"Audited prototype commit: `{validator.SOURCE_MERGE_COMMIT}`" in contents
+    assert f"Evidence-generation Git HEAD: `{generation_head}`" in contents
+    assert "Validated commit (`git rev-parse HEAD`)" not in contents

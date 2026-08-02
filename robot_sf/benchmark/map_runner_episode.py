@@ -1392,6 +1392,20 @@ class _EpisodePostLoopResult:
     metrics_raw: dict[str, Any]
 
 
+@dataclass(frozen=True, slots=True)
+class _MetadataFinalizationOptions:
+    """Runtime options consumed while finalizing an episode record."""
+
+    actuation_controller: Any
+    active_observation_mode: str
+    active_observation_level: str
+    single_pedestrian_intent_metadata: Any
+    single_pedestrian_vru_metadata: Any
+    record_forces: bool
+    record_planner_decision_trace: bool
+    record_simulation_step_trace: bool
+
+
 def _compute_post_loop_metrics(  # noqa: PLR0913
     *,
     robot_positions: list[np.ndarray],
@@ -1791,6 +1805,33 @@ class _StepLoopConfig:
     hybrid_source_field: str | None
     active_harness: Any
     collision_event_context: _CollisionEventContext
+
+
+@dataclass(frozen=True, slots=True)
+class _StepLoopSetupArgs:
+    """Inputs for environment setup and execution of one episode step loop."""
+
+    seed: int
+    scenario: dict[str, object] | None
+    config: RobotSimulationConfig
+    horizon_val: int
+    planner_runtime: PlannerRuntime
+    noise: NoiseConfig
+    tracking_precision_spec: TrackingPrecisionSpec
+    tracking_precision_rng: np.random.Generator
+    safety_wrapper_runtime: SafetyWrapperRuntimeConfig
+    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None
+    cbf_runtime: CBFSafetyFilterRuntimeConfig
+    actuation_controller: SyntheticActuationController | None
+    algo_meta: AlgoMeta
+    record_forces: bool
+    record_planner_decision_trace: bool
+    record_simulation_step_trace: bool
+    single_pedestrian_intent_metadata: Any
+    single_pedestrian_vru_metadata: Any
+    pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None
+    expected_population_size: int | None
+    hybrid_source_field: str | None
 
 
 @dataclass(slots=True)
@@ -2667,37 +2708,14 @@ def _execute_step_loop(
             break
 
 
-def _setup_and_run_step_loop(  # noqa: PLR0913
-    *,
-    seed: int,
-    scenario: dict[str, object] | None,
-    config: RobotSimulationConfig,
-    horizon_val: int,
-    planner_runtime: PlannerRuntime,
-    noise: NoiseConfig,
-    tracking_precision_spec: TrackingPrecisionSpec,
-    tracking_precision_rng: np.random.Generator,
-    safety_wrapper_runtime: SafetyWrapperRuntimeConfig,
-    safety_wrapper_deadlock_monitor: DeadlockRecoveryMonitor | None,
-    cbf_runtime: CBFSafetyFilterRuntimeConfig,
-    actuation_controller: SyntheticActuationController | None,
-    algo_meta: AlgoMeta,
-    record_forces: bool,
-    record_planner_decision_trace: bool,
-    record_simulation_step_trace: bool,
-    single_pedestrian_intent_metadata: Any,
-    single_pedestrian_vru_metadata: Any,
-    pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None,
-    expected_population_size: int | None,
-    hybrid_source_field: str | None,
-) -> _EpisodeStepLoopResult:
+def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult:
     """Create env, run the step loop, teardown, and return the result bundle.
 
     Returns:
         _EpisodeStepLoopResult: Immutable bundle of trajectory and outcome data.
     """
-    policy_fn = planner_runtime.policy_fn
-    env = make_robot_env(config=config, seed=int(seed), debug=False)
+    policy_fn = args.planner_runtime.policy_fn
+    env = make_robot_env(config=args.config, seed=int(args.seed), debug=False)
     state: _StepLoopState | None = None
     try:
         active_harness = LatencyMeasurementHarness.get_current()
@@ -2705,46 +2723,46 @@ def _setup_and_run_step_loop(  # noqa: PLR0913
             policy_fn = active_harness.wrap_policy(policy_fn)
         obs = _prepare_episode_env(
             env,
-            seed=seed,
-            scenario=scenario,
-            planner_bind_env=planner_runtime.planner_bind_env,
-            planner_reset=planner_runtime.planner_reset,
-            expected_population_size=expected_population_size,
-            pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
+            seed=args.seed,
+            scenario=args.scenario,
+            planner_bind_env=args.planner_runtime.planner_bind_env,
+            planner_reset=args.planner_runtime.planner_reset,
+            expected_population_size=args.expected_population_size,
+            pedestrian_control_trace_label_builder=args.pedestrian_control_trace_label_builder,
         )
         state = _init_step_loop_state(
             obs=obs,
             env=env,
-            config=config,
-            hybrid_source_field=hybrid_source_field,
+            config=args.config,
+            hybrid_source_field=args.hybrid_source_field,
         )
         slc = _make_step_loop_config(
-            config=config,
+            config=args.config,
             policy_fn=policy_fn,
-            planner_runtime=planner_runtime,
-            noise=noise,
-            tracking_precision_spec=tracking_precision_spec,
-            tracking_precision_rng=tracking_precision_rng,
-            safety_wrapper_runtime=safety_wrapper_runtime,
-            safety_wrapper_deadlock_monitor=safety_wrapper_deadlock_monitor,
-            cbf_runtime=cbf_runtime,
-            actuation_controller=actuation_controller,
-            algo_meta=algo_meta,
-            record_forces=record_forces,
-            record_planner_decision_trace=record_planner_decision_trace,
-            record_simulation_step_trace=record_simulation_step_trace,
-            single_pedestrian_intent_metadata=single_pedestrian_intent_metadata,
-            single_pedestrian_vru_metadata=single_pedestrian_vru_metadata,
-            hybrid_source_field=hybrid_source_field,
+            planner_runtime=args.planner_runtime,
+            noise=args.noise,
+            tracking_precision_spec=args.tracking_precision_spec,
+            tracking_precision_rng=args.tracking_precision_rng,
+            safety_wrapper_runtime=args.safety_wrapper_runtime,
+            safety_wrapper_deadlock_monitor=args.safety_wrapper_deadlock_monitor,
+            cbf_runtime=args.cbf_runtime,
+            actuation_controller=args.actuation_controller,
+            algo_meta=args.algo_meta,
+            record_forces=args.record_forces,
+            record_planner_decision_trace=args.record_planner_decision_trace,
+            record_simulation_step_trace=args.record_simulation_step_trace,
+            single_pedestrian_intent_metadata=args.single_pedestrian_intent_metadata,
+            single_pedestrian_vru_metadata=args.single_pedestrian_vru_metadata,
+            hybrid_source_field=args.hybrid_source_field,
             active_harness=active_harness,
-            collision_event_context=_make_collision_event_context(config, state.map_def),
+            collision_event_context=_make_collision_event_context(args.config, state.map_def),
         )
         _execute_step_loop(
             state,
             slc,
             env=env,
-            planner_stats=planner_runtime.planner_stats,
-            horizon_val=horizon_val,
+            planner_stats=args.planner_runtime.planner_stats,
+            horizon_val=args.horizon_val,
         )
         if getattr(env, "simulator", None) is not None:
             state.map_def = env.simulator.map_def
@@ -2752,8 +2770,8 @@ def _setup_and_run_step_loop(  # noqa: PLR0913
     finally:
         _teardown_step_loop(
             env,
-            planner_stats=planner_runtime.planner_stats,
-            planner_close=planner_runtime.planner_close,
+            planner_stats=args.planner_runtime.planner_stats,
+            planner_close=args.planner_runtime.planner_close,
             state=state,
         )
     # ``state`` is only ``None`` when setup raised before the loop body ran; in
@@ -2801,27 +2819,29 @@ def _run_episode_step_loop(  # noqa: PLR0913
         "hybrid_rule_local_planner": "selected_source",
     }.get(_algo_key)
     return _setup_and_run_step_loop(
-        seed=seed,
-        scenario=scenario,
-        config=config,
-        horizon_val=horizon_val,
-        planner_runtime=planner_runtime,
-        noise=noise,
-        tracking_precision_spec=tracking_precision_spec,
-        tracking_precision_rng=tracking_precision_rng,
-        safety_wrapper_runtime=safety_wrapper_runtime,
-        safety_wrapper_deadlock_monitor=safety_wrapper_deadlock_monitor,
-        cbf_runtime=cbf_runtime,
-        actuation_controller=actuation_controller,
-        algo_meta=algo_meta,
-        record_forces=record_forces,
-        record_planner_decision_trace=record_planner_decision_trace,
-        record_simulation_step_trace=record_simulation_step_trace,
-        single_pedestrian_intent_metadata=single_pedestrian_intent_metadata,
-        single_pedestrian_vru_metadata=single_pedestrian_vru_metadata,
-        pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
-        expected_population_size=expected_population_size,
-        hybrid_source_field=hybrid_source_field,
+        _StepLoopSetupArgs(
+            seed=seed,
+            scenario=scenario,
+            config=config,
+            horizon_val=horizon_val,
+            planner_runtime=planner_runtime,
+            noise=noise,
+            tracking_precision_spec=tracking_precision_spec,
+            tracking_precision_rng=tracking_precision_rng,
+            safety_wrapper_runtime=safety_wrapper_runtime,
+            safety_wrapper_deadlock_monitor=safety_wrapper_deadlock_monitor,
+            cbf_runtime=cbf_runtime,
+            actuation_controller=actuation_controller,
+            algo_meta=algo_meta,
+            record_forces=record_forces,
+            record_planner_decision_trace=record_planner_decision_trace,
+            record_simulation_step_trace=record_simulation_step_trace,
+            single_pedestrian_intent_metadata=single_pedestrian_intent_metadata,
+            single_pedestrian_vru_metadata=single_pedestrian_vru_metadata,
+            pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
+            expected_population_size=expected_population_size,
+            hybrid_source_field=hybrid_source_field,
+        )
     )
 
 
@@ -3195,20 +3215,13 @@ def _build_episode_record_dict(  # noqa: PLR0913
     }
 
 
-def _finalize_metadata_phase(  # noqa: PLR0913
+def _finalize_metadata_outputs(
     algo_meta: AlgoMeta,
     *,
     ctx: _EpisodeRunContext,
     loop_result: _EpisodeStepLoopResult,
     post_loop: _EpisodePostLoopResult,
-    actuation_controller: Any,
-    active_observation_mode: str,
-    active_observation_level: str,
-    single_pedestrian_intent_metadata: Any,
-    single_pedestrian_vru_metadata: Any,
-    record_forces: bool,
-    record_planner_decision_trace: bool,
-    record_simulation_step_trace: bool,
+    options: _MetadataFinalizationOptions,
 ) -> tuple[
     AlgoMeta,
     dict[str, Any],
@@ -3217,7 +3230,7 @@ def _finalize_metadata_phase(  # noqa: PLR0913
     dict[str, Any],
     dict[str, Any],
 ]:
-    """Run all algorithm-metadata finalization sub-phases.
+    """Finalize trace, safety, and behavior metadata after runtime metadata.
 
     Returns:
         Tuple of (algo_meta, tp_summary, sw_summary, cbf_summary,
@@ -3226,38 +3239,15 @@ def _finalize_metadata_phase(  # noqa: PLR0913
     config = ctx.config
     robot_pos_arr = post_loop.robot_pos_arr
     robot_config = getattr(config, "robot_config", None) if robot_pos_arr.size else None
-    algo_meta = _finalize_adapter_impact_metadata(
-        algo_meta,
-        algo=ctx.algo,
-        robot_kinematics=ctx.robot_kinematics,
-        active_observation_mode=active_observation_mode,
-        active_observation_level=active_observation_level,
-        benchmark_track=ctx.benchmark_track,
-        track_schema_version=ctx.track_schema_version,
-    )
-    _finalize_feasibility_metadata(cast("dict[str, Any]", algo_meta))
-    algo_meta["ammv_feasibility"] = evaluate_artifact_command_feasibility(
-        loop_result.ammv_command_actions
-    )
-    algo_meta = _finalize_planner_runtime_metadata(
-        algo_meta,
-        loop_result.planner_runtime_snapshot,
-        algo=ctx.algo,
-        robot_kinematics=ctx.robot_kinematics,
-        active_observation_mode=active_observation_mode,
-        active_observation_level=active_observation_level,
-        benchmark_track=ctx.benchmark_track,
-        track_schema_version=ctx.track_schema_version,
-    )
     _finalize_trace_metadata(
         algo_meta,
         config=config,
         initial_goal_distance=loop_result.initial_goal_distance,
         planner_decision_trace=loop_result.planner_decision_trace,
         simulation_step_trace=loop_result.simulation_step_trace,
-        record_planner_decision_trace=record_planner_decision_trace,
-        record_simulation_step_trace=record_simulation_step_trace,
-        record_forces=record_forces,
+        record_planner_decision_trace=options.record_planner_decision_trace,
+        record_simulation_step_trace=options.record_simulation_step_trace,
+        record_forces=options.record_forces,
         scenario=ctx.scenario,
         ped_pos_arr=post_loop.ped_pos_arr,
         ped_forces_arr=post_loop.ped_forces_arr,
@@ -3278,9 +3268,9 @@ def _finalize_metadata_phase(  # noqa: PLR0913
     actuation_summary, public_requirement_events = _finalize_behavior_metadata(
         algo_meta,
         scenario=ctx.scenario,
-        single_pedestrian_intent_metadata=single_pedestrian_intent_metadata,
-        single_pedestrian_vru_metadata=single_pedestrian_vru_metadata,
-        actuation_controller=actuation_controller,
+        single_pedestrian_intent_metadata=options.single_pedestrian_intent_metadata,
+        single_pedestrian_vru_metadata=options.single_pedestrian_vru_metadata,
+        actuation_controller=options.actuation_controller,
         actuation_profile=ctx.actuation_profile,
         synthetic_actuation_trace=loop_result.synthetic_actuation_trace,
         latency_profile=ctx.latency_profile,
@@ -3297,6 +3287,58 @@ def _finalize_metadata_phase(  # noqa: PLR0913
         cbf_summary,
         actuation_summary,
         public_requirement_events,
+    )
+
+
+def _finalize_metadata_phase(
+    algo_meta: AlgoMeta,
+    *,
+    ctx: _EpisodeRunContext,
+    loop_result: _EpisodeStepLoopResult,
+    post_loop: _EpisodePostLoopResult,
+    options: _MetadataFinalizationOptions,
+) -> tuple[
+    AlgoMeta,
+    dict[str, Any],
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any],
+    dict[str, Any],
+]:
+    """Finalize runtime metadata before trace, safety, and behavior outputs.
+
+    Returns:
+        Tuple containing finalized metadata and derived summaries.
+    """
+    algo_meta = _finalize_adapter_impact_metadata(
+        algo_meta,
+        algo=ctx.algo,
+        robot_kinematics=ctx.robot_kinematics,
+        active_observation_mode=options.active_observation_mode,
+        active_observation_level=options.active_observation_level,
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+    )
+    _finalize_feasibility_metadata(cast("dict[str, Any]", algo_meta))
+    algo_meta["ammv_feasibility"] = evaluate_artifact_command_feasibility(
+        loop_result.ammv_command_actions
+    )
+    algo_meta = _finalize_planner_runtime_metadata(
+        algo_meta,
+        loop_result.planner_runtime_snapshot,
+        algo=ctx.algo,
+        robot_kinematics=ctx.robot_kinematics,
+        active_observation_mode=options.active_observation_mode,
+        active_observation_level=options.active_observation_level,
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+    )
+    return _finalize_metadata_outputs(
+        algo_meta,
+        ctx=ctx,
+        loop_result=loop_result,
+        post_loop=post_loop,
+        options=options,
     )
 
 
@@ -3513,6 +3555,71 @@ def _finalize_result_provenance_block(  # noqa: PLR0913
     }
 
 
+def _finalize_assembled_record_provenance(  # noqa: PLR0913
+    record: dict[str, Any],
+    *,
+    ctx: _EpisodeRunContext,
+    loop_result: _EpisodeStepLoopResult,
+    post_loop: _EpisodePostLoopResult,
+    algo_meta: AlgoMeta,
+    scenario_params: dict[str, Any],
+    outcome: dict[str, Any],
+    record_forces: bool,
+    active_observation_mode: str,
+    active_observation_level: str,
+) -> None:
+    """Attach provenance and episode-evidence metadata to an assembled record."""
+    _finalize_record_provenance(
+        record,
+        algo_meta=algo_meta,
+        config=ctx.config,
+        policy_cfg=ctx.policy_cfg,
+        scenario=ctx.scenario,
+        scenario_id=ctx.scenario_id,
+        seed=record["seed"],
+        scenario_params=scenario_params,
+        robot_pos_arr=post_loop.robot_pos_arr,
+        ped_pos_arr=post_loop.ped_pos_arr,
+        goal_vec=loop_result.goal_vec,
+        initial_goal_distance=loop_result.initial_goal_distance,
+        termination_reason=loop_result.termination_reason,
+        outcome=outcome,
+        collision_events=loop_result.collision_events,
+        planner_decision_trace=loop_result.planner_decision_trace,
+        route_complete=loop_result.reached_goal_step is not None,
+        collision_seen=loop_result.collision_seen,
+        horizon_val=ctx.horizon_val,
+        record_forces=record_forces,
+        active_observation_mode=active_observation_mode,
+        active_observation_level=active_observation_level,
+        noise_spec=ctx.noise_spec,
+        tracking_precision_spec=ctx.tracking_precision_spec,
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+    )
+
+
+def _episode_outcome(loop_result: _EpisodeStepLoopResult) -> tuple[dict[str, bool], str]:
+    """Build the standardized outcome payload and status for one step-loop result.
+
+    Returns:
+        Tuple of outcome payload and status label.
+    """
+    route_complete = loop_result.reached_goal_step is not None
+    timeout_event = loop_result.timeout_seen or loop_result.termination_reason in {
+        "truncated",
+        "max_steps",
+    }
+    return (
+        build_outcome_payload(
+            route_complete=route_complete,
+            collision=loop_result.collision_seen,
+            timeout=timeout_event,
+        ),
+        status_from_termination_reason(loop_result.termination_reason),
+    )
+
+
 def _assemble_episode_record(  # noqa: PLR0913
     *,
     ctx: _EpisodeRunContext,
@@ -3527,7 +3634,7 @@ def _assemble_episode_record(  # noqa: PLR0913
     seed: int,
     record_forces: bool,
 ) -> dict[str, Any]:
-    """Compute outcome, build the record dict, and attach provenance.
+    """Build and finalize an episode record.
 
     Returns:
         dict[str, Any]: The finalized episode record.
@@ -3535,17 +3642,7 @@ def _assemble_episode_record(  # noqa: PLR0913
     robot_pos_arr = post_loop.robot_pos_arr
     steps_taken = int(robot_pos_arr.shape[0])
     wall_time = float(max(1e-9, time.time() - ctx.start_time))
-    route_complete = loop_result.reached_goal_step is not None
-    timeout_event = loop_result.timeout_seen or loop_result.termination_reason in {
-        "truncated",
-        "max_steps",
-    }
-    outcome = build_outcome_payload(
-        route_complete=route_complete,
-        collision=loop_result.collision_seen,
-        timeout=timeout_event,
-    )
-    status = status_from_termination_reason(loop_result.termination_reason)
+    outcome, status = _episode_outcome(loop_result)
     contradictions = outcome_contradictions(
         termination_reason=loop_result.termination_reason,
         outcome=outcome,
@@ -3581,33 +3678,17 @@ def _assemble_episode_record(  # noqa: PLR0913
         contradictions=contradictions,
         view_integrity=loop_result.view_integrity,
     )
-    _finalize_record_provenance(
+    _finalize_assembled_record_provenance(
         record,
+        ctx=ctx,
+        loop_result=loop_result,
+        post_loop=post_loop,
         algo_meta=algo_meta,
-        config=ctx.config,
-        policy_cfg=ctx.policy_cfg,
-        scenario=ctx.scenario,
-        scenario_id=ctx.scenario_id,
-        seed=seed,
         scenario_params=scenario_params,
-        robot_pos_arr=robot_pos_arr,
-        ped_pos_arr=post_loop.ped_pos_arr,
-        goal_vec=loop_result.goal_vec,
-        initial_goal_distance=loop_result.initial_goal_distance,
-        termination_reason=loop_result.termination_reason,
         outcome=outcome,
-        collision_events=loop_result.collision_events,
-        planner_decision_trace=loop_result.planner_decision_trace,
-        route_complete=route_complete,
-        collision_seen=loop_result.collision_seen,
-        horizon_val=ctx.horizon_val,
         record_forces=record_forces,
         active_observation_mode=active_observation_mode,
         active_observation_level=active_observation_level,
-        noise_spec=ctx.noise_spec,
-        tracking_precision_spec=ctx.tracking_precision_spec,
-        benchmark_track=ctx.benchmark_track,
-        track_schema_version=ctx.track_schema_version,
     )
     return record
 
@@ -3651,24 +3732,82 @@ def _finalize_record_inner(  # noqa: PLR0913
         ctx=ctx,
         loop_result=loop_result,
         post_loop=post_loop,
+        options=_MetadataFinalizationOptions(
+            actuation_controller=actuation_controller,
+            active_observation_mode=active_observation_mode,
+            active_observation_level=active_observation_level,
+            single_pedestrian_intent_metadata=single_pedestrian_intent_metadata,
+            single_pedestrian_vru_metadata=single_pedestrian_vru_metadata,
+            record_forces=record_forces,
+            record_planner_decision_trace=record_planner_decision_trace,
+            record_simulation_step_trace=record_simulation_step_trace,
+        ),
+    )
+    return _finalize_metrics_and_assemble_record(
+        ctx=ctx,
+        loop_result=loop_result,
+        post_loop=post_loop,
+        algo_meta=algo_meta,
+        tracking_precision_summary=tp_summary,
+        safety_wrapper_summary=sw_summary,
+        cbf_filter_summary=cbf_summary,
+        actuation_summary=actuation_summary,
+        public_requirement_events=public_requirement_events,
         actuation_controller=actuation_controller,
         active_observation_mode=active_observation_mode,
         active_observation_level=active_observation_level,
-        single_pedestrian_intent_metadata=single_pedestrian_intent_metadata,
-        single_pedestrian_vru_metadata=single_pedestrian_vru_metadata,
+        seed=seed,
+        horizon=horizon,
+        dt=dt,
+        safety_wrapper=safety_wrapper,
+        cbf_safety_filter=cbf_safety_filter,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
         record_forces=record_forces,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
     )
+
+
+def _finalize_metrics_and_assemble_record(  # noqa: PLR0913
+    *,
+    ctx: _EpisodeRunContext,
+    loop_result: _EpisodeStepLoopResult,
+    post_loop: _EpisodePostLoopResult,
+    algo_meta: AlgoMeta,
+    tracking_precision_summary: dict[str, Any],
+    safety_wrapper_summary: dict[str, Any] | None,
+    cbf_filter_summary: dict[str, Any] | None,
+    actuation_summary: dict[str, Any],
+    public_requirement_events: dict[str, Any],
+    actuation_controller: Any,
+    active_observation_mode: str,
+    active_observation_level: str,
+    seed: int,
+    horizon: int | None,
+    dt: float | None,
+    safety_wrapper: dict[str, Any] | None,
+    cbf_safety_filter: dict[str, Any] | None,
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
+    record_forces: bool,
+    record_planner_decision_trace: bool,
+    record_simulation_step_trace: bool,
+) -> dict[str, Any]:
+    """Build metrics, scenario parameters, and the final episode record.
+
+    Returns:
+        dict[str, Any]: The finalized episode record.
+    """
     metrics = _finalize_episode_metrics(
         post_loop.metrics_raw,
         algo_meta=algo_meta,
         actuation_controller=actuation_controller,
         actuation_summary=actuation_summary,
-        tracking_precision_summary=tp_summary,
+        tracking_precision_summary=tracking_precision_summary,
         tracking_precision_spec=ctx.tracking_precision_spec,
-        safety_wrapper_summary=sw_summary,
-        cbf_filter_summary=cbf_summary,
+        safety_wrapper_summary=safety_wrapper_summary,
+        cbf_filter_summary=cbf_filter_summary,
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
     )

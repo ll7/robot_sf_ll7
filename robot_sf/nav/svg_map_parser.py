@@ -35,6 +35,7 @@ Typical Usage:
 
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
 from math import atan2, ceil, cos, dist, pi, radians, sin, sqrt
 from pathlib import Path
 
@@ -77,6 +78,20 @@ def _log_obstacle_path_event_once(
         return
     _LOGGED_OBSTACLE_PATH_EVENTS.add(key)
     getattr(logger, level)(message, svg=path_obj.name, pid=path_id, **kwargs)
+
+
+@dataclass
+class _PathParseState:
+    """Mutable state container for SVG path coordinate parsing."""
+
+    tokens: list[str]
+    idx: int = 0
+    command: str | None = None
+    current: tuple[float, float] = (0.0, 0.0)
+    subpath_start: tuple[float, float] | None = None
+    last_cubic_ctrl: tuple[float, float] | None = None
+    last_quad_ctrl: tuple[float, float] | None = None
+    points: list[tuple[float, float]] = field(default_factory=list)
 
 
 class SvgMapConverter:
@@ -339,7 +354,264 @@ class SvgMapConverter:
             tokens[idx : idx + 1] = [token[0], token[1]]
 
     @staticmethod
-    def _parse_path_coordinates(  # noqa: C901, PLR0912, PLR0915
+    def _is_path_command(token: str) -> bool:
+        """Return whether a path token is an SVG command letter."""
+        return len(token) == 1 and token.isalpha()
+
+    @staticmethod
+    def _read_path_number(state: _PathParseState) -> float:
+        """Read the next numeric path parameter and advance the state cursor.
+
+        Returns:
+            float: Parsed SVG path parameter.
+
+        Raises:
+            ValueError: If tokens are exhausted or the next token is a command letter.
+        """
+        if state.idx >= len(state.tokens):
+            raise ValueError("Unexpected end of path data while reading numeric parameter.")
+        token = state.tokens[state.idx]
+        if SvgMapConverter._is_path_command(token):
+            raise ValueError(f"Expected numeric path parameter, found command {token!r}.")
+        state.idx += 1
+        return float(token)
+
+    @staticmethod
+    def _has_more_path_numbers(state: _PathParseState) -> bool:
+        """Return whether the current command still has numeric parameters."""
+        return state.idx < len(state.tokens) and not SvgMapConverter._is_path_command(
+            state.tokens[state.idx]
+        )
+
+    @staticmethod
+    def _handle_moveto(state: _PathParseState) -> None:
+        """Handle M/m (moveto) command, updating state position and subpath start."""
+        x = SvgMapConverter._read_path_number(state)
+        y = SvgMapConverter._read_path_number(state)
+        if state.command == "m":
+            state.current = (state.current[0] + x, state.current[1] + y)
+        else:
+            state.current = (x, y)
+        state.subpath_start = state.current
+        SvgMapConverter._append_point(state.points, state.current)
+
+        line_command = "l" if state.command == "m" else "L"
+        while SvgMapConverter._has_more_path_numbers(state):
+            x = SvgMapConverter._read_path_number(state)
+            y = SvgMapConverter._read_path_number(state)
+            if line_command == "l":
+                state.current = (state.current[0] + x, state.current[1] + y)
+            else:
+                state.current = (x, y)
+            SvgMapConverter._append_point(state.points, state.current)
+        state.command = line_command
+
+    @staticmethod
+    def _handle_lineto(state: _PathParseState) -> None:
+        """Handle L/l (lineto) command, updating state position."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            x = SvgMapConverter._read_path_number(state)
+            y = SvgMapConverter._read_path_number(state)
+            if state.command == "l":
+                state.current = (state.current[0] + x, state.current[1] + y)
+            else:
+                state.current = (x, y)
+            SvgMapConverter._append_point(state.points, state.current)
+
+    @staticmethod
+    def _handle_horizontal(state: _PathParseState) -> None:
+        """Handle H/h (horizontal lineto) command, updating state position."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            x = SvgMapConverter._read_path_number(state)
+            if state.command == "h":
+                state.current = (state.current[0] + x, state.current[1])
+            else:
+                state.current = (x, state.current[1])
+            SvgMapConverter._append_point(state.points, state.current)
+
+    @staticmethod
+    def _handle_vertical(state: _PathParseState) -> None:
+        """Handle V/v (vertical lineto) command, updating state position."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            y = SvgMapConverter._read_path_number(state)
+            if state.command == "v":
+                state.current = (state.current[0], state.current[1] + y)
+            else:
+                state.current = (state.current[0], y)
+            SvgMapConverter._append_point(state.points, state.current)
+
+    @staticmethod
+    def _handle_cubic(state: _PathParseState) -> None:
+        """Handle C/c (cubic bezier) command, updating state position and control point."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            x1 = SvgMapConverter._read_path_number(state)
+            y1 = SvgMapConverter._read_path_number(state)
+            x2 = SvgMapConverter._read_path_number(state)
+            y2 = SvgMapConverter._read_path_number(state)
+            x = SvgMapConverter._read_path_number(state)
+            y = SvgMapConverter._read_path_number(state)
+            if state.command == "c":
+                p1 = (state.current[0] + x1, state.current[1] + y1)
+                p2 = (state.current[0] + x2, state.current[1] + y2)
+                p3 = (state.current[0] + x, state.current[1] + y)
+            else:
+                p1 = (x1, y1)
+                p2 = (x2, y2)
+                p3 = (x, y)
+            for point in SvgMapConverter._sample_cubic_curve(
+                state.current,
+                p1,
+                p2,
+                p3,
+                max_step=SvgMapConverter._CURVE_MAX_STEP,
+            ):
+                SvgMapConverter._append_point(state.points, point)
+            state.current = p3
+            state.last_cubic_ctrl = p2
+            state.last_quad_ctrl = None
+
+    @staticmethod
+    def _handle_smooth_cubic(state: _PathParseState) -> None:
+        """Handle S/s (smooth cubic) command, updating state position and control point."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            x2 = SvgMapConverter._read_path_number(state)
+            y2 = SvgMapConverter._read_path_number(state)
+            x = SvgMapConverter._read_path_number(state)
+            y = SvgMapConverter._read_path_number(state)
+            p1 = SvgMapConverter._reflect_point(state.current, state.last_cubic_ctrl)
+            if state.command == "s":
+                p2 = (state.current[0] + x2, state.current[1] + y2)
+                p3 = (state.current[0] + x, state.current[1] + y)
+            else:
+                p2 = (x2, y2)
+                p3 = (x, y)
+            for point in SvgMapConverter._sample_cubic_curve(
+                state.current,
+                p1,
+                p2,
+                p3,
+                max_step=SvgMapConverter._CURVE_MAX_STEP,
+            ):
+                SvgMapConverter._append_point(state.points, point)
+            state.current = p3
+            state.last_cubic_ctrl = p2
+            state.last_quad_ctrl = None
+
+    @staticmethod
+    def _handle_quadratic(state: _PathParseState) -> None:
+        """Handle Q/q (quadratic bezier) command, updating state position and control point."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            x1 = SvgMapConverter._read_path_number(state)
+            y1 = SvgMapConverter._read_path_number(state)
+            x = SvgMapConverter._read_path_number(state)
+            y = SvgMapConverter._read_path_number(state)
+            if state.command == "q":
+                p1 = (state.current[0] + x1, state.current[1] + y1)
+                p2 = (state.current[0] + x, state.current[1] + y)
+            else:
+                p1 = (x1, y1)
+                p2 = (x, y)
+            for point in SvgMapConverter._sample_quadratic_curve(
+                state.current,
+                p1,
+                p2,
+                max_step=SvgMapConverter._CURVE_MAX_STEP,
+            ):
+                SvgMapConverter._append_point(state.points, point)
+            state.current = p2
+            state.last_quad_ctrl = p1
+            state.last_cubic_ctrl = None
+
+    @staticmethod
+    def _handle_smooth_quadratic(state: _PathParseState) -> None:
+        """Handle T/t (smooth quadratic) command, updating state position and control point."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            x = SvgMapConverter._read_path_number(state)
+            y = SvgMapConverter._read_path_number(state)
+            control = SvgMapConverter._reflect_point(state.current, state.last_quad_ctrl)
+            if state.command == "t":
+                p2 = (state.current[0] + x, state.current[1] + y)
+            else:
+                p2 = (x, y)
+            for point in SvgMapConverter._sample_quadratic_curve(
+                state.current,
+                control,
+                p2,
+                max_step=SvgMapConverter._CURVE_MAX_STEP,
+            ):
+                SvgMapConverter._append_point(state.points, point)
+            state.current = p2
+            state.last_quad_ctrl = control
+            state.last_cubic_ctrl = None
+
+    @staticmethod
+    def _handle_arc(state: _PathParseState) -> None:
+        """Handle A/a (arc) command, updating state position."""
+        while SvgMapConverter._has_more_path_numbers(state):
+            rx = SvgMapConverter._read_path_number(state)
+            ry = SvgMapConverter._read_path_number(state)
+            x_axis_rotation = SvgMapConverter._read_path_number(state)
+            SvgMapConverter._split_arc_flag_token(state.tokens, state.idx)
+            large_arc_flag = SvgMapConverter._read_path_number(state)
+            SvgMapConverter._split_arc_flag_token(state.tokens, state.idx)
+            sweep_flag = SvgMapConverter._read_path_number(state)
+            x = SvgMapConverter._read_path_number(state)
+            y = SvgMapConverter._read_path_number(state)
+            if state.command == "a":
+                end = (state.current[0] + x, state.current[1] + y)
+            else:
+                end = (x, y)
+            for point in SvgMapConverter._sample_arc_segment(
+                state.current,
+                end,
+                rx,
+                ry,
+                x_axis_rotation,
+                large_arc_flag >= 0.5,
+                sweep_flag >= 0.5,
+                max_step=SvgMapConverter._CURVE_MAX_STEP,
+            ):
+                SvgMapConverter._append_point(state.points, point)
+            state.current = end
+            state.last_cubic_ctrl = None
+            state.last_quad_ctrl = None
+
+    @staticmethod
+    def _dispatch_path_command(state: _PathParseState) -> None:
+        """Dispatch the current SVG path command to its handler.
+
+        Line/move commands reset both control points here. Curve and arc handlers
+        reset control points inside their per-segment loop, so a command with no
+        parameters leaves control points unchanged (matching legacy behavior).
+        """
+        command = state.command
+        if command in {"M", "m"}:
+            SvgMapConverter._handle_moveto(state)
+            state.last_cubic_ctrl = state.last_quad_ctrl = None
+        elif command in {"L", "l"}:
+            SvgMapConverter._handle_lineto(state)
+            state.last_cubic_ctrl = state.last_quad_ctrl = None
+        elif command in {"H", "h"}:
+            SvgMapConverter._handle_horizontal(state)
+            state.last_cubic_ctrl = state.last_quad_ctrl = None
+        elif command in {"V", "v"}:
+            SvgMapConverter._handle_vertical(state)
+            state.last_cubic_ctrl = state.last_quad_ctrl = None
+        elif command in {"C", "c"}:
+            SvgMapConverter._handle_cubic(state)
+        elif command in {"S", "s"}:
+            SvgMapConverter._handle_smooth_cubic(state)
+        elif command in {"Q", "q"}:
+            SvgMapConverter._handle_quadratic(state)
+        elif command in {"T", "t"}:
+            SvgMapConverter._handle_smooth_quadratic(state)
+        elif command in {"A", "a"}:
+            SvgMapConverter._handle_arc(state)
+        else:
+            raise ValueError(f"Unsupported SVG path command {command!r}.")
+
+    @staticmethod
+    def _parse_path_coordinates(
         path_d: str,
     ) -> tuple[tuple[float, float], ...]:
         """Parse SVG path commands into ordered waypoint coordinates.
@@ -357,243 +629,27 @@ class SvgMapConverter:
         if not tokens:
             return ()
 
-        def is_command(token: str) -> bool:
-            """Return whether a path token is an SVG command letter."""
-            return len(token) == 1 and token.isalpha()
-
-        idx = 0
-        command: str | None = None
-        current = (0.0, 0.0)
-        subpath_start: tuple[float, float] | None = None
-        last_cubic_ctrl: tuple[float, float] | None = None
-        last_quad_ctrl: tuple[float, float] | None = None
-        points: list[tuple[float, float]] = []
-
-        def read_number() -> float:
-            """Read the next numeric path parameter and advance the token cursor.
-
-            Returns:
-                float: Parsed SVG path parameter.
-            """
-            nonlocal idx
-            if idx >= len(tokens):
-                raise ValueError("Unexpected end of path data while reading numeric parameter.")
-            token = tokens[idx]
-            if is_command(token):
-                raise ValueError(f"Expected numeric path parameter, found command {token!r}.")
-            idx += 1
-            return float(token)
-
-        def has_more_numbers() -> bool:
-            """Return whether the current command still has numeric parameters."""
-            return idx < len(tokens) and not is_command(tokens[idx])
-
-        while idx < len(tokens):
-            token = tokens[idx]
-            if is_command(token):
-                command = token
-                idx += 1
-                if command in {"Z", "z"}:
-                    if subpath_start is not None:
-                        SvgMapConverter._append_point(points, subpath_start)
-                        current = subpath_start
-                    command = None
-                    last_cubic_ctrl = None
-                    last_quad_ctrl = None
+        state = _PathParseState(tokens=tokens)
+        while state.idx < len(state.tokens):
+            token = state.tokens[state.idx]
+            if SvgMapConverter._is_path_command(token):
+                state.command = token
+                state.idx += 1
+                if state.command in {"Z", "z"}:
+                    if state.subpath_start is not None:
+                        SvgMapConverter._append_point(state.points, state.subpath_start)
+                        state.current = state.subpath_start
+                    state.command = None
+                    state.last_cubic_ctrl = None
+                    state.last_quad_ctrl = None
                     continue
 
-            if command is None:
+            if state.command is None:
                 raise ValueError("Path data is missing an initial SVG command.")
 
-            if command in {"M", "m"}:
-                x = read_number()
-                y = read_number()
-                if command == "m":
-                    current = (current[0] + x, current[1] + y)
-                else:
-                    current = (x, y)
-                subpath_start = current
-                SvgMapConverter._append_point(points, current)
+            SvgMapConverter._dispatch_path_command(state)
 
-                line_command = "l" if command == "m" else "L"
-                while has_more_numbers():
-                    x = read_number()
-                    y = read_number()
-                    if line_command == "l":
-                        current = (current[0] + x, current[1] + y)
-                    else:
-                        current = (x, y)
-                    SvgMapConverter._append_point(points, current)
-                command = line_command
-                last_cubic_ctrl = None
-                last_quad_ctrl = None
-                continue
-
-            if command in {"L", "l"}:
-                while has_more_numbers():
-                    x = read_number()
-                    y = read_number()
-                    if command == "l":
-                        current = (current[0] + x, current[1] + y)
-                    else:
-                        current = (x, y)
-                    SvgMapConverter._append_point(points, current)
-                last_cubic_ctrl = None
-                last_quad_ctrl = None
-                continue
-
-            if command in {"H", "h"}:
-                while has_more_numbers():
-                    x = read_number()
-                    current = (current[0] + x, current[1]) if command == "h" else (x, current[1])
-                    SvgMapConverter._append_point(points, current)
-                last_cubic_ctrl = None
-                last_quad_ctrl = None
-                continue
-
-            if command in {"V", "v"}:
-                while has_more_numbers():
-                    y = read_number()
-                    current = (current[0], current[1] + y) if command == "v" else (current[0], y)
-                    SvgMapConverter._append_point(points, current)
-                last_cubic_ctrl = None
-                last_quad_ctrl = None
-                continue
-
-            if command in {"C", "c"}:
-                while has_more_numbers():
-                    x1 = read_number()
-                    y1 = read_number()
-                    x2 = read_number()
-                    y2 = read_number()
-                    x = read_number()
-                    y = read_number()
-                    if command == "c":
-                        p1 = (current[0] + x1, current[1] + y1)
-                        p2 = (current[0] + x2, current[1] + y2)
-                        p3 = (current[0] + x, current[1] + y)
-                    else:
-                        p1 = (x1, y1)
-                        p2 = (x2, y2)
-                        p3 = (x, y)
-                    for point in SvgMapConverter._sample_cubic_curve(
-                        current,
-                        p1,
-                        p2,
-                        p3,
-                        max_step=SvgMapConverter._CURVE_MAX_STEP,
-                    ):
-                        SvgMapConverter._append_point(points, point)
-                    current = p3
-                    last_cubic_ctrl = p2
-                    last_quad_ctrl = None
-                continue
-
-            if command in {"S", "s"}:
-                while has_more_numbers():
-                    x2 = read_number()
-                    y2 = read_number()
-                    x = read_number()
-                    y = read_number()
-                    p1 = SvgMapConverter._reflect_point(current, last_cubic_ctrl)
-                    if command == "s":
-                        p2 = (current[0] + x2, current[1] + y2)
-                        p3 = (current[0] + x, current[1] + y)
-                    else:
-                        p2 = (x2, y2)
-                        p3 = (x, y)
-                    for point in SvgMapConverter._sample_cubic_curve(
-                        current,
-                        p1,
-                        p2,
-                        p3,
-                        max_step=SvgMapConverter._CURVE_MAX_STEP,
-                    ):
-                        SvgMapConverter._append_point(points, point)
-                    current = p3
-                    last_cubic_ctrl = p2
-                    last_quad_ctrl = None
-                continue
-
-            if command in {"Q", "q"}:
-                while has_more_numbers():
-                    x1 = read_number()
-                    y1 = read_number()
-                    x = read_number()
-                    y = read_number()
-                    if command == "q":
-                        p1 = (current[0] + x1, current[1] + y1)
-                        p2 = (current[0] + x, current[1] + y)
-                    else:
-                        p1 = (x1, y1)
-                        p2 = (x, y)
-                    for point in SvgMapConverter._sample_quadratic_curve(
-                        current,
-                        p1,
-                        p2,
-                        max_step=SvgMapConverter._CURVE_MAX_STEP,
-                    ):
-                        SvgMapConverter._append_point(points, point)
-                    current = p2
-                    last_quad_ctrl = p1
-                    last_cubic_ctrl = None
-                continue
-
-            if command in {"T", "t"}:
-                while has_more_numbers():
-                    x = read_number()
-                    y = read_number()
-                    control = SvgMapConverter._reflect_point(current, last_quad_ctrl)
-                    if command == "t":
-                        p2 = (current[0] + x, current[1] + y)
-                    else:
-                        p2 = (x, y)
-                    for point in SvgMapConverter._sample_quadratic_curve(
-                        current,
-                        control,
-                        p2,
-                        max_step=SvgMapConverter._CURVE_MAX_STEP,
-                    ):
-                        SvgMapConverter._append_point(points, point)
-                    current = p2
-                    last_quad_ctrl = control
-                    last_cubic_ctrl = None
-                continue
-
-            if command in {"A", "a"}:
-                while has_more_numbers():
-                    rx = read_number()
-                    ry = read_number()
-                    x_axis_rotation = read_number()
-                    SvgMapConverter._split_arc_flag_token(tokens, idx)
-                    large_arc_flag = read_number()
-                    SvgMapConverter._split_arc_flag_token(tokens, idx)
-                    sweep_flag = read_number()
-                    x = read_number()
-                    y = read_number()
-                    if command == "a":
-                        end = (current[0] + x, current[1] + y)
-                    else:
-                        end = (x, y)
-                    for point in SvgMapConverter._sample_arc_segment(
-                        current,
-                        end,
-                        rx,
-                        ry,
-                        x_axis_rotation,
-                        large_arc_flag >= 0.5,
-                        sweep_flag >= 0.5,
-                        max_step=SvgMapConverter._CURVE_MAX_STEP,
-                    ):
-                        SvgMapConverter._append_point(points, point)
-                    current = end
-                    last_cubic_ctrl = None
-                    last_quad_ctrl = None
-                continue
-
-            raise ValueError(f"Unsupported SVG path command {command!r}.")
-
-        return tuple(points)
+        return tuple(state.points)
 
     def _parse_path_element(
         self, path: ET.Element, coordinate_pattern: re.Pattern

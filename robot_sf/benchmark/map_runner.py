@@ -258,6 +258,7 @@ from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
 )
+from robot_sf.planner.protocol import normalize_planner_diagnostics
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
 from robot_sf.planner.safety_barrier import (  # noqa: F401
     SafetyBarrierPlannerAdapter,
@@ -2198,6 +2199,11 @@ def _build_common_adapter_policy(  # noqa: C901
         def _planner_stats() -> dict[str, Any]:
             """Expose generic adapter diagnostics for episode metadata.
 
+            Propagated through the canonical #6492 ``normalize_planner_diagnostics``
+            so the SocNav-family adapter arm shares one fail-closed diagnostics
+            schema (string ``planner_type``) with the runner native-command arm;
+            every counter the adapter already carries is preserved unchanged.
+
             Returns:
                 dict[str, Any]: Adapter diagnostic payload.
             """
@@ -2206,7 +2212,9 @@ def _build_common_adapter_policy(  # noqa: C901
             foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
             if isinstance(foresight, dict):
                 runtime.update(foresight)
-            return runtime
+            return normalize_planner_diagnostics(
+                runtime, fallback_planner_type=type(adapter).__name__
+            )
 
         _policy._planner_stats = _planner_stats
     return _policy, meta

@@ -1,4 +1,4 @@
-"""Issue #6506 pre-refactor parity baseline for planner construction.
+"""Issue #6506 parity guard for unified planner-construction diagnostics.
 
 Issue #6506 asks the benchmark harness to replace its two duplicated planner
 bridging layers -- the baselines ``step(obs) -> dict`` arm in
@@ -7,12 +7,18 @@ planner ``plan(observation) -> tuple`` arm in ``robot_sf/benchmark/map_runner.py
 (SocNav-family adapter construction) -- with the single canonical adapter
 introduced by issue #6492 (``LocalPlannerProtocol``).
 
-The canonical protocol is now available from #6492, but that deliberately
-limited proof slice adapts only two representative planner families. The
-existing map-runner adapters do not yet all satisfy its full lifecycle contract,
-so #6506 must not add a second compatibility layer in the benchmark package.
-This module captures the *current* contract the eventual canonical wiring must
-preserve -- validation requirement #4 of the #6506 contract:
+#6492 has now merged its canonical adapter (``robot_sf/planner/protocol.py``).
+#6506 wires both harness entry points' ``planner_diagnostics`` propagation
+through that single canonical adapter's fail-closed normalizer
+(``normalize_planner_diagnostics``): the runner native-command arm
+(``run_episode``) and the map-runner SocNav-family adapter arm
+(``_build_common_adapter_policy._planner_stats``) now share one diagnostics
+schema that always carries a string ``planner_type``. The full step()->dict /
+plan()->tuple *bridging* collapse remains blocked behind #6506 stop-condition 3
+(the canonical adapter is a proof-of-concept and lacks the process-isolated,
+heading-based, holonomic-passthrough, and learned-action conversions the two
+arms actually use); this module pins the contract the diagnostics unification
+must preserve -- validation requirement #4 of the #6506 contract:
 
     "A parity assertion that native vs adapter execution-mode metadata and
     planner_diagnostics are unchanged for representative planners."
@@ -22,14 +28,11 @@ execution modes:
 
 * the ``planner_kinematics.execution_mode`` classification (``native`` /
   ``adapter`` / ``mixed``) plus the zeroed ``adapter_impact`` counter schema,
-  and
-* the ``planner_diagnostics`` propagation path for the native-command arm
-  (``runner.py`` ``step()`` bridging).
-
-When the #6492 canonical adapter lands and #6506 rewires both harness entry
-points through it, these assertions must still pass; a change here is the
-signal that the unification altered execution-mode classification or
-diagnostics propagation and must be investigated rather than silently merged.
+  which the diagnostics unification must not alter, and
+* the canonical ``planner_diagnostics`` propagation path: both the runner
+  native-command arm and the map-runner SocNav-family adapter arm must route
+  through ``normalize_planner_diagnostics`` so the payload carries a string
+  ``planner_type`` while every existing counter is preserved unchanged.
 """
 
 from __future__ import annotations
@@ -143,8 +146,10 @@ def test_native_command_arm_propagates_native_mode_and_diagnostics() -> None:
     The native-command arm is the representative of the baselines ``step()``
     family in ``runner.py``. It must classify as ``native`` and surface its
     counters under ``algorithm_metadata.planner_diagnostics`` (the
-    ``NATIVE_COMMAND_DIAGNOSTICS_KEY`` propagation path). The #6506 rewire must
-    not alter either signal.
+    ``NATIVE_COMMAND_DIAGNOSTICS_KEY`` propagation path). After the #6506 rewire
+    the payload is routed through the canonical ``normalize_planner_diagnostics``
+    adapter from #6492, so it must additionally carry a string ``planner_type``
+    while every existing counter is preserved unchanged.
     """
     record = run_episode(
         _native_command_scenario(),
@@ -175,3 +180,50 @@ def test_native_command_arm_propagates_native_mode_and_diagnostics() -> None:
     assert diagnostics["process_spawns"] == 8
     assert diagnostics["fallback_count"] == 0
     assert len(diagnostics["planner_step_runtime_seconds"]) == 8
+
+    # Canonical #6492 diagnostics schema: the unified propagation path must
+    # guarantee a string ``planner_type``. The native-command arm does not
+    # produce one natively, so the fail-closed normalizer synthesizes it from
+    # the algorithm key and records the synthesis explicitly.
+    assert isinstance(diagnostics.get("planner_type"), str)
+    assert diagnostics["planner_type"] == "native_command"
+    assert diagnostics.get("diagnostics_unavailable") == ["planner_type"]
+
+
+def test_diagnostics_propagation_routes_through_canonical_adapter() -> None:
+    """Both harness arms route ``planner_diagnostics`` through the #6492 adapter.
+
+    The #6506 unification imports the single canonical adapter from #6492
+    (``normalize_planner_diagnostics``) into both ``runner.py`` and
+    ``map_runner.py`` so the native-command arm and the SocNav-family adapter
+    arm share one fail-closed diagnostics propagation path. Each payload must
+    carry a string ``planner_type`` while preserving the counters/values the
+    arm already produced.
+    """
+    from robot_sf.planner.protocol import PLANNER_TYPE_KEY
+
+    # Native-command arm (runner.py): ``planner_type`` synthesized from the algo key.
+    record = run_episode(
+        _native_command_scenario(),
+        seed=3,
+        algo="native_command",
+        horizon=4,
+        dt=0.1,
+        record_forces=False,
+    )
+    native_diag = record["algorithm_metadata"][NATIVE_COMMAND_DIAGNOSTICS_KEY]
+    assert native_diag[PLANNER_TYPE_KEY] == "native_command"
+    assert native_diag["process_spawns"] == 4
+
+    # SocNav-family adapter arm (map_runner.py): ``planner_type`` synthesized
+    # from the adapter class name by the canonical normalizer.
+    policy, _meta = build_map_policy("social_force", {})
+    try:
+        stats_fn = getattr(policy, "_planner_stats", None)
+        assert callable(stats_fn), "SocNav adapter policy must expose _planner_stats"
+        adapter_diag = stats_fn()
+        assert adapter_diag[PLANNER_TYPE_KEY] == "SocialForcePlannerAdapter"
+    finally:
+        close = getattr(policy, "_planner_close", None)
+        if callable(close):
+            close()

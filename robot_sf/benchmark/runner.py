@@ -96,6 +96,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import set_global_seed
+from robot_sf.planner.protocol import normalize_planner_diagnostics
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -2115,11 +2116,17 @@ def run_episode(  # noqa: PLR0913
 
     # Refresh live native-command diagnostics into the episode metadata so the
     # per-step runtime/exit counters captured during the episode are recorded.
+    # Route the payload through the canonical #6492 diagnostics normalizer so the
+    # native-command arm shares one fail-closed propagation path with the
+    # map-runner adapter arm: every payload carries a string ``planner_type`` and
+    # any normalization loss is recorded explicitly rather than silently dropped.
     policy_diag = getattr(robot_policy, "diagnostics", None)
     if callable(policy_diag):
         live_diag = policy_diag()
         if isinstance(live_diag, dict):
-            algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
+            algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = normalize_planner_diagnostics(
+                live_diag, fallback_planner_type=algo
+            )
 
     # Issue #6190: refresh the predictive planner's foresight-model-load
     # provenance (captured during the episode) so ``enrich_algorithm_metadata``

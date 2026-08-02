@@ -5315,9 +5315,6 @@ all = [
     { name = "tqdm" },
     { name = "wandb" },
 ]
-analysis = [
-    { name = "seaborn" },
-]
 analytics = [
     { name = "duckdb" },
     { name = "pyarrow" },
@@ -5471,7 +5468,6 @@ requires-dist = [
     { name = "scipy", marker = "extra == 'all'", specifier = ">=1.17.1" },
     { name = "scipy", marker = "extra == 'benchmark'", specifier = ">=1.17.1" },
     { name = "seaborn", marker = "extra == 'all'", specifier = ">=0.13.2" },
-    { name = "seaborn", marker = "extra == 'analysis'", specifier = ">=0.13.2" },
     { name = "seaborn", marker = "extra == 'viz'", specifier = ">=0.13.2" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "stable-baselines3", marker = "extra == 'all'", specifier = ">=2.9.0" },
@@ -5491,7 +5487,7 @@ requires-dist = [
     { name = "wandb", marker = "extra == 'all'", specifier = ">=0.28.1" },
     { name = "wandb", marker = "extra == 'training'", specifier = ">=0.28.1" },
 ]
-provides-extras = ["all", "analysis", "analytics", "benchmark", "browser", "criticality", "gpu", "maps", "orca", "progress", "recurrent", "rllib", "sacadrl", "socnav", "training", "viz"]
+provides-extras = ["all", "analytics", "benchmark", "browser", "criticality", "gpu", "maps", "orca", "progress", "recurrent", "rllib", "sacadrl", "socnav", "training", "viz"]
 
 [package.metadata.requires-dev]
 carla = [{ name = "carla", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==0.9.16" }]

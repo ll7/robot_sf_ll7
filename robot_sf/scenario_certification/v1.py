@@ -8,7 +8,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from shapely.geometry import GeometryCollection, LineString, Point, Polygon, box
@@ -421,6 +421,7 @@ def _check_geometric_feasibility(state: _RouteCertificationState) -> str | None:
         str | None: Early-exit certification status, or ``None`` when feasible.
     """
     start, goal, route_line = _require_route_geometry(state.start, state.goal, state.route_line)
+    state.start, state.goal, state.route_line = start, goal, route_line
     direct_length = float(Point(start).distance(Point(goal)))
     state.checks["direct_start_goal_distance_m"] = direct_length
     state.checks["authored_route_length_m"] = _polyline_length(state.route.waypoints)
@@ -581,7 +582,7 @@ def _check_infrastructure(state: _RouteCertificationState) -> str | None:
     Returns:
         str | None: ``INVALID``, or ``None`` when route traversal is legal.
     """
-    _, _, route_line = _require_route_geometry(state.start, state.goal, state.route_line)
+    route_line = cast("LineString", state.route_line)
     infrastructure_reasons, infrastructure_checks = _infrastructure_checks(
         state.map_def,
         route_line=route_line,

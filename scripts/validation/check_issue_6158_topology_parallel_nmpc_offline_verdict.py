@@ -1095,6 +1095,14 @@ def gate_8_pr_audit() -> GateResult:
 def _derive_verdict(gates: list[GateResult]) -> tuple[str, str]:
     """Map gate outcomes to exactly one verdict plus a rationale string."""
     by_name = {g.name: g for g in gates}
+    execution_failures = [
+        gate.name for gate in gates if gate.evidence.get("execution_error") is not None
+    ]
+    if execution_failures:
+        return (
+            "incomplete",
+            "required gate execution failed: " + ", ".join(execution_failures) + ".",
+        )
     if not by_name["gate_1_k1_legacy_parity"].passed:
         return "invalid_regression", "gate 1 (K=1 legacy parity) failed -> legacy/default drift."
     identity_failures = [
@@ -1122,6 +1130,22 @@ def _derive_verdict(gates: list[GateResult]) -> tuple[str, str]:
     if not by_name["gate_8_pr_audit"].passed:
         return "incomplete", "gate 8 (PR #6170 audit provenance) failed."
     return "accepted_offline_prototype", "all eight mechanism/integrity gates passed."
+
+
+def _run_gate(name: str, gate: Any, *args: Any) -> GateResult:
+    """Convert an unexpected required-gate error into durable incomplete evidence."""
+    try:
+        return gate(*args)
+    except Exception as exc:  # noqa: BLE001 - evidence collection must record any gate failure.
+        return GateResult(
+            name=name,
+            passed=False,
+            detail=(
+                "Required diagnostic could not be collected; this is incomplete evidence: "
+                f"{type(exc).__name__}: {exc}"
+            ),
+            evidence={"execution_error": f"{type(exc).__name__}: {exc}"},
+        )
 
 
 def _hardware_context(cpu_affinity_fixture: dict[str, Any]) -> dict[str, Any]:
@@ -1201,6 +1225,9 @@ def _write_evidence_doc(
     latency_exceeds_100ms = bool(latency_gate.evidence.get("latency_exceeds_100ms", False))
     worst_p95 = latency_gate.evidence.get("worst_hypothesis_p95_ms")
     per_hyp = latency_gate.evidence.get("per_hypothesis_solver_runtime_ms", {})
+    if not isinstance(per_hyp, dict):
+        per_hyp = {}
+    worst_p95_text = f"{worst_p95:.3g} ms" if isinstance(worst_p95, (int, float)) else "unavailable"
 
     summary = {
         "schema": "issue_6158_topology_parallel_nmpc_offline_verdict.v1",
@@ -1262,8 +1289,8 @@ def _write_evidence_doc(
         f"| {label} | {stats['p50_ms']:.4g} | {stats['p95_ms']:.4g} | {stats['max_ms']:.4g} | {stats['n']} |"
         for label, stats in per_hyp.items()
     )
-    plan_ms = latency_gate.evidence.get("plan_wall_clock_ms_measurement_safe_deadline", {})
-    plan_real = latency_gate.evidence.get("plan_wall_clock_ms_real_2s_deadline", {})
+    plan_ms = latency_gate.evidence.get("plan_wall_clock_ms_measurement_safe_deadline") or {}
+    plan_real = latency_gate.evidence.get("plan_wall_clock_ms_real_2s_deadline") or {}
     md = []
     md.append(f"# Issue #{ISSUE_NUMBER}: topology-parallel NMPC offline verdict\n")
     md.append(
@@ -1281,11 +1308,15 @@ def _write_evidence_doc(
         "a real-time qualification campaign; real-time/performance qualification stays "
         "in #5423."
         + (
-            f" On this fixture, worst per-hypothesis solver p95 = **{worst_p95:.3g} ms** "
+            f" On this fixture, worst per-hypothesis solver p95 = **{worst_p95_text}** "
             f"exceeded 100 ms, reinforcing the blocker."
             if latency_exceeds_100ms
-            else f" On this fixture, worst per-hypothesis solver p95 = {worst_p95:.3g} ms "
-            f"(under 100 ms, descriptive only; not a real-time qualification claim)."
+            else (
+                f" On this fixture, worst per-hypothesis solver p95 = {worst_p95_text} "
+                "(descriptive only; not a real-time qualification claim)."
+                if worst_p95_text != "unavailable"
+                else " The required latency diagnostic was unavailable; the verdict is incomplete."
+            )
         )
         + "\n"
     )
@@ -1327,17 +1358,21 @@ def _write_evidence_doc(
     audit = next(g for g in gates if g.name == "gate_8_pr_audit")
     md.append(f"Merge commit `{SOURCE_MERGE_COMMIT}`.\n")
     md.append("| path | + | - | net |\n| --- | ---: | ---: | ---: |\n")
-    for row in audit.evidence["files"]:
+    audit_files = audit.evidence.get("files", [])
+    if audit_files:
+        for row in audit_files:
+            md.append(
+                f"| {row['path']} | +{row['additions']} | -{row['deletions']} | "
+                f"{row['additions'] - row['deletions']:+d} |\n"
+            )
         md.append(
-            f"| {row['path']} | +{row['additions']} | -{row['deletions']} | "
-            f"{row['additions'] - row['deletions']:+d} |\n"
+            f"| **total** | **+{audit.evidence['total_additions']}** | "
+            f"**-{audit.evidence['total_deletions']}** | "
+            f"**{audit.evidence['net_lines']:+d}** |\n"
         )
-    md.append(
-        f"| **total** | **+{audit.evidence['total_additions']}** | "
-        f"**-{audit.evidence['total_deletions']}** | "
-        f"**{audit.evidence['net_lines']:+d}** |\n"
-    )
-    md.append("\n" + audit.evidence["head_post_merge_note"] + "\n")
+        md.append("\n" + audit.evidence.get("head_post_merge_note", "") + "\n")
+    else:
+        md.append(f"Required audit unavailable: {audit.detail}\n")
     md.append("\n## Claim boundary\n")
     md.append(summary["claim_boundary"] + "\n")
     md.append("\n## Machine-readable summary\n")
@@ -1372,14 +1407,14 @@ def main() -> int:
     raw_cfg = _raw_config(config_path)
 
     gates = [
-        gate_1_k1_legacy_parity(nmpc_config),
-        gate_2_material_distinctness(nmpc_config),
-        gate_3_objective_invariance(nmpc_config),
-        gate_4_selection_and_hysteresis(nmpc_config),
-        gate_5_fail_closed(nmpc_config),
-        gate_6_registration_smoke(raw_cfg),
-        gate_7_latency(nmpc_config),
-        gate_8_pr_audit(),
+        _run_gate("gate_1_k1_legacy_parity", gate_1_k1_legacy_parity, nmpc_config),
+        _run_gate("gate_2_material_distinctness", gate_2_material_distinctness, nmpc_config),
+        _run_gate("gate_3_objective_invariance", gate_3_objective_invariance, nmpc_config),
+        _run_gate("gate_4_selection_and_hysteresis", gate_4_selection_and_hysteresis, nmpc_config),
+        _run_gate("gate_5_fail_closed", gate_5_fail_closed, nmpc_config),
+        _run_gate("gate_6_registration_smoke", gate_6_registration_smoke, raw_cfg),
+        _run_gate("gate_7_latency", gate_7_latency, nmpc_config),
+        _run_gate("gate_8_pr_audit", gate_8_pr_audit),
     ]
 
     verdict, rationale = _derive_verdict(gates)
@@ -1387,7 +1422,12 @@ def main() -> int:
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, cwd=REPO_ROOT
     ).stdout.strip()
     branch = _evidence_branch()
-    hardware = _hardware_context(gates[6].evidence["cpu_affinity_fixture"])
+    hardware = _hardware_context(
+        gates[6].evidence.get(
+            "cpu_affinity_fixture",
+            {"pinned": False, "measurement_cpu": None, "restored": False, "error": "gate failed"},
+        )
+    )
 
     summary = _write_evidence_doc(
         verdict=verdict,

@@ -400,6 +400,13 @@ class TestResearchIndividualFileExceptions:
 
         _assert_triple_catch(ScenarioPriorStagingContractError, ValueError)
 
+    def test_continual_adaptation_protocol_error(self) -> None:
+        from robot_sf.research.continual_adaptation_protocol import (
+            ContinualAdaptationProtocolError,
+        )
+
+        _assert_triple_catch(ContinualAdaptationProtocolError, ValueError)
+
     def test_research_individual_errors_catchable_by_robot_sf_error(self) -> None:
         from robot_sf.research.amv_command_response_trace_manifest import AmvTraceManifestError
 

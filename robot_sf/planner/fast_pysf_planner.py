@@ -62,7 +62,7 @@ class FastPysfPlannerPolicy:
         """Reset planner state (noop for now)."""
         del seed
 
-    def predict(self, _obs=None, **_kwargs):
+    def predict(self, _obs=None, **_kwargs) -> tuple[np.ndarray, None]:
         """Return a diff-drive action compatible with Gym predict signatures."""
         return self.action(), None
 

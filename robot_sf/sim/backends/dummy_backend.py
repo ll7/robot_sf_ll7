@@ -51,7 +51,7 @@ class DummySimulator:
         self.ped_radii = np.empty((0,), dtype=float)
         self.reset_state()
 
-    def reset_state(self):
+    def reset_state(self) -> None:
         """Reset simulator to initial state."""
         self.timestep = 0
         self.rng = np.random.default_rng(self.seed)
@@ -60,7 +60,7 @@ class DummySimulator:
         navigator.new_route(route[1:], start_pos=route[0])
         self.robots[0].reset_state((route[0], navigator.initial_orientation))
 
-    def step_once(self, actions):
+    def step_once(self, actions) -> None:
         """Advance one timestep using a simple unicycle-style pose update."""
         self.timestep += 1
         action = actions[0] if actions else (0.0, 0.0)
@@ -68,27 +68,27 @@ class DummySimulator:
         self.robot_navs[0].update_position(self.robots[0].pose[0])
 
     @property
-    def robot_poses(self):
+    def robot_poses(self) -> list[RobotPose]:
         """Return current robot poses."""
         return [robot.pose for robot in self.robots]
 
     @property
-    def robot_pos(self):
+    def robot_pos(self) -> list[tuple[float, float]]:
         """Return current robot positions."""
         return [robot.pose[0] for robot in self.robots]
 
     @property
-    def ped_pos(self):
+    def ped_pos(self) -> np.ndarray:
         """Return pedestrian positions."""
         return self._ped_pos
 
     @property
-    def goal_pos(self):
+    def goal_pos(self) -> list[tuple[float, float]]:
         """Return current goal waypoints."""
         return [navigator.current_waypoint for navigator in self.robot_navs]
 
     @property
-    def next_goal_pos(self):
+    def next_goal_pos(self) -> list[tuple[float, float] | None]:
         """Return next goal waypoints when present."""
         return [navigator.next_waypoint for navigator in self.robot_navs]
 
@@ -105,7 +105,7 @@ class _MockRobot:
     pose: RobotPose = ((0.0, 0.0), 0.0)
     current_speed: tuple[float, float] = (0.0, 0.0)
 
-    def parse_action(self, action):
+    def parse_action(self, action) -> tuple[float, float]:
         """Pass-through action parsing.
 
         Returns:

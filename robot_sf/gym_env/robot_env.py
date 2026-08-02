@@ -1012,7 +1012,7 @@ class RobotEnv(BaseEnv):
         reward_terms["rollover_proxy_penalty"] = penalty
         return reward + penalty
 
-    def step(self, action):
+    def step(self, action) -> tuple[Any, float, bool, bool, dict[str, Any]]:
         """Execute one environment step.
 
         Args:
@@ -1031,7 +1031,7 @@ class RobotEnv(BaseEnv):
         # Perform simulation step
         self.simulator.step_once([action])
         # Get updated observation
-        obs = self.state.step()
+        obs: Any = self.state.step()
 
         # T044: Wrap observation as dict if observation space was converted for grid inclusion
         if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
@@ -1134,7 +1134,7 @@ class RobotEnv(BaseEnv):
             info,
         )
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None) -> tuple[Any, dict[str, Any]]:
         """Reset the environment and start a new episode.
 
         Args:
@@ -1157,7 +1157,7 @@ class RobotEnv(BaseEnv):
             self.simulator.reset_state()
             # Reset the environment's state and return the initial observation
             reset_episode_counter_for_seed(self.state, seed)
-            obs = self.state.reset()
+            obs: Any = self.state.reset()
             self._prime_snqi_proxy_state()
 
             # T044: Wrap observation as dict if observation space was converted for grid inclusion
@@ -1424,7 +1424,7 @@ class RobotEnv(BaseEnv):
 
         return state
 
-    def render(self):
+    def render(self) -> None:
         """
         Render the environment visually if in debug mode.
 
@@ -1444,7 +1444,7 @@ class RobotEnv(BaseEnv):
         # Execute rendering of the state through the simulation UI
         self.sim_ui.render(state)
 
-    def record(self):
+    def record(self) -> None:
         """
         Records the current state as visualizable state and stores it in the list.
         """
@@ -1453,7 +1453,7 @@ class RobotEnv(BaseEnv):
         # Use the new unified recording method
         self.record_simulation_step(state)
 
-    def set_pedestrian_velocity_scale(self, scale: float = 1.0):
+    def set_pedestrian_velocity_scale(self, scale: float = 1.0) -> None:
         """
         Set the pedestrian velocity visualization scaling factor.
 
@@ -1466,7 +1466,7 @@ class RobotEnv(BaseEnv):
         else:
             logger.warning("Cannot set velocity scale: debug mode not enabled")
 
-    def get_telemetry_session(self):
+    def get_telemetry_session(self) -> TelemetrySession | None:
         """
         Get the telemetry session for accessing recorded metrics and artifacts.
 

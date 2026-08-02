@@ -11,9 +11,9 @@ The module deliberately does **not** reimplement any contact geometry, risk
 math, or feasibility predicate. It reuses ``CandidateAction``,
 ``estimate_action_conditioned_risk``, and ``RiskEstimatorConfig`` verbatim and
 treats the two deterministic verifiers as authoritative hard gates: a candidate
-rejected by ``verify_trajectory`` (``fallback_brake``) or by
-``evaluate_actuator_feasibility`` (``infeasible``) is marked ineligible
-regardless of its probabilistic collision risk.
+rejected by ``verify_trajectory`` (``fallback_brake``) or reported physically
+infeasible by ``evaluate_actuator_feasibility`` is marked ineligible regardless
+of its probabilistic collision risk.
 
 .. admonition:: Claim boundary
    :class: note
@@ -39,7 +39,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from robot_sf.benchmark.actuator_feasibility import (
-    VERDICT_INFEASIBLE,
     ActuatorLimitsConfig,
     evaluate_actuator_feasibility,
 )
@@ -101,8 +100,8 @@ class PrimitiveGeneratorConfig:
         lateral_offsets_m: Terminal lateral offsets (metres) for the arc
             primitives. Each offset yields one distinct candidate; the sign
             selects left vs. right of the start-to-goal direction.
-        cruise_speed_mps: Reference cruise speed (m/s) used to bound primitive arc
-            length to what is reachable within the horizon.
+        cruise_speed_mps: Reference cruise speed (m/s) used to bound each
+            primitive's sampled speed to what is reachable within the horizon.
         goal_reach_fraction: Fraction of the start-to-goal distance the primitives
             attempt to cover (clipped to the reachable arc length).
         include_brake_primitive: When True, append a low-displacement brake
@@ -122,8 +121,8 @@ class PrimitiveGeneratorConfig:
             raise ValueError("PrimitiveGeneratorConfig.lateral_offsets_m must be non-empty")
         if any(not math.isfinite(value) for value in self.lateral_offsets_m):
             raise ValueError("PrimitiveGeneratorConfig.lateral_offsets_m must be finite")
-        if self.cruise_speed_mps <= 0.0:
-            raise ValueError("PrimitiveGeneratorConfig.cruise_speed_mps must be > 0")
+        if not math.isfinite(self.cruise_speed_mps) or self.cruise_speed_mps <= 0.0:
+            raise ValueError("PrimitiveGeneratorConfig.cruise_speed_mps must be finite and > 0")
         if not (0.0 < self.goal_reach_fraction <= 1.0):
             raise ValueError("PrimitiveGeneratorConfig.goal_reach_fraction must be in (0, 1]")
         if self.brake_displacement_m < 0.0 or not math.isfinite(self.brake_displacement_m):
@@ -242,7 +241,9 @@ class HardGateResult:
 
     Attributes:
         eligible: True iff the verifier did not return ``fallback_brake`` and the
-            actuator-feasibility verdict is not ``infeasible``.
+            actuator-feasibility report is physically feasible. This rejects both
+            ``infeasible`` and ``geometry_only_clear``: the latter means the
+            geometry is clear, but the maneuver still violates an actuator limit.
         verifier_decision: Decision returned by :func:`verify_trajectory`
             (``accept`` / ``warn`` / ``fallback_brake``), or ``"skipped_no_hazard"``
             when there were no pedestrians to verify against.
@@ -369,6 +370,33 @@ def _arc_primitive(
     return CandidateAction(action_id=action_id, waypoints=waypoints, representation="primitive")
 
 
+def _limit_candidate_speed(
+    candidate: CandidateAction, *, dt_s: float, cruise_speed_mps: float
+) -> CandidateAction:
+    """Scale a primitive's displacement when its sampled speed exceeds the limit.
+
+    Lateral blending adds arc length beyond longitudinal progress. Scaling all
+    waypoints around the first one preserves the primitive's shape while making
+    its sampled waypoint speed feasible for the supplied horizon.
+
+    Returns:
+        The original candidate when it is within the cruise-speed limit, otherwise
+        a speed-limited candidate with the same identifier and representation.
+    """
+    step_speeds = np.linalg.norm(np.diff(candidate.waypoints, axis=0), axis=1) / dt_s
+    max_speed_mps = float(np.max(step_speeds))
+    if max_speed_mps <= cruise_speed_mps:
+        return candidate
+
+    displacement_scale = cruise_speed_mps / max_speed_mps
+    start = candidate.waypoints[0]
+    return CandidateAction(
+        action_id=candidate.action_id,
+        waypoints=start + (candidate.waypoints - start) * displacement_scale,
+        representation=candidate.representation,
+    )
+
+
 def generate_primitive_candidates(
     start_position: Sequence[float] | NDArray[np.floating],
     local_goal: Sequence[float] | NDArray[np.floating],
@@ -399,8 +427,8 @@ def generate_primitive_candidates(
     """
     if horizon_steps <= 0:
         raise ValueError("horizon_steps must be positive")
-    if dt_s <= 0.0:
-        raise ValueError("dt_s must be positive")
+    if not math.isfinite(dt_s) or dt_s <= 0.0:
+        raise ValueError("dt_s must be finite and positive")
     cfg = config if config is not None else PrimitiveGeneratorConfig()
 
     start = np.asarray(start_position, dtype=float).reshape(2)
@@ -425,28 +453,36 @@ def generate_primitive_candidates(
         label = "straight" if offset == 0.0 else ("left" if offset > 0.0 else "right")
         action_id = f"primitive_{label}_{index}"
         candidates.append(
-            _arc_primitive(
-                action_id,
-                start,
-                unit,
-                perp,
-                progress_m=progress_m,
-                lateral_offset_m=offset,
-                horizon_steps=horizon_steps,
+            _limit_candidate_speed(
+                _arc_primitive(
+                    action_id,
+                    start,
+                    unit,
+                    perp,
+                    progress_m=progress_m,
+                    lateral_offset_m=offset,
+                    horizon_steps=horizon_steps,
+                ),
+                dt_s=dt_s,
+                cruise_speed_mps=cfg.cruise_speed_mps,
             )
         )
 
     if cfg.include_brake_primitive:
         brake_progress = min(cfg.brake_displacement_m, reach_m)
         candidates.append(
-            _arc_primitive(
-                "primitive_brake",
-                start,
-                unit,
-                perp,
-                progress_m=brake_progress,
-                lateral_offset_m=0.0,
-                horizon_steps=horizon_steps,
+            _limit_candidate_speed(
+                _arc_primitive(
+                    "primitive_brake",
+                    start,
+                    unit,
+                    perp,
+                    progress_m=brake_progress,
+                    lateral_offset_m=0.0,
+                    horizon_steps=horizon_steps,
+                ),
+                dt_s=dt_s,
+                cruise_speed_mps=cfg.cruise_speed_mps,
             )
         )
 
@@ -596,8 +632,10 @@ def _hard_gate(
 
     Returns:
         :class:`HardGateResult` marking the candidate ineligible when either the
-        trajectory verifier returns ``fallback_brake`` or actuator feasibility
-        returns ``infeasible``.
+        trajectory verifier returns ``fallback_brake`` or the actuator-feasibility
+        report is physically infeasible. A ``geometry_only_clear`` verdict is
+        geometrically clear but physically infeasible, so it remains a hard-gate
+        rejection rather than a candidate the ranker may select.
     """
     min_clearance_m = estimate.deterministic.min_clearance_m
     hazard_clearance_m = (
@@ -634,8 +672,10 @@ def _hard_gate(
     ineligible_reasons: list[str] = []
     if verifier_decision == DECISION_FALLBACK_BRAKE:
         ineligible_reasons.append("trajectory_verifier returned fallback_brake")
-    if actuator_report.verdict == VERDICT_INFEASIBLE:
-        ineligible_reasons.append("actuator_feasibility returned infeasible")
+    if not actuator_report.physically_feasible:
+        ineligible_reasons.append(
+            f"actuator_feasibility reported physically infeasible ({actuator_report.verdict})"
+        )
 
     eligible = not ineligible_reasons
     return HardGateResult(

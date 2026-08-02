@@ -82,9 +82,10 @@ def _components_are_finite(record) -> None:
 
 
 def test_primitive_generator_shapes_finiteness_and_action_ids() -> None:
-    """Generated primitives have shape (H + 1, 2), finite states, and stable ids."""
+    """Generated primitives are finite, uniquely identified, and speed-limited."""
+    config = PrimitiveGeneratorConfig(cruise_speed_mps=1.0)
     candidates = generate_primitive_candidates(
-        [0.0, 0.0], [2.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+        [0.0, 0.0], [2.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S, config=config
     )
 
     assert len(candidates) >= 3
@@ -94,6 +95,8 @@ def test_primitive_generator_shapes_finiteness_and_action_ids() -> None:
         waypoints = candidate.as_array(horizon_steps=HORIZON_STEPS)
         assert waypoints.shape == (HORIZON_STEPS + 1, 2)
         assert np.all(np.isfinite(waypoints))
+        sampled_speeds = np.linalg.norm(np.diff(waypoints, axis=0), axis=1) / DT_S
+        assert float(np.max(sampled_speeds)) <= config.cruise_speed_mps + 1.0e-12
 
 
 def test_primitive_generator_is_deterministic() -> None:
@@ -124,6 +127,12 @@ def test_primitive_generator_rejects_invalid_horizon() -> None:
         generate_primitive_candidates([0.0, 0.0], [2.0, 0.0], horizon_steps=0, dt_s=DT_S)
     with pytest.raises(ValueError):
         generate_primitive_candidates([0.0, 0.0], [2.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=0.0)
+    with pytest.raises(ValueError):
+        generate_primitive_candidates(
+            [0.0, 0.0], [2.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=math.inf
+        )
+    with pytest.raises(ValueError):
+        PrimitiveGeneratorConfig(cruise_speed_mps=math.inf)
 
 
 # ---------------------------------------------------------------------------
@@ -391,13 +400,8 @@ def test_rank_reuses_candidate_action_schema_verbatim() -> None:
     assert rankings[0].estimate.provenance.action_id == "reuse"
 
 
-def test_rank_actuator_geometry_only_clear_stays_eligible() -> None:
-    """A ``geometry_only_clear`` actuator verdict is not ``infeasible`` and stays eligible.
-
-    The literal contract marks a candidate ineligible only on ``fallback_brake``
-    or ``infeasible``; geometrically-clear-but-physically-infeasible remains
-    eligible so the probabilistic ranker can still consider it.
-    """
+def test_rank_actuator_geometry_only_clear_is_ineligible() -> None:
+    """A physically infeasible ``geometry_only_clear`` candidate is gated out."""
     # A tight actuator limit makes braking physically infeasible while geometry
     # is still clear, producing ``geometry_only_clear`` rather than ``infeasible``.
     action = action_from_constant_velocity(
@@ -415,9 +419,10 @@ def test_rank_actuator_geometry_only_clear_stays_eligible() -> None:
     )
     record = rankings[0]
     # Non-overlapping geometry plus a missed brake deadline yields the
-    # ``geometry_only_clear`` verdict: geometrically clear but physically
-    # infeasible. It is not ``infeasible``, so the candidate stays eligible and
-    # the probabilistic ranker can still consider it.
+    # ``geometry_only_clear`` is geometrically clear but physically infeasible,
+    # so the ranker must not select it despite the non-negative clearance.
     assert record.hard_gate.actuator_verdict == VERDICT_GEOMETRY_ONLY_CLEAR
     assert record.components.min_clearance_m > 0.0
-    assert record.eligible is True
+    assert record.eligible is False
+    assert record.hard_gate.ineligibility_reason is not None
+    assert "physically infeasible" in record.hard_gate.ineligibility_reason

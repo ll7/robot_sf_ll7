@@ -30,12 +30,17 @@ Usage (preregistration manifest only; no campaign is run):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
+
+from robot_sf.benchmark.camera_ready._config import load_campaign_config
+from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.social_compliance import (
     SOCIAL_COMPLIANCE_CLAIM_CLASS,
     SOCIAL_COMPLIANCE_SCHEMA_VERSION,
@@ -52,6 +57,11 @@ CAMPAIGN_CONFIG_PATH = (
 SCENARIO_MATRIX_PATH = REPO_ROOT / "configs/scenarios/issue_6474_social_compliance_nominal.yaml"
 PREREGISTRATION_PATH = (
     REPO_ROOT / "docs/context/evidence/issue_6474_social_compliance_preregistration.json"
+)
+CLASSIC_SCENARIO_MATRIX_PATH = REPO_ROOT / "configs/scenarios/classic_interactions.yaml"
+METRIC_CONTRACT_PATH = REPO_ROOT / "configs/benchmarks/social_compliance_metric_contract_v1.yaml"
+PREFLIGHT_CONFIG_PATH = (
+    REPO_ROOT / "configs/benchmarks/issue_6481_social_compliance_preflight_smoke.yaml"
 )
 
 # --- Frozen campaign design (mirrors the campaign config and preregistration) ---
@@ -96,6 +106,13 @@ METRIC_FAMILIES = (
     "legibility_progress",
     "pedestrian_deviation",
 )
+METRIC_FAMILY_DENOMINATORS = {
+    "comfort_exposure": "pedestrian_steps",
+    "distributional_inconvenience": "pedestrians_with_delay_samples",
+    "flow_disruption": "pedestrians_with_reference_arrival",
+    "legibility_progress": "robot_steps_before_terminal",
+    "pedestrian_deviation": "tracked_pedestrian_steps_with_baseline",
+}
 METRIC_DIRECTION = "lower_is_better"
 HORIZON_STEPS = 250
 DT_SECONDS = 0.1
@@ -118,9 +135,12 @@ class PairedEstimand:
         comparator_a: First planner in the pair.
         comparator_b: Second planner in the pair.
         metric_family: Versioned social-compliance metric family.
+        metric_denominator: Declared denominator for the metric family.
         estimand: Estimand type (paired mean difference per episode).
         effect_definition: Plain-language definition of the paired effect.
         direction: Metric direction convention (lower_is_better).
+        reporting_strata: Dimensions reported beside the primary effect.
+        support_policy: Rule for available, unavailable, and invalid rows.
         resampling_unit: Bootstrap resampling unit (paired seed block).
         ci_method: Confidence interval method (paired bootstrap percentile CI95).
         multiplicity_family: Multiplicity correction family (Holm-Bonferroni).
@@ -130,9 +150,12 @@ class PairedEstimand:
     comparator_a: str
     comparator_b: str
     metric_family: str
+    metric_denominator: str
     estimand: str
     effect_definition: str
     direction: str
+    reporting_strata: tuple[str, ...]
+    support_policy: str
     resampling_unit: str
     ci_method: str
     multiplicity_family: str
@@ -156,6 +179,7 @@ def declared_estimands() -> list[PairedEstimand]:
                     comparator_a=comparator_a,
                     comparator_b=comparator_b,
                     metric_family=metric_family,
+                    metric_denominator=METRIC_FAMILY_DENOMINATORS[metric_family],
                     estimand="paired_mean_difference_per_episode",
                     effect_definition=(
                         f"Mean over episodes of (per-episode {metric_family} value for "
@@ -164,12 +188,143 @@ def declared_estimands() -> list[PairedEstimand]:
                         "planners in the pair."
                     ),
                     direction=METRIC_DIRECTION,
+                    reporting_strata=("metric_family", "scenario_family"),
+                    support_policy=(
+                        "Report support and denominators; exclude fallback, degraded, missing, "
+                        "invalid, or unavailable rows without zero-imputation."
+                    ),
                     resampling_unit=RESAMPLING_UNIT,
                     ci_method="paired_bootstrap_percentile_ci95",
                     multiplicity_family=MULTIPLICITY_FAMILY,
                 )
             )
     return estimands
+
+
+def _require_contract(condition: bool, message: str) -> None:
+    """Raise a clear error when a frozen preregistration field has drifted."""
+    if not condition:
+        raise ValueError(message)
+
+
+def _file_sha256(path: Path) -> str:
+    """Return the SHA-256 digest for a tracked preregistration surface."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _selected_scenario_content_sha256() -> str:
+    """Return the canonical hash of the frozen #6102 scenario payloads."""
+    scenarios = load_scenario_matrix(CLASSIC_SCENARIO_MATRIX_PATH)
+    by_name = {str(row.get("name")): row for row in scenarios}
+    missing = [name for name in SCENARIOS if name not in by_name]
+    _require_contract(not missing, f"frozen scenarios missing from #6102 source: {missing}")
+    payload = [by_name[name] for name in SCENARIOS]
+    canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical_json).hexdigest()
+
+
+def _metric_contract_denominators() -> dict[str, str]:
+    """Read the versioned metric contract as a family-to-denominator mapping."""
+    payload = yaml.safe_load(METRIC_CONTRACT_PATH.read_text(encoding="utf-8"))
+    _require_contract(isinstance(payload, dict), "metric contract must be a mapping")
+    metrics = payload.get("metrics")
+    _require_contract(isinstance(metrics, list), "metric contract must declare a metrics list")
+
+    denominators: dict[str, str] = {}
+    for metric in metrics:
+        _require_contract(isinstance(metric, dict), "metric contract entries must be mappings")
+        family = metric.get("family")
+        denominator = metric.get("denominator")
+        _require_contract(
+            isinstance(family, str) and isinstance(denominator, str),
+            "metric contract entries must declare string family and denominator values",
+        )
+        denominators[family] = denominator
+    return denominators
+
+
+def validate_preregistration_contract(manifest: dict[str, Any]) -> None:
+    """Fail closed when the checked-in preregistration surfaces no longer agree.
+
+    This intentionally reads only tracked configs and evidence. It does not load
+    campaign output, execute a benchmark, or submit work.
+    """
+    campaign = load_campaign_config(CAMPAIGN_CONFIG_PATH)
+    preflight = load_campaign_config(PREFLIGHT_CONFIG_PATH)
+    matrix_rows = load_scenario_matrix(SCENARIO_MATRIX_PATH)
+    matrix_names = tuple(str(row.get("name")) for row in matrix_rows)
+    evidence = json.loads(PREREGISTRATION_PATH.read_text(encoding="utf-8"))
+    _require_contract(isinstance(evidence, dict), "preregistration evidence must be an object")
+
+    _require_contract(
+        tuple(planner.key for planner in campaign.planners) == PLANNERS, "planner drift"
+    )
+    _require_contract(campaign.seed_policy.seeds == SEEDS, "paired seed policy drift")
+    _require_contract(matrix_names == SCENARIOS, "scenario matrix selection or order drift")
+    _require_contract(
+        campaign.scenario_matrix_path == SCENARIO_MATRIX_PATH, "scenario matrix path drift"
+    )
+    _require_contract(
+        (campaign.horizon, campaign.dt)
+        == (preflight.horizon, preflight.dt)
+        == (HORIZON_STEPS, DT_SECONDS),
+        "horizon or dt drifted from the #6481 preflight",
+    )
+    _require_contract(
+        (campaign.paper_facing, campaign.export_publication_bundle) == (False, False),
+        "campaign must remain non-paper-facing and not export a publication bundle",
+    )
+
+    provenance = evidence.get("provenance")
+    design = evidence.get("design")
+    multiplicity = evidence.get("multiplicity")
+    estimands = evidence.get("estimands")
+    _require_contract(isinstance(provenance, dict), "preregistration provenance is missing")
+    _require_contract(isinstance(design, dict), "preregistration design is missing")
+    _require_contract(isinstance(multiplicity, dict), "preregistration multiplicity is missing")
+    _require_contract(isinstance(estimands, dict), "preregistration estimands are missing")
+    _require_contract(evidence.get("status") == "preregistration_only", "evidence status drift")
+    _require_contract(
+        evidence.get("evidence_status") == "not_benchmark_evidence", "evidence class drift"
+    )
+    _require_contract(
+        provenance.get("config_sha256") == _file_sha256(CAMPAIGN_CONFIG_PATH), "config hash drift"
+    )
+    _require_contract(
+        provenance.get("scenario_matrix_sha256") == _file_sha256(SCENARIO_MATRIX_PATH),
+        "scenario matrix hash drift",
+    )
+    _require_contract(
+        provenance.get("scenario_content_sha256") == _selected_scenario_content_sha256(),
+        "selected scenario content hash drift",
+    )
+    _require_contract(tuple(design.get("planners", ())) == PLANNERS, "evidence planner drift")
+    _require_contract(tuple(design.get("seeds", ())) == SEEDS, "evidence seed drift")
+    _require_contract(tuple(design.get("scenarios", ())) == SCENARIOS, "evidence scenario drift")
+    _require_contract(
+        design.get("expected_cell_count") == EXPECTED_CELL_COUNT, "evidence cell count drift"
+    )
+    _require_contract(
+        multiplicity.get("family") == MULTIPLICITY_FAMILY, "multiplicity family drift"
+    )
+    _require_contract(
+        multiplicity.get("num_decisions") == NUM_DECISIONS, "multiplicity count drift"
+    )
+    _require_contract(
+        estimands.get("support_and_denominators") is not None,
+        "preregistration must declare support and denominator handling",
+    )
+    _require_contract(
+        _metric_contract_denominators() == METRIC_FAMILY_DENOMINATORS,
+        "metric-family denominator contract drift",
+    )
+    _require_contract(
+        manifest["scenarios"] == list(SCENARIOS), "manifest scenario declaration drift"
+    )
+    _require_contract(
+        manifest["metric_family_denominators"] == METRIC_FAMILY_DENOMINATORS,
+        "manifest denominator declaration drift",
+    )
 
 
 def compute_paired_effects(*_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
@@ -247,8 +402,10 @@ def estimand_manifest() -> dict[str, Any]:
         "planner_execution_modes": dict(PLANNER_EXECUTION_MODES),
         "planner_pairs": [list(pair) for pair in PLANNER_PAIRS],
         "seeds": list(SEEDS),
+        "scenarios": list(SCENARIOS),
         "scenario_families": list(SCENARIO_FAMILIES),
         "metric_families": list(METRIC_FAMILIES),
+        "metric_family_denominators": dict(METRIC_FAMILY_DENOMINATORS),
         "metric_direction": METRIC_DIRECTION,
         "horizon_steps": HORIZON_STEPS,
         "dt_seconds": DT_SECONDS,
@@ -260,6 +417,11 @@ def estimand_manifest() -> dict[str, Any]:
         "multiplicity_family": MULTIPLICITY_FAMILY,
         "familywise_alpha": FAMILYWISE_ALPHA,
         "num_multiplicity_decisions": NUM_DECISIONS,
+        "reporting_strata": ["metric_family", "scenario_family"],
+        "support_and_denominators": (
+            "Report support counts and denominators beside every estimand. Exclude fallback, "
+            "degraded, missing, invalid, or unavailable rows without zero-imputation."
+        ),
         "claim_boundary": (
             "Estimate within-simulator planner-pair differences for the versioned "
             "social-compliance metric families. No universal planner superiority, "
@@ -282,7 +444,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check-only",
         action="store_true",
-        help="Validate that the declared estimand count matches the multiplicity contract and exit.",
+        help=(
+            "Validate the frozen config, scenario, metric, evidence, and multiplicity contracts "
+            "without executing a campaign."
+        ),
     )
     return parser
 
@@ -291,7 +456,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Emit the preregistration-only estimand manifest without executing any campaign.
 
     Returns:
-        0 when the manifest is emitted and the multiplicity contract checks pass.
+        0 when the manifest is emitted or the frozen contract check passes.
     """
     parser = _build_parser()
     _args = parser.parse_args(argv)
@@ -305,11 +470,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 1
     if _args.check_only:
+        try:
+            validate_preregistration_contract(manifest)
+        except (KeyError, OSError, TypeError, ValueError, yaml.YAMLError) as error:
+            print(f"ERROR: preregistration contract validation failed: {error}", file=sys.stderr)
+            return 1
         print(
             "OK: "
             f"{len(manifest['estimands'])} estimands / "
             f"{manifest['num_multiplicity_decisions']} multiplicity decisions "
-            "(preregistration-only; no campaign executed)."
+            "(frozen config, scenario, metric, and evidence contracts agree; no campaign executed)."
         )
         return 0
     print(json.dumps(manifest, indent=2, sort_keys=True))

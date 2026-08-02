@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import torch
 import yaml
 
 from robot_sf.planner.obstacle_features import PREDICTIVE_LEGACY_FEATURE_SCHEMA
@@ -42,6 +41,8 @@ def infer_predictive_checkpoint_feature_schema_name(
         return None
 
     try:
+        import torch  # noqa: PLC0415
+
         payload = torch.load(path, map_location="cpu", weights_only=True)
     except (OSError, EOFError, RuntimeError, ValueError, KeyError):
         return None

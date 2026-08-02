@@ -3,6 +3,7 @@ Extended robot environment with image-based observation space support.
 """
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
 
 from robot_sf.gym_env.env_config import RobotEnvSettings
 from robot_sf.gym_env.env_util import (
@@ -12,6 +13,9 @@ from robot_sf.gym_env.env_util import (
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.robot.robot_state import RobotState
+
+if TYPE_CHECKING:
+    from robot_sf.sensor.sensor_fusion import SensorFusion
 
 
 class RobotEnvWithImage(RobotEnv):
@@ -106,7 +110,7 @@ class RobotEnvWithImage(RobotEnv):
         self.state = RobotState(
             self.simulator.robot_navs[0],
             occupancies[0],
-            sensors[0],
+            cast("SensorFusion", sensors[0]),
             env_config.sim_config.time_per_step_in_secs,
             env_config.sim_config.sim_time_in_secs,
         )

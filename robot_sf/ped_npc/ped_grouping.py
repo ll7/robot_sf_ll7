@@ -64,7 +64,7 @@ class PedestrianStates:
         """
         return self.pysf_states()[:, 2:4]
 
-    def redirect(self, ped_id: int, new_goal: Vec2D):
+    def redirect(self, ped_id: int, new_goal: Vec2D) -> None:
         """
         Redirect a pedestrian to a new goal.
 
@@ -77,7 +77,7 @@ class PedestrianStates:
         """
         self.pysf_states()[ped_id, 4:6] = new_goal
 
-    def set_velocity(self, ped_id: int, new_velocity: Vec2D):
+    def set_velocity(self, ped_id: int, new_velocity: Vec2D) -> None:
         """
         Set the velocity of a pedestrian.
 
@@ -90,7 +90,7 @@ class PedestrianStates:
         """
         self.pysf_states()[ped_id, 2:4] = new_velocity
 
-    def reposition(self, ped_id: int, new_pos: Vec2D):
+    def reposition(self, ped_id: int, new_pos: Vec2D) -> None:
         """
         Reposition a pedestrian to a new position.
 
@@ -258,7 +258,7 @@ class PedestrianGroupings:
             return self.group_by_ped_id[ped_id]
         return self.new_group({ped_id})
 
-    def remove_group(self, group_id: int):
+    def remove_group(self, group_id: int) -> None:
         """Remove a group by reassigning members to single-member groups."""
         ped_ids = deepcopy(self.groups[group_id])
         for ped_id in ped_ids:
@@ -266,12 +266,12 @@ class PedestrianGroupings:
         self.groups[group_id].clear()
         self._invalidate_groups_as_lists_cache()
 
-    def redirect_group(self, group_id: int, new_goal: Vec2D):
+    def redirect_group(self, group_id: int, new_goal: Vec2D) -> None:
         """Redirect all members of a group to a new goal."""
         for ped_id in self.groups[group_id]:
             self.states.redirect(ped_id, new_goal)
 
-    def reposition_group(self, group_id: int, new_positions: list[Vec2D]):
+    def reposition_group(self, group_id: int, new_positions: list[Vec2D]) -> None:
         """Reposition group members using a list of new positions."""
         for ped_id, new_pos in zip(self.groups[group_id], new_positions, strict=False):
             self.states.reposition(ped_id, new_pos)

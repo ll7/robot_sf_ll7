@@ -5,18 +5,14 @@ This module provides a standardized way to configure and create different
 feature extractors while maintaining backward compatibility.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-
-from robot_sf.feature_extractor import DynamicsExtractor
-from robot_sf.feature_extractors.attention_extractor import AttentionFeatureExtractor
-from robot_sf.feature_extractors.lightweight_cnn_extractor import LightweightCNNExtractor
-from robot_sf.feature_extractors.lstm_extractor import LSTMFeatureExtractor
-from robot_sf.feature_extractors.mamba_extractor import MambaFeatureExtractor
-from robot_sf.feature_extractors.mlp_extractor import MLPFeatureExtractor
+if TYPE_CHECKING:
+    from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 
 class FeatureExtractorType(Enum):
@@ -28,6 +24,47 @@ class FeatureExtractorType(Enum):
     LIGHTWEIGHT_CNN = "lightweight_cnn"  # Lightweight CNN extractor
     LSTM = "lstm"  # LSTM sequential extractor (spatial, not temporal with standard PPO)
     MAMBA = "mamba"  # Mamba/SSM sequence extractor (bounded observation sequence)
+
+
+def _get_extractor_class(extractor_type: FeatureExtractorType) -> type[BaseFeaturesExtractor]:
+    """Lazy import and return the feature extractor class for the given type.
+
+    Returns:
+        type[BaseFeaturesExtractor]: Feature extractor class.
+    """
+    if extractor_type == FeatureExtractorType.DYNAMICS:
+        from robot_sf.feature_extractor import DynamicsExtractor  # noqa: PLC0415
+
+        return DynamicsExtractor
+    if extractor_type == FeatureExtractorType.MLP:
+        from robot_sf.feature_extractors.mlp_extractor import MLPFeatureExtractor  # noqa: PLC0415
+
+        return MLPFeatureExtractor
+    if extractor_type == FeatureExtractorType.ATTENTION:
+        from robot_sf.feature_extractors.attention_extractor import (  # noqa: PLC0415
+            AttentionFeatureExtractor,
+        )
+
+        return AttentionFeatureExtractor
+    if extractor_type == FeatureExtractorType.LIGHTWEIGHT_CNN:
+        from robot_sf.feature_extractors.lightweight_cnn_extractor import (  # noqa: PLC0415
+            LightweightCNNExtractor,
+        )
+
+        return LightweightCNNExtractor
+    if extractor_type == FeatureExtractorType.LSTM:
+        from robot_sf.feature_extractors.lstm_extractor import (  # noqa: PLC0415
+            LSTMFeatureExtractor,
+        )
+
+        return LSTMFeatureExtractor
+    if extractor_type == FeatureExtractorType.MAMBA:
+        from robot_sf.feature_extractors.mamba_extractor import (  # noqa: PLC0415
+            MambaFeatureExtractor,
+        )
+
+        return MambaFeatureExtractor
+    raise ValueError(f"Unknown feature extractor type: {extractor_type}")
 
 
 @dataclass
@@ -52,7 +89,7 @@ class FeatureExtractorConfig:
         Returns:
             type[BaseFeaturesExtractor]: Class object for the configured extractor.
         """
-        return _EXTRACTOR_REGISTRY[self.extractor_type]
+        return _get_extractor_class(self.extractor_type)
 
     def get_policy_kwargs(self) -> dict[str, Any]:
         """Get policy kwargs suitable for StableBaselines3.
@@ -64,17 +101,6 @@ class FeatureExtractorConfig:
             "features_extractor_class": self.get_extractor_class(),
             "features_extractor_kwargs": self.params.copy(),
         }
-
-
-# Registry mapping extractor types to their classes
-_EXTRACTOR_REGISTRY: dict[FeatureExtractorType, type[BaseFeaturesExtractor]] = {
-    FeatureExtractorType.DYNAMICS: DynamicsExtractor,
-    FeatureExtractorType.MLP: MLPFeatureExtractor,
-    FeatureExtractorType.ATTENTION: AttentionFeatureExtractor,
-    FeatureExtractorType.LIGHTWEIGHT_CNN: LightweightCNNExtractor,
-    FeatureExtractorType.LSTM: LSTMFeatureExtractor,
-    FeatureExtractorType.MAMBA: MambaFeatureExtractor,
-}
 
 
 # Predefined configurations for common use cases

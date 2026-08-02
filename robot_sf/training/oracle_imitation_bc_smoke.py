@@ -36,10 +36,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import torch
+
+if TYPE_CHECKING:
+    import torch
 
 from robot_sf.benchmark.artifact_catalog import sha256_file
 from robot_sf.common.atomic_io import atomic_write_json
@@ -599,29 +601,6 @@ def _stack_fixed_width(vectors: list[np.ndarray]) -> np.ndarray:
     return matrix
 
 
-class _BCPolicy(torch.nn.Module):
-    """Tiny MLP that maps a flattened observation vector to a continuous action."""
-
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
-        """Construct the three-layer Tanh MLP with the given layer widths."""
-        super().__init__()
-        self.net = torch.nn.Sequential(
-            torch.nn.Linear(input_dim, hidden_dim),
-            torch.nn.Tanh(),
-            torch.nn.Linear(hidden_dim, hidden_dim),
-            torch.nn.Tanh(),
-            torch.nn.Linear(hidden_dim, output_dim),
-        )
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:  # type: ignore[override]
-        """Map a flattened observation tensor to a continuous action vector.
-
-        Returns:
-            The output action tensor.
-        """
-        return self.net(features)
-
-
 def run_bc_overfit_smoke(config: BCSmokeConfig) -> BCSmokeResult:
     """Run the bounded BC loader/overfit smoke and write checkpoint + manifest artifacts.
 
@@ -639,6 +618,24 @@ def run_bc_overfit_smoke(config: BCSmokeConfig) -> BCSmokeResult:
         OracleImitationBcSmokeError: If the loss did not decrease (the overfit probe failed), the
             artifact is missing/malformed, or a split/leakage invariant is violated.
     """
+    import torch  # noqa: PLC0415
+
+    class _BCPolicy(torch.nn.Module):
+        """Tiny MLP that maps a flattened observation vector to a continuous action."""
+
+        def __init__(self, input_dim: int, hidden_dim: int, output_dim: int) -> None:
+            super().__init__()
+            self.net = torch.nn.Sequential(
+                torch.nn.Linear(input_dim, hidden_dim),
+                torch.nn.Tanh(),
+                torch.nn.Linear(hidden_dim, hidden_dim),
+                torch.nn.Tanh(),
+                torch.nn.Linear(hidden_dim, output_dim),
+            )
+
+        def forward(self, features: torch.Tensor) -> torch.Tensor:
+            return self.net(features)
+
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
 

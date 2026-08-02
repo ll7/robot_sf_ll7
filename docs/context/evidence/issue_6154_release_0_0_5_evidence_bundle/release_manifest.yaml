@@ -1,0 +1,128 @@
+# Release 0.0.5 Evidence Bundle Manifest
+# Issue: #6154
+# Parent Issue: #6149
+# Release Target: 0.0.5
+# Reverified frozen manifest date: 2026-07-26
+
+schema_version: release_0_0_5_evidence_bundle.v1
+issue: 6154
+parent_issue: 6149
+target_release: "0.0.5"
+date: "2026-07-26"
+zenodo_concept_doi: "10.5281/zenodo.19482025"
+frozen_manifest:
+  path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
+  sha256: 84af86ca08b060132ed3d9f40d95254c8c73cc5096229623e173524d4ffe9177
+  evaluated_against_origin_main: e27a5a9900e9f83f1b1bbf2501de76bc71eed400
+
+provenance:
+  publication_assembly:
+    commit: 0d212c4f1e0bb0c280f09adbaf9050bd5b026c91
+    role: >-
+      Draft assembly baseline that finalized the tracked bundle's checksum and review-sidecar
+      coverage. It did not publish a tag, GitHub Release, or Zenodo version.
+  execution_commits:
+    - candidate_id: candidate_5034
+      commit: 484d3fd05a0e29da9e267fa18f817a1fe101de70
+      role: Source commit recorded by the frozen manifest for the candidate's metric evidence.
+    - candidate_id: candidate_5305
+      commit: ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f
+      role: Source commit recorded by the frozen manifest for the certified archive.
+    - candidate_id: candidate_5592
+      commit: 96776636e797b16baa2be833ad957dd071a3b815
+      role: Source commit recorded by the frozen manifest for the preregistration packet.
+  reconciliation: >-
+    Execution and draft-assembly commits differ because this release only packages frozen,
+    checksummed references. No campaign was run and no candidate metric, result, or claim
+    boundary changed during assembly.
+
+summary:
+  included_candidates: 3
+  excluded_candidates: 3
+  disposition_status: evidence_bundle_assembled
+  release_recommendation: proceed_to_assembly_with_three_candidates
+
+candidates:
+  - candidate_id: candidate_5034
+    owning_issue: 5034
+    title: "control-action latency metric-evidence promotion"
+    source_commit: "484d3fd05a0e29da9e267fa18f817a1fe101de70"
+    durable_artifact_uri: "docs/context/evidence/issue_5034_control_action_latency_sweep"
+    evidence_classification: metric_evidence_promotion
+    allowed_claim: "control-action-latency metric-evidence promotion only: action latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell. evidence_tier=targeted smoke; result_classification=diagnostic-only."
+    fallback_degraded_excluded: true
+    acceptance_checker_status: passed
+    acceptance_checker_detail: "fixed_scope_coverage.status=verified (expected_row_count=1296, observed_row_count=1296; 48 scenarios x 3 latency variants x 3 planner groups x 3 seeds); re-verified 2026-07-26"
+    sha256_coverage:
+      summary_json: caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba
+      manifest: 7394e4348f72dca7e00e95e1ef6644a705bc9adfd699523af27260e0a133f0ae
+      snqi_analysis: 5ba2974cd8f300e61153e9e5d25ffe737dadbfb5efc62fc2659b19f9f9ec3949
+
+  - candidate_id: candidate_5305
+    owning_issue: 5305
+    title: "certified adversarial archive"
+    source_commit: "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
+    durable_artifact_uri: "docs/context/evidence/issue_5305_certified_archive"
+    evidence_classification: certified_adversarial_archive
+    allowed_claim: "certified adversarial archive of 17 certified episode entries with stable failure mechanism attributions and disjoint scenario splits."
+    fallback_degraded_excluded: true
+    acceptance_checker_status: passed
+    acceptance_checker_detail: "status=passed, repository_readiness.ready=true (entry_count=17 certified entries across 2 distinct scenario families; archive_id_overlap_count=0, seed_overlap_count=0); re-verified 2026-07-26, SHA256SUMS all OK"
+    sha256_coverage:
+      archive_json: 79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445
+      acceptance_report: d297f759e5cb91d7c18a964c09162fd98091f8c38f9c30756431260a2dbb587c
+      SHA256SUMS: b5bcbd13fc596208c49cce5f53d7e84403780f3121cfe31d6bc6aa6c5d9ae014
+
+  - candidate_id: candidate_5592
+    owning_issue: 5592
+    title: "cross-matrix preregistration packet"
+    source_commit: "96776636e797b16baa2be833ad957dd071a3b815"
+    durable_artifact_uri: "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml"
+    evidence_classification: preregistration_packet
+    allowed_claim: "Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
+    fallback_degraded_excluded: true
+    acceptance_checker_status: passed
+    acceptance_checker_detail: "status=ready, campaign_execution_allowed=false (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5); exit_code=0 at reverification 2026-07-26"
+    sha256_coverage:
+      scenario_set_config: 6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07
+      preregistration_config: 04032c5d8a06e31487821ac7c9c563cea326b6c015ad50ab049faac5b9f051d4
+
+excluded_reference:
+  - candidate_id: candidate_4977
+    owning_issue: 4977
+    disposition: exclude
+    rationale: "Campaign was not executed; the separate #5034 candidate owns its metric evidence."
+    gate_status: failed
+  - candidate_id: candidate_5416
+    owning_issue: 5416
+    disposition: exclude
+    rationale: "Current acceptance checker is blocked by three geometrically infeasible rows; correction remains with the owning issue."
+    gate_status: failed
+  - candidate_id: candidate_5756
+    owning_issue: 5756
+    disposition: exclude
+    rationale: "Campaign is in progress with no completed durable evidence directory."
+    gate_status: failed
+
+claims:
+  - claim_id: clm_5034_control_action_latency
+    description: "Targeted-smoke metric evidence for eligible native/adapter control-action-latency cells only."
+    promoted: true
+    planner_mode: native
+    row_status: completed
+  - claim_id: clm_5305_certified_adversarial_archive
+    description: "Certified adversarial archive of 17 entries with stable failure-mechanism attributions and disjoint scenario splits."
+    promoted: true
+    planner_mode: native
+    row_status: completed
+  - claim_id: clm_5592_cross_matrix_preregistration
+    description: "Generalization-check contract across two scenario matrices only; not a paper/dissertation ranking."
+    promoted: true
+    planner_mode: native
+    row_status: completed
+
+residual_risks:
+  - risk_id: rsk_5416_current_checker_blocked
+    description: "#5416 is excluded from this release because its full acceptance checker is currently blocked."
+    impact: "The bundle contains three, not four, candidates; the #5416 correction remains with its owning issue."
+    severity: medium

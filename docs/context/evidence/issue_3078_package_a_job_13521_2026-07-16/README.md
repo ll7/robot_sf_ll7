@@ -10,6 +10,10 @@ seed-sufficiency reference with a real-data seed/rank-stability diagnostic. The
 classification is `diagnostic_review_ready`; no synthetic fixture is used and no
 benchmark, ranking, paper, or dissertation claim is promoted.
 
+The renderer output remains `diagnostic_review_ready` and `NEEDS-REVIEW`. The separate
+`package_a_domain_decision_overlay.json` records the subsequent domain-approved decision:
+overall `diagnostic` with transfer sub-classification `no_eligible_comparator`.
+
 ## Provenance and acceptance
 
 - Job: `13521` (`01e-issue3078-heldout-fullpilot`).
@@ -49,16 +53,21 @@ relabeled native-only.
 ## Package A disposition
 
 - readiness: `ready`;
-- decision-packet classification: `diagnostic_review_ready`;
+- renderer claim-status: `not_reviewed`;
+- renderer decision-packet classification: `diagnostic_review_ready`;
+- domain decision overlay claim-status: `reviewed`;
+- domain decision overlay classification: `diagnostic`;
+- domain decision overlay transfer sub-classification: `no_eligible_comparator`;
 - issue-result classification: `diagnostic`;
 - all four decision-packet criteria: satisfied;
 - held-out table episode count: 18;
 - synthetic fixture marker: absent.
 
-This does not promote a benchmark claim. The report has no benchmark-set baseline
-rows for these held-out-only inputs, so `transfer_delta_snqi` remains empty and
-`claim_eligible=false`. Claim-card review and an eligible comparator remain
-necessary before any transfer, ranking, or paper-facing claim.
+The renderer does not promote a benchmark claim. The report has no benchmark-set baseline rows for
+these held-out-only inputs, so `transfer_delta_snqi` remains empty and `claim_eligible=false`.
+The separate domain decision overlay records the completed claim-boundary decision; it does not
+rewrite or replace the renderer output, and rank stability and transfer-delta claims remain
+non-promotable.
 
 ## Files
 
@@ -73,7 +82,11 @@ necessary before any transfer, ranking, or paper-facing claim.
   (not_identifiable, sole seed 111).
 - `fig_seed_rank_stability.png`, `fig_transfer_delta.png`: deterministic figures.
 - `no_eligible_comparator.json`: frozen comparator-eligibility receipt.
+- `no_eligible_comparator.json.review.json`: receipt review sidecar, explicitly bound to the
+  receipt and the domain decision overlay.
 - `package_a_decision_packet.json`: Package A readiness/classification disposition.
 - `claim_card.yaml`: explicit review and promotion boundary.
+- `package_a_domain_decision_overlay.json`: domain-approved decision layered over the renderer
+  outputs without rewriting their generated classification.
 - `registration.json`: job and checksum lineage.
 - `checksums.sha256`: registered bundle integrity manifest.

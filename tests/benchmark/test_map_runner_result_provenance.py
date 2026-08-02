@@ -88,6 +88,18 @@ def test_run_map_batch_records_result_manifest_write_error(
     assert "read-only output" in summary["provenance"]["result_manifest_error"]
 
 
+def test_run_map_batch_validates_scenarios_before_later_run_specs(tmp_path: Path) -> None:
+    """Scenario validation keeps its historical precedence over noise-spec normalization."""
+    with pytest.raises(ValueError, match="Scenario validation failed"):
+        run_map_batch(
+            [{"name": "missing-required-scenario-fields"}],
+            tmp_path / "invalid.jsonl",
+            Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
+            observation_noise={"pose_noise_std_m": "not-a-number"},
+            resume=False,
+        )
+
+
 def test_map_result_provenance_preserves_planned_skipped_job_count() -> None:
     """Skipped summaries should retain the planned job count in seed identity."""
     provenance = _map_result_provenance(

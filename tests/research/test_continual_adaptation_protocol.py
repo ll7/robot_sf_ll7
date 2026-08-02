@@ -189,6 +189,19 @@ def test_promote_with_unsupported_result_checksum_fails_closed() -> None:
     assert any("nominal_result" in blocker for blocker in report.blockers)
 
 
+def test_promote_with_truncated_result_checksum_fails_closed() -> None:
+    """Promotion evidence must use the complete digest for its declared algorithm."""
+    manifest = _manifest()
+    manifest["promotion_decision"] = {"decision": "promote", "rationale": "want to ship"}
+    incomplete = _results()
+    incomplete["nominal_result"]["checksum"] = {"algorithm": "sha256", "digest": "deadbeef"}
+    manifest["results"] = incomplete
+    report = check_continual_adaptation_run(manifest)
+    assert report.protocol_status == PROTOCOL_STATUS_INVALID
+    assert report.promotion_ready is False
+    assert any("nominal_result" in blocker for blocker in report.blockers)
+
+
 def test_promote_with_baseline_named_evidence_bundle_fails_closed() -> None:
     """A new evidence bundle must not reuse the immutable baseline identifier."""
     manifest = _manifest()
@@ -232,6 +245,14 @@ def test_empty_checksum_digest_raises() -> None:
     """A trivially empty digest fails closed at schema validation."""
     manifest = _manifest()
     manifest["baseline_policy"]["checksum"]["digest"] = "not-hex"
+    with pytest.raises(ContinualAdaptationProtocolError):
+        check_continual_adaptation_run(manifest)
+
+
+def test_truncated_checksum_digest_raises() -> None:
+    """A checksum must use the full canonical digest length for its algorithm."""
+    manifest = _manifest()
+    manifest["baseline_policy"]["checksum"]["digest"] = "deadbeef"
     with pytest.raises(ContinualAdaptationProtocolError):
         check_continual_adaptation_run(manifest)
 

@@ -73,9 +73,35 @@
         "digest": {
           "type": "string",
           "pattern": "^[0-9a-f]{8,}$",
-          "description": "Lowercase hexadecimal digest of the checksummed artifact. Required and non-trivial so a missing/empty hash fails closed at schema validation time."
+          "description": "Lowercase hexadecimal digest of the checksummed artifact. Its algorithm-specific canonical length is enforced below so truncated hashes fail closed at schema validation time."
         }
-      }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "algorithm": {"const": "sha256"},
+            "digest": {"pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        {
+          "properties": {
+            "algorithm": {"const": "sha384"},
+            "digest": {"pattern": "^[0-9a-f]{96}$"}
+          }
+        },
+        {
+          "properties": {
+            "algorithm": {"const": "sha512"},
+            "digest": {"pattern": "^[0-9a-f]{128}$"}
+          }
+        },
+        {
+          "properties": {
+            "algorithm": {"const": "blake2b"},
+            "digest": {"pattern": "^[0-9a-f]{128}$"}
+          }
+        }
+      ]
     },
     "baseline_policy": {
       "type": "object",
@@ -263,7 +289,7 @@
     "results": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Loosely typed at the schema level so a partial block fails closed at the semantic promotion gate. Each ref must carry a 'uri' plus a supported 'checksum' of {algorithm, digest}; evidence_bundle must also carry a non-empty identifier distinct from the baseline policy. The semantic checker requires all of nominal_result, shift_result, forgetting_result, and evidence_bundle to be present and complete before 'promote' can pass.",
+      "description": "Loosely typed at the schema level so a partial block fails closed at the semantic promotion gate. Each ref must carry a 'uri' plus a supported checksum with the canonical digest length for its algorithm; evidence_bundle must also carry a non-empty identifier distinct from the baseline policy. The semantic checker requires all of nominal_result, shift_result, forgetting_result, and evidence_bundle to be present and complete before 'promote' can pass.",
       "properties": {
         "nominal_result": {
           "type": "object"

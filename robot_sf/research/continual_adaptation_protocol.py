@@ -87,8 +87,12 @@ _REQUIRED_PROMOTION_REFS = (
     "evidence_bundle",
 )
 
-_SUPPORTED_CHECKSUM_ALGORITHMS = frozenset({"sha256", "sha384", "sha512", "blake2b"})
-_CHECKSUM_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{8,}$")
+_CHECKSUM_DIGEST_PATTERNS = {
+    "sha256": re.compile(r"^[0-9a-f]{64}$"),
+    "sha384": re.compile(r"^[0-9a-f]{96}$"),
+    "sha512": re.compile(r"^[0-9a-f]{128}$"),
+    "blake2b": re.compile(r"^[0-9a-f]{128}$"),
+}
 
 
 class ContinualAdaptationProtocolError(RobotSfError, ValueError):
@@ -473,11 +477,11 @@ def _is_complete_reference(
         return False
     algorithm = checksum.get("algorithm")
     digest = checksum.get("digest")
+    digest_pattern = (
+        _CHECKSUM_DIGEST_PATTERNS.get(algorithm) if isinstance(algorithm, str) else None
+    )
     if not (
-        isinstance(algorithm, str)
-        and algorithm in _SUPPORTED_CHECKSUM_ALGORITHMS
-        and isinstance(digest, str)
-        and _CHECKSUM_DIGEST_PATTERN.fullmatch(digest)
+        isinstance(digest, str) and digest_pattern is not None and digest_pattern.fullmatch(digest)
     ):
         return False
     if ref_name != "evidence_bundle":

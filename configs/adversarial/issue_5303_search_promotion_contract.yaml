@@ -9,7 +9,7 @@
 #
 # This file is the frozen source of truth. Its SHA-256 is recorded in the side-effect-free
 # preregistration manifest (docs/context/evidence/issue_5303_search_promotion_preregistration/)
-# and is recomputed by robot_sf/benchmark/issue_5303_search_promotion_preflight.py at every
+# and is recomputed by robot_sf/benchmark/issue_5303_search_promotion_preregistration.py at every
 # check. Any field change is a contract change and requires re-preregistration before any
 # step-3 outcome is generated.
 schema_version: issue_5303_search_promotion_contract.v1
@@ -116,10 +116,10 @@ input_provenance:
       path: scripts/tools/analyze_issue_5303_search_promotion.py
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
     - id: preflight_module
-      path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
+      path: robot_sf/benchmark/issue_5303_search_promotion_preregistration.py
       sha256: 62ec47b27c918fc436f82c97c90061d26e2f491a651f4c96bdb70ea33fa4327c
     - id: contract_check_cli
-      path: scripts/tools/check_issue_5303_search_promotion_contract.py
+      path: scripts/tools/check_issue_5303_search_promotion_preregistration.py
       sha256: 8d71644f0eafabe3cbe749507ec83d77287c6b98ed241489bfd8ec53de037451
 
 # ---------------------------------------------------------------------------

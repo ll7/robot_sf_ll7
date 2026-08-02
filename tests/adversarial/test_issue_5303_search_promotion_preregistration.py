@@ -27,7 +27,7 @@ from typing import Any
 import pytest
 import yaml
 
-from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
+from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
     CONTRACT_SCHEMA_VERSION,
     DEFAULT_CONTRACT_PATH,
     DEFAULT_MANIFEST_PATH,
@@ -41,7 +41,7 @@ from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PREFLIGHT_MODULE_PATH = REPO_ROOT / "robot_sf/benchmark/issue_5303_search_promotion_preflight.py"
+PREFLIGHT_MODULE_PATH = REPO_ROOT / "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py"
 CONTRACT_PATH = REPO_ROOT / DEFAULT_CONTRACT_PATH
 RECEIPT_PATH = REPO_ROOT / DEFAULT_RECEIPT_PATH
 MANIFEST_PATH = REPO_ROOT / DEFAULT_MANIFEST_PATH
@@ -925,6 +925,6 @@ def test_future_run_is_diagnostic_inconclusive_without_weakening_thresholds() ->
 def test_reimporting_preflight_module_is_idempotent() -> None:
     """Re-importing the module does not mutate global sampler/optimizer registries."""
     importlib.reload(
-        importlib.import_module("robot_sf.benchmark.issue_5303_search_promotion_preflight")
+        importlib.import_module("robot_sf.benchmark.issue_5303_search_promotion_preregistration")
     )
     test_preflight_passes_on_frozen_contract()

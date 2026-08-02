@@ -26,7 +26,7 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.objectives import constraints_first_outcome_projection
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
-from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
+from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
     DEFAULT_CONTRACT_PATH,
     preflight_issue_5303_contract,
 )

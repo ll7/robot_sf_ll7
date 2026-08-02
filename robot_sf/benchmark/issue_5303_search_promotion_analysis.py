@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D, SearchSpaceConfig
-from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
+from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
     DEFAULT_MANIFEST_PATH,
     preflight_issue_5303_contract,
 )

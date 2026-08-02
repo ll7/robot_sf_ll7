@@ -1,7 +1,7 @@
 {
   "candidate_budget_per_search_seed_per_method": 64,
   "certified_archive_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
-  "check_command": "uv run python scripts/tools/check_issue_5303_search_promotion_contract.py",
+  "check_command": "uv run python scripts/tools/check_issue_5303_search_promotion_preregistration.py",
   "contract_check_cli_sha256": "8d71644f0eafabe3cbe749507ec83d77287c6b98ed241489bfd8ec53de037451",
   "contract_path": "configs/adversarial/issue_5303_search_promotion_contract.yaml",
   "contract_schema_version": "issue_5303_search_promotion_contract.v1",

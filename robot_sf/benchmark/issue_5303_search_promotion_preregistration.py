@@ -15,7 +15,7 @@ recertification receipt, preregistration manifest, and statically parsed handoff
 files. It recomputes SHA-256 hashes and asserts the frozen fields, outcome schema,
 runner/objective support, and power analysis.
 
-The companion test ``tests/adversarial/test_issue_5303_search_promotion_preflight.py``
+The companion test ``tests/adversarial/test_issue_5303_search_promotion_preregistration.py``
 AST-scans this module's source to prove the side-effect-free contract holds.
 """
 
@@ -135,8 +135,8 @@ EXPECTED_PROVENANCE_PATHS = {
     "adversarial_search_runner": "robot_sf/adversarial/search.py",
     "promotion_analysis_module": "robot_sf/benchmark/issue_5303_search_promotion_analysis.py",
     "promotion_analysis_cli": "scripts/tools/analyze_issue_5303_search_promotion.py",
-    "preflight_module": "robot_sf/benchmark/issue_5303_search_promotion_preflight.py",
-    "contract_check_cli": "scripts/tools/check_issue_5303_search_promotion_contract.py",
+    "preflight_module": "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py",
+    "contract_check_cli": "scripts/tools/check_issue_5303_search_promotion_preregistration.py",
 }
 EXPECTED_ENTRY_GATE_BINDINGS = {
     "blocking_issue": 6139,

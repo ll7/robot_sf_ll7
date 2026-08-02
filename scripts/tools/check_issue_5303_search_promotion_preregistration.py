@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
+from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
     DEFAULT_CONTRACT_PATH,
     DEFAULT_MANIFEST_PATH,
     dump_preflight_payload,
@@ -29,7 +29,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "Example:\n  uv run python scripts/tools/check_issue_5303_search_promotion_contract.py"
+            "Example:\n  uv run python scripts/tools/check_issue_5303_search_promotion_preregistration.py"
         ),
     )
     parser.add_argument(

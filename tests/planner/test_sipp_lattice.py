@@ -1416,6 +1416,62 @@ class TestSpaceTimeFeasibilityOracle:
         commands = [[p.as_command() for p in (r.witness or ())] for r in results]
         assert commands[0] == commands[1]
 
+    def test_verify_witness_rejects_empty_route(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [], [])
+        assert not oracle._verify_witness(
+            (),
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            start_angular_velocity=0.0,
+            forecast=forecast,
+            static_blocked=None,
+        )
+
+    def test_verify_witness_rejects_kinematically_unreachable_primitive(self) -> None:
+        """A primitive the dynamics cannot reach fails the witness replay closed."""
+        cfg = _oracle_config(max_linear_acceleration=0.1, max_steering_rate=0.1)
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [], [])
+        unreachable = (MotionPrimitive(1.0, 0.0, cfg.primitive_duration, PrimitiveKind.FORWARD),)
+        assert not oracle._verify_witness(
+            unreachable,
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            start_angular_velocity=0.0,
+            forecast=forecast,
+            static_blocked=None,
+        )
+
+    def test_verify_witness_rejects_static_collision(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [], [])
+        wait = (MotionPrimitive(0.0, 0.0, cfg.primitive_duration, PrimitiveKind.WAIT),)
+        assert not oracle._verify_witness(
+            wait,
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            start_angular_velocity=0.0,
+            forecast=forecast,
+            static_blocked=lambda _arc: True,
+        )
+
+    def test_algo_config_factory_flows_through(self) -> None:
+        from robot_sf.planner.sipp_lattice import (
+            build_space_time_feasibility_oracle_from_algo_config,
+        )
+
+        oracle = build_space_time_feasibility_oracle_from_algo_config(
+            {"xy_resolution": 0.2, "planning_horizon_slots": 12}
+        )
+        assert oracle.config.xy_resolution == pytest.approx(0.2)
+        assert oracle.config.planning_horizon_slots == 12
+
     def test_result_serializes_to_diagnostic_payload(self) -> None:
         cfg = _oracle_config()
         oracle = SpaceTimeFeasibilityOracle(cfg)
@@ -1500,6 +1556,12 @@ class TestSpaceTimeStaticOracleComparison:
             _feasible_result_stub(), static_feasible=None, static_status="blocked"
         )
         assert comparison["comparison_verdict"] == COMPARISON_INDETERMINATE
+
+    def test_divergent_explained_static_time_truncated_dynamic_witness(self) -> None:
+        comparison = compare_with_static_feasibility(
+            _feasible_result_stub(), static_feasible=False, static_status="time_truncated"
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_DIVERGENT_EXPLAINED
 
     def test_comparison_uses_real_static_oracle_vocabulary(self) -> None:
         """The comparison is wired to the static oracle's exported constants."""

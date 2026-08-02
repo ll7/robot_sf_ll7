@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import types
 from pathlib import Path
 
@@ -128,8 +129,10 @@ class TestDRMPCPlanner:
         assert planner._policy is None
         assert planner._module is None
 
-    def test_step_raises_when_dependency_missing(self) -> None:
+    def test_step_raises_when_dependency_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """step must raise RuntimeError when the DR-MPC dependency is missing."""
+        for module_name in ("dr_mpc", "drmpc", "DR_MPC"):
+            monkeypatch.setitem(sys.modules, module_name, None)
         planner = DRMPCPlanner({})
         obs = {
             "dt": 0.1,
@@ -155,8 +158,10 @@ class TestDRMPCPlanner:
         assert isinstance(meta["config_hash"], str)
         assert len(meta["config_hash"]) == 16
 
-    def test_get_metadata_missing_dependency_status(self) -> None:
+    def test_get_metadata_missing_dependency_status(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """get_metadata must report missing_dependency when DR-MPC is absent."""
+        for module_name in ("dr_mpc", "drmpc", "DR_MPC"):
+            monkeypatch.setitem(sys.modules, module_name, None)
         planner = DRMPCPlanner({})
         meta = planner.get_metadata()
         assert meta["status"] == "missing_dependency"

@@ -3604,18 +3604,11 @@ def _run_campaign_orchestrator(
     dependencies: _CampaignRuntimeDependencies,
     arm_isolation: str | None = None,
 ) -> dict[str, Any]:
-    """Execute the campaign orchestrator with optional arm isolation override.
+    """Execute the five campaign phases and return the campaign summary.
 
-    Args:
-        cfg: Campaign configuration.
-        output_root: Optional campaign base output directory.
-        label: Optional label suffix embedded into campaign_id.
-        campaign_id: Optional exact campaign directory id for resume.
-        skip_publication_bundle: Skip publication bundle export even if enabled in config.
-        invoked_command: Full command line that invoked this run.
-        dependencies: Runtime dependency collaborators.
-        arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
-            If None, uses cfg.arm_isolation (issue #4826).
+    Thin coordinator over ``_prepare_campaign_execution``,
+    ``_execute_planner_matrix_phase``, ``_post_run_integrity_and_fairness``,
+    ``_write_campaign_report_artifacts``, and ``_finalize_campaign_outputs``.
 
     Returns:
         Campaign execution summary with output paths and counters.
@@ -3671,15 +3664,6 @@ def _run_campaign_orchestrator(
         dependencies=dependencies,
     )
 
-    outcome = artifacts.outcome
-    logger.info(
-        "Camera-ready campaign finished id={} runs={} episodes={} out={}",
-        paths.campaign_id,
-        len(run_entries),
-        outcome.total_episodes,
-        paths.campaign_root,
-    )
-
     return _build_orchestrator_return(
         paths=paths,
         artifacts=artifacts,
@@ -3709,6 +3693,13 @@ def _build_orchestrator_return(
     snqi = artifacts.snqi
     campaign_outcome = outcome.campaign_outcome
     campaign_status_axes = outcome.campaign_status_axes
+    logger.info(
+        "Camera-ready campaign finished id={} runs={} episodes={} out={}",
+        paths.campaign_id,
+        len(run_entries),
+        outcome.total_episodes,
+        paths.campaign_root,
+    )
     return {
         "campaign_id": paths.campaign_id,
         "campaign_root": str(paths.campaign_root),

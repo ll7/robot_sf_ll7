@@ -1466,7 +1466,8 @@ def _execute_campaign_targets(  # noqa: PLR0913 - campaign state is intentionall
     """
     # The runnability predicate reflects current main's ``run_episode`` registry
     # and is applied even when a runner is injected, so the disposition records a
-    # property of the codebase rather than of the test harness.
+    # property of the codebase rather than of the test harness. Imported from the
+    # lightweight baselines package to avoid pulling heavy optional deps.
     from robot_sf.baselines import is_runnable_algo  # noqa: PLC0415
 
     results: list[dict[str, Any]] = []
@@ -1519,10 +1520,27 @@ def execute_campaign(
     run_episode: Any | None = None,
     target_filter: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Run resolved targets and write the schema-compatible host result.
+    """Execute the exact-repeat campaign and return a host_result.json payload.
+
+    Consumes a resolved definitions bundle (from ``resolve_runnable_definitions``),
+    runs each target the declared number of times (3), and emits a host result
+    conforming to ``scenario_exact_repeat_host_result.v1``.  Supports resume: if
+    a cached result file exists for a target, that target is skipped unless its
+    environment fingerprint has changed.
+
+    Args:
+        resolved_bundle: Output of ``resolve_runnable_definitions()`` containing
+            runnable scenario/planner definitions and manifest metadata.
+        output_dir: Directory for per-target result cache and the final
+            ``host_result.json``.
+        run_episode: Optional injected episode runner for testability.  Defaults
+            to ``robot_sf.benchmark.runner.run_episode``.
+        target_filter: Optional list of ``"scenario_id--seed"`` strings to execute
+            a subset of targets.
 
     Returns:
-        The payload also written to ``output_dir/host_result.json``.
+        A host report dict conforming to the ``scenario_exact_repeat_host_result.v1``
+        schema, also written to ``output_dir/host_result.json``.
     """
     targets, scenario_defs, planner_defs, repeats_per_target, expected_manifest_hash = (
         _validate_resolved_bundle(resolved_bundle)

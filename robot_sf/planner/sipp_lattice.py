@@ -926,6 +926,8 @@ class PedestrianOccupancyForecast:
         velocities: World-frame pedestrian velocities as ``(N, 2)``.
         slot_duration: Seconds represented by one discrete time slot.
         combined_radius: Robot radius + safety margin + pedestrian radius.
+        pedestrian_radius: Pedestrian radius used to build the forecast, when
+            available. Older manually constructed forecasts may leave this unset.
         horizon_slots: Slots beyond which the forecast is not trusted.
         status: ``"ok"`` (dynamic state usable), ``"static"`` (no velocities,
             stationary assumption), or ``"failed"`` (malformed dynamic input).
@@ -937,16 +939,97 @@ class PedestrianOccupancyForecast:
     combined_radius: float
     horizon_slots: int
     status: str
+    pedestrian_radius: float | None = None
 
     @property
     def usable(self) -> bool:
         """Return whether the forecast can back planner success evidence."""
-        return self.status != "failed"
+        return self.status in {"ok", "static"}
 
     @property
     def pedestrian_count(self) -> int:
         """Return the number of forecast pedestrians."""
         return int(self.positions.shape[0])
+
+    def _validated_geometry(
+        self,
+    ) -> tuple[np.ndarray, np.ndarray, float, float, int] | None:
+        """Return validated forecast geometry, or ``None`` to fail closed."""
+        if not self.usable:
+            return None
+        try:
+            forecast_positions = np.asarray(self.positions, dtype=float)
+            forecast_velocities = np.asarray(self.velocities, dtype=float)
+            slot_duration = float(self.slot_duration)
+            combined_radius = float(self.combined_radius)
+            horizon_slots = float(self.horizon_slots)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if (
+            forecast_positions.ndim != 2
+            or forecast_positions.shape[-1] != 2
+            or forecast_velocities.ndim != 2
+            or forecast_velocities.shape != forecast_positions.shape
+            or not np.all(np.isfinite(forecast_positions))
+            or not np.all(np.isfinite(forecast_velocities))
+            or not (isfinite(slot_duration) and slot_duration > 0.0)
+            or not (isfinite(combined_radius) and combined_radius >= 0.0)
+            or not (isfinite(horizon_slots) and horizon_slots >= 0.0)
+            or not horizon_slots.is_integer()
+        ):
+            return None
+        return (
+            forecast_positions,
+            forecast_velocities,
+            slot_duration,
+            combined_radius,
+            int(horizon_slots),
+        )
+
+    @staticmethod
+    def _sample_times(
+        arc: np.ndarray,
+        start_slot: int,
+        duration: float | None,
+        slot_duration: float,
+        horizon_slots: int,
+    ) -> np.ndarray | None:
+        """Build arc sample times, returning ``None`` outside the forecast horizon.
+
+        Returns:
+            Finite sample times, or ``None`` when the query is malformed or
+            outside the trusted forecast horizon.
+        """
+        try:
+            start_slot_value = float(start_slot)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not (isfinite(start_slot_value) and start_slot_value.is_integer()):
+            return None
+        start_slot_int = int(start_slot_value)
+        if duration is None:
+            if start_slot_int < 0 or start_slot_int > horizon_slots:
+                return None
+            sample_times = np.full(arc.shape[0], start_slot_int * slot_duration)
+        else:
+            try:
+                duration_value = float(duration)
+            except (TypeError, ValueError, OverflowError):
+                return None
+            if not (isfinite(duration_value) and duration_value > 0.0):
+                return None
+            start_time = start_slot_int * slot_duration
+            sample_times = start_time + np.linspace(0.0, duration_value, arc.shape[0])
+            trusted_horizon = horizon_slots * slot_duration
+            if (
+                start_slot_int < 0
+                or np.any(sample_times < -1e-9)
+                or float(sample_times[-1]) > trusted_horizon + 1e-9
+            ):
+                return None
+        if not np.all(np.isfinite(sample_times)):
+            return None
+        return sample_times
 
     def arc_occupied(
         self,
@@ -964,8 +1047,16 @@ class PedestrianOccupancyForecast:
         Returns:
             ``True`` for a collision or an arc beyond the trusted horizon.
         """
-        if self.pedestrian_count == 0:
-            return False
+        geometry = self._validated_geometry()
+        if geometry is None:
+            return True
+        (
+            forecast_positions,
+            forecast_velocities,
+            slot_duration,
+            combined_radius,
+            horizon_slots,
+        ) = geometry
         try:
             arc = np.asarray(arc_positions, dtype=float)
         except (TypeError, ValueError, OverflowError):
@@ -974,34 +1065,33 @@ class PedestrianOccupancyForecast:
             return False
         if arc.ndim != 2 or arc.shape[-1] != 2 or not np.all(np.isfinite(arc)):
             return True
+        sample_times = self._sample_times(
+            arc,
+            start_slot,
+            duration,
+            slot_duration,
+            horizon_slots,
+        )
+        if sample_times is None:
+            return True
 
-        if duration is None:
-            if int(start_slot) < 0 or int(start_slot) > int(self.horizon_slots):
-                return True
-            sample_times = np.full(arc.shape[0], float(int(start_slot)) * float(self.slot_duration))
-        else:
-            if not (isfinite(float(duration)) and float(duration) > 0.0):
-                return True
-            start_time = float(int(start_slot)) * float(self.slot_duration)
-            sample_times = start_time + np.linspace(0.0, float(duration), arc.shape[0])
-            trusted_horizon = float(self.horizon_slots) * float(self.slot_duration)
-            if (
-                int(start_slot) < 0
-                or np.any(sample_times < -1e-9)
-                or float(sample_times[-1]) > trusted_horizon + 1e-9
-            ):
-                return True
-
+        if forecast_positions.shape[0] == 0:
+            return False
         forecast = (
-            self.positions[None, :, :] + sample_times[:, None, None] * self.velocities[None, :, :]
+            forecast_positions[None, :, :]
+            + sample_times[:, None, None] * forecast_velocities[None, :, :]
         )
         diffs = arc[:, None, :] - forecast
         distances_squared = np.sum(diffs * diffs, axis=2)
-        return bool(np.any(distances_squared <= self.combined_radius * self.combined_radius))
+        return bool(np.any(distances_squared <= combined_radius * combined_radius))
 
 
 def _failed_forecast(
-    *, slot_duration: float, combined_radius: float, horizon_slots: int
+    *,
+    slot_duration: float,
+    combined_radius: float,
+    horizon_slots: int,
+    pedestrian_radius: float | None = None,
 ) -> PedestrianOccupancyForecast:
     """Return the empty fail-closed forecast used for malformed active state."""
     return PedestrianOccupancyForecast(
@@ -1011,6 +1101,7 @@ def _failed_forecast(
         combined_radius=combined_radius,
         horizon_slots=horizon_slots,
         status="failed",
+        pedestrian_radius=pedestrian_radius,
     )
 
 
@@ -1043,6 +1134,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
+            pedestrian_radius=pedestrian_radius,
         )
     try:
         positions = np.asarray(positions, dtype=float)
@@ -1051,6 +1143,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
+            pedestrian_radius=pedestrian_radius,
         )
     if positions.ndim == 1 and positions.size == 0:
         positions = positions.reshape(0, 2)
@@ -1061,6 +1154,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
+            pedestrian_radius=pedestrian_radius,
         )
     count = positions.shape[0]
 
@@ -1072,6 +1166,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
             status="static",
+            pedestrian_radius=pedestrian_radius,
         )
 
     if not np.all(np.isfinite(positions)):
@@ -1079,6 +1174,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
+            pedestrian_radius=pedestrian_radius,
         )
 
     try:
@@ -1088,6 +1184,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
+            pedestrian_radius=pedestrian_radius,
         )
     if raw_velocities.size == 0:
         return PedestrianOccupancyForecast(
@@ -1097,6 +1194,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
             status="static",
+            pedestrian_radius=pedestrian_radius,
         )
 
     if raw_velocities.ndim == 1 and raw_velocities.size % 2 == 0:
@@ -1111,6 +1209,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
+            pedestrian_radius=pedestrian_radius,
         )
 
     world_velocities = _rotate_ego_velocities_to_world(raw_velocities[:count], float(heading))
@@ -1121,6 +1220,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
         combined_radius=combined_radius,
         horizon_slots=horizon_slots,
         status="ok",
+        pedestrian_radius=pedestrian_radius,
     )
 
 
@@ -1957,6 +2057,7 @@ COMPARISON_INDETERMINATE = "indeterminate"
 #: These mirror ``robot_sf.scenario_certification.feasibility_oracle`` constants;
 #: they are duplicated as literals here to avoid importing that heavy module.
 _STATIC_INFEASIBLE_BY_CONSTRUCTION = "infeasible_by_construction"
+_STATIC_UNDECIDED_STATUSES = frozenset({"blocked", "time_truncated"})
 
 
 @dataclass(frozen=True)
@@ -1986,7 +2087,7 @@ class SpaceTimeDiscretization:
     pedestrian_radius: float
     safety_margin: float
 
-    def as_dict(self) -> dict[str, float]:
+    def as_dict(self) -> dict[str, float | int]:
         """Serialize the discretization to JSON-safe primitives.
 
         Returns:
@@ -1995,8 +2096,8 @@ class SpaceTimeDiscretization:
         return {
             "xy_resolution": float(self.xy_resolution),
             "time_slot_duration": float(self.time_slot_duration),
-            "planning_horizon_slots": float(self.planning_horizon_slots),
-            "forecast_horizon_slots": float(self.forecast_horizon_slots),
+            "planning_horizon_slots": int(self.planning_horizon_slots),
+            "forecast_horizon_slots": int(self.forecast_horizon_slots),
             "combined_radius": float(self.combined_radius),
             "robot_radius": float(self.robot_radius),
             "pedestrian_radius": float(self.pedestrian_radius),
@@ -2047,7 +2148,9 @@ class SpaceTimeFeasibilityResult:
             ``True`` only when the verdict is feasible and the witness replayed
             collision-free.
         """
-        return self.verdict == FEASIBILITY_FEASIBLE and self.witness_valid
+        return (
+            self.verdict == FEASIBILITY_FEASIBLE and bool(self.witness) and bool(self.witness_valid)
+        )
 
 
 class SpaceTimeFeasibilityOracle:
@@ -2083,11 +2186,12 @@ class SpaceTimeFeasibilityOracle:
         Returns:
             The discretization parameters binding for this assessment.
         """
-        combined_radius = (
-            float(self.config.robot_radius)
-            + float(self.config.safety_margin)
-            + float(self.config.pedestrian_radius)
-        )
+        combined_radius = float(forecast.combined_radius)
+        pedestrian_radius = forecast.pedestrian_radius
+        if pedestrian_radius is None:
+            pedestrian_radius = (
+                combined_radius - float(self.config.robot_radius) - float(self.config.safety_margin)
+            )
         return SpaceTimeDiscretization(
             xy_resolution=float(self.config.xy_resolution),
             time_slot_duration=float(self.config.time_slot_duration),
@@ -2097,7 +2201,7 @@ class SpaceTimeFeasibilityOracle:
             forecast_horizon_slots=int(forecast.horizon_slots),
             combined_radius=combined_radius,
             robot_radius=float(self.config.robot_radius),
-            pedestrian_radius=float(self.config.pedestrian_radius),
+            pedestrian_radius=float(pedestrian_radius),
             safety_margin=float(self.config.safety_margin),
         )
 
@@ -2176,6 +2280,7 @@ class SpaceTimeFeasibilityOracle:
             start_pos=np.asarray(start_pos, dtype=float),
             start_heading=float(start_heading),
             start_speed=float(start_speed),
+            goal=np.asarray(goal, dtype=float),
             start_angular_velocity=float(start_angular_velocity),
             forecast=forecast,
             static_blocked=static_blocked,
@@ -2193,6 +2298,45 @@ class SpaceTimeFeasibilityOracle:
             discretization=discretization,
         )
 
+    @staticmethod
+    def _validated_witness_state(
+        witness: Sequence[MotionPrimitive],
+        *,
+        start_pos: np.ndarray,
+        start_heading: float,
+        start_speed: float,
+        goal: np.ndarray,
+        start_angular_velocity: float,
+        forecast: PedestrianOccupancyForecast,
+    ) -> tuple[np.ndarray, np.ndarray, float, float, float] | None:
+        """Validate the scalar and vector state used for witness replay.
+
+        Returns:
+            The normalized cursor, goal, heading, speed, and angular velocity,
+            or ``None`` for malformed or unusable input.
+        """
+        if not witness or not forecast.usable:
+            return None
+        try:
+            cursor = np.asarray(start_pos, dtype=float)
+            goal_position = np.asarray(goal, dtype=float)
+            heading = float(start_heading)
+            speed = float(start_speed)
+            angular_velocity = float(start_angular_velocity)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if (
+            cursor.shape != (2,)
+            or goal_position.shape != (2,)
+            or not np.all(np.isfinite(cursor))
+            or not np.all(np.isfinite(goal_position))
+            or not isfinite(heading)
+            or not isfinite(speed)
+            or not isfinite(angular_velocity)
+        ):
+            return None
+        return cursor, goal_position, wrap_angle_pi(heading), speed, angular_velocity
+
     def _verify_witness(
         self,
         witness: Sequence[MotionPrimitive],
@@ -2200,6 +2344,7 @@ class SpaceTimeFeasibilityOracle:
         start_pos: np.ndarray,
         start_heading: float,
         start_speed: float,
+        goal: np.ndarray,
         start_angular_velocity: float,
         forecast: PedestrianOccupancyForecast,
         static_blocked: Callable[[np.ndarray], bool] | None,
@@ -2214,6 +2359,7 @@ class SpaceTimeFeasibilityOracle:
             start_pos: Robot start position as ``(x, y)``.
             start_heading: Robot start heading in radians.
             start_speed: Robot start linear speed in m/s.
+            goal: Goal position as ``(x, y)``.
             start_angular_velocity: Robot start angular velocity in rad/s.
             forecast: Time-indexed pedestrian occupancy forecast.
             static_blocked: Optional static-occupancy arc checker.
@@ -2222,12 +2368,22 @@ class SpaceTimeFeasibilityOracle:
             ``True`` only when every primitive is reachable and collision-free
             under the frozen discretization.
         """
-        if not witness:
+        state = self._validated_witness_state(
+            witness,
+            start_pos=start_pos,
+            start_heading=start_heading,
+            start_speed=start_speed,
+            goal=goal,
+            start_angular_velocity=start_angular_velocity,
+            forecast=forecast,
+        )
+        if state is None:
             return False
-        cursor = np.asarray(start_pos, dtype=float)
-        heading = wrap_angle_pi(float(start_heading))
-        speed = float(start_speed)
-        angular_velocity = float(start_angular_velocity)
+        cursor, goal_position, heading, speed, angular_velocity = state
+        if static_blocked is not None and static_blocked(cursor[None, :]):
+            return False
+        if forecast.arc_occupied(cursor[None, :], 0):
+            return False
         slot = 0
         horizon = min(int(self.config.planning_horizon_slots), int(forecast.horizon_slots))
         for primitive in witness:
@@ -2248,7 +2404,7 @@ class SpaceTimeFeasibilityOracle:
             speed = float(primitive.linear_velocity)
             angular_velocity = float(primitive.angular_velocity)
             slot = arrival_slot
-        return True
+        return bool(np.linalg.norm(cursor - goal_position) <= float(self.config.goal_tolerance))
 
 
 def build_space_time_feasibility_oracle(
@@ -2327,6 +2483,7 @@ def space_time_feasibility_result_to_dict(
         A ``space_time_feasibility_oracle.v1`` diagnostic payload.
     """
     witness = result.witness or ()
+    witness_valid = bool(witness) and bool(result.witness_valid)
     return {
         "schema_version": SPACE_TIME_FEASIBILITY_SCHEMA,
         "issue": SPACE_TIME_FEASIBILITY_ISSUE,
@@ -2335,8 +2492,8 @@ def space_time_feasibility_result_to_dict(
         "scenario_id": scenario_id,
         "episode_id": episode_id,
         "verdict": result.verdict,
-        "witness_found": bool(witness) and result.witness_valid,
-        "witness_valid": result.witness_valid,
+        "witness_found": result.feasible,
+        "witness_valid": witness_valid,
         "witness_length": len(witness),
         "witness_commands": [list(primitive.as_command()) for primitive in witness],
         "episode_annotation": episode_annotation,
@@ -2393,6 +2550,16 @@ def compare_with_static_feasibility(
     elif static_feasible and space_time_feasible:
         comparison_verdict = COMPARISON_CONSISTENT_FEASIBLE
         explanation = "Both oracles report a feasible route under their respective discretizations."
+    elif (
+        not static_feasible
+        and not space_time_feasible
+        and (static_status is None or static_status in _STATIC_UNDECIDED_STATUSES)
+    ):
+        comparison_verdict = COMPARISON_INDETERMINATE
+        explanation = (
+            "The static oracle did not establish infeasibility "
+            f"({static_status}), so two missing witnesses remain indeterminate."
+        )
     elif not static_feasible and not space_time_feasible:
         comparison_verdict = COMPARISON_CONSISTENT_NOT_FEASIBLE
         explanation = (

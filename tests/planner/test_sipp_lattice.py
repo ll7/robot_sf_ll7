@@ -698,6 +698,24 @@ class TestPedestrianOccupancyForecast:
         arc = np.array([[0.0, 0.0], [0.1, 0.0], [0.2, 0.0]])
         assert not fc.arc_occupied(arc, 5)
 
+    def test_empty_forecast_still_enforces_trusted_horizon(self) -> None:
+        cfg = SippLatticeConfig(
+            time_slot_duration=0.2,
+            pedestrian_forecast_horizon_s=0.2,
+        )
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.zeros((0, 2)),
+            velocities=np.zeros((0, 2)),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.3,
+        )
+        arc = np.array([[0.0, 0.0], [0.1, 0.0]])
+        assert not fc.arc_occupied(arc, 0, 0.2)
+        assert fc.arc_occupied(arc, 1, 0.2)
+        assert fc.arc_occupied(arc, -1, 0.2)
+        assert fc.arc_occupied(arc, 2)
+
     def test_missing_velocities_is_static_stationary(self) -> None:
         fc = build_pedestrian_occupancy_forecast(
             positions=np.array([[0.3, 0.0]]),
@@ -1425,6 +1443,7 @@ class TestSpaceTimeFeasibilityOracle:
             start_pos=np.zeros(2),
             start_heading=0.0,
             start_speed=0.0,
+            goal=np.zeros(2),
             start_angular_velocity=0.0,
             forecast=forecast,
             static_blocked=None,
@@ -1441,6 +1460,7 @@ class TestSpaceTimeFeasibilityOracle:
             start_pos=np.zeros(2),
             start_heading=0.0,
             start_speed=0.0,
+            goal=np.zeros(2),
             start_angular_velocity=0.0,
             forecast=forecast,
             static_blocked=None,
@@ -1456,9 +1476,45 @@ class TestSpaceTimeFeasibilityOracle:
             start_pos=np.zeros(2),
             start_heading=0.0,
             start_speed=0.0,
+            goal=np.zeros(2),
             start_angular_velocity=0.0,
             forecast=forecast,
             static_blocked=lambda _arc: True,
+        )
+
+    def test_verify_witness_rejects_goal_mismatch(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [], [])
+        wait = (MotionPrimitive(0.0, 0.0, cfg.primitive_duration, PrimitiveKind.WAIT),)
+        assert not oracle._verify_witness(
+            wait,
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            start_angular_velocity=0.0,
+            forecast=forecast,
+            static_blocked=None,
+        )
+
+    def test_discretization_records_forecast_collision_envelope(self) -> None:
+        cfg = _oracle_config(pedestrian_radius=0.15)
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = build_pedestrian_occupancy_forecast(
+            positions=np.array([[2.0, 2.0]]),
+            velocities=np.zeros((1, 2)),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.8,
+        )
+        discretization = oracle._discretization(forecast)
+        assert discretization.combined_radius == pytest.approx(forecast.combined_radius)
+        assert discretization.pedestrian_radius == pytest.approx(0.8)
+        assert discretization.combined_radius == pytest.approx(
+            discretization.robot_radius
+            + discretization.safety_margin
+            + discretization.pedestrian_radius
         )
 
     def test_algo_config_factory_flows_through(self) -> None:
@@ -1493,8 +1549,29 @@ class TestSpaceTimeFeasibilityOracle:
         assert payload["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
         assert payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
         assert payload["witness_found"] is True
+        assert payload["witness_valid"] is True
         assert payload["episode_annotation"] == EPISODE_LOCAL_POLICY_FAILURE
         assert payload["discretization"]["xy_resolution"] == pytest.approx(0.1)
+        assert isinstance(payload["discretization"]["planning_horizon_slots"], int)
+        assert isinstance(payload["discretization"]["forecast_horizon_slots"], int)
+
+    def test_result_and_payload_require_a_nonempty_witness(self) -> None:
+        result = SpaceTimeFeasibilityResult(
+            verdict=FEASIBILITY_FEASIBLE,
+            witness=None,
+            witness_valid=True,
+            search_result_type="native_plan",
+            bound_termination="goal",
+            expansions=1,
+            horizon_reached=1,
+            safe_interval_rejections=0,
+            forecast_status="ok",
+            discretization=_discretization_stub(),
+        )
+        assert not result.feasible
+        payload = space_time_feasibility_result_to_dict(result)
+        assert payload["witness_found"] is False
+        assert payload["witness_valid"] is False
 
 
 class TestSpaceTimeEpisodeClassification:
@@ -1563,6 +1640,12 @@ class TestSpaceTimeStaticOracleComparison:
         )
         assert comparison["comparison_verdict"] == COMPARISON_DIVERGENT_EXPLAINED
 
+    def test_indeterminate_when_both_witnesses_are_missing_and_static_is_truncated(self) -> None:
+        comparison = compare_with_static_feasibility(
+            _not_proven_result_stub(), static_feasible=False, static_status="time_truncated"
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_INDETERMINATE
+
     def test_comparison_uses_real_static_oracle_vocabulary(self) -> None:
         """The comparison is wired to the static oracle's exported constants."""
         from robot_sf.scenario_certification.feasibility_oracle import (
@@ -1617,6 +1700,30 @@ class TestSpaceTimeFeasibilityAnnotation:
                 episode_annotation="scenario_infeasible",
                 oracle_verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
                 witness_found=False,
+            )
+
+    def test_annotation_rejects_unsupported_oracle_verdict(self) -> None:
+        with pytest.raises(FailureMechanismClassificationError, match="oracle_verdict"):
+            build_space_time_feasibility_annotation(
+                scenario_id="s",
+                planner_id="p",
+                seed="0",
+                episode_succeeded=False,
+                episode_annotation=EPISODE_NOT_PROVEN_FEASIBLE,
+                oracle_verdict="made_up",
+                witness_found=False,
+            )
+
+    def test_annotation_rejects_witness_annotation_inconsistency(self) -> None:
+        with pytest.raises(FailureMechanismClassificationError, match="inconsistent"):
+            build_space_time_feasibility_annotation(
+                scenario_id="s",
+                planner_id="p",
+                seed="0",
+                episode_succeeded=False,
+                episode_annotation=EPISODE_NOT_PROVEN_FEASIBLE,
+                oracle_verdict=FEASIBILITY_FEASIBLE,
+                witness_found=True,
             )
 
     def test_annotation_round_trips_oracle_classifier(self) -> None:

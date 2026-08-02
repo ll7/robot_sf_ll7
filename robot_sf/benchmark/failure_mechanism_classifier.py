@@ -935,6 +935,7 @@ _SPACE_TIME_EPISODE_ANNOTATIONS = frozenset(
         SPACE_TIME_NOT_PROVEN_FEASIBLE,
     }
 )
+_SPACE_TIME_ORACLE_VERDICTS = frozenset({"feasible", "not_proven_feasible"})
 
 
 def build_space_time_feasibility_annotation(
@@ -977,6 +978,26 @@ def build_space_time_feasibility_annotation(
         raise FailureMechanismClassificationError(
             f"unsupported space-time episode_annotation: {episode_annotation!r}"
         )
+    episode_succeeded = bool(episode_succeeded)
+    witness_found = bool(witness_found)
+    oracle_verdict = str(oracle_verdict)
+    if oracle_verdict not in _SPACE_TIME_ORACLE_VERDICTS:
+        raise FailureMechanismClassificationError(
+            f"unsupported space-time oracle_verdict: {oracle_verdict!r}"
+        )
+    if witness_found != (oracle_verdict == "feasible"):
+        raise FailureMechanismClassificationError(
+            "witness_found must be true exactly for a feasible oracle verdict"
+        )
+    expected_annotation = (
+        SPACE_TIME_EPISODE_SUCCEEDED
+        if episode_succeeded
+        else (SPACE_TIME_LOCAL_POLICY_FAILURE if witness_found else SPACE_TIME_NOT_PROVEN_FEASIBLE)
+    )
+    if episode_annotation != expected_annotation:
+        raise FailureMechanismClassificationError(
+            "episode_annotation is inconsistent with episode_succeeded and the oracle witness"
+        )
     return {
         "schema_version": SPACE_TIME_FEASIBILITY_ANNOTATION_SCHEMA_VERSION,
         "classification_source": SPACE_TIME_FEASIBILITY_ANNOTATION_SOURCE,
@@ -984,10 +1005,10 @@ def build_space_time_feasibility_annotation(
         "scenario_id": str(scenario_id),
         "planner_id": str(planner_id),
         "seed": str(seed),
-        "episode_succeeded": bool(episode_succeeded),
+        "episode_succeeded": episode_succeeded,
         "episode_annotation": episode_annotation,
-        "oracle_verdict": str(oracle_verdict),
-        "witness_found": bool(witness_found),
+        "oracle_verdict": oracle_verdict,
+        "witness_found": witness_found,
         "caveats": [
             "Diagnostic only; does not reclassify the benchmark row failure mechanism.",
             "not_proven_feasible is unknown, not scenario infeasibility, until completeness "

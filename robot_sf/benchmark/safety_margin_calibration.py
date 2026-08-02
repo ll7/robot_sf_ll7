@@ -375,6 +375,34 @@ def _partition_traces(
     return fit, calibration, evaluation
 
 
+def _validate_populated_split_ids(
+    *,
+    fit_ids: set[str],
+    calibration_ids: set[str],
+    evaluation_ids: set[str],
+    fit: Sequence[SafetyMarginTraceSample],
+    calibration: Sequence[SafetyMarginTraceSample],
+    evaluation: Sequence[SafetyMarginTraceSample],
+) -> None:
+    """Reject declared split identifiers that do not identify any supplied trace.
+
+    A typo in a declared identifier would otherwise be silently omitted from the computed
+    partition while still being echoed in provenance, which makes the split contract
+    misleading rather than fail-closed.
+    """
+    partitions = (
+        ("fit", fit_ids, fit),
+        ("calibration", calibration_ids, calibration),
+        ("evaluation", evaluation_ids, evaluation),
+    )
+    for name, declared_ids, samples in partitions:
+        observed_ids = {sample.split_id for sample in samples}
+        missing_ids = declared_ids - observed_ids
+        if missing_ids:
+            joined = ", ".join(sorted(missing_ids))
+            raise ValueError(f"{name}_split_ids contain identifiers with no traces: {joined}")
+
+
 def _require_non_empty_split(name: str, samples: Sequence[SafetyMarginTraceSample]) -> None:
     """Fail closed when a split has no traces.
 
@@ -667,6 +695,7 @@ def _provenance(  # noqa: PLR0913
     conformal_radius: float,
     adaptive_config: AdaptiveConformalConfig,
     adaptive_empirical_coverage: float | None,
+    adaptive_emitted_count: int,
     weights: Mapping[str, float],
     feature_scales: Mapping[str, float],
     seed: int,
@@ -679,7 +708,10 @@ def _provenance(  # noqa: PLR0913
         evaluation_count: Number of evaluation residuals measured.
         conformal_radius: Fitted split-conformal radius.
         adaptive_config: ACI configuration reused for the diagnostic.
-        adaptive_empirical_coverage: ACI empirical coverage over evaluation, or ``None``.
+        adaptive_empirical_coverage: ACI empirical coverage over emitted evaluation steps, or
+            ``None``.
+        adaptive_emitted_count: Number of evaluation steps for which ACI emitted a radius;
+            this is the denominator for ``adaptive_empirical_coverage``.
         weights: Preferred-margin weights used.
         feature_scales: Fit-derived feature normalization scales.
         seed: Determinism seed recorded for reproducibility.
@@ -703,7 +735,8 @@ def _provenance(  # noqa: PLR0913
                     "window": adaptive_config.window,
                     "min_history": int(adaptive_config.min_history),
                 },
-                "evaluation_denominator": int(evaluation_count),
+                "evaluation_trace_count": int(evaluation_count),
+                "evaluation_denominator": int(adaptive_emitted_count),
                 "empirical_coverage": _finite_or_none(adaptive_empirical_coverage),
             },
         },
@@ -809,6 +842,8 @@ def build_safety_margin_comparison(  # noqa: PLR0913
     """
     if not 0.0 < coverage_target < 1.0:
         raise ValueError("coverage_target must be between 0 and 1 (exclusive)")
+    if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)):
+        raise ValueError("seed must be an integer")
     floor = require_finite_scalar("hard_floor_m", hard_floor_m)
     if floor < 0.0:
         raise ValueError(f"hard_floor_m must be non-negative: {floor}")
@@ -840,6 +875,14 @@ def build_safety_margin_comparison(  # noqa: PLR0913
     _require_non_empty_split("fit", fit)
     _require_non_empty_split("calibration", calibration)
     _require_non_empty_split("evaluation", evaluation)
+    _validate_populated_split_ids(
+        fit_ids=fit_ids,
+        calibration_ids=calibration_ids,
+        evaluation_ids=evaluation_ids,
+        fit=fit,
+        calibration=calibration,
+        evaluation=evaluation,
+    )
 
     scales = _feature_scales([t.context for t in fit])
 
@@ -920,6 +963,7 @@ def build_safety_margin_comparison(  # noqa: PLR0913
         conformal_radius=conformal_radius,
         adaptive_config=aci_cfg,
         adaptive_empirical_coverage=aci_coverage,
+        adaptive_emitted_count=int(aci_result.indices.size),
         weights=weights,
         feature_scales=scales,
         seed=seed,

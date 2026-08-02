@@ -236,6 +236,12 @@ def test_empty_trace_partition_is_rejected() -> None:
         _build(traces)
 
 
+def test_declared_split_id_without_trace_is_rejected() -> None:
+    """A typo in a declared split identifier must not be silently ignored."""
+    with pytest.raises(ValueError, match="fit_split_ids.*identifiers with no traces"):
+        _build(fit_split_ids={"fit", "missing-fit-id"})
+
+
 # --------------------------------------------------------------------------- hard-floor monotonicity
 
 
@@ -309,6 +315,13 @@ def test_report_seed_recorded_in_provenance() -> None:
     report = _build(seed=42)
     assert report.provenance["seed"] == 42
     assert "deterministic" in report.provenance["determinism"]
+
+
+@pytest.mark.parametrize("seed", [True, 1.5, "42"])
+def test_seed_must_be_integral_for_provenance(seed: object) -> None:
+    """Seed metadata must not silently truncate or coerce non-integral values."""
+    with pytest.raises(ValueError, match="seed must be an integer"):
+        _build(seed=seed)
 
 
 def test_method_ordering_is_stable() -> None:
@@ -463,6 +476,15 @@ def test_provenance_carries_both_reused_primitive_schemas() -> None:
     assert report.provenance["distributional_assumptions"]
     assert report.provenance["documented_failure_cases"]
     assert report.provenance["preferred_margin_model"]["hard_floor_immutable"] is True
+
+
+def test_adaptive_provenance_uses_emitted_step_denominator() -> None:
+    """ACI coverage provenance counts only steps for which a radius was emitted."""
+    report = _build(adaptive_config=AdaptiveConformalConfig(min_history=2))
+    adaptive = report.provenance["reused_primitives"]["adaptive_conformal_buffers"]
+    assert adaptive["evaluation_trace_count"] == 3
+    assert adaptive["evaluation_denominator"] == 1
+    assert adaptive["empirical_coverage"] is not None
 
 
 def test_split_provenance_records_disjoint_counts() -> None:

@@ -239,6 +239,22 @@ def test_safety_wrapper_mutation_permitted_fails_closed() -> None:
     assert any("safety wrapper" in blocker for blocker in report.blockers)
 
 
+@pytest.mark.parametrize(
+    "parameter_prefix",
+    ["robot_sf.gym_env.safety_wrapper.", "robot_sf.gym_env."],
+)
+def test_allowed_parameter_prefix_overlapping_safety_wrapper_fails_closed(
+    parameter_prefix: str,
+) -> None:
+    """Mutable prefixes cannot grant indirect permission to change the safety wrapper."""
+    manifest = _manifest()
+    manifest["adaptation"]["allowed_parameters"] = [parameter_prefix]
+    report = check_continual_adaptation_run(manifest)
+    assert report.protocol_status == PROTOCOL_STATUS_INVALID
+    assert report.promotion_ready is False
+    assert any("overlaps immutable safety wrapper" in blocker for blocker in report.blockers)
+
+
 def test_missing_required_baseline_hash_raises() -> None:
     """Omitting the required baseline checksum fails closed at schema validation."""
     manifest = _manifest()
@@ -323,6 +339,15 @@ def test_non_finite_threshold_bound_fails_closed(bound: float) -> None:
     assert report.protocol_status == PROTOCOL_STATUS_INVALID
     assert report.promotion_ready is False
     assert any("thresholds.nominal.bound" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_non_finite_shift_parameter_raises(value: float) -> None:
+    """Shift parameters used in the canonical ID must be finite JSON values."""
+    manifest = _manifest()
+    manifest["shifts"][0]["parameters"]["invalid"] = value
+    with pytest.raises(ContinualAdaptationProtocolError, match="finite JSON values"):
+        check_continual_adaptation_run(manifest)
 
 
 def test_yaml_only_shift_parameter_value_raises() -> None:

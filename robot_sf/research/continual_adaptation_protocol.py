@@ -161,6 +161,21 @@ def _raise_on_schema_errors(payload: Mapping[str, Any], *, source: str | Path | 
     ]
     if errors:
         raise ContinualAdaptationProtocolError(errors, source=source)
+    _raise_on_non_finite_shift_parameters(payload, source=source)
+
+
+def _raise_on_non_finite_shift_parameters(
+    payload: Mapping[str, Any], *, source: str | Path | None
+) -> None:
+    """Reject YAML numeric values that are not valid finite JSON values."""
+    for index, shift in enumerate(payload["shifts"]):
+        try:
+            json.dumps(shift.get("parameters", {}), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ContinualAdaptationProtocolError(
+                [f"/shifts/{index}/parameters must contain finite JSON values: {exc}"],
+                source=source,
+            ) from exc
 
 
 def load_continual_adaptation_run(path: str | Path) -> dict[str, Any]:
@@ -220,12 +235,18 @@ def check_continual_adaptation_run(
 
     baseline_identifier = str(manifest["baseline_policy"]["identifier"])
     safety_wrapper = manifest["safety_wrapper"]
+    safety_wrapper_identifier = str(safety_wrapper["identifier"])
     mutation_permitted = bool(safety_wrapper["mutation_permitted"])
     if mutation_permitted:
         blockers.append(
             "safety_wrapper.mutation_permitted is true; the adaptation job must not be allowed to "
             "mutate the safety wrapper"
         )
+    _check_allowed_parameter_prefixes(
+        manifest["adaptation"]["allowed_parameters"],
+        safety_wrapper_identifier,
+        blockers,
+    )
 
     budget = manifest["adaptation"]["experience_budget"]
     budget_bounded = _check_experience_budget(budget, blockers)
@@ -428,6 +449,26 @@ def _check_scenario_disjoint(
         )
         return False
     return True
+
+
+def _check_allowed_parameter_prefixes(
+    allowed_parameters: list[str], safety_wrapper_identifier: str, blockers: list[str]
+) -> None:
+    """Reject mutable prefixes that could include the immutable safety wrapper."""
+    protected_identifier = safety_wrapper_identifier.rstrip(".")
+    for parameter_prefix in allowed_parameters:
+        normalized_prefix = str(parameter_prefix).rstrip(".")
+        overlaps_wrapper = (
+            normalized_prefix == protected_identifier
+            or protected_identifier.startswith(f"{normalized_prefix}.")
+            or normalized_prefix.startswith(f"{protected_identifier}.")
+        )
+        if overlaps_wrapper:
+            blockers.append(
+                "adaptation.allowed_parameters contains "
+                f"{parameter_prefix!r}, which overlaps immutable safety wrapper "
+                f"{safety_wrapper_identifier!r}"
+            )
 
 
 def _check_thresholds(thresholds: Mapping[str, Any], blockers: list[str]) -> None:

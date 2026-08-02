@@ -169,7 +169,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Mutable parameter prefixes the adaptation job is allowed to update (e.g. 'policy_net.head.'). Parameters outside this list are frozen."
+          "description": "Mutable parameter prefixes the adaptation job is allowed to update (e.g. 'policy_net.head.'). Parameters outside this list are frozen. The semantic checker rejects prefixes that overlap the immutable safety_wrapper.identifier namespace."
         },
         "experience_budget": {
           "$ref": "#/$defs/experience_budget"

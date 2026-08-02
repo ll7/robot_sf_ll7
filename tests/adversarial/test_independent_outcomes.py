@@ -842,6 +842,17 @@ def test_candidate_manifest_id_in_both_arms_fails_closed() -> None:
     assert "overlap" in result["reason"]
 
 
+def test_duplicate_row_ids_fail_closed() -> None:
+    """Every v2 outcome row must retain a unique row-level identity."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    packet["rows"][1]["row_id"] = packet["rows"][0]["row_id"]
+
+    result = _evaluate(packet, budget_per_arm=1)
+
+    assert result["status"] == "blocked"
+    assert "duplicate row_id" in result["reason"]
+
+
 def test_complete_packet_decision_follows_execution() -> None:
     """A strong proposal-favors-execution packet yields a continue/underpowered decision."""
     # 4/4 proposal failures vs 0/4 random: large effect, but k=4 is underpowered

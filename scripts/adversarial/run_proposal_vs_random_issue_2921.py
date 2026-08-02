@@ -1241,6 +1241,11 @@ def _contract_cli_override_error(args: argparse.Namespace, frozen: dict[str, Any
             f"--seed {args.seed} does not match frozen candidate_pool_seed "
             f"{frozen['candidate_pool_seed']}"
         )
+    if contract is not None and args.minimally_important != frozen["minimally_important"]:
+        return (
+            f"--minimally-important {args.minimally_important} does not match frozen "
+            f"minimally important effect {frozen['minimally_important']}"
+        )
     if contract is not None and args.null_test_permutations != frozen["null_test_permutations"]:
         return (
             f"--null-test-permutations {args.null_test_permutations} does not match "

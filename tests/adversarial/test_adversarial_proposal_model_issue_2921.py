@@ -1237,6 +1237,28 @@ def test_contract_runner_rejects_a_budget_outside_the_frozen_contract(
     assert script_main() == 2
 
 
+def test_contract_runner_rejects_a_non_frozen_minimally_important_effect(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A contract run cannot replace the frozen minimally important effect."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--minimally-important",
+            "0.10",
+            "--output",
+            (tmp_path / "report.json").as_posix(),
+        ],
+    )
+
+    assert script_main() == 2
+
+
 def test_contract_runner_rejects_a_non_frozen_candidate_pool_seed(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -1015,12 +1015,20 @@ def build_independent_outcome_evaluation(  # noqa: C901
 
     admitted_rows: list[dict[str, Any]] = []
     excluded_count = 0
+    seen_row_ids: set[str] = set()
     for index, row in enumerate(rows):
         admitted, reason = _admit_row(row, row_index=index, spec=admission_spec)
         if reason is not None:
             return _blocked(reason, payload_sha256=payload_sha256(payload))
         if admitted is None:
             continue
+        row_id = str(admitted["row_id"])
+        if row_id in seen_row_ids:
+            return _blocked(
+                f"duplicate row_id {row_id!r} in outcome packet",
+                payload_sha256=payload_sha256(payload),
+            )
+        seen_row_ids.add(row_id)
         if admitted.get("_excluded"):
             excluded_count += 1
         else:

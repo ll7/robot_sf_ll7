@@ -94,6 +94,9 @@ DEFAULT_CONFIDENCE = 0.95
 DEFAULT_ALPHA = 0.05
 DEFAULT_REFERENCE_PLANNER = "goal"
 DEFAULT_COMPARISON_PLANNERS = ("social_force", "orca")
+FROZEN_SEEDS = frozenset(range(111, 141))
+FROZEN_SCENARIO_COUNT = 6
+VALID_METRIC_STATUSES = frozenset({"available", "unavailable", "not_applicable"})
 
 # Canonical metric id -> (family, units, denominator) mirror of
 # robot_sf.benchmark.social_compliance, read at import time as the frozen
@@ -149,7 +152,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--episode-rows",
         type=Path,
-        help="path to per-episode social-compliance rows (JSON list or CSV)",
+        help="per-episode rows (JSON list or CSV with JSON-encoded nested metric fields)",
     )
     parser.add_argument(
         "--config",
@@ -237,8 +240,60 @@ def _normalise_text(value: Any, *, default: str = "unknown") -> str:
 # --------------------------------------------------------------------------------------
 
 
+_CSV_NESTED_FIELDS = (
+    "statuses",
+    "values",
+    "support_counts",
+    "denominators",
+    "unavailable_reasons",
+)
+_CSV_BOOL_FIELDS = (
+    "schema_valid",
+    "all_families_present",
+    "benchmark_success",
+    "execution_mode_consistent",
+)
+
+
+def _decode_csv_row(raw_row: dict[str, str], *, line_number: int) -> dict[str, Any]:
+    """Decode one CSV row whose nested social-compliance fields are JSON objects."""
+
+    row: dict[str, Any] = dict(raw_row)
+    for field in _CSV_NESTED_FIELDS:
+        value = row.get(field)
+        if value is None:
+            continue
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError as error:
+            raise AnalysisError(f"CSV row {line_number} field {field!r} is not JSON") from error
+        if not isinstance(decoded, dict):
+            raise AnalysisError(f"CSV row {line_number} field {field!r} must decode to an object")
+        row[field] = decoded
+    if isinstance(row.get("seed"), str):
+        try:
+            row["seed"] = int(row["seed"])
+        except ValueError as error:
+            raise AnalysisError(f"CSV row {line_number} seed is not an integer") from error
+    for field in _CSV_BOOL_FIELDS:
+        value = row.get(field)
+        if isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+            row[field] = value.strip().lower() == "true"
+    return row
+
+
+def _load_csv_rows(path: Path) -> list[dict[str, Any]]:
+    """Load CSV rows with JSON-encoded nested social-compliance fields."""
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        return [
+            _decode_csv_row(dict(raw_row), line_number=line_number)
+            for line_number, raw_row in enumerate(csv.DictReader(handle), start=2)
+        ]
+
+
 def _load_rows_from_path(path: Path) -> list[dict[str, Any]]:
-    """Load per-episode rows from a JSON list or CSV file."""
+    """Load per-episode rows from JSON or CSV with JSON-encoded nested fields."""
 
     if not path.exists():
         raise AnalysisError(f"episode rows file not found: {path}")
@@ -254,9 +309,7 @@ def _load_rows_from_path(path: Path) -> list[dict[str, Any]]:
                     return [row for row in candidate if isinstance(row, dict)]
         raise AnalysisError(f"JSON episode-rows payload at {path} is not a list of rows")
     if suffix in {".csv", ".tsv"}:
-        with path.open(newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            return [dict(row) for row in reader]
+        return _load_csv_rows(path)
     raise AnalysisError(f"unsupported episode-rows format: {path}")
 
 
@@ -283,8 +336,11 @@ def _extract_rows_from_manifest(manifest_path: Path) -> list[dict[str, Any]]:
         for key in ("social_compliance_rows", "episode_rows", "seed_episode_rows_json"):
             pointer = artifacts.get(key)
             if isinstance(pointer, str) and pointer:
+                pointer_path = Path(pointer)
                 candidate_path = (
-                    (manifest_path.parent / pointer) if "/" in pointer else Path(pointer)
+                    pointer_path
+                    if pointer_path.is_absolute()
+                    else manifest_path.parent / pointer_path
                 )
                 if candidate_path.exists():
                     return _load_rows_from_path(candidate_path)
@@ -318,6 +374,31 @@ class AcceptedUnavailableOnly(Exception):
     """Raised when all rows are benchmark-capable but no decision has support (exit 3)."""
 
 
+def _is_non_negative_int(value: Any, *, require_positive: bool = False) -> bool:
+    """Return whether a value is a non-boolean integer in the required range."""
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    return value > 0 if require_positive else value >= 0
+
+
+def validate_protocol_parameters(args: argparse.Namespace) -> None:
+    """Reject CLI settings that would silently change the frozen analysis plan."""
+
+    if args.reference_planner != DEFAULT_REFERENCE_PLANNER or tuple(args.comparison_planners) != (
+        DEFAULT_COMPARISON_PLANNERS
+    ):
+        raise AnalysisError(
+            "the preregistered analysis is frozen to goal versus social_force and orca",
+        )
+    if args.bootstrap_samples <= 0 or args.permutation_samples <= 0:
+        raise AnalysisError("bootstrap and permutation sample counts must be positive")
+    if not 0.0 < args.confidence < 1.0:
+        raise AnalysisError("confidence must be strictly between zero and one")
+    if not 0.0 < args.alpha < 1.0:
+        raise AnalysisError("alpha must be strictly between zero and one")
+
+
 def _row_schema_version(row: dict[str, Any]) -> str:
     """Return the social-compliance schema version recorded on a row."""
 
@@ -341,6 +422,159 @@ def _row_execution_mode(row: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _validate_row_identity(
+    row: dict[str, Any],
+    *,
+    index: int,
+    expected_planners: set[str],
+    identities: set[tuple[str, str, int]],
+) -> None:
+    """Validate and record one unique frozen planner-scenario-seed identity."""
+
+    planner = _normalise_text(row.get("planner"))
+    scenario = _normalise_text(row.get("scenario_id"))
+    seed = row.get("seed")
+    if planner not in expected_planners:
+        raise AnalysisError(f"row {index} has unexpected planner {planner!r}")
+    if scenario == "unknown":
+        raise AnalysisError(f"row {index} has missing scenario_id")
+    if not _is_non_negative_int(seed) or seed not in FROZEN_SEEDS:
+        raise AnalysisError(f"row {index} seed {seed!r} is outside frozen seeds 111-140")
+    identity = (planner, scenario, seed)
+    if identity in identities:
+        raise AnalysisError(f"duplicate campaign row identity: {identity!r}")
+    identities.add(identity)
+
+
+def _validate_campaign_status(row: dict[str, Any], *, index: int) -> str:
+    """Return the benchmark-capable execution mode after checking campaign status fields."""
+
+    if (
+        _normalise_text(row.get("readiness_status")) not in NATIVE_EXECUTION_MODES
+        or _normalise_text(row.get("availability_status")) != "available"
+        or row.get("benchmark_success") is not True
+        or row.get("execution_mode_consistent") is not True
+    ):
+        raise AnalysisError(f"row {index} does not carry a benchmark-success campaign status")
+    execution_mode = _row_execution_mode(row)
+    if execution_mode not in NATIVE_EXECUTION_MODES:
+        raise AnalysisError(
+            "nominal campaign contract requires native or adapter execution; "
+            f"row {index} has {execution_mode!r}",
+        )
+    return execution_mode
+
+
+def _social_compliance_payloads(
+    row: dict[str, Any], *, index: int
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Return the required flattened social-compliance maps for one validated row."""
+
+    if row.get("schema_valid") is not True or row.get("all_families_present") is not True:
+        raise AnalysisError(f"row {index} has an invalid or incomplete social-compliance block")
+    payloads = tuple(
+        row.get(field)
+        for field in (
+            "statuses",
+            "values",
+            "support_counts",
+            "denominators",
+            "unavailable_reasons",
+        )
+    )
+    if not all(isinstance(payload, dict) for payload in payloads):
+        raise AnalysisError(f"row {index} is missing flattened social-compliance fields")
+    statuses, values, support_counts, denominators, unavailable_reasons = payloads
+    if set(statuses) != set(METRIC_IDS) or set(denominators) != set(METRIC_IDS):
+        raise AnalysisError(f"row {index} does not declare every social-compliance metric")
+    return statuses, values, support_counts, denominators, unavailable_reasons
+
+
+def _validate_metric_payload(
+    *,
+    index: int,
+    metric_id: str,
+    denominator: str,
+    statuses: dict[str, Any],
+    values: dict[str, Any],
+    support_counts: dict[str, Any],
+    denominators: dict[str, Any],
+    unavailable_reasons: dict[str, Any],
+) -> None:
+    """Validate one metric's status, support, denominator, and value/reason fields."""
+
+    status = _normalise_text(statuses.get(metric_id))
+    support_count = support_counts.get(metric_id)
+    if status not in VALID_METRIC_STATUSES:
+        raise AnalysisError(f"row {index} metric {metric_id} has invalid status {status!r}")
+    if denominators.get(metric_id) != denominator:
+        raise AnalysisError(f"row {index} metric {metric_id} has wrong denominator")
+    if not _is_non_negative_int(support_count, require_positive=status == "available"):
+        raise AnalysisError(f"row {index} metric {metric_id} has invalid support count")
+    if status == "available" and not _is_finite_number(values.get(metric_id)):
+        raise AnalysisError(f"row {index} metric {metric_id} lacks a finite value")
+    if status != "available" and (
+        support_count != 0 or not isinstance(unavailable_reasons.get(metric_id), str)
+    ):
+        raise AnalysisError(f"row {index} metric {metric_id} has invalid unavailable metadata")
+
+
+def _validate_social_compliance_row(row: dict[str, Any], *, index: int) -> None:
+    """Validate all metrics in one flattened social-compliance block."""
+
+    schema_version = _row_schema_version(row)
+    if schema_version != SOCIAL_COMPLIANCE_SCHEMA_VERSION:
+        raise AnalysisError(
+            f"row {index} schema_version {schema_version!r} != "
+            f"{SOCIAL_COMPLIANCE_SCHEMA_VERSION!r}",
+        )
+    statuses, values, support_counts, denominators, unavailable_reasons = (
+        _social_compliance_payloads(
+            row,
+            index=index,
+        )
+    )
+    for metric_id, (_family, _units, denominator) in METRIC_CONTRACT.items():
+        _validate_metric_payload(
+            index=index,
+            metric_id=metric_id,
+            denominator=denominator,
+            statuses=statuses,
+            values=values,
+            support_counts=support_counts,
+            denominators=denominators,
+            unavailable_reasons=unavailable_reasons,
+        )
+
+
+def _validate_campaign_matrix(
+    identities: set[tuple[str, str, int]], expected_planners: set[str]
+) -> int:
+    """Require the frozen six-scenario, 30-seed matrix for every planner."""
+
+    planner_cells = {
+        planner: {
+            (scenario, seed) for row_planner, scenario, seed in identities if row_planner == planner
+        }
+        for planner in expected_planners
+    }
+    reference_cells = planner_cells[DEFAULT_REFERENCE_PLANNER]
+    expected_cell_count = FROZEN_SCENARIO_COUNT * len(FROZEN_SEEDS)
+    if len(reference_cells) != expected_cell_count:
+        raise AnalysisError(
+            "goal rows do not cover the frozen six-scenario by 30-seed matrix "
+            f"(got {len(reference_cells)}, expected {expected_cell_count})",
+        )
+    if len({scenario for scenario, _seed in reference_cells}) != FROZEN_SCENARIO_COUNT:
+        raise AnalysisError(
+            f"goal rows do not contain exactly {FROZEN_SCENARIO_COUNT} frozen scenarios",
+        )
+    for planner, cells in planner_cells.items():
+        if cells != reference_cells:
+            raise AnalysisError(f"{planner} rows do not match the goal scenario-seed matrix")
+    return expected_cell_count
+
+
 def validate_rows(rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Validate per-episode rows under the fail-closed campaign contract.
 
@@ -353,52 +587,34 @@ def validate_rows(rows: Sequence[dict[str, Any]]) -> tuple[list[dict[str, Any]],
 
     if not rows:
         raise AnalysisError("no per-episode rows were supplied")
-    valid: list[dict[str, Any]] = []
     schema_versions: dict[str, int] = {}
-    rejected: list[dict[str, Any]] = []
     execution_mode_counts: dict[str, int] = {}
+    expected_planners = {DEFAULT_REFERENCE_PLANNER, *DEFAULT_COMPARISON_PLANNERS}
+    identities: set[tuple[str, str, int]] = set()
     for index, row in enumerate(rows):
+        _validate_row_identity(
+            row,
+            index=index,
+            expected_planners=expected_planners,
+            identities=identities,
+        )
         schema_version = _row_schema_version(row)
         schema_versions[schema_version] = schema_versions.get(schema_version, 0) + 1
-        if schema_version != SOCIAL_COMPLIANCE_SCHEMA_VERSION:
-            raise AnalysisError(
-                f"row {index} schema_version {schema_version!r} != "
-                f"{SOCIAL_COMPLIANCE_SCHEMA_VERSION!r}",
-            )
-        execution_mode = _row_execution_mode(row)
+        _validate_social_compliance_row(row, index=index)
+        execution_mode = _validate_campaign_status(row, index=index)
         execution_mode_counts[execution_mode] = execution_mode_counts.get(execution_mode, 0) + 1
-        if execution_mode not in NATIVE_EXECUTION_MODES:
-            planner = _normalise_text(row.get("planner"))
-            scenario = _normalise_text(row.get("scenario_id"))
-            seed = row.get("seed")
-            rejected.append(
-                {
-                    "index": index,
-                    "planner": planner,
-                    "scenario_id": scenario,
-                    "seed": seed,
-                    "execution_mode": execution_mode,
-                    "reason": (
-                        "execution mode is not benchmark-capable "
-                        f"(expected one of {sorted(NATIVE_EXECUTION_MODES)})"
-                    ),
-                },
-            )
-        else:
-            valid.append(row)
-    if rejected:
-        raise AnalysisError(
-            "nominal campaign contract requires zero fallback/degraded/unknown execution rows; "
-            f"found {len(rejected)}: {json.dumps(rejected[:5])}",
-        )
+    expected_cell_count = _validate_campaign_matrix(identities, expected_planners)
     report = {
         "row_count": len(rows),
-        "valid_row_count": len(valid),
+        "valid_row_count": len(rows),
+        "expected_row_count": expected_cell_count * len(expected_planners),
+        "scenario_count": FROZEN_SCENARIO_COUNT,
+        "seed_count": len(FROZEN_SEEDS),
         "schema_versions": schema_versions,
         "execution_mode_counts": execution_mode_counts,
-        "rejected": rejected,
+        "rejected": [],
     }
-    return valid, report
+    return list(rows), report
 
 
 # --------------------------------------------------------------------------------------
@@ -897,6 +1113,7 @@ def _synthetic_row(
         "readiness_status": execution_mode,
         "benchmark_success": True,
         "availability_status": "available",
+        "execution_mode_consistent": True,
         "social_compliance_schema_version": SOCIAL_COMPLIANCE_SCHEMA_VERSION,
         "statuses": statuses,
         "values": values,
@@ -1013,7 +1230,7 @@ def run_self_test() -> int:
     bad_rows.append(
         _synthetic_row(
             "goal",
-            scenarios[0],
+            "fallback_guard_scenario",
             seeds[0],
             {"comfort_exposure_person_s": 1.0},
             unavailable=other_unavailable,
@@ -1026,6 +1243,21 @@ def run_self_test() -> int:
         pass
     else:  # pragma: no cover - defensive
         raise AssertionError("fallback execution row was not rejected by validate_rows")
+    # A complete, unique frozen matrix and valid social-compliance blocks are mandatory.
+    for malformed_rows, reason in (
+        (rows[:-1], "incomplete campaign matrix"),
+        (rows + [rows[0]], "duplicate campaign identity"),
+        (
+            [{**rows[0], "schema_valid": False}, *rows[1:]],
+            "schema-invalid social-compliance block",
+        ),
+    ):
+        try:
+            validate_rows(malformed_rows)
+        except AnalysisError:
+            pass
+        else:  # pragma: no cover - defensive
+            raise AssertionError(f"{reason} was not rejected by validate_rows")
     print(
         "self-test OK: recovered comfort_exposure social_force-goal mean diff "
         f"{sf_comfort['mean_difference']:.4f} (true {true_effect}), "
@@ -1046,6 +1278,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.self_test:
         return run_self_test()
+    validate_protocol_parameters(args)
     policy = {
         "reference_planner": args.reference_planner,
         "comparison_planners": list(args.comparison_planners),

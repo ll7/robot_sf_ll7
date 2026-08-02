@@ -34,6 +34,7 @@ from robot_sf.planner.risk_aware_trajectory_ranker import (
 from robot_sf.research.collision_risk import (
     CandidateAction,
     RiskEstimatorConfig,
+    RiskProvenance,
     action_from_constant_velocity,
 )
 
@@ -272,6 +273,23 @@ def test_hard_gate_precedence_low_risk_does_not_override_brake_infeasible() -> N
     assert record.components.min_clearance_m < 0.0
 
 
+def test_ineligible_candidates_are_not_ordered_by_composite_score() -> None:
+    """Rejected candidates stay unranked even when their scores differ."""
+    higher_cost = action_from_constant_velocity(
+        "a_higher_cost", [0.0, 0.0], [1.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+    lower_cost = action_from_constant_velocity(
+        "z_lower_cost", [0.0, 0.0], [0.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+    rankings = rank_trajectories(
+        [lower_cost, higher_cost], [_ped(1, 0.1, 0.0)], risk_config=_risk_config()
+    )
+
+    assert [record.action_id for record in rankings] == ["a_higher_cost", "z_lower_cost"]
+    assert all(record.rank == -1 for record in rankings)
+    assert rankings[0].composite_score > rankings[1].composite_score
+
+
 # ---------------------------------------------------------------------------
 # Decomposed components, deterministic ordering, provenance, peak timing
 # ---------------------------------------------------------------------------
@@ -355,8 +373,8 @@ def test_rank_ordering_is_deterministic() -> None:
         assert left.joint_contact_probability == pytest.approx(right.joint_contact_probability)
 
 
-def test_rank_provenance_links_to_reused_estimator() -> None:
-    """Each ranking carries full estimator provenance and the ranker schema version."""
+def test_rank_provenance_reuses_the_canonical_estimator_schema() -> None:
+    """Each ranking exposes the canonical full estimator provenance unchanged."""
     action = CandidateAction(
         action_id="custom", waypoints=np.zeros((HORIZON_STEPS + 1, 2)), representation="zeros"
     )
@@ -365,14 +383,17 @@ def test_rank_provenance_links_to_reused_estimator() -> None:
     record = rankings[0]
     provenance = record.provenance
 
+    assert isinstance(provenance, RiskProvenance)
+    assert provenance is record.estimate.provenance
     assert provenance.action_id == "custom"
     assert provenance.estimator_id
     assert provenance.forecast_model
     assert provenance.geometry_version
     assert provenance.config_hash
     assert provenance.seed == 7
-    assert provenance.ranker_schema_version == RANKER_SCHEMA_VERSION
-    assert provenance.abstained == record.estimate.uncertainty.abstained
+    assert provenance.horizon_steps == HORIZON_STEPS
+    assert provenance.dt_s == DT_S
+    assert record.ranker_schema_version == RANKER_SCHEMA_VERSION
 
 
 def test_peak_risk_timing_matches_critical_interval_shape() -> None:
@@ -388,6 +409,16 @@ def test_peak_risk_timing_matches_critical_interval_shape() -> None:
     assert 0 <= peak.window_start_step <= peak.peak_step
     assert peak.peak_step < peak.window_end_step <= HORIZON_STEPS
     assert len(peak.first_passage_distribution) == HORIZON_STEPS
+
+
+def test_rank_rejects_nonintegral_peak_window() -> None:
+    """Critical-interval windows must preserve integer step indices."""
+    action = action_from_constant_velocity(
+        "cruise", [0.0, 0.0], [1.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+
+    with pytest.raises(ValueError, match="non-negative integer"):
+        rank_trajectories([action], [], risk_config=_risk_config(), peak_window_half_steps=0.5)
 
 
 def test_rank_reuses_candidate_action_schema_verbatim() -> None:

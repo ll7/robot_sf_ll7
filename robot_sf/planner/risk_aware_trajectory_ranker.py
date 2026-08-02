@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from numbers import Integral
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -51,6 +52,7 @@ from robot_sf.research.collision_risk import (
     ActionConditionedRiskEstimate,
     CandidateAction,
     RiskEstimatorConfig,
+    RiskProvenance,
     estimate_action_conditioned_risk,
 )
 
@@ -264,33 +266,6 @@ class HardGateResult:
 
 
 @dataclass(frozen=True)
-class CandidateProvenance:
-    """Risk-estimator provenance carried through to the ranking record.
-
-    Attributes:
-        action_id: Stable identifier of the scored candidate action.
-        estimator_id: Identifier of the reused risk estimator.
-        forecast_model: Declared pedestrian forecast model identifier.
-        geometry_version: Footprint / contact-geometry version identifier.
-        config_hash: Stable hash of the estimator configuration.
-        seed: Monte Carlo seed used by the estimator.
-        risk_schema_version: Schema version of the reused risk estimate.
-        ranker_schema_version: Always :data:`RANKER_SCHEMA_VERSION`.
-        abstained: True when the estimator flagged the estimate as untrusted.
-    """
-
-    action_id: str
-    estimator_id: str
-    forecast_model: str
-    geometry_version: str
-    config_hash: str
-    seed: int
-    risk_schema_version: str
-    ranker_schema_version: str = RANKER_SCHEMA_VERSION
-    abstained: bool = False
-
-
-@dataclass(frozen=True)
 class CandidateRanking:
     """Full decomposed ranking record for one candidate action.
 
@@ -303,11 +278,12 @@ class CandidateRanking:
         components: Decomposed :class:`ScoreComponents`.
         peak_risk: :class:`PeakRiskTiming` for critical-interval inspection.
         hard_gate: :class:`HardGateResult` with the deterministic-gate outcomes.
-        provenance: :class:`CandidateProvenance` linking back to the risk estimator.
+        provenance: Canonical reused :class:`RiskProvenance` from the risk estimate.
         joint_contact_probability: Raw model joint contact probability (identical
             to ``components.calibrated_collision_risk`` in this prototype).
         estimate: Full reused :class:`ActionConditionedRiskEstimate` for traceability.
         claim_boundary: Always :data:`RANKER_CLAIM_BOUNDARY`.
+        ranker_schema_version: Version tag for this ranker result record.
     """
 
     action_id: str
@@ -317,10 +293,11 @@ class CandidateRanking:
     components: ScoreComponents
     peak_risk: PeakRiskTiming
     hard_gate: HardGateResult
-    provenance: CandidateProvenance
+    provenance: RiskProvenance
     joint_contact_probability: float
     estimate: ActionConditionedRiskEstimate
     claim_boundary: str = RANKER_CLAIM_BOUNDARY
+    ranker_schema_version: str = RANKER_SCHEMA_VERSION
 
 
 # ---------------------------------------------------------------------------
@@ -702,25 +679,6 @@ def _pedestrian_velocities(
     return np.asarray([np.asarray(actor.velocity, dtype=float).reshape(2) for actor in pedestrians])
 
 
-def _provenance(action_id: str, estimate: ActionConditionedRiskEstimate) -> CandidateProvenance:
-    """Lift the estimator provenance into the ranking provenance record.
-
-    Returns:
-        :class:`CandidateProvenance` carrying the reused estimator identifiers.
-    """
-    risk_provenance = estimate.provenance
-    return CandidateProvenance(
-        action_id=action_id,
-        estimator_id=risk_provenance.estimator_id,
-        forecast_model=risk_provenance.forecast_model,
-        geometry_version=risk_provenance.geometry_version,
-        config_hash=risk_provenance.config_hash,
-        seed=risk_provenance.seed,
-        risk_schema_version=risk_provenance.schema_version,
-        abstained=estimate.uncertainty.abstained,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Public ranking entry point
 # ---------------------------------------------------------------------------
@@ -762,15 +720,20 @@ def rank_trajectories(
 
     Returns:
         Rankings ordered with eligible candidates first (1-based rank by
-        ascending composite cost), followed by ineligible candidates. Each record
-        exposes every score component, eligibility, hard-gate outcomes, peak-risk
-        timing, and full risk-estimator provenance.
+        ascending composite cost), followed by ineligible candidates in stable
+        action-id order. Each record exposes every score component, eligibility,
+        hard-gate outcomes, peak-risk timing, and full risk-estimator provenance.
 
     Raises:
-        ValueError: If ``peak_window_half_steps`` is negative.
+        ValueError: If ``peak_window_half_steps`` is not a non-negative integer.
     """
-    if peak_window_half_steps < 0:
-        raise ValueError("peak_window_half_steps must be >= 0")
+    if (
+        isinstance(peak_window_half_steps, bool)
+        or not isinstance(peak_window_half_steps, Integral)
+        or peak_window_half_steps < 0
+    ):
+        raise ValueError("peak_window_half_steps must be a non-negative integer")
+    peak_window_half_steps = int(peak_window_half_steps)
     risk_config = risk_config if risk_config is not None else RiskEstimatorConfig()
     weights = weights if weights is not None else RankingWeights()
 
@@ -810,7 +773,7 @@ def rank_trajectories(
                 components=components,
                 peak_risk=peak_risk,
                 hard_gate=hard_gate,
-                provenance=_provenance(action.action_id, estimate),
+                provenance=estimate.provenance,
                 joint_contact_probability=float(estimate.joint_contact_probability),
                 estimate=estimate,
             )
@@ -819,7 +782,9 @@ def rank_trajectories(
     eligible = [record for record in unranked if record.eligible]
     ineligible = [record for record in unranked if not record.eligible]
     eligible.sort(key=lambda record: (record.composite_score, record.action_id))
-    ineligible.sort(key=lambda record: (record.composite_score, record.action_id))
+    # The composite is only a selection order for eligible candidates; a rejected
+    # candidate remains unranked regardless of its cost.
+    ineligible.sort(key=lambda record: record.action_id)
 
     ranked: list[CandidateRanking] = []
     for position, record in enumerate(eligible, start=1):
@@ -842,13 +807,13 @@ def _with_rank(record: CandidateRanking, rank: int) -> CandidateRanking:
         joint_contact_probability=record.joint_contact_probability,
         estimate=record.estimate,
         claim_boundary=record.claim_boundary,
+        ranker_schema_version=record.ranker_schema_version,
     )
 
 
 __all__ = [
     "RANKER_CLAIM_BOUNDARY",
     "RANKER_SCHEMA_VERSION",
-    "CandidateProvenance",
     "CandidateRanking",
     "HardGateResult",
     "PeakRiskTiming",

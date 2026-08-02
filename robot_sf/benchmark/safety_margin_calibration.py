@@ -759,6 +759,11 @@ def build_safety_margin_comparison(  # noqa: PLR0913
     aci_cfg = adaptive_config or AdaptiveConformalConfig(
         coverage_target=coverage_target, step_size=0.05, window=None, min_history=1
     )
+    if aci_cfg.coverage_target != coverage_target:
+        raise ValueError(
+            "adaptive_config.coverage_target must equal coverage_target so every reused "
+            "conformal primitive is recorded against the report's declared target"
+        )
 
     fit_ids = _to_id_set("fit_split_ids", fit_split_ids)
     calibration_ids = _to_id_set("calibration_split_ids", calibration_split_ids)

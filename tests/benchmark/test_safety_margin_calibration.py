@@ -27,6 +27,7 @@ from robot_sf.benchmark.safety_margin_calibration import (
 from robot_sf.benchmark.uncertainty_safety import (
     ADAPTIVE_CONFORMAL_BUFFERS_SCHEMA,
     SPLIT_CONFORMAL_RADIUS_SCHEMA,
+    AdaptiveConformalConfig,
 )
 
 # --------------------------------------------------------------------------- helpers
@@ -548,6 +549,12 @@ def test_bad_coverage_target_rejected() -> None:
         _build(coverage_target=1.0)
     with pytest.raises(ValueError, match="coverage_target"):
         _build(coverage_target=0.0)
+
+
+def test_adaptive_config_target_must_match_report_target() -> None:
+    """Reused conformal primitives must share the report's declared coverage target."""
+    with pytest.raises(ValueError, match="adaptive_config.coverage_target must equal"):
+        _build(adaptive_config=AdaptiveConformalConfig(coverage_target=0.8))
 
 
 def test_preferred_weights_must_match_default_keys() -> None:

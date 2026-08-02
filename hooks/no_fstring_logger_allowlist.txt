@@ -199,13 +199,7 @@ robot_sf/nav/occupancy.py	circle_collides_any_lines	debug	1e14b0a973ca36b5	1
 robot_sf/nav/occupancy_grid.py	GridConfig.__post_init__	debug	86224a2e2490bf20	1
 robot_sf/nav/occupancy_grid.py	OccupancyGrid.__init__	debug	348a51cd911713cd	1
 robot_sf/nav/occupancy_grid.py	OccupancyGrid._get_or_create_static_obstacle_layer	debug	36abbfc90bd0bdc9	1
-robot_sf/nav/occupancy_grid.py	OccupancyGrid.generate	debug	36abbfc90bd0bdc9	1
 robot_sf/nav/occupancy_grid.py	OccupancyGrid.generate	debug	3ccb909da7c3f199	1
-robot_sf/nav/occupancy_grid.py	OccupancyGrid.generate	debug	40c3f8dd3eaa5e59	1
-robot_sf/nav/occupancy_grid.py	OccupancyGrid.generate	debug	a9cbf24940de897e	1
-robot_sf/nav/occupancy_grid.py	OccupancyGrid.generate	debug	b9c696e766703866	1
-robot_sf/nav/occupancy_grid.py	OccupancyGrid.generate	error	41eafd1276142ee5	1
-robot_sf/nav/occupancy_grid.py	OccupancyGrid.generate	error	f309d6b3e1bdb023	1
 robot_sf/nav/occupancy_grid.py	OccupancyGrid.get_channel	error	91a2efe2e8c48a47	1
 robot_sf/nav/occupancy_grid.py	OccupancyGrid.get_channel	error	afac4ff7d6d7f795	1
 robot_sf/nav/occupancy_grid.py	OccupancyGrid.query	debug	c7216b0d8eb3768c	1

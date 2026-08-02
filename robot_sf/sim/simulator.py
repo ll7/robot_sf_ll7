@@ -436,6 +436,7 @@ class Simulator:
     _initial_ped_headings: np.ndarray = field(init=False, repr=False)
     ped_angular_velocities: np.ndarray = field(init=False, repr=False)
     pedestrian_model: str = field(init=False)
+    _cached_social_force: SocialForce | None = field(init=False, repr=False, default=None)
     _residual_adversary: BoundedResidualAdversary | None = field(
         init=False, repr=False, default=None
     )
@@ -476,6 +477,11 @@ class Simulator:
             response_law_composition=self.config.response_law_composition,
             response_law_seed=self.config.response_law_seed,
             force_population_size=self.config.population_size,
+        )
+
+        # Cache the SocialForce component once instead of scanning forces every step (#6493)
+        self._cached_social_force = next(
+            (f for f in self.pysf_sim.forces if isinstance(f, SocialForce)), None
         )
 
         self.robot_navs = [
@@ -714,12 +720,14 @@ class Simulator:
         total force. Fail closed if the component is missing, mirroring the ``max_speeds``
         guard, so the opt-in model never silently degrades to a different force law.
 
+        The instance is cached during ``__post_init__`` to avoid an ``isinstance``
+        scan of ``self.pysf_sim.forces`` on every simulation step (issue #6493).
+
         Returns:
             The ``SocialForce`` instance from the physics engine's force list.
         """
-        for force in self.pysf_sim.forces:
-            if isinstance(force, SocialForce):
-                return force
+        if self._cached_social_force is not None:
+            return self._cached_social_force
         raise RuntimeError(
             "PySocialForce SocialForce component is unavailable for the pairwise pedestrian model"
         )
@@ -1021,6 +1029,11 @@ class PedSimulator(Simulator):
             peds_have_obstacle_forces=self.peds_have_obstacle_forces,
             add_ego_state=True,
             include_response_law_multipliers=False,
+        )
+
+        # Cache the SocialForce component once instead of scanning forces every step (#6493)
+        self._cached_social_force = next(
+            (f for f in self.pysf_sim.forces if isinstance(f, SocialForce)), None
         )
 
         self.robot_navs = [

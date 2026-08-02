@@ -1046,16 +1046,15 @@ class RobotEnv(BaseEnv):
             ped_positions = step_ped_positions
             ped_radii = getattr(self.simulator, "ped_radii", None)
             if ped_radii is None:
-                ped_radii = [0.35] * len(ped_positions)
-            pedestrians = [
-                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=True)
-            ]
+                ped_radii = np.full(len(ped_positions), 0.35)
+            else:
+                ped_radii = np.asarray(ped_radii, dtype=float)
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
             # Regenerate grid (allow grid config to opt into ego frame)
             self.occupancy_grid.generate(
                 obstacles=obstacles,
-                pedestrians=pedestrians,
+                pedestrians=(np.asarray(ped_positions, dtype=float), ped_radii),
                 robot_pose=robot_pose,
                 ego_frame=False,
                 obstacle_polygons=obstacle_polygons,
@@ -1172,18 +1171,15 @@ class RobotEnv(BaseEnv):
                 ped_positions = self.simulator.ped_pos
                 ped_radii = getattr(self.simulator, "ped_radii", None)
                 if ped_radii is None:
-                    # Default pedestrian radius if not available
-                    ped_radii = [0.35] * len(ped_positions)
-                pedestrians = [
-                    (tuple(pos), radius)
-                    for pos, radius in zip(ped_positions, ped_radii, strict=True)
-                ]
+                    ped_radii = np.full(len(ped_positions), 0.35)
+                else:
+                    ped_radii = np.asarray(ped_radii, dtype=float)
                 # Get robot pose (already in RobotPose format: ((x, y), theta))
                 robot_pose = self.simulator.robot_poses[0]
                 # Generate grid (allow grid config to opt into ego frame)
                 self.occupancy_grid.generate(
                     obstacles=obstacles,
-                    pedestrians=pedestrians,
+                    pedestrians=(np.asarray(ped_positions, dtype=float), ped_radii),
                     robot_pose=robot_pose,
                     ego_frame=False,
                     obstacle_polygons=obstacle_polygons,
@@ -1197,7 +1193,7 @@ class RobotEnv(BaseEnv):
                     )
                     logger.debug(
                         f"Initial occupancy grid generated: "
-                        f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
+                        f"obstacles={len(obstacles)}, pedestrians={len(ped_positions)}"
                     )
             obs = self._attach_asymmetric_critic_state(obs)
             self._latest_observation = obs

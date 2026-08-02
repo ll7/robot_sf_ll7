@@ -15,9 +15,48 @@ Issue: https://github.com/ll7/robot_sf_ll7/issues/6580
 
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 
 PLANNER_CAPABILITY_SCHEMA_VERSION = "planner_capability.v1"
+
+_WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def _validate_repository_relative_refs(
+    field_name: str, evidence_refs: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Return errors for evidence references that are not repository-relative paths."""
+    errors: list[str] = []
+    if not isinstance(evidence_refs, tuple):
+        return (f"{field_name} must be a tuple of repository-relative paths",)
+    for index, evidence_ref in enumerate(evidence_refs):
+        if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+            errors.append(f"{field_name}[{index}] must be a non-empty string")
+            continue
+        normalized = evidence_ref.strip().replace("\\", "/")
+        path = PurePosixPath(normalized)
+        if (
+            normalized.startswith("/")
+            or _WINDOWS_ABSOLUTE_PATH.match(normalized)
+            or "://" in normalized
+            or ".." in path.parts
+        ):
+            errors.append(
+                f"{field_name}[{index}] must be a repository-relative path: {evidence_ref!r}"
+            )
+    return tuple(errors)
+
+
+def _merge_evidence_refs(*evidence_ref_groups: tuple[str, ...]) -> tuple[str, ...]:
+    """Merge evidence references while preserving first-seen order.
+
+    Returns:
+        Tuple of unique references in first-seen order.
+    """
+    return tuple(dict.fromkeys(ref for group in evidence_ref_groups for ref in group))
 
 
 @dataclass(frozen=True)
@@ -26,7 +65,7 @@ class MeasuredRange:
 
     When ``low`` and ``high`` are both ``None`` the range is unknown and must
     not be inferred. Every non-unknown range carries at least one
-    repository-relative ``evidence_ref``.
+    repository-relative ``evidence_refs``.
     """
 
     low: float | None = None
@@ -39,6 +78,49 @@ class MeasuredRange:
         """Return True when the range has not been measured."""
         return self.low is None and self.high is None
 
+    def validate(self, field_name: str = "range") -> tuple[str, ...]:
+        """Return validation errors for the range and its provenance."""
+        errors: list[str] = []
+        if not isinstance(self.assumption, bool):
+            errors.append(f"{field_name}.assumption must be a boolean")
+
+        if self.low is None and self.high is None:
+            errors.extend(
+                _validate_repository_relative_refs(
+                    f"{field_name}.evidence_refs", self.evidence_refs
+                )
+            )
+            return tuple(errors)
+
+        if self.low is None or self.high is None:
+            errors.append(f"{field_name} must provide both low and high, or neither")
+        else:
+            for bound_name, bound in (("low", self.low), ("high", self.high)):
+                if isinstance(bound, bool) or not isinstance(bound, int | float):
+                    errors.append(f"{field_name}.{bound_name} must be a finite number")
+                elif not math.isfinite(float(bound)):
+                    errors.append(f"{field_name}.{bound_name} must be a finite number")
+            if (
+                isinstance(self.low, int | float)
+                and not isinstance(self.low, bool)
+                and isinstance(self.high, int | float)
+                and not isinstance(self.high, bool)
+                and math.isfinite(float(self.low))
+                and math.isfinite(float(self.high))
+                and self.low > self.high
+            ):
+                errors.append(f"{field_name}.low must not exceed {field_name}.high")
+
+        if not self.evidence_refs:
+            errors.append(f"{field_name} is measured but has no evidence_refs")
+        else:
+            errors.extend(
+                _validate_repository_relative_refs(
+                    f"{field_name}.evidence_refs", self.evidence_refs
+                )
+            )
+        return tuple(errors)
+
 
 @dataclass(frozen=True)
 class PlannerCapabilityEntry:
@@ -46,17 +128,21 @@ class PlannerCapabilityEntry:
 
     Every measured field carries at least one repository-relative evidence_ref.
     Assumptions are explicitly marked via ``MeasuredRange.assumption``.
+    Non-measured assumptions are named in ``assumption_fields``.
     Unknown ranges are preserved as ``None`` rather than inferred.
     """
 
     schema_version: str = PLANNER_CAPABILITY_SCHEMA_VERSION
     planner_id: str = ""
     supported_scenarios: tuple[str, ...] = ()
+    vehicle_footprints: tuple[str, ...] = ()
     speed_range_mps: MeasuredRange = field(default_factory=MeasuredRange)
     pedestrian_density_range: MeasuredRange = field(default_factory=MeasuredRange)
     required_observations: tuple[str, ...] = ()
+    known_failure_signatures: tuple[str, ...] = ()
     required_preconditions: tuple[str, ...] = ()
     handoff_targets: tuple[str, ...] = ()
+    assumption_fields: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
 
     def validate(self) -> tuple[str, ...]:
@@ -69,15 +155,28 @@ class PlannerCapabilityEntry:
                 f"unsupported schema_version: {self.schema_version!r}; "
                 f"expected {PLANNER_CAPABILITY_SCHEMA_VERSION!r}"
             )
-        if not self.speed_range_mps.is_unknown and not self.speed_range_mps.evidence_refs:
-            errors.append("speed_range_mps is measured but has no evidence_refs")
-        if (
-            not self.pedestrian_density_range.is_unknown
-            and not self.pedestrian_density_range.evidence_refs
-        ):
-            errors.append("pedestrian_density_range is measured but has no evidence_refs")
         if not self.evidence_refs:
             errors.append("entry-level evidence_refs must not be empty")
+        else:
+            errors.extend(_validate_repository_relative_refs("evidence_refs", self.evidence_refs))
+        errors.extend(self.speed_range_mps.validate("speed_range_mps"))
+        errors.extend(self.pedestrian_density_range.validate("pedestrian_density_range"))
+        known_fields = {
+            "supported_scenarios",
+            "vehicle_footprints",
+            "speed_range_mps",
+            "pedestrian_density_range",
+            "required_observations",
+            "known_failure_signatures",
+            "required_preconditions",
+            "handoff_targets",
+        }
+        unknown_assumption_fields = set(self.assumption_fields) - known_fields
+        if unknown_assumption_fields:
+            errors.append(
+                "assumption_fields contains unknown fields: "
+                f"{tuple(sorted(unknown_assumption_fields))}"
+            )
         return tuple(errors)
 
 
@@ -86,7 +185,8 @@ class EligibilityResult:
     """Result of an assignment or handoff eligibility check.
 
     Fail-closed: ``eligible`` is False unless all preconditions are met and
-    evidence is present. ``reasons`` explains every rejection.
+    evidence is present. Handoff results include source and target evidence.
+    ``reasons`` explains every rejection.
     """
 
     eligible: bool
@@ -108,6 +208,7 @@ def _CAPABILITY_LEDGER() -> dict[str, PlannerCapabilityEntry]:
         "goal": PlannerCapabilityEntry(
             planner_id="goal",
             supported_scenarios=("open_space", "corridor", "crossing"),
+            assumption_fields=("supported_scenarios",),
             speed_range_mps=MeasuredRange(
                 low=0.0,
                 high=2.0,
@@ -126,6 +227,7 @@ def _CAPABILITY_LEDGER() -> dict[str, PlannerCapabilityEntry]:
         "planner_selector_v2_diagnostic": PlannerCapabilityEntry(
             planner_id="planner_selector_v2_diagnostic",
             supported_scenarios=("open_space", "corridor", "bottleneck", "crossing"),
+            assumption_fields=("supported_scenarios",),
             speed_range_mps=MeasuredRange(),
             pedestrian_density_range=MeasuredRange(),
             required_observations=("robot_state", "goal", "pedestrians"),
@@ -187,14 +289,16 @@ def check_assignment_eligibility(
     reasons: list[str] = []
     preconditions_checked: list[str] = []
 
-    if entry.supported_scenarios and scenario not in entry.supported_scenarios:
+    if not entry.supported_scenarios:
+        reasons.append("supported_scenarios is unknown")
+    elif scenario not in entry.supported_scenarios:
         reasons.append(
             f"scenario '{scenario}' not in supported_scenarios {entry.supported_scenarios}"
         )
 
     for precondition in entry.required_preconditions:
         preconditions_checked.append(precondition)
-        if not preconditions_met.get(precondition, False):
+        if preconditions_met.get(precondition) is not True:
             reasons.append(f"precondition '{precondition}' not met")
 
     return EligibilityResult(
@@ -218,11 +322,13 @@ def check_handoff_eligibility(
     Returns ineligible with explicit reasons when:
     - The source planner is not in the ledger.
     - The target planner is not in the ledger.
+    - The source entry fails schema validation.
     - The target is not a declared handoff_target of the source.
     - The target's assignment eligibility fails.
 
     Returns:
-        EligibilityResult with eligible=True only when all checks pass.
+        EligibilityResult with eligible=True only when all checks pass and
+        evidence_refs contains both source and target references.
     """
     preconditions_met = preconditions_met if preconditions_met is not None else {}
 
@@ -237,15 +343,17 @@ def check_handoff_eligibility(
 
     target_entry = get_capability_entry(to_planner_id)
     if target_entry is None:
+        source_validation_errors = source_entry.validate()
         return EligibilityResult(
             eligible=False,
             planner_id=to_planner_id,
-            reasons=(f"target planner '{to_planner_id}' not found in capability ledger",),
+            reasons=source_validation_errors
+            + (f"target planner '{to_planner_id}' not found in capability ledger",),
             evidence_refs=source_entry.evidence_refs,
             prior_planner_id=from_planner_id,
         )
 
-    reasons: list[str] = []
+    reasons: list[str] = list(source_entry.validate())
     preconditions_checked: list[str] = []
 
     if to_planner_id not in source_entry.handoff_targets:
@@ -266,7 +374,7 @@ def check_handoff_eligibility(
         eligible=len(reasons) == 0,
         planner_id=to_planner_id,
         reasons=tuple(reasons),
-        evidence_refs=target_entry.evidence_refs,
+        evidence_refs=_merge_evidence_refs(source_entry.evidence_refs, target_entry.evidence_refs),
         preconditions_checked=tuple(preconditions_checked),
         prior_planner_id=from_planner_id,
     )

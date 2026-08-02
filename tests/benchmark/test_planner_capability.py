@@ -53,6 +53,28 @@ class TestSchemaValidation:
         errors = entry.validate()
         assert any("speed_range_mps" in e for e in errors)
 
+    def test_partial_range_fails_validation(self) -> None:
+        entry = PlannerCapabilityEntry(
+            planner_id="hypothetical",
+            speed_range_mps=MeasuredRange(low=0.0, evidence_refs=("some/file.py",)),
+            evidence_refs=("some/file.py",),
+        )
+        errors = entry.validate()
+        assert any("both low and high" in e for e in errors)
+
+    def test_non_relative_evidence_ref_fails_validation(self) -> None:
+        entry = PlannerCapabilityEntry(
+            planner_id="hypothetical",
+            speed_range_mps=MeasuredRange(
+                low=0.0,
+                high=1.5,
+                evidence_refs=("/tmp/evidence.py",),
+            ),
+            evidence_refs=("https://example.invalid/evidence",),
+        )
+        errors = entry.validate()
+        assert any("repository-relative" in e for e in errors)
+
     def test_unknown_range_passes_validation(self) -> None:
         entry = PlannerCapabilityEntry(
             planner_id="hypothetical",
@@ -97,13 +119,30 @@ class TestAssignmentEligibility:
         assert result.eligible is False
         assert any("underwater_cave" in r for r in result.reasons)
 
-    def test_missing_evidence_failure_unknown_planner(self) -> None:
+    def test_unknown_planner_fails_closed(self) -> None:
         result = check_assignment_eligibility(
             planner_id="nonexistent_planner",
             scenario="open_space",
         )
         assert result.eligible is False
         assert any("not found" in r for r in result.reasons)
+
+    def test_missing_evidence_fails_closed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        entry = PlannerCapabilityEntry(
+            planner_id="unverified",
+            speed_range_mps=MeasuredRange(low=0.0, high=1.0),
+            evidence_refs=("robot_sf/benchmark/algorithm_metadata.py",),
+        )
+        monkeypatch.setattr(
+            "robot_sf.benchmark.planner_capability.get_capability_entry",
+            lambda planner_id: entry if planner_id == "unverified" else None,
+        )
+        result = check_assignment_eligibility(
+            planner_id="unverified",
+            scenario="open_space",
+        )
+        assert result.eligible is False
+        assert any("speed_range_mps" in reason for reason in result.reasons)
 
     def test_unmet_precondition_fails_closed(self) -> None:
         result = check_assignment_eligibility(
@@ -113,6 +152,22 @@ class TestAssignmentEligibility:
         )
         assert result.eligible is False
         assert any("goal_position_available" in r for r in result.reasons)
+
+    def test_unknown_supported_scenarios_fail_closed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        entry = PlannerCapabilityEntry(
+            planner_id="unscoped",
+            evidence_refs=("robot_sf/benchmark/algorithm_metadata.py",),
+        )
+        monkeypatch.setattr(
+            "robot_sf.benchmark.planner_capability.get_capability_entry",
+            lambda planner_id: entry if planner_id == "unscoped" else None,
+        )
+        result = check_assignment_eligibility(
+            planner_id="unscoped",
+            scenario="open_space",
+        )
+        assert result.eligible is False
+        assert "supported_scenarios is unknown" in result.reasons
 
     def test_selector_requires_explicit_opt_in(self) -> None:
         result = check_assignment_eligibility(
@@ -142,6 +197,9 @@ class TestHandoffEligibility:
         assert result.prior_planner_id == "goal"
         assert result.planner_id == "planner_selector_v2_diagnostic"
         assert len(result.evidence_refs) > 0
+        source_entry = get_capability_entry("goal")
+        assert source_entry is not None
+        assert set(source_entry.evidence_refs).issubset(result.evidence_refs)
         assert "explicit_opt_in" in result.preconditions_checked
 
     def test_valid_reverse_handoff_selector_to_goal(self) -> None:
@@ -220,3 +278,26 @@ class TestHandoffEligibility:
         )
         assert result.eligible is False
         assert any("explicit_opt_in" in r for r in result.reasons)
+
+    def test_handoff_fails_closed_on_invalid_source_evidence(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = PlannerCapabilityEntry(
+            planner_id="unverified",
+            speed_range_mps=MeasuredRange(low=0.0, high=1.0),
+            handoff_targets=("goal",),
+            evidence_refs=("robot_sf/benchmark/algorithm_metadata.py",),
+        )
+        lookup = {"unverified": source, "goal": get_capability_entry("goal")}
+        monkeypatch.setattr(
+            "robot_sf.benchmark.planner_capability.get_capability_entry",
+            lookup.get,
+        )
+        result = check_handoff_eligibility(
+            from_planner_id="unverified",
+            to_planner_id="goal",
+            scenario="open_space",
+            preconditions_met={"goal_position_available": True},
+        )
+        assert result.eligible is False
+        assert any("speed_range_mps" in reason for reason in result.reasons)

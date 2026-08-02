@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -636,6 +638,15 @@ class TestExecutionDeviationConfig:
         with pytest.raises(ValueError, match="max_input_age_s"):
             _deviation_config(max_input_age_s=0.0)
 
+    @pytest.mark.parametrize(
+        "field_name",
+        ("warn_threshold", "replan_threshold", "fallback_brake_threshold", "max_input_age_s"),
+    )
+    def test_non_finite_thresholds_raise(self, field_name: str) -> None:
+        """Configuration rejects non-finite values that could bypass precedence."""
+        with pytest.raises(ValueError, match=field_name):
+            _deviation_config(**{field_name: math.nan})
+
     def test_invalid_fail_closed_intervention_raises(self) -> None:
         with pytest.raises(ValueError, match="fail_closed_intervention"):
             _deviation_config(fail_closed_intervention="continue")
@@ -824,6 +835,16 @@ class TestExecutionDeviationStaleInput:
         assert result.fail_closed is False
         assert result.deviation_score is not None
 
+    @pytest.mark.parametrize("input_age_s", (math.nan, -0.1))
+    def test_invalid_input_age_fails_closed(self, input_age_s: float) -> None:
+        """Invalid input age never yields a numeric deviation result."""
+        result = monitor_execution_deviation(
+            config=_deviation_config(), input_age_s=input_age_s, **_aligned_windows()
+        )
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+        assert result.input_age_s is None
+
 
 class TestExecutionDeviationMisalignedInputs:
     """Misaligned or non-finite inputs fail closed."""
@@ -972,6 +993,7 @@ class TestExecutionDeviationMiscellaneous:
     """Additional contract and edge-case tests."""
 
     def test_non_positive_dt_raises(self) -> None:
+        """Non-positive or non-finite timesteps are rejected before scoring."""
         with pytest.raises(ValueError, match="dt_s"):
             monitor_execution_deviation(
                 predicted_robot_positions=np.zeros((5, 2)),
@@ -979,6 +1001,36 @@ class TestExecutionDeviationMiscellaneous:
                 dt_s=0.0,
                 config=_deviation_config(),
             )
+        with pytest.raises(ValueError, match="dt_s"):
+            monitor_execution_deviation(
+                predicted_robot_positions=np.zeros((5, 2)),
+                observed_robot_positions=np.zeros((5, 2)),
+                dt_s=math.nan,
+                config=_deviation_config(),
+            )
+
+    def test_missing_config_rejected(self) -> None:
+        """The monitor requires explicit calibration provenance before scoring."""
+        with pytest.raises(ValueError, match="calibration_source"):
+            monitor_execution_deviation(
+                predicted_robot_positions=np.zeros((5, 2)),
+                observed_robot_positions=np.zeros((5, 2)),
+                dt_s=0.1,
+            )
+
+    def test_empty_pedestrian_window_fails_closed(self) -> None:
+        """An empty optional pedestrian component cannot produce a NaN score."""
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=np.zeros((5, 2)),
+            predicted_pedestrian_positions=np.zeros((5, 0, 2)),
+            observed_pedestrian_positions=np.zeros((5, 0, 2)),
+            dt_s=0.1,
+            config=_deviation_config(),
+        )
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+        assert result.component_deviations == ()
 
     def test_result_is_frozen_dataclass(self) -> None:
         windows = _aligned_windows(deviation=0.0)

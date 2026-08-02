@@ -18,6 +18,7 @@ and called from offline analysis utilities (see :func:`verify_episode_trace_wind
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -766,6 +767,14 @@ class ExecutionDeviationConfig:
 
     def __post_init__(self) -> None:
         """Validate threshold ordering and fail-closed configuration."""
+        for field_name, value in (
+            ("warn_threshold", self.warn_threshold),
+            ("replan_threshold", self.replan_threshold),
+            ("fallback_brake_threshold", self.fallback_brake_threshold),
+            ("max_input_age_s", self.max_input_age_s),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(f"ExecutionDeviationConfig.{field_name} must be finite")
         if self.warn_threshold < 0.0:
             raise ValueError("ExecutionDeviationConfig.warn_threshold must be >= 0")
         if self.replan_threshold < self.warn_threshold:
@@ -848,12 +857,18 @@ def _fail_closed_result(
     Returns:
         A fail-closed result with ``deviation_score=None`` and empty components.
     """
+    try:
+        reported_age = float(input_age_s) if input_age_s is not None else None
+    except (TypeError, ValueError, OverflowError):
+        reported_age = None
+    if reported_age is not None and (not math.isfinite(reported_age) or reported_age < 0.0):
+        reported_age = None
     return ExecutionDeviationResult(
         intervention=cfg.fail_closed_intervention,
         deviation_score=None,
         component_deviations=(),
         first_threshold_crossing_time_s=None,
-        input_age_s=input_age_s,
+        input_age_s=reported_age,
         fail_closed=True,
         schema_version=cfg.schema_version,
     )
@@ -873,10 +888,21 @@ def _validate_primary_windows(
     """
     if predicted_robot_positions is None or observed_robot_positions is None:
         return None
-    if input_age_s is not None and input_age_s > cfg.max_input_age_s:
+    if input_age_s is not None:
+        try:
+            if (
+                not math.isfinite(input_age_s)
+                or input_age_s < 0.0
+                or input_age_s > cfg.max_input_age_s
+            ):
+                return None
+        except (TypeError, ValueError, OverflowError):
+            return None
+    try:
+        pred_robot = np.asarray(predicted_robot_positions, dtype=float)
+        obs_robot = np.asarray(observed_robot_positions, dtype=float)
+    except (TypeError, ValueError, OverflowError):
         return None
-    pred_robot = np.asarray(predicted_robot_positions, dtype=float)
-    obs_robot = np.asarray(observed_robot_positions, dtype=float)
     if pred_robot.shape != obs_robot.shape:
         return None
     if pred_robot.ndim != 2 or pred_robot.shape[1] != 2:
@@ -904,13 +930,17 @@ def _compute_velocity_deviation(
         return None
     if predicted_robot_velocities is None or observed_robot_velocities is None:
         return np.array([])
-    pred_vel = np.asarray(predicted_robot_velocities, dtype=float)
-    obs_vel = np.asarray(observed_robot_velocities, dtype=float)
+    try:
+        pred_vel = np.asarray(predicted_robot_velocities, dtype=float)
+        obs_vel = np.asarray(observed_robot_velocities, dtype=float)
+    except (TypeError, ValueError, OverflowError):
+        return np.array([])
     if pred_vel.shape != obs_vel.shape or pred_vel.shape != reference_shape:
         return np.array([])
     if not np.isfinite(pred_vel).all() or not np.isfinite(obs_vel).all():
         return np.array([])
-    return np.linalg.norm(obs_vel - pred_vel, axis=-1)
+    deviation = np.linalg.norm(obs_vel - pred_vel, axis=-1)
+    return deviation if np.isfinite(deviation).all() else np.array([])
 
 
 def _compute_pedestrian_deviation(
@@ -929,15 +959,48 @@ def _compute_pedestrian_deviation(
         return None
     if predicted_pedestrian_positions is None or observed_pedestrian_positions is None:
         return np.array([])
-    pred_ped = np.asarray(predicted_pedestrian_positions, dtype=float)
-    obs_ped = np.asarray(observed_pedestrian_positions, dtype=float)
+    try:
+        pred_ped = np.asarray(predicted_pedestrian_positions, dtype=float)
+        obs_ped = np.asarray(observed_pedestrian_positions, dtype=float)
+    except (TypeError, ValueError, OverflowError):
+        return np.array([])
     if pred_ped.shape != obs_ped.shape:
         return np.array([])
     if pred_ped.ndim != 3 or pred_ped.shape[2] != 2 or pred_ped.shape[0] != expected_t:
         return np.array([])
+    if pred_ped.shape[1] == 0:
+        return np.array([])
     if not np.isfinite(pred_ped).all() or not np.isfinite(obs_ped).all():
         return np.array([])
-    return np.mean(np.linalg.norm(obs_ped - pred_ped, axis=-1), axis=-1)
+    deviation = np.mean(np.linalg.norm(obs_ped - pred_ped, axis=-1), axis=-1)
+    return deviation if np.isfinite(deviation).all() else np.array([])
+
+
+def _finite_component_score(per_timestep: np.ndarray) -> float | None:
+    """Return a finite mean component score, or ``None`` for invalid values."""
+    if per_timestep.size == 0 or not np.isfinite(per_timestep).all():
+        return None
+    score = float(np.mean(per_timestep))
+    return score if math.isfinite(score) else None
+
+
+def _require_execution_deviation_config(
+    config: ExecutionDeviationConfig | None,
+) -> ExecutionDeviationConfig:
+    """Require explicit threshold provenance before execution deviation scoring.
+
+    Returns:
+        The caller-provided configuration.
+
+    Raises:
+        ValueError: If no configuration with calibration provenance is provided.
+    """
+    if config is None:
+        raise ValueError(
+            "monitor_execution_deviation requires an ExecutionDeviationConfig with "
+            "an explicit calibration_source"
+        )
+    return config
 
 
 def monitor_execution_deviation(
@@ -976,8 +1039,9 @@ def monitor_execution_deviation(
         dt_s: Timestep duration in seconds. Must be positive.
         input_age_s: Age of the prediction input in seconds. If greater than
             ``config.max_input_age_s``, the monitor fails closed.
-        config: Deviation monitor configuration. Defaults to
-            :class:`ExecutionDeviationConfig` (requires a calibration source).
+        config: Deviation monitor configuration with an explicit calibration source.
+            A configuration is required so threshold provenance cannot be silently
+            replaced by an uncalibrated default.
 
     Returns:
         An :class:`ExecutionDeviationResult` with the intervention label,
@@ -986,14 +1050,10 @@ def monitor_execution_deviation(
     Raises:
         ValueError: If ``dt_s`` is non-positive or config validation fails.
     """
-    if dt_s <= 0.0:
+    if not math.isfinite(dt_s) or dt_s <= 0.0:
         raise ValueError(f"dt_s must be > 0; got {dt_s}")
 
-    cfg = (
-        config
-        if config is not None
-        else ExecutionDeviationConfig(calibration_source="default_test_fixture")
-    )
+    cfg = _require_execution_deviation_config(config)
 
     # --- Validate primary windows (missing, stale, misaligned, non-finite) ---
     validated = _validate_primary_windows(
@@ -1008,25 +1068,30 @@ def monitor_execution_deviation(
     per_timestep_scores: list[np.ndarray] = []
 
     robot_per_t = np.linalg.norm(obs_robot - pred_robot, axis=-1)
-    component_scores["robot_position"] = float(np.mean(robot_per_t))
+    robot_score = _finite_component_score(robot_per_t)
+    if robot_score is None:
+        return _fail_closed_result(cfg, input_age_s)
+    component_scores["robot_position"] = robot_score
     per_timestep_scores.append(robot_per_t)
 
     vel_per_t = _compute_velocity_deviation(
         predicted_robot_velocities, observed_robot_velocities, pred_robot.shape
     )
     if vel_per_t is not None:
-        if vel_per_t.size == 0:
+        velocity_score = _finite_component_score(vel_per_t)
+        if velocity_score is None:
             return _fail_closed_result(cfg, input_age_s)
-        component_scores["robot_velocity"] = float(np.mean(vel_per_t))
+        component_scores["robot_velocity"] = velocity_score
         per_timestep_scores.append(vel_per_t)
 
     ped_per_t = _compute_pedestrian_deviation(
         predicted_pedestrian_positions, observed_pedestrian_positions, pred_robot.shape[0]
     )
     if ped_per_t is not None:
-        if ped_per_t.size == 0:
+        pedestrian_score = _finite_component_score(ped_per_t)
+        if pedestrian_score is None:
             return _fail_closed_result(cfg, input_age_s)
-        component_scores["pedestrian_position"] = float(np.mean(ped_per_t))
+        component_scores["pedestrian_position"] = pedestrian_score
         per_timestep_scores.append(ped_per_t)
 
     # --- Aggregate score and first threshold-crossing time ---

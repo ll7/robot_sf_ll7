@@ -1,0 +1,59 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "approval": {
+    "approval_source": "Issue #6430 approved decision, carried by PR #6444",
+    "approved_at_utc": "2026-07-30",
+    "review_marker": "DOMAIN-APPROVED (2026-07-30) - REVIEWED",
+    "status": "domain_approved"
+  },
+  "bundle_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16",
+  "claim_boundary_ref": "Issue #6157 canonical diagnostic-only boundary, as carried by issue #6430",
+  "decision": {
+    "claim_status": "reviewed",
+    "classification": "diagnostic",
+    "transfer_sub_classification": "no_eligible_comparator"
+  },
+  "forbidden_actions_confirmed": {
+    "benchmark_campaign_run": false,
+    "compute_submit": false,
+    "paper_claim_edits": false,
+    "ranking_claim_promotion": false
+  },
+  "issue": 3078,
+  "renderer_outputs": [
+    {
+      "classification": "diagnostic_review_ready",
+      "claim_status": "not_reviewed",
+      "path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/claim_card.yaml",
+      "sha256": "0673eaef397a7d160e909f7a1e02713e2c1e3aedbd1c77c3ad91a2cbd10c95aa"
+    },
+    {
+      "classification": "diagnostic_review_ready",
+      "path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/package_a_decision_packet.json",
+      "sha256": "5aa97e075b364dde03f43826ee30510cede22e036b3260f6d695a97fdbee5200"
+    },
+    {
+      "classification": "diagnostic_review_ready",
+      "path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/postrun_acceptance.json",
+      "sha256": "59a0fb5c5fd4d028a260da7bfb1d2db96bdae61a94789f1ab28b4e631111acee"
+    },
+    {
+      "classification": "diagnostic_review_ready",
+      "path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json",
+      "sha256": "3ac3f8737bdc5ead46f166ac175e29981aae82c42b0f350880d0e9c0e168f78b"
+    },
+    {
+      "classification": "not_identifiable",
+      "path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/seed_rank_stability_diagnostic.json",
+      "sha256": "81ae5d714394b85d263c3e926134f7a43e84b1dca212639b5396350f16734587"
+    }
+  ],
+  "schema_version": "package_a_domain_decision_overlay.v1",
+  "transfer_comparator_receipt": {
+    "path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/no_eligible_comparator.json",
+    "review_sidecar_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/no_eligible_comparator.json.review.json",
+    "review_sidecar_sha256": "343701ce87334a0bb52a5384bb2ca3a9c322e8e3f7994ab95e6d668a883ab36f",
+    "sha256": "4f24133797dd7631a992e96d2f9cddcd7dffd9c4d287a5fdc609af85b3869c06",
+    "status": "no_eligible_comparator"
+  }
+}

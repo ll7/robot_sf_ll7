@@ -3,9 +3,8 @@
 
 These dataclasses and TypedDicts provide typed containers for scenario
 specifications, episode records, resume manifests, and episode payloads.
-They are deliberately minimal and avoid introducing runtime dependencies
-(pure typing + stdlib) so they can be imported in lightweight tooling
-(schema generation, hashing, etc.).
+The concrete runtime annotations are kept resolvable for schema and tooling
+consumers while the serialization helpers remain deliberately minimal.
 
 Serialization: writing to JSONL will typically convert instances to
 ``dict`` via ``dataclasses.asdict`` or explicit ``to_dict`` helpers.
@@ -13,15 +12,25 @@ Serialization: writing to JSONL will typically convert instances to
 
 from __future__ import annotations
 
+from collections.abc import (  # noqa: TC003 - runtime annotation resolution.
+    Callable,
+    Mapping,
+)
 from dataclasses import asdict, dataclass, field
 from datetime import (
     UTC,  # type: ignore[attr-defined]
     datetime,
 )
-from typing import TYPE_CHECKING, Any, TypedDict
+from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
+    BaseContext,
+)
+from pathlib import Path  # noqa: TC003 - runtime annotation resolution.
+from typing import Any, TypedDict
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
+import numpy as np  # noqa: TC002 - runtime type-hint consumers resolve fields.
+
+from robot_sf.benchmark.algorithm_readiness import BenchmarkProfile  # noqa: TC001
+from robot_sf.benchmark.observation_noise import ObservationNoiseState  # noqa: TC001
 
 # ---------------------------------------------------------------------------
 # TypedDicts for dict-based episode payloads
@@ -392,17 +401,93 @@ class ResumeManifest:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PlannerRuntime:
+    """Planner lifecycle hooks, policy callable, and native-action flag.
+
+    Groups the six ``planner_*`` parameters of ``_run_episode_step_loop``
+    (policy_fn, planner_bind_env, planner_reset, planner_close, planner_stats,
+    planner_native_action) into a single typed object.
+    """
+
+    policy_fn: Callable[..., Any]
+    planner_bind_env: Callable[..., Any] | None
+    planner_reset: Callable[..., Any] | None
+    planner_close: Callable[..., Any] | None
+    planner_stats: Callable[..., Any] | None
+    planner_native_action: bool
+
+
+@dataclass(frozen=True, slots=True)
+class NoiseConfig:
+    """Observation-noise parameters for the episode step loop.
+
+    Groups the ``noise_spec``, ``noise_rng``, ``noise_state``, and
+    ``noise_stats`` keyword arguments into a single typed object.
+    """
+
+    spec: NoiseSpec
+    rng: np.random.Generator
+    state: ObservationNoiseState | None
+    stats: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class MapBatchConfig:
+    """Consolidated keyword arguments for ``run_map_batch``.
+
+    Mirrors the keyword-only parameters of ``run_map_batch`` (excluding
+    ``batch_config`` itself), so a caller can bundle and validate the batch
+    configuration in one typed object before passing it to the runner via
+    ``run_map_batch(..., batch_config=cfg)``.
+    """
+
+    scenario_path: str | Path | None = None
+    horizon: int | None = None
+    dt: float | None = None
+    record_forces: bool = True
+    snqi_weights: dict[str, float] | None = None
+    snqi_baseline: dict[str, dict[str, float]] | None = None
+    algo: str = "goal"
+    algo_config_path: str | None = None
+    benchmark_profile: BenchmarkProfile = "baseline-safe"
+    socnav_missing_prereq_policy: str = "fail-fast"
+    adapter_impact_eval: bool = False
+    experimental_ped_impact: bool = False
+    ped_impact_radius_m: float = 2.0
+    ped_impact_window_steps: int = 5
+    observation_mode: str | None = None
+    observation_level: str | None = None
+    benchmark_track: str | None = None
+    track_schema_version: str | None = None
+    observation_noise: NoiseSpec | None = None
+    tracking_precision: TrackingPrecisionSpec | None = None
+    synthetic_actuation_profile: dict[str, object] | None = None
+    latency_stress_profile: dict[str, object] | None = None
+    safety_wrapper: dict[str, object] | None = None
+    cbf_safety_filter: dict[str, object] | None = None
+    record_planner_decision_trace: bool = False
+    record_simulation_step_trace: bool = False
+    multiprocessing_context: BaseContext | None = None
+    workers: int = 1
+    resume: bool = True
+    circuit_breaker_threshold: int | None = None
+
+
 __all__ = [
     "AdapterImpact",
     "AlgoMeta",
     "EpisodeRecord",
     "EpisodeRecordDict",
+    "MapBatchConfig",
     "MetricsBundle",
+    "NoiseConfig",
     "NoiseSpec",
     "OutcomePayload",
     "PlannerDecisionTrace",
     "PlannerDecisionTraceEntry",
     "PlannerDynamicWindow",
+    "PlannerRuntime",
     "PlannerTargetGoal",
     "ResumeManifest",
     "SNQIWeights",

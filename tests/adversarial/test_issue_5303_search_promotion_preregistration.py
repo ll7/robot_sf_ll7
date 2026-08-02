@@ -41,7 +41,9 @@ from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PREFLIGHT_MODULE_PATH = REPO_ROOT / "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py"
+PREFLIGHT_MODULE_PATH = (
+    REPO_ROOT / "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py"
+)
 CONTRACT_PATH = REPO_ROOT / DEFAULT_CONTRACT_PATH
 RECEIPT_PATH = REPO_ROOT / DEFAULT_RECEIPT_PATH
 MANIFEST_PATH = REPO_ROOT / DEFAULT_MANIFEST_PATH

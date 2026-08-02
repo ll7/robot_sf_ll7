@@ -75,6 +75,21 @@ Independent confirmation that #4437 is itself a valid candidate: `gh pr list --s
 run would surface #4437 as `closure_review_required` (not `parent_or_roadmap` — its title contains no
 parent marker).
 
+### Current REST-first invocation (issue #6610)
+
+The command and search-rate-limit result above are historical evidence for commit `8b306cad5`.
+The current audit no longer uses GitHub search; it reads bounded REST inventories instead:
+
+```bash
+uv run python scripts/dev/open_issue_closure_audit.py \
+  --max-issue-pages 10 --max-pr-pages 20
+```
+
+If the packet reports `truncated_any: true`, its exit code is non-zero and the inventory is partial;
+inspect the page-budget metadata before increasing either limit. A REST read failure also stays
+fail-closed with a schema-valid error packet. Neither outcome should be retried through the retired
+search route.
+
 ## Closure decision
 
 **Keep #4437 open — `Refs #4437`, not `Closes`.** The closure-audit *enablement tooling* (Phases 1–4
@@ -87,8 +102,8 @@ criteria.
 
 ### Residual checklist (dispatchable — for an authorized comment/close lane)
 
-- [ ] Run `open_issue_closure_audit.py` to produce the live candidate packet (read-only; retry if the
-      GitHub search API is rate-limited).
+- [ ] Run `open_issue_closure_audit.py --max-issue-pages 10 --max-pr-pages 20` to produce the live
+      candidate packet (read-only; inspect page-budget metadata before increasing a partial inventory).
 - [ ] For each candidate, read the issue acceptance criteria + merged PR body/diff; decide
       close-fully-covered / residual / parent-ledger.
 - [ ] `closure_mechanics.py --apply --close-issues <human-verified numbers>` for fully-covered issues;

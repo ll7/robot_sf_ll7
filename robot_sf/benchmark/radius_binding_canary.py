@@ -352,10 +352,68 @@ def probe_contact_logic(
             robot_radius = float(cfg.robot_config.radius)
             ped_radius = float(cfg.sim_config.ped_radius)
             runtime_evidence: dict[str, Any] = {}
+            runtime_boundary_binds = True
         else:
+            import numpy as np  # noqa: PLC0415
+
             occupancy = runtime_binding.occupancy
             robot_radius = float(occupancy.agent_radius)
             ped_radius = float(occupancy.ped_radius)
+            center = (float(occupancy.width) / 2.0, float(occupancy.height) / 2.0)
+            boundary_eps = 1e-6
+
+            def obstacle_segments(offset: float) -> np.ndarray:
+                obstacle_x = center[0] + float(offset)
+                return np.asarray(
+                    [[obstacle_x, center[1] - 1.0, obstacle_x, center[1] + 1.0]],
+                    dtype=float,
+                )
+
+            def pedestrian_coords(offset: float) -> np.ndarray:
+                return np.asarray([[center[0] + float(offset), center[1]]], dtype=float)
+
+            obstacle_inside = bool(
+                replace(
+                    occupancy,
+                    get_agent_coords=lambda: center,
+                    get_obstacle_coords=lambda: obstacle_segments(robot_radius - boundary_eps),
+                    get_pedestrian_coords=lambda: np.empty((0, 2), dtype=float),
+                ).is_obstacle_collision
+            )
+            obstacle_outside = bool(
+                replace(
+                    occupancy,
+                    get_agent_coords=lambda: center,
+                    get_obstacle_coords=lambda: obstacle_segments(robot_radius + boundary_eps),
+                    get_pedestrian_coords=lambda: np.empty((0, 2), dtype=float),
+                ).is_obstacle_collision
+            )
+            pedestrian_inside = bool(
+                replace(
+                    occupancy,
+                    get_agent_coords=lambda: center,
+                    get_obstacle_coords=lambda: np.empty((0, 4), dtype=float),
+                    get_pedestrian_coords=lambda: pedestrian_coords(
+                        robot_radius + ped_radius - boundary_eps
+                    ),
+                ).is_pedestrian_collision
+            )
+            pedestrian_outside = bool(
+                replace(
+                    occupancy,
+                    get_agent_coords=lambda: center,
+                    get_obstacle_coords=lambda: np.empty((0, 4), dtype=float),
+                    get_pedestrian_coords=lambda: pedestrian_coords(
+                        robot_radius + ped_radius + boundary_eps
+                    ),
+                ).is_pedestrian_collision
+            )
+            runtime_boundary_binds = (
+                obstacle_inside
+                and not obstacle_outside
+                and pedestrian_inside
+                and not pedestrian_outside
+            )
             runtime_evidence = {
                 "runtime_component": (
                     "ContinuousOccupancy.agent_radius/ped_radius + "
@@ -363,6 +421,10 @@ def probe_contact_logic(
                 ),
                 "runtime_obstacle_collision": bool(occupancy.is_obstacle_collision),
                 "runtime_pedestrian_collision": bool(occupancy.is_pedestrian_collision),
+                "runtime_obstacle_boundary_inside": obstacle_inside,
+                "runtime_obstacle_boundary_outside": obstacle_outside,
+                "runtime_pedestrian_boundary_inside": pedestrian_inside,
+                "runtime_pedestrian_boundary_outside": pedestrian_outside,
             }
         radius_sum = robot_radius + ped_radius
 
@@ -378,12 +440,18 @@ def probe_contact_logic(
             near_miss_dist=NEAR_MISS_DIST,
         )
         boundary_binds = inside_label == LABEL_COLLISION and outside_label != LABEL_COLLISION
-        bound = _radius_matches(robot_radius, target_radius_m, tolerance_m) and boundary_binds
+        bound = (
+            _radius_matches(robot_radius, target_radius_m, tolerance_m)
+            and boundary_binds
+            and runtime_boundary_binds
+        )
         note = ""
         if not _radius_matches(robot_radius, target_radius_m, tolerance_m):
             note = "contact logic robot radius did not bind the declared radius"
         elif not boundary_binds:
             note = "contact boundary did not flip at robot_radius + ped_radius"
+        elif not runtime_boundary_binds:
+            note = "runtime occupancy collision boundaries did not consume the bound radii"
         return SurfaceVerdict(
             surface=surface,
             expected_radius_m=float(target_radius_m),

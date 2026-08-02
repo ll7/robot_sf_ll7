@@ -81,6 +81,11 @@ def test_canary_go_on_narrow_doorway(narrow_doorway_scenario: dict, radius: floa
         "ContinuousOccupancy.agent_radius/ped_radius + "
         "is_obstacle_collision/is_pedestrian_collision"
     )
+    contact_evidence = by_surface["obstacle_pedestrian_contact_logic"].evidence
+    assert contact_evidence["runtime_obstacle_boundary_inside"] is True
+    assert contact_evidence["runtime_obstacle_boundary_outside"] is False
+    assert contact_evidence["runtime_pedestrian_boundary_inside"] is True
+    assert contact_evidence["runtime_pedestrian_boundary_outside"] is False
     assert by_surface["planner_inputs"].evidence["runtime_component"] == (
         "Simulator.pysf_sim.forces[].config.robot_radius"
     )

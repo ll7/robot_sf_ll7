@@ -998,12 +998,12 @@ def _predicate_to_dict(predicate: TraceFailurePredicate | Mapping[str, Any]) -> 
             predicate_dict = {
                 field.name: getattr(predicate, field.name) for field in fields(predicate)
             }
-        except Exception as exc:
+        except (AttributeError, TypeError) as exc:
             raise FailureDiagnosisError("predicate dataclass fields could not be read") from exc
     elif callable(getattr(predicate, "to_dict", None)):
         try:
             raw_predicate = predicate.to_dict()
-        except Exception as exc:
+        except (AttributeError, OverflowError, RecursionError, TypeError, ValueError) as exc:
             raise FailureDiagnosisError("predicate.to_dict() failed") from exc
         if not isinstance(raw_predicate, Mapping):
             raise FailureDiagnosisError("predicate.to_dict() must return a mapping")

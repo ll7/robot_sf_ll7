@@ -348,7 +348,11 @@ def _paginate_rest(
             raise ValueError(f"Invalid JSON from GitHub REST ({paged_path}): {exc.msg}") from exc
         if not isinstance(payload, list):
             raise ValueError(f"Expected JSON list from GitHub REST ({paged_path})")
-        page_rows = [row for row in payload if isinstance(row, dict)]
+        page_rows: list[dict[str, object]] = []
+        for row in payload:
+            if not isinstance(row, dict):
+                raise ValueError(f"Expected JSON list of objects from GitHub REST ({paged_path})")
+            page_rows.append(row)
         rows.extend(page_rows)
         pages_read = page
         if len(page_rows) < per_page:

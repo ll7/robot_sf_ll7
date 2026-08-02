@@ -604,6 +604,20 @@ def test_paginate_rest_reports_invalid_json(monkeypatch: pytest.MonkeyPatch) -> 
         )
 
 
+def test_paginate_rest_rejects_non_object_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A list containing a malformed row fails closed instead of looking complete."""
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return _completed(json.dumps([{"number": 1}, "malformed-row"]))
+
+    monkeypatch.setattr(open_issue_closure_audit.subprocess, "run", fake_run)
+
+    with pytest.raises(ValueError, match="Expected JSON list of objects"):
+        open_issue_closure_audit._paginate_rest(
+            "repos/x/issues?state=open", max_pages=1, per_page=10
+        )
+
+
 def test_main_reports_rest_error_as_schema_valid_packet_exit_two(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

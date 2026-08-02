@@ -1,0 +1,50 @@
+# Opt-in bounded residual-control reactive adversary (issue #4360, post-freeze item 2).
+#
+# Capability-only slice: enabling this perturbs (does NOT replace) the nominal
+# Social Force pedestrian behavior at a 0.5 s macro-action cadence via a bounded
+# residual acceleration. It makes no benchmark, planner-ranking, safety, or
+# paper-facing claim and defines no stress-case metric. Covariance Matrix
+# Adaptation Evolution Strategy (CMA-ES), Monte Carlo Tree Search (MCTS), and
+# Proximal Policy Optimization (PPO) adversaries are deferred slices that will
+# implement the same ResidualAdversaryPolicy interface.
+#
+# This file documents the opt-in knobs for humans and downstream tooling. Copy the
+# ``residual_adversary`` mapping under a scenario's
+# ``simulation_config.residual_adversary`` key; the scenario loader validates and
+# applies it to ``SimulationSettings`` (see robot_sf/ped_npc/residual_adversary.py
+# and docs/context/issue_4360_reactive_adversary_design.md).
+schema_version: residual_adversary_example.v1
+issue: 4360
+claim_boundary: >
+  Capability-only: bounded residual-control reactive adversary interface and
+  runtime wiring. No benchmark, metric, schema, planner-ranking, safety, or
+  paper-facing claim. No stress-case metric (issue item 4 is deferred). No
+  CMA-ES/MCTS or PPO adversary and no matched-compute comparison.
+naming: reactive_adversarial_stress_testing
+residual_adversary:
+  is_active: true
+  # Macro-action cadence: a new residual proposal is requested every 0.5 s and
+  # held constant between boundaries.
+  macro_action_dt_s: 0.5
+  # Hard bounds enforced on every applied residual (see BoundedResidualAdversary).
+  max_residual_accel_mps2: 1.5
+  max_jerk_mps3: 7.5
+  max_speed_delta_mps: 0.5
+  max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
+  max_route_deviation_m: 1.5
+  min_separation_m: 0.6
+  target_ped_idx: -1  # -1 anywhere in the selector targets all eligible NPC pedestrians
+  obstacle_projection_margin_m: 0.1
+  seed: null
+notes:
+  - >
+    pysocialforce.forces.SocialForce remains the base law; the residual is added
+    to the already-computed pedestrian forces, so the base law is preserved and
+    only perturbed (perturb-not-replace).
+  - >
+    The bundled ScriptedPullResidualAdversaryPolicy is a deterministic bounded
+    baseline used for runtime wiring and tests; it is not the search or learned
+    adversary.
+  - >
+    Off by default. Existing pedestrian-model defaults and the scripted
+    AdversarialPedForce semantics are unchanged (additive opt-in only).

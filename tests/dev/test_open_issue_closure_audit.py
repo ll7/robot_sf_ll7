@@ -555,6 +555,27 @@ def test_gh_api_get_reports_missing_gh(monkeypatch: pytest.MonkeyPatch) -> None:
         open_issue_closure_audit._gh_api_get("repos/ll7/robot_sf_ll7/issues")
 
 
+def test_main_reports_rest_timeout_as_schema_valid_packet_exit_two(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A bounded REST timeout fails closed with the standard error packet."""
+
+    def timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd=["gh", "api"], timeout=30)
+
+    monkeypatch.setattr(open_issue_closure_audit.subprocess, "run", timeout)
+
+    exit_code = open_issue_closure_audit.main(["--repo", "ll7/robot_sf_ll7"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 2
+    assert payload["schema"] == "open_issue_closure_audit.v1"
+    assert payload["read_only"] is True
+    assert payload["issue_writes"] is False
+    assert payload["project_writes"] is False
+    assert "GitHub REST read timed out after 30s" in payload["error"]
+
+
 def test_paginate_rest_reports_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed REST read fails closed instead of silently returning partial data."""
 

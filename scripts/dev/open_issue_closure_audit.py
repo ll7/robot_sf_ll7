@@ -314,6 +314,8 @@ def _gh_api_get(path: str, *, timeout: int = 30) -> subprocess.CompletedProcess[
         return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
     except FileNotFoundError as exc:
         raise RuntimeError("GitHub CLI 'gh' was not found") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"GitHub REST read timed out after {timeout}s ({path})") from exc
 
 
 def _paginate_rest(

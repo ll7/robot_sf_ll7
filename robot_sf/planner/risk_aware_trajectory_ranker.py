@@ -595,7 +595,6 @@ def _composite_cost(components: ScoreComponents, weights: RankingWeights) -> flo
 
 
 def _hard_gate(
-    action: CandidateAction,
     pedestrians: Sequence[PedestrianState],
     *,
     robot_positions: NDArray[np.floating],
@@ -633,8 +632,8 @@ def _hard_gate(
         verifier_result = verify_trajectory(
             robot_positions=robot_positions,
             robot_velocities=robot_velocities,
-            pedestrian_positions=_pedestrian_positions(pedestrians, risk_config),
-            pedestrian_velocities=_pedestrian_velocities(pedestrians, risk_config),
+            pedestrian_positions=_pedestrian_positions(pedestrians),
+            pedestrian_velocities=_pedestrian_velocities(pedestrians),
             dt_s=risk_config.dt_s,
             robot_radius_m=risk_config.robot_radius_m,
             pedestrian_radius_m=risk_config.pedestrian_radius_m,
@@ -665,16 +664,12 @@ def _hard_gate(
     )
 
 
-def _pedestrian_positions(
-    pedestrians: Sequence[PedestrianState], config: RiskEstimatorConfig
-) -> NDArray[np.floating]:
+def _pedestrian_positions(pedestrians: Sequence[PedestrianState]) -> NDArray[np.floating]:
     """Return the ``(N, 2)`` static pedestrian positions for the verifier."""
     return np.asarray([np.asarray(actor.position, dtype=float).reshape(2) for actor in pedestrians])
 
 
-def _pedestrian_velocities(
-    pedestrians: Sequence[PedestrianState], config: RiskEstimatorConfig
-) -> NDArray[np.floating]:
+def _pedestrian_velocities(pedestrians: Sequence[PedestrianState]) -> NDArray[np.floating]:
     """Return the ``(N, 2)`` static pedestrian velocities for the verifier."""
     return np.asarray([np.asarray(actor.velocity, dtype=float).reshape(2) for actor in pedestrians])
 
@@ -755,7 +750,6 @@ def rank_trajectories(
             window_half_steps=peak_window_half_steps,
         )
         hard_gate = _hard_gate(
-            action,
             pedestrians,
             robot_positions=robot_positions,
             robot_velocities=robot_velocities,

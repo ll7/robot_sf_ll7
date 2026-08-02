@@ -8,7 +8,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from shapely.geometry import GeometryCollection, LineString, Point, Polygon, box
@@ -288,6 +288,72 @@ def _require_route_geometry(
     return start, goal, route_line
 
 
+@dataclass
+class _RouteCertificationState:
+    """Mutable per-route state threaded through the staged certification pipeline."""
+
+    route: GlobalRoute
+    route_id: str
+    map_def: MapDefinition
+    config: RobotSimulationConfig
+    settings: CertificationSettings
+    robot_radius: float
+    ped_radius: float
+    start: Vec2D | None
+    goal: Vec2D | None
+    route_line: LineString | None
+    obstacle_union: Any
+    map_bounds: Polygon
+    reasons: list[str] = field(default_factory=list)
+    checks: dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
+    planned_line: LineString | None = None
+
+
+def _route_certification_state(
+    route: GlobalRoute,
+    *,
+    map_def: MapDefinition,
+    map_name: str,
+    config: RobotSimulationConfig,
+    settings: CertificationSettings,
+) -> _RouteCertificationState:
+    """Build the initial certification state for one route.
+
+    Returns:
+        _RouteCertificationState: Envelope, geometry, and check accumulators.
+    """
+    route_id = route.source_label or f"robot_route_{route.spawn_id}_{route.goal_id}"
+    robot_radius = float(getattr(config.robot_config, "radius", 1.0))
+    ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
+    start, goal = _route_start_goal(route)
+    route_line = _line_from_points(route.waypoints)
+    obstacle_union = _obstacle_union(map_def)
+    map_bounds = box(0.0, 0.0, float(map_def.width), float(map_def.height))
+    return _RouteCertificationState(
+        route=route,
+        route_id=route_id,
+        map_def=map_def,
+        config=config,
+        settings=settings,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+        start=start,
+        goal=goal,
+        route_line=route_line,
+        obstacle_union=obstacle_union,
+        map_bounds=map_bounds,
+        checks={
+            "map_name": map_name,
+            "robot_radius_m": robot_radius,
+            "ped_radius_m": ped_radius,
+            "start": list(start) if start else None,
+            "goal": list(goal) if goal else None,
+            "waypoint_count": len(route.waypoints),
+        },
+    )
+
+
 def _certify_route(
     route: GlobalRoute,
     *,
@@ -301,154 +367,95 @@ def _certify_route(
     Returns:
         RouteCertificate: Route classification, eligibility, checks, and evidence.
     """
-    route_id = route.source_label or f"robot_route_{route.spawn_id}_{route.goal_id}"
-    reasons: list[str] = []
-    checks: dict[str, Any] = {"map_name": map_name}
-    evidence: dict[str, Any] = {}
-    robot_radius = float(getattr(config.robot_config, "radius", 1.0))
-    ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
-    start, goal = _route_start_goal(route)
-    route_line = _line_from_points(route.waypoints)
-    obstacle_union = _obstacle_union(map_def)
-    map_bounds = box(0.0, 0.0, float(map_def.width), float(map_def.height))
-
-    checks.update(
-        {
-            "robot_radius_m": robot_radius,
-            "ped_radius_m": ped_radius,
-            "start": list(start) if start else None,
-            "goal": list(goal) if goal else None,
-            "waypoint_count": len(route.waypoints),
-        }
-    )
-
-    invalid_reasons = _validate_route_shape(route, start, goal, map_bounds, obstacle_union)
-    if invalid_reasons:
-        reasons.extend(invalid_reasons)
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=INVALID,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
-        )
-
-    start, goal, route_line = _require_route_geometry(start, goal, route_line)
-    direct_length = float(Point(start).distance(Point(goal)))
-    checks["direct_start_goal_distance_m"] = direct_length
-    checks["authored_route_length_m"] = _polyline_length(route.waypoints)
-    checks["minimum_static_clearance_m"] = _minimum_static_clearance(
-        route_line,
-        obstacle_union=obstacle_union,
-        robot_radius=robot_radius,
-    )
-
-    planned_path, planner_info, planner_error = _plan_inflated_shortest_path(
-        map_def,
-        start=start,
-        goal=goal,
-        robot_radius=robot_radius,
+    state = _route_certification_state(
+        route,
+        map_def=map_def,
+        map_name=map_name,
+        config=config,
         settings=settings,
     )
-    if planned_path is None:
-        reasons.append(f"no_inflated_collision_free_path: {planner_error}")
-        checks["inflated_collision_free_path"] = False
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=GEOMETRICALLY_INFEASIBLE,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
-        )
+    status = _check_route_shape(state)
+    if status is None:
+        status = _check_geometric_feasibility(state)
+    if status is None:
+        status = _check_kinodynamics(state)
+    if status is None:
+        status = _check_infrastructure(state)
+    if status is None:
+        status = _check_dynamics(state)
+    if status is None:
+        status = _finalize_solvable_route(state)
+    return _route_certificate(
+        route,
+        route_id=state.route_id,
+        status=status,
+        reasons=state.reasons,
+        checks=state.checks,
+        evidence=state.evidence,
+    )
 
+
+def _check_route_shape(state: _RouteCertificationState) -> str | None:
+    """Fail closed on unusable route geometry before planner-based certification.
+
+    Returns:
+        str | None: ``INVALID`` after recording reasons, or ``None`` when usable.
+    """
+    invalid_reasons = _validate_route_shape(
+        state.route,
+        state.start,
+        state.goal,
+        state.map_bounds,
+        state.obstacle_union,
+    )
+    if invalid_reasons:
+        state.reasons.extend(invalid_reasons)
+        return INVALID
+    return None
+
+
+def _check_geometric_feasibility(state: _RouteCertificationState) -> str | None:
+    """Plan an inflated shortest path and verify continuous collision freedom.
+
+    Returns:
+        str | None: Early-exit certification status, or ``None`` when feasible.
+    """
+    start, goal, route_line = _require_route_geometry(state.start, state.goal, state.route_line)
+    state.start, state.goal, state.route_line = start, goal, route_line
+    direct_length = float(Point(start).distance(Point(goal)))
+    state.checks["direct_start_goal_distance_m"] = direct_length
+    state.checks["authored_route_length_m"] = _polyline_length(state.route.waypoints)
+    state.checks["minimum_static_clearance_m"] = _minimum_static_clearance(
+        route_line,
+        obstacle_union=state.obstacle_union,
+        robot_radius=state.robot_radius,
+    )
+    planned_path, planner_info, planner_error = _plan_inflated_shortest_path(
+        state.map_def,
+        start=start,
+        goal=goal,
+        robot_radius=state.robot_radius,
+        settings=state.settings,
+    )
+    if planned_path is None:
+        state.reasons.append(f"no_inflated_collision_free_path: {planner_error}")
+        state.checks["inflated_collision_free_path"] = False
+        return GEOMETRICALLY_INFEASIBLE
     planned_line, shortest_length, path_length_ratio = _planned_path_metrics(
         planned_path,
         direct_length,
     )
-
-    # Issue #6139: the A* occupancy-grid verdict is necessary but not sufficient.
-    # Grid inflation approximates the robot disc by cells, so a diagonally adjacent
-    # free cell can produce a planned path whose continuous swept envelope (the disc
-    # swept along the polyline) clips an obstacle corner. Re-validate the planned
-    # path continuously against the same parsed obstacle geometry and robot envelope
-    # the simulator uses, and fail closed when the envelope collides or the geometry
-    # cannot be verified.
-    collision_checks = _planned_path_collision_checks(
-        planned_path,
-        map_def=map_def,
+    collision_status = _check_planned_path_collisions(
+        state,
+        planned_path=planned_path,
         goal=goal,
-        obstacle_union=obstacle_union,
-        robot_radius=robot_radius,
+        planner_info=planner_info,
+        shortest_length=shortest_length,
+        path_length_ratio=path_length_ratio,
     )
-    checks.update(collision_checks)
-    swept_envelope = collision_checks["swept_envelope"]
-    simulator_collision = collision_checks["simulator_obstacle_collision"]
-    unverified = next(
-        ((name, verdict) for name, verdict in collision_checks.items() if not verdict["validated"]),
-        None,
-    )
-    if unverified is not None:
-        check_name, check_verdict = unverified
-        reasons.append(f"planned_path_{check_name}_unverifiable: {check_verdict['blocker']}")
-        checks["inflated_collision_free_path"] = False
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=INVALID,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
-        )
-    if swept_envelope["clips_obstacle"]:
-        reasons.append(
-            "planned_path_swept_envelope_clips_obstacle: "
-            f"full_polyline_clearance_m={swept_envelope['clearance_m']:.6g}"
-        )
-        checks["inflated_collision_free_path"] = False
-        checks.update(
-            {
-                "shortest_path_length_m": shortest_length,
-                "path_length_ratio": path_length_ratio,
-                "planner": planner_info,
-                "planned_waypoint_count": len(planned_path),
-                "planned_turn_count": _turn_count(planned_path),
-            }
-        )
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=GEOMETRICALLY_INFEASIBLE,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
-        )
-    if simulator_collision["collides_obstacle"]:
-        reasons.append(
-            "planned_path_simulator_collision: "
-            f"first_collision_sample_index={simulator_collision['first_collision_sample_index']}"
-        )
-        checks["inflated_collision_free_path"] = False
-        checks.update(
-            {
-                "shortest_path_length_m": shortest_length,
-                "path_length_ratio": path_length_ratio,
-                "planner": planner_info,
-                "planned_waypoint_count": len(planned_path),
-                "planned_turn_count": _turn_count(planned_path),
-            }
-        )
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=GEOMETRICALLY_INFEASIBLE,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
-        )
-
-    checks.update(
+    if collision_status is not None:
+        return collision_status
+    state.checks.update(
         {
             "inflated_collision_free_path": True,
             "shortest_path_length_m": shortest_length,
@@ -458,71 +465,167 @@ def _certify_route(
             "planned_turn_count": _turn_count(planned_path),
         }
     )
+    state.planned_line = planned_line
+    return None
 
-    kinodynamic_reasons, kinodynamic_checks = _kinodynamic_checks(
-        route,
-        robot_config=config.robot_config,
+
+def _check_planned_path_collisions(
+    state: _RouteCertificationState,
+    *,
+    planned_path: list[Vec2D],
+    goal: Vec2D,
+    planner_info: dict[str, Any],
+    shortest_length: float,
+    path_length_ratio: float | None,
+) -> str | None:
+    """Re-validate the planned path continuously against obstacle geometry.
+
+    Returns:
+        str | None: Early-exit certification status, or ``None`` when collision-free.
+    """
+    # Issue #6139: the A* occupancy-grid verdict is necessary but not sufficient.
+    # Grid inflation approximates the robot disc by cells, so a diagonally adjacent
+    # free cell can produce a planned path whose continuous swept envelope (the disc
+    # swept along the polyline) clips an obstacle corner. Re-validate the planned
+    # path continuously against the same parsed obstacle geometry and robot envelope
+    # the simulator uses, and fail closed when the envelope collides or the geometry
+    # cannot be verified.
+    collision_checks = _planned_path_collision_checks(
+        planned_path,
+        map_def=state.map_def,
+        goal=goal,
+        obstacle_union=state.obstacle_union,
+        robot_radius=state.robot_radius,
     )
-    checks["kinodynamic"] = kinodynamic_checks
-    if kinodynamic_reasons:
-        reasons.extend(kinodynamic_reasons)
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=KINODYNAMICALLY_INFEASIBLE,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
+    state.checks.update(collision_checks)
+    swept_envelope = collision_checks["swept_envelope"]
+    simulator_collision = collision_checks["simulator_obstacle_collision"]
+    unverified = next(
+        ((name, verdict) for name, verdict in collision_checks.items() if not verdict["validated"]),
+        None,
+    )
+    if unverified is not None:
+        check_name, check_verdict = unverified
+        state.reasons.append(f"planned_path_{check_name}_unverifiable: {check_verdict['blocker']}")
+        state.checks["inflated_collision_free_path"] = False
+        return INVALID
+    if swept_envelope["clips_obstacle"]:
+        state.reasons.append(
+            "planned_path_swept_envelope_clips_obstacle: "
+            f"full_polyline_clearance_m={swept_envelope['clearance_m']:.6g}"
         )
+        _mark_planned_path_collision_failure(
+            state,
+            planned_path=planned_path,
+            planner_info=planner_info,
+            shortest_length=shortest_length,
+            path_length_ratio=path_length_ratio,
+        )
+        return GEOMETRICALLY_INFEASIBLE
+    if simulator_collision["collides_obstacle"]:
+        state.reasons.append(
+            "planned_path_simulator_collision: "
+            f"first_collision_sample_index={simulator_collision['first_collision_sample_index']}"
+        )
+        _mark_planned_path_collision_failure(
+            state,
+            planned_path=planned_path,
+            planner_info=planner_info,
+            shortest_length=shortest_length,
+            path_length_ratio=path_length_ratio,
+        )
+        return GEOMETRICALLY_INFEASIBLE
+    return None
 
+
+def _mark_planned_path_collision_failure(
+    state: _RouteCertificationState,
+    *,
+    planned_path: list[Vec2D],
+    planner_info: dict[str, Any],
+    shortest_length: float,
+    path_length_ratio: float | None,
+) -> None:
+    """Record planned-path evidence after a continuous collision failure."""
+    state.checks["inflated_collision_free_path"] = False
+    state.checks.update(
+        {
+            "shortest_path_length_m": shortest_length,
+            "path_length_ratio": path_length_ratio,
+            "planner": planner_info,
+            "planned_waypoint_count": len(planned_path),
+            "planned_turn_count": _turn_count(planned_path),
+        }
+    )
+
+
+def _check_kinodynamics(state: _RouteCertificationState) -> str | None:
+    """Record robot-kinematics compatibility and fail closed on violations.
+
+    Returns:
+        str | None: ``KINODYNAMICALLY_INFEASIBLE``, or ``None`` when compatible.
+    """
+    kinodynamic_reasons, kinodynamic_checks = _kinodynamic_checks(
+        state.route,
+        robot_config=state.config.robot_config,
+    )
+    state.checks["kinodynamic"] = kinodynamic_checks
+    if kinodynamic_reasons:
+        state.reasons.extend(kinodynamic_reasons)
+        return KINODYNAMICALLY_INFEASIBLE
+    return None
+
+
+def _check_infrastructure(state: _RouteCertificationState) -> str | None:
+    """Record infrastructure-zone restrictions and fail closed on violations.
+
+    Returns:
+        str | None: ``INVALID``, or ``None`` when route traversal is legal.
+    """
+    route_line = cast("LineString", state.route_line)
     infrastructure_reasons, infrastructure_checks = _infrastructure_checks(
-        map_def,
+        state.map_def,
         route_line=route_line,
     )
-    checks["infrastructure"] = infrastructure_checks
+    state.checks["infrastructure"] = infrastructure_checks
     if infrastructure_reasons:
-        reasons.extend(infrastructure_reasons)
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=INVALID,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
-        )
+        state.reasons.extend(infrastructure_reasons)
+        return INVALID
+    return None
 
+
+def _check_dynamics(state: _RouteCertificationState) -> str | None:
+    """Record pedestrian dynamics and fail closed on static route blockers.
+
+    Returns:
+        str | None: ``DYNAMICALLY_OVERCONSTRAINED``, or ``None`` when passable.
+    """
     dynamic_reasons, dynamic_checks = _dynamic_checks(
-        map_def,
-        planned_line=planned_line,
-        robot_radius=robot_radius,
-        ped_radius=ped_radius,
+        state.map_def,
+        planned_line=state.planned_line,
+        robot_radius=state.robot_radius,
+        ped_radius=state.ped_radius,
     )
-    checks["dynamic"] = dynamic_checks
+    state.checks["dynamic"] = dynamic_checks
     if dynamic_reasons:
-        reasons.extend(dynamic_reasons)
-        return _route_certificate(
-            route,
-            route_id=route_id,
-            status=DYNAMICALLY_OVERCONSTRAINED,
-            reasons=reasons,
-            checks=checks,
-            evidence=evidence,
-        )
+        state.reasons.extend(dynamic_reasons)
+        return DYNAMICALLY_OVERCONSTRAINED
+    return None
 
-    route_status = _classify_solvable_route(checks, settings=settings)
-    reasons.extend(_solvable_reasons(route_status, checks, settings=settings))
-    evidence["difficulty_analysis"] = {
+
+def _finalize_solvable_route(state: _RouteCertificationState) -> str:
+    """Classify a feasible route and attach difficulty evidence.
+
+    Returns:
+        str: Solvable-route certification status.
+    """
+    route_status = _classify_solvable_route(state.checks, settings=state.settings)
+    state.reasons.extend(_solvable_reasons(route_status, state.checks, settings=state.settings))
+    state.evidence["difficulty_analysis"] = {
         "source": "docs/context/issue_692_scenario_difficulty_analysis.md",
         "role": "optional_diagnostic_evidence_only",
     }
-    return _route_certificate(
-        route,
-        route_id=route_id,
-        status=route_status,
-        reasons=reasons,
-        checks=checks,
-        evidence=evidence,
-    )
+    return route_status
 
 
 def _aggregate_scenario_certificate(

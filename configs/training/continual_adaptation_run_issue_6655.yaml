@@ -39,8 +39,8 @@ safety_wrapper:
   mutation_permitted: false
 adaptation:
   allowed_parameters:
-  - policy_net.head.
-  - value_net.head.
+  - action_net.
+  - value_net.
   experience_budget:
     bounded: true
     steps: 200000

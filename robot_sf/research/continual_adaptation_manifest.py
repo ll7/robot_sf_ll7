@@ -69,9 +69,11 @@ PPO_SAFETY_WRAPPER_CHECKSUM_PLACEHOLDER = (
 )
 
 # Literal dotted mutable parameter prefixes the adaptation job may update. No
-# wildcards; everything outside this list is frozen. These are disjoint from the
-# immutable safety-wrapper namespace (robot_sf.gym_env.safety_vel_controller).
-PPO_ALLOWED_PARAMETERS = ("policy_net.head.", "value_net.head.")
+# wildcards; everything outside this list is frozen. These are the reviewed SB3
+# PPO output-head namespaces (see ``robot_sf.training.ppo_diagnostics``) and are
+# disjoint from the immutable safety-wrapper namespace
+# (robot_sf.gym_env.safety_vel_controller).
+PPO_ALLOWED_PARAMETERS = ("action_net.", "value_net.")
 
 # Declared bounded finite experience budget. This is a pre-declared bound on a
 # future adaptation job, not an executed step count.

@@ -63,6 +63,10 @@ def test_builder_declares_reviewed_ppo_backend_identity() -> None:
     assert manifest["safety_wrapper"]["mutation_permitted"] is False
     assert manifest["baseline_policy"]["checksum"]["algorithm"] == "sha256"
     assert manifest["safety_wrapper"]["checksum"]["algorithm"] == "sha256"
+    assert tuple(manifest["adaptation"]["allowed_parameters"]) == (
+        "action_net.",
+        "value_net.",
+    )
 
 
 def test_builder_mutable_parameters_are_literal_and_disjoint_from_wrapper() -> None:

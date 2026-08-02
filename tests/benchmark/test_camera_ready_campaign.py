@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import csv
 import io
 import json
@@ -20,6 +21,7 @@ import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
 import robot_sf.benchmark.camera_ready._config_types as camera_ready_config_types_module
 import robot_sf.benchmark.camera_ready._legacy_campaign_facade as camera_ready_legacy_facade
 import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
+import robot_sf.benchmark.camera_ready.campaign as camera_ready_campaign_impl_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 import robot_sf.benchmark.camera_ready_campaign_config as camera_ready_campaign_config_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
@@ -116,6 +118,20 @@ def test_camera_ready_campaign_legacy_module_is_package_owned_facade() -> None:
     """Legacy campaign module resolves to the package-owned compatibility facade."""
     assert camera_ready_campaign_module is camera_ready_legacy_facade
     assert camera_ready_campaign_module.run_campaign is camera_ready_legacy_facade.run_campaign
+
+
+def test_campaign_orchestrators_remain_thin() -> None:
+    """Campaign coordinators stay below the issue #6535 focused-function boundary."""
+    source_path = Path(camera_ready_campaign_impl_module.__file__)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    function_lengths = {
+        node.name: node.end_lineno - node.lineno + 1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+    }
+
+    assert function_lengths["_run_campaign_orchestrator"] <= 80
+    assert function_lengths["_run_campaign_planner_variant_subprocess"] <= 80
 
 
 def test_camera_ready_config_types_keep_legacy_import_identity() -> None:

@@ -175,6 +175,23 @@ def test_rank_no_pedestrian_hazard_is_eligible() -> None:
     assert record.components.clearance_penalty == 0.0
 
 
+def test_rank_hard_verifier_uses_nominal_pedestrian_forecast() -> None:
+    """A future nominal contact is visible to the deterministic hard verifier."""
+    action = action_from_constant_velocity(
+        "stationary", [0.0, 0.0], [0.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+    pedestrian = _ped(1, 0.0, 2.0, vy=-1.0)
+    rankings = rank_trajectories(
+        [action], [pedestrian], risk_config=_risk_config(velocity_std_m_s=0.0)
+    )
+
+    record = rankings[0]
+    assert record.components.min_clearance_m < 0.0
+    assert record.hard_gate.verifier_decision == DECISION_FALLBACK_BRAKE
+    assert "min_clearance_hard" in record.hard_gate.violated_predicates
+    assert record.eligible is False
+
+
 def test_rank_deterministic_collision_is_ineligible() -> None:
     """A head-on drive into a stationary actor is ineligible under both hard gates."""
     action = action_from_constant_velocity(

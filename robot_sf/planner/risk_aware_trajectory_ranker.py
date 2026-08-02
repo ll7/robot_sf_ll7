@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from robot_sf.benchmark.actuator_feasibility import (
+    VERDICT_ACTUATOR_FEASIBLE,
     ActuatorLimitsConfig,
     evaluate_actuator_feasibility,
 )
@@ -243,8 +244,8 @@ class HardGateResult:
 
     Attributes:
         eligible: True iff the verifier did not return ``fallback_brake`` and the
-            actuator-feasibility report is physically feasible. This rejects both
-            ``infeasible`` and ``geometry_only_clear``: the latter means the
+            actuator-feasibility verdict is ``actuator_feasible``. This rejects
+            both ``infeasible`` and ``geometry_only_clear``: the latter means the
             geometry is clear, but the maneuver still violates an actuator limit.
         verifier_decision: Decision returned by :func:`verify_trajectory`
             (``accept`` / ``warn`` / ``fallback_brake``), or ``"skipped_no_hazard"``
@@ -609,9 +610,11 @@ def _hard_gate(
     Returns:
         :class:`HardGateResult` marking the candidate ineligible when either the
         trajectory verifier returns ``fallback_brake`` or the actuator-feasibility
-        report is physically infeasible. A ``geometry_only_clear`` verdict is
+        verdict is not ``actuator_feasible``. A ``geometry_only_clear`` verdict is
         geometrically clear but physically infeasible, so it remains a hard-gate
-        rejection rather than a candidate the ranker may select.
+        rejection rather than a candidate the ranker may select. The canonical
+        ``infeasible`` verdict is also rejected, including when its geometry check
+        fails independently of actuator rates.
     """
     min_clearance_m = estimate.deterministic.min_clearance_m
     hazard_clearance_m = (
@@ -632,7 +635,11 @@ def _hard_gate(
         verifier_result = verify_trajectory(
             robot_positions=robot_positions,
             robot_velocities=robot_velocities,
-            pedestrian_positions=_pedestrian_positions(pedestrians),
+            pedestrian_positions=_pedestrian_positions(
+                pedestrians,
+                horizon_steps=risk_config.horizon_steps,
+                dt_s=risk_config.dt_s,
+            ),
             pedestrian_velocities=_pedestrian_velocities(pedestrians),
             dt_s=risk_config.dt_s,
             robot_radius_m=risk_config.robot_radius_m,
@@ -648,9 +655,10 @@ def _hard_gate(
     ineligible_reasons: list[str] = []
     if verifier_decision == DECISION_FALLBACK_BRAKE:
         ineligible_reasons.append("trajectory_verifier returned fallback_brake")
-    if not actuator_report.physically_feasible:
+    if actuator_report.verdict != VERDICT_ACTUATOR_FEASIBLE:
         ineligible_reasons.append(
-            f"actuator_feasibility reported physically infeasible ({actuator_report.verdict})"
+            "actuator_feasibility reported a non-feasible verdict "
+            f"({actuator_report.verdict}); physically infeasible for ranking"
         )
 
     eligible = not ineligible_reasons
@@ -664,9 +672,22 @@ def _hard_gate(
     )
 
 
-def _pedestrian_positions(pedestrians: Sequence[PedestrianState]) -> NDArray[np.floating]:
-    """Return the ``(N, 2)`` static pedestrian positions for the verifier."""
-    return np.asarray([np.asarray(actor.position, dtype=float).reshape(2) for actor in pedestrians])
+def _pedestrian_positions(
+    pedestrians: Sequence[PedestrianState], *, horizon_steps: int, dt_s: float
+) -> NDArray[np.floating]:
+    """Return nominal constant-velocity pedestrian positions for the verifier.
+
+    The risk estimator and deterministic verifier must inspect the same actor
+    forecast. The verifier accepts time-varying positions, so provide the nominal
+    constant-velocity rollout rather than broadcasting only the current position
+    across the robot horizon.
+    """
+    positions = np.asarray(
+        [np.asarray(actor.position, dtype=float).reshape(2) for actor in pedestrians]
+    )
+    velocities = _pedestrian_velocities(pedestrians)
+    steps = np.arange(horizon_steps + 1, dtype=float)[:, None, None]
+    return positions[None, :, :] + steps * dt_s * velocities[None, :, :]
 
 
 def _pedestrian_velocities(pedestrians: Sequence[PedestrianState]) -> NDArray[np.floating]:

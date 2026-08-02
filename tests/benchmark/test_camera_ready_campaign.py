@@ -121,13 +121,12 @@ def test_camera_ready_campaign_legacy_module_is_package_owned_facade() -> None:
 
 
 def test_campaign_refactor_functions_remain_focused() -> None:
-    """Issue #6535 coordinators and extracted helpers stay below 80 lines."""
+    """Issue #6535 keeps coordinators delegated and all focused functions under 80 lines."""
     source_path = Path(camera_ready_campaign_impl_module.__file__)
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    function_nodes = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
     function_lengths = {
-        node.name: node.end_lineno - node.lineno + 1
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef)
+        name: node.end_lineno - node.lineno + 1 for name, node in function_nodes.items()
     }
 
     focused_function_names = (
@@ -176,6 +175,32 @@ def test_campaign_refactor_functions_remain_focused() -> None:
     )
     for function_name in focused_function_names:
         assert function_lengths[function_name] <= 80, function_name
+
+    expected_phase_calls = {
+        "_run_campaign_planner_variant_subprocess": {
+            "_prepare_campaign_planner_variant_run",
+            "_execute_subprocess_arm",
+            "_parse_subprocess_output",
+            "_collect_subprocess_episodes",
+            "_build_subprocess_run_entry",
+            "_check_subprocess_stop_on_failure",
+        },
+        "_run_campaign_orchestrator": {
+            "_prepare_campaign_execution",
+            "_write_campaign_tables",
+            "_write_campaign_analysis",
+            "_build_campaign_summary_and_write_manifest",
+            "_finalize_campaign_execution",
+        },
+    }
+    for function_name, expected_calls in expected_phase_calls.items():
+        actual_calls = {
+            call.func.id
+            for call in ast.walk(function_nodes[function_name])
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+        }
+        missing_calls = expected_calls - actual_calls
+        assert not missing_calls, f"{function_name} is missing phase calls: {sorted(missing_calls)}"
 
 
 def test_camera_ready_config_types_keep_legacy_import_identity() -> None:

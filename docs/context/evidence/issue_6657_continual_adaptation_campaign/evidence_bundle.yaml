@@ -1,0 +1,16 @@
+# Versioned evidence bundle for continual-adaptation promotion gate (issue #6657).
+#
+# This bundle names the validator-derived adapted-policy identifier distinct from
+# the baseline. It is metadata-only: not an executed adaptation, a promoted policy,
+# or benchmark/paper evidence.
+
+schema_version: continual_adaptation_evidence.v1
+run_id: continual_adaptation_campaign_issue_6657
+issue: 6657
+evidence_boundary: >-
+  protocol_contract_only_no_training_no_checkpoint_write_no_safety_wrapper_mutation_no_policy_promotion_no_benchmark_or_paper_evidence
+baseline_policy_identifier: ppo_ammv_baseline_v3
+derived_adapted_policy_identifier: "ppo_ammv_baseline_v3#continual-adaptation@sha256:7e1d8e6036fa246c"
+execution_mode: native
+claim_boundary: >-
+  Metadata-only campaign integration fixture. Not benchmark or paper evidence.

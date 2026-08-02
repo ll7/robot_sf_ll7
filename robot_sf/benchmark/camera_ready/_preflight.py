@@ -394,69 +394,23 @@ def _build_preflight_preview_payload(
     return payload
 
 
-def prepare_campaign_preflight(  # noqa: PLR0913
+# ---------------------------------------------------------------------------
+# Focused sub-functions extracted from prepare_campaign_preflight (issue #6537)
+# ---------------------------------------------------------------------------
+
+
+def _run_preflight_checks(
     cfg: CampaignConfig,
     *,
-    output_root: Path | None = None,
-    label: str | None = None,
-    campaign_id: str | None = None,
-    invoked_command: str | None = None,
-    validate_campaign_config: Callable[[CampaignConfig], None] | None = None,
-    build_route_clearance_warnings: Callable[..., list[dict[str, Any]]] | None = None,
-    checkpoint_preflight_mode: CheckpointPreflightMode = "metadata_only",
-    checkpoint_cache_dir: Path | None = None,
-    checkpoint_registry_path: str | Path | None = None,
+    checkpoint_preflight_mode: CheckpointPreflightMode,
+    checkpoint_cache_dir: Path | None,
+    checkpoint_registry_path: str | Path | None,
 ) -> dict[str, Any]:
-    """Prepare campaign preflight artifacts and matrix-definition summary.
-
-    Args:
-        cfg: A loaded camera-ready campaign config.
-        output_root: Optional campaign base output directory.
-        label: Optional label suffix embedded into ``campaign_id``.
-        campaign_id: Optional exact campaign directory id (used with resume-enabled configs).
-        invoked_command: Optional shell-quoted command line recorded in the manifest.
-        validate_campaign_config: Injected config validator (defaults to the canonical one).
-        build_route_clearance_warnings: Injected route-clearance warning builder.
-        checkpoint_preflight_mode: Arm-checkpoint preflight mode.
-
-            * ``"metadata_only"`` (default, cheap, network-free): only confirm each checkpoint is
-              present locally or declares a durable remote source to stage from. Safe for the
-              always-on guard including offline preflight-only workflows. A ``stageable_remote``
-              arm passes this check but is **not** submit-safe (see ``submit_safe`` in the report).
-            * ``"enforced_staged"``: actually download and checksum-verify each registry artifact
-              into the durable cache via :func:`robot_sf.models.resolve_model_path`. The submit
-              wrapper must invoke this mode (or run
-              ``scripts/benchmark/preflight_campaign_checkpoints.py --stage``) before ``sbatch`` so
-              the compute node loads a validated file (issue #4613).
-
-        checkpoint_cache_dir: Optional cache directory override for staged downloads
-            (only meaningful with ``checkpoint_preflight_mode="enforced_staged"``).
-        checkpoint_registry_path: Optional model-registry path override.
+    """Run ORCA, policy-dependency, and arm-checkpoint preflight checks.
 
     Returns:
-        Paths and metadata required by preflight-only workflows and full runs.
-
-    Raises:
-        OrcaRvo2PreflightError: When enabled ORCA-dependent planners require ``rvo2`` but it is
-            not importable.
-        RouteClearanceError: When any scenario route centerline lies closer to a static obstacle
-            than the robot radius, making the route geometrically impossible to follow without
-            collision.
-        CampaignCheckpointPreflightError: When any enabled arm names a checkpoint that cannot be
-            resolved (or, in ``enforced_staged`` mode, cannot be staged) before scenarios load.
-        CampaignPolicyDependencyPreflightError: When an enabled arm cannot import its required
-            policy dependency in the active campaign interpreter.
-        CampaignScenarioMapPreflightError: When a prepared scenario's ``map_file`` cannot resolve
-            with the same repository-root path semantics used by campaign execution.
+        Checkpoint preflight report from the arm-checkpoint preflight gate.
     """
-    if validate_campaign_config is None:
-        from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
-            _validate_campaign_config as validate_campaign_config,
-        )
-    if build_route_clearance_warnings is None:
-        build_route_clearance_warnings = _build_route_clearance_warnings
-
-    validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
     check_campaign_arm_policy_dependencies_preflight(cfg)
     # Fail fast when an enabled arm names a checkpoint that cannot be resolved (unknown/mistyped
@@ -467,13 +421,27 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     #   * enforced_staged: actually download+checksum-verify each registry artifact so the compute
     #     node loads a validated file. The submit wrapper must run this before sbatch.
     checkpoint_preflight_stage = checkpoint_preflight_mode == "enforced_staged"
-    checkpoint_preflight_report = check_campaign_arm_checkpoints_preflight(
+    return check_campaign_arm_checkpoints_preflight(
         cfg,
         stage=checkpoint_preflight_stage,
         registry_path=checkpoint_registry_path,
         cache_dir=checkpoint_cache_dir,
         fail_closed_implicit=cfg.checkpoint_provenance_enforcement == "error",
     )
+
+
+def _setup_campaign_directories(
+    cfg: CampaignConfig,
+    *,
+    output_root: Path | None,
+    label: str | None,
+    campaign_id: str | None,
+) -> tuple[str, Path, Path, Path]:
+    """Resolve campaign identity and create output directories.
+
+    Returns:
+        Tuple of ``(campaign_id, campaign_root, reports_dir, preflight_dir)``.
+    """
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
     base_dir = (
@@ -486,8 +454,52 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     preflight_dir = campaign_root / "preflight"
     reports_dir.mkdir(parents=True, exist_ok=True)
     preflight_dir.mkdir(parents=True, exist_ok=True)
+    return campaign_id, campaign_root, reports_dir, preflight_dir
 
-    created_at_utc = _utc_now()
+
+def _validate_and_setup_campaign(
+    cfg: CampaignConfig,
+    *,
+    checkpoint_preflight_mode: CheckpointPreflightMode,
+    checkpoint_cache_dir: Path | None,
+    checkpoint_registry_path: str | Path | None,
+    output_root: Path | None,
+    label: str | None,
+    campaign_id: str | None,
+) -> tuple[dict[str, Any], str, Path, Path, Path]:
+    """Run preflight checks and set up campaign directories.
+
+    Returns:
+        Tuple of ``(checkpoint_report, campaign_id, campaign_root, reports_dir, preflight_dir)``.
+    """
+    ckpt_report = _run_preflight_checks(
+        cfg,
+        checkpoint_preflight_mode=checkpoint_preflight_mode,
+        checkpoint_cache_dir=checkpoint_cache_dir,
+        checkpoint_registry_path=checkpoint_registry_path,
+    )
+    campaign_id, campaign_root, reports_dir, preflight_dir = _setup_campaign_directories(
+        cfg,
+        output_root=output_root,
+        label=label,
+        campaign_id=campaign_id,
+    )
+    return ckpt_report, campaign_id, campaign_root, reports_dir, preflight_dir
+
+
+def _load_scenarios_and_route_clearance(
+    cfg: CampaignConfig,
+    build_route_clearance_warnings: Callable[..., list[dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Load scenarios, validate maps, and build route-clearance warnings.
+
+    Returns:
+        Tuple of ``(scenarios, route_clearance_warnings, route_clearance_warning_summary)``.
+
+    Raises:
+        CampaignScenarioMapPreflightError: When a scenario ``map_file`` cannot resolve.
+        RouteClearanceError: When a route centerline is geometrically infeasible.
+    """
     scenarios = _load_campaign_scenarios(cfg)
     check_campaign_scenario_maps_preflight(scenarios)
     route_clearance_certifications = _load_route_clearance_certifications(
@@ -503,6 +515,19 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     # (issue #3628).
     _assert_route_clearance_feasible(route_clearance_warnings)
     route_clearance_warning_summary = _route_clearance_warning_summary(route_clearance_warnings)
+    return scenarios, route_clearance_warnings, route_clearance_warning_summary
+
+
+def _compute_campaign_metadata(
+    cfg: CampaignConfig,
+    scenarios: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute campaign metadata hashes and summaries.
+
+    Returns:
+        Dict with ``resolved_seeds``, ``scenario_hash``, ``scenario_horizons_summary``,
+        ``git_meta``, ``config_hash``, ``noise_spec``, and ``noise_hash``.
+    """
     resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
     scenario_horizons_summary = _scenario_horizon_summary(
@@ -513,7 +538,54 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
     noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
+    return {
+        "resolved_seeds": resolved_seeds,
+        "scenario_hash": scenario_hash,
+        "scenario_horizons_summary": scenario_horizons_summary,
+        "git_meta": git_meta,
+        "config_hash": config_hash,
+        "noise_spec": noise_spec,
+        "noise_hash": noise_hash,
+    }
 
+
+def _load_and_prepare_scenarios(
+    cfg: CampaignConfig,
+    build_route_clearance_warnings: Callable[..., list[dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    """Load scenarios, validate route clearance, and compute campaign metadata.
+
+    Returns:
+        Tuple of ``(scenarios, route_clearance_warnings, route_clearance_warning_summary,
+        metadata)``.
+    """
+    scenarios, rc_warnings, rc_summary = _load_scenarios_and_route_clearance(
+        cfg,
+        build_route_clearance_warnings,
+    )
+    metadata = _compute_campaign_metadata(cfg, scenarios)
+    return scenarios, rc_warnings, rc_summary, metadata
+
+
+def _write_preflight_artifacts(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    preflight_dir: Path,
+    campaign_id: str,
+    created_at_utc: str,
+    scenarios: list[dict[str, Any]],
+    metadata: dict[str, Any],
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    checkpoint_preflight_report: dict[str, Any],
+    checkpoint_preflight_mode: CheckpointPreflightMode,
+) -> tuple[Path, Path, Path]:
+    """Build and write preflight validation, preview, and checkpoint artifacts.
+
+    Returns:
+        Tuple of ``(validate_config_path, preview_scenarios_path,
+        checkpoint_preflight_report_path)``.
+    """
     validate_config_path = preflight_dir / "validate_config.json"
     preview_scenarios_path = preflight_dir / "preview_scenarios.json"
     validate_payload = _build_preflight_validate_payload(
@@ -521,12 +593,12 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         campaign_id=campaign_id,
         created_at_utc=created_at_utc,
         scenarios=scenarios,
-        resolved_seeds=resolved_seeds,
-        scenario_horizons_summary=scenario_horizons_summary,
+        resolved_seeds=metadata["resolved_seeds"],
+        scenario_horizons_summary=metadata["scenario_horizons_summary"],
         route_clearance_warnings=route_clearance_warnings,
         route_clearance_warning_summary=route_clearance_warning_summary,
-        noise_spec=noise_spec,
-        noise_hash=noise_hash,
+        noise_spec=metadata["noise_spec"],
+        noise_hash=metadata["noise_hash"],
         checkpoint_preflight_summary=checkpoint_preflight_report,
         checkpoint_preflight_mode=checkpoint_preflight_mode,
     )
@@ -559,7 +631,29 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             "arms": list(checkpoint_preflight_report.get("arms", [])),
         },
     )
+    return validate_config_path, preview_scenarios_path, checkpoint_preflight_report_path
 
+
+def _write_matrix_and_amv_artifacts(
+    cfg: CampaignConfig,
+    *,
+    reports_dir: Path,
+    scenarios: list[dict[str, Any]],
+    resolved_seeds: list[int],
+    scenario_hash: str,
+    git_meta: dict[str, Any],
+    campaign_id: str,
+    created_at_utc: str,
+) -> tuple[Path, Path, Path, Path, dict[str, Any]]:
+    """Build and write matrix summary and AMV coverage artifacts.
+
+    Returns:
+        Tuple of ``(matrix_json_path, matrix_csv_path, amv_json_path, amv_md_path,
+        amv_summary)``.
+
+    Raises:
+        ValueError: When paper-facing AMV coverage enforcement fails.
+    """
     matrix_rows = _build_matrix_summary_rows(
         cfg,
         scenarios,
@@ -592,35 +686,241 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             "AMV coverage contract validation failed: missing required AMV dimensions "
             "(coverage_enforcement=error)."
         )
+    return (
+        matrix_summary_json_path,
+        matrix_summary_csv_path,
+        amv_coverage_json_path,
+        amv_coverage_md_path,
+        amv_summary,
+    )
 
+
+def _build_comparability_artifacts_if_configured(
+    cfg: CampaignConfig,
+    *,
+    reports_dir: Path,
+    scenarios: list[dict[str, Any]],
+    campaign_id: str,
+    created_at_utc: str,
+) -> tuple[dict[str, Any] | None, Path | None, Path | None, Path | None]:
+    """Build comparability artifacts when a mapping path is configured.
+
+    Returns:
+        Tuple of ``(comparability_summary, comparability_json_path,
+        comparability_md_path, comparability_mapping_path)``.
+    """
+    if cfg.comparability_mapping_path is None:
+        return None, None, None, None
     comparability_summary: dict[str, Any] | None = None
     comparability_json_path: Path | None = None
     comparability_md_path: Path | None = None
     comparability_mapping_path: Path | None = None
-    if cfg.comparability_mapping_path is not None:
-        try:
-            comparability_summary, comparability_mapping_path = _build_comparability_summary(
-                cfg,
-                scenarios,
-                campaign_id=campaign_id,
-                generated_at_utc=created_at_utc,
-            )
-            comparability_json_path, comparability_md_path = _write_comparability_artifacts(
-                reports_dir,
-                comparability_summary,
-            )
-        except (ValueError, FileNotFoundError, yaml.YAMLError):
-            if cfg.paper_facing:
-                raise
+    try:
+        comparability_summary, comparability_mapping_path = _build_comparability_summary(
+            cfg,
+            scenarios,
+            campaign_id=campaign_id,
+            generated_at_utc=created_at_utc,
+        )
+        comparability_json_path, comparability_md_path = _write_comparability_artifacts(
+            reports_dir,
+            comparability_summary,
+        )
+    except (ValueError, FileNotFoundError, yaml.YAMLError):
+        if cfg.paper_facing:
+            raise
+    return (
+        comparability_summary,
+        comparability_json_path,
+        comparability_md_path,
+        comparability_mapping_path,
+    )
 
-    manifest_payload: dict[str, Any] = {
+
+def _write_summary_artifacts(
+    cfg: CampaignConfig,
+    *,
+    reports_dir: Path,
+    scenarios: list[dict[str, Any]],
+    metadata: dict[str, Any],
+    campaign_id: str,
+    created_at_utc: str,
+) -> dict[str, Any]:
+    """Write matrix summary, AMV coverage, and comparability artifacts.
+
+    Returns:
+        Dict with artifact paths and summaries keyed by artifact name.
+    """
+    mx_json, mx_csv, amv_json, amv_md, amv_summary = _write_matrix_and_amv_artifacts(
+        cfg,
+        reports_dir=reports_dir,
+        scenarios=scenarios,
+        resolved_seeds=metadata["resolved_seeds"],
+        scenario_hash=metadata["scenario_hash"],
+        git_meta=metadata["git_meta"],
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+    )
+    comp_sum, comp_json, comp_md, comp_map = _build_comparability_artifacts_if_configured(
+        cfg,
+        reports_dir=reports_dir,
+        scenarios=scenarios,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+    )
+    return {
+        "matrix_summary_json_path": mx_json,
+        "matrix_summary_csv_path": mx_csv,
+        "amv_coverage_json_path": amv_json,
+        "amv_coverage_md_path": amv_md,
+        "amv_summary": amv_summary,
+        "comparability_summary": comp_sum,
+        "comparability_json_path": comp_json,
+        "comparability_md_path": comp_md,
+        "comparability_mapping_path": comp_map,
+    }
+
+
+def _write_campaign_artifacts(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    preflight_dir: Path,
+    reports_dir: Path,
+    campaign_id: str,
+    created_at_utc: str,
+    scenarios: list[dict[str, Any]],
+    metadata: dict[str, Any],
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    checkpoint_preflight_report: dict[str, Any],
+    checkpoint_preflight_mode: CheckpointPreflightMode,
+) -> tuple[Path, Path, Path, dict[str, Any]]:
+    """Write preflight and report artifacts.
+
+    Returns:
+        Tuple of preflight paths followed by the summary-artifact mapping.
+    """
+    validate_config_path, preview_scenarios_path, checkpoint_report_path = (
+        _write_preflight_artifacts(
+            cfg,
+            preflight_dir=preflight_dir,
+            campaign_id=campaign_id,
+            created_at_utc=created_at_utc,
+            scenarios=scenarios,
+            metadata=metadata,
+            route_clearance_warnings=route_clearance_warnings,
+            route_clearance_warning_summary=route_clearance_warning_summary,
+            checkpoint_preflight_report=checkpoint_preflight_report,
+            checkpoint_preflight_mode=checkpoint_preflight_mode,
+        )
+    )
+    summary_artifacts = _write_summary_artifacts(
+        cfg,
+        reports_dir=reports_dir,
+        scenarios=scenarios,
+        metadata=metadata,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+    )
+    return validate_config_path, preview_scenarios_path, checkpoint_report_path, summary_artifacts
+
+
+def _build_manifest_planner_entries(
+    cfg: CampaignConfig,
+    checkpoint_preflight_report: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build per-planner manifest entries with tuning and checkpoint provenance.
+
+    Returns:
+        List of JSON-serializable planner manifest entries.
+    """
+    return [
+        {
+            "key": planner.key,
+            "algo": planner.algo,
+            "human_model_variant": planner.human_model_variant,
+            "human_model_source": planner.human_model_source,
+            "planner_group": planner.planner_group,
+            "benchmark_profile": planner.benchmark_profile,
+            "algo_config_path": (
+                _repo_relative(planner.algo_config_path)
+                if planner.algo_config_path is not None
+                else None
+            ),
+            "availability_gate": planner.availability_gate,
+            "fail_closed_reason": planner.fail_closed_reason,
+            "status": (
+                "not_available" if planner.availability_gate == "dependency_gated" else "ok"
+            ),
+            "observation_mode": planner.observation_mode,
+            "enabled": planner.enabled,
+            "tuning": _tuning_effort_block(planner),
+            "checkpoint_provenance": _checkpoint_provenance_block(
+                planner, checkpoint_preflight_report
+            ),
+        }
+        for planner in cfg.planners
+    ]
+
+
+def _build_manifest_artifact_block(  # noqa: PLR0913
+    *,
+    validate_config_path: Path,
+    preview_scenarios_path: Path,
+    checkpoint_preflight_report_path: Path,
+    matrix_summary_json_path: Path,
+    matrix_summary_csv_path: Path,
+    amv_coverage_json_path: Path,
+    amv_coverage_md_path: Path,
+    comparability_json_path: Path | None,
+    comparability_md_path: Path | None,
+) -> dict[str, Any]:
+    """Build the artifact-path block for the campaign manifest.
+
+    Returns:
+        JSON-serializable artifact path mapping.
+    """
+    return {
+        "preflight_validate_config": _repo_relative(validate_config_path),
+        "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
+        "preflight_checkpoint_provisioning": _repo_relative(checkpoint_preflight_report_path),
+        "matrix_summary_json": _repo_relative(matrix_summary_json_path),
+        "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
+        "amv_coverage_json": _repo_relative(amv_coverage_json_path),
+        "amv_coverage_md": _repo_relative(amv_coverage_md_path),
+        "comparability_json": (
+            _repo_relative(comparability_json_path) if comparability_json_path else None
+        ),
+        "comparability_md": (
+            _repo_relative(comparability_md_path) if comparability_md_path else None
+        ),
+        "snqi_diagnostics_json": None,
+        "snqi_diagnostics_md": None,
+        "snqi_sensitivity_csv": None,
+    }
+
+
+def _build_manifest_context_block(
+    cfg: CampaignConfig,
+    *,
+    campaign_id: str,
+    created_at_utc: str,
+    metadata: dict[str, Any],
+    invoked_command: str | None,
+) -> dict[str, Any]:
+    """Build identity, scenario, and provenance fields for the campaign manifest.
+
+    Returns:
+        JSON-serializable manifest fields for campaign identity and provenance.
+    """
+    return {
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
         "campaign_id": campaign_id,
         "name": cfg.name,
         "created_at_utc": created_at_utc,
         "started_at_utc": created_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
-        "scenario_matrix_hash": scenario_hash,
+        "scenario_matrix_hash": metadata["scenario_hash"],
         "scenario_candidates": list(cfg.scenario_candidates.names),
         "scenario_amv_overrides": {
             scenario_name: dict(values)
@@ -630,16 +930,35 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             "mode": cfg.seed_policy.mode,
             "seed_set": cfg.seed_policy.seed_set,
             "seeds": list(cfg.seed_policy.seeds),
-            "resolved_seeds": resolved_seeds,
+            "resolved_seeds": metadata["resolved_seeds"],
             "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
         },
-        "git": git_meta,
-        "config_hash": config_hash,
+        "git": metadata["git_meta"],
+        "config_hash": metadata["config_hash"],
         "invoked_command": invoked_command,
         "paper_facing": bool(cfg.paper_facing),
         "paper_profile_version": cfg.paper_profile_version,
         "amv_profile_name": cfg.amv_profile.name,
         "amv_contract_version": cfg.amv_profile.contract_version,
+    }
+
+
+def _build_manifest_contract_block(
+    cfg: CampaignConfig,
+    *,
+    metadata: dict[str, Any],
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    amv_summary: dict[str, Any],
+    comparability_summary: dict[str, Any] | None,
+    comparability_mapping_path: Path | None,
+) -> dict[str, Any]:
+    """Build benchmark-contract and evidence fields for the campaign manifest.
+
+    Returns:
+        JSON-serializable manifest fields for benchmark contract metadata.
+    """
+    return {
         "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
         "amv_coverage_status": amv_summary.get("status", "unknown"),
         "synthetic_actuation_profile": _synthetic_actuation_metadata(
@@ -669,9 +988,9 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             if cfg.route_clearance_certifications_path is not None
             else None
         ),
-        "scenario_horizons": scenario_horizons_summary,
-        "observation_noise": noise_spec,
-        "observation_noise_hash": noise_hash,
+        "scenario_horizons": metadata["scenario_horizons_summary"],
+        "observation_noise": metadata["noise_spec"],
+        "observation_noise_hash": metadata["noise_hash"],
         "snqi_weights_path": (
             _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
         ),
@@ -683,33 +1002,20 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         "snqi_contract_status": "not_evaluated",
         "snqi_positioning_recommendation": "not_evaluated",
         "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
-        "planners": [
-            {
-                "key": planner.key,
-                "algo": planner.algo,
-                "human_model_variant": planner.human_model_variant,
-                "human_model_source": planner.human_model_source,
-                "planner_group": planner.planner_group,
-                "benchmark_profile": planner.benchmark_profile,
-                "algo_config_path": (
-                    _repo_relative(planner.algo_config_path)
-                    if planner.algo_config_path is not None
-                    else None
-                ),
-                "availability_gate": planner.availability_gate,
-                "fail_closed_reason": planner.fail_closed_reason,
-                "status": (
-                    "not_available" if planner.availability_gate == "dependency_gated" else "ok"
-                ),
-                "observation_mode": planner.observation_mode,
-                "enabled": planner.enabled,
-                "tuning": _tuning_effort_block(planner),
-                "checkpoint_provenance": _checkpoint_provenance_block(
-                    planner, checkpoint_preflight_report
-                ),
-            }
-            for planner in cfg.planners
-        ],
+    }
+
+
+def _build_manifest_execution_block(
+    cfg: CampaignConfig,
+    planner_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build planner, tuning, and execution metadata for the campaign manifest.
+
+    Returns:
+        JSON-serializable manifest fields for planner and execution metadata.
+    """
+    return {
+        "planners": planner_entries,
         "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
         "tuning_effort_summary": _tuning_effort_summary(cfg.planners),
         "checkpoint_provenance_enforcement": cfg.checkpoint_provenance_enforcement,
@@ -719,30 +1025,111 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         "repository_url": cfg.repository_url,
         "release_tag": cfg.release_tag,
         "doi": cfg.doi,
-        "artifacts": {
-            "preflight_validate_config": _repo_relative(validate_config_path),
-            "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
-            "preflight_checkpoint_provisioning": _repo_relative(checkpoint_preflight_report_path),
-            "matrix_summary_json": _repo_relative(matrix_summary_json_path),
-            "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
-            "amv_coverage_json": _repo_relative(amv_coverage_json_path),
-            "amv_coverage_md": _repo_relative(amv_coverage_md_path),
-            "comparability_json": (
-                _repo_relative(comparability_json_path) if comparability_json_path else None
-            ),
-            "comparability_md": (
-                _repo_relative(comparability_md_path) if comparability_md_path else None
-            ),
-            "snqi_diagnostics_json": None,
-            "snqi_diagnostics_md": None,
-            "snqi_sensitivity_csv": None,
-        },
     }
+
+
+def _build_campaign_manifest_payload(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    campaign_id: str,
+    created_at_utc: str,
+    metadata: dict[str, Any],
+    invoked_command: str | None,
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    amv_summary: dict[str, Any],
+    comparability_summary: dict[str, Any] | None,
+    comparability_mapping_path: Path | None,
+    planner_entries: list[dict[str, Any]],
+    artifact_block: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the complete JSON-serializable campaign manifest payload.
+
+    Returns:
+        Complete JSON-serializable campaign manifest payload.
+    """
+    return {
+        **_build_manifest_context_block(
+            cfg,
+            campaign_id=campaign_id,
+            created_at_utc=created_at_utc,
+            metadata=metadata,
+            invoked_command=invoked_command,
+        ),
+        **_build_manifest_contract_block(
+            cfg,
+            metadata=metadata,
+            route_clearance_warnings=route_clearance_warnings,
+            route_clearance_warning_summary=route_clearance_warning_summary,
+            amv_summary=amv_summary,
+            comparability_summary=comparability_summary,
+            comparability_mapping_path=comparability_mapping_path,
+        ),
+        **_build_manifest_execution_block(cfg, planner_entries),
+        "artifacts": artifact_block,
+    }
+
+
+def _finalize_campaign_preflight(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    campaign_id: str,
+    campaign_root: Path,
+    reports_dir: Path,
+    preflight_dir: Path,
+    created_at_utc: str,
+    metadata: dict[str, Any],
+    invoked_command: str | None,
+    scenarios: list[dict[str, Any]],
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    checkpoint_preflight_report: dict[str, Any],
+    validate_config_path: Path,
+    preview_scenarios_path: Path,
+    checkpoint_preflight_report_path: Path,
+    summary_artifacts: dict[str, Any],
+) -> dict[str, Any]:
+    """Build manifest, verify resume context, write manifest, and assemble result.
+
+    Returns:
+        Paths and metadata required by preflight-only workflows and full runs.
+
+    Raises:
+        OrcaRvo2PreflightError: When ORCA planners require ``rvo2`` but it is missing.
+        RouteClearanceError: When a route centerline is geometrically infeasible.
+        CampaignCheckpointPreflightError: When a checkpoint cannot be resolved.
+        CampaignPolicyDependencyPreflightError: When a policy dependency is missing.
+        CampaignScenarioMapPreflightError: When a scenario map file cannot resolve.
+    """
+    manifest_payload = _build_campaign_manifest_payload(
+        cfg,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+        metadata=metadata,
+        invoked_command=invoked_command,
+        route_clearance_warnings=route_clearance_warnings,
+        route_clearance_warning_summary=route_clearance_warning_summary,
+        amv_summary=summary_artifacts["amv_summary"],
+        comparability_summary=summary_artifacts["comparability_summary"],
+        comparability_mapping_path=summary_artifacts["comparability_mapping_path"],
+        planner_entries=_build_manifest_planner_entries(cfg, checkpoint_preflight_report),
+        artifact_block=_build_manifest_artifact_block(
+            validate_config_path=validate_config_path,
+            preview_scenarios_path=preview_scenarios_path,
+            checkpoint_preflight_report_path=checkpoint_preflight_report_path,
+            matrix_summary_json_path=summary_artifacts["matrix_summary_json_path"],
+            matrix_summary_csv_path=summary_artifacts["matrix_summary_csv_path"],
+            amv_coverage_json_path=summary_artifacts["amv_coverage_json_path"],
+            amv_coverage_md_path=summary_artifacts["amv_coverage_md_path"],
+            comparability_json_path=summary_artifacts["comparability_json_path"],
+            comparability_md_path=summary_artifacts["comparability_md_path"],
+        ),
+    )
     _verify_existing_resume_context(
         cfg,
         campaign_root=campaign_root,
         campaign_id=campaign_id,
-        config_hash=config_hash,
+        config_hash=metadata["config_hash"],
     )
     _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
     return {
@@ -754,18 +1141,92 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         "preview_scenarios_path": preview_scenarios_path,
         "checkpoint_preflight_report_path": checkpoint_preflight_report_path,
         "checkpoint_preflight_summary": checkpoint_preflight_report,
-        "matrix_summary_json_path": matrix_summary_json_path,
-        "matrix_summary_csv_path": matrix_summary_csv_path,
-        "amv_coverage_json_path": amv_coverage_json_path,
-        "amv_coverage_md_path": amv_coverage_md_path,
-        "amv_summary": amv_summary,
-        "comparability_json_path": comparability_json_path,
-        "comparability_md_path": comparability_md_path,
+        "matrix_summary_json_path": summary_artifacts["matrix_summary_json_path"],
+        "matrix_summary_csv_path": summary_artifacts["matrix_summary_csv_path"],
+        "amv_coverage_json_path": summary_artifacts["amv_coverage_json_path"],
+        "amv_coverage_md_path": summary_artifacts["amv_coverage_md_path"],
+        "amv_summary": summary_artifacts["amv_summary"],
+        "comparability_json_path": summary_artifacts["comparability_json_path"],
+        "comparability_md_path": summary_artifacts["comparability_md_path"],
         "manifest_payload": manifest_payload,
         "created_at_utc": created_at_utc,
         "scenarios": scenarios,
-        "resolved_seeds": resolved_seeds,
-        "scenario_hash": scenario_hash,
-        "git_meta": git_meta,
-        "config_hash": config_hash,
+        "resolved_seeds": metadata["resolved_seeds"],
+        "scenario_hash": metadata["scenario_hash"],
+        "git_meta": metadata["git_meta"],
+        "config_hash": metadata["config_hash"],
     }
+
+
+def prepare_campaign_preflight(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    output_root: Path | None = None,
+    label: str | None = None,
+    campaign_id: str | None = None,
+    invoked_command: str | None = None,
+    validate_campaign_config: Callable[[CampaignConfig], None] | None = None,
+    build_route_clearance_warnings: Callable[..., list[dict[str, Any]]] | None = None,
+    checkpoint_preflight_mode: CheckpointPreflightMode = "metadata_only",
+    checkpoint_cache_dir: Path | None = None,
+    checkpoint_registry_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Prepare campaign preflight artifacts and matrix-definition summary.
+
+    Returns:
+        Paths and metadata required by preflight-only workflows and full runs.
+    """
+    if validate_campaign_config is None:
+        from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
+            _validate_campaign_config as validate_campaign_config,
+        )
+    if build_route_clearance_warnings is None:
+        build_route_clearance_warnings = _build_route_clearance_warnings
+    validate_campaign_config(cfg)
+    ckpt_report, campaign_id, campaign_root, reports_dir, preflight_dir = (
+        _validate_and_setup_campaign(
+            cfg,
+            checkpoint_preflight_mode=checkpoint_preflight_mode,
+            checkpoint_cache_dir=checkpoint_cache_dir,
+            checkpoint_registry_path=checkpoint_registry_path,
+            output_root=output_root,
+            label=label,
+            campaign_id=campaign_id,
+        )
+    )
+    created_at_utc = _utc_now()
+    scenarios, rc_warnings, rc_summary, meta = _load_and_prepare_scenarios(
+        cfg,
+        build_route_clearance_warnings,
+    )
+    vc_path, ps_path, ckpt_path, summary_artifacts = _write_campaign_artifacts(
+        cfg,
+        preflight_dir=preflight_dir,
+        reports_dir=reports_dir,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+        scenarios=scenarios,
+        metadata=meta,
+        route_clearance_warnings=rc_warnings,
+        route_clearance_warning_summary=rc_summary,
+        checkpoint_preflight_report=ckpt_report,
+        checkpoint_preflight_mode=checkpoint_preflight_mode,
+    )
+    return _finalize_campaign_preflight(
+        cfg,
+        campaign_id=campaign_id,
+        campaign_root=campaign_root,
+        reports_dir=reports_dir,
+        preflight_dir=preflight_dir,
+        created_at_utc=created_at_utc,
+        metadata=meta,
+        invoked_command=invoked_command,
+        scenarios=scenarios,
+        route_clearance_warnings=rc_warnings,
+        route_clearance_warning_summary=rc_summary,
+        checkpoint_preflight_report=ckpt_report,
+        validate_config_path=vc_path,
+        preview_scenarios_path=ps_path,
+        checkpoint_preflight_report_path=ckpt_path,
+        summary_artifacts=summary_artifacts,
+    )

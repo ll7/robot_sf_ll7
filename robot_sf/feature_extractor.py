@@ -74,7 +74,7 @@ class DynamicsExtractor(BaseFeaturesExtractor):
         # Initialize the base feature extractor
         super().__init__(observation_space, features_dim=total_features)
 
-        def padding(kernel_size: int):
+        def padding(kernel_size: int) -> int:
             """
             Calculate the padding needed for a given kernel size.
 
@@ -92,7 +92,9 @@ class DynamicsExtractor(BaseFeaturesExtractor):
                 raise ValueError("kernel size must be odd!")
             return int((kernel_size - 1) / 2)
 
-        def conv_block(in_channels: int, out_channels: int, kernel_size: int, dropout_rate: float):
+        def conv_block(
+            in_channels: int, out_channels: int, kernel_size: int, dropout_rate: float
+        ) -> list[nn.Module]:
             """
             Create a convolutional block.
 

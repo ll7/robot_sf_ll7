@@ -21,7 +21,8 @@ Concretely these tests pin, for representative planners across all three
 execution modes:
 
 * the ``planner_kinematics.execution_mode`` classification (``native`` /
-  ``adapter`` / ``mixed``), and
+  ``adapter`` / ``mixed``) plus the zeroed ``adapter_impact`` counter schema,
+  and
 * the ``planner_diagnostics`` propagation path for the native-command arm
   (``runner.py`` ``step()`` bridging).
 
@@ -100,13 +101,25 @@ def test_execution_mode_classification_baseline(algo_key: str, expected_mode: st
     through one construction path while preserving the native/adapter/mixed
     label each representative earns today via ``enrich_algorithm_metadata``.
     """
-    metadata = enrich_algorithm_metadata(algo=algo_key)
+    metadata = enrich_algorithm_metadata(algo=algo_key, adapter_impact_requested=True)
     planner_kinematics = metadata["planner_kinematics"]
     assert planner_kinematics["execution_mode"] == expected_mode
     # ``adapter_active`` is the derived parity flag the benchmark reports: it is
     # True exactly for adapter/mixed modes and False for native. A flip here
     # would change the execution-mode classification surfaced to consumers.
     assert planner_kinematics["adapter_active"] is (expected_mode in {"adapter", "mixed"})
+
+    # The eventual single construction path must retain the additive
+    # adapter-impact counters for every execution-mode family. Actual values
+    # are accumulated at runtime, so metadata initialization is deliberately
+    # zeroed here rather than fabricated by this contract test.
+    adapter_impact = metadata["adapter_impact"]
+    assert adapter_impact == {
+        "requested": True,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "pending",
+    }
 
 
 def test_map_runner_socnav_adapter_preserves_adapter_metadata() -> None:

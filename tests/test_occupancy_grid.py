@@ -713,9 +713,7 @@ class TestVectorizedParity:
         scalar_obstacles = [
             (scalar_to_ego(s[0], s[1]), scalar_to_ego(e[0], e[1])) for s, e in obstacles
         ]
-        scalar_pedestrians = [
-            (scalar_to_ego(c[0], c[1]), r) for c, r in pedestrians
-        ]
+        scalar_pedestrians = [(scalar_to_ego(c[0], c[1]), r) for c, r in pedestrians]
 
         grid_scalar = OccupancyGrid(config=config)
         grid_scalar._last_robot_pose = grid_vec._last_robot_pose

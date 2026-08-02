@@ -103,6 +103,24 @@
         }
       ]
     },
+    "json_value": {
+      "description": "A recursively JSON-serializable value. Shift parameters participate in the canonical manifest digest, so they must not contain YAML-only values such as timestamps.",
+      "oneOf": [
+        {"type": "null"},
+        {"type": "boolean"},
+        {"type": "number"},
+        {"type": "string"},
+        {
+          "type": "array",
+          "items": {"$ref": "#/$defs/json_value"}
+        },
+        {
+          "type": "object",
+          "propertyNames": {"type": "string"},
+          "additionalProperties": {"$ref": "#/$defs/json_value"}
+        }
+      ]
+    },
     "baseline_policy": {
       "type": "object",
       "additionalProperties": false,
@@ -230,7 +248,9 @@
         },
         "parameters": {
           "type": "object",
-          "description": "Optional free-form parameters describing the shift magnitude/direction."
+          "propertyNames": {"type": "string"},
+          "additionalProperties": {"$ref": "#/$defs/json_value"},
+          "description": "Optional JSON-serializable parameters describing the shift magnitude/direction. YAML-only values are rejected because parameters contribute to the canonical adapted-policy identifier."
         }
       }
     },

@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -322,6 +323,14 @@ def test_non_finite_threshold_bound_fails_closed(bound: float) -> None:
     assert report.protocol_status == PROTOCOL_STATUS_INVALID
     assert report.promotion_ready is False
     assert any("thresholds.nominal.bound" in blocker for blocker in report.blockers)
+
+
+def test_yaml_only_shift_parameter_value_raises() -> None:
+    """Shift parameters must be JSON values used in the canonical identifier digest."""
+    manifest = _manifest()
+    manifest["shifts"][0]["parameters"]["calibration_date"] = date(2026, 8, 2)
+    with pytest.raises(ContinualAdaptationProtocolError):
+        check_continual_adaptation_run(manifest)
 
 
 def test_derived_identifier_is_deterministic() -> None:

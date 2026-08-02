@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
+`robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
+groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this
+issue):
+[issue_6469_benchmark_reorganization_plan.md](issue_6469_benchmark_reorganization_plan.md).
+
 Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
 upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the
 only permissible route is clean-room reimplementation (no upstream code copied, vendored, or

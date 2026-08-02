@@ -85,7 +85,7 @@ def ped_robot_force(
     ped_positions: np.ndarray,
     robot_pos: Vec2D,
     threshold: float,
-):
+) -> None:
     """Compute repulsive forces applied by the robot to each nearby pedestrian.
 
     Args:

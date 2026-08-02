@@ -514,7 +514,9 @@ def _validate_metric_payload(
     if status == "available" and not _is_finite_number(values.get(metric_id)):
         raise AnalysisError(f"row {index} metric {metric_id} lacks a finite value")
     if status != "available" and (
-        support_count != 0 or not isinstance(unavailable_reasons.get(metric_id), str)
+        support_count != 0
+        or not isinstance(unavailable_reasons.get(metric_id), str)
+        or not unavailable_reasons[metric_id].strip()
     ):
         raise AnalysisError(f"row {index} metric {metric_id} has invalid unavailable metadata")
 
@@ -1250,6 +1252,19 @@ def run_self_test() -> int:
         (
             [{**rows[0], "schema_valid": False}, *rows[1:]],
             "schema-invalid social-compliance block",
+        ),
+        (
+            [
+                {
+                    **rows[0],
+                    "unavailable_reasons": {
+                        **rows[0]["unavailable_reasons"],
+                        "pedestrian_deviation_mean_m": " ",
+                    },
+                },
+                *rows[1:],
+            ],
+            "blank unavailable reason",
         ),
     ):
         try:

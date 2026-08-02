@@ -79,6 +79,7 @@ from robot_sf.benchmark.social_compliance import (
     SOCIAL_COMPLIANCE_CLAIM_CLASS,
     SOCIAL_COMPLIANCE_SCHEMA_VERSION,
 )
+from robot_sf.evidence.writers import write_json, write_text
 
 REPORT_SCHEMA_VERSION = "social-compliance-cross-planner-report.v1"
 
@@ -802,26 +803,20 @@ def write_artifacts(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / report_name
-    report_path.write_text(report_markdown, encoding="utf-8")
+    write_text(report_path, report_markdown, issue_ref="robot_sf#6474")
     summary_path = output_dir / report_path.with_suffix(".summary.json").name
-    summary_path.write_text(
-        json.dumps(
-            {
-                "review_marker": "AI-GENERATED NEEDS-REVIEW",
-                "schema_version": REPORT_SCHEMA_VERSION,
-                "social_compliance_schema_version": SOCIAL_COMPLIANCE_SCHEMA_VERSION,
-                "claim_class": SOCIAL_COMPLIANCE_CLAIM_CLASS,
-                "claim_boundary": _CLAIM_BOUNDARY_SUMMARY,
-                "provenance": provenance,
-                "policy": policy,
-                "validation": validation_report,
-                "decisions": list(decisions),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    write_json(
+        summary_path,
+        {
+            "schema_version": REPORT_SCHEMA_VERSION,
+            "social_compliance_schema_version": SOCIAL_COMPLIANCE_SCHEMA_VERSION,
+            "claim_class": SOCIAL_COMPLIANCE_CLAIM_CLASS,
+            "claim_boundary": _CLAIM_BOUNDARY_SUMMARY,
+            "provenance": provenance,
+            "policy": policy,
+            "validation": validation_report,
+            "decisions": list(decisions),
+        },
     )
     paths = {"report": report_path, "summary": summary_path}
     if (
@@ -831,32 +826,26 @@ def write_artifacts(
         manifest_path = (
             output_dir / "issue_6474_social_compliance_nominal_campaign_artifact_manifest.json"
         )
-        manifest_path.write_text(
-            json.dumps(
-                {
-                    "review_marker": "AI-GENERATED NEEDS-REVIEW",
-                    "schema_version": ARTIFACT_MANIFEST_SCHEMA_VERSION,
-                    "campaign_manifest": provenance.get("campaign_manifest"),
-                    "campaign_manifest_sha256": provenance.get("campaign_manifest_sha256"),
-                    "config_path": provenance.get("config_path"),
-                    "config_sha256": provenance.get("config_sha256"),
-                    "commit_sha": provenance.get("commit_sha"),
-                    "report_path": str(report_path),
-                    "summary_path": str(summary_path),
-                    "row_count": validation_report["row_count"],
-                    "valid_row_count": validation_report["valid_row_count"],
-                    "execution_mode_counts": validation_report["execution_mode_counts"],
-                    "rejected_row_count": len(validation_report["rejected"]),
-                    "note": (
-                        "Promoted only after the full 540-row campaign completes with zero "
-                        "fallback/degraded rows (issue #6639 stop conditions)."
-                    ),
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
+        write_json(
+            manifest_path,
+            {
+                "schema_version": ARTIFACT_MANIFEST_SCHEMA_VERSION,
+                "campaign_manifest": provenance.get("campaign_manifest"),
+                "campaign_manifest_sha256": provenance.get("campaign_manifest_sha256"),
+                "config_path": provenance.get("config_path"),
+                "config_sha256": provenance.get("config_sha256"),
+                "commit_sha": provenance.get("commit_sha"),
+                "report_path": str(report_path),
+                "summary_path": str(summary_path),
+                "row_count": validation_report["row_count"],
+                "valid_row_count": validation_report["valid_row_count"],
+                "execution_mode_counts": validation_report["execution_mode_counts"],
+                "rejected_row_count": len(validation_report["rejected"]),
+                "note": (
+                    "Promoted only after the full 540-row campaign completes with zero "
+                    "fallback/degraded rows (issue #6639 stop conditions)."
+                ),
+            },
         )
         paths["artifact_manifest"] = manifest_path
     return paths

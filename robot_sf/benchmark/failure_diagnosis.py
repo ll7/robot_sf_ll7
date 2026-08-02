@@ -64,7 +64,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from math import isfinite
-from numbers import Real
+from numbers import Integral, Real
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.failure_mechanism_classifier import FAILURE_MECHANISM_LABELS
@@ -243,6 +243,24 @@ _STRING_RECORD_FIELDS = (
     "validity_status",
     "correction_status",
 )
+
+#: Fields that the explicit unknown-record helper may conservatively override while
+#: source, onset, evidence, and correction provenance remain adapter-derived.
+_UNKNOWN_RECORD_METADATA_FIELDS = frozenset(
+    {
+        "failure_level",
+        "failure_type",
+        "confidence",
+        "evidence_mode",
+        "unknown_reason",
+        "caveats",
+    }
+)
+
+#: JSON-safe marker used in copied source evidence when the input contains a
+#: non-finite or otherwise unsupported Python value. The marker is treated as
+#: invalid predicate evidence and therefore cannot receive a known diagnosis.
+_INVALID_JSON_VALUE_MARKER = "__failure_diagnosis_invalid_json_value__:"
 
 
 class FailureDiagnosisError(RobotSfError, ValueError):
@@ -519,7 +537,10 @@ def validate_failure_diagnosis_record(record: Mapping[str, Any]) -> dict[str, An
     Enforces the schema contract: required fields and collection shapes are present,
     vocabulary fields are strings in their allowed sets, optional correction text has
     its declared type, and the ``unknown_reason`` invariant holds (set iff
-    ``failure_type`` is ``"unknown"``).
+    ``failure_type`` is ``"unknown"``). Explicit unknown records may conservatively
+    override only the unknown metadata fields accepted by
+    :func:`unknown_failure_diagnosis_record`; source, onset, evidence, and correction
+    provenance must still match the deterministic adapter.
 
     Args:
         record: A diagnosis record mapping (e.g. ``FailureDiagnosisRecord.to_dict()``).
@@ -712,7 +733,9 @@ def _require_adapter_provenance_consistency(record: Mapping[str, Any]) -> None:
     retain that predicate's validity text and include its exact non-causal
     evidence pointer.  Otherwise an externally edited record could present a
     known diagnosis as supported after its source became unavailable, or cite a
-    different predicate as evidence.
+    different predicate as evidence. An explicit ``unknown`` record may
+    conservatively override its classification metadata, but it may not alter
+    source-derived evidence or claim a supported confidence/evidence mode.
 
     Args:
         record: A record that has already passed the structural validators.
@@ -748,13 +771,25 @@ def _require_adapter_provenance_consistency(record: Mapping[str, Any]) -> None:
                 "confidence, and evidence_mode"
             )
 
+    if record["failure_type"] == "unknown" and (
+        record["confidence"] != "unknown" or record["evidence_mode"] != "unknown"
+    ):
+        raise FailureDiagnosisError(
+            "unknown failure_type requires unknown confidence and evidence_mode"
+        )
+
     expected_record = diagnose_from_trace_failure_predicate(
         source_predicate,
         proposed_correction=record["proposed_correction"],
         correction_status=record["correction_status"],
     ).to_dict()
+    allowed_overrides = (
+        _UNKNOWN_RECORD_METADATA_FIELDS if record["failure_type"] == "unknown" else frozenset()
+    )
     mismatched_fields = [
-        field for field in _REQUIRED_RECORD_FIELDS if record[field] != expected_record[field]
+        field
+        for field in _REQUIRED_RECORD_FIELDS
+        if field not in allowed_overrides and record[field] != expected_record[field]
     ]
     if mismatched_fields:
         raise FailureDiagnosisError(
@@ -922,15 +957,17 @@ def _predicate_to_dict(predicate: TraceFailurePredicate | Mapping[str, Any]) -> 
         FailureDiagnosisError: If the predicate is not a supported type.
     """
     if isinstance(predicate, Mapping):
-        return dict(predicate)
-    if hasattr(predicate, "to_dict"):
-        return dict(predicate.to_dict())
+        predicate_dict = dict(predicate)
+    elif hasattr(predicate, "to_dict"):
+        predicate_dict = dict(predicate.to_dict())
     # Defensive fallback for plain dataclasses without a ``to_dict`` method.
-    if is_dataclass(predicate) and not isinstance(predicate, type):
-        return dict(asdict(predicate))
-    raise FailureDiagnosisError(
-        "predicate must be a TraceFailurePredicate, a mapping, or a dataclass instance"
-    )
+    elif is_dataclass(predicate) and not isinstance(predicate, type):
+        predicate_dict = dict(asdict(predicate))
+    else:
+        raise FailureDiagnosisError(
+            "predicate must be a TraceFailurePredicate, a mapping, or a dataclass instance"
+        )
+    return _json_safe_value(predicate_dict)
 
 
 def _predicate_text(predicate_dict: Mapping[str, Any], field: str) -> str:
@@ -983,6 +1020,8 @@ def _invalid_predicate_evidence_reason(predicate_dict: Mapping[str, Any]) -> str
         A deterministic invalid-evidence reason, or ``None`` when the required
         predicate evidence shapes are present.
     """
+    if _contains_invalid_json_marker(predicate_dict):
+        return "invalid_predicate_evidence:non_json_safe_value"
     time_interval_s = predicate_dict.get("time_interval_s")
     if not isinstance(time_interval_s, (list, tuple)) or len(time_interval_s) != 2:
         return "invalid_predicate_evidence:time_interval_s_not_two_element_sequence"
@@ -1132,6 +1171,36 @@ def _finite_or_none(value: Any) -> float | None:
     except (OverflowError, TypeError, ValueError):
         return None
     return number if isfinite(number) else None
+
+
+def _json_safe_value(value: Any) -> Any:
+    """Return a JSON-safe copy, marking values that invalidate predicate evidence."""
+    if value is None or isinstance(value, (bool, str)):
+        return value
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Real):
+        number = float(value)
+        return number if isfinite(number) else f"{_INVALID_JSON_VALUE_MARKER}non_finite"
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_value(item) for item in value]
+    return f"{_INVALID_JSON_VALUE_MARKER}{type(value).__module__}.{type(value).__qualname__}"
+
+
+def _contains_invalid_json_marker(value: Any) -> bool:
+    """Return whether a copied predicate contains a JSON-safety invalid marker."""
+    if isinstance(value, str):
+        return value.startswith(_INVALID_JSON_VALUE_MARKER)
+    if isinstance(value, Mapping):
+        return any(
+            _contains_invalid_json_marker(key) or _contains_invalid_json_marker(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_invalid_json_marker(item) for item in value)
+    return False
 
 
 __all__ = [

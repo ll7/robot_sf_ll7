@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 import pytest
@@ -558,6 +559,20 @@ def test_numeric_string_predicate_onset_fails_closed_to_unknown_record() -> None
     validate_failure_diagnosis_record(record.to_dict())
 
 
+def test_nonfinite_predicate_evidence_fails_closed_and_stays_strict_json() -> None:
+    """Non-finite source values become explicit unknown evidence without invalid JSON."""
+    predicate = _predicate("collision").to_dict()
+    predicate["time_interval_s"] = [math.nan, 1.5]
+    predicate["evidence_fields"] = {"distance_m": math.inf}
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "invalid_predicate_evidence:non_json_safe_value"
+    json.dumps(record.to_dict(), allow_nan=False)
+    validate_failure_diagnosis_record(record.to_dict())
+
+
 def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> None:
     """unknown_failure_diagnosis_record mirrors unknown_failure_mechanism_record."""
     predicate = _predicate("collision", validity_status=_NOT_AVAILABLE, severity="critical")
@@ -571,6 +586,23 @@ def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> N
     # Empty reason is rejected.
     with pytest.raises(FailureDiagnosisError, match="non-empty"):
         unknown_failure_diagnosis_record(predicate, "   ")
+
+
+def test_explicit_unknown_helper_record_validates_and_wraps() -> None:
+    """Explicit unknown metadata must remain valid for payload construction."""
+    record = unknown_failure_diagnosis_record(
+        _predicate("collision", validity_status=_NOT_AVAILABLE),
+        "explicit_blocker_reason",
+    )
+
+    validated = validate_failure_diagnosis_record(record.to_dict())
+    assert validated["failure_type"] == "unknown"
+    assert validated["unknown_reason"] == "explicit_blocker_reason"
+
+    payload = build_failure_diagnosis_payload([record])
+    assert validate_failure_diagnosis_payload(payload)["records"][0]["unknown_reason"] == (
+        "explicit_blocker_reason"
+    )
 
 
 def test_payload_is_versioned_and_non_claim() -> None:

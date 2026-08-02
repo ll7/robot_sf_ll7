@@ -64,7 +64,15 @@ def _is_type_checking_guard(node: ast.If) -> bool:
     if isinstance(test, ast.Name):
         return test.id == "TYPE_CHECKING"
     if isinstance(test, ast.Attribute):
-        return test.attr == "TYPE_CHECKING"
+        return (
+            test.attr == "TYPE_CHECKING"
+            and isinstance(test.value, ast.Name)
+            and test.value.id
+            in {
+                "typing",
+                "typing_extensions",
+            }
+        )
     return False
 
 
@@ -93,7 +101,13 @@ def _iter_load_time_imports(tree: ast.AST):
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             continue  # deferred imports are a sanctioned cycle break (#6455)
         if isinstance(child, ast.If) and (_is_type_checking_guard(child) or _is_main_guard(child)):
-            continue  # never executed during import
+            # The guarded body is not executed during import, but its else
+            # branch is. Keep scanning that branch for load-time imports.
+            for else_child in child.orelse:
+                if isinstance(else_child, (ast.Import, ast.ImportFrom)):
+                    yield else_child
+                yield from _iter_load_time_imports(else_child)
+            continue
         if isinstance(child, (ast.Import, ast.ImportFrom)):
             yield child
         yield from _iter_load_time_imports(child)
@@ -260,6 +274,38 @@ def test_guard_ignores_type_checking_back_edge(tmp_path: Path) -> None:
     assert find_load_time_cycles(root, package="pkg") == []
 
 
+def test_guard_counts_type_checking_else_branch(tmp_path: Path) -> None:
+    """The executable else branch of a TYPE_CHECKING guard remains load-time code."""
+    root = _write_package(
+        tmp_path,
+        {
+            "a.py": "from pkg import b\n",
+            "b.py": (
+                "from typing import TYPE_CHECKING\n\n"
+                "if TYPE_CHECKING:\n    pass\n"
+                "else:\n    from pkg import a\n"
+            ),
+        },
+    )
+
+    assert find_load_time_cycles(root, package="pkg") == [["pkg.a", "pkg.b"]]
+
+
+def test_guard_does_not_treat_arbitrary_attribute_as_type_checking(
+    tmp_path: Path,
+) -> None:
+    """Only typing's TYPE_CHECKING sentinel suppresses a guarded import."""
+    root = _write_package(
+        tmp_path,
+        {
+            "a.py": "from pkg import b\n",
+            "b.py": "if runtime.TYPE_CHECKING:\n    from pkg import a\n",
+        },
+    )
+
+    assert find_load_time_cycles(root, package="pkg") == [["pkg.a", "pkg.b"]]
+
+
 def test_guard_ignores_function_level_back_edge(tmp_path: Path) -> None:
     """Deferred function-level imports are a sanctioned cycle break."""
     root = _write_package(
@@ -284,6 +330,19 @@ def test_guard_ignores_main_guard_back_edge(tmp_path: Path) -> None:
     )
 
     assert find_load_time_cycles(root, package="pkg") == []
+
+
+def test_guard_counts_main_guard_else_branch(tmp_path: Path) -> None:
+    """The executable else branch of a __main__ guard remains load-time code."""
+    root = _write_package(
+        tmp_path,
+        {
+            "a.py": "from pkg import b\n",
+            "b.py": 'if __name__ == "__main__":\n    pass\nelse:\n    from pkg import a\n',
+        },
+    )
+
+    assert find_load_time_cycles(root, package="pkg") == [["pkg.a", "pkg.b"]]
 
 
 def test_guard_ignores_acyclic_shared_dependency(tmp_path: Path) -> None:

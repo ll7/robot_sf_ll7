@@ -9,6 +9,8 @@ safety, deployment coverage, or real-world risk reduction.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
+from itertools import count
 
 import numpy as np
 import pytest
@@ -33,6 +35,9 @@ from robot_sf.benchmark.uncertainty_safety import (
 # --------------------------------------------------------------------------- helpers
 
 
+_TRACE_IDS = count()
+
+
 def _ctx(
     *,
     density: float = 0.2,
@@ -54,6 +59,7 @@ def _ctx(
 def _sample(  # noqa: PLR0913
     split_id: str,
     *,
+    trace_id: str | None = None,
     residual: float | None = 0.1,
     density: float = 0.2,
     visibility: float = 8.0,
@@ -68,6 +74,7 @@ def _sample(  # noqa: PLR0913
 ) -> SafetyMarginTraceSample:
     """Build a trace sample with optional outcome fields."""
     return SafetyMarginTraceSample(
+        trace_id=trace_id if trace_id is not None else f"test-trace-{next(_TRACE_IDS)}",
         split_id=split_id,
         context=_ctx(
             density=density,
@@ -192,6 +199,15 @@ def test_split_leakage_check_runs_before_residual_computation() -> None:
             traces=[*fit, *cal, *evaluation],
             hard_floor_m=0.5,
         )
+
+
+def test_reused_trace_id_across_partitions_is_rejected() -> None:
+    """A source trace cannot be copied into calibration and evaluation under new split labels."""
+    traces = _balanced_traces()
+    calibration = next(trace for trace in traces if trace.split_id == "cal")
+    traces.append(replace(calibration, split_id="eval"))
+    with pytest.raises(ValueError, match="trace_id values must be unique.*reused trace ids"):
+        _build(traces)
 
 
 def test_unknown_split_id_is_rejected() -> None:
@@ -581,7 +597,7 @@ def test_missing_calibration_residual_rejected() -> None:
     # Drop the residual on the first calibration trace.
     cal_trace = next(t for t in traces if t.split_id == "cal")
     traces[traces.index(cal_trace)] = SafetyMarginTraceSample(
-        split_id="cal", context=cal_trace.context, residual_m=None
+        trace_id=cal_trace.trace_id, split_id="cal", context=cal_trace.context, residual_m=None
     )
     with pytest.raises(ValueError, match="calibration traces must carry a non-null residual_m"):
         _build(traces)

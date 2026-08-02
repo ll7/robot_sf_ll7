@@ -129,6 +129,8 @@ class SafetyMarginTraceSample:
     never synthesized or imputed.
 
     Attributes:
+        trace_id: Stable identifier for the source trace. It must appear exactly once in an
+            input comparison so a source trace cannot be reused across partitions.
         split_id: Identifier of the split this trace belongs to (fit/calibration/eval).
         context: Context descriptor active at this trace.
         residual_m: Nonconformity score in metres, or ``None`` for fit-only traces.
@@ -139,6 +141,7 @@ class SafetyMarginTraceSample:
         unnecessary_braking: Whether unnecessary braking was recorded, or ``None``.
     """
 
+    trace_id: str
     split_id: str
     context: MarginContext
     residual_m: float | None = None
@@ -156,6 +159,8 @@ class SafetyMarginTraceSample:
         calibration/evaluation residuals via :func:`require_finite_array` so the
         ``finite_checks`` boundary is exercised on the computation path.
         """
+        if not isinstance(self.trace_id, str) or not self.trace_id:
+            raise ValueError("trace_id must be a non-empty string")
         if not isinstance(self.split_id, str) or not self.split_id:
             raise ValueError("split_id must be a non-empty string")
         if self.path_efficiency is not None:
@@ -378,6 +383,26 @@ def _require_non_empty_split(name: str, samples: Sequence[SafetyMarginTraceSampl
     """
     if not samples:
         raise ValueError(f"{name} split must contain at least one trace")
+
+
+def _validate_unique_trace_ids(traces: Sequence[SafetyMarginTraceSample]) -> None:
+    """Reject reused source traces before calibration or evaluation.
+
+    Split labels establish the declared partition, while ``trace_id`` makes that partition
+    auditable at the source-trace level. A repeated identifier would let the same trace enter
+    more than one split under different labels, invalidating the no-leakage contract.
+    """
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for sample in traces:
+        if sample.trace_id in seen:
+            duplicates.add(sample.trace_id)
+        seen.add(sample.trace_id)
+    if duplicates:
+        raise ValueError(
+            "trace_id values must be unique across fit/calibration/evaluation; "
+            f"reused trace ids: {', '.join(sorted(duplicates))}"
+        )
 
 
 # --------------------------------------------------------------------------- preferred margin
@@ -715,7 +740,8 @@ def build_safety_margin_comparison(  # noqa: PLR0913
             conformal radius.
         evaluation_split_ids: Identifiers of held-out traces used only to measure
             coverage and outcomes.
-        traces: All trace samples, each carrying one of the split identifiers.
+        traces: All trace samples, each carrying one split identifier and a unique source-trace
+            identifier. Reusing a ``trace_id`` is rejected before any computation.
         hard_floor_m: Immutable minimum clearance in metres (``>= 0``).
         coverage_target: Desired conformal coverage in ``(0, 1)``.
         fixed_margin_m: Fixed-baseline margin in metres (``>= 0``); defaults to the
@@ -732,7 +758,8 @@ def build_safety_margin_comparison(  # noqa: PLR0913
     Raises:
         ValueError: On bad coverage target, non-finite/negative margins, empty split
             identifier sets, overlapping split identifiers (leakage), unknown trace
-            split ids, empty splits, or non-finite calibration/evaluation residuals.
+            split ids, reused trace ids, empty splits, or non-finite calibration/evaluation
+            residuals.
 
     .. admonition:: Evidence tier
        :class: warning
@@ -773,6 +800,7 @@ def build_safety_margin_comparison(  # noqa: PLR0913
     fit, calibration, evaluation = _partition_traces(
         traces, fit_ids=fit_ids, calibration_ids=calibration_ids, evaluation_ids=evaluation_ids
     )
+    _validate_unique_trace_ids(traces)
     _require_non_empty_split("fit", fit)
     _require_non_empty_split("calibration", calibration)
     _require_non_empty_split("evaluation", evaluation)

@@ -3106,6 +3106,53 @@ def _run_campaign_orchestrator(
         paths.campaign_root,
     )
 
+    return _build_orchestrator_return(
+        paths=paths,
+        outcome=outcome,
+        snqi=snqi,
+        run_entries=run_entries,
+        campaign_integrity=campaign_integrity,
+        warnings=warnings,
+        publication_payload=publication_payload,
+        summary_json_path=summary_json_path,
+        csv_path=csv_path,
+        md_table_path=md_table_path,
+        report_md_path=report_md_path,
+        seed_variability_json_path=seed_variability_json_path,
+        seed_variability_csv_path=seed_variability_csv_path,
+        seed_episode_rows_csv_path=seed_episode_rows_csv_path,
+        statistical_sufficiency_json_path=statistical_sufficiency_json_path,
+        actuation_envelope_json_path=actuation_envelope_json_path,
+        actuation_envelope_md_path=actuation_envelope_md_path,
+    )
+
+
+def _build_orchestrator_return(  # noqa: PLR0913
+    *,
+    paths: _CampaignPreflightPaths,
+    outcome: _CampaignOutcomeState,
+    snqi: _SnqiSectionResult,
+    run_entries: list[dict[str, Any]],
+    campaign_integrity: dict[str, Any],
+    warnings: list[str],
+    publication_payload: dict[str, Any] | None,
+    summary_json_path: Path,
+    csv_path: Path,
+    md_table_path: Path,
+    report_md_path: Path,
+    seed_variability_json_path: Path,
+    seed_variability_csv_path: Path,
+    seed_episode_rows_csv_path: Path,
+    statistical_sufficiency_json_path: Path,
+    actuation_envelope_json_path: Path | None,
+    actuation_envelope_md_path: Path | None,
+) -> dict[str, Any]:
+    """Build the final orchestrator return dict.
+
+    Returns:
+        Campaign execution summary with output paths and counters.
+    """
+    reports_dir = paths.reports_dir
     campaign_outcome = outcome.campaign_outcome
     campaign_status_axes = outcome.campaign_status_axes
     return {

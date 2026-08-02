@@ -2323,6 +2323,151 @@ def _write_actuation_envelope_section(
     return actuation_envelope_payload, actuation_envelope_json_path, actuation_envelope_md_path
 
 
+def _build_campaign_execution_metadata(
+    cfg: CampaignConfig,
+    *,
+    paths: _CampaignPreflightPaths,
+    outcome: _CampaignOutcomeState,
+    run_entries: list[dict[str, Any]],
+    kinematics_matrix: tuple[str, ...],
+    invoked_command: str | None,
+) -> dict[str, Any]:
+    """Build execution-related campaign metadata fields.
+
+    Returns:
+        Dict with execution status, counters, and config metadata.
+    """
+    campaign_outcome = outcome.campaign_outcome
+    campaign_status_axes = outcome.campaign_status_axes
+    return {
+        "schema_version": CAMPAIGN_SCHEMA_VERSION,
+        "campaign_id": paths.campaign_id,
+        "name": cfg.name,
+        "created_at_utc": paths.campaign_started_at_utc,
+        "started_at_utc": paths.campaign_started_at_utc,
+        "finished_at_utc": outcome.campaign_finished_at_utc,
+        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
+        "scenario_matrix_hash": paths.scenario_hash,
+        "git_hash": paths.git_meta.get("commit", "unknown"),
+        "invoked_command": invoked_command,
+        "runtime_sec": outcome.runtime_sec,
+        "episodes_per_second": (
+            (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
+        ),
+        "total_episodes": outcome.total_episodes,
+        "successful_runs": outcome.successful_runs,
+        "total_runs": len(run_entries),
+        "seed_count": len(paths.resolved_seeds),
+        "non_success_runs": campaign_outcome.non_success_runs,
+        "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
+        "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
+        "campaign_execution_status": campaign_status_axes.campaign_execution_status,
+        "evidence_status": outcome.campaign_evidence_status,
+        "row_status_summary": outcome.row_status_summary,
+        "benchmark_success": outcome.benchmark_success,
+        "status": outcome.campaign_status,
+        "status_reason": outcome.campaign_status_reason,
+        "exit_code": outcome.campaign_exit_code,
+        "benchmark_success_basis": outcome.success_counters["benchmark_success_basis"],
+        "core_successful_runs": outcome.success_counters["core_successful_runs"],
+        "core_total_runs": outcome.success_counters["core_total_runs"],
+        "paper_interpretation_profile": cfg.paper_interpretation_profile,
+        "kinematics_matrix": list(kinematics_matrix),
+        "holonomic_command_mode": cfg.holonomic_command_mode,
+        "paper_facing": bool(cfg.paper_facing),
+        "paper_profile_version": cfg.paper_profile_version,
+        "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),
+        "observation_noise_hash": observation_noise_hash(
+            normalize_observation_noise_spec(cfg.observation_noise)
+        ),
+        "amv_profile_name": cfg.amv_profile.name,
+        "amv_contract_version": cfg.amv_profile.contract_version,
+        "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
+        "amv_coverage_status": str(
+            (paths.manifest_payload or {}).get("amv_coverage_status", "unknown")
+        ),
+        "scenario_amv_overrides": {
+            scenario_name: dict(values)
+            for scenario_name, values in sorted(cfg.scenario_amv_overrides.items())
+        },
+        "scenario_candidates": list(cfg.scenario_candidates.names),
+        "scenario_candidates_selection_name": cfg.scenario_candidates.selection_name,
+    }
+
+
+def _build_campaign_metadata_section(
+    cfg: CampaignConfig,
+    *,
+    paths: _CampaignPreflightPaths,
+    outcome: _CampaignOutcomeState,
+    snqi: _SnqiSectionResult,
+    run_entries: list[dict[str, Any]],
+    kinematics_matrix: tuple[str, ...],
+    invoked_command: str | None,
+) -> dict[str, Any]:
+    """Build the 'campaign' metadata sub-dict for the summary.
+
+    Returns:
+        Campaign metadata dict.
+    """
+    release_tag_value = cfg.release_tag
+    expected_archive_name = f"{paths.campaign_id}_publication_bundle.tar.gz"
+    repository_url = cfg.repository_url.rstrip("/")
+    release_url = f"{repository_url}/releases/tag/{release_tag_value}"
+    release_asset_url = (
+        f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
+    )
+    doi_url = f"https://doi.org/{cfg.doi}"
+    return {
+        **_build_campaign_execution_metadata(
+            cfg,
+            paths=paths,
+            outcome=outcome,
+            run_entries=run_entries,
+            kinematics_matrix=kinematics_matrix,
+            invoked_command=invoked_command,
+        ),
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
+        "latency_stress_profile": _latency_stress_metadata(
+            cfg.latency_stress_profile,
+            dt=cfg.dt,
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
+        ),
+        "comparability_mapping_path": paths.manifest_payload.get("comparability_mapping_path"),
+        "comparability_mapping_version": paths.manifest_payload.get(
+            "comparability_mapping_version"
+        ),
+        "comparability_mapping_hash": paths.manifest_payload.get("comparability_mapping_hash"),
+        "repository_url": cfg.repository_url,
+        "release_tag": release_tag_value,
+        "doi": cfg.doi,
+        "release_url": release_url,
+        "release_asset_url": release_asset_url,
+        "doi_url": doi_url,
+        "snqi_weights_version": (
+            cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
+        ),
+        "snqi_weights_sha256": snqi.weights_sha256,
+        "snqi_baseline_version": (
+            cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
+        ),
+        "snqi_baseline_sha256": snqi.baseline_sha256,
+        "snqi_contract_status": snqi.contract_eval.status,
+        "snqi_contract_rank_alignment_spearman": (snqi.contract_eval.rank_alignment_spearman),
+        "snqi_contract_outcome_separation": snqi.contract_eval.outcome_separation,
+        "snqi_contract_dominant_component": snqi.contract_eval.dominant_component,
+        "snqi_contract_dominant_component_mean_abs": (
+            snqi.contract_eval.dominant_component_mean_abs
+        ),
+        "snqi_positioning_recommendation": snqi.positioning.get("recommendation"),
+        "snqi_positioning_claim_scope": snqi.positioning.get("claim_scope"),
+    }
+
+
 def _build_campaign_summary_dict(  # noqa: PLR0913
     cfg: CampaignConfig,
     *,
@@ -2344,110 +2489,17 @@ def _build_campaign_summary_dict(  # noqa: PLR0913
     Returns:
         Complete campaign summary dict.
     """
-    release_tag_value = cfg.release_tag
-    expected_archive_name = f"{paths.campaign_id}_publication_bundle.tar.gz"
-    repository_url = cfg.repository_url.rstrip("/")
-    release_url = f"{repository_url}/releases/tag/{release_tag_value}"
-    release_asset_url = (
-        f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
-    )
-    doi_url = f"https://doi.org/{cfg.doi}"
-    campaign_outcome = outcome.campaign_outcome
-    campaign_status_axes = outcome.campaign_status_axes
     return {
         "fairness_contract": fairness_report.to_dict(),
-        "campaign": {
-            "schema_version": CAMPAIGN_SCHEMA_VERSION,
-            "campaign_id": paths.campaign_id,
-            "name": cfg.name,
-            "created_at_utc": paths.campaign_started_at_utc,
-            "started_at_utc": paths.campaign_started_at_utc,
-            "finished_at_utc": outcome.campaign_finished_at_utc,
-            "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
-            "scenario_matrix_hash": paths.scenario_hash,
-            "git_hash": paths.git_meta.get("commit", "unknown"),
-            "invoked_command": invoked_command,
-            "runtime_sec": outcome.runtime_sec,
-            "episodes_per_second": (
-                (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
-            ),
-            "total_episodes": outcome.total_episodes,
-            "successful_runs": outcome.successful_runs,
-            "total_runs": len(run_entries),
-            "seed_count": len(paths.resolved_seeds),
-            "non_success_runs": campaign_outcome.non_success_runs,
-            "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
-            "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
-            "campaign_execution_status": campaign_status_axes.campaign_execution_status,
-            "evidence_status": outcome.campaign_evidence_status,
-            "row_status_summary": outcome.row_status_summary,
-            "benchmark_success": outcome.benchmark_success,
-            "status": outcome.campaign_status,
-            "status_reason": outcome.campaign_status_reason,
-            "exit_code": outcome.campaign_exit_code,
-            "benchmark_success_basis": outcome.success_counters["benchmark_success_basis"],
-            "core_successful_runs": outcome.success_counters["core_successful_runs"],
-            "core_total_runs": outcome.success_counters["core_total_runs"],
-            "paper_interpretation_profile": cfg.paper_interpretation_profile,
-            "kinematics_matrix": list(kinematics_matrix),
-            "holonomic_command_mode": cfg.holonomic_command_mode,
-            "paper_facing": bool(cfg.paper_facing),
-            "paper_profile_version": cfg.paper_profile_version,
-            "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),
-            "observation_noise_hash": observation_noise_hash(
-                normalize_observation_noise_spec(cfg.observation_noise)
-            ),
-            "amv_profile_name": cfg.amv_profile.name,
-            "amv_contract_version": cfg.amv_profile.contract_version,
-            "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
-            "amv_coverage_status": str(
-                (paths.manifest_payload or {}).get("amv_coverage_status", "unknown")
-            ),
-            "scenario_amv_overrides": {
-                scenario_name: dict(values)
-                for scenario_name, values in sorted(cfg.scenario_amv_overrides.items())
-            },
-            "scenario_candidates": list(cfg.scenario_candidates.names),
-            "scenario_candidates_selection_name": cfg.scenario_candidates.selection_name,
-            "synthetic_actuation_profile": _synthetic_actuation_metadata(
-                cfg.synthetic_actuation_profile
-            ),
-            "latency_stress_profile": _latency_stress_metadata(
-                cfg.latency_stress_profile,
-                dt=cfg.dt,
-            ),
-            "latency_stress_metrics": (
-                not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
-            ),
-            "comparability_mapping_path": paths.manifest_payload.get("comparability_mapping_path"),
-            "comparability_mapping_version": paths.manifest_payload.get(
-                "comparability_mapping_version"
-            ),
-            "comparability_mapping_hash": paths.manifest_payload.get("comparability_mapping_hash"),
-            "repository_url": cfg.repository_url,
-            "release_tag": release_tag_value,
-            "doi": cfg.doi,
-            "release_url": release_url,
-            "release_asset_url": release_asset_url,
-            "doi_url": doi_url,
-            "snqi_weights_version": (
-                cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
-            ),
-            "snqi_weights_sha256": snqi.weights_sha256,
-            "snqi_baseline_version": (
-                cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
-            ),
-            "snqi_baseline_sha256": snqi.baseline_sha256,
-            "snqi_contract_status": snqi.contract_eval.status,
-            "snqi_contract_rank_alignment_spearman": (snqi.contract_eval.rank_alignment_spearman),
-            "snqi_contract_outcome_separation": snqi.contract_eval.outcome_separation,
-            "snqi_contract_dominant_component": snqi.contract_eval.dominant_component,
-            "snqi_contract_dominant_component_mean_abs": (
-                snqi.contract_eval.dominant_component_mean_abs
-            ),
-            "snqi_positioning_recommendation": snqi.positioning.get("recommendation"),
-            "snqi_positioning_claim_scope": snqi.positioning.get("claim_scope"),
-        },
+        "campaign": _build_campaign_metadata_section(
+            cfg,
+            paths=paths,
+            outcome=outcome,
+            snqi=snqi,
+            run_entries=run_entries,
+            kinematics_matrix=kinematics_matrix,
+            invoked_command=invoked_command,
+        ),
         "planner_rows": planner_rows,
         "arm_rollup": arm_rollup,
         "runs": run_entries,

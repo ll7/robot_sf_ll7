@@ -259,7 +259,12 @@ from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
 )
-from robot_sf.planner.protocol import normalize_planner_diagnostics
+from robot_sf.planner.protocol import (
+    DIAGNOSTICS_UNAVAILABLE_KEY,
+    DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+    PLANNER_TYPE_KEY,
+    normalize_planner_diagnostics,
+)
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
 from robot_sf.planner.safety_barrier import (  # noqa: F401
     SafetyBarrierPlannerAdapter,
@@ -2210,23 +2215,19 @@ def _build_common_adapter_policy(  # noqa: C901
             """
             diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
             foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
-            if not isinstance(diagnostics, Mapping):
-                # Normalize the malformed primary payload before merging supplementary
-                # foresight counters, otherwise converting it to ``{}`` hides its type.
-                runtime = normalize_planner_diagnostics(
-                    diagnostics, fallback_planner_type=type(adapter).__name__
-                )
-                if isinstance(foresight, Mapping):
-                    for key, value in foresight.items():
-                        runtime.setdefault(key, value)
-                return runtime
-
-            runtime = dict(diagnostics)
-            if isinstance(foresight, Mapping):
-                runtime.update(foresight)
-            return normalize_planner_diagnostics(
-                runtime, fallback_planner_type=type(adapter).__name__
+            runtime = normalize_planner_diagnostics(
+                diagnostics, fallback_planner_type=type(adapter).__name__
             )
+            if isinstance(foresight, Mapping):
+                for key, value in foresight.items():
+                    if key in {
+                        PLANNER_TYPE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+                    }:
+                        continue
+                    runtime[key] = value
+            return runtime
 
         _policy._planner_stats = _planner_stats
     return _policy, meta

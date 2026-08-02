@@ -259,6 +259,45 @@ def test_adapter_diagnostics_preserve_mapping_payloads(monkeypatch: pytest.Monke
     assert stats_fn() == {"planner_type": "mapping_fixture", "preserved_counter": 7}
 
 
+def test_adapter_diagnostics_keep_primary_schema_over_foresight_collisions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Supplementary foresight data cannot replace canonical primary schema fields."""
+
+    class CollidingDiagnosticsAdapter:
+        """Fixture whose supplementary diagnostics deliberately reuse reserved keys."""
+
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def plan(self, _obs: dict[str, object]) -> tuple[float, float]:
+            """Return a no-op unicycle command for policy construction."""
+            return 0.0, 0.0
+
+        def diagnostics(self) -> dict[str, object]:
+            """Return the primary planner diagnostics schema and a counter."""
+            return {"planner_type": "primary_fixture", "preserved_counter": 7}
+
+        def foresight_diagnostics(self) -> dict[str, object]:
+            """Return supplemental data that attempts to collide with reserved keys."""
+            return {
+                "planner_type": "foresight_fixture",
+                "diagnostics_unavailable": ["foresight_fixture"],
+                "diagnostics_unavailable_reason": "must not replace primary schema",
+                "foresight_counter": 11,
+            }
+
+    monkeypatch.setattr(map_runner, "SocialForcePlannerAdapter", CollidingDiagnosticsAdapter)
+    policy, _meta = map_runner.build_map_policy("social_force", {})
+    stats_fn = getattr(policy, "_planner_stats", None)
+    assert callable(stats_fn), "SocNav adapter policy must expose _planner_stats"
+    assert stats_fn() == {
+        "planner_type": "primary_fixture",
+        "preserved_counter": 7,
+        "foresight_counter": 11,
+    }
+
+
 def test_adapter_diagnostics_fail_closed_for_non_mapping_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

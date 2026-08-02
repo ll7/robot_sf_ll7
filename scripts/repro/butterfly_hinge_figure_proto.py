@@ -1491,7 +1491,11 @@ def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
     # (figure_qa.lint_figure flags text_text_overlap at error severity). Contrast-mode
     # gutters are sparser and keep the default size.
     total_visual_lines = sum(max(1, text.count("\n") + 1) for text in lines)
-    fontsize = 6.3 if gutter.get("mode") == "contrast" else max(4.0, 6.3 * 11 / total_visual_lines)
+    fontsize = (
+        6.3
+        if gutter.get("mode") == "contrast"
+        else min(6.3, max(4.0, 6.3 * 11 / total_visual_lines))
+    )
     n = len(lines)
     for i, text in enumerate(lines):
         y = 1.0 - (i + 0.5) / n

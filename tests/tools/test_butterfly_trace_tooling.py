@@ -209,6 +209,17 @@ def test_video_helpers_reject_empty_trace(tmp_path: Path) -> None:
         video.compute_trace_metrics(trace_series)
 
 
+def test_hinge_gutter_font_size_is_capped_for_short_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A short custom gutter must not enlarge the adaptive hinge font."""
+    fig, ax = plt.subplots()
+    monkeypatch.setattr(hinge, "_format_gutter_lines", lambda _gutter: ["short label"])
+
+    hinge._draw_delta_gutter(ax, {})
+
+    assert ax.texts[0].get_fontsize() == pytest.approx(6.3)
+    plt.close(fig)
+
+
 def test_print_contrast_renderer_uses_final_width_and_role_colors(tmp_path: Path) -> None:
     """Exercise the renderer delta's print geometry and shared role-color contract."""
     episode_kwargs = {

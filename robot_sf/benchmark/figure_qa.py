@@ -686,7 +686,7 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
         max_severity: ``"error"`` (default) or ``"warn"``.
 
     Raises:
-            ValueError: When at least one defect meets the severity threshold.
+        ValueError: When at least one defect meets the severity threshold.
     """
     severity_order = {_SEVERITY_WARN: 0, _SEVERITY_ERROR: 1}
     threshold = severity_order.get(max_severity, 1)

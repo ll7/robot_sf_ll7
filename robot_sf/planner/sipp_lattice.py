@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.nav.occupancy import is_circle_circle_intersection
@@ -1910,3 +1910,525 @@ def build_sipp_lattice_search_adapter(
         A configured :class:`SippLatticeSearchPlannerAdapter`.
     """
     return SippLatticeSearchPlannerAdapter(config=build_sipp_lattice_config(algo_config))
+
+
+# ---------------------------------------------------------------------------
+# Issue #6471: space-time feasibility oracle
+# ---------------------------------------------------------------------------
+#
+# A diagnostic oracle that reuses the bounded SIPP state-time search above to
+# decide whether a collision-free space-time route exists under the scenario
+# boundaries, collision envelope, and agent dynamics. It distinguishes a
+# *local-policy failure* (a route witness exists, so the scenario was solvable
+# under the frozen discretization and the benchmark planner made suboptimal
+# decisions) from *not-proven-feasible* (no witness found within bounds).
+#
+# Claim boundary (Domain-Aware Approval on issue #6471): a returned route is a
+# diagnostic feasibility witness under the frozen discretization and dynamics.
+# Failure to find a route is unknown / not-proven-feasible, NOT scenario
+# infeasibility, until completeness and grid-sensitivity are validated. This
+# oracle never retroactively reclassifies benchmark failures, and it excludes
+# fallback/degraded execution (an unusable forecast fails closed).
+
+SPACE_TIME_FEASIBILITY_SCHEMA = "space_time_feasibility_oracle.v1"
+SPACE_TIME_FEASIBILITY_ISSUE = "6471"
+SPACE_TIME_FEASIBILITY_REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
+
+#: A collision-free space-time route witness was found and independently replayed.
+FEASIBILITY_FEASIBLE = "feasible"
+#: No route witness was found within bounds; unknown, not proven infeasible.
+FEASIBILITY_NOT_PROVEN_FEASIBLE = "not_proven_feasible"
+
+#: Episode annotation: a witness exists but the benchmark episode failed.
+EPISODE_LOCAL_POLICY_FAILURE = "local_policy_failure"
+#: Episode annotation: no witness; the episode failure cannot be attributed.
+EPISODE_NOT_PROVEN_FEASIBLE = "not_proven_feasible"
+#: Episode annotation: the benchmark episode already succeeded.
+EPISODE_SUCCEEDED = "episode_succeeded"
+
+#: Comparison verdicts against the static (planner-free) feasibility oracle.
+COMPARISON_CONSISTENT_FEASIBLE = "consistent_feasible"
+COMPARISON_CONSISTENT_NOT_FEASIBLE = "consistent_not_feasible"
+COMPARISON_DIVERGENT_EXPLAINED = "divergent_explained"
+COMPARISON_DIVERGENT_UNEXPECTED = "divergent_unexpected"
+COMPARISON_INDETERMINATE = "indeterminate"
+
+#: Static-oracle status values that mean "no feasible route by construction".
+#: These mirror ``robot_sf.scenario_certification.feasibility_oracle`` constants;
+#: they are duplicated as literals here to avoid importing that heavy module.
+_STATIC_INFEASIBLE_BY_CONSTRUCTION = "infeasible_by_construction"
+
+
+@dataclass(frozen=True)
+class SpaceTimeDiscretization:
+    """Frozen discretization and envelope parameters behind an oracle verdict.
+
+    Recorded so every verdict is interpretable and grid-sensitivity can be
+    audited: a witness is only valid under exactly these parameters.
+
+    Attributes:
+        xy_resolution: Spatial lattice resolution in metres.
+        time_slot_duration: Seconds represented by one discrete time slot.
+        planning_horizon_slots: Search horizon in slots (binding horizon used).
+        forecast_horizon_slots: Trusted pedestrian-forecast horizon in slots.
+        combined_radius: Robot radius + safety margin + pedestrian radius.
+        robot_radius: Robot envelope radius in metres.
+        pedestrian_radius: Pedestrian radius in metres.
+        safety_margin: Clearance margin added to the robot envelope in metres.
+    """
+
+    xy_resolution: float
+    time_slot_duration: float
+    planning_horizon_slots: int
+    forecast_horizon_slots: int
+    combined_radius: float
+    robot_radius: float
+    pedestrian_radius: float
+    safety_margin: float
+
+    def as_dict(self) -> dict[str, float]:
+        """Serialize the discretization to JSON-safe primitives.
+
+        Returns:
+            Mapping of discretization field names to numeric values.
+        """
+        return {
+            "xy_resolution": float(self.xy_resolution),
+            "time_slot_duration": float(self.time_slot_duration),
+            "planning_horizon_slots": float(self.planning_horizon_slots),
+            "forecast_horizon_slots": float(self.forecast_horizon_slots),
+            "combined_radius": float(self.combined_radius),
+            "robot_radius": float(self.robot_radius),
+            "pedestrian_radius": float(self.pedestrian_radius),
+            "safety_margin": float(self.safety_margin),
+        }
+
+
+@dataclass(frozen=True)
+class SpaceTimeFeasibilityResult:
+    """Diagnostic verdict from one space-time feasibility oracle assessment.
+
+    Attributes:
+        verdict: ``feasible`` (a collision-free route witness was found and
+            replayed) or ``not_proven_feasible`` (no witness within bounds;
+            unknown, not infeasible).
+        witness: The collision-free primitive route when ``verdict`` is
+            ``feasible`` and the replay validated it; otherwise ``None``.
+        witness_valid: Whether the witness was independently replayed as
+            collision-free under the frozen discretization.
+        search_result_type: Underlying bounded-search result type.
+        bound_termination: Why the bounded search terminated.
+        expansions: Number of state-time nodes expanded.
+        horizon_reached: Deepest slot reached during search.
+        safe_interval_rejections: Number of dynamically-occupied arc rejections.
+        forecast_status: Pedestrian-forecast status (``ok`` / ``static`` /
+            ``failed``). A ``failed`` forecast fails closed to not-proven-feasible.
+        discretization: Frozen discretization and envelope behind the verdict.
+        claim_boundary: Diagnostic-only claim boundary marker.
+    """
+
+    verdict: str
+    witness: tuple[MotionPrimitive, ...] | None
+    witness_valid: bool
+    search_result_type: str
+    bound_termination: str
+    expansions: int
+    horizon_reached: int
+    safe_interval_rejections: int
+    forecast_status: str
+    discretization: SpaceTimeDiscretization
+    claim_boundary: str = "diagnostic_only_not_benchmark_evidence"
+
+    @property
+    def feasible(self) -> bool:
+        """Return whether a validated route witness was found.
+
+        Returns:
+            ``True`` only when the verdict is feasible and the witness replayed
+            collision-free.
+        """
+        return self.verdict == FEASIBILITY_FEASIBLE and self.witness_valid
+
+
+class SpaceTimeFeasibilityOracle:
+    """Space-time feasibility oracle built on the bounded SIPP state-time search.
+
+    Runs the bounded weighted-A*/SIPP search toward the goal and interprets the
+    outcome as a diagnostic feasibility verdict. A search that reaches the goal
+    yields a route witness that is independently replayed as collision-free;
+    any other outcome is reported as not-proven-feasible (unknown), never as
+    scenario infeasibility.
+
+    Attributes:
+        config: Frozen lattice/discretization configuration for this oracle.
+    """
+
+    def __init__(self, config: SippLatticeConfig | None = None) -> None:
+        """Initialize the oracle with optional config overrides.
+
+        Args:
+            config: Lattice configuration; defaults to ``SippLatticeConfig()``.
+        """
+        self.config = config or SippLatticeConfig()
+        self._primitives = self.config.to_primitive_set().build()
+        self._collision_model = self.config.to_collision_model()
+        self._search = SippLatticeSearch(self.config, self._primitives, self._collision_model)
+
+    def _discretization(self, forecast: PedestrianOccupancyForecast) -> SpaceTimeDiscretization:
+        """Capture the frozen discretization and envelope behind a verdict.
+
+        Args:
+            forecast: Pedestrian forecast whose trusted horizon is recorded.
+
+        Returns:
+            The discretization parameters binding for this assessment.
+        """
+        combined_radius = (
+            float(self.config.robot_radius)
+            + float(self.config.safety_margin)
+            + float(self.config.pedestrian_radius)
+        )
+        return SpaceTimeDiscretization(
+            xy_resolution=float(self.config.xy_resolution),
+            time_slot_duration=float(self.config.time_slot_duration),
+            planning_horizon_slots=min(
+                int(self.config.planning_horizon_slots), int(forecast.horizon_slots)
+            ),
+            forecast_horizon_slots=int(forecast.horizon_slots),
+            combined_radius=combined_radius,
+            robot_radius=float(self.config.robot_radius),
+            pedestrian_radius=float(self.config.pedestrian_radius),
+            safety_margin=float(self.config.safety_margin),
+        )
+
+    def assess(
+        self,
+        *,
+        start_pos: np.ndarray,
+        start_heading: float,
+        start_speed: float,
+        goal: np.ndarray,
+        forecast: PedestrianOccupancyForecast,
+        static_blocked: Callable[[np.ndarray], bool] | None = None,
+        start_angular_velocity: float = 0.0,
+    ) -> SpaceTimeFeasibilityResult:
+        """Assess whether a collision-free space-time route exists to the goal.
+
+        Args:
+            start_pos: Robot start position as ``(x, y)``.
+            start_heading: Robot start heading in radians.
+            start_speed: Robot start linear speed in m/s.
+            goal: Goal position as ``(x, y)``.
+            forecast: Time-indexed pedestrian occupancy forecast.
+            static_blocked: Optional footprint-inflated static-occupancy checker
+                returning ``True`` when an arc collides with static obstacles.
+            start_angular_velocity: Robot start angular velocity in rad/s.
+
+        Returns:
+            A diagnostic :class:`SpaceTimeFeasibilityResult`. A usable forecast
+            that reaches the goal yields a validated route witness; anything
+            else (including a failed forecast) is not-proven-feasible.
+        """
+        discretization = self._discretization(forecast)
+        if not forecast.usable:
+            # Fail closed: degraded/invalid dynamic input never backs feasibility.
+            return SpaceTimeFeasibilityResult(
+                verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
+                witness=None,
+                witness_valid=False,
+                search_result_type="invalid_forecast",
+                bound_termination="invalid_forecast",
+                expansions=0,
+                horizon_reached=0,
+                safe_interval_rejections=0,
+                forecast_status=forecast.status,
+                discretization=discretization,
+            )
+
+        result = self._search.search(
+            start_pos=start_pos,
+            start_heading=start_heading,
+            start_speed=start_speed,
+            start_angular_velocity=start_angular_velocity,
+            goal=goal,
+            forecast=forecast,
+            static_blocked=static_blocked,
+        )
+
+        reached_goal = result.result_type == "native_plan" and result.bound_termination == "goal"
+        if not reached_goal:
+            return SpaceTimeFeasibilityResult(
+                verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
+                witness=None,
+                witness_valid=False,
+                search_result_type=result.result_type,
+                bound_termination=result.bound_termination,
+                expansions=result.expansions,
+                horizon_reached=result.horizon_reached,
+                safe_interval_rejections=result.safe_interval_rejections,
+                forecast_status=forecast.status,
+                discretization=discretization,
+            )
+
+        witness = tuple(result.plan)
+        witness_valid = self._verify_witness(
+            witness,
+            start_pos=np.asarray(start_pos, dtype=float),
+            start_heading=float(start_heading),
+            start_speed=float(start_speed),
+            start_angular_velocity=float(start_angular_velocity),
+            forecast=forecast,
+            static_blocked=static_blocked,
+        )
+        return SpaceTimeFeasibilityResult(
+            verdict=FEASIBILITY_FEASIBLE if witness_valid else FEASIBILITY_NOT_PROVEN_FEASIBLE,
+            witness=witness if witness_valid else None,
+            witness_valid=witness_valid,
+            search_result_type=result.result_type,
+            bound_termination=result.bound_termination,
+            expansions=result.expansions,
+            horizon_reached=result.horizon_reached,
+            safe_interval_rejections=result.safe_interval_rejections,
+            forecast_status=forecast.status,
+            discretization=discretization,
+        )
+
+    def _verify_witness(
+        self,
+        witness: Sequence[MotionPrimitive],
+        *,
+        start_pos: np.ndarray,
+        start_heading: float,
+        start_speed: float,
+        start_angular_velocity: float,
+        forecast: PedestrianOccupancyForecast,
+        static_blocked: Callable[[np.ndarray], bool] | None,
+    ) -> bool:
+        """Independently replay a candidate witness as collision-free.
+
+        Mirrors the bounded search's transition-reachability and collision
+        checks so a search-found route validates, and any drift fails closed.
+
+        Args:
+            witness: Ordered primitive route to replay.
+            start_pos: Robot start position as ``(x, y)``.
+            start_heading: Robot start heading in radians.
+            start_speed: Robot start linear speed in m/s.
+            start_angular_velocity: Robot start angular velocity in rad/s.
+            forecast: Time-indexed pedestrian occupancy forecast.
+            static_blocked: Optional static-occupancy arc checker.
+
+        Returns:
+            ``True`` only when every primitive is reachable and collision-free
+            under the frozen discretization.
+        """
+        if not witness:
+            return False
+        cursor = np.asarray(start_pos, dtype=float)
+        heading = wrap_angle_pi(float(start_heading))
+        speed = float(start_speed)
+        angular_velocity = float(start_angular_velocity)
+        slot = 0
+        horizon = min(int(self.config.planning_horizon_slots), int(forecast.horizon_slots))
+        for primitive in witness:
+            arrival_slot = slot + self._search._slots_per_primitive
+            if arrival_slot > horizon:
+                return False
+            if not self._search._transition_reachable(speed, angular_velocity, primitive):
+                return False
+            arc_positions = self._collision_model._unicycle_arc_positions(
+                primitive.as_command(), heading, primitive.duration, cursor
+            )
+            if static_blocked is not None and static_blocked(arc_positions):
+                return False
+            if forecast.arc_occupied(arc_positions, slot, primitive.duration):
+                return False
+            cursor = arc_positions[-1]
+            heading = wrap_angle_pi(heading + primitive.delta_yaw)
+            speed = float(primitive.linear_velocity)
+            angular_velocity = float(primitive.angular_velocity)
+            slot = arrival_slot
+        return True
+
+
+def build_space_time_feasibility_oracle(
+    config: SippLatticeConfig | None = None,
+) -> SpaceTimeFeasibilityOracle:
+    """Build a space-time feasibility oracle from a lattice config.
+
+    Args:
+        config: Optional lattice configuration; defaults to ``SippLatticeConfig()``.
+
+    Returns:
+        A configured :class:`SpaceTimeFeasibilityOracle`.
+    """
+    return SpaceTimeFeasibilityOracle(config=config)
+
+
+def build_space_time_feasibility_oracle_from_algo_config(
+    algo_config: dict[str, Any] | None,
+) -> SpaceTimeFeasibilityOracle:
+    """Build a space-time feasibility oracle from an algorithm-config mapping.
+
+    Args:
+        algo_config: Optional algorithm-config mapping parsed by
+            :func:`build_sipp_lattice_config`.
+
+    Returns:
+        A configured :class:`SpaceTimeFeasibilityOracle`.
+    """
+    return SpaceTimeFeasibilityOracle(config=build_sipp_lattice_config(algo_config))
+
+
+def classify_episode_feasibility(
+    result: SpaceTimeFeasibilityResult,
+    *,
+    episode_succeeded: bool,
+) -> str:
+    """Map an oracle verdict and episode outcome to a diagnostic annotation.
+
+    The annotation is conservative and respects the issue #6471 claim boundary:
+    a route witness for a failed episode is a local-policy failure (the scenario
+    was solvable under the frozen discretization); the absence of a witness is
+    not-proven-feasible, never scenario infeasibility.
+
+    Args:
+        result: Oracle assessment for the episode's scenario cell.
+        episode_succeeded: Whether the benchmark episode already succeeded.
+
+    Returns:
+        One of ``episode_succeeded``, ``local_policy_failure``, or
+        ``not_proven_feasible``.
+    """
+    if episode_succeeded:
+        return EPISODE_SUCCEEDED
+    if result.feasible:
+        return EPISODE_LOCAL_POLICY_FAILURE
+    return EPISODE_NOT_PROVEN_FEASIBLE
+
+
+def space_time_feasibility_result_to_dict(
+    result: SpaceTimeFeasibilityResult,
+    *,
+    scenario_id: str = "",
+    episode_id: str = "",
+    episode_annotation: str | None = None,
+) -> dict[str, Any]:
+    """Serialize an oracle result to a versioned diagnostic-only payload.
+
+    Args:
+        result: Oracle assessment to serialize.
+        scenario_id: Scenario cell identifier for traceability.
+        episode_id: Benchmark episode identifier for traceability.
+        episode_annotation: Optional episode annotation from
+            :func:`classify_episode_feasibility`.
+
+    Returns:
+        A ``space_time_feasibility_oracle.v1`` diagnostic payload.
+    """
+    witness = result.witness or ()
+    return {
+        "schema_version": SPACE_TIME_FEASIBILITY_SCHEMA,
+        "issue": SPACE_TIME_FEASIBILITY_ISSUE,
+        "review_marker": SPACE_TIME_FEASIBILITY_REVIEW_MARKER,
+        "claim_boundary": result.claim_boundary,
+        "scenario_id": scenario_id,
+        "episode_id": episode_id,
+        "verdict": result.verdict,
+        "witness_found": bool(witness) and result.witness_valid,
+        "witness_valid": result.witness_valid,
+        "witness_length": len(witness),
+        "witness_commands": [list(primitive.as_command()) for primitive in witness],
+        "episode_annotation": episode_annotation,
+        "search_result_type": result.search_result_type,
+        "bound_termination": result.bound_termination,
+        "expansions": int(result.expansions),
+        "horizon_reached": int(result.horizon_reached),
+        "safe_interval_rejections": int(result.safe_interval_rejections),
+        "forecast_status": result.forecast_status,
+        "discretization": result.discretization.as_dict(),
+        "caveats": [
+            "A route is a diagnostic feasibility witness under the frozen discretization.",
+            "not_proven_feasible is unknown, not scenario infeasibility, until completeness "
+            "and grid-sensitivity are validated.",
+            "Does not retroactively reclassify benchmark failures; fallback/degraded execution "
+            "is excluded from evidence.",
+        ],
+    }
+
+
+def compare_with_static_feasibility(
+    result: SpaceTimeFeasibilityResult,
+    *,
+    static_feasible: bool | None,
+    static_status: str | None = None,
+) -> dict[str, Any]:
+    """Compare a space-time verdict with the static feasibility oracle verdict.
+
+    The static oracle (``robot_sf.scenario_certification.feasibility_oracle``)
+    is planner-free and ignores moving pedestrians; the space-time oracle
+    accounts for dynamic pedestrians under a bounded, incomplete search. The
+    comparison therefore reports consistency or an explicit explanation for any
+    divergence rather than treating divergence as an error.
+
+    Args:
+        result: Space-time oracle assessment for a scenario cell.
+        static_feasible: Static oracle ``FeasibilityVerdict.feasible`` for the
+            same cell (``None`` when the static oracle was blocked).
+        static_status: Static oracle ``FeasibilityVerdict.status`` for the same
+            cell (e.g. ``feasible``, ``infeasible_by_construction``,
+            ``time_truncated``, ``blocked``).
+
+    Returns:
+        A diagnostic comparison payload with ``comparison_verdict`` and
+        ``explanation`` keys.
+    """
+    space_time_feasible = result.feasible
+    if static_feasible is None:
+        comparison_verdict = COMPARISON_INDETERMINATE
+        explanation = (
+            "The static oracle returned no verdict (blocked) for this cell, so the "
+            "comparison is indeterminate."
+        )
+    elif static_feasible and space_time_feasible:
+        comparison_verdict = COMPARISON_CONSISTENT_FEASIBLE
+        explanation = "Both oracles report a feasible route under their respective discretizations."
+    elif not static_feasible and not space_time_feasible:
+        comparison_verdict = COMPARISON_CONSISTENT_NOT_FEASIBLE
+        explanation = (
+            "Neither oracle produced a feasible witness; the static status "
+            f"({static_status}) is consistent with space-time not-proven-feasible."
+        )
+    elif static_feasible and not space_time_feasible:
+        comparison_verdict = COMPARISON_DIVERGENT_EXPLAINED
+        explanation = (
+            "The static oracle (ignoring moving pedestrians) found a route, but the "
+            "space-time search found no collision-free witness under dynamic pedestrians "
+            "within bounds. This is not-proven-feasible, not infeasibility: the space-time "
+            "check is stricter and its bounded search is incomplete."
+        )
+    elif static_status == _STATIC_INFEASIBLE_BY_CONSTRUCTION:
+        comparison_verdict = COMPARISON_DIVERGENT_UNEXPECTED
+        explanation = (
+            "The static oracle reports geometric infeasibility by construction, yet the "
+            "space-time oracle produced a witness. This is unexpected and should be "
+            "investigated for an envelope or discretization mismatch."
+        )
+    else:
+        comparison_verdict = COMPARISON_DIVERGENT_EXPLAINED
+        explanation = (
+            "The static oracle did not complete within its horizon "
+            f"({static_status}), but the space-time oracle found a witness within its "
+            "horizon; differing horizon semantics explain the divergence."
+        )
+    return {
+        "schema_version": SPACE_TIME_FEASIBILITY_SCHEMA,
+        "issue": SPACE_TIME_FEASIBILITY_ISSUE,
+        "claim_boundary": result.claim_boundary,
+        "comparison_verdict": comparison_verdict,
+        "explanation": explanation,
+        "space_time_feasible": space_time_feasible,
+        "space_time_verdict": result.verdict,
+        "static_feasible": static_feasible,
+        "static_status": static_status,
+    }

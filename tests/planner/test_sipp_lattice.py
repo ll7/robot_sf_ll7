@@ -1155,3 +1155,428 @@ class TestSippLatticeConfigSlice2:
         assert cfg.max_planning_time_s == pytest.approx(0.02)
         assert cfg.commitment_horizon == 3
         assert cfg.pedestrian_forecast_horizon_s == pytest.approx(2.0)
+
+
+# -- Issue #6471: space-time feasibility oracle --
+
+from robot_sf.benchmark.failure_mechanism_classifier import (  # noqa: E402
+    SPACE_TIME_FEASIBILITY_ANNOTATION_SCHEMA_VERSION,
+    FailureMechanismClassificationError,
+    build_space_time_feasibility_annotation,
+)
+from robot_sf.planner.sipp_lattice import (  # noqa: E402
+    COMPARISON_CONSISTENT_FEASIBLE,
+    COMPARISON_CONSISTENT_NOT_FEASIBLE,
+    COMPARISON_DIVERGENT_EXPLAINED,
+    COMPARISON_DIVERGENT_UNEXPECTED,
+    COMPARISON_INDETERMINATE,
+    EPISODE_LOCAL_POLICY_FAILURE,
+    EPISODE_NOT_PROVEN_FEASIBLE,
+    EPISODE_SUCCEEDED,
+    FEASIBILITY_FEASIBLE,
+    FEASIBILITY_NOT_PROVEN_FEASIBLE,
+    SPACE_TIME_FEASIBILITY_SCHEMA,
+    SpaceTimeDiscretization,
+    SpaceTimeFeasibilityOracle,
+    SpaceTimeFeasibilityResult,
+    build_space_time_feasibility_oracle,
+    classify_episode_feasibility,
+    compare_with_static_feasibility,
+    space_time_feasibility_result_to_dict,
+)
+
+
+def _oracle_config(**overrides):
+    """Config with generous bounds so the feasibility search is tractable."""
+    params = {
+        "max_linear_acceleration": 5.0,
+        "max_expansions": 8000,
+        "planning_horizon_slots": 40,
+        "max_planning_time_s": 3.0,
+        "robot_radius": 0.15,
+        "pedestrian_radius": 0.15,
+        "safety_margin": 0.05,
+        "goal_tolerance": 0.3,
+        "xy_resolution": 0.1,
+        "time_slot_duration": 0.2,
+        "primitive_duration": 0.2,
+        "pedestrian_forecast_horizon_s": 8.0,
+    }
+    params.update(overrides)
+    return build_sipp_lattice_config(params)
+
+
+def _oracle_forecast(cfg, positions, velocities, heading=0.0):
+    """Build a usable time-indexed pedestrian forecast for oracle tests."""
+    return build_pedestrian_occupancy_forecast(
+        positions=np.asarray(positions, dtype=float).reshape(-1, 2),
+        velocities=np.asarray(velocities, dtype=float).reshape(-1, 2),
+        heading=heading,
+        config=cfg,
+        pedestrian_radius=float(cfg.pedestrian_radius),
+    )
+
+
+def _wall_blocked(arc_positions):
+    """Static blocker: an impassable wall slab across the corridor at x~=0.5."""
+    arc = np.asarray(arc_positions, dtype=float)
+    return bool(np.any((arc[:, 0] >= 0.45) & (arc[:, 0] <= 0.55)))
+
+
+def _discretization_stub():
+    """Minimal discretization for constructing results without running a search."""
+    return SpaceTimeDiscretization(
+        xy_resolution=0.1,
+        time_slot_duration=0.2,
+        planning_horizon_slots=40,
+        forecast_horizon_slots=40,
+        combined_radius=0.35,
+        robot_radius=0.15,
+        pedestrian_radius=0.15,
+        safety_margin=0.05,
+    )
+
+
+def _feasible_result_stub():
+    """A feasible result carrying a validated wait witness (logic tests only)."""
+    witness = (MotionPrimitive(0.0, 0.0, 0.2, PrimitiveKind.WAIT),)
+    return SpaceTimeFeasibilityResult(
+        verdict=FEASIBILITY_FEASIBLE,
+        witness=witness,
+        witness_valid=True,
+        search_result_type="native_plan",
+        bound_termination="goal",
+        expansions=1,
+        horizon_reached=1,
+        safe_interval_rejections=0,
+        forecast_status="ok",
+        discretization=_discretization_stub(),
+    )
+
+
+def _not_proven_result_stub():
+    """A not-proven-feasible result (logic tests only)."""
+    return SpaceTimeFeasibilityResult(
+        verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
+        witness=None,
+        witness_valid=False,
+        search_result_type="bounded_safe_wait",
+        bound_termination="horizon",
+        expansions=10,
+        horizon_reached=40,
+        safe_interval_rejections=3,
+        forecast_status="ok",
+        discretization=_discretization_stub(),
+    )
+
+
+class TestSpaceTimeFeasibilityOracle:
+    """Focused tests for the issue #6471 space-time feasibility oracle."""
+
+    def test_known_feasible_open_crossing_returns_route_witness(self) -> None:
+        """Open crossing with clearance and time budget yields a route witness."""
+        cfg = _oracle_config()
+        oracle = build_space_time_feasibility_oracle(cfg)
+        # Pedestrian moves away from the corridor, so a route clearly exists.
+        forecast = _oracle_forecast(cfg, [[0.5, 2.0]], [[0.0, 1.0]])
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+        )
+        assert result.verdict == FEASIBILITY_FEASIBLE
+        assert result.feasible
+        assert result.witness_valid
+        assert result.witness
+        assert result.bound_termination == "goal"
+        assert result.forecast_status == "ok"
+
+    def test_known_infeasible_blocked_doorway_returns_not_proven_feasible(self) -> None:
+        """A doorway blocked below the envelope for the full horizon has no witness."""
+        cfg = _oracle_config(max_expansions=1500, max_planning_time_s=0.5)
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [], [])
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+            static_blocked=_wall_blocked,
+        )
+        # Claim boundary: no route is not-proven-feasible, never infeasible.
+        assert result.verdict == FEASIBILITY_NOT_PROVEN_FEASIBLE
+        assert not result.feasible
+        assert result.witness is None
+        assert result.witness_valid is False
+
+    def test_failed_forecast_fails_closed_to_not_proven_feasible(self) -> None:
+        """Degraded dynamic input is excluded from evidence (fail closed)."""
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = build_pedestrian_occupancy_forecast(
+            positions=np.array([[0.5, 0.0]]),
+            velocities=np.array([[float("inf"), 0.0]]),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=float(cfg.pedestrian_radius),
+        )
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+        )
+        assert result.verdict == FEASIBILITY_NOT_PROVEN_FEASIBLE
+        assert result.forecast_status == "failed"
+        assert result.witness is None
+        assert result.expansions == 0
+
+    def test_witness_replays_collision_free_under_frozen_discretization(self) -> None:
+        """The returned witness independently replays as collision-free."""
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [[0.5, 2.0]], [[0.0, 1.0]])
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+        )
+        assert result.witness
+        collision = cfg.to_collision_model()
+        cursor = np.zeros(2)
+        heading = 0.0
+        slot = 0
+        for primitive in result.witness:
+            arc = collision._unicycle_arc_positions(
+                primitive.as_command(), heading, primitive.duration, cursor
+            )
+            assert not forecast.arc_occupied(arc, slot, primitive.duration)
+            cursor = arc[-1]
+            heading += primitive.delta_yaw
+            slot += 1
+        # The witness endpoint reaches the goal within tolerance.
+        assert float(np.linalg.norm(cursor - np.array([1.0, 0.0]))) <= cfg.goal_tolerance
+
+    def test_discretization_sensitivity_smoke(self) -> None:
+        """The oracle runs without errors at default and finer resolutions."""
+        goal = np.array([0.6, 0.0])
+        verdicts = {}
+        discretizations = {}
+        for label, overrides in {
+            "default": {},
+            "finer": {
+                "xy_resolution": 0.05,
+                "time_slot_duration": 0.1,
+                "primitive_duration": 0.1,
+            },
+        }.items():
+            cfg = _oracle_config(**overrides)
+            oracle = SpaceTimeFeasibilityOracle(cfg)
+            forecast = _oracle_forecast(cfg, [], [])
+            result = oracle.assess(
+                start_pos=np.array([0.0, 0.0]),
+                start_heading=0.0,
+                start_speed=0.0,
+                goal=goal,
+                forecast=forecast,
+            )
+            assert result.verdict in {FEASIBILITY_FEASIBLE, FEASIBILITY_NOT_PROVEN_FEASIBLE}
+            verdicts[label] = result.verdict
+            discretizations[label] = result.discretization
+        # The open crossing stays feasible at both resolutions, and the frozen
+        # discretization is recorded and differs across resolutions.
+        assert verdicts["default"] == FEASIBILITY_FEASIBLE
+        assert verdicts["finer"] == FEASIBILITY_FEASIBLE
+        assert discretizations["default"].xy_resolution != discretizations["finer"].xy_resolution
+        assert (
+            discretizations["default"].time_slot_duration
+            != discretizations["finer"].time_slot_duration
+        )
+
+    def test_assessment_is_deterministic(self) -> None:
+        cfg = _oracle_config()
+        forecast = _oracle_forecast(cfg, [[0.5, 2.0]], [[0.0, 1.0]])
+        results = [
+            SpaceTimeFeasibilityOracle(cfg).assess(
+                start_pos=np.array([0.0, 0.0]),
+                start_heading=0.0,
+                start_speed=0.0,
+                goal=np.array([1.0, 0.0]),
+                forecast=forecast,
+            )
+            for _ in range(2)
+        ]
+        assert results[0].verdict == results[1].verdict
+        commands = [[p.as_command() for p in (r.witness or ())] for r in results]
+        assert commands[0] == commands[1]
+
+    def test_result_serializes_to_diagnostic_payload(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [[0.5, 2.0]], [[0.0, 1.0]])
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+        )
+        payload = space_time_feasibility_result_to_dict(
+            result,
+            scenario_id="open_crossing",
+            episode_id="ep-1",
+            episode_annotation=classify_episode_feasibility(result, episode_succeeded=False),
+        )
+        assert payload["schema_version"] == SPACE_TIME_FEASIBILITY_SCHEMA
+        assert payload["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+        assert payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+        assert payload["witness_found"] is True
+        assert payload["episode_annotation"] == EPISODE_LOCAL_POLICY_FAILURE
+        assert payload["discretization"]["xy_resolution"] == pytest.approx(0.1)
+
+
+class TestSpaceTimeEpisodeClassification:
+    """Episode annotation respects the issue #6471 claim boundary."""
+
+    def test_witness_with_failed_episode_is_local_policy_failure(self) -> None:
+        result = _feasible_result_stub()
+        assert (
+            classify_episode_feasibility(result, episode_succeeded=False)
+            == EPISODE_LOCAL_POLICY_FAILURE
+        )
+
+    def test_not_proven_with_failed_episode_is_not_proven_feasible(self) -> None:
+        result = _not_proven_result_stub()
+        assert (
+            classify_episode_feasibility(result, episode_succeeded=False)
+            == EPISODE_NOT_PROVEN_FEASIBLE
+        )
+
+    def test_succeeded_episode_is_episode_succeeded(self) -> None:
+        result = _not_proven_result_stub()
+        assert classify_episode_feasibility(result, episode_succeeded=True) == EPISODE_SUCCEEDED
+
+
+class TestSpaceTimeStaticOracleComparison:
+    """Comparison with the static feasibility oracle verdict vocabulary."""
+
+    def test_consistent_feasible(self) -> None:
+        comparison = compare_with_static_feasibility(
+            _feasible_result_stub(), static_feasible=True, static_status="feasible"
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_CONSISTENT_FEASIBLE
+
+    def test_consistent_not_feasible(self) -> None:
+        comparison = compare_with_static_feasibility(
+            _not_proven_result_stub(),
+            static_feasible=False,
+            static_status="infeasible_by_construction",
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_CONSISTENT_NOT_FEASIBLE
+
+    def test_divergent_explained_static_feasible_dynamic_unknown(self) -> None:
+        comparison = compare_with_static_feasibility(
+            _not_proven_result_stub(), static_feasible=True, static_status="feasible"
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_DIVERGENT_EXPLAINED
+        assert comparison["explanation"]
+
+    def test_divergent_unexpected_static_infeasible_dynamic_witness(self) -> None:
+        comparison = compare_with_static_feasibility(
+            _feasible_result_stub(),
+            static_feasible=False,
+            static_status="infeasible_by_construction",
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_DIVERGENT_UNEXPECTED
+
+    def test_indeterminate_when_static_blocked(self) -> None:
+        comparison = compare_with_static_feasibility(
+            _feasible_result_stub(), static_feasible=None, static_status="blocked"
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_INDETERMINATE
+
+    def test_comparison_uses_real_static_oracle_vocabulary(self) -> None:
+        """The comparison is wired to the static oracle's exported constants."""
+        from robot_sf.scenario_certification.feasibility_oracle import (
+            BLOCKED,
+            FEASIBLE,
+            INFEASIBLE_BY_CONSTRUCTION,
+        )
+
+        assert FEASIBLE == "feasible"
+        assert INFEASIBLE_BY_CONSTRUCTION == "infeasible_by_construction"
+        consistent = compare_with_static_feasibility(
+            _feasible_result_stub(), static_feasible=True, static_status=FEASIBLE
+        )
+        assert consistent["comparison_verdict"] == COMPARISON_CONSISTENT_FEASIBLE
+        unexpected = compare_with_static_feasibility(
+            _feasible_result_stub(),
+            static_feasible=False,
+            static_status=INFEASIBLE_BY_CONSTRUCTION,
+        )
+        assert unexpected["comparison_verdict"] == COMPARISON_DIVERGENT_UNEXPECTED
+        indeterminate = compare_with_static_feasibility(
+            _feasible_result_stub(), static_feasible=None, static_status=BLOCKED
+        )
+        assert indeterminate["comparison_verdict"] == COMPARISON_INDETERMINATE
+
+
+class TestSpaceTimeFeasibilityAnnotation:
+    """Classifier-side diagnostic annotation for oracle verdicts."""
+
+    def test_annotation_payload_for_local_policy_failure(self) -> None:
+        payload = build_space_time_feasibility_annotation(
+            scenario_id="open_crossing",
+            planner_id="sipp",
+            seed="0",
+            episode_succeeded=False,
+            episode_annotation=EPISODE_LOCAL_POLICY_FAILURE,
+            oracle_verdict=FEASIBILITY_FEASIBLE,
+            witness_found=True,
+        )
+        assert payload["schema_version"] == SPACE_TIME_FEASIBILITY_ANNOTATION_SCHEMA_VERSION
+        assert payload["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+        assert payload["episode_annotation"] == EPISODE_LOCAL_POLICY_FAILURE
+        assert payload["witness_found"] is True
+
+    def test_annotation_rejects_unknown_label(self) -> None:
+        with pytest.raises(FailureMechanismClassificationError, match="episode_annotation"):
+            build_space_time_feasibility_annotation(
+                scenario_id="s",
+                planner_id="p",
+                seed="0",
+                episode_succeeded=False,
+                episode_annotation="scenario_infeasible",
+                oracle_verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
+                witness_found=False,
+            )
+
+    def test_annotation_round_trips_oracle_classifier(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [[0.5, 2.0]], [[0.0, 1.0]])
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+        )
+        annotation = classify_episode_feasibility(result, episode_succeeded=False)
+        payload = build_space_time_feasibility_annotation(
+            scenario_id="open_crossing",
+            planner_id="sipp",
+            seed="0",
+            episode_succeeded=False,
+            episode_annotation=annotation,
+            oracle_verdict=result.verdict,
+            witness_found=result.feasible,
+        )
+        assert payload["episode_annotation"] == EPISODE_LOCAL_POLICY_FAILURE
+        assert payload["oracle_verdict"] == FEASIBILITY_FEASIBLE

@@ -1691,7 +1691,6 @@ def _validate_blind_corner_manifest(
 def _run_route_follow_intervention(
     blind_corner: dict[str, Any],
     radii: tuple[float, ...],
-    config: FeasibilityOracleConfig,
     route_runner: EpisodeRunner,
     seed: int,
 ) -> list[dict[str, Any]]:
@@ -1934,9 +1933,7 @@ def build_issue_5596_blind_corner_diagnostic(
     oracle_dict = envelope_sensitivity_verdict_to_dict(envelope_verdict)
     oracle_dict["issue"] = "5596"
 
-    route_follow_results = _run_route_follow_intervention(
-        blind_corner, radii, config, route_runner, seed
-    )
+    route_follow_results = _run_route_follow_intervention(blind_corner, radii, route_runner, seed)
     clearance_comparison = _run_clearance_comparison(blind_corner, radii, manifest_path, certify)
     planned_path_clearance = _run_planned_path_clearance_checks(blind_corner, radii, manifest_path)
     mechanism = _classify_blind_corner_mechanism(

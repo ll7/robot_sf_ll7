@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from functools import lru_cache
@@ -85,6 +86,9 @@ _REQUIRED_PROMOTION_REFS = (
     "forgetting_result",
     "evidence_bundle",
 )
+
+_SUPPORTED_CHECKSUM_ALGORITHMS = frozenset({"sha256", "sha384", "sha512", "blake2b"})
+_CHECKSUM_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{8,}$")
 
 
 class ContinualAdaptationProtocolError(RobotSfError, ValueError):
@@ -225,10 +229,14 @@ def check_continual_adaptation_run(
     evaluation_ids = [str(sid) for sid in manifest["scenarios"]["evaluation"]]
     disjoint = _check_scenario_disjoint(adaptation_ids, evaluation_ids, blockers)
 
-    decision = str(manifest["promotion_decision"]["decision"])
-    promotion_ready = _check_promotion_gate(decision, manifest.get("results"), blockers)
-
     derived_identifier = _compute_derived_identifier(baseline_identifier, manifest)
+    decision = str(manifest["promotion_decision"]["decision"])
+    promotion_ready = _check_promotion_gate(
+        decision,
+        manifest.get("results"),
+        baseline_identifier=baseline_identifier,
+        blockers=blockers,
+    )
 
     protocol_status = PROTOCOL_STATUS_VALID if not blockers else PROTOCOL_STATUS_INVALID
     # A derived identifier that somehow collided with the baseline would let the
@@ -412,7 +420,11 @@ def _check_scenario_disjoint(
 
 
 def _check_promotion_gate(
-    decision: str, results: Mapping[str, Any] | None, blockers: list[str]
+    decision: str,
+    results: Mapping[str, Any] | None,
+    *,
+    baseline_identifier: str,
+    blockers: list[str],
 ) -> bool:
     """Gate promotion on complete result/evidence references.
 
@@ -431,17 +443,26 @@ def _check_promotion_gate(
     promotion_ready = True
     for ref_name in _REQUIRED_PROMOTION_REFS:
         ref = results.get(ref_name)
-        if not _is_complete_reference(ref, ref_name):
+        if not _is_complete_reference(
+            ref,
+            ref_name,
+            baseline_identifier=baseline_identifier,
+        ):
             blockers.append(
                 f"promotion_decision is 'promote' but results.{ref_name} is missing or incomplete; "
-                "promotion requires a uri plus checksum"
+                "promotion requires a uri plus a supported checksum"
             )
             promotion_ready = False
     return promotion_ready
 
 
-def _is_complete_reference(ref: Any, ref_name: str) -> bool:
-    """Return ``True`` when a result/evidence reference has a uri and checksum."""
+def _is_complete_reference(
+    ref: Any,
+    ref_name: str,
+    *,
+    baseline_identifier: str,
+) -> bool:
+    """Return ``True`` when a promotion reference has a valid immutable identity."""
     if not isinstance(ref, Mapping):
         return False
     uri = ref.get("uri")
@@ -452,9 +473,18 @@ def _is_complete_reference(ref: Any, ref_name: str) -> bool:
         return False
     algorithm = checksum.get("algorithm")
     digest = checksum.get("digest")
-    return (
+    if not (
         isinstance(algorithm, str)
-        and bool(algorithm.strip())
+        and algorithm in _SUPPORTED_CHECKSUM_ALGORITHMS
         and isinstance(digest, str)
-        and bool(digest.strip())
+        and _CHECKSUM_DIGEST_PATTERN.fullmatch(digest)
+    ):
+        return False
+    if ref_name != "evidence_bundle":
+        return True
+    identifier = ref.get("identifier")
+    return (
+        isinstance(identifier, str)
+        and bool(identifier.strip())
+        and identifier != baseline_identifier
     )

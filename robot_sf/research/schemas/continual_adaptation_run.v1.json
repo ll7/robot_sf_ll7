@@ -57,7 +57,7 @@
     },
     "results": {
       "$ref": "#/$defs/results",
-      "description": "Optional references to the nominal, shifted, and forgetting evaluation results plus the new evidence bundle. Completeness (all four refs with uri plus checksum) is required only when promotion_decision.decision is 'promote' and is enforced by the semantic checker, so a partial results block fails closed at the promotion gate rather than at schema validation."
+      "description": "Optional references to the nominal, shifted, and forgetting evaluation results plus the new evidence bundle. Completeness (all four refs with uri plus a supported checksum, and a distinct non-empty evidence-bundle identifier) is required only when promotion_decision.decision is 'promote' and is enforced by the semantic checker, so a partial results block fails closed at the promotion gate rather than at schema validation."
     }
   },
   "$defs": {
@@ -263,7 +263,7 @@
     "results": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Loosely typed at the schema level so a partial block fails closed at the semantic promotion gate. Each ref is expected to carry a 'uri' plus a 'checksum' of {algorithm, digest}; the semantic checker requires all of nominal_result, shift_result, forgetting_result, and evidence_bundle to be present and complete before 'promote' can pass.",
+      "description": "Loosely typed at the schema level so a partial block fails closed at the semantic promotion gate. Each ref must carry a 'uri' plus a supported 'checksum' of {algorithm, digest}; evidence_bundle must also carry a non-empty identifier distinct from the baseline policy. The semantic checker requires all of nominal_result, shift_result, forgetting_result, and evidence_bundle to be present and complete before 'promote' can pass.",
       "properties": {
         "nominal_result": {
           "type": "object"
@@ -276,7 +276,7 @@
         },
         "evidence_bundle": {
           "type": "object",
-          "description": "New immutable evidence bundle for the adapted policy; expected to carry a fresh identifier, uri, and checksum that do not equal the baseline policy identifier."
+          "description": "New immutable evidence bundle for the adapted policy; promotion requires a fresh identifier, uri, and supported checksum, and the identifier must not equal the baseline policy identifier."
         }
       }
     }

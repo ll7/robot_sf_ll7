@@ -176,6 +176,32 @@ def test_promote_with_empty_reference_fails_closed() -> None:
     assert any("shift_result" in blocker for blocker in report.blockers)
 
 
+def test_promote_with_unsupported_result_checksum_fails_closed() -> None:
+    """A promotion result must use a supported checksum with a hexadecimal digest."""
+    manifest = _manifest()
+    manifest["promotion_decision"] = {"decision": "promote", "rationale": "want to ship"}
+    incomplete = _results()
+    incomplete["nominal_result"]["checksum"] = {"algorithm": "md5", "digest": "not-a-hash"}
+    manifest["results"] = incomplete
+    report = check_continual_adaptation_run(manifest)
+    assert report.protocol_status == PROTOCOL_STATUS_INVALID
+    assert report.promotion_ready is False
+    assert any("nominal_result" in blocker for blocker in report.blockers)
+
+
+def test_promote_with_baseline_named_evidence_bundle_fails_closed() -> None:
+    """A new evidence bundle must not reuse the immutable baseline identifier."""
+    manifest = _manifest()
+    manifest["promotion_decision"] = {"decision": "promote", "rationale": "want to ship"}
+    results = _results()
+    results["evidence_bundle"]["identifier"] = manifest["baseline_policy"]["identifier"]
+    manifest["results"] = results
+    report = check_continual_adaptation_run(manifest)
+    assert report.protocol_status == PROTOCOL_STATUS_INVALID
+    assert report.promotion_ready is False
+    assert any("evidence_bundle" in blocker for blocker in report.blockers)
+
+
 def test_safety_wrapper_mutation_permitted_fails_closed() -> None:
     """A manifest granting safety-wrapper mutation permission fails closed."""
     manifest = _manifest()

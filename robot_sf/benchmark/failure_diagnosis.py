@@ -528,6 +528,7 @@ def _require_collection_shapes(record: Mapping[str, Any]) -> None:
     onset = record["onset_interval"]
     if not isinstance(onset, list) or len(onset) != 2:
         raise FailureDiagnosisError("onset_interval must be a two-element list")
+    _require_onset_consistency(record["onset_time_s"], onset)
     causal_evidence = record["causal_evidence"]
     if not isinstance(causal_evidence, list):
         raise FailureDiagnosisError("causal_evidence must be a list")
@@ -541,6 +542,34 @@ def _require_collection_shapes(record: Mapping[str, Any]) -> None:
             raise FailureDiagnosisError(f"{field} must be a list")
     if not isinstance(record["source_predicate"], Mapping):
         raise FailureDiagnosisError("source_predicate must be a mapping")
+
+
+def _require_onset_consistency(onset_time_s: Any, onset_interval: list[Any]) -> None:
+    """Validate finite onset endpoints and their documented derivation relationship.
+
+    ``onset_time_s`` is the first endpoint of ``onset_interval``.  Keeping that
+    relationship in the validator prevents externally supplied payloads from
+    contradicting the deterministic adapter's onset localization.
+
+    Args:
+        onset_time_s: Reported onset time.
+        onset_interval: Two-element onset interval.
+
+    Raises:
+        FailureDiagnosisError: If an endpoint is non-finite/non-numeric or the
+            onset time does not equal the interval start.
+    """
+    normalized_interval = [_finite_or_none(endpoint) for endpoint in onset_interval]
+    if any(
+        endpoint is not None and normalized is None
+        for endpoint, normalized in zip(onset_interval, normalized_interval, strict=True)
+    ):
+        raise FailureDiagnosisError("onset_interval endpoints must be finite numbers or None")
+    normalized_onset = _finite_or_none(onset_time_s)
+    if onset_time_s is not None and normalized_onset is None:
+        raise FailureDiagnosisError("onset_time_s must be a finite number or None")
+    if normalized_onset != normalized_interval[0]:
+        raise FailureDiagnosisError("onset_time_s must equal onset_interval[0]")
 
 
 def _require_unknown_reason_invariant(record: Mapping[str, Any]) -> None:

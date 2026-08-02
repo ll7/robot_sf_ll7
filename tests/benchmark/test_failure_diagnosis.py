@@ -350,6 +350,15 @@ def test_validate_record_rejects_non_two_element_onset_interval() -> None:
         validate_failure_diagnosis_record(payload)
 
 
+def test_validate_record_rejects_inconsistent_onset_localization() -> None:
+    """onset_time_s must remain the first endpoint of onset_interval."""
+    record = diagnose_from_trace_failure_predicate(_predicate("collision"))
+    payload = record.to_dict()
+    payload["onset_time_s"] = 99.0
+    with pytest.raises(FailureDiagnosisError, match="onset_time_s must equal onset_interval"):
+        validate_failure_diagnosis_record(payload)
+
+
 def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> None:
     """unknown_failure_diagnosis_record mirrors unknown_failure_mechanism_record."""
     predicate = _predicate("collision", validity_status=_NOT_AVAILABLE, severity="critical")

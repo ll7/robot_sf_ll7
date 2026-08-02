@@ -255,6 +255,17 @@ def test_allowed_parameter_prefix_overlapping_safety_wrapper_fails_closed(
     assert any("overlaps immutable safety wrapper" in blocker for blocker in report.blockers)
 
 
+@pytest.mark.parametrize("parameter_prefix", ["*", "policy_net.*", "policy_net/head"])
+def test_wildcard_or_non_prefix_allowed_parameter_declaration_raises(
+    parameter_prefix: str,
+) -> None:
+    """Mutable declarations are literal prefixes, never backend-specific patterns."""
+    manifest = _manifest()
+    manifest["adaptation"]["allowed_parameters"] = [parameter_prefix]
+    with pytest.raises(ContinualAdaptationProtocolError, match="does not match"):
+        check_continual_adaptation_run(manifest)
+
+
 def test_missing_required_baseline_hash_raises() -> None:
     """Omitting the required baseline checksum fails closed at schema validation."""
     manifest = _manifest()

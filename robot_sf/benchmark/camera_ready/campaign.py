@@ -121,6 +121,106 @@ if TYPE_CHECKING:
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 
+_CAMPAIGN_TABLE_HEADERS = (
+    "planner_key",
+    "algo",
+    "human_model_variant",
+    "human_model_source",
+    "planner_group",
+    "kinematics",
+    "execution_mode",
+    "readiness_status",
+    "availability_status",
+    "benchmark_success",
+    "most_likely_failure_reason",
+    "availability_reason",
+    "readiness_tier",
+    "preflight_status",
+    "learned_policy_contract_status",
+    "socnav_prereq_policy",
+    "status",
+    "episodes",
+    "commands_evaluated",
+    "projection_rate",
+    "infeasible_rate",
+    "success_mean",
+    "collisions_mean",
+    "ped_collision_count_mean",
+    "obstacle_collision_count_mean",
+    "total_collision_count_mean",
+    "near_misses_mean",
+    "time_to_goal_norm_mean",
+    "path_efficiency_mean",
+    "comfort_exposure_mean",
+    "jerk_mean",
+    "snqi_mean",
+    "fairness_mismatch_flags",
+    "fairness_in_ranking_subset",
+)
+
+_CORE_EXPERIMENTAL_TABLE_HEADERS = (
+    "planner_key",
+    "algo",
+    "human_model_variant",
+    "human_model_source",
+    "planner_group",
+    "kinematics",
+    "readiness_tier",
+    "status",
+    "episodes",
+    "success_mean",
+    "collisions_mean",
+    "ped_collision_count_mean",
+    "obstacle_collision_count_mean",
+    "total_collision_count_mean",
+    "snqi_mean",
+)
+
+_SCENARIO_BREAKDOWN_HEADERS = (
+    "planner_key",
+    "algo",
+    "scenario_family",
+    "scenario_id",
+    "use_case",
+    "context",
+    "speed_regime",
+    "maneuver_type",
+    "episodes",
+    "success_mean",
+    "collisions_mean",
+    "ped_collision_count_mean",
+    "obstacle_collision_count_mean",
+    "total_collision_count_mean",
+    "near_misses_mean",
+    "time_to_goal_norm_mean",
+    "path_efficiency_mean",
+    "comfort_exposure_mean",
+    "jerk_mean",
+    "snqi_mean",
+)
+
+_FAMILY_BREAKDOWN_HEADERS = (
+    "planner_key",
+    "algo",
+    "scenario_family",
+    "use_case",
+    "context",
+    "speed_regime",
+    "maneuver_type",
+    "episodes",
+    "success_mean",
+    "collisions_mean",
+    "ped_collision_count_mean",
+    "obstacle_collision_count_mean",
+    "total_collision_count_mean",
+    "near_misses_mean",
+    "time_to_goal_norm_mean",
+    "path_efficiency_mean",
+    "comfort_exposure_mean",
+    "jerk_mean",
+    "snqi_mean",
+)
+
 
 @dataclass(frozen=True)
 class _CampaignRuntimeDependencies:
@@ -1508,6 +1608,38 @@ class _CampaignOutcomeState:
 
 
 @dataclass(frozen=True)
+class _CampaignReportArtifacts:
+    """Intermediate results from the report-writing phase of the orchestrator."""
+
+    outcome: _CampaignOutcomeState
+    snqi: _SnqiSectionResult
+    seed_variability_payload: dict[str, Any]
+    summary_json_path: Path
+    report_md_path: Path
+    credibility_scorecard_json_path: Path
+    csv_path: Path
+    md_table_path: Path
+    core_csv_path: Path
+    core_md_path: Path
+    experimental_csv_path: Path
+    experimental_md_path: Path
+    scenario_csv_path: Path
+    scenario_md_path: Path
+    family_csv_path: Path
+    family_md_path: Path
+    parity_csv_path: Path
+    parity_md_path: Path
+    skipped_csv_path: Path
+    skipped_md_path: Path
+    seed_variability_json_path: Path
+    seed_variability_csv_path: Path
+    seed_episode_rows_csv_path: Path
+    statistical_sufficiency_json_path: Path
+    actuation_envelope_json_path: Path | None
+    actuation_envelope_md_path: Path | None
+
+
+@dataclass(frozen=True)
 class _SnqiSectionResult:
     """Result of the SNQI diagnostics evaluation and artifact writing."""
 
@@ -1606,6 +1738,27 @@ def _post_run_integrity_and_fairness(
     return campaign_integrity, arm_rollup, fairness_report
 
 
+def _split_planner_rows_by_group(
+    cfg: CampaignConfig, planner_rows: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split planner rows into core and experimental groups.
+
+    Returns:
+        Tuple of (core_rows, experimental_rows).
+    """
+    if cfg.paper_facing:
+        core_rows = [row for row in planner_rows if str(row.get("planner_group")) == "core"]
+        experimental_rows = [row for row in planner_rows if str(row.get("planner_group")) != "core"]
+    else:
+        core_rows = [
+            row for row in planner_rows if str(row.get("readiness_tier")) == "baseline-ready"
+        ]
+        experimental_rows = [
+            row for row in planner_rows if str(row.get("readiness_tier")) != "baseline-ready"
+        ]
+    return core_rows, experimental_rows
+
+
 def _write_campaign_table_artifacts(
     cfg: CampaignConfig,
     reports_dir: Path,
@@ -1621,96 +1774,20 @@ def _write_campaign_table_artifacts(
         reports_dir,
         "campaign_table",
         planner_rows,
-        headers=(
-            "planner_key",
-            "algo",
-            "human_model_variant",
-            "human_model_source",
-            "planner_group",
-            "kinematics",
-            "execution_mode",
-            "readiness_status",
-            "availability_status",
-            "benchmark_success",
-            "most_likely_failure_reason",
-            "availability_reason",
-            "readiness_tier",
-            "preflight_status",
-            "learned_policy_contract_status",
-            "socnav_prereq_policy",
-            "status",
-            "episodes",
-            "commands_evaluated",
-            "projection_rate",
-            "infeasible_rate",
-            "success_mean",
-            "collisions_mean",
-            "ped_collision_count_mean",
-            "obstacle_collision_count_mean",
-            "total_collision_count_mean",
-            "near_misses_mean",
-            "time_to_goal_norm_mean",
-            "path_efficiency_mean",
-            "comfort_exposure_mean",
-            "jerk_mean",
-            "snqi_mean",
-            "fairness_mismatch_flags",
-            "fairness_in_ranking_subset",
-        ),
+        headers=_CAMPAIGN_TABLE_HEADERS,
     )
-    if cfg.paper_facing:
-        core_rows = [row for row in planner_rows if str(row.get("planner_group")) == "core"]
-        experimental_rows = [row for row in planner_rows if str(row.get("planner_group")) != "core"]
-    else:
-        core_rows = [
-            row for row in planner_rows if str(row.get("readiness_tier")) == "baseline-ready"
-        ]
-        experimental_rows = [
-            row for row in planner_rows if str(row.get("readiness_tier")) != "baseline-ready"
-        ]
+    core_rows, experimental_rows = _split_planner_rows_by_group(cfg, planner_rows)
     core_csv_path, core_md_path = _write_table_artifacts(
         reports_dir,
         "campaign_table_core",
         core_rows,
-        headers=(
-            "planner_key",
-            "algo",
-            "human_model_variant",
-            "human_model_source",
-            "planner_group",
-            "kinematics",
-            "readiness_tier",
-            "status",
-            "episodes",
-            "success_mean",
-            "collisions_mean",
-            "ped_collision_count_mean",
-            "obstacle_collision_count_mean",
-            "total_collision_count_mean",
-            "snqi_mean",
-        ),
+        headers=_CORE_EXPERIMENTAL_TABLE_HEADERS,
     )
     experimental_csv_path, experimental_md_path = _write_table_artifacts(
         reports_dir,
         "campaign_table_experimental",
         experimental_rows,
-        headers=(
-            "planner_key",
-            "algo",
-            "human_model_variant",
-            "human_model_source",
-            "planner_group",
-            "kinematics",
-            "readiness_tier",
-            "status",
-            "episodes",
-            "success_mean",
-            "collisions_mean",
-            "ped_collision_count_mean",
-            "obstacle_collision_count_mean",
-            "total_collision_count_mean",
-            "snqi_mean",
-        ),
+        headers=_CORE_EXPERIMENTAL_TABLE_HEADERS,
     )
     return (
         csv_path,
@@ -1744,54 +1821,13 @@ def _write_breakdown_and_parity_artifacts(
         reports_dir,
         "scenario_breakdown",
         scenario_rows,
-        headers=(
-            "planner_key",
-            "algo",
-            "scenario_family",
-            "scenario_id",
-            "use_case",
-            "context",
-            "speed_regime",
-            "maneuver_type",
-            "episodes",
-            "success_mean",
-            "collisions_mean",
-            "ped_collision_count_mean",
-            "obstacle_collision_count_mean",
-            "total_collision_count_mean",
-            "near_misses_mean",
-            "time_to_goal_norm_mean",
-            "path_efficiency_mean",
-            "comfort_exposure_mean",
-            "jerk_mean",
-            "snqi_mean",
-        ),
+        headers=_SCENARIO_BREAKDOWN_HEADERS,
     )
     family_csv_path, family_md_path = _write_table_artifacts(
         reports_dir,
         "scenario_family_breakdown",
         family_rows,
-        headers=(
-            "planner_key",
-            "algo",
-            "scenario_family",
-            "use_case",
-            "context",
-            "speed_regime",
-            "maneuver_type",
-            "episodes",
-            "success_mean",
-            "collisions_mean",
-            "ped_collision_count_mean",
-            "obstacle_collision_count_mean",
-            "total_collision_count_mean",
-            "near_misses_mean",
-            "time_to_goal_norm_mean",
-            "path_efficiency_mean",
-            "comfort_exposure_mean",
-            "jerk_mean",
-            "snqi_mean",
-        ),
+        headers=_FAMILY_BREAKDOWN_HEADERS,
     )
     parity_csv_path, parity_md_path = _write_parity_table(reports_dir, planner_rows)
     skipped_combo_rows = _build_skipped_combo_rows(run_entries)
@@ -1966,24 +2002,17 @@ def _compute_campaign_outcome_state(
     )
 
 
-def _build_and_write_snqi_section(  # noqa: PLR0913
-    cfg: CampaignConfig,
-    *,
-    campaign_id: str,
-    campaign_finished_at_utc: str,
-    reports_dir: Path,
-    planner_rows: list[dict[str, Any]],
-    run_entries: list[dict[str, Any]],
+def _resolve_snqi_baseline_and_weights(
     snqi_weights: dict[str, Any] | None,
     snqi_baseline: dict[str, Any] | None,
+    episodes: list[dict[str, Any]],
     warnings: list[str],
-) -> _SnqiSectionResult:
-    """Evaluate the SNQI contract and write diagnostics artifacts.
+) -> tuple[dict[str, Any], dict[str, Any], str, int]:
+    """Resolve SNQI weights and baseline statistics.
 
     Returns:
-        SNQI section result with paths, contract evaluation, and warning flags.
+        Tuple of (configured_weights, baseline_for_eval, baseline_source, baseline_adjustments).
     """
-    episodes = collect_episodes_from_campaign_runs(run_entries, repo_root=get_repository_root())
     configured_weights = resolve_weight_mapping(snqi_weights)
     if snqi_baseline is None:
         baseline_source = "derived_from_campaign_episodes"
@@ -1995,6 +2024,15 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
         baseline_for_eval, baseline_warnings = sanitize_baseline_stats(snqi_baseline)
         baseline_adjustments = len(baseline_warnings)
         warnings.extend(baseline_warnings)
+    return configured_weights, baseline_for_eval, baseline_source, baseline_adjustments
+
+
+def _validate_snqi_inputs_if_paper_facing(
+    cfg: CampaignConfig,
+    episodes: list[dict[str, Any]],
+    baseline_for_eval: dict[str, Any],
+) -> None:
+    """Validate SNQI normalized inputs when paper_facing mode is enabled."""
     if cfg.paper_facing and cfg.snqi_contract.enabled:
         normalized_input_issues = validate_snqi_normalized_inputs(
             episodes=episodes,
@@ -2005,25 +2043,18 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
                 "SNQI sensitivity preflight failed: "
                 + "; ".join(sorted(set(normalized_input_issues)))
             )
-    thresholds = SnqiContractThresholds(
-        rank_alignment_warn=cfg.snqi_contract.rank_alignment_warn_threshold,
-        rank_alignment_fail=cfg.snqi_contract.rank_alignment_fail_threshold,
-        outcome_separation_warn=cfg.snqi_contract.outcome_separation_warn_threshold,
-        outcome_separation_fail=cfg.snqi_contract.outcome_separation_fail_threshold,
-        max_component_dominance_warn=cfg.snqi_contract.max_component_dominance_warn_threshold,
-        max_component_dominance_fail=cfg.snqi_contract.max_component_dominance_fail_threshold,
-    )
-    contract_eval = evaluate_snqi_contract(
-        planner_rows,
-        episodes,
-        weights=configured_weights,
-        baseline=baseline_for_eval,
-        thresholds=thresholds,
-    )
-    positioning_results = _compute_snqi_positioning(
-        planner_rows, episodes, baseline_for_eval, configured_weights, cfg
-    )
-    positioning = positioning_results["positioning"]
+
+
+def _compute_snqi_hashes(
+    cfg: CampaignConfig,
+    configured_weights: dict[str, Any],
+    baseline_for_eval: dict[str, Any],
+) -> tuple[str, str]:
+    """Compute SHA256 hashes for SNQI weights and baseline.
+
+    Returns:
+        Tuple of (weights_sha256, baseline_sha256).
+    """
     weights_sha256 = (
         _sha256_file(cfg.snqi_weights_path)
         if cfg.snqi_weights_path is not None
@@ -2034,22 +2065,19 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
         if cfg.snqi_baseline_path is not None
         else _sha256_payload(baseline_for_eval)
     )
-    snqi_diagnostics_payload = _build_snqi_diagnostics_payload(
-        cfg,
-        campaign_id=campaign_id,
-        campaign_finished_at_utc=campaign_finished_at_utc,
-        contract_eval=contract_eval,
-        positioning_results=positioning_results,
-        configured_weights=configured_weights,
-        baseline_for_eval=baseline_for_eval,
-        baseline_source=baseline_source,
-        baseline_adjustments=baseline_adjustments,
-        weights_sha256=weights_sha256,
-        baseline_sha256=baseline_sha256,
-    )
-    snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
-        _write_snqi_diagnostics_artifacts(reports_dir, snqi_diagnostics_payload)
-    )
+    return weights_sha256, baseline_sha256
+
+
+def _determine_snqi_contract_warnings(
+    cfg: CampaignConfig,
+    contract_eval: Any,
+    warnings: list[str],
+) -> tuple[bool, bool]:
+    """Determine SNQI hard fail and soft contract warning flags.
+
+    Returns:
+        Tuple of (snqi_hard_fail, soft_contract_warning).
+    """
     snqi_hard_fail = (
         cfg.paper_facing
         and cfg.snqi_contract.enabled
@@ -2076,6 +2104,72 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
             "SNQI contract status="
             f"{contract_eval.status} with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
         )
+    return snqi_hard_fail, soft_contract_warning
+
+
+def _build_and_write_snqi_section(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    campaign_id: str,
+    campaign_finished_at_utc: str,
+    reports_dir: Path,
+    planner_rows: list[dict[str, Any]],
+    run_entries: list[dict[str, Any]],
+    snqi_weights: dict[str, Any] | None,
+    snqi_baseline: dict[str, Any] | None,
+    warnings: list[str],
+) -> _SnqiSectionResult:
+    """Evaluate the SNQI contract and write diagnostics artifacts.
+
+    Returns:
+        SNQI section result with paths, contract evaluation, and warning flags.
+    """
+    episodes = collect_episodes_from_campaign_runs(run_entries, repo_root=get_repository_root())
+    configured_weights, baseline_for_eval, baseline_source, baseline_adjustments = (
+        _resolve_snqi_baseline_and_weights(snqi_weights, snqi_baseline, episodes, warnings)
+    )
+    _validate_snqi_inputs_if_paper_facing(cfg, episodes, baseline_for_eval)
+    thresholds = SnqiContractThresholds(
+        rank_alignment_warn=cfg.snqi_contract.rank_alignment_warn_threshold,
+        rank_alignment_fail=cfg.snqi_contract.rank_alignment_fail_threshold,
+        outcome_separation_warn=cfg.snqi_contract.outcome_separation_warn_threshold,
+        outcome_separation_fail=cfg.snqi_contract.outcome_separation_fail_threshold,
+        max_component_dominance_warn=cfg.snqi_contract.max_component_dominance_warn_threshold,
+        max_component_dominance_fail=cfg.snqi_contract.max_component_dominance_fail_threshold,
+    )
+    contract_eval = evaluate_snqi_contract(
+        planner_rows,
+        episodes,
+        weights=configured_weights,
+        baseline=baseline_for_eval,
+        thresholds=thresholds,
+    )
+    positioning_results = _compute_snqi_positioning(
+        planner_rows, episodes, baseline_for_eval, configured_weights, cfg
+    )
+    positioning = positioning_results["positioning"]
+    weights_sha256, baseline_sha256 = _compute_snqi_hashes(
+        cfg, configured_weights, baseline_for_eval
+    )
+    snqi_diagnostics_payload = _build_snqi_diagnostics_payload(
+        cfg,
+        campaign_id=campaign_id,
+        campaign_finished_at_utc=campaign_finished_at_utc,
+        contract_eval=contract_eval,
+        positioning_results=positioning_results,
+        configured_weights=configured_weights,
+        baseline_for_eval=baseline_for_eval,
+        baseline_source=baseline_source,
+        baseline_adjustments=baseline_adjustments,
+        weights_sha256=weights_sha256,
+        baseline_sha256=baseline_sha256,
+    )
+    snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
+        _write_snqi_diagnostics_artifacts(reports_dir, snqi_diagnostics_payload)
+    )
+    snqi_hard_fail, soft_contract_warning = _determine_snqi_contract_warnings(
+        cfg, contract_eval, warnings
+    )
     return _SnqiSectionResult(
         snqi_diagnostics_json_path=snqi_diagnostics_json_path,
         snqi_diagnostics_md_path=snqi_diagnostics_md_path,
@@ -2510,6 +2604,25 @@ def _build_campaign_summary_dict(  # noqa: PLR0913
     }
 
 
+def _build_release_artifact_urls(
+    paths: _CampaignPreflightPaths, table_paths: dict[str, Any]
+) -> tuple[str, str, str, str]:
+    """Build release-related URLs and archive name.
+
+    Returns:
+        Tuple of (expected_archive_name, release_url, release_asset_url, doi_url).
+    """
+    release_tag_value = table_paths.get("release_tag_value", "")
+    repository_url = str(table_paths.get("repository_url", "")).rstrip("/")
+    expected_archive_name = f"{paths.campaign_id}_publication_bundle.tar.gz"
+    release_url = f"{repository_url}/releases/tag/{release_tag_value}"
+    release_asset_url = (
+        f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
+    )
+    doi_url = f"https://doi.org/{table_paths.get('doi', '')}"
+    return expected_archive_name, release_url, release_asset_url, doi_url
+
+
 def _build_campaign_artifacts_section(
     paths: _CampaignPreflightPaths,
     snqi: _SnqiSectionResult,
@@ -2522,14 +2635,9 @@ def _build_campaign_artifacts_section(
     """
     reports_dir = paths.reports_dir
     campaign_root = paths.campaign_root
-    release_tag_value = table_paths.get("release_tag_value", "")
-    repository_url = str(table_paths.get("repository_url", "")).rstrip("/")
-    expected_archive_name = f"{paths.campaign_id}_publication_bundle.tar.gz"
-    release_url = f"{repository_url}/releases/tag/{release_tag_value}"
-    release_asset_url = (
-        f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
+    expected_archive_name, release_url, release_asset_url, doi_url = _build_release_artifact_urls(
+        paths, table_paths
     )
-    doi_url = f"https://doi.org/{table_paths.get('doi', '')}"
     return {
         "campaign_manifest": _repo_relative(campaign_root / "campaign_manifest.json"),
         "campaign_summary_json": _repo_relative(table_paths["summary_json_path"]),
@@ -2593,6 +2701,66 @@ def _build_campaign_artifacts_section(
     }
 
 
+def _build_run_meta_preflight_artifacts(
+    paths: _CampaignPreflightPaths, table_paths: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the preflight_artifacts section of run_meta.
+
+    Returns:
+        Preflight artifacts mapping with repo-relative paths.
+    """
+    return {
+        "validate_config": _repo_relative(paths.validate_config_path),
+        "preview_scenarios": _repo_relative(paths.preview_scenarios_path),
+        "amv_coverage_json": _repo_relative(paths.amv_coverage_json_path),
+        "amv_coverage_md": _repo_relative(paths.amv_coverage_md_path),
+        "comparability_json": (
+            _repo_relative(paths.comparability_json_path) if paths.comparability_json_path else None
+        ),
+        "comparability_md": (
+            _repo_relative(paths.comparability_md_path) if paths.comparability_md_path else None
+        ),
+        "seed_variability_json": _repo_relative(table_paths["seed_variability_json_path"]),
+        "seed_variability_csv": _repo_relative(table_paths["seed_variability_csv_path"]),
+        "seed_episode_rows_csv": _repo_relative(table_paths["seed_episode_rows_csv_path"]),
+        "statistical_sufficiency_json": _repo_relative(
+            table_paths["statistical_sufficiency_json_path"]
+        ),
+        "actuation_envelope_json": (
+            _repo_relative(table_paths["actuation_envelope_json_path"])
+            if table_paths.get("actuation_envelope_json_path") is not None
+            else None
+        ),
+        "actuation_envelope_md": (
+            _repo_relative(table_paths["actuation_envelope_md_path"])
+            if table_paths.get("actuation_envelope_md_path") is not None
+            else None
+        ),
+    }
+
+
+def _build_run_meta_seed_variability_metrics(
+    seed_variability_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the seed_variability metrics section of run_meta.
+
+    Returns:
+        Seed variability metrics mapping.
+    """
+    return {
+        "metrics": list(_SEED_VARIABILITY_METRICS),
+        "row_count": int(seed_variability_payload.get("row_count", 0)),
+        "bootstrap_method": str(seed_variability_payload.get("confidence", {}).get("method", "")),
+        "bootstrap_level": float(
+            seed_variability_payload.get("confidence", {}).get("confidence", 0.0) or 0.0
+        ),
+        "bootstrap_samples": int(
+            seed_variability_payload.get("confidence", {}).get("bootstrap_samples", 0) or 0
+        ),
+        "seed": int(seed_variability_payload.get("confidence", {}).get("bootstrap_seed", 0) or 0),
+    }
+
+
 def _build_run_meta(
     cfg: CampaignConfig,
     *,
@@ -2629,36 +2797,7 @@ def _build_run_meta(
             "resolved_seeds": paths.resolved_seeds,
             "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
         },
-        "preflight_artifacts": {
-            "validate_config": _repo_relative(paths.validate_config_path),
-            "preview_scenarios": _repo_relative(paths.preview_scenarios_path),
-            "amv_coverage_json": _repo_relative(paths.amv_coverage_json_path),
-            "amv_coverage_md": _repo_relative(paths.amv_coverage_md_path),
-            "comparability_json": (
-                _repo_relative(paths.comparability_json_path)
-                if paths.comparability_json_path
-                else None
-            ),
-            "comparability_md": (
-                _repo_relative(paths.comparability_md_path) if paths.comparability_md_path else None
-            ),
-            "seed_variability_json": _repo_relative(table_paths["seed_variability_json_path"]),
-            "seed_variability_csv": _repo_relative(table_paths["seed_variability_csv_path"]),
-            "seed_episode_rows_csv": _repo_relative(table_paths["seed_episode_rows_csv_path"]),
-            "statistical_sufficiency_json": _repo_relative(
-                table_paths["statistical_sufficiency_json_path"]
-            ),
-            "actuation_envelope_json": (
-                _repo_relative(table_paths["actuation_envelope_json_path"])
-                if table_paths.get("actuation_envelope_json_path") is not None
-                else None
-            ),
-            "actuation_envelope_md": (
-                _repo_relative(table_paths["actuation_envelope_md_path"])
-                if table_paths.get("actuation_envelope_md_path") is not None
-                else None
-            ),
-        },
+        "preflight_artifacts": _build_run_meta_preflight_artifacts(paths, table_paths),
         "synthetic_actuation_artifacts": {
             "json": (
                 _repo_relative(table_paths["actuation_envelope_json_path"])
@@ -2684,22 +2823,7 @@ def _build_run_meta(
                 table_paths["statistical_sufficiency_json_path"]
             ),
         },
-        "seed_variability": {
-            "metrics": list(_SEED_VARIABILITY_METRICS),
-            "row_count": int(seed_variability_payload.get("row_count", 0)),
-            "bootstrap_method": str(
-                seed_variability_payload.get("confidence", {}).get("method", "")
-            ),
-            "bootstrap_level": float(
-                seed_variability_payload.get("confidence", {}).get("confidence", 0.0) or 0.0
-            ),
-            "bootstrap_samples": int(
-                seed_variability_payload.get("confidence", {}).get("bootstrap_samples", 0) or 0
-            ),
-            "seed": int(
-                seed_variability_payload.get("confidence", {}).get("bootstrap_seed", 0) or 0
-            ),
-        },
+        "seed_variability": _build_run_meta_seed_variability_metrics(seed_variability_payload),
         "campaign_id": paths.campaign_id,
         "started_at_utc": paths.campaign_started_at_utc,
         "finished_at_utc": outcome.campaign_finished_at_utc,
@@ -2904,89 +3028,18 @@ def _write_final_campaign_artifacts(
         warnings.append(f"Assurance fragment export failed: {exc}")
 
 
-def _run_campaign_orchestrator(
+def _write_table_and_breakdown_artifacts(
     cfg: CampaignConfig,
-    *,
-    output_root: Path | None = None,
-    label: str | None = None,
-    campaign_id: str | None = None,
-    skip_publication_bundle: bool = False,
-    invoked_command: str | None = None,
-    dependencies: _CampaignRuntimeDependencies,
-    arm_isolation: str | None = None,
-) -> dict[str, Any]:
-    """Execute the campaign orchestrator with optional arm isolation override.
-
-    Args:
-        cfg: Campaign configuration.
-        output_root: Optional campaign base output directory.
-        label: Optional label suffix embedded into campaign_id.
-        campaign_id: Optional exact campaign directory id for resume.
-        skip_publication_bundle: Skip publication bundle export even if enabled in config.
-        invoked_command: Full command line that invoked this run.
-        dependencies: Runtime dependency collaborators.
-        arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
-            If None, uses cfg.arm_isolation (issue #4826).
+    paths: _CampaignPreflightPaths,
+    planner_rows: list[dict[str, Any]],
+    run_entries: list[dict[str, Any]],
+) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path]:
+    """Write campaign table and breakdown artifacts.
 
     Returns:
-        Campaign execution summary with output paths and counters.
+        Tuple of all table and breakdown artifact paths.
     """
-    start = time.perf_counter()
-    prepared = dependencies.prepare_campaign_preflight(
-        cfg,
-        output_root=output_root,
-        label=label,
-        campaign_id=campaign_id,
-        invoked_command=invoked_command,
-    )
-    paths = _unpack_campaign_preflight(prepared)
-    snqi_weights = load_optional_json(str(cfg.snqi_weights_path) if cfg.snqi_weights_path else None)
-    snqi_baseline = load_optional_json(
-        str(cfg.snqi_baseline_path) if cfg.snqi_baseline_path else None
-    )
-
-    runs_dir = paths.campaign_root / "runs"
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    resume_verdicts = _emit_resume_plan_preflight(
-        cfg=cfg,
-        campaign_id=paths.campaign_id,
-        config_hash=str(paths.config_hash),
-        campaign_root=paths.campaign_root,
-        runs_dir=runs_dir,
-        scenarios=paths.scenarios,
-    )
-    kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
-    planner_run_results = _run_campaign_planner_matrix(
-        cfg=cfg,
-        scenarios=paths.scenarios,
-        snqi_weights=snqi_weights,
-        snqi_baseline=snqi_baseline,
-        runs_dir=runs_dir,
-        dependencies=dependencies,
-        arm_isolation=arm_isolation,
-        resume_verdicts=resume_verdicts,
-    )
-    run_entries = planner_run_results.run_entries
-    planner_rows = planner_run_results.planner_rows
-    warnings = planner_run_results.warnings
-    seed_variability_records = planner_run_results.seed_variability_records
-
-    campaign_integrity, arm_rollup, fairness_report = _post_run_integrity_and_fairness(
-        cfg,
-        manifest_payload=paths.manifest_payload,
-        run_entries=run_entries,
-        planner_rows=planner_rows,
-        warnings=warnings,
-        scenarios=paths.scenarios,
-        resolved_seeds=paths.resolved_seeds,
-        campaign_root=paths.campaign_root,
-    )
-
     reports_dir = paths.reports_dir
-    summary_json_path = reports_dir / "campaign_summary.json"
-    report_md_path = reports_dir / "campaign_report.md"
-    credibility_scorecard_json_path = reports_dir / "campaign_credibility_scorecard.json"
-
     (
         csv_path,
         md_table_path,
@@ -3010,16 +3063,44 @@ def _run_campaign_orchestrator(
         run_entries=run_entries,
         planner_rows=planner_rows,
     )
-
-    outcome = _compute_campaign_outcome_state(
-        cfg,
-        start=start,
-        run_entries=run_entries,
-        planner_rows=planner_rows,
-        campaign_integrity=campaign_integrity,
-        kinematics_matrix=kinematics_matrix,
+    return (
+        csv_path,
+        md_table_path,
+        core_csv_path,
+        core_md_path,
+        experimental_csv_path,
+        experimental_md_path,
+        scenario_csv_path,
+        scenario_md_path,
+        family_csv_path,
+        family_md_path,
+        parity_csv_path,
+        parity_md_path,
+        skipped_csv_path,
+        skipped_md_path,
     )
 
+
+def _write_diagnostic_sections(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    paths: _CampaignPreflightPaths,
+    outcome: _CampaignOutcomeState,
+    planner_rows: list[dict[str, Any]],
+    run_entries: list[dict[str, Any]],
+    seed_variability_records: list[dict[str, Any]],
+    snqi_weights: dict[str, Any] | None,
+    snqi_baseline: dict[str, Any] | None,
+    warnings: list[str],
+) -> tuple[_SnqiSectionResult, dict[str, Any], Path, Path, Path, Path, Path | None, Path | None]:
+    """Write seed variability, actuation envelope, and SNQI diagnostic sections.
+
+    Returns:
+        Tuple of (snqi, seed_variability_payload, seed_variability_json_path,
+        seed_variability_csv_path, seed_episode_rows_csv_path,
+        statistical_sufficiency_json_path, actuation_envelope_json_path,
+        actuation_envelope_md_path).
+    """
+    reports_dir = paths.reports_dir
     (
         seed_variability_payload,
         seed_variability_json_path,
@@ -3060,36 +3141,192 @@ def _run_campaign_orchestrator(
         warnings=warnings,
     )
 
-    release_tag_value = cfg.release_tag
-    repository_url = cfg.repository_url.rstrip("/")
-    table_paths: dict[str, Any] = {
-        "summary_json_path": summary_json_path,
-        "credibility_scorecard_json_path": credibility_scorecard_json_path,
-        "report_md_path": report_md_path,
-        "csv_path": csv_path,
-        "md_table_path": md_table_path,
-        "core_csv_path": core_csv_path,
-        "core_md_path": core_md_path,
-        "experimental_csv_path": experimental_csv_path,
-        "experimental_md_path": experimental_md_path,
-        "scenario_csv_path": scenario_csv_path,
-        "scenario_md_path": scenario_md_path,
-        "family_csv_path": family_csv_path,
-        "family_md_path": family_md_path,
-        "parity_csv_path": parity_csv_path,
-        "parity_md_path": parity_md_path,
-        "skipped_csv_path": skipped_csv_path,
-        "skipped_md_path": skipped_md_path,
-        "seed_variability_json_path": seed_variability_json_path,
-        "seed_variability_csv_path": seed_variability_csv_path,
-        "seed_episode_rows_csv_path": seed_episode_rows_csv_path,
-        "statistical_sufficiency_json_path": statistical_sufficiency_json_path,
-        "actuation_envelope_json_path": actuation_envelope_json_path,
-        "actuation_envelope_md_path": actuation_envelope_md_path,
-        "release_tag_value": release_tag_value,
-        "repository_url": repository_url,
-        "doi": cfg.doi,
-    }
+    return (
+        snqi,
+        seed_variability_payload,
+        seed_variability_json_path,
+        seed_variability_csv_path,
+        seed_episode_rows_csv_path,
+        statistical_sufficiency_json_path,
+        actuation_envelope_json_path,
+        actuation_envelope_md_path,
+    )
+
+
+def _assemble_report_artifacts(
+    outcome: _CampaignOutcomeState,
+    snqi: _SnqiSectionResult,
+    seed_variability_payload: dict[str, Any],
+    summary_json_path: Path,
+    report_md_path: Path,
+    credibility_scorecard_json_path: Path,
+    table_paths: tuple[Path, ...],
+    diagnostic_paths: tuple[Any, ...],
+) -> _CampaignReportArtifacts:
+    """Assemble the _CampaignReportArtifacts dataclass from computed results.
+
+    Returns:
+        Grouped report artifact paths and computed results.
+    """
+    (
+        seed_variability_json_path,
+        seed_variability_csv_path,
+        seed_episode_rows_csv_path,
+        statistical_sufficiency_json_path,
+        actuation_envelope_json_path,
+        actuation_envelope_md_path,
+    ) = diagnostic_paths
+    return _CampaignReportArtifacts(
+        outcome=outcome,
+        snqi=snqi,
+        seed_variability_payload=seed_variability_payload,
+        summary_json_path=summary_json_path,
+        report_md_path=report_md_path,
+        credibility_scorecard_json_path=credibility_scorecard_json_path,
+        csv_path=table_paths[0],
+        md_table_path=table_paths[1],
+        core_csv_path=table_paths[2],
+        core_md_path=table_paths[3],
+        experimental_csv_path=table_paths[4],
+        experimental_md_path=table_paths[5],
+        scenario_csv_path=table_paths[6],
+        scenario_md_path=table_paths[7],
+        family_csv_path=table_paths[8],
+        family_md_path=table_paths[9],
+        parity_csv_path=table_paths[10],
+        parity_md_path=table_paths[11],
+        skipped_csv_path=table_paths[12],
+        skipped_md_path=table_paths[13],
+        seed_variability_json_path=seed_variability_json_path,
+        seed_variability_csv_path=seed_variability_csv_path,
+        seed_episode_rows_csv_path=seed_episode_rows_csv_path,
+        statistical_sufficiency_json_path=statistical_sufficiency_json_path,
+        actuation_envelope_json_path=actuation_envelope_json_path,
+        actuation_envelope_md_path=actuation_envelope_md_path,
+    )
+
+
+def _write_campaign_report_artifacts(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    paths: _CampaignPreflightPaths,
+    start: float,
+    run_entries: list[dict[str, Any]],
+    planner_rows: list[dict[str, Any]],
+    campaign_integrity: dict[str, Any],
+    kinematics_matrix: dict[str, Any],
+    seed_variability_records: list[dict[str, Any]],
+    snqi_weights: dict[str, Any] | None,
+    snqi_baseline: dict[str, Any] | None,
+    warnings: list[str],
+) -> _CampaignReportArtifacts:
+    """Write all report-level artifacts and compute outcome state.
+
+    Returns:
+        Grouped intermediate results for downstream summary and finalization.
+    """
+    reports_dir = paths.reports_dir
+    summary_json_path = reports_dir / "campaign_summary.json"
+    report_md_path = reports_dir / "campaign_report.md"
+    credibility_scorecard_json_path = reports_dir / "campaign_credibility_scorecard.json"
+
+    table_paths = _write_table_and_breakdown_artifacts(cfg, paths, planner_rows, run_entries)
+
+    outcome = _compute_campaign_outcome_state(
+        cfg,
+        start=start,
+        run_entries=run_entries,
+        planner_rows=planner_rows,
+        campaign_integrity=campaign_integrity,
+        kinematics_matrix=kinematics_matrix,
+    )
+
+    (
+        snqi,
+        seed_variability_payload,
+        seed_variability_json_path,
+        seed_variability_csv_path,
+        seed_episode_rows_csv_path,
+        statistical_sufficiency_json_path,
+        actuation_envelope_json_path,
+        actuation_envelope_md_path,
+    ) = _write_diagnostic_sections(
+        cfg,
+        paths,
+        outcome,
+        planner_rows,
+        run_entries,
+        seed_variability_records,
+        snqi_weights,
+        snqi_baseline,
+        warnings,
+    )
+
+    return _assemble_report_artifacts(
+        outcome,
+        snqi,
+        seed_variability_payload,
+        summary_json_path,
+        report_md_path,
+        credibility_scorecard_json_path,
+        table_paths,
+        (
+            seed_variability_json_path,
+            seed_variability_csv_path,
+            seed_episode_rows_csv_path,
+            statistical_sufficiency_json_path,
+            actuation_envelope_json_path,
+            actuation_envelope_md_path,
+        ),
+    )
+
+
+def _build_summary_and_write_run_files(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    paths: _CampaignPreflightPaths,
+    artifacts: _CampaignReportArtifacts,
+    run_entries: list[dict[str, Any]],
+    planner_rows: list[dict[str, Any]],
+    campaign_integrity: dict[str, Any],
+    arm_rollup: dict[str, Any],
+    fairness_report: Any,
+    warnings: list[str],
+    kinematics_matrix: dict[str, Any],
+    invoked_command: str | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build campaign summary and write run-level files.
+
+    Returns:
+        Tuple of (campaign_summary, table_paths).
+    """
+    outcome = artifacts.outcome
+    snqi = artifacts.snqi
+    table_paths = _build_table_paths_dict(
+        cfg,
+        summary_json_path=artifacts.summary_json_path,
+        credibility_scorecard_json_path=artifacts.credibility_scorecard_json_path,
+        report_md_path=artifacts.report_md_path,
+        csv_path=artifacts.csv_path,
+        md_table_path=artifacts.md_table_path,
+        core_csv_path=artifacts.core_csv_path,
+        core_md_path=artifacts.core_md_path,
+        experimental_csv_path=artifacts.experimental_csv_path,
+        experimental_md_path=artifacts.experimental_md_path,
+        scenario_csv_path=artifacts.scenario_csv_path,
+        scenario_md_path=artifacts.scenario_md_path,
+        family_csv_path=artifacts.family_csv_path,
+        family_md_path=artifacts.family_md_path,
+        parity_csv_path=artifacts.parity_csv_path,
+        parity_md_path=artifacts.parity_md_path,
+        skipped_csv_path=artifacts.skipped_csv_path,
+        skipped_md_path=artifacts.skipped_md_path,
+        seed_variability_json_path=artifacts.seed_variability_json_path,
+        seed_variability_csv_path=artifacts.seed_variability_csv_path,
+        seed_episode_rows_csv_path=artifacts.seed_episode_rows_csv_path,
+        statistical_sufficiency_json_path=artifacts.statistical_sufficiency_json_path,
+        actuation_envelope_json_path=artifacts.actuation_envelope_json_path,
+        actuation_envelope_md_path=artifacts.actuation_envelope_md_path,
+    )
 
     campaign_summary = _build_campaign_summary_dict(
         cfg,
@@ -3115,11 +3352,31 @@ def _run_campaign_orchestrator(
         paths=paths,
         outcome=outcome,
         snqi=snqi,
-        seed_variability_payload=seed_variability_payload,
+        seed_variability_payload=artifacts.seed_variability_payload,
         invoked_command=invoked_command,
         table_paths=table_paths,
     )
 
+    return campaign_summary, table_paths
+
+
+def _export_and_write_final_artifacts(
+    cfg: CampaignConfig,
+    paths: _CampaignPreflightPaths,
+    artifacts: _CampaignReportArtifacts,
+    campaign_summary: dict[str, Any],
+    campaign_integrity: dict[str, Any],
+    warnings: list[str],
+    skip_publication_bundle: bool,
+    dependencies: _CampaignRuntimeDependencies,
+) -> dict[str, Any] | None:
+    """Export publication bundle and write final campaign artifacts.
+
+    Returns:
+        Publication payload dict, or None when skipped/failed.
+    """
+    outcome = artifacts.outcome
+    snqi = artifacts.snqi
     publication_payload = _export_publication_bundle_section(
         cfg,
         campaign_id=paths.campaign_id,
@@ -3133,12 +3390,12 @@ def _run_campaign_orchestrator(
     )
 
     _write_final_campaign_artifacts(
-        reports_dir,
+        paths.reports_dir,
         campaign_summary=campaign_summary,
         campaign_integrity=campaign_integrity,
-        credibility_scorecard_json_path=credibility_scorecard_json_path,
-        summary_json_path=summary_json_path,
-        report_md_path=report_md_path,
+        credibility_scorecard_json_path=artifacts.credibility_scorecard_json_path,
+        summary_json_path=artifacts.summary_json_path,
+        report_md_path=artifacts.report_md_path,
         warnings=warnings,
     )
 
@@ -3150,6 +3407,271 @@ def _run_campaign_orchestrator(
             f"See diagnostics: {_repo_relative(snqi.snqi_diagnostics_json_path)}"
         )
 
+    return publication_payload
+
+
+def _finalize_campaign_outputs(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    paths: _CampaignPreflightPaths,
+    artifacts: _CampaignReportArtifacts,
+    run_entries: list[dict[str, Any]],
+    planner_rows: list[dict[str, Any]],
+    campaign_integrity: dict[str, Any],
+    arm_rollup: dict[str, Any],
+    fairness_report: Any,
+    warnings: list[str],
+    kinematics_matrix: dict[str, Any],
+    invoked_command: str | None,
+    skip_publication_bundle: bool,
+    dependencies: _CampaignRuntimeDependencies,
+) -> dict[str, Any] | None:
+    """Build summary, write run-level files, export bundle, and write final artifacts.
+
+    Returns:
+        Publication payload dict, or None when skipped/failed.
+    """
+    campaign_summary, _ = _build_summary_and_write_run_files(
+        cfg,
+        paths,
+        artifacts,
+        run_entries,
+        planner_rows,
+        campaign_integrity,
+        arm_rollup,
+        fairness_report,
+        warnings,
+        kinematics_matrix,
+        invoked_command,
+    )
+
+    return _export_and_write_final_artifacts(
+        cfg,
+        paths,
+        artifacts,
+        campaign_summary,
+        campaign_integrity,
+        warnings,
+        skip_publication_bundle,
+        dependencies,
+    )
+
+
+def _build_table_paths_dict(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    summary_json_path: Path,
+    credibility_scorecard_json_path: Path,
+    report_md_path: Path,
+    csv_path: Path,
+    md_table_path: Path,
+    core_csv_path: Path,
+    core_md_path: Path,
+    experimental_csv_path: Path,
+    experimental_md_path: Path,
+    scenario_csv_path: Path,
+    scenario_md_path: Path,
+    family_csv_path: Path,
+    family_md_path: Path,
+    parity_csv_path: Path,
+    parity_md_path: Path,
+    skipped_csv_path: Path,
+    skipped_md_path: Path,
+    seed_variability_json_path: Path,
+    seed_variability_csv_path: Path,
+    seed_episode_rows_csv_path: Path,
+    statistical_sufficiency_json_path: Path,
+    actuation_envelope_json_path: Path | None,
+    actuation_envelope_md_path: Path | None,
+) -> dict[str, Any]:
+    """Build the table_paths dict for campaign artifact tracking.
+
+    Returns:
+        Dict mapping artifact names to their paths and metadata.
+    """
+    return {
+        "summary_json_path": summary_json_path,
+        "credibility_scorecard_json_path": credibility_scorecard_json_path,
+        "report_md_path": report_md_path,
+        "csv_path": csv_path,
+        "md_table_path": md_table_path,
+        "core_csv_path": core_csv_path,
+        "core_md_path": core_md_path,
+        "experimental_csv_path": experimental_csv_path,
+        "experimental_md_path": experimental_md_path,
+        "scenario_csv_path": scenario_csv_path,
+        "scenario_md_path": scenario_md_path,
+        "family_csv_path": family_csv_path,
+        "family_md_path": family_md_path,
+        "parity_csv_path": parity_csv_path,
+        "parity_md_path": parity_md_path,
+        "skipped_csv_path": skipped_csv_path,
+        "skipped_md_path": skipped_md_path,
+        "seed_variability_json_path": seed_variability_json_path,
+        "seed_variability_csv_path": seed_variability_csv_path,
+        "seed_episode_rows_csv_path": seed_episode_rows_csv_path,
+        "statistical_sufficiency_json_path": statistical_sufficiency_json_path,
+        "actuation_envelope_json_path": actuation_envelope_json_path,
+        "actuation_envelope_md_path": actuation_envelope_md_path,
+        "release_tag_value": cfg.release_tag,
+        "repository_url": cfg.repository_url.rstrip("/"),
+        "doi": cfg.doi,
+    }
+
+
+def _prepare_campaign_execution(
+    cfg: CampaignConfig,
+    dependencies: _CampaignRuntimeDependencies,
+    output_root: Path | None,
+    label: str | None,
+    campaign_id: str | None,
+    invoked_command: str | None,
+) -> tuple[_CampaignPreflightPaths, dict[str, Any] | None, dict[str, Any] | None, float]:
+    """Prepare campaign preflight and load SNQI configuration.
+
+    Returns:
+        Tuple of (paths, snqi_weights, snqi_baseline, start_time).
+    """
+    start = time.perf_counter()
+    prepared = dependencies.prepare_campaign_preflight(
+        cfg,
+        output_root=output_root,
+        label=label,
+        campaign_id=campaign_id,
+        invoked_command=invoked_command,
+    )
+    paths = _unpack_campaign_preflight(prepared)
+    snqi_weights = load_optional_json(str(cfg.snqi_weights_path) if cfg.snqi_weights_path else None)
+    snqi_baseline = load_optional_json(
+        str(cfg.snqi_baseline_path) if cfg.snqi_baseline_path else None
+    )
+    return paths, snqi_weights, snqi_baseline, start
+
+
+def _execute_planner_matrix_phase(
+    cfg: CampaignConfig,
+    paths: _CampaignPreflightPaths,
+    snqi_weights: dict[str, Any] | None,
+    snqi_baseline: dict[str, Any] | None,
+    dependencies: _CampaignRuntimeDependencies,
+    arm_isolation: str | None,
+) -> tuple[
+    list[dict[str, Any]], list[dict[str, Any]], list[str], list[dict[str, Any]], dict[str, Any]
+]:
+    """Execute the planner matrix and post-run integrity checks.
+
+    Returns:
+        Tuple of (run_entries, planner_rows, warnings, seed_variability_records, kinematics_matrix).
+    """
+    runs_dir = paths.campaign_root / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    resume_verdicts = _emit_resume_plan_preflight(
+        cfg=cfg,
+        campaign_id=paths.campaign_id,
+        config_hash=str(paths.config_hash),
+        campaign_root=paths.campaign_root,
+        runs_dir=runs_dir,
+        scenarios=paths.scenarios,
+    )
+    kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
+    planner_run_results = _run_campaign_planner_matrix(
+        cfg=cfg,
+        scenarios=paths.scenarios,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        runs_dir=runs_dir,
+        dependencies=dependencies,
+        arm_isolation=arm_isolation,
+        resume_verdicts=resume_verdicts,
+    )
+    return (
+        planner_run_results.run_entries,
+        planner_run_results.planner_rows,
+        planner_run_results.warnings,
+        planner_run_results.seed_variability_records,
+        kinematics_matrix,
+    )
+
+
+def _run_campaign_orchestrator(
+    cfg: CampaignConfig,
+    *,
+    output_root: Path | None = None,
+    label: str | None = None,
+    campaign_id: str | None = None,
+    skip_publication_bundle: bool = False,
+    invoked_command: str | None = None,
+    dependencies: _CampaignRuntimeDependencies,
+    arm_isolation: str | None = None,
+) -> dict[str, Any]:
+    """Execute the campaign orchestrator with optional arm isolation override.
+
+    Args:
+        cfg: Campaign configuration.
+        output_root: Optional campaign base output directory.
+        label: Optional label suffix embedded into campaign_id.
+        campaign_id: Optional exact campaign directory id for resume.
+        skip_publication_bundle: Skip publication bundle export even if enabled in config.
+        invoked_command: Full command line that invoked this run.
+        dependencies: Runtime dependency collaborators.
+        arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
+            If None, uses cfg.arm_isolation (issue #4826).
+
+    Returns:
+        Campaign execution summary with output paths and counters.
+    """
+    paths, snqi_weights, snqi_baseline, start = _prepare_campaign_execution(
+        cfg, dependencies, output_root, label, campaign_id, invoked_command
+    )
+
+    run_entries, planner_rows, warnings, seed_variability_records, kinematics_matrix = (
+        _execute_planner_matrix_phase(
+            cfg, paths, snqi_weights, snqi_baseline, dependencies, arm_isolation
+        )
+    )
+
+    campaign_integrity, arm_rollup, fairness_report = _post_run_integrity_and_fairness(
+        cfg,
+        manifest_payload=paths.manifest_payload,
+        run_entries=run_entries,
+        planner_rows=planner_rows,
+        warnings=warnings,
+        scenarios=paths.scenarios,
+        resolved_seeds=paths.resolved_seeds,
+        campaign_root=paths.campaign_root,
+    )
+
+    artifacts = _write_campaign_report_artifacts(
+        cfg,
+        paths=paths,
+        start=start,
+        run_entries=run_entries,
+        planner_rows=planner_rows,
+        campaign_integrity=campaign_integrity,
+        kinematics_matrix=kinematics_matrix,
+        seed_variability_records=seed_variability_records,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        warnings=warnings,
+    )
+
+    publication_payload = _finalize_campaign_outputs(
+        cfg,
+        paths=paths,
+        artifacts=artifacts,
+        run_entries=run_entries,
+        planner_rows=planner_rows,
+        campaign_integrity=campaign_integrity,
+        arm_rollup=arm_rollup,
+        fairness_report=fairness_report,
+        warnings=warnings,
+        kinematics_matrix=kinematics_matrix,
+        invoked_command=invoked_command,
+        skip_publication_bundle=skip_publication_bundle,
+        dependencies=dependencies,
+    )
+
+    outcome = artifacts.outcome
     logger.info(
         "Camera-ready campaign finished id={} runs={} episodes={} out={}",
         paths.campaign_id,
@@ -3160,44 +3682,22 @@ def _run_campaign_orchestrator(
 
     return _build_orchestrator_return(
         paths=paths,
-        outcome=outcome,
-        snqi=snqi,
+        artifacts=artifacts,
         run_entries=run_entries,
         campaign_integrity=campaign_integrity,
         warnings=warnings,
         publication_payload=publication_payload,
-        summary_json_path=summary_json_path,
-        csv_path=csv_path,
-        md_table_path=md_table_path,
-        report_md_path=report_md_path,
-        seed_variability_json_path=seed_variability_json_path,
-        seed_variability_csv_path=seed_variability_csv_path,
-        seed_episode_rows_csv_path=seed_episode_rows_csv_path,
-        statistical_sufficiency_json_path=statistical_sufficiency_json_path,
-        actuation_envelope_json_path=actuation_envelope_json_path,
-        actuation_envelope_md_path=actuation_envelope_md_path,
     )
 
 
-def _build_orchestrator_return(  # noqa: PLR0913
+def _build_orchestrator_return(
     *,
     paths: _CampaignPreflightPaths,
-    outcome: _CampaignOutcomeState,
-    snqi: _SnqiSectionResult,
+    artifacts: _CampaignReportArtifacts,
     run_entries: list[dict[str, Any]],
     campaign_integrity: dict[str, Any],
     warnings: list[str],
     publication_payload: dict[str, Any] | None,
-    summary_json_path: Path,
-    csv_path: Path,
-    md_table_path: Path,
-    report_md_path: Path,
-    seed_variability_json_path: Path,
-    seed_variability_csv_path: Path,
-    seed_episode_rows_csv_path: Path,
-    statistical_sufficiency_json_path: Path,
-    actuation_envelope_json_path: Path | None,
-    actuation_envelope_md_path: Path | None,
 ) -> dict[str, Any]:
     """Build the final orchestrator return dict.
 
@@ -3205,15 +3705,17 @@ def _build_orchestrator_return(  # noqa: PLR0913
         Campaign execution summary with output paths and counters.
     """
     reports_dir = paths.reports_dir
+    outcome = artifacts.outcome
+    snqi = artifacts.snqi
     campaign_outcome = outcome.campaign_outcome
     campaign_status_axes = outcome.campaign_status_axes
     return {
         "campaign_id": paths.campaign_id,
         "campaign_root": str(paths.campaign_root),
-        "summary_json": str(summary_json_path),
-        "table_csv": str(csv_path),
-        "table_md": str(md_table_path),
-        "report_md": str(report_md_path),
+        "summary_json": str(artifacts.summary_json_path),
+        "table_csv": str(artifacts.csv_path),
+        "table_md": str(artifacts.md_table_path),
+        "report_md": str(artifacts.report_md_path),
         "snqi_diagnostics_json": str(snqi.snqi_diagnostics_json_path),
         "snqi_diagnostics_md": str(snqi.snqi_diagnostics_md_path),
         "snqi_sensitivity_csv": str(snqi.snqi_sensitivity_csv_path),
@@ -3222,15 +3724,19 @@ def _build_orchestrator_return(  # noqa: PLR0913
         "assurance_fragment_svg": str(reports_dir / "assurance_fragment.svg"),
         "matrix_summary_json": str(paths.matrix_summary_json_path),
         "matrix_summary_csv": str(paths.matrix_summary_csv_path),
-        "seed_variability_json": str(seed_variability_json_path),
-        "seed_variability_csv": str(seed_variability_csv_path),
-        "seed_episode_rows_csv": str(seed_episode_rows_csv_path),
-        "statistical_sufficiency_json": str(statistical_sufficiency_json_path),
+        "seed_variability_json": str(artifacts.seed_variability_json_path),
+        "seed_variability_csv": str(artifacts.seed_variability_csv_path),
+        "seed_episode_rows_csv": str(artifacts.seed_episode_rows_csv_path),
+        "statistical_sufficiency_json": str(artifacts.statistical_sufficiency_json_path),
         "actuation_envelope_json": (
-            str(actuation_envelope_json_path) if actuation_envelope_json_path is not None else None
+            str(artifacts.actuation_envelope_json_path)
+            if artifacts.actuation_envelope_json_path is not None
+            else None
         ),
         "actuation_envelope_md": (
-            str(actuation_envelope_md_path) if actuation_envelope_md_path is not None else None
+            str(artifacts.actuation_envelope_md_path)
+            if artifacts.actuation_envelope_md_path is not None
+            else None
         ),
         "total_runs": len(run_entries),
         "successful_runs": outcome.successful_runs,

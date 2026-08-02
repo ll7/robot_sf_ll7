@@ -278,7 +278,7 @@ def save_zones_yaml(config: OSMZonesConfig, yaml_file: str) -> None:
 
         pass
 
-    def represent_dict_sorted(dumper, data):
+    def represent_dict_sorted(dumper, data) -> yaml.Node:
         """Represent dictionaries with sorted keys for reproducible YAML output.
 
         Returns:

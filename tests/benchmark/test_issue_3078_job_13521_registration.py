@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = REPO_ROOT / "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16"
@@ -17,6 +18,10 @@ DIAGNOSTIC_NAME = "seed_rank_stability_diagnostic.json"
 DIAGNOSTIC_REL = (
     f"docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/{DIAGNOSTIC_NAME}"
 )
+NO_COMPARATOR_SIDECAR_REL = (
+    f"{DIAGNOSTIC_REL.removesuffix(DIAGNOSTIC_NAME)}no_eligible_comparator.json.review.json"
+)
+OVERLAY_NAME = "package_a_domain_decision_overlay.json"
 
 
 def _load_json(name: str) -> dict:
@@ -68,9 +73,11 @@ def test_fullpilot_replaces_synthetic_heldout_input_fail_closed() -> None:
     assert row_acceptance["row_status_counts"] == {"adapter": 12, "native": 6}
     assert report_acceptance == {
         "classification": "diagnostic_review_ready",
+        "domain_decision_overlay": OVERLAY_NAME,
         "episode_count": 18,
         "heldout_table_episode_count": 18,
         "issue_result_classification": "diagnostic",
+        "review_state": "renderer_output_not_domain_approved",
         "status": "postrun_accepted",
         "synthetic_fixture_used": False,
     }
@@ -118,6 +125,99 @@ def test_no_eligible_comparator_receipt_is_recorded() -> None:
     assert receipt["comparator_audit"]["matching_benchmark_set_campaign_found"] is False
 
 
+def test_domain_decision_overlay_preserves_renderer_state_and_binds_receipt() -> None:
+    """The reviewed decision overlays, rather than rewrites, generated evidence."""
+    overlay = _load_json(OVERLAY_NAME)
+    bundle_rel = BUNDLE.relative_to(REPO_ROOT).as_posix()
+    assert overlay["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert overlay["schema_version"] == "package_a_domain_decision_overlay.v1"
+    assert overlay["issue"] == 3078
+    assert overlay["bundle_path"] == bundle_rel
+    assert (
+        overlay["claim_boundary_ref"]
+        == "Issue #6157 canonical diagnostic-only boundary, as carried by issue #6430"
+    )
+    assert overlay["approval"] == {
+        "approval_source": "Issue #6430 approved decision, carried by PR #6444",
+        "approved_at_utc": "2026-07-30",
+        "review_marker": "DOMAIN-APPROVED (2026-07-30) - REVIEWED",
+        "status": "domain_approved",
+    }
+    assert overlay["forbidden_actions_confirmed"] == {
+        "benchmark_campaign_run": False,
+        "compute_submit": False,
+        "paper_claim_edits": False,
+        "ranking_claim_promotion": False,
+    }
+    assert overlay["decision"] == {
+        "claim_status": "reviewed",
+        "classification": "diagnostic",
+        "transfer_sub_classification": "no_eligible_comparator",
+    }
+
+    claim_card = yaml.safe_load((BUNDLE / "claim_card.yaml").read_text(encoding="utf-8"))
+    assert claim_card["claim_status"] == "not_reviewed"
+    assert claim_card["classification"] == "diagnostic_review_ready"
+    packet = _load_json("package_a_decision_packet.json")
+    assert packet["classification"] == "diagnostic_review_ready"
+
+    for artifact in overlay["renderer_outputs"]:
+        path = REPO_ROOT / artifact["path"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == artifact["sha256"]
+
+    renderer_by_path = {artifact["path"]: artifact for artifact in overlay["renderer_outputs"]}
+    assert set(renderer_by_path) == {
+        f"{bundle_rel}/claim_card.yaml",
+        f"{bundle_rel}/package_a_decision_packet.json",
+        f"{bundle_rel}/postrun_acceptance.json",
+        f"{bundle_rel}/registration.json",
+        f"{bundle_rel}/seed_rank_stability_diagnostic.json",
+    }
+    assert renderer_by_path[f"{bundle_rel}/claim_card.yaml"]["claim_status"] == "not_reviewed"
+    assert renderer_by_path[f"{bundle_rel}/claim_card.yaml"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    assert renderer_by_path[f"{bundle_rel}/package_a_decision_packet.json"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    assert renderer_by_path[f"{bundle_rel}/postrun_acceptance.json"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    assert renderer_by_path[f"{bundle_rel}/registration.json"]["classification"] == (
+        "diagnostic_review_ready"
+    )
+    seed_renderer = renderer_by_path[f"{bundle_rel}/seed_rank_stability_diagnostic.json"]
+    assert seed_renderer["classification"] == "not_identifiable"
+
+    receipt_binding = overlay["transfer_comparator_receipt"]
+    assert receipt_binding["path"] == NO_COMPARATOR_SIDECAR_REL.removesuffix(".review.json")
+    assert receipt_binding["review_sidecar_path"] == NO_COMPARATOR_SIDECAR_REL
+    assert receipt_binding["status"] == "no_eligible_comparator"
+    receipt_path = REPO_ROOT / receipt_binding["path"]
+    sidecar_path = REPO_ROOT / receipt_binding["review_sidecar_path"]
+    assert hashlib.sha256(receipt_path.read_bytes()).hexdigest() == receipt_binding["sha256"]
+    assert (
+        hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
+        == receipt_binding["review_sidecar_sha256"]
+    )
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["schema_version"] == "evidence-review-marker.v1"
+    assert sidecar["artifact_path"] == receipt_binding["path"]
+    assert sidecar["artifact_sha256"] == receipt_binding["sha256"]
+    assert sidecar["preserved_exact_bytes"] is True
+    assert "DOMAIN-APPROVED" in sidecar["review_marker"]
+    assert sidecar["review_source"] == OVERLAY_NAME
+
+    manifest = yaml.safe_load((BUNDLE / "artifact_manifest.yaml").read_text(encoding="utf-8"))
+    manifest_paths = {entry["path"] for entry in manifest["files"]}
+    assert receipt_binding["path"] in manifest_paths
+    assert NO_COMPARATOR_SIDECAR_REL in manifest_paths
+    assert f"{BUNDLE.relative_to(REPO_ROOT).as_posix()}/{OVERLAY_NAME}" in manifest_paths
+    for entry in manifest["files"]:
+        path = REPO_ROOT / entry["path"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
+
+
 def test_registration_preserves_private_row_store_checksum_without_committing_rows() -> None:
     """The compact source rows remain private while their exact checksum is registered."""
     registration = _load_json("registration.json")
@@ -128,6 +228,8 @@ def test_registration_preserves_private_row_store_checksum_without_committing_ro
     assert store["committed"] is False
     assert not (BUNDLE / "episodes.parquet").exists()
     assert registration["supersedes"]["job_id"] == 13506
+    assert registration["domain_decision_overlay"] == OVERLAY_NAME
+    assert registration["review_state"] == "renderer_output_not_domain_approved"
 
 
 def test_reproduction_documents_local_hydration_boundary() -> None:
@@ -254,6 +356,7 @@ def test_checksums_cover_every_primary_bundle_file() -> None:
         and not path.name.endswith(".review.json")
         and path.name != "checksums.sha256"
     }
+    expected.add(NO_COMPARATOR_SIDECAR_REL)
     assert set(recorded) == expected, (
         f"missing={expected - set(recorded)} extra={set(recorded) - expected}"
     )

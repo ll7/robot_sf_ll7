@@ -1,8 +1,10 @@
 {
   "classification": "diagnostic_review_ready",
+  "domain_decision_overlay": "package_a_domain_decision_overlay.json",
   "episode_count": 18,
   "heldout_table_episode_count": 18,
   "issue_result_classification": "diagnostic",
+  "review_state": "renderer_output_not_domain_approved",
   "status": "postrun_accepted",
   "synthetic_fixture_used": false
 }

@@ -453,8 +453,30 @@ def _flatten_human_interaction_proxy_block(
             base[source_key] = reductions.get(source_key)
 
 
+def _is_valid_social_support_count(value: Any, *, require_positive: bool = False) -> bool:
+    """Return whether a social-compliance support count has the contract type and range."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return False
+    if value <= 0 if require_positive else value < 0:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
+def _is_finite_social_value(value: Any) -> bool:
+    """Return whether a social-compliance value is a finite JSON-compatible number."""
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
 def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
-    """Flatten social-compliance values while retaining status/support metadata."""
+    """Flatten social-compliance values while retaining contract metadata."""
     if not isinstance(block, dict):
         return
     metrics = block.get("metrics") or {}
@@ -466,8 +488,16 @@ def _flatten_social_compliance_block(base: dict[str, Any], block: Any) -> None:
         prefix = f"social_compliance.{metric_id}"
         base[f"{prefix}.status"] = row.get("status")
         base[f"{prefix}.support_count"] = row.get("support_count", 0)
-        if row.get("status") == "available" and row.get("value") is not None:
-            base[prefix] = row["value"]
+        base[f"{prefix}.denominator"] = row.get("denominator")
+        if row.get("status") != "available":
+            base[f"{prefix}.unavailable_reason"] = row.get("unavailable_reason")
+        value = row.get("value")
+        if (
+            row.get("status") == "available"
+            and _is_valid_social_support_count(row.get("support_count"), require_positive=True)
+            and _is_finite_social_value(value)
+        ):
+            base[prefix] = value
 
 
 def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -491,16 +521,39 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
     for metric_id in dict.fromkeys(metric_ids):
         status_key = f"social_compliance.{metric_id}.status"
         support_key = f"social_compliance.{metric_id}.support_count"
+        denominator_key = f"social_compliance.{metric_id}.denominator"
+        reason_key = f"social_compliance.{metric_id}.unavailable_reason"
         value_key = f"social_compliance.{metric_id}"
         statuses = [row.get(status_key) or "unavailable" for row in rows]
-        values = [row[value_key] for row in rows if isinstance(row.get(value_key), int | float)]
-        support = [
-            row.get(support_key, 0) if status == "available" else 0
+        values = [
+            row[value_key]
             for row, status in zip(rows, statuses, strict=True)
+            if status == "available"
+            and _is_valid_social_support_count(row.get(support_key), require_positive=True)
+            and _is_finite_social_value(row.get(value_key))
         ]
+        support = [
+            value
+            for row, status in zip(rows, statuses, strict=True)
+            if status == "available"
+            for value in (row.get(support_key, 0),)
+            if _is_valid_social_support_count(value)
+        ]
+        denominators = Counter(
+            value.strip() if isinstance(value, str) and value.strip() else "unknown"
+            for value in (row.get(denominator_key) for row in rows)
+        )
+        unavailable_reasons = Counter(
+            value.strip() if isinstance(value, str) and value.strip() else "unknown"
+            for row, status in zip(rows, statuses, strict=True)
+            if status != "available"
+            for value in (row.get(reason_key),)
+        )
         metric_summary: dict[str, Any] = {
             "status_counts": dict(Counter(str(status) for status in statuses)),
-            "support_count": int(sum(value for value in support if isinstance(value, int | float))),
+            "support_count": int(sum(support)),
+            "denominators": dict(sorted(denominators.items())),
+            "unavailable_reasons": dict(sorted(unavailable_reasons.items())),
         }
         if values:
             arr = np.asarray(values, dtype=float)
@@ -701,8 +754,12 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
         if isinstance(v, bool):
             out[k] = float(v)
             continue
-        if isinstance(v, int | float) and math.isfinite(float(v)):
-            out[k] = float(v)
+        if isinstance(v, int | float):
+            try:
+                if math.isfinite(float(v)):
+                    out[k] = float(v)
+            except (OverflowError, ValueError):
+                continue
     return out
 
 

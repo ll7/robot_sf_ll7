@@ -45,11 +45,12 @@ from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import torch
 from gymnasium import spaces
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    import torch
 
 # Staged checkout written by ``scripts/tools/manage_external_repos.py stage
 # crowdnav_pred_attng`` (gitignored under third_party/external_repos/).
@@ -326,6 +327,8 @@ class CrowdNavPredAttnGraphAdapter:
                 f"{self.checkpoint_path}. Restage the pinned commit."
             )
 
+        import torch  # noqa: PLC0415
+
         self._device = torch.device(self.config.device)
         self._human_num = int(self.config.human_num)
         self._args = _default_args_namespace()
@@ -353,6 +356,8 @@ class CrowdNavPredAttnGraphAdapter:
     def reset(self, *, seed: int | None = None) -> None:
         """Reset the two SRNN recurrent hidden-state tensors to zeros."""
         del seed
+        import torch  # noqa: PLC0415
+
         base = self._policy.base
         self._hidden_state = {
             "human_node_rnn": torch.zeros(
@@ -481,6 +486,8 @@ class CrowdNavPredAttnGraphAdapter:
             "detected_human_num": np.asarray([float(detected)], dtype=np.float32),
             "visible_masks": np.zeros((self._human_num,), dtype=np.float32),
         }
+        import torch  # noqa: PLC0415
+
         tensors = {
             key: torch.from_numpy(np.ascontiguousarray(value)).unsqueeze(0).to(self._device)
             for key, value in payload.items()
@@ -516,6 +523,8 @@ class CrowdNavPredAttnGraphAdapter:
                 f"{expected:.6f}s (training cadence), got {float(time_step):.6f}s"
             )
         obs_tensors, meta = self._build_model_inputs(observation)
+        import torch  # noqa: PLC0415
+
         with torch.no_grad():
             _value, action, _log_prob, self._hidden_state = self._policy.act(
                 obs_tensors,

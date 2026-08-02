@@ -227,7 +227,7 @@ class SensorFusion:
             OBS_RAYS: (self.stacked_lidar_state / max_lidar).astype(np.float32, copy=False),
         }
 
-    def reset_cache(self):
+    def reset_cache(self) -> None:
         """
         Clear the caches of previous drive and LiDAR states.
         """

@@ -1891,9 +1891,9 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
     assert len(run.logged) == 1
 
 
-def test_issue_6484_base_config_inheritance_equivalence() -> None:
+def test_issue_2557_base_config_inheritance_equivalence() -> None:
     """All 24 seed-fixed issue-2557 variants should resolve identically to pre-change baseline."""
-    baseline_path = Path("tests/integration/_baseline_issue_6484_resolved.json").resolve()
+    baseline_path = Path("tests/integration/_baseline_issue_2557_resolved.json").resolve()
     assert baseline_path.exists(), (
         "Pre-change baseline missing; re-run capture before changing configs"
     )

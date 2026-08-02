@@ -243,6 +243,44 @@ scenario_overrides_by_name:
     }
 
 
+def test_build_robot_config_applies_residual_adversary_override(tmp_path: Path) -> None:
+    """Scenario YAML must reach the validated runtime residual-adversary config."""
+    config = build_robot_config_from_scenario(
+        {
+            "name": "residual-adversary-runtime-smoke",
+            "simulation_config": {
+                "residual_adversary": {
+                    "is_active": True,
+                    "target_ped_idx": [0, 2],
+                    "max_residual_accel_mps2": 0.8,
+                    "seed": 4360,
+                }
+            },
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    residual_adversary = config.sim_config.residual_adversary
+    assert residual_adversary.is_active is True
+    assert residual_adversary.target_ped_idx == [0, 2]
+    assert residual_adversary.max_residual_accel_mps2 == pytest.approx(0.8)
+    assert residual_adversary.seed == 4360
+
+
+def test_build_robot_config_rejects_non_mapping_residual_adversary_override(
+    tmp_path: Path,
+) -> None:
+    """Scenario residual-adversary overrides must not silently accept raw values."""
+    with pytest.raises(ValueError, match="residual_adversary must be a mapping"):
+        build_robot_config_from_scenario(
+            {
+                "name": "invalid-residual-adversary-runtime-smoke",
+                "simulation_config": {"residual_adversary": True},
+            },
+            scenario_path=tmp_path / "scenario.yaml",
+        )
+
+
 def test_build_robot_config_applies_archetype_simulation_overrides(tmp_path: Path) -> None:
     """Scenario YAML can carry pedestrian archetype composition into runtime config."""
     scenario = {

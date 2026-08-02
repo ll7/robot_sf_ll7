@@ -2,7 +2,8 @@
 
 Status: proposal (planning only; not benchmark evidence)
 
-This note records the bounded repository-hygiene outcome for Issue #6469. It confirms that the
+This note records the bounded repository-hygiene outcome for
+[Issue #6469](https://github.com/ll7/robot_sf_ll7/issues/6469). It confirms that the
 ghost utility directories carry no tracked files, and it proposes a domain-subdirectory
 reorganization for the flat `robot_sf/benchmark/` namespace. Per the Issue #6469 domain-aware
 approval boundary, this note does **not** move or rename any benchmark module and does **not**
@@ -24,7 +25,8 @@ checkout. The follow-up contract below includes a guard so the husks are not rei
 
 ## Current Benchmark State
 
-`robot_sf/benchmark/` has grown to **279 top-level `.py` files** plus existing subdirectories.
+`robot_sf/benchmark/` has grown to **279 top-level non-`__init__.py` modules** (**280 top-level
+`.py` files including `__init__.py`**) plus existing subdirectories.
 The flat namespace mixes domain modules, issue-specific modules, cross-cutting preflight/readiness
 helpers, and schema/data directories. Existing subdirectories show that domain grouping is viable:
 
@@ -53,8 +55,9 @@ Two structural smells are already visible and should be resolved by the follow-u
 ## Proposed Domain Subdirectory Groupings
 
 The grouping below is illustrative and conservative. Counts are filename-prefix counts over the
-279 top-level modules; some modules are cross-cutting and final assignment is a follow-up decision,
-not a claim made here. The issue-specific modules named in Issue #6469 (for example
+279 top-level non-`__init__.py` modules; some modules are cross-cutting and final assignment is a
+follow-up decision, not a claim made here. The issue-specific modules named in Issue #6469 (for
+example
 `issue_5302_oracle_gap.py`, `issue_4142_dpcbf_dense_runner.py`) are assigned to the domain they
 serve rather than to an `issue_*` directory, so the namespace stays domain-oriented.
 
@@ -78,8 +81,8 @@ top-level set substantially, not to force every file into a domain.
 
 ## Migration Contract (for the follow-up, not this issue)
 
-The follow-up must treat the move as an import-contract change, because 158 top-level benchmark
-modules import from `robot_sf.benchmark`. Required discipline:
+The follow-up must treat the move as an import-contract change, because 158 top-level
+non-`__init__.py` benchmark modules import from `robot_sf.benchmark`. Required discipline:
 
 1. Move files with `git mv` so history is preserved; never delete-and-recreate.
 2. Update every `robot_sf.benchmark.<module>` import across `robot_sf/`, `scripts/`, `tests/`, and
@@ -104,7 +107,8 @@ A move PR should be accepted only after:
 
 ## Follow-Up Issue Contract
 
-Issue #6469 acceptance is satisfied by this plan plus a follow-up issue. Suggested follow-up shape:
+Issue #6469 acceptance is satisfied by this plan. This PR does not create the follow-up issue;
+the contract below gives the coordinator an actionable shape for that next step:
 
 - Title: `benchmark: reorganize flat module namespace into domain subdirectories`.
 - Parent/umbrella issue with one child issue per domain cluster in the table above, each child
@@ -127,8 +131,8 @@ Issue #6469 acceptance is satisfied by this plan plus a follow-up issue. Suggest
 
 ## Links
 
-- Motivating issue: Issue #6469 (`repo-hygiene: remove ghost util/utils dirs and plan benchmark
-  module reorganization`).
+- Motivating issue: [Issue #6469](https://github.com/ll7/robot_sf_ll7/issues/6469) (`repo-hygiene:
+  remove ghost util/utils dirs and plan benchmark module reorganization`).
 - Prior structured-migration precedent and proof-plan style:
   [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md).
 - Repository execution rules: [AGENTS.md](../../AGENTS.md).

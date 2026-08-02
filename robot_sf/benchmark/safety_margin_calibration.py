@@ -885,7 +885,7 @@ def _split_residuals(name: str, samples: Sequence[SafetyMarginTraceSample]) -> n
         1-D float64 residual array.
 
     Raises:
-        ValueError: If any residual is missing or non-finite, or the split is empty.
+        ValueError: If any residual is missing, non-finite, or negative, or the split is empty.
     """
     raw: list[float] = []
     for sample in samples:
@@ -894,7 +894,10 @@ def _split_residuals(name: str, samples: Sequence[SafetyMarginTraceSample]) -> n
         raw.append(float(sample.residual_m))
     if not raw:
         raise ValueError(f"{name} split must contain at least one residual")
-    return require_finite_array(f"{name}_residuals", np.asarray(raw, dtype=np.float64))
+    residuals = require_finite_array(f"{name}_residuals", np.asarray(raw, dtype=np.float64))
+    if np.any(residuals < 0.0):
+        raise ValueError(f"{name}_residuals must be non-negative deviation magnitudes")
+    return residuals
 
 
 def _empirical_coverage(evaluation_residuals: np.ndarray, margins: Sequence[float]) -> float | None:

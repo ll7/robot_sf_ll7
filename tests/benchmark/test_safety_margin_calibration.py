@@ -505,6 +505,19 @@ def test_non_finite_evaluation_residual_rejected() -> None:
         _build(traces)
 
 
+@pytest.mark.parametrize(
+    ("split", "kwargs"),
+    [
+        ("calibration", {"calibration_residuals": [-0.1, 0.2, 0.3]}),
+        ("evaluation", {"evaluation_residuals": [0.1, -0.2, 0.3]}),
+    ],
+)
+def test_negative_residual_rejected(split: str, kwargs: dict[str, list[float]]) -> None:
+    """Residuals are non-negative nominal-to-perturbed deviation magnitudes."""
+    with pytest.raises(ValueError, match=rf"{split}_residuals must be non-negative"):
+        _build(_balanced_traces(**kwargs))
+
+
 def test_non_finite_hard_floor_rejected() -> None:
     """A non-finite hard floor fails closed."""
     with pytest.raises(ValueError, match="hard_floor_m is not finite"):

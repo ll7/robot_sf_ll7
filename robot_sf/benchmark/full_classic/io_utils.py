@@ -44,7 +44,7 @@ def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
     return str(obj)
 
 
-def append_episode_record(path, record):  # T025
+def append_episode_record(path, record) -> None:  # T025
     """Append a single episode record as JSON line.
 
     Guarantees line-oriented append; caller can fsync externally if needed. Creates
@@ -58,7 +58,7 @@ def append_episode_record(path, record):  # T025
     logger.debug("Appended episode record to {}", p)
 
 
-def write_manifest(manifest, path):  # T025
+def write_manifest(manifest, path) -> None:  # T025
     """Atomically serialize manifest object to JSON.
 
     Complexity kept low by delegating to helpers.

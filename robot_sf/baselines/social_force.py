@@ -157,7 +157,7 @@ class SocialForcePlanner(BasePolicy):
             low: int,
             high: int | None = None,
             size: int | tuple[int, ...] | None = None,
-        ):
+        ) -> np.integer | np.ndarray:
             """Generate random integers from low (inclusive) to high (exclusive).
 
             Provides compatibility with legacy random.randint() where a single
@@ -182,7 +182,7 @@ class SocialForcePlanner(BasePolicy):
             loc: float = 0.0,
             scale: float = 1.0,
             size: int | tuple[int, ...] | None = None,
-        ):
+        ) -> float | np.ndarray:
             """Return samples from a normal distribution.
 
             Args:
@@ -262,7 +262,10 @@ class SocialForcePlanner(BasePolicy):
         """
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
-        assert isinstance(obs, Observation)
+        if not isinstance(obs, Observation):
+            raise TypeError(
+                f"SocialForcePlanner requires Observation, got {type(obs).__name__}",
+            )
 
         robot_pos = np.asarray(obs.robot["position"], dtype=float)
         robot_vel = np.asarray(obs.robot["velocity"], dtype=float)

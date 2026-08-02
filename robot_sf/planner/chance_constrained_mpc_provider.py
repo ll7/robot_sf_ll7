@@ -182,8 +182,9 @@ class ConstantVelocityGmmPredictor:
             heading_spread_rad=self.heading_spread_rad,
         )
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """No per-episode state to clear for the deterministic surrogate."""
+        del seed
 
 
 def _spawn_scenario(
@@ -464,6 +465,7 @@ def _aggregate_horizon_risk(
             if formulation == "joint_horizon":
                 window_values.append(float(any(np.any(step) for step in window)))
             else:
+                # cvar_alpha must be set in non-joint-horizon formulation
                 assert cvar_alpha is not None
                 window_values.append(_empirical_cvar(np.concatenate(window), alpha=cvar_alpha))
     observation_count = len(window_values)

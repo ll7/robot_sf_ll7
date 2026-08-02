@@ -6,7 +6,7 @@ Provides common functionality for all environments.
 import datetime
 import importlib
 import pickle
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, SupportsFloat
 
 from gymnasium import Env
 from loguru import logger
@@ -91,7 +91,10 @@ class BaseEnv(Env):
         # Set video FPS if not provided
         if video_fps is None:
             video_fps = 1 / self.env_config.sim_config.time_per_step_in_secs
-            logger.debug(f"Video FPS not provided, setting to {video_fps}")
+            logger.debug(
+                "Video FPS not provided, setting to {video_fps}",
+                video_fps=f"{video_fps}",
+            )
 
         # Extract map definition; respect explicit map_id when provided.
         map_id = getattr(env_config, "map_id", None)
@@ -192,11 +195,11 @@ class BaseEnv(Env):
                 video_fps=video_fps,
             )
 
-    def render(self):
+    def render(self) -> None:
         """Close the environment and release resources."""
         raise NotImplementedError
 
-    def step(self, action):
+    def step(self, action) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
         """Step the environment forward.
 
         Args:
@@ -204,14 +207,14 @@ class BaseEnv(Env):
         """
         raise NotImplementedError
 
-    def exit(self):
+    def exit(self) -> None:
         """
         Clean up and exit the simulation UI, if it exists.
         """
         if self.sim_ui:
             self.sim_ui.exit_simulation()
 
-    def save_recording(self, filename: str | None = None):
+    def save_recording(self, filename: str | None = None) -> None:
         """
         Save the recorded states to a file.
 
@@ -234,7 +237,7 @@ class BaseEnv(Env):
 
         with target_path.open("wb") as f:  # write binary
             pickle.dump((self.recorded_states, self.map_def), f)
-            logger.info(f"Recording saved to {target_path}")
+            logger.info("Recording saved to {target_path}", target_path=f"{target_path}")
             logger.info("Reset state list")
             self.recorded_states = []
 

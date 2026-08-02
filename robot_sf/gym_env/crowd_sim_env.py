@@ -136,7 +136,7 @@ class CrowdSimEnv(gym.Env):
             self.render()
         return observation, 0.0, False, truncated, info
 
-    def render(self):
+    def render(self) -> np.ndarray | None:
         """Render the current crowd state when rendering is enabled.
 
         Returns

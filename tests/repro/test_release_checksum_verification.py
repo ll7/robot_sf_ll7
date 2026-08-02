@@ -7,6 +7,8 @@ Tests verify:
 - Documentation and discoverability
 """
 
+# evidence-writer-exempt: tests deliberately build legacy, malformed, and synthetic fixture files for verifier coverage
+
 from __future__ import annotations
 
 import hashlib
@@ -368,6 +370,328 @@ class TestVerificationScript:
 
         assert report["overall_verdict"] == "fail"
         assert "Bundle checksum mismatch" in report["errors"][0]
+
+    def test_repository_entry_verification_without_archive(self, tmp_path: Path) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "docs" / "evidence.txt"
+        evidence_path.parent.mkdir(parents=True)
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": evidence_digest}],
+                },
+            },
+            "entries": [
+                {
+                    "path": "docs/evidence.txt",
+                    "sha256": evidence_digest,
+                },
+            ],
+        }
+        manifest_path = tmp_path / "configs" / "releases" / "manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "pass"
+        assert report["verdicts"]["bundle_evidence_coverage"]["match"] is True
+        assert report["verdicts"]["repository_entries"][0]["match"] is True
+
+    def test_repository_entry_verification_requires_complete_bundle_coverage(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "docs" / "evidence.txt"
+        evidence_path.parent.mkdir(parents=True)
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": digest}],
+                },
+            },
+            "entries": [
+                {
+                    "path": "docs/other.txt",
+                    "sha256": digest,
+                },
+            ],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["match"] is False
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "Bundle-evidence file 'docs/evidence.txt' is missing from checksum entries.",
+        ]
+
+    def test_repository_entry_verification_covers_all_declared_bundle_directory_files(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A directory-backed bundle cannot silently omit a tracked sidecar."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        bundle = tmp_path / "docs" / "bundle"
+        bundle.mkdir(parents=True)
+        evidence_path = bundle / "evidence.txt"
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        (bundle / "evidence.txt.review.json").write_text("{}\n", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "directory": "docs/bundle",
+                    "files": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+                },
+            },
+            "entries": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "Bundle directory file 'docs/bundle/evidence.txt.review.json' is missing from checksum entries.",
+        ]
+
+    def test_repository_entry_verification_rejects_files_outside_bundle_directory(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        bundle = tmp_path / "docs" / "bundle"
+        bundle.mkdir(parents=True)
+        outside = tmp_path / "docs" / "outside.txt"
+        outside.write_text("outside bundle", encoding="utf-8")
+        digest = hashlib.sha256(outside.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "directory": "docs/bundle",
+                    "files": [{"path": "docs/outside.txt", "sha256": digest}],
+                },
+            },
+            "entries": [{"path": "docs/outside.txt", "sha256": digest}],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "Bundle-evidence file 'docs/outside.txt' is outside the declared bundle directory "
+            "'docs/bundle'.",
+        ]
+
+    def test_repository_entry_verification_rejects_absolute_bundle_directory(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        bundle = tmp_path / "docs" / "bundle"
+        bundle.mkdir(parents=True)
+        evidence_path = bundle / "evidence.txt"
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "directory": str(bundle),
+                    "files": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+                },
+            },
+            "entries": [{"path": "docs/bundle/evidence.txt", "sha256": digest}],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "artifact_set.bundle_evidence.directory must be repository-relative.",
+        ]
+
+    def test_null_bundle_archive_cannot_fall_back_to_repository_entries(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "evidence.txt"
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        manifest = {
+            "release_tag": "test",
+            "artifact_set": {"bundle_archive": None},
+            "entries": [
+                {
+                    "path": "evidence.txt",
+                    "sha256": hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+                },
+            ],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "error"
+        assert report["errors"] == ["artifact_set.bundle_archive must be a mapping."]
+
+    def test_release_0_0_5_manifest_verifies_frozen_candidate_source_artifacts(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The repository-backed release must checksum source evidence, not only references."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        manifest_path = ROOT / "configs" / "releases" / "release_0_0_5_checksum_manifest.yaml"
+        manifest = _read_yaml(manifest_path)
+        entry_paths = {entry["path"] for entry in manifest["entries"]}
+        expected_source_paths = {
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/summary.json",
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/README.md",
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256",
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_analysis.json",
+            "docs/context/evidence/issue_5305_certified_archive/acceptance_report.json",
+            "docs/context/evidence/issue_5305_certified_archive/archive.json",
+            "docs/context/evidence/issue_5305_certified_archive/README.md",
+            "docs/context/evidence/issue_5305_certified_archive/SHA256SUMS",
+            "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml",
+            "configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml",
+        }
+
+        assert expected_source_paths <= entry_paths
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=ROOT,
+        )
+        assert report["overall_verdict"] == "pass"
+
+    def test_release_0_0_5_preserves_frozen_candidate_contract(self) -> None:
+        """The release cards must preserve the frozen membership and claim boundaries."""
+        frozen = _read_yaml(
+            ROOT / "docs" / "context" / "evidence" / "issue_6153_frozen_candidate_manifest.yaml"
+        )
+        bundle_root = (
+            ROOT / "docs" / "context" / "evidence" / "issue_6154_release_0_0_5_evidence_bundle"
+        )
+        release = _read_yaml(bundle_root / "release_manifest.yaml")
+
+        frozen_candidates = {
+            candidate["owning_issue"]: candidate for candidate in frozen["candidates"]
+        }
+        release_candidates = {
+            candidate["owning_issue"]: candidate for candidate in release["candidates"]
+        }
+        assert set(release_candidates) == set(frozen["summary"]["included"])
+        assert {candidate["owning_issue"] for candidate in release["excluded_reference"]} == set(
+            frozen["summary"]["excluded"]
+        )
+
+        reference_paths = {
+            issue: bundle_root / "candidates" / f"candidate_{issue}_reference.yaml"
+            for issue in release_candidates
+        }
+        for issue, release_candidate in release_candidates.items():
+            frozen_candidate = frozen_candidates[issue]
+            assert release_candidate["source_commit"] == frozen_candidate["source_commit"]
+            assert (
+                release_candidate["durable_artifact_uri"]
+                == frozen_candidate["durable_artifact_uri"]
+            )
+            assert (
+                release_candidate["evidence_classification"]
+                == frozen_candidate["evidence_classification"]
+            )
+            assert release_candidate["allowed_claim"] == frozen_candidate["allowed_claim"]
+            assert (
+                release_candidate["acceptance_checker_status"]
+                == frozen_candidate["acceptance_checker"]["gate_status"]
+            )
+            assert (
+                release_candidate["acceptance_checker_detail"]
+                == frozen_candidate["acceptance_checker"]["result"]
+            )
+
+            reference = _read_yaml(reference_paths[issue])
+            assert reference["source_commit"] == frozen_candidate["source_commit"]
+            assert reference["evidence_location"].rstrip("/") == frozen_candidate[
+                "durable_artifact_uri"
+            ].rstrip("/")
+            assert (
+                reference["evidence_classification"] == frozen_candidate["evidence_classification"]
+            )
+            assert reference["allowed_claim"] == frozen_candidate["allowed_claim"]
+            assert (
+                reference["acceptance_checker"]["detail"]
+                == frozen_candidate["acceptance_checker"]["result"]
+            )
 
     def test_verification_fails_closed_for_non_mapping_manifest(self, tmp_path: Path) -> None:
         from scripts.repro.verify_release_checksums import verify_release

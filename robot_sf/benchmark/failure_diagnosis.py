@@ -1003,7 +1003,14 @@ def _predicate_to_dict(predicate: TraceFailurePredicate | Mapping[str, Any]) -> 
     elif callable(getattr(predicate, "to_dict", None)):
         try:
             raw_predicate = predicate.to_dict()
-        except (AttributeError, OverflowError, RecursionError, TypeError, ValueError) as exc:
+        except (
+            AttributeError,
+            OverflowError,
+            RecursionError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             raise FailureDiagnosisError("predicate.to_dict() failed") from exc
         if not isinstance(raw_predicate, Mapping):
             raise FailureDiagnosisError("predicate.to_dict() must return a mapping")

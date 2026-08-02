@@ -774,6 +774,20 @@ def test_predicate_to_dict_failures_raise_domain_error() -> None:
         diagnose_from_trace_failure_predicate(raising_predicate)
 
 
+def test_predicate_to_dict_runtime_failures_raise_domain_error() -> None:
+    """Runtime failures from custom serializers stay inside the domain boundary."""
+
+    class RuntimeFailingPredicate:
+        """Expose a representative runtime serializer failure."""
+
+        def to_dict(self) -> dict[str, Any]:
+            """Raise a runtime failure that callers cannot repair from the record."""
+            raise RuntimeError("serializer state is invalid")
+
+    with pytest.raises(FailureDiagnosisError, match=r"to_dict\(\) failed"):
+        diagnose_from_trace_failure_predicate(RuntimeFailingPredicate())
+
+
 def test_validate_unknown_record_preserves_claim_boundary() -> None:
     """Unknown records must retain non-causal and explicit-reason caveats."""
     record = unknown_failure_diagnosis_record(

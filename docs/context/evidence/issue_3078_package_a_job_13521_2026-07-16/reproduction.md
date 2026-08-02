@@ -61,6 +61,22 @@ The private campaign URI remains the durable provenance pointer; it is not passe
 directly to this local-`Path` CLI. This command renders compact evidence only. It
 does not run Package A campaigns.
 
+## Domain decision overlay
+
+The renderer-produced `claim_card.yaml`, `package_a_decision_packet.json`,
+`postrun_acceptance.json`, and `registration.json` retain their
+`diagnostic_review_ready` / `NEEDS-REVIEW` state. The human decision is recorded
+separately in `package_a_domain_decision_overlay.json`, which binds the renderer
+outputs and the `no_eligible_comparator.json` receipt (including its review sidecar)
+by SHA-256. The overlay narrows the claim boundary to diagnostic-only evidence; it
+does not turn the generated renderer output into benchmark or ranking evidence.
+
+Validate the overlay, renderer state, receipt binding, and full checksum inventory with:
+
+```bash
+uv run pytest tests/benchmark/test_issue_3078_job_13521_registration.py -q
+```
+
 ## Integrity check
 
 From the repository root, verify every primary bundle artifact against the

@@ -45,7 +45,7 @@ class RiskDWAPlannerConfig:
     goal_progress_weight: float = _DEFAULT_GOAL_PROGRESS_WEIGHT
     heading_weight: float = 0.8
     ped_clearance_weight: float = 1.6
-    obstacle_clearance_weight: float = 1.2
+    obstacle_clearance_weight: float = _DEFAULT_OBSTACLE_CLEARANCE_WEIGHT
     smoothness_weight: float = 0.15
     ttc_weight: float = 0.3
 

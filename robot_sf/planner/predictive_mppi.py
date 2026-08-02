@@ -43,7 +43,7 @@ class PredictiveMPPIConfig:
     horizon_steps: int = 12
     rollout_dt: float = 0.2
     sample_count: int = 128
-    iterations: int = 4
+    iterations: int = _DEFAULT_ITERATIONS
     elite_fraction: float = 0.2
     init_linear_std: float = 0.35
     init_angular_std: float = 0.65
@@ -60,16 +60,16 @@ class PredictiveMPPIConfig:
     first_step_ped_clearance: float = 0.75
     first_step_obstacle_clearance: float = 0.35
     invalid_sequence_cost: float = 1e6
-    goal_progress_weight: float = 6.0
+    goal_progress_weight: float = _DEFAULT_GOAL_PROGRESS_WEIGHT
     heading_weight: float = 0.8
-    clearance_weight: float = 3.0
+    clearance_weight: float = _DEFAULT_CLEARANCE_WEIGHT
     obstacle_weight: float = 1.6
     smoothness_weight: float = 0.2
     ttc_weight: float = 0.45
     occupancy_weight: float = 0.35
     anchor_bias_weight: float = 0.08
     progress_escape_enabled: bool = True
-    progress_escape_distance: float = 1.2
+    progress_escape_distance: float = _DEFAULT_PROGRESS_ESCAPE_DISTANCE_M
     progress_escape_speed: float = 0.55
     progress_escape_heading_gain: float = 1.5
 

@@ -33,7 +33,7 @@ class PlannerSelectorV2DiagnosticConfig:
         "docs/context/issue_1608_seed_sensitivity_analysis.md",
         "docs/context/issue_1692_topology_hypothesis_probe.md",
     )
-    dense_ped_count: int = 4
+    dense_ped_count: int = _DEFAULT_DENSE_PED_COUNT
     near_field_distance_m: float = 2.3
     comfort_distance_m: float = 1.05
     baseline_candidate: str = "baseline"

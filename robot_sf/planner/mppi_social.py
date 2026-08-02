@@ -40,7 +40,7 @@ class MPPISocialConfig:
     horizon_steps: int = 10
     rollout_dt: float = 0.2
     sample_count: int = 96
-    iterations: int = 3
+    iterations: int = _DEFAULT_ITERATIONS
     elite_fraction: float = 0.2
 
     init_linear_std: float = 0.35

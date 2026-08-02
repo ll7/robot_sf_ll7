@@ -35,9 +35,9 @@ class HybridPortfolioConfig:
 
     emergency_clearance: float = 0.55
     caution_clearance: float = 1.0
-    dense_ped_count: int = 6
+    dense_ped_count: int = _DEFAULT_DENSE_PED_COUNT
     near_field_distance: float = 2.5
-    hysteresis_steps: int = 6
+    hysteresis_steps: int = _DEFAULT_HYSTERESIS_STEPS
     fallback_on_exception: bool = True
     adaptive_switching_enabled: bool = True
 

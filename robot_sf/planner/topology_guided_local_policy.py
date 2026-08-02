@@ -86,7 +86,7 @@ class TopologyGuidedLocalPolicyConfig:
     stall_window_steps: int = 20
     min_hypotheses: int = 2
     max_hypotheses: int = 2
-    block_radius_cells: int = 3
+    block_radius_cells: int = _DEFAULT_BLOCK_RADIUS_CELLS
     block_stride_cells: int = 8
     max_path_overlap: float = 0.88
     length_weight: float = 1.0
@@ -104,7 +104,9 @@ class TopologyGuidedLocalPolicyConfig:
     near_parity_diversity_bonus: float = 0.0
     primary_route_reuse_penalty_enabled: bool = False
     primary_route_reuse_penalty_weight: float = 1.0
-    primary_route_reuse_penalty_cooldown_steps: int = 3
+    primary_route_reuse_penalty_cooldown_steps: int = (
+        _DEFAULT_PRIMARY_ROUTE_REUSE_PENALTY_COOLDOWN_STEPS
+    )
     primary_route_reuse_penalty_min_prior_primary_selections: int = 2
     primary_route_progress_gate_enabled: bool = False
     primary_route_progress_gate_threshold_m: float = 0.0

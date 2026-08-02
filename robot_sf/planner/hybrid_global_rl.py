@@ -33,7 +33,7 @@ class HybridGlobalRLLocalConfig:
     allow_goal_fallback: bool = False
     fail_closed_on_missing_waypoint: bool = True
     preserve_final_goal: bool = True
-    waypoint_max_distance_from_robot: float = 3.0
+    waypoint_max_distance_from_robot: float = _DEFAULT_WAYPOINT_MAX_DISTANCE_FROM_ROBOT_M
     max_linear_speed: float = 1.0
     max_angular_speed: float = 1.0
 

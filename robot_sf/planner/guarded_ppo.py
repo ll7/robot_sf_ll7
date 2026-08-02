@@ -35,7 +35,7 @@ class GuardedPPOConfig:
     """Configuration for the PPO safety guard."""
 
     rollout_dt: float = 0.2
-    rollout_steps: int = 6
+    rollout_steps: int = _DEFAULT_GUARD_ROLLOUT_STEPS
     goal_tolerance: float = 0.25
     near_field_distance: float = 2.0
     hard_ped_clearance: float = 0.58

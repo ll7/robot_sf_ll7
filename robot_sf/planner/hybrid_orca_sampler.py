@@ -24,9 +24,10 @@ _DEFAULT_ROUTE_STALL_CYCLES_BEFORE_SAMPLER = 3
 class HybridORCASamplerConfig(GuardedPPOConfig):
     """Configuration for ORCA with sampled fallback/repair."""
 
+    rollout_steps: int = _DEFAULT_ROLLOUT_STEPS
     sampler_progress_margin: float = 0.05
     route_progress_epsilon: float = 0.05
-    route_stall_cycles_before_sampler: int = 3
+    route_stall_cycles_before_sampler: int = _DEFAULT_ROUTE_STALL_CYCLES_BEFORE_SAMPLER
     route_goal_regression_tolerance: float = 0.5
 
 

@@ -47,11 +47,11 @@ class GridRoutePlannerConfig:
     goal_tolerance: float = 0.25
     heading_gain: float = 1.8
     turn_in_place_angle: float = 0.8
-    waypoint_lookahead_cells: int = 5
+    waypoint_lookahead_cells: int = _DEFAULT_WAYPOINT_LOOKAHEAD_CELLS
     waypoint_reached_distance: float = 0.3
     obstacle_threshold: float = 0.5
     obstacle_inflation_cells: int = 1
-    clearance_search_cells: int = 5
+    clearance_search_cells: int = _DEFAULT_CLEARANCE_SEARCH_CELLS
     stop_distance: float = 0.25
     progress_weight: float = 1.0
     heading_weight: float = 1.0

@@ -508,6 +508,13 @@ def test_non_finite_context_field_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize("field_name", ["collision", "near_miss", "unnecessary_braking"])
+def test_non_boolean_outcome_field_rejected(field_name: str) -> None:
+    """Outcome indicators reject truthy non-booleans instead of silently coercing them."""
+    with pytest.raises(ValueError, match=rf"{field_name} must be a bool or None"):
+        _sample("eval", **{field_name: "false"})
+
+
 def test_non_finite_residual_rejected() -> None:
     """A non-finite calibration residual fails closed before any report."""
     traces = _balanced_traces(calibration_residuals=[0.1, float("inf"), 0.3])

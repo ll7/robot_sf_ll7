@@ -159,10 +159,14 @@ class SafetyMarginTraceSample:
         calibration/evaluation residuals via :func:`require_finite_array` so the
         ``finite_checks`` boundary is exercised on the computation path.
         """
-        if not isinstance(self.trace_id, str) or not self.trace_id:
+        if not isinstance(self.trace_id, str) or not self.trace_id.strip():
             raise ValueError("trace_id must be a non-empty string")
         if not isinstance(self.split_id, str) or not self.split_id:
             raise ValueError("split_id must be a non-empty string")
+        for field_name in ("collision", "near_miss", "unnecessary_braking"):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, bool):
+                raise ValueError(f"{field_name} must be a bool or None")
         if self.path_efficiency is not None:
             eff = require_finite_scalar("path_efficiency", self.path_efficiency)
             if not 0.0 <= eff <= 1.0:

@@ -4765,6 +4765,9 @@ entries:
   freshness: evidence
   area: release_evidence
 - path: docs/context/evidence/issue_6481_social_compliance_preflight_receipt.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5303_search_promotion_preregistration
   status: evidence
   freshness: evidence

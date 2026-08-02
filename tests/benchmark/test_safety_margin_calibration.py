@@ -352,7 +352,7 @@ def test_under_coverage_when_evaluation_exceeds_radius() -> None:
 
 
 def test_coverage_unreachable_returns_infinite_radius() -> None:
-    """When the sample cannot certify the target the radius is +inf and coverage is full."""
+    """An infinite radius is uncertifiable, even though it trivially covers the holdout."""
     # n=2, target 0.9 -> k = ceil(3*0.9) = 3 > 2 -> +inf per split_conformal_radius.
     report = build_safety_margin_comparison(
         fit_split_ids={"fit"},
@@ -369,6 +369,7 @@ def test_coverage_unreachable_returns_infinite_radius() -> None:
     conformal = _method(report, METHOD_ADAPTIVE_CONFORMAL)
     assert math.isinf(conformal.conformal_tightening_m)
     assert conformal.empirical_coverage == pytest.approx(1.0)
+    assert conformal.coverage_status == "uncertifiable_infinite_radius"
     assert report.provenance["reused_primitives"]["split_conformal_radius"]["radius_m"] == "+inf"
 
 

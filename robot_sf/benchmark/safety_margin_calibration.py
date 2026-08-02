@@ -508,6 +508,7 @@ def _effective_margins(
 def _coverage_status(
     *,
     method: str,
+    conformal_tightening: float,
     empirical_coverage: float | None,
     coverage_target: float | None,
     coverage_gap: float | None,
@@ -516,6 +517,7 @@ def _coverage_status(
 
     Args:
         method: Construction name.
+        conformal_tightening: Split-conformal radius used by the method.
         empirical_coverage: Measured evaluation coverage, or ``None``.
         coverage_target: Target for conformal methods, or ``None``.
         coverage_gap: ``empirical - target``, or ``None``.
@@ -525,6 +527,12 @@ def _coverage_status(
     """
     if empirical_coverage is None:
         return "unavailable_no_evaluation_residuals"
+    if method == METHOD_ADAPTIVE_CONFORMAL and math.isinf(conformal_tightening):
+        # An unbounded radius covers every finite evaluation residual trivially, but it
+        # means the calibration sample could not certify the requested target with a
+        # finite usable margin.  Do not represent that fail-closed result as coverage
+        # success in a smoke report.
+        return "uncertifiable_infinite_radius"
     if method != METHOD_ADAPTIVE_CONFORMAL or coverage_target is None or coverage_gap is None:
         return "diagnostic_no_target"
     if coverage_gap < 0.0:
@@ -802,6 +810,7 @@ def build_safety_margin_comparison(  # noqa: PLR0913
             gap = empirical_coverage - target
         status = _coverage_status(
             method=method,
+            conformal_tightening=tightening,
             empirical_coverage=empirical_coverage,
             coverage_target=target,
             coverage_gap=gap,

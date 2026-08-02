@@ -323,7 +323,13 @@
         },
         "evidence_bundle": {
           "type": "object",
-          "description": "New immutable evidence bundle for the adapted policy; promotion requires a fresh identifier, uri, and supported checksum, and the identifier must not equal the baseline policy identifier."
+          "properties": {
+            "policy_identifier": {
+              "type": "string",
+              "description": "The validator-derived adapted-policy identifier this evidence bundle covers. Required by the semantic promotion gate."
+            }
+          },
+          "description": "New immutable evidence bundle for the adapted policy; promotion requires a fresh identifier, uri, supported checksum, and policy_identifier exactly matching the validator-derived adapted-policy identifier. The evidence-bundle identifier must not equal the baseline policy identifier."
         }
       }
     }

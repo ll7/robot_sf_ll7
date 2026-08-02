@@ -262,6 +262,7 @@ def check_continual_adaptation_run(
         decision,
         manifest.get("results"),
         baseline_identifier=baseline_identifier,
+        adapted_policy_identifier=derived_identifier,
         blockers=blockers,
     )
 
@@ -484,6 +485,7 @@ def _check_promotion_gate(
     results: Mapping[str, Any] | None,
     *,
     baseline_identifier: str,
+    adapted_policy_identifier: str,
     blockers: list[str],
 ) -> bool:
     """Gate promotion on complete result/evidence references.
@@ -507,10 +509,12 @@ def _check_promotion_gate(
             ref,
             ref_name,
             baseline_identifier=baseline_identifier,
+            adapted_policy_identifier=adapted_policy_identifier,
         ):
             blockers.append(
                 f"promotion_decision is 'promote' but results.{ref_name} is missing or incomplete; "
-                "promotion requires a uri plus a supported checksum"
+                "promotion requires a uri plus a supported checksum, and evidence_bundle must name "
+                "the derived adapted-policy identifier"
             )
             promotion_ready = False
     return promotion_ready
@@ -521,8 +525,14 @@ def _is_complete_reference(
     ref_name: str,
     *,
     baseline_identifier: str,
+    adapted_policy_identifier: str,
 ) -> bool:
-    """Return ``True`` when a promotion reference has a valid immutable identity."""
+    """Return ``True`` when a promotion reference has a valid immutable identity.
+
+    The promotion evidence bundle must additionally name the exact adapted policy
+    identifier derived from this manifest, so evidence for an unrelated policy
+    cannot authorize promotion.
+    """
     if not isinstance(ref, Mapping):
         return False
     uri = ref.get("uri")
@@ -543,8 +553,10 @@ def _is_complete_reference(
     if ref_name != "evidence_bundle":
         return True
     identifier = ref.get("identifier")
+    policy_identifier = ref.get("policy_identifier")
     return (
         isinstance(identifier, str)
         and bool(identifier.strip())
         and identifier != baseline_identifier
+        and policy_identifier == adapted_policy_identifier
     )

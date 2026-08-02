@@ -50,20 +50,23 @@ def _result_ref(uri: str = "runs/nominal.json") -> dict:
     return {"uri": uri, "checksum": _checksum(_RESULT_DIGEST)}
 
 
-def _evidence_ref() -> dict:
-    return {
+def _evidence_ref(adapted_policy_identifier: str | None = None) -> dict:
+    reference = {
         "identifier": "evidence_adapted_v1",
         "uri": "evidence/adapted_v1.json",
         "checksum": _checksum(_RESULT_DIGEST),
     }
+    if adapted_policy_identifier is not None:
+        reference["policy_identifier"] = adapted_policy_identifier
+    return reference
 
 
-def _results() -> dict:
+def _results(adapted_policy_identifier: str | None = None) -> dict:
     return {
         "nominal_result": _result_ref("runs/nominal.json"),
         "shift_result": _result_ref("runs/shift.json"),
         "forgetting_result": _result_ref("runs/forgetting.json"),
-        "evidence_bundle": _evidence_ref(),
+        "evidence_bundle": _evidence_ref(adapted_policy_identifier),
     }
 
 
@@ -135,7 +138,7 @@ def test_promote_with_complete_results_is_promotion_ready() -> None:
     """A 'promote' decision with all result/evidence references is promotion-ready."""
     manifest = _manifest()
     manifest["promotion_decision"] = {"decision": "promote", "rationale": "all gates passed"}
-    manifest["results"] = _results()
+    manifest["results"] = _results(derive_adapted_policy_identifier(manifest))
     report = check_continual_adaptation_run(manifest)
     assert report.protocol_status == PROTOCOL_STATUS_VALID
     assert report.promotion_decision == "promote"
@@ -208,9 +211,23 @@ def test_promote_with_baseline_named_evidence_bundle_fails_closed() -> None:
     """A new evidence bundle must not reuse the immutable baseline identifier."""
     manifest = _manifest()
     manifest["promotion_decision"] = {"decision": "promote", "rationale": "want to ship"}
-    results = _results()
+    results = _results(derive_adapted_policy_identifier(manifest))
     results["evidence_bundle"]["identifier"] = manifest["baseline_policy"]["identifier"]
     manifest["results"] = results
+    report = check_continual_adaptation_run(manifest)
+    assert report.protocol_status == PROTOCOL_STATUS_INVALID
+    assert report.promotion_ready is False
+    assert any("evidence_bundle" in blocker for blocker in report.blockers)
+
+
+@pytest.mark.parametrize("policy_identifier", [None, "unrelated_adapted_policy"])
+def test_promote_with_missing_or_mismatched_evidence_policy_identifier_fails_closed(
+    policy_identifier: str | None,
+) -> None:
+    """Promotion evidence must name exactly the policy derived by this manifest."""
+    manifest = _manifest()
+    manifest["promotion_decision"] = {"decision": "promote", "rationale": "want to ship"}
+    manifest["results"] = _results(policy_identifier)
     report = check_continual_adaptation_run(manifest)
     assert report.protocol_status == PROTOCOL_STATUS_INVALID
     assert report.promotion_ready is False
@@ -221,7 +238,7 @@ def test_promote_with_protocol_blocker_is_not_promotion_ready() -> None:
     """A complete promotion bundle cannot bypass another protocol invariant."""
     manifest = _manifest()
     manifest["promotion_decision"] = {"decision": "promote", "rationale": "want to ship"}
-    manifest["results"] = _results()
+    manifest["results"] = _results(derive_adapted_policy_identifier(manifest))
     manifest["safety_wrapper"]["mutation_permitted"] = True
     report = check_continual_adaptation_run(manifest)
     assert report.protocol_status == PROTOCOL_STATUS_INVALID

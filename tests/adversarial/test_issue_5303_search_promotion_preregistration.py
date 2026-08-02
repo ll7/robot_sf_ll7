@@ -439,7 +439,7 @@ def test_preflight_runtime_does_not_import_forbidden_modules() -> None:
 
 def test_check_command_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     """The CLI check command reproduces the contract hash and exits zero."""
-    from scripts.tools.check_issue_5303_search_promotion_contract import main
+    from scripts.tools.check_issue_5303_search_promotion_preregistration import main
 
     exit_code = main(["--repo-root", str(REPO_ROOT)])
     captured = capsys.readouterr()

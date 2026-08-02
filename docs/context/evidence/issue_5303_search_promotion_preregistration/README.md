@@ -223,3 +223,22 @@ cannot make a different input packet appear complete.
 - Diagnostic analysis: `robot_sf/benchmark/issue_5303_search_promotion_analysis.py`
 - Diagnostic analysis CLI: `scripts/tools/analyze_issue_5303_search_promotion.py`
 - Focused tests: `tests/adversarial/test_issue_5303_search_promotion_preregistration.py`
+
+## Rename and re-freeze note (merge with origin/main)
+
+Merged PR #6586 (issue #6475) independently introduced
+`robot_sf/benchmark/issue_5303_search_promotion_preflight.py`,
+`scripts/tools/check_issue_5303_search_promotion_contract.py`, and
+`tests/adversarial/test_issue_5303_search_promotion_preflight.py` for the *timing-control
+readiness gate*. Those are a different artifact from this *preregistration contract* packet
+and only collided on filename. This packet's module, CLI, and test were therefore renamed to
+the `..._preregistration` names listed above; both artifacts now coexist unchanged in
+substance.
+
+The rename altered file bytes and recorded paths, so the raw-file provenance SHA-256 values
+and the derived `contract_sha256` were recomputed. **No frozen design field changed**: the
+target planner, family split, candidate space, 64-candidate budget, three search seeds per
+method, objective, gates, denominator, uncertainty, null tests, decision rule, and the
+`diagnostic_inconclusive` declaration are byte-identical to the pre-rename freeze. The
+re-freeze is a path/identity refresh only and does not re-preregister the design or authorize
+any promotion.

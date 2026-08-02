@@ -43,6 +43,7 @@ from robot_sf.benchmark.actuator_feasibility import (
     VERDICT_ACTUATOR_FEASIBLE,
     ActuatorLimitsConfig,
     evaluate_actuator_feasibility,
+    stopping_distance,
 )
 from robot_sf.benchmark.trajectory_verifier import (
     DECISION_FALLBACK_BRAKE,
@@ -73,11 +74,6 @@ RANKER_CLAIM_BOUNDARY = (
     "formal safety case; hard deterministic gates remain authoritative; default "
     "planner behavior unchanged; not wired into map_runner or any planner loop"
 )
-
-#: Finite clearance sentinel passed to the actuator-feasibility gate when no
-#: pedestrian hazard is present (the estimator reports ``+inf`` clearance in that
-#: case, which the actuator gate rejects as non-finite).
-_NO_HAZARD_CLEARANCE_M = 1.0e3
 
 #: Half-window (in horizon steps) around the peak-risk timestep, matching the
 #: ``before_s`` / ``after_s`` anchor-window convention of ``critical_intervals``.
@@ -617,16 +613,24 @@ def _hard_gate(
         fails independently of actuator rates.
     """
     min_clearance_m = estimate.deterministic.min_clearance_m
-    hazard_clearance_m = (
-        _NO_HAZARD_CLEARANCE_M if not math.isfinite(min_clearance_m) else min_clearance_m
+    resolved_actuator_config = (
+        actuator_config if actuator_config is not None else ActuatorLimitsConfig()
     )
+    if math.isfinite(min_clearance_m):
+        hazard_clearance_m = min_clearance_m
+    else:
+        # The actuator gate requires finite clearance even when no hazard exists.
+        # Derive a sufficient sentinel from the candidate's actual maximum speed
+        # rather than imposing an arbitrary distance cap on otherwise valid rates.
+        max_speed_mps = float(np.max(np.linalg.norm(robot_velocities, axis=1)))
+        hazard_clearance_m = stopping_distance(max_speed_mps, resolved_actuator_config)
 
     actuator_report = evaluate_actuator_feasibility(
         robot_positions=robot_positions,
         robot_velocities=robot_velocities,
         dt_s=risk_config.dt_s,
         hazard_clearance_m=hazard_clearance_m,
-        config=actuator_config,
+        config=resolved_actuator_config,
     )
 
     verifier_decision: str

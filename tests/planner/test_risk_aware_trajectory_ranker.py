@@ -175,6 +175,18 @@ def test_rank_no_pedestrian_hazard_is_eligible() -> None:
     assert record.components.clearance_penalty == 0.0
 
 
+def test_rank_no_hazard_does_not_apply_fixed_clearance_cap() -> None:
+    """No-hazard actuator checks do not reject a high-speed constant trajectory."""
+    action = action_from_constant_velocity(
+        "fast_cruise", [0.0, 0.0], [200.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+    record = rank_trajectories([action], [], risk_config=_risk_config())[0]
+
+    assert record.components.min_clearance_m == float("inf")
+    assert record.hard_gate.actuator_verdict == "actuator_feasible"
+    assert record.eligible is True
+
+
 def test_rank_hard_verifier_uses_nominal_pedestrian_forecast() -> None:
     """A future nominal contact is visible to the deterministic hard verifier."""
     action = action_from_constant_velocity(

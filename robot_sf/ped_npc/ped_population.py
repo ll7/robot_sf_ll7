@@ -1177,6 +1177,7 @@ def _create_groups_and_behaviors(
         background.initial_sections,
         obstacle_polygons=prepared_obstacles,
         reset_at_start=spawn_config.reset_follow_route_at_start,
+        global_ped_offset=route_offset,
     )
     return groups, [crowd_behavior, route_behavior]
 

@@ -60,8 +60,8 @@ here.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass, is_dataclass
+from collections.abc import Collection, Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass, fields, is_dataclass
 from datetime import UTC, datetime
 from math import isfinite
 from numbers import Integral, Real
@@ -160,6 +160,10 @@ _UNKNOWN_CAVEAT = (
     "Unsupported, invalid, or unavailable mappings resolve to unknown; causal_evidence "
     "still cites the source predicate's evidence pointers."
 )
+#: Caveats that every record must retain so downstream consumers cannot strip the
+#: non-causal and fail-closed boundaries during validation.
+_REQUIRED_RECORD_CAVEATS = frozenset({_NON_CAUSAL_CAVEAT})
+_REQUIRED_UNKNOWN_RECORD_CAVEATS = frozenset({_NON_CAUSAL_CAVEAT, _UNKNOWN_CAVEAT})
 #: Caveat attached to every diagnosis payload.
 _PAYLOAD_NON_CLAIM_CAVEAT = (
     "failure_diagnosis records are deterministic diagnostics adapted from trace "
@@ -561,13 +565,12 @@ def validate_failure_diagnosis_record(record: Mapping[str, Any]) -> dict[str, An
         _require_scalar_value(record, field, allowed)
     _require_collection_shapes(record)
     _require_unknown_reason_invariant(record)
+    _require_record_caveat_boundary(record)
     _require_adapter_provenance_consistency(record)
     return _normalize_record(record)
 
 
-def _require_scalar_value(
-    record: Mapping[str, Any], field: str, allowed: tuple[str, ...] | frozenset[str]
-) -> None:
+def _require_scalar_value(record: Mapping[str, Any], field: str, allowed: Collection[str]) -> None:
     """Raise unless ``record[field]`` equals one of the ``allowed`` values.
 
     Args:
@@ -617,7 +620,7 @@ def _require_collection_shapes(record: Mapping[str, Any]) -> None:
         raise FailureDiagnosisError("proposed_correction must be a string or None")
 
 
-def _require_causal_evidence_pointer(pointer: Mapping[str, Any], index: int) -> None:
+def _require_causal_evidence_pointer(pointer: Mapping[Any, Any], index: int) -> None:
     """Validate the trace-predicate pointer shape without rewriting source evidence.
 
     The deterministic adapter may preserve malformed source values inside pointer
@@ -724,6 +727,33 @@ def _require_unknown_reason_invariant(record: Mapping[str, Any]) -> None:
         )
 
 
+def _require_record_caveat_boundary(record: Mapping[str, Any]) -> None:
+    """Require record caveats to preserve the diagnostic claim boundary.
+
+    Unknown records may carry a caller-supplied reason and therefore may not match the
+    adapter's exact caveat list.  They must still retain the shared non-causal and
+    fail-closed caveats, plus a caveat that repeats the validated reason.
+
+    Args:
+        record: A record that has passed structural and unknown-reason validation.
+
+    Raises:
+        FailureDiagnosisError: If required record caveats are missing.
+    """
+    required = (
+        _REQUIRED_UNKNOWN_RECORD_CAVEATS
+        if record["failure_type"] == "unknown"
+        else _REQUIRED_RECORD_CAVEATS
+    )
+    caveats = record["caveats"]
+    if not required.issubset(caveats):
+        raise FailureDiagnosisError("record caveats must preserve the diagnostic claim boundary")
+    if record["failure_type"] == "unknown":
+        reason_caveat = f"unknown_reason: {record['unknown_reason']}"
+        if reason_caveat not in caveats:
+            raise FailureDiagnosisError("unknown record caveats must preserve unknown_reason")
+
+
 def _require_adapter_provenance_consistency(record: Mapping[str, Any]) -> None:
     """Ensure a deterministic diagnosis remains tied to its source predicate.
 
@@ -813,7 +843,7 @@ def _normalize_record(record: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def build_failure_diagnosis_payload(
-    records: list[FailureDiagnosisRecord | Mapping[str, Any]],
+    records: Iterable[FailureDiagnosisRecord | Mapping[str, Any]],
     *,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -916,7 +946,9 @@ def _require_payload_metadata(payload: Mapping[str, Any]) -> list[Any]:
     return records
 
 
-def _validate_payload_coverage(coverage: Any, normalized_records: list[Mapping[str, Any]]) -> None:
+def _validate_payload_coverage(
+    coverage: Any, normalized_records: Sequence[Mapping[str, Any]]
+) -> None:
     """Require payload coverage metadata to match its validated records exactly.
 
     Args:
@@ -957,14 +989,25 @@ def _predicate_to_dict(predicate: TraceFailurePredicate | Mapping[str, Any]) -> 
     """
     if isinstance(predicate, Mapping):
         predicate_dict = dict(predicate)
+    # Read dataclass fields shallowly instead of calling asdict/to_dict first.
+    # TraceFailurePredicate.to_dict() uses dataclasses.asdict; a malformed cyclic
+    # evidence field would otherwise raise RecursionError before the JSON-safe
+    # sanitizer can convert it into an explicit unknown diagnosis.
+    elif is_dataclass(predicate) and not isinstance(predicate, type):
+        try:
+            predicate_dict = {
+                field.name: getattr(predicate, field.name) for field in fields(predicate)
+            }
+        except Exception as exc:
+            raise FailureDiagnosisError("predicate dataclass fields could not be read") from exc
     elif callable(getattr(predicate, "to_dict", None)):
-        raw_predicate = predicate.to_dict()
+        try:
+            raw_predicate = predicate.to_dict()
+        except Exception as exc:
+            raise FailureDiagnosisError("predicate.to_dict() failed") from exc
         if not isinstance(raw_predicate, Mapping):
             raise FailureDiagnosisError("predicate.to_dict() must return a mapping")
         predicate_dict = dict(raw_predicate)
-    # Defensive fallback for plain dataclasses without a ``to_dict`` method.
-    elif is_dataclass(predicate) and not isinstance(predicate, type):
-        predicate_dict = dict(asdict(predicate))
     else:
         raise FailureDiagnosisError(
             "predicate must be a TraceFailurePredicate, a mapping, or a dataclass instance"
@@ -1141,7 +1184,7 @@ def _validate_correction_inputs(proposed_correction: str | None, correction_stat
         raise FailureDiagnosisError("proposed_correction must be a string or None")
 
 
-def _failure_type_coverage(records: list[Mapping[str, Any]]) -> dict[str, int]:
+def _failure_type_coverage(records: Sequence[Mapping[str, Any]]) -> dict[str, int]:
     """Return deterministic failure-type counts for validated diagnosis records.
 
     Args:

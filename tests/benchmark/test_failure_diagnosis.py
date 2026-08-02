@@ -629,8 +629,9 @@ def test_predicate_to_dict_must_return_a_mapping() -> None:
             """Return an invalid predicate representation."""
             return None
 
+    invalid_predicate: Any = InvalidPredicate()
     with pytest.raises(FailureDiagnosisError, match=r"to_dict\(\).*mapping"):
-        diagnose_from_trace_failure_predicate(InvalidPredicate())
+        diagnose_from_trace_failure_predicate(invalid_predicate)
 
 
 def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> None:
@@ -647,8 +648,9 @@ def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> N
     with pytest.raises(FailureDiagnosisError, match="non-empty"):
         unknown_failure_diagnosis_record(predicate, "   ")
     # Non-string values must not be silently converted into a schema reason.
+    invalid_reason: Any = None
     with pytest.raises(FailureDiagnosisError, match="non-empty string"):
-        unknown_failure_diagnosis_record(predicate, None)  # type: ignore[arg-type]
+        unknown_failure_diagnosis_record(predicate, invalid_reason)
 
 
 def test_explicit_unknown_helper_record_validates_and_wraps() -> None:
@@ -742,3 +744,44 @@ def test_every_known_predicate_id_maps_deterministically(predicate_id: str) -> N
         assert record.unknown_reason is not None
     else:
         assert record.unknown_reason is None
+
+
+def test_cyclic_trace_predicate_object_evidence_fails_closed() -> None:
+    """Direct TraceFailurePredicate objects must use the cycle-safe adapter boundary."""
+    predicate = _predicate("collision")
+    predicate.evidence_fields["self"] = predicate.evidence_fields
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "invalid_predicate_evidence:non_json_safe_value"
+    json.dumps(record.to_dict(), allow_nan=False)
+    validate_failure_diagnosis_record(record.to_dict())
+
+
+def test_predicate_to_dict_failures_raise_domain_error() -> None:
+    """A failing custom serializer must not leak its implementation exception."""
+
+    class RaisingPredicate:
+        """Expose a serializer failure at the adapter boundary."""
+
+        def to_dict(self) -> dict[str, Any]:
+            """Raise a representative serialization failure."""
+            raise RecursionError("cyclic predicate")
+
+    raising_predicate: Any = RaisingPredicate()
+    with pytest.raises(FailureDiagnosisError, match=r"to_dict\(\) failed"):
+        diagnose_from_trace_failure_predicate(raising_predicate)
+
+
+def test_validate_unknown_record_preserves_claim_boundary() -> None:
+    """Unknown records must retain non-causal and explicit-reason caveats."""
+    record = unknown_failure_diagnosis_record(
+        _predicate("collision", validity_status=_NOT_AVAILABLE),
+        "explicit_blocker_reason",
+    )
+    payload = record.to_dict()
+    payload["caveats"] = []
+
+    with pytest.raises(FailureDiagnosisError, match="claim boundary"):
+        validate_failure_diagnosis_record(payload)

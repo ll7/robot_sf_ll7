@@ -1,0 +1,2266 @@
+{
+  "claim_boundary": "Retrospective achieved-precision and minimum-resolvable risk-difference derivation over the checksum-pinned #5351 successor rows. This is a design-sensitivity diagnostic, NOT a post-hoc observed-data adequacy computation, NOT prospective sizing, and NOT a claim that 30 seeds were adequate for any target effect. Output remains blocked_review_pending and promotes no benchmark, paper, or dissertation claim automatically.",
+  "claim_gate": {
+    "reason": "retrospective precision derivation over frozen #5351 rows; claim promotion requires human review",
+    "status": "blocked_review_pending"
+  },
+  "contrast_precisions": [
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06102625453149833,
+      "ci_high": 0.4379376197318008,
+      "ci_low": 0.2015305673009162,
+      "ci_width": 0.23640705243088458,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.139609260993111,
+      "mrrd_practical_simulated": 0.138,
+      "mrrd_statistical": 0.239218521986222,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.3191597662122464,
+      "outcome": "collision",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.6027777777777777,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.03836545632293027,
+      "ci_high": 0.061915113871635556,
+      "ci_low": -0.08768211289092297,
+      "ci_width": 0.14959722676255852,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.09519491264338784,
+      "mrrd_practical_simulated": 0.092,
+      "mrrd_statistical": 0.15038982528677566,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.0164699826625316,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.5090277777777777,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.022994534800179874,
+      "ci_high": -0.0028955314009662,
+      "ci_low": -0.08820046768707482,
+      "ci_width": 0.08530493628610862,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.06506846004960548,
+      "mrrd_practical_simulated": 0.072,
+      "mrrd_statistical": 0.09013692009921097,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.036654278355431356,
+      "outcome": "timeout",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.0,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06608415077904183,
+      "ci_high": 0.2972969387755101,
+      "ci_low": 0.03553072390572402,
+      "ci_width": 0.2617662148697861,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.1495225554758365,
+      "mrrd_practical_simulated": 0.158,
+      "mrrd_statistical": 0.25904511095167304,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.17298708924690157,
+      "outcome": "collision",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.4597222222222222,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.07686312870803158,
+      "ci_high": 0.04307291666666653,
+      "ci_low": -0.25410587002096424,
+      "ci_width": 0.29717878668763076,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.1706489640068086,
+      "mrrd_practical_simulated": 0.172,
+      "mrrd_statistical": 0.3012979280136172,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.1025178747579584,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.42083333333333334,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06514040907573175,
+      "ci_high": 0.39829629629629626,
+      "ci_low": 0.14392836879432636,
+      "ci_width": 0.2543679275019699,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.1476728557266403,
+      "mrrd_practical_simulated": 0.145,
+      "mrrd_statistical": 0.2553457114532806,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.2687812335048483,
+      "outcome": "timeout",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.30486111111111114,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.053383754261820446,
+      "ci_high": 0.03213608305274963,
+      "ci_low": -0.18055717054263562,
+      "ci_width": 0.21269325359538524,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12463023571270469,
+      "mrrd_practical_simulated": 0.124,
+      "mrrd_statistical": 0.20926047142540938,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.07685082256716527,
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.20555555555555555,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.03637252661069883,
+      "ci_high": 0.05752843137254886,
+      "ci_low": -0.08409389952153111,
+      "ci_width": 0.14162233089407997,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.09128884218369443,
+      "mrrd_practical_simulated": 0.092,
+      "mrrd_statistical": 0.14257768436738885,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.01218537920925836,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.5138888888888888,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.02608429266971373,
+      "ci_high": 0.042038866930171226,
+      "ci_low": -0.05752083333333329,
+      "ci_width": 0.09955970026350452,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.07112427419484105,
+      "mrrd_practical_simulated": 0.076,
+      "mrrd_statistical": 0.1022485483896821,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.001972268431613807,
+      "outcome": "timeout",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.034722222222222224,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.04180320738721242,
+      "ci_high": -0.052721147646679574,
+      "ci_low": -0.2190559246954596,
+      "ci_width": 0.16633477704878002,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.10193278091719507,
+      "mrrd_practical_simulated": 0.106,
+      "mrrd_statistical": 0.16386556183439013,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.1338719561382615,
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.1486111111111111,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.0365966731386249,
+      "ci_high": 0.004891756475704222,
+      "ci_low": -0.13910984848484842,
+      "ci_width": 0.14400160496055264,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.09172816130568923,
+      "mrrd_practical_simulated": 0.094,
+      "mrrd_statistical": 0.14345632261137845,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.06552033686082308,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.46111111111111114,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.024478963454360514,
+      "ci_high": 0.08962962962962963,
+      "ci_low": -0.006383660665575567,
+      "ci_width": 0.0960132902952052,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.06797788674941879,
+      "mrrd_practical_simulated": 0.071,
+      "mrrd_statistical": 0.09595577349883759,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.044069109333646495,
+      "outcome": "timeout",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.08055555555555556,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06475885737554321,
+      "ci_high": 0.10408761652809272,
+      "ci_low": -0.14552845528455283,
+      "ci_width": 0.24961607181264556,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14692502813603073,
+      "mrrd_practical_simulated": 0.148,
+      "mrrd_statistical": 0.2538500562720615,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.017789719361867178,
+      "outcome": "collision",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.26944444444444443,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.04536381271052705,
+      "ci_high": 0.0006566347469220067,
+      "ci_low": -0.1754751495628164,
+      "ci_width": 0.17613178430973842,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.10891143911405335,
+      "mrrd_practical_simulated": 0.11,
+      "mrrd_statistical": 0.1778228782281067,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.08561463781184066,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.44375,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.0242307499064415,
+      "ci_high": 0.015833333333333335,
+      "ci_low": -0.0748507830805278,
+      "ci_width": 0.09068411641386113,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.06749139713502263,
+      "mrrd_practical_simulated": 0.074,
+      "mrrd_statistical": 0.09498279427004526,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.021741776434200836,
+      "outcome": "timeout",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.014583333333333334,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.04467246815152036,
+      "ci_high": 0.30073738593666116,
+      "ci_low": 0.12713057170542633,
+      "ci_width": 0.17360681423123484,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.1075564286774925,
+      "mrrd_practical_simulated": 0.108,
+      "mrrd_statistical": 0.175112857354985,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.2148261532384449,
+      "outcome": "collision",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.4979166666666667,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.03176386137340233,
+      "ci_high": 0.052386243386243335,
+      "ci_low": -0.07151546717171718,
+      "ci_width": 0.12390171055796051,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.08225602430179153,
+      "mrrd_practical_simulated": 0.085,
+      "mrrd_statistical": 0.12451204860358307,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.006642805348062646,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.5201388888888889,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.02294219714771228,
+      "ci_high": -0.0014177009456264815,
+      "ci_low": -0.08652482269503546,
+      "ci_width": 0.08510712174940897,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.06496588013573362,
+      "mrrd_practical_simulated": 0.073,
+      "mrrd_statistical": 0.08993176027146725,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.03383562085433702,
+      "outcome": "timeout",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.002777777777777778,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06127355501778437,
+      "ci_high": 0.5176327742837176,
+      "ci_low": 0.28059652108148986,
+      "ci_width": 0.2370362532022277,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14009396103959088,
+      "mrrd_practical_simulated": 0.147,
+      "mrrd_statistical": 0.24018792207918177,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.4072879438108655,
+      "outcome": "collision",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.6951388888888889,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06810139429794997,
+      "ci_high": 0.041500850340136064,
+      "ci_low": -0.2212478559176672,
+      "ci_width": 0.2627487062578033,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.15347628012094333,
+      "mrrd_practical_simulated": 0.156,
+      "mrrd_statistical": 0.2669525602418867,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.08588717350151474,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.4375,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.050279254540079754,
+      "ci_high": 0.21250231481481482,
+      "ci_low": 0.018832528180354278,
+      "ci_width": 0.19366978663446055,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.11854552806807832,
+      "mrrd_practical_simulated": 0.116,
+      "mrrd_statistical": 0.19709105613615663,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.11482965386625733,
+      "outcome": "timeout",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.15,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.05257705108831527,
+      "ci_high": 0.6023269656699889,
+      "ci_low": 0.3969291754756872,
+      "ci_width": 0.2053977901943017,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12304912654642039,
+      "mrrd_practical_simulated": 0.129,
+      "mrrd_statistical": 0.20609825309284077,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.5055210957507462,
+      "outcome": "collision",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.7916666666666666,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.07016459324196181,
+      "ci_high": 0.0809722222222221,
+      "ci_low": -0.1888945578231292,
+      "ci_width": 0.2698667800453513,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.15752007574414761,
+      "mrrd_practical_simulated": 0.16,
+      "mrrd_statistical": 0.27504015148829525,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.04912423553551628,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.4736111111111111,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.048471397871114937,
+      "ci_high": 0.1933369565217391,
+      "ci_low": 0.006788903061224515,
+      "ci_width": 0.1865480534605146,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.11500219410769673,
+      "mrrd_practical_simulated": 0.112,
+      "mrrd_statistical": 0.19000438821539345,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.09837824435991557,
+      "outcome": "timeout",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.13402777777777777,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06213384853889281,
+      "ci_high": 0.5149691952252599,
+      "ci_low": 0.2725862884160757,
+      "ci_width": 0.24238290680918417,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14178010535709656,
+      "mrrd_practical_simulated": 0.143,
+      "mrrd_statistical": 0.24356021071419315,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.3948339456235292,
+      "outcome": "collision",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.6819444444444445,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.05438945950518018,
+      "ci_high": -0.04926299045599161,
+      "ci_low": -0.26122661564625854,
+      "ci_width": 0.21196362519026693,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12660138176875285,
+      "mrrd_practical_simulated": 0.13,
+      "mrrd_statistical": 0.21320276353750572,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.15191546521532517,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.37222222222222223,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.02294986946545849,
+      "ci_high": -0.002666666666666667,
+      "ci_low": -0.08742334905660376,
+      "ci_width": 0.0847566823899371,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.06498091760219414,
+      "mrrd_practical_simulated": 0.072,
+      "mrrd_statistical": 0.08996183520438827,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.03594961398015778,
+      "outcome": "timeout",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.0006944444444444445,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.05182826910017357,
+      "ci_high": 0.0390122624550589,
+      "ci_low": -0.16327282075620947,
+      "ci_width": 0.20228508321126837,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12158154081739035,
+      "mrrd_practical_simulated": 0.117,
+      "mrrd_statistical": 0.2031630816347807,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.0670843506462211,
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.2152777777777778,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.036692911148713724,
+      "ci_high": 0.05687450980392142,
+      "ci_low": -0.08487266279819466,
+      "ci_width": 0.14174717260211608,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.09191678433940713,
+      "mrrd_practical_simulated": 0.093,
+      "mrrd_statistical": 0.14383356867881425,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.012843606550865538,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.5131944444444444,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.025930788766358886,
+      "ci_high": 0.03876291989664081,
+      "ci_low": -0.0601491901108269,
+      "ci_width": 0.09891211000746772,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.07082341207277923,
+      "mrrd_practical_simulated": 0.075,
+      "mrrd_statistical": 0.10164682414555846,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.005447168185797581,
+      "outcome": "timeout",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.03125,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.051696333641323026,
+      "ci_high": 0.03561079723791583,
+      "ci_low": -0.16821797711332598,
+      "ci_width": 0.2038287743512418,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12132295206975953,
+      "mrrd_practical_simulated": 0.118,
+      "mrrd_statistical": 0.20264590413951905,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.07119683389351221,
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.2111111111111111,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.036692911148713724,
+      "ci_high": 0.05687450980392142,
+      "ci_low": -0.08487266279819466,
+      "ci_width": 0.14174717260211608,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.09191678433940713,
+      "mrrd_practical_simulated": 0.093,
+      "mrrd_statistical": 0.14383356867881425,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.012843606550865538,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.5131944444444444,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.026202856944378572,
+      "ci_high": 0.043212962962962946,
+      "ci_low": -0.05779166666666664,
+      "ci_width": 0.10100462962962958,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.07135665590303725,
+      "mrrd_practical_simulated": 0.077,
+      "mrrd_statistical": 0.1027133118060745,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.001334684938506495,
+      "outcome": "timeout",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.035416666666666666,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.08356531150764179,
+      "ci_high": 0.38371695680206297,
+      "ci_low": 0.053993537414965986,
+      "ci_width": 0.329723419387097,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.18378500091184843,
+      "mrrd_practical_simulated": 0.18,
+      "mrrd_statistical": 0.3275700018236969,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.21302867287243288,
+      "outcome": "collision",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.49375,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.07179378642651787,
+      "ci_high": 0.026860258596191865,
+      "ci_low": -0.24325810185185176,
+      "ci_width": 0.2701183604480436,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.1607132357097356,
+      "mrrd_practical_simulated": 0.161,
+      "mrrd_statistical": 0.28142647141947125,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.10246585674187045,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.4270833333333333,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.07544186568604319,
+      "ci_high": 0.5954709096753453,
+      "ci_low": 0.30457442067736185,
+      "ci_width": 0.2908964889979835,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.16786333967115277,
+      "mrrd_practical_simulated": 0.168,
+      "mrrd_statistical": 0.29572667934230557,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.45238138826898366,
+      "outcome": "timeout",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.49236111111111114,
+      "risk_b": 0.03611111111111111
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06209926175213968,
+      "ci_high": 0.5421814767573696,
+      "ci_low": 0.3014791666666667,
+      "ci_width": 0.24070231009070292,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14171231650071947,
+      "mrrd_practical_simulated": 0.142,
+      "mrrd_statistical": 0.24342463300143893,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.4227302040198083,
+      "outcome": "collision",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.7090277777777778,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.057870613883572126,
+      "ci_high": -0.027637494021999075,
+      "ci_low": -0.2490880503144653,
+      "ci_width": 0.2214505562924662,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.133424318975025,
+      "mrrd_practical_simulated": 0.131,
+      "mrrd_statistical": 0.22684863795005,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.1384155887859577,
+      "outcome": "near_miss",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.38958333333333334,
+      "risk_b": 0.5291666666666667
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.022994534800179874,
+      "ci_high": -0.0028955314009662,
+      "ci_low": -0.08820046768707482,
+      "ci_width": 0.08530493628610862,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.06506846004960548,
+      "mrrd_practical_simulated": 0.072,
+      "mrrd_statistical": 0.09013692009921097,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.036654278355431356,
+      "outcome": "timeout",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.0,
+      "risk_b": 0.03611111111111111
+    }
+  ],
+  "estimand": {
+    "comparison_unit": "matched planner-scenario-seed cell",
+    "description": "Paired risk difference in binary outcome rates between two planner arms on matched scenario-seed cells",
+    "n_cells_per_pair": 1440,
+    "n_families": 35,
+    "outer_resampling_unit": "one-stage scenario-family cluster bootstrap"
+  },
+  "evidence_status": "not_benchmark_evidence",
+  "exclusions": [
+    {
+      "reason": "The cluster bootstrap percentile interval is not validated for event rates near zero; contrasts where both arms have near-zero event rates produce degenerate intervals that cannot support precision claims",
+      "type": "rare_event"
+    },
+    {
+      "reason": "The 35 scenario families are the resampling unit, not a random sample from a super-population; precision statements apply to these specific families, not to unseen scenario types",
+      "type": "family_generalization"
+    },
+    {
+      "reason": "Within-family correlation is preserved by the cluster bootstrap; treating individual cells as independent would artificially narrow intervals and overstate precision",
+      "type": "non_independent_interpretation"
+    },
+    {
+      "reason": "The 30 seeds per scenario were not chosen via a prospective sizing calculation for any specific target effect; the MRRD is a retrospective design-sensitivity measure, not a prospective adequacy claim",
+      "type": "prospective_sizing"
+    }
+  ],
+  "frozen_input_provenance": {
+    "arms_count": 14,
+    "family_count": 35,
+    "publication_commit": "ded9027d2928512c14bc241397e0ab1d8f586654",
+    "release_tag": "0.0.3.post1",
+    "rows_per_arm": 1440,
+    "successor_rows_sha256": "c45c2ed8defdadaf47c001277e6bf9ca0c2238c101570d1d64be8015060febea",
+    "total_rows": 20160
+  },
+  "headline_collision_precisions": [
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06102625453149833,
+      "ci_high": 0.4379376197318008,
+      "ci_low": 0.2015305673009162,
+      "ci_width": 0.23640705243088458,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.139609260993111,
+      "mrrd_practical_simulated": 0.138,
+      "mrrd_statistical": 0.239218521986222,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.3191597662122464,
+      "outcome": "collision",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.6027777777777777,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06608415077904183,
+      "ci_high": 0.2972969387755101,
+      "ci_low": 0.03553072390572402,
+      "ci_width": 0.2617662148697861,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.1495225554758365,
+      "mrrd_practical_simulated": 0.158,
+      "mrrd_statistical": 0.25904511095167304,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.17298708924690157,
+      "outcome": "collision",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.4597222222222222,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.053383754261820446,
+      "ci_high": 0.03213608305274963,
+      "ci_low": -0.18055717054263562,
+      "ci_width": 0.21269325359538524,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12463023571270469,
+      "mrrd_practical_simulated": 0.124,
+      "mrrd_statistical": 0.20926047142540938,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.07685082256716527,
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.20555555555555555,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.04180320738721242,
+      "ci_high": -0.052721147646679574,
+      "ci_low": -0.2190559246954596,
+      "ci_width": 0.16633477704878002,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.10193278091719507,
+      "mrrd_practical_simulated": 0.106,
+      "mrrd_statistical": 0.16386556183439013,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.1338719561382615,
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.1486111111111111,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06475885737554321,
+      "ci_high": 0.10408761652809272,
+      "ci_low": -0.14552845528455283,
+      "ci_width": 0.24961607181264556,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14692502813603073,
+      "mrrd_practical_simulated": 0.148,
+      "mrrd_statistical": 0.2538500562720615,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.017789719361867178,
+      "outcome": "collision",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.26944444444444443,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.04467246815152036,
+      "ci_high": 0.30073738593666116,
+      "ci_low": 0.12713057170542633,
+      "ci_width": 0.17360681423123484,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.1075564286774925,
+      "mrrd_practical_simulated": 0.108,
+      "mrrd_statistical": 0.175112857354985,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.2148261532384449,
+      "outcome": "collision",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.4979166666666667,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06127355501778437,
+      "ci_high": 0.5176327742837176,
+      "ci_low": 0.28059652108148986,
+      "ci_width": 0.2370362532022277,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14009396103959088,
+      "mrrd_practical_simulated": 0.147,
+      "mrrd_statistical": 0.24018792207918177,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.4072879438108655,
+      "outcome": "collision",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.6951388888888889,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.05257705108831527,
+      "ci_high": 0.6023269656699889,
+      "ci_low": 0.3969291754756872,
+      "ci_width": 0.2053977901943017,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12304912654642039,
+      "mrrd_practical_simulated": 0.129,
+      "mrrd_statistical": 0.20609825309284077,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.5055210957507462,
+      "outcome": "collision",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.7916666666666666,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06213384853889281,
+      "ci_high": 0.5149691952252599,
+      "ci_low": 0.2725862884160757,
+      "ci_width": 0.24238290680918417,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14178010535709656,
+      "mrrd_practical_simulated": 0.143,
+      "mrrd_statistical": 0.24356021071419315,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.3948339456235292,
+      "outcome": "collision",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.6819444444444445,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.05182826910017357,
+      "ci_high": 0.0390122624550589,
+      "ci_low": -0.16327282075620947,
+      "ci_width": 0.20228508321126837,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12158154081739035,
+      "mrrd_practical_simulated": 0.117,
+      "mrrd_statistical": 0.2031630816347807,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.0670843506462211,
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.2152777777777778,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.051696333641323026,
+      "ci_high": 0.03561079723791583,
+      "ci_low": -0.16821797711332598,
+      "ci_width": 0.2038287743512418,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.12132295206975953,
+      "mrrd_practical_simulated": 0.118,
+      "mrrd_statistical": 0.20264590413951905,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": -0.07119683389351221,
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.2111111111111111,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.08356531150764179,
+      "ci_high": 0.38371695680206297,
+      "ci_low": 0.053993537414965986,
+      "ci_width": 0.329723419387097,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.18378500091184843,
+      "mrrd_practical_simulated": 0.18,
+      "mrrd_statistical": 0.3275700018236969,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.21302867287243288,
+      "outcome": "collision",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.49375,
+      "risk_b": 0.2833333333333333
+    },
+    {
+      "bootstrap_samples": 2000,
+      "bootstrap_se": 0.06209926175213968,
+      "ci_high": 0.5421814767573696,
+      "ci_low": 0.3014791666666667,
+      "ci_width": 0.24070231009070292,
+      "confidence": 0.95,
+      "mrrd_practical_closed_form": 0.14171231650071947,
+      "mrrd_practical_simulated": 0.142,
+      "mrrd_statistical": 0.24342463300143893,
+      "n_cells": 1440,
+      "n_families": 35,
+      "observed_risk_difference": 0.4227302040198083,
+      "outcome": "collision",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "practical_effect_threshold": 0.02,
+      "risk_a": 0.7090277777777778,
+      "risk_b": 0.2833333333333333
+    }
+  ],
+  "interval_construction": {
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 20260718,
+    "confidence": 0.95,
+    "method": "equal-tailed percentile bootstrap"
+  },
+  "issue": 6592,
+  "multiplicity": {
+    "method": "holm_step_down",
+    "n_exposed_contrasts": 39,
+    "note": "Holm step-down correction over all exposed contrasts, matching the admitted #5351 multiplicity policy"
+  },
+  "practical_effect_rule": {
+    "description": "A risk difference below min_risk_difference is treated as practically null even when its interval excludes zero",
+    "min_risk_difference": 0.02
+  },
+  "proposed_dissertation_statement": "[blocked_review_pending] Retrospective achieved-precision derivation over the frozen 0.0.3.post1 successor rows (n=1440 matched cells per planner pair, one-stage scenario-family cluster bootstrap with n=35 families, 95% equal-tailed percentile intervals, B=2000 resamples). Achieved collision CI widths range from 0.1663 (hybrid_rule_v3_fast_progress_static_escape_continuous vs orca) to 0.3297 (social_force vs orca). The minimum resolvable risk difference under the declared practical-effect threshold (>= 0.02) ranges from 0.1060 to 0.1800 across headline contrasts. This is a design-sensitivity measure, NOT a post-hoc observed-data adequacy computation, and does NOT claim prospective adequacy of the 30-seed design. Multiplicity: Holm step-down over 39 exposed contrasts. Material exclusions: rare-event degeneracy, family-generalization beyond the 35 observed families, and non-independent cell interpretation. Claim promotion requires separate human review.",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "retrospective_precision_report.v1",
+  "sensitivity_analyses": [
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ]
+    },
+    {
+      "grid": [
+        {
+          "baseline_event_rate": 0.01,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.02,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.05,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.1,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.15,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.2,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.3,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.4,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        },
+        {
+          "baseline_event_rate": 0.5,
+          "bootstrap_se": 0.0,
+          "mrrd_practical": 0.02,
+          "mrrd_statistical": 0.0,
+          "n_cells": 1440,
+          "n_families": 35
+        }
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ]
+    }
+  ],
+  "source_issue": 5351,
+  "terminology_note": "This report uses 'achieved precision' (CI width) and 'minimum resolvable risk difference' (MRRD, a design-sensitivity measure). It does NOT report any post-hoc observed-data adequacy metric, does NOT claim prospective adequacy, and does NOT claim that the 30-seed design was chosen via a prospective sizing calculation."
+}

@@ -4788,3 +4788,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6592_retrospective_precision
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

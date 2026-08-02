@@ -64,6 +64,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from math import isfinite
+from numbers import Real
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.failure_mechanism_classifier import FAILURE_MECHANISM_LABELS
@@ -324,8 +325,8 @@ def diagnose_from_trace_failure_predicate(
     """
     _validate_correction_inputs(proposed_correction, correction_status)
     predicate_dict = _predicate_to_dict(predicate)
-    predicate_id = str(predicate_dict.get("predicate_id", "")).strip()
-    validity_status = str(predicate_dict.get("validity_status", "")).strip()
+    predicate_id = _predicate_text(predicate_dict, "predicate_id")
+    validity_status = _predicate_text(predicate_dict, "validity_status")
     mapping = _PREDICATE_DIAGNOSIS_MAP.get(predicate_id)
     failure_level = mapping[1] if mapping is not None else "analysis"
 
@@ -339,7 +340,7 @@ def diagnose_from_trace_failure_predicate(
         )
 
     if validity_status != _VALID_VALIDITY_STATUS:
-        reason = f"predicate_validity_not_valid:{validity_status or 'empty'}"
+        reason = f"predicate_validity_not_valid:{validity_status.strip() or 'empty'}"
         return unknown_failure_diagnosis_record(
             predicate_dict,
             reason,
@@ -359,7 +360,7 @@ def diagnose_from_trace_failure_predicate(
         )
 
     if mapping is None:
-        reason = f"unsupported_predicate_id:{predicate_id or 'empty'}"
+        reason = f"unsupported_predicate_id:{predicate_id.strip() or 'empty'}"
         return unknown_failure_diagnosis_record(
             predicate_dict,
             reason,
@@ -466,7 +467,7 @@ def unknown_failure_diagnosis_record(
     if not normalized_reason:
         raise FailureDiagnosisError("unknown reason must be a non-empty string")
     predicate_dict = _predicate_to_dict(predicate)
-    validity_status = str(predicate_dict.get("validity_status", "")).strip()
+    validity_status = _predicate_text(predicate_dict, "validity_status")
     onset_time_s, onset_interval = _onset_from_time_interval(predicate_dict.get("time_interval_s"))
     severity = _diagnosis_severity(predicate_dict.get("severity"), validity_status=validity_status)
     causal_evidence = _causal_evidence_from_predicate(predicate_dict)
@@ -818,6 +819,18 @@ def _predicate_to_dict(predicate: TraceFailurePredicate | Mapping[str, Any]) -> 
     )
 
 
+def _predicate_text(predicate_dict: Mapping[str, Any], field: str) -> str:
+    """Return a predicate text field without normalizing away invalid evidence.
+
+    String-valued predicate identifiers and validity statuses are preserved verbatim so
+    non-canonical values fail closed instead of being silently accepted as valid evidence.
+    Non-string values are stringified only to keep the diagnosis record's documented
+    string field shape.
+    """
+    value = predicate_dict.get(field, "")
+    return value if isinstance(value, str) else str(value)
+
+
 def _onset_from_time_interval(
     time_interval_s: Any,
 ) -> tuple[float | None, list[float | None]]:
@@ -987,11 +1000,11 @@ def _finite_or_none(value: Any) -> float | None:
     Returns:
         The finite float value, or ``None``.
     """
-    if isinstance(value, bool) or value is None:
+    if isinstance(value, bool) or value is None or not isinstance(value, Real):
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return None
     return number if isfinite(number) else None
 

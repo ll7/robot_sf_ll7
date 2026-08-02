@@ -123,6 +123,29 @@ def test_severity_unknown_when_predicate_validity_not_valid() -> None:
     assert record.severity in DIAGNOSIS_SEVERITIES
 
 
+def test_noncanonical_validity_status_fails_closed_and_is_preserved() -> None:
+    """Padded validity text must not be accepted as valid evidence or normalized away."""
+    predicate = _predicate("collision").to_dict()
+    predicate["validity_status"] = " valid "
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "predicate_validity_not_valid:valid"
+    assert record.validity_status == " valid "
+
+
+def test_noncanonical_predicate_id_fails_closed() -> None:
+    """Predicate IDs with surrounding whitespace must remain unsupported mappings."""
+    predicate = _predicate("collision").to_dict()
+    predicate["predicate_id"] = " collision "
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "unsupported_predicate_id:collision"
+
+
 def test_causal_evidence_cites_predicate_pointers_only() -> None:
     """causal_evidence must cite predicate evidence pointers and a non-causal note."""
     predicate = _predicate(
@@ -374,6 +397,17 @@ def test_validate_record_rejects_inconsistent_onset_localization() -> None:
         validate_failure_diagnosis_record(payload)
 
 
+def test_validate_record_rejects_string_onset_numbers() -> None:
+    """The record schema requires JSON numbers rather than numeric-looking strings."""
+    record = diagnose_from_trace_failure_predicate(_predicate("collision"))
+    payload = record.to_dict()
+    payload["onset_time_s"] = "1.0"
+    payload["onset_interval"] = ["1.0", 1.5]
+
+    with pytest.raises(FailureDiagnosisError, match="finite numbers or None"):
+        validate_failure_diagnosis_record(payload)
+
+
 def test_validate_record_rejects_reversed_onset_interval() -> None:
     """The end of an onset interval cannot precede its start."""
     record = diagnose_from_trace_failure_predicate(_predicate("collision"))
@@ -424,6 +458,23 @@ def test_non_numeric_predicate_onset_fails_closed_to_unknown_record() -> None:
     """A valid-status predicate still needs finite onset evidence for a known label."""
     predicate = _predicate("collision").to_dict()
     predicate["time_interval_s"] = ["not-a-time", 1.5]
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert (
+        record.unknown_reason
+        == "invalid_predicate_evidence:time_interval_s_non_finite_or_non_numeric"
+    )
+    assert record.onset_time_s is None
+    assert record.onset_interval == [None, 1.5]
+    validate_failure_diagnosis_record(record.to_dict())
+
+
+def test_numeric_string_predicate_onset_fails_closed_to_unknown_record() -> None:
+    """Numeric-looking strings are not valid JSON-number onset evidence."""
+    predicate = _predicate("collision").to_dict()
+    predicate["time_interval_s"] = ["1.0", 1.5]
 
     record = diagnose_from_trace_failure_predicate(predicate)
 

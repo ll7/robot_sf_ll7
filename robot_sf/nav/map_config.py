@@ -897,7 +897,7 @@ class MapDefinition:
         except KeyError as exc:  # pragma: no cover - thin wrapper
             raise KeyError(f"No POI with label '{label}' found in map.") from exc
 
-    def get_map_bounds(self):
+    def get_map_bounds(self) -> tuple[float, float, float, float]:
         """Returns the min and max of x and y bounds.
 
         Returns:
@@ -922,7 +922,7 @@ class MapDefinition:
 
         return x_min, x_max, y_min, y_max
 
-    def plot_map_obstacles(self, ax):
+    def plot_map_obstacles(self, ax) -> None:
         """Plot map obstacles on the given matplotlib axis.
 
         Args:

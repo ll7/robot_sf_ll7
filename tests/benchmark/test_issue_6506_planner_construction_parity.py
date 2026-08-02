@@ -259,6 +259,42 @@ def test_adapter_diagnostics_preserve_mapping_payloads(monkeypatch: pytest.Monke
     assert stats_fn() == {"planner_type": "mapping_fixture", "preserved_counter": 7}
 
 
+def test_adapter_diagnostics_fail_closed_for_non_mapping_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed adapter diagnostics retain their source-type reason and foresight counters."""
+
+    class InvalidDiagnosticsAdapter:
+        """Fixture adapter with malformed primary diagnostics and valid supplementary counters."""
+
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def plan(self, _obs: dict[str, object]) -> tuple[float, float]:
+            """Return a no-op unicycle command for policy construction."""
+            return 0.0, 0.0
+
+        def diagnostics(self) -> str:
+            """Return an invalid payload that the canonical normalizer must report."""
+            return "not-a-mapping"
+
+        def foresight_diagnostics(self) -> dict[str, int]:
+            """Return valid supplemental counters that must survive diagnostics normalization."""
+            return {"foresight_counter": 7}
+
+    monkeypatch.setattr(map_runner, "SocialForcePlannerAdapter", InvalidDiagnosticsAdapter)
+    policy, _meta = map_runner.build_map_policy("social_force", {})
+    stats_fn = getattr(policy, "_planner_stats", None)
+    assert callable(stats_fn), "SocNav adapter policy must expose _planner_stats"
+
+    assert stats_fn() == {
+        "planner_type": "InvalidDiagnosticsAdapter",
+        "diagnostics_unavailable": ["planner_type"],
+        "diagnostics_unavailable_reason": "diagnostics() did not return a mapping (got str)",
+        "foresight_counter": 7,
+    }
+
+
 def test_native_command_diagnostics_fail_closed_for_non_mapping_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

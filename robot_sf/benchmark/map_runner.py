@@ -2209,8 +2209,19 @@ def _build_common_adapter_policy(  # noqa: C901
                 dict[str, Any]: Adapter diagnostic payload.
             """
             diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
-            runtime = dict(diagnostics) if isinstance(diagnostics, Mapping) else {}
             foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
+            if not isinstance(diagnostics, Mapping):
+                # Normalize the malformed primary payload before merging supplementary
+                # foresight counters, otherwise converting it to ``{}`` hides its type.
+                runtime = normalize_planner_diagnostics(
+                    diagnostics, fallback_planner_type=type(adapter).__name__
+                )
+                if isinstance(foresight, Mapping):
+                    for key, value in foresight.items():
+                        runtime.setdefault(key, value)
+                return runtime
+
+            runtime = dict(diagnostics)
             if isinstance(foresight, Mapping):
                 runtime.update(foresight)
             return normalize_planner_diagnostics(

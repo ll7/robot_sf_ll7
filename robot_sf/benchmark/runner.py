@@ -2123,10 +2123,9 @@ def run_episode(  # noqa: PLR0913
     policy_diag = getattr(robot_policy, "diagnostics", None)
     if callable(policy_diag):
         live_diag = policy_diag()
-        if isinstance(live_diag, dict):
-            algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = normalize_planner_diagnostics(
-                live_diag, fallback_planner_type=algo
-            )
+        algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = normalize_planner_diagnostics(
+            live_diag, fallback_planner_type=algo
+        )
 
     # Issue #6190: refresh the predictive planner's foresight-model-load
     # provenance (captured during the episode) so ``enrich_algorithm_metadata``

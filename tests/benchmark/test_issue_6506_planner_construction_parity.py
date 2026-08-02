@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from robot_sf.benchmark import map_runner
+from robot_sf.benchmark import map_runner, runner
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.map_runner import build_map_policy
 from robot_sf.benchmark.runner import NATIVE_COMMAND_DIAGNOSTICS_KEY, run_episode
@@ -257,3 +257,32 @@ def test_adapter_diagnostics_preserve_mapping_payloads(monkeypatch: pytest.Monke
     stats_fn = getattr(policy, "_planner_stats", None)
     assert callable(stats_fn), "SocNav adapter policy must expose _planner_stats"
     assert stats_fn() == {"planner_type": "mapping_fixture", "preserved_counter": 7}
+
+
+def test_native_command_diagnostics_fail_closed_for_non_mapping_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The runner normalizes malformed live diagnostics instead of retaining stale data."""
+    original_create_policy = runner._create_robot_policy
+
+    def _create_with_invalid_diagnostics(*args: object, **kwargs: object) -> tuple[object, object]:
+        policy, metadata = original_create_policy(*args, **kwargs)
+        policy.diagnostics = lambda: "not-a-mapping"
+        return policy, metadata
+
+    monkeypatch.setattr(runner, "_create_robot_policy", _create_with_invalid_diagnostics)
+    record = runner.run_episode(
+        _native_command_scenario(),
+        seed=11,
+        algo="native_command",
+        horizon=2,
+        dt=0.1,
+        record_forces=False,
+    )
+
+    diagnostics = record["algorithm_metadata"][NATIVE_COMMAND_DIAGNOSTICS_KEY]
+    assert diagnostics["planner_type"] == "native_command"
+    assert diagnostics["diagnostics_unavailable"] == ["planner_type"]
+    assert diagnostics["diagnostics_unavailable_reason"] == (
+        "diagnostics() did not return a mapping (got str)"
+    )

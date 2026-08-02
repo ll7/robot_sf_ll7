@@ -172,7 +172,7 @@ class ImageSensorFusion:
         else:
             return np.ones(default_shape)  # Default normalization
 
-    def reset_cache(self):
+    def reset_cache(self) -> None:
         """
         Clear the caches of previous states.
         """

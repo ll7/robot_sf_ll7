@@ -7,19 +7,17 @@ instead of silently falling back to defaults.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 from gymnasium import spaces
 
 from scripts.training.imitation_env_contract import (
+    load_training_env_factory_kwargs,
     load_training_env_overrides,
     make_training_contract_env,
     resolve_scenario_config_path,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_load_training_env_overrides_rejects_non_file_or_non_mapping(tmp_path: Path) -> None:
@@ -46,6 +44,33 @@ def test_resolve_scenario_config_path_rejects_invalid_training_config(tmp_path: 
             scenario_config_path=None,
             training_config_path=invalid_yaml,
         )
+
+
+def test_training_config_contract_resolves_base_inheritance() -> None:
+    """Imitation consumers must receive the effective mapping from an inherited PPO config."""
+    repo_root = Path(__file__).resolve().parents[2]
+    training_config = (
+        repo_root / "configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
+    ).resolve()
+    expected_scenario = (
+        repo_root / "configs/scenarios/classic_interactions_francis2023.yaml"
+    ).resolve()
+
+    overrides = load_training_env_overrides(training_config)
+    factory_kwargs = load_training_env_factory_kwargs(training_config)
+    robot_config = overrides["robot_config"]
+
+    assert overrides["observation_mode"] == "socnav_struct"
+    assert isinstance(robot_config, dict)
+    assert robot_config["max_linear_speed"] == 3.0
+    assert factory_kwargs["reward_name"] == "route_completion_v3"
+    assert (
+        resolve_scenario_config_path(
+            scenario_config_path=None,
+            training_config_path=training_config,
+        )
+        == expected_scenario
+    )
 
 
 def test_make_training_contract_env_rejects_non_dict_observation_space(

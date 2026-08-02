@@ -379,6 +379,16 @@ def test_validate_record_rejects_non_schema_vocab_and_correction_values() -> Non
         validate_failure_diagnosis_record(non_string_correction)
 
 
+def test_validate_record_rejects_non_pointer_causal_evidence() -> None:
+    """External records cannot substitute a causal assertion for a source pointer."""
+    record = diagnose_from_trace_failure_predicate(_predicate("collision"))
+    payload = record.to_dict()
+    payload["causal_evidence"] = [{"assertion": "pedestrian caused the collision"}]
+
+    with pytest.raises(FailureDiagnosisError, match="exactly the trace-predicate pointer fields"):
+        validate_failure_diagnosis_record(payload)
+
+
 def test_validate_record_rejects_non_two_element_onset_interval() -> None:
     """onset_interval must be a two-element list."""
     record = diagnose_from_trace_failure_predicate(_predicate("collision"))

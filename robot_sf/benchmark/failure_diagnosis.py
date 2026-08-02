@@ -204,6 +204,21 @@ _REQUIRED_PAYLOAD_FIELDS = (
     "caveats",
 )
 
+#: Exact fields carried by each trace-predicate evidence pointer.  The pointer keeps
+#: source values (including malformed source values on an ``unknown`` record)
+#: traceable without allowing callers to substitute an unstructured causal claim.
+_CAUSAL_EVIDENCE_POINTER_FIELDS = frozenset(
+    {
+        "evidence_kind",
+        "predicate_id",
+        "time_interval_s",
+        "steps",
+        "involved_actors",
+        "evidence_fields",
+        "non_causal_note",
+    }
+)
+
 #: Diagnosis fields whose value must come from a fixed vocabulary (field, allowed set).
 _RECORD_VOCAB_FIELDS = (
     ("failure_level", FAILURE_LEVELS),
@@ -568,6 +583,7 @@ def _require_collection_shapes(record: Mapping[str, Any]) -> None:
             raise FailureDiagnosisError(
                 f"causal_evidence[{index}] must be a mapping (evidence pointer)"
             )
+        _require_causal_evidence_pointer(pointer, index)
     for field in ("contributing_factors", "caveats"):
         _require_string_list(record[field], field)
     if not isinstance(record["source_predicate"], Mapping):
@@ -578,6 +594,44 @@ def _require_collection_shapes(record: Mapping[str, Any]) -> None:
         record["proposed_correction"], str
     ):
         raise FailureDiagnosisError("proposed_correction must be a string or None")
+
+
+def _require_causal_evidence_pointer(pointer: Mapping[str, Any], index: int) -> None:
+    """Validate the trace-predicate pointer shape without rewriting source evidence.
+
+    The deterministic adapter may preserve malformed source values inside pointer
+    fields on an ``unknown`` record.  Its own pointer envelope must nevertheless
+    remain exact so external records cannot pass schema validation with a causal
+    assertion or an unrelated evidence object.
+
+    Args:
+        pointer: Candidate trace-predicate evidence pointer.
+        index: Position in the record's ``causal_evidence`` list.
+
+    Raises:
+        FailureDiagnosisError: If the pointer is not the documented non-causal
+            trace-predicate envelope.
+    """
+    fields = set(pointer)
+    if fields != _CAUSAL_EVIDENCE_POINTER_FIELDS:
+        raise FailureDiagnosisError(
+            f"causal_evidence[{index}] must contain exactly the trace-predicate pointer fields"
+        )
+    if pointer["evidence_kind"] != "trace_failure_predicate":
+        raise FailureDiagnosisError(
+            f"causal_evidence[{index}].evidence_kind must be 'trace_failure_predicate'"
+        )
+    if not isinstance(pointer["predicate_id"], str):
+        raise FailureDiagnosisError(f"causal_evidence[{index}].predicate_id must be a string")
+    for field in ("time_interval_s", "steps", "involved_actors"):
+        if not isinstance(pointer[field], list):
+            raise FailureDiagnosisError(f"causal_evidence[{index}].{field} must be a list")
+    if not isinstance(pointer["evidence_fields"], Mapping):
+        raise FailureDiagnosisError(f"causal_evidence[{index}].evidence_fields must be a mapping")
+    if pointer["non_causal_note"] != _NON_CAUSAL_CAVEAT:
+        raise FailureDiagnosisError(
+            f"causal_evidence[{index}].non_causal_note must preserve the non-causal boundary"
+        )
 
 
 def _require_string_list(value: Any, field: str) -> None:

@@ -711,6 +711,10 @@ def _build_comparability_artifacts_if_configured(
     """
     if cfg.comparability_mapping_path is None:
         return None, None, None, None
+    comparability_summary: dict[str, Any] | None = None
+    comparability_json_path: Path | None = None
+    comparability_md_path: Path | None = None
+    comparability_mapping_path: Path | None = None
     try:
         comparability_summary, comparability_mapping_path = _build_comparability_summary(
             cfg,
@@ -725,7 +729,6 @@ def _build_comparability_artifacts_if_configured(
     except (ValueError, FileNotFoundError, yaml.YAMLError):
         if cfg.paper_facing:
             raise
-        return None, None, None, None
     return (
         comparability_summary,
         comparability_json_path,
@@ -776,6 +779,50 @@ def _write_summary_artifacts(
         "comparability_md_path": comp_md,
         "comparability_mapping_path": comp_map,
     }
+
+
+def _write_campaign_artifacts(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    preflight_dir: Path,
+    reports_dir: Path,
+    campaign_id: str,
+    created_at_utc: str,
+    scenarios: list[dict[str, Any]],
+    metadata: dict[str, Any],
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    checkpoint_preflight_report: dict[str, Any],
+    checkpoint_preflight_mode: CheckpointPreflightMode,
+) -> tuple[Path, Path, Path, dict[str, Any]]:
+    """Write preflight and report artifacts.
+
+    Returns:
+        Tuple of preflight paths followed by the summary-artifact mapping.
+    """
+    validate_config_path, preview_scenarios_path, checkpoint_report_path = (
+        _write_preflight_artifacts(
+            cfg,
+            preflight_dir=preflight_dir,
+            campaign_id=campaign_id,
+            created_at_utc=created_at_utc,
+            scenarios=scenarios,
+            metadata=metadata,
+            route_clearance_warnings=route_clearance_warnings,
+            route_clearance_warning_summary=route_clearance_warning_summary,
+            checkpoint_preflight_report=checkpoint_preflight_report,
+            checkpoint_preflight_mode=checkpoint_preflight_mode,
+        )
+    )
+    summary_artifacts = _write_summary_artifacts(
+        cfg,
+        reports_dir=reports_dir,
+        scenarios=scenarios,
+        metadata=metadata,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+    )
+    return validate_config_path, preview_scenarios_path, checkpoint_report_path, summary_artifacts
 
 
 def _build_manifest_planner_entries(
@@ -853,25 +900,18 @@ def _build_manifest_artifact_block(  # noqa: PLR0913
     }
 
 
-def _build_campaign_manifest_payload(  # noqa: PLR0913
+def _build_manifest_context_block(
     cfg: CampaignConfig,
     *,
     campaign_id: str,
     created_at_utc: str,
     metadata: dict[str, Any],
     invoked_command: str | None,
-    route_clearance_warnings: list[dict[str, Any]],
-    route_clearance_warning_summary: dict[str, Any],
-    amv_summary: dict[str, Any],
-    comparability_summary: dict[str, Any] | None,
-    comparability_mapping_path: Path | None,
-    planner_entries: list[dict[str, Any]],
-    artifact_block: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build the campaign manifest JSON payload.
+    """Build identity, scenario, and provenance fields for the campaign manifest.
 
     Returns:
-        JSON-serializable campaign manifest payload.
+        JSON-serializable manifest fields for campaign identity and provenance.
     """
     return {
         "schema_version": CAMPAIGN_SCHEMA_VERSION,
@@ -900,6 +940,25 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
         "paper_profile_version": cfg.paper_profile_version,
         "amv_profile_name": cfg.amv_profile.name,
         "amv_contract_version": cfg.amv_profile.contract_version,
+    }
+
+
+def _build_manifest_contract_block(
+    cfg: CampaignConfig,
+    *,
+    metadata: dict[str, Any],
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    amv_summary: dict[str, Any],
+    comparability_summary: dict[str, Any] | None,
+    comparability_mapping_path: Path | None,
+) -> dict[str, Any]:
+    """Build benchmark-contract and evidence fields for the campaign manifest.
+
+    Returns:
+        JSON-serializable manifest fields for benchmark contract metadata.
+    """
+    return {
         "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
         "amv_coverage_status": amv_summary.get("status", "unknown"),
         "synthetic_actuation_profile": _synthetic_actuation_metadata(
@@ -943,6 +1002,19 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
         "snqi_contract_status": "not_evaluated",
         "snqi_positioning_recommendation": "not_evaluated",
         "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
+    }
+
+
+def _build_manifest_execution_block(
+    cfg: CampaignConfig,
+    planner_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build planner, tuning, and execution metadata for the campaign manifest.
+
+    Returns:
+        JSON-serializable manifest fields for planner and execution metadata.
+    """
+    return {
         "planners": planner_entries,
         "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
         "tuning_effort_summary": _tuning_effort_summary(cfg.planners),
@@ -953,6 +1025,47 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
         "repository_url": cfg.repository_url,
         "release_tag": cfg.release_tag,
         "doi": cfg.doi,
+    }
+
+
+def _build_campaign_manifest_payload(  # noqa: PLR0913
+    cfg: CampaignConfig,
+    *,
+    campaign_id: str,
+    created_at_utc: str,
+    metadata: dict[str, Any],
+    invoked_command: str | None,
+    route_clearance_warnings: list[dict[str, Any]],
+    route_clearance_warning_summary: dict[str, Any],
+    amv_summary: dict[str, Any],
+    comparability_summary: dict[str, Any] | None,
+    comparability_mapping_path: Path | None,
+    planner_entries: list[dict[str, Any]],
+    artifact_block: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the complete JSON-serializable campaign manifest payload.
+
+    Returns:
+        Complete JSON-serializable campaign manifest payload.
+    """
+    return {
+        **_build_manifest_context_block(
+            cfg,
+            campaign_id=campaign_id,
+            created_at_utc=created_at_utc,
+            metadata=metadata,
+            invoked_command=invoked_command,
+        ),
+        **_build_manifest_contract_block(
+            cfg,
+            metadata=metadata,
+            route_clearance_warnings=route_clearance_warnings,
+            route_clearance_warning_summary=route_clearance_warning_summary,
+            amv_summary=amv_summary,
+            comparability_summary=comparability_summary,
+            comparability_mapping_path=comparability_mapping_path,
+        ),
+        **_build_manifest_execution_block(cfg, planner_entries),
         "artifacts": artifact_block,
     }
 
@@ -980,6 +1093,13 @@ def _finalize_campaign_preflight(  # noqa: PLR0913
 
     Returns:
         Paths and metadata required by preflight-only workflows and full runs.
+
+    Raises:
+        OrcaRvo2PreflightError: When ORCA planners require ``rvo2`` but it is missing.
+        RouteClearanceError: When a route centerline is geometrically infeasible.
+        CampaignCheckpointPreflightError: When a checkpoint cannot be resolved.
+        CampaignPolicyDependencyPreflightError: When a policy dependency is missing.
+        CampaignScenarioMapPreflightError: When a scenario map file cannot resolve.
     """
     manifest_payload = _build_campaign_manifest_payload(
         cfg,
@@ -1055,13 +1175,6 @@ def prepare_campaign_preflight(  # noqa: PLR0913
 
     Returns:
         Paths and metadata required by preflight-only workflows and full runs.
-
-    Raises:
-        OrcaRvo2PreflightError: When ORCA planners require ``rvo2`` but it is missing.
-        RouteClearanceError: When a route centerline is geometrically infeasible.
-        CampaignCheckpointPreflightError: When a checkpoint cannot be resolved.
-        CampaignPolicyDependencyPreflightError: When a policy dependency is missing.
-        CampaignScenarioMapPreflightError: When a scenario map file cannot resolve.
     """
     if validate_campaign_config is None:
         from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
@@ -1086,9 +1199,10 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         cfg,
         build_route_clearance_warnings,
     )
-    vc_path, ps_path, ckpt_path = _write_preflight_artifacts(
+    vc_path, ps_path, ckpt_path, summary_artifacts = _write_campaign_artifacts(
         cfg,
         preflight_dir=preflight_dir,
+        reports_dir=reports_dir,
         campaign_id=campaign_id,
         created_at_utc=created_at_utc,
         scenarios=scenarios,
@@ -1097,14 +1211,6 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         route_clearance_warning_summary=rc_summary,
         checkpoint_preflight_report=ckpt_report,
         checkpoint_preflight_mode=checkpoint_preflight_mode,
-    )
-    summary_artifacts = _write_summary_artifacts(
-        cfg,
-        reports_dir=reports_dir,
-        scenarios=scenarios,
-        metadata=meta,
-        campaign_id=campaign_id,
-        created_at_utc=created_at_utc,
     )
     return _finalize_campaign_preflight(
         cfg,

@@ -341,6 +341,21 @@ def test_validate_record_rejects_bad_vocab_and_missing_fields() -> None:
         validate_failure_diagnosis_record(missing)
 
 
+def test_validate_record_rejects_non_schema_vocab_and_correction_values() -> None:
+    """External records must fail closed rather than leak type errors or bad corrections."""
+    record = diagnose_from_trace_failure_predicate(_predicate("collision"))
+
+    unhashable_type = record.to_dict()
+    unhashable_type["failure_type"] = []
+    with pytest.raises(FailureDiagnosisError, match="unsupported failure_type"):
+        validate_failure_diagnosis_record(unhashable_type)
+
+    non_string_correction = record.to_dict()
+    non_string_correction["proposed_correction"] = 7
+    with pytest.raises(FailureDiagnosisError, match="proposed_correction"):
+        validate_failure_diagnosis_record(non_string_correction)
+
+
 def test_validate_record_rejects_non_two_element_onset_interval() -> None:
     """onset_interval must be a two-element list."""
     record = diagnose_from_trace_failure_predicate(_predicate("collision"))
@@ -388,6 +403,37 @@ def test_reversed_predicate_interval_fails_closed_to_valid_unknown_record() -> N
     # Raw malformed timing remains traceable in the source/evidence pointer.
     assert record.source_predicate["time_interval_s"] == [2.0, 1.0]
     assert record.causal_evidence[0]["time_interval_s"] == [2.0, 1.0]
+    validate_failure_diagnosis_record(record.to_dict())
+
+
+def test_malformed_predicate_evidence_fails_closed_to_unknown_record() -> None:
+    """Malformed mapping evidence must not crash or receive a confident diagnosis label."""
+    predicate = _predicate("collision").to_dict()
+    predicate["evidence_fields"] = None
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert record.unknown_reason == "invalid_predicate_evidence:evidence_fields_not_mapping"
+    assert record.source_predicate["evidence_fields"] is None
+    assert record.causal_evidence[0]["evidence_fields"] == {}
+    validate_failure_diagnosis_record(record.to_dict())
+
+
+def test_non_numeric_predicate_onset_fails_closed_to_unknown_record() -> None:
+    """A valid-status predicate still needs finite onset evidence for a known label."""
+    predicate = _predicate("collision").to_dict()
+    predicate["time_interval_s"] = ["not-a-time", 1.5]
+
+    record = diagnose_from_trace_failure_predicate(predicate)
+
+    assert record.failure_type == "unknown"
+    assert (
+        record.unknown_reason
+        == "invalid_predicate_evidence:time_interval_s_non_finite_or_non_numeric"
+    )
+    assert record.onset_time_s is None
+    assert record.onset_interval == [None, 1.5]
     validate_failure_diagnosis_record(record.to_dict())
 
 
@@ -442,6 +488,27 @@ def test_payload_validation_round_trips() -> None:
     bad_payload["schema_version"] = "something.else.v1"
     with pytest.raises(FailureDiagnosisError, match="schema_version must be"):
         validate_failure_diagnosis_payload(bad_payload)
+
+
+def test_payload_validation_rejects_missing_or_forged_metadata() -> None:
+    """Payload metadata and coverage must agree with the validated record list."""
+    record = diagnose_from_trace_failure_predicate(_predicate("collision"))
+    payload = build_failure_diagnosis_payload(
+        [record], generated_at_utc="2026-08-02T00:00:00+00:00"
+    )
+
+    missing_timestamp = dict(payload)
+    del missing_timestamp["generated_at_utc"]
+    with pytest.raises(FailureDiagnosisError, match="missing required field"):
+        validate_failure_diagnosis_payload(missing_timestamp)
+
+    forged_coverage = dict(payload)
+    forged_coverage["failure_type_coverage"] = {
+        "counts": {"collision": 99},
+        "classification_source": DIAGNOSIS_SOURCE,
+    }
+    with pytest.raises(FailureDiagnosisError, match="failure_type_coverage counts"):
+        validate_failure_diagnosis_payload(forged_coverage)
 
 
 @pytest.mark.parametrize("predicate_id", list(TRACE_FAILURE_PREDICATE_IDS))

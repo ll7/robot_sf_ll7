@@ -193,6 +193,16 @@ _REQUIRED_RECORD_FIELDS = (
     "source_predicate",
 )
 
+#: Required top-level fields on every versioned diagnosis payload.
+_REQUIRED_PAYLOAD_FIELDS = (
+    "schema_version",
+    "diagnosis_source",
+    "generated_at_utc",
+    "records",
+    "failure_type_coverage",
+    "caveats",
+)
+
 #: Diagnosis fields whose value must come from a fixed vocabulary (field, allowed set).
 _RECORD_VOCAB_FIELDS = (
     ("failure_level", FAILURE_LEVELS),
@@ -333,6 +343,16 @@ def diagnose_from_trace_failure_predicate(
         return unknown_failure_diagnosis_record(
             predicate_dict,
             reason,
+            failure_level=failure_level,
+            proposed_correction=proposed_correction,
+            correction_status=correction_status,
+        )
+
+    invalid_evidence_reason = _invalid_predicate_evidence_reason(predicate_dict)
+    if invalid_evidence_reason is not None:
+        return unknown_failure_diagnosis_record(
+            predicate_dict,
+            invalid_evidence_reason,
             failure_level=failure_level,
             proposed_correction=proposed_correction,
             correction_status=correction_status,
@@ -480,9 +500,10 @@ def unknown_failure_diagnosis_record(
 def validate_failure_diagnosis_record(record: Mapping[str, Any]) -> dict[str, Any]:
     """Validate and normalize a failure-diagnosis record mapping.
 
-    Enforces the schema contract: required fields are present, vocabulary fields are in
-    their allowed sets, ``failure_type`` is in :data:`ALLOWED_FAILURE_TYPES`, and the
-    ``unknown_reason`` invariant holds (set iff ``failure_type`` is ``"unknown"``).
+    Enforces the schema contract: required fields and collection shapes are present,
+    vocabulary fields are strings in their allowed sets, optional correction text has
+    its declared type, and the ``unknown_reason`` invariant holds (set iff
+    ``failure_type`` is ``"unknown"``).
 
     Args:
         record: A diagnosis record mapping (e.g. ``FailureDiagnosisRecord.to_dict()``).
@@ -521,7 +542,7 @@ def _require_scalar_value(
         FailureDiagnosisError: If the field value is not in ``allowed``.
     """
     value = record.get(field)
-    if value not in allowed:
+    if not isinstance(value, str) or value not in allowed:
         raise FailureDiagnosisError(f"unsupported {field}: {value!r}")
 
 
@@ -547,10 +568,31 @@ def _require_collection_shapes(record: Mapping[str, Any]) -> None:
                 f"causal_evidence[{index}] must be a mapping (evidence pointer)"
             )
     for field in ("contributing_factors", "caveats"):
-        if not isinstance(record[field], list):
-            raise FailureDiagnosisError(f"{field} must be a list")
+        _require_string_list(record[field], field)
     if not isinstance(record["source_predicate"], Mapping):
         raise FailureDiagnosisError("source_predicate must be a mapping")
+    if not isinstance(record["validity_status"], str):
+        raise FailureDiagnosisError("validity_status must be a string")
+    if record["proposed_correction"] is not None and not isinstance(
+        record["proposed_correction"], str
+    ):
+        raise FailureDiagnosisError("proposed_correction must be a string or None")
+
+
+def _require_string_list(value: Any, field: str) -> None:
+    """Raise unless a record field is a list containing only strings.
+
+    Args:
+        value: Candidate list value.
+        field: Field name used in the validation error.
+
+    Raises:
+        FailureDiagnosisError: If the value is not a list of strings.
+    """
+    if not isinstance(value, list):
+        raise FailureDiagnosisError(f"{field} must be a list")
+    if not all(isinstance(item, str) for item in value):
+        raise FailureDiagnosisError(f"{field} entries must be strings")
 
 
 def _require_onset_consistency(onset_time_s: Any, onset_interval: list[Any]) -> None:
@@ -645,10 +687,7 @@ def build_failure_diagnosis_payload(
         else:  # pragma: no cover - defensive guard for misuse
             raise FailureDiagnosisError(f"records[{index}] must be a record or mapping")
         serialized.append(validate_failure_diagnosis_record(record_dict))
-    coverage: dict[str, int] = {}
-    for record_dict in serialized:
-        key = str(record_dict["failure_type"])
-        coverage[key] = coverage.get(key, 0) + 1
+    coverage = _failure_type_coverage(serialized)
     return {
         "schema_version": FAILURE_DIAGNOSIS_SCHEMA_VERSION,
         "diagnosis_source": DIAGNOSIS_SOURCE,
@@ -676,6 +715,32 @@ def validate_failure_diagnosis_payload(payload: Mapping[str, Any]) -> dict[str, 
     """
     if not isinstance(payload, Mapping):
         raise FailureDiagnosisError("payload must be a mapping")
+    records = _require_payload_metadata(payload)
+    normalized_records = [validate_failure_diagnosis_record(record) for record in records]
+    _validate_payload_coverage(payload["failure_type_coverage"], normalized_records)
+    normalized = dict(payload)
+    normalized["records"] = normalized_records
+    coverage = payload["failure_type_coverage"]
+    normalized["failure_type_coverage"] = {**dict(coverage), "counts": dict(coverage["counts"])}
+    normalized["caveats"] = list(payload["caveats"])
+    return normalized
+
+
+def _require_payload_metadata(payload: Mapping[str, Any]) -> list[Any]:
+    """Return payload records after validating the versioned payload metadata.
+
+    Args:
+        payload: Candidate failure-diagnosis payload.
+
+    Returns:
+        The unvalidated record list from a structurally valid payload.
+
+    Raises:
+        FailureDiagnosisError: If required payload metadata is absent or invalid.
+    """
+    missing = [field for field in _REQUIRED_PAYLOAD_FIELDS if field not in payload]
+    if missing:
+        raise FailureDiagnosisError(f"payload missing required field(s): {missing}")
     if payload.get("schema_version") != FAILURE_DIAGNOSIS_SCHEMA_VERSION:
         raise FailureDiagnosisError(
             "schema_version must be "
@@ -686,10 +751,46 @@ def validate_failure_diagnosis_payload(payload: Mapping[str, Any]) -> dict[str, 
     records = payload.get("records")
     if not isinstance(records, list):
         raise FailureDiagnosisError("payload records must be a list")
-    normalized_records = [validate_failure_diagnosis_record(record) for record in records]
-    normalized = dict(payload)
-    normalized["records"] = normalized_records
-    return normalized
+    generated_at_utc = payload["generated_at_utc"]
+    if not isinstance(generated_at_utc, str) or not generated_at_utc.strip():
+        raise FailureDiagnosisError("generated_at_utc must be a non-empty string")
+    caveats = payload["caveats"]
+    if not isinstance(caveats, list) or not all(isinstance(caveat, str) for caveat in caveats):
+        raise FailureDiagnosisError("payload caveats must be a list of strings")
+    required_caveats = {
+        _PAYLOAD_NON_CLAIM_CAVEAT,
+        _NON_CAUSAL_CAVEAT,
+        _OUT_OF_SCOPE_CAVEAT,
+    }
+    if not required_caveats.issubset(caveats):
+        raise FailureDiagnosisError("payload caveats must preserve the diagnostic claim boundary")
+    return records
+
+
+def _validate_payload_coverage(coverage: Any, normalized_records: list[Mapping[str, Any]]) -> None:
+    """Require payload coverage metadata to match its validated records exactly.
+
+    Args:
+        coverage: Candidate ``failure_type_coverage`` mapping.
+        normalized_records: Validated payload records used to recompute counts.
+
+    Raises:
+        FailureDiagnosisError: If coverage provenance or counts are invalid.
+    """
+    if not isinstance(coverage, Mapping):
+        raise FailureDiagnosisError("failure_type_coverage must be a mapping")
+    if coverage.get("classification_source") != DIAGNOSIS_SOURCE:
+        raise FailureDiagnosisError(
+            f"failure_type_coverage classification_source must be {DIAGNOSIS_SOURCE!r}"
+        )
+    counts = coverage.get("counts")
+    if not isinstance(counts, Mapping) or any(
+        not isinstance(count, int) or isinstance(count, bool) for count in counts.values()
+    ):
+        raise FailureDiagnosisError("failure_type_coverage counts must map labels to integers")
+    expected_coverage = _failure_type_coverage(normalized_records)
+    if dict(counts) != expected_coverage:
+        raise FailureDiagnosisError("failure_type_coverage counts must match validated records")
 
 
 def _predicate_to_dict(predicate: TraceFailurePredicate | Mapping[str, Any]) -> dict[str, Any]:
@@ -738,6 +839,37 @@ def _onset_from_time_interval(
     if start_value is not None and end_value is not None and end_value < start_value:
         return None, [None, None]
     return start_value, [start_value, end_value]
+
+
+def _invalid_predicate_evidence_reason(predicate_dict: Mapping[str, Any]) -> str | None:
+    """Return an explicit unknown-diagnosis reason for malformed predicate evidence.
+
+    A mapping input may bypass the :class:`TraceFailurePredicate` dataclass.  When a
+    source still claims ``valid`` evidence but lacks the adapter's required
+    trace/predicate shapes, fail closed to an unknown diagnosis instead of assigning
+    a confident classifier label or leaking a raw container ``TypeError``.
+
+    Args:
+        predicate_dict: Dictionary view of the source predicate.
+
+    Returns:
+        A deterministic invalid-evidence reason, or ``None`` when the required
+        predicate evidence shapes are present.
+    """
+    time_interval_s = predicate_dict.get("time_interval_s")
+    if not isinstance(time_interval_s, (list, tuple)) or len(time_interval_s) != 2:
+        return "invalid_predicate_evidence:time_interval_s_not_two_element_sequence"
+    if any(
+        endpoint is not None and _finite_or_none(endpoint) is None for endpoint in time_interval_s
+    ):
+        return "invalid_predicate_evidence:time_interval_s_non_finite_or_non_numeric"
+    if not isinstance(predicate_dict.get("steps"), (list, tuple)):
+        return "invalid_predicate_evidence:steps_not_sequence"
+    if not isinstance(predicate_dict.get("involved_actors"), (list, tuple)):
+        return "invalid_predicate_evidence:involved_actors_not_sequence"
+    if not isinstance(predicate_dict.get("evidence_fields"), Mapping):
+        return "invalid_predicate_evidence:evidence_fields_not_mapping"
+    return None
 
 
 def _has_reversed_time_interval(time_interval_s: Any) -> bool:
@@ -795,14 +927,18 @@ def _causal_evidence_from_predicate(predicate_dict: Mapping[str, Any]) -> list[d
     interval = list(time_interval_s) if isinstance(time_interval_s, (list, tuple)) else []
     steps = predicate_dict.get("steps")
     steps_list = list(steps) if isinstance(steps, (list, tuple)) else []
+    involved_actors = predicate_dict.get("involved_actors")
+    actors_list = list(involved_actors) if isinstance(involved_actors, (list, tuple)) else []
+    evidence_fields = predicate_dict.get("evidence_fields")
+    evidence_dict = dict(evidence_fields) if isinstance(evidence_fields, Mapping) else {}
     return [
         {
             "evidence_kind": "trace_failure_predicate",
             "predicate_id": str(predicate_dict.get("predicate_id", "")),
             "time_interval_s": interval,
             "steps": steps_list,
-            "involved_actors": list(predicate_dict.get("involved_actors", [])),
-            "evidence_fields": dict(predicate_dict.get("evidence_fields", {})),
+            "involved_actors": actors_list,
+            "evidence_fields": evidence_dict,
             "non_causal_note": _NON_CAUSAL_CAVEAT,
         }
     ]
@@ -824,6 +960,22 @@ def _validate_correction_inputs(proposed_correction: str | None, correction_stat
         raise FailureDiagnosisError(f"unsupported correction_status: {correction_status!r}")
     if proposed_correction is not None and not isinstance(proposed_correction, str):
         raise FailureDiagnosisError("proposed_correction must be a string or None")
+
+
+def _failure_type_coverage(records: list[Mapping[str, Any]]) -> dict[str, int]:
+    """Return deterministic failure-type counts for validated diagnosis records.
+
+    Args:
+        records: Validated diagnosis records.
+
+    Returns:
+        Count of each failure type present in the supplied record order.
+    """
+    coverage: dict[str, int] = {}
+    for record in records:
+        failure_type = str(record["failure_type"])
+        coverage[failure_type] = coverage.get(failure_type, 0) + 1
+    return coverage
 
 
 def _finite_or_none(value: Any) -> float | None:

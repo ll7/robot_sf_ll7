@@ -2476,16 +2476,23 @@ def _teardown_step_loop(
     *,
     planner_stats: Any,
     planner_close: Any,
-    state: _StepLoopState,
+    state: _StepLoopState | None = None,
 ) -> None:
-    """Capture planner runtime snapshot, close planner and environment."""
+    """Capture planner runtime snapshot, close planner and environment.
+
+    ``state`` is optional so teardown stays safe when the step-loop state was
+    never initialised (e.g. ``env.reset()`` raised during setup): the planner
+    hooks and environment are still released even though there is no state
+    object to attach the runtime snapshot to, matching the pre-refactor
+    finally-block behaviour.
+    """
     if callable(planner_stats):
         try:
             planner_stats_payload = planner_stats()
         except (RuntimeError, ValueError, TypeError):
             logger.debug("Planner stats hook failed before close", exc_info=True)
             planner_stats_payload = None
-        if isinstance(planner_stats_payload, dict):
+        if isinstance(planner_stats_payload, dict) and state is not None:
             state.planner_runtime_snapshot = dict(planner_stats_payload)
     if callable(planner_close):
         try:
@@ -2691,6 +2698,7 @@ def _setup_and_run_step_loop(  # noqa: PLR0913
     """
     policy_fn = planner_runtime.policy_fn
     env = make_robot_env(config=config, seed=int(seed), debug=False)
+    state: _StepLoopState | None = None
     try:
         active_harness = LatencyMeasurementHarness.get_current()
         if active_harness is not None:
@@ -2748,6 +2756,10 @@ def _setup_and_run_step_loop(  # noqa: PLR0913
             planner_close=planner_runtime.planner_close,
             state=state,
         )
+    # ``state`` is only ``None`` when setup raised before the loop body ran; in
+    # that case the exception propagates through ``finally`` and control never
+    # reaches here, so the narrowed type below is sound.
+    assert state is not None
     return _build_step_loop_result(state)
 
 

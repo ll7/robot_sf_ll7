@@ -21,7 +21,7 @@ def ensure_dir_exists(directory) -> None:
     """
     if not os.path.exists(directory):
         os.makedirs(directory)
-        logger.info(f"Created directory: {directory}")
+        logger.info("Created directory: {}", directory)
 
 
 def extract_timestamp(filename: str) -> str:

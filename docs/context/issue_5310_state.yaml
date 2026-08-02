@@ -1,4 +1,4 @@
-# Issue #5310 state tracking: topology-parallel NMPC prototype (#6152)
+# Issue #5310 state tracking: topology-parallel nonlinear model predictive control (NMPC) prototype (#6152)
 schema: issue_state.v1
 issue: 5310
 title: "planner: topology-driven parallel NMPC with shared solver objective"

@@ -1293,9 +1293,13 @@ def _write_evidence_doc(
     plan_ms = latency_gate.evidence.get("plan_wall_clock_ms_measurement_safe_deadline") or {}
     plan_real = latency_gate.evidence.get("plan_wall_clock_ms_real_2s_deadline") or {}
     md = []
-    md.append(f"# Issue #{ISSUE_NUMBER}: topology-parallel NMPC offline verdict\n")
     md.append(
-        f"Diagnostic-only validation of the merged #{SOURCE_PR} prototype "
+        f"# Issue #{ISSUE_NUMBER}: topology-parallel nonlinear model predictive control (NMPC) "
+        "offline verdict\n"
+    )
+    md.append(
+        f"Diagnostic-only validation of the merged #{SOURCE_PR} topology-parallel nonlinear "
+        "model predictive control (NMPC) prototype "
         f"(`robot_sf/planner/topology_parallel_nmpc.py`) for parent #{PARENT_ISSUE}. "
         "The prototype was executed **unchanged**; this validator only imports/calls it "
         "and reads back diagnostics.\n"

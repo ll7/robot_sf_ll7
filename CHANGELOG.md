@@ -46,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bypassed). Byte-identity was verified by downloading each published asset and confirming its
   SHA-256 equals the in-tree blob SHA-256. These are non-benchmark legacy checkpoints retained for
   traceability and local debugging; they are **not benchmark evidence**.
-* **issue #6158 topology-parallel NMPC offline verdict (#5310 analysis child).** New
+* **issue #6158 topology-parallel nonlinear model predictive control (NMPC) offline verdict
+  (#5310 analysis child).** New
   `scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py`
   diagnostic validator that exercises the merged #6152 prototype
   (`robot_sf/planner/topology_parallel_nmpc.py`, executed unchanged) against the eight

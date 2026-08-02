@@ -570,6 +570,12 @@ def _require_onset_consistency(onset_time_s: Any, onset_interval: list[Any]) -> 
         raise FailureDiagnosisError("onset_time_s must be a finite number or None")
     if normalized_onset != normalized_interval[0]:
         raise FailureDiagnosisError("onset_time_s must equal onset_interval[0]")
+    if (
+        normalized_interval[0] is not None
+        and normalized_interval[1] is not None
+        and normalized_interval[1] < normalized_interval[0]
+    ):
+        raise FailureDiagnosisError("onset_interval end must not precede onset_interval start")
 
 
 def _require_unknown_reason_invariant(record: Mapping[str, Any]) -> None:

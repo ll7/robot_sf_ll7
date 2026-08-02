@@ -359,6 +359,16 @@ def test_validate_record_rejects_inconsistent_onset_localization() -> None:
         validate_failure_diagnosis_record(payload)
 
 
+def test_validate_record_rejects_reversed_onset_interval() -> None:
+    """The end of an onset interval cannot precede its start."""
+    record = diagnose_from_trace_failure_predicate(_predicate("collision"))
+    payload = record.to_dict()
+    payload["onset_interval"] = [2.0, 1.0]
+    payload["onset_time_s"] = 2.0
+    with pytest.raises(FailureDiagnosisError, match="end must not precede"):
+        validate_failure_diagnosis_record(payload)
+
+
 def test_unknown_failure_diagnosis_record_helper_mirrors_taxonomy_unknown() -> None:
     """unknown_failure_diagnosis_record mirrors unknown_failure_mechanism_record."""
     predicate = _predicate("collision", validity_status=_NOT_AVAILABLE, severity="critical")

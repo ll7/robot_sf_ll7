@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import csv
+import inspect
 import io
 import json
 import math
@@ -20,6 +21,7 @@ import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_modu
 import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
 import robot_sf.benchmark.camera_ready._config_types as camera_ready_config_types_module
 import robot_sf.benchmark.camera_ready._legacy_campaign_facade as camera_ready_legacy_facade
+import robot_sf.benchmark.camera_ready._preflight as camera_ready_preflight_module
 import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
 import robot_sf.benchmark.camera_ready.campaign as camera_ready_campaign_impl_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
@@ -253,6 +255,48 @@ def test_camera_ready_campaign_reexports_package_run_state_helpers() -> None:
         assert getattr(camera_ready_campaign_module, helper_name) is getattr(
             camera_ready_run_state_module, helper_name
         )
+
+
+def test_prepare_campaign_preflight_refactor_respects_function_size_budget() -> None:
+    """The refactor keeps the entry point and manifest builder below the issue's line budget."""
+    for function_name in ("prepare_campaign_preflight", "_build_campaign_manifest_payload"):
+        function = getattr(camera_ready_preflight_module, function_name)
+        source_lines, _ = inspect.getsourcelines(function)
+        assert len(source_lines) < 80, function_name
+
+
+def test_non_paper_comparability_writer_failure_preserves_partial_mapping_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recoverable writer failures preserve the legacy partial comparability assignments."""
+    cfg = SimpleNamespace(
+        comparability_mapping_path=tmp_path / "mapping.yaml",
+        paper_facing=False,
+    )
+    summary = {"mapping_version": "v1", "mapping_hash": "hash"}
+    mapping_path = tmp_path / "mapping.yaml"
+    monkeypatch.setattr(
+        camera_ready_preflight_module,
+        "_build_comparability_summary",
+        lambda *_args, **_kwargs: (summary, mapping_path),
+    )
+
+    def fail_writer(*_args, **_kwargs):
+        raise ValueError("writer failed")
+
+    monkeypatch.setattr(
+        camera_ready_preflight_module,
+        "_write_comparability_artifacts",
+        fail_writer,
+    )
+
+    assert camera_ready_preflight_module._build_comparability_artifacts_if_configured(
+        cfg,
+        reports_dir=tmp_path / "reports",
+        scenarios=[],
+        campaign_id="campaign",
+        created_at_utc="2026-08-02T00:00:00Z",
+    ) == (summary, None, None, mapping_path)
 
 
 def test_campaign_success_counters_core_success_ignores_experimental_failure() -> None:

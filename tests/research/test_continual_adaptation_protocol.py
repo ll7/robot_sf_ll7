@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -215,6 +216,18 @@ def test_promote_with_baseline_named_evidence_bundle_fails_closed() -> None:
     assert any("evidence_bundle" in blocker for blocker in report.blockers)
 
 
+def test_promote_with_protocol_blocker_is_not_promotion_ready() -> None:
+    """A complete promotion bundle cannot bypass another protocol invariant."""
+    manifest = _manifest()
+    manifest["promotion_decision"] = {"decision": "promote", "rationale": "want to ship"}
+    manifest["results"] = _results()
+    manifest["safety_wrapper"]["mutation_permitted"] = True
+    report = check_continual_adaptation_run(manifest)
+    assert report.protocol_status == PROTOCOL_STATUS_INVALID
+    assert report.promotion_ready is False
+    assert any("safety wrapper" in blocker for blocker in report.blockers)
+
+
 def test_safety_wrapper_mutation_permitted_fails_closed() -> None:
     """A manifest granting safety-wrapper mutation permission fails closed."""
     manifest = _manifest()
@@ -300,6 +313,17 @@ def test_bounded_budget_with_nonpositive_steps_fails_closed() -> None:
     assert any("positive integer" in blocker for blocker in report.blockers)
 
 
+@pytest.mark.parametrize("bound", [math.nan, math.inf, -math.inf])
+def test_non_finite_threshold_bound_fails_closed(bound: float) -> None:
+    """Acceptance thresholds must be finite numeric bounds."""
+    manifest = _manifest()
+    manifest["thresholds"]["nominal"]["bound"] = bound
+    report = check_continual_adaptation_run(manifest)
+    assert report.protocol_status == PROTOCOL_STATUS_INVALID
+    assert report.promotion_ready is False
+    assert any("thresholds.nominal.bound" in blocker for blocker in report.blockers)
+
+
 def test_derived_identifier_is_deterministic() -> None:
     """The same manifest always derives the same adapted-policy identifier."""
     manifest = _manifest()
@@ -316,6 +340,14 @@ def test_derived_identifier_reflects_adaptation_manifest() -> None:
     changed = copy.deepcopy(manifest)
     changed["adaptation"]["experience_budget"]["steps"] = 999999
     assert derive_adapted_policy_identifier(changed) != base_derived
+
+
+def test_derived_identifier_reflects_shift_parameters() -> None:
+    """Changing a synthetic-shift parameter changes the adapted-policy identifier."""
+    manifest = _manifest()
+    changed = copy.deepcopy(manifest)
+    changed["shifts"][0]["parameters"]["friction_coefficient"] = 0.8
+    assert derive_adapted_policy_identifier(changed) != derive_adapted_policy_identifier(manifest)
 
 
 def test_derived_identifier_never_equals_baseline() -> None:

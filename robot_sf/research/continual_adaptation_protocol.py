@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
@@ -232,6 +233,7 @@ def check_continual_adaptation_run(
     adaptation_ids = [str(sid) for sid in manifest["scenarios"]["adaptation"]]
     evaluation_ids = [str(sid) for sid in manifest["scenarios"]["evaluation"]]
     disjoint = _check_scenario_disjoint(adaptation_ids, evaluation_ids, blockers)
+    _check_thresholds(manifest["thresholds"], blockers)
 
     derived_identifier = _compute_derived_identifier(baseline_identifier, manifest)
     decision = str(manifest["promotion_decision"]["decision"])
@@ -242,7 +244,6 @@ def check_continual_adaptation_run(
         blockers=blockers,
     )
 
-    protocol_status = PROTOCOL_STATUS_VALID if not blockers else PROTOCOL_STATUS_INVALID
     # A derived identifier that somehow collided with the baseline would let the
     # adaptation overwrite the frozen baseline; fail closed defensively.
     if derived_identifier == baseline_identifier:
@@ -250,8 +251,10 @@ def check_continual_adaptation_run(
             "derived adapted-policy identifier collides with the baseline identifier; "
             "the adapted identifier must never overwrite the baseline"
         )
-        protocol_status = PROTOCOL_STATUS_INVALID
-        promotion_ready = False
+    protocol_status = PROTOCOL_STATUS_VALID if not blockers else PROTOCOL_STATUS_INVALID
+    # Promotion is valid only when every protocol invariant passes, not merely
+    # when the four promotion references are complete.
+    promotion_ready = promotion_ready and not blockers
 
     return ContinualAdaptationRunReport(
         schema_version=CONTINUAL_ADAPTATION_RUN_SCHEMA_VERSION,
@@ -352,7 +355,11 @@ def _normalize_for_derivation(
         "adaptation_scenarios": sorted(str(sid) for sid in manifest["scenarios"]["adaptation"]),
         "evaluation_scenarios": sorted(str(sid) for sid in manifest["scenarios"]["evaluation"]),
         "shifts": [
-            {"id": str(shift["id"]), "kind": str(shift["kind"])}
+            {
+                "id": str(shift["id"]),
+                "kind": str(shift["kind"]),
+                "parameters": shift.get("parameters", {}),
+            }
             for shift in sorted(manifest["shifts"], key=lambda s: (str(s["id"]), str(s["kind"])))
         ],
         "thresholds": {
@@ -421,6 +428,14 @@ def _check_scenario_disjoint(
         )
         return False
     return True
+
+
+def _check_thresholds(thresholds: Mapping[str, Any], blockers: list[str]) -> None:
+    """Reject non-finite threshold bounds that cannot define an acceptance limit."""
+    for name, threshold in thresholds.items():
+        bound = threshold["bound"]
+        if isinstance(bound, float) and not math.isfinite(bound):
+            blockers.append(f"thresholds.{name}.bound must be finite; got {bound!r}")
 
 
 def _check_promotion_gate(

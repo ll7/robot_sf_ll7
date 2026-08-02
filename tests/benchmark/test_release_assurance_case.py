@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -15,6 +16,12 @@ SMOKE_MANIFEST = Path(
     "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
 )
 GATE_SPEC = Path("configs/benchmarks/release_gates/default_safety_comfort_gates.yaml")
+
+
+def _canonical_payload_digest(payload: dict[str, object]) -> str:
+    """Return a stable digest that pins every payload key and value."""
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def test_release_assurance_case_exports_gate_claims_and_manifest_evidence() -> None:
@@ -37,6 +44,19 @@ def test_release_assurance_case_exports_gate_claims_and_manifest_evidence() -> N
         leaf for leaf in payload["evidence"] if leaf["id"] == "E_campaign_config"
     )
     assert campaign_config["sha256"] == campaign_config["expected_sha256"]
+
+
+def test_release_assurance_case_representative_payload_is_exact() -> None:
+    """Pin the complete deterministic release-assurance payload across refactors."""
+    payload = build_release_assurance_case_from_paths(
+        manifest_path=SMOKE_MANIFEST,
+        gate_spec_path=GATE_SPEC,
+        generated_at_utc="2026-07-06T00:00:00Z",
+    )
+
+    assert _canonical_payload_digest(payload) == (
+        "1db2317a5a1b45f87b29113acaa4dc83d8c1273549fce91c1a03faca131acd81"
+    )
 
 
 def test_release_assurance_case_reference_check_fails_on_stale_sha(tmp_path: Path) -> None:

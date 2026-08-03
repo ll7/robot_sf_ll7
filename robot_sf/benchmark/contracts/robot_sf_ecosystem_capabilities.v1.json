@@ -1,0 +1,373 @@
+{
+  "registry_schema_version": "robot_sf_ecosystem_capabilities.v1",
+  "contract_version": "1.0.0",
+  "producer": {
+    "producer_id": "robot_sf",
+    "repository_url": "https://github.com/ll7/robot_sf_ll7",
+    "supported_python_input_id": "producer.python.requires"
+  },
+  "change": {
+    "declared_type": "initial",
+    "based_on_contract_digest": null
+  },
+  "authoritative_inputs": [
+    {
+      "input_id": "producer.python.requires",
+      "kind": "toml_project_field",
+      "path": "pyproject.toml",
+      "selector": "project.requires-python"
+    },
+    {
+      "input_id": "cli.robot_sf.entrypoint",
+      "kind": "toml_project_script",
+      "path": "pyproject.toml",
+      "selector": "robot-sf",
+      "expected_value": "robot_sf.cli:main"
+    },
+    {
+      "input_id": "cli.robot_sf.envs_list.handler",
+      "kind": "python_symbol",
+      "path": "robot_sf/cli_envs.py",
+      "selector": "_handle_envs_list"
+    },
+    {
+      "input_id": "cli.robot_sf.envs_describe.handler",
+      "kind": "python_symbol",
+      "path": "robot_sf/cli_envs.py",
+      "selector": "_handle_envs_describe"
+    },
+    {
+      "input_id": "cli.robot_sf.envs.contract_test",
+      "kind": "python_test",
+      "path": "tests/test_cli_envs.py",
+      "selector": "test_top_level_cli_envs_list_and_describe"
+    },
+    {
+      "input_id": "cli.robot_sf_bench.entrypoint",
+      "kind": "toml_project_script",
+      "path": "pyproject.toml",
+      "selector": "robot_sf_bench",
+      "expected_value": "robot_sf.benchmark.cli:main"
+    },
+    {
+      "input_id": "cli.robot_sf_bench.validate_config.handler",
+      "kind": "python_symbol",
+      "path": "robot_sf/benchmark/cli.py",
+      "selector": "_handle_validate_config"
+    },
+    {
+      "input_id": "cli.robot_sf_bench.validate_config.success_test",
+      "kind": "python_test",
+      "path": "tests/test_cli.py",
+      "selector": "test_cli_validate_config_success"
+    },
+    {
+      "input_id": "cli.robot_sf_bench.validate_config.error_test",
+      "kind": "python_test",
+      "path": "tests/benchmark/test_benchmark_cli_exception_boundaries.py",
+      "selector": "test_missing_or_malformed_input_returns_cli_error"
+    },
+    {
+      "input_id": "schema.episode.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.aggregate.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/aggregate.schema.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.scenario_matrix.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/scenario-matrix.schema.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.evidence_bundle.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/evidence_bundle.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.release_assurance_case.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/release_assurance_case.schema.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.report_metadata.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/report_metadata.schema.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.result_job_durability.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/result_job_durability.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "protocol.result_provenance.identifier",
+      "kind": "python_constant",
+      "path": "robot_sf/benchmark/result_provenance.py",
+      "selector": "SCHEMA_VERSION",
+      "expected_value": "benchmark_result_provenance.v1"
+    },
+    {
+      "input_id": "protocol.result_provenance.contract_test",
+      "kind": "python_test",
+      "path": "tests/benchmark/test_benchmark_result_provenance.py",
+      "selector": "test_build_row_result_provenance_uses_supplied_postprocessing_steps"
+    },
+    {
+      "input_id": "protocol.campaign_result_store.identifier",
+      "kind": "python_constant",
+      "path": "scripts/tools/campaign_result_store.py",
+      "selector": "SCHEMA_VERSION",
+      "expected_value": "campaign-result-store.v1"
+    },
+    {
+      "input_id": "protocol.campaign_result_store.contract_test",
+      "kind": "python_test",
+      "path": "tests/tools/test_campaign_result_store.py",
+      "selector": "test_result_store_round_trips_episode_rows_through_parquet_and_duckdb"
+    },
+    {
+      "input_id": "protocol.release_manifest.identifier",
+      "kind": "python_constant",
+      "path": "robot_sf/benchmark/release_protocol.py",
+      "selector": "RELEASE_MANIFEST_SCHEMA_VERSION",
+      "expected_value": "benchmark-release-manifest.v0.1"
+    },
+    {
+      "input_id": "protocol.release_manifest.version",
+      "kind": "python_constant",
+      "path": "robot_sf/benchmark/release_protocol.py",
+      "selector": "BENCHMARK_PROTOCOL_VERSION",
+      "expected_value": "0.1.0"
+    },
+    {
+      "input_id": "protocol.release_manifest.contract_test",
+      "kind": "python_test",
+      "path": "tests/benchmark/test_release_protocol.py",
+      "selector": "test_smoke_release_manifest_validates_against_campaign_config"
+    },
+    {
+      "input_id": "protocol.publication_bundle.identifier",
+      "kind": "python_constant",
+      "path": "robot_sf/benchmark/artifact_publication.py",
+      "selector": "PUBLICATION_BUNDLE_SCHEMA_VERSION",
+      "expected_value": "benchmark-publication-bundle.v2"
+    },
+    {
+      "input_id": "protocol.publication_bundle.contract_test",
+      "kind": "python_test",
+      "path": "tests/benchmark/test_artifact_publication.py",
+      "selector": "test_export_publication_bundle_writes_manifest_checksums_and_archive"
+    },
+    {
+      "input_id": "artifact.sha256sums.writer",
+      "kind": "python_symbol",
+      "path": "robot_sf/evidence/writers.py",
+      "selector": "write_sha256sums"
+    },
+    {
+      "input_id": "artifact.sha256sums.contract_test",
+      "kind": "python_test",
+      "path": "tests/test_evidence_writers.py",
+      "selector": "TestWriteSha256sums.test_uses_repo_relative_labels_inside_repo"
+    }
+  ],
+  "capabilities": [
+    {
+      "capability_id": "robot_sf.cli.envs.describe.v1",
+      "kind": "cli",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.cli.envs.describe.exit_semantics.v1",
+      "location": "robot_sf/cli_envs.py",
+      "authority": [
+        "cli.robot_sf.entrypoint",
+        "cli.robot_sf.envs_describe.handler",
+        "cli.robot_sf.envs.contract_test"
+      ],
+      "entrypoint_input_id": "cli.robot_sf.entrypoint",
+      "argv": ["envs", "describe"],
+      "exit_codes": [
+        {"code": 0, "meaning": "success"},
+        {"code": 2, "meaning": "unknown_environment_or_invalid_usage"}
+      ]
+    },
+    {
+      "capability_id": "robot_sf.cli.envs.list.v1",
+      "kind": "cli",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.cli.envs.list.exit_semantics.v1",
+      "location": "robot_sf/cli_envs.py",
+      "authority": [
+        "cli.robot_sf.entrypoint",
+        "cli.robot_sf.envs_list.handler",
+        "cli.robot_sf.envs.contract_test"
+      ],
+      "entrypoint_input_id": "cli.robot_sf.entrypoint",
+      "argv": ["envs", "list"],
+      "exit_codes": [
+        {"code": 0, "meaning": "success"}
+      ]
+    },
+    {
+      "capability_id": "robot_sf.cli.validate_config.v1",
+      "kind": "cli",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.cli.validate_config.exit_semantics.v1",
+      "location": "robot_sf/benchmark/cli.py",
+      "authority": [
+        "cli.robot_sf_bench.entrypoint",
+        "cli.robot_sf_bench.validate_config.handler",
+        "cli.robot_sf_bench.validate_config.success_test",
+        "cli.robot_sf_bench.validate_config.error_test"
+      ],
+      "entrypoint_input_id": "cli.robot_sf_bench.entrypoint",
+      "argv": ["validate-config"],
+      "exit_codes": [
+        {"code": 0, "meaning": "valid"},
+        {"code": 2, "meaning": "invalid_or_unreadable_configuration"}
+      ]
+    },
+    {
+      "capability_id": "robot_sf.schema.aggregate.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.schema.aggregate.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/aggregate.schema.v1.json",
+      "authority": ["schema.aggregate.v1"]
+    },
+    {
+      "capability_id": "robot_sf.schema.episode.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.schema.episode.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "authority": ["schema.episode.v1"]
+    },
+    {
+      "capability_id": "robot_sf.schema.evidence_bundle.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.schema.evidence_bundle.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/evidence_bundle.v1.json",
+      "authority": ["schema.evidence_bundle.v1"]
+    },
+    {
+      "capability_id": "robot_sf.schema.release_assurance_case.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "experimental",
+      "semantics_id": "robot_sf.schema.release_assurance_case.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/release_assurance_case.schema.v1.json",
+      "authority": ["schema.release_assurance_case.v1"]
+    },
+    {
+      "capability_id": "robot_sf.schema.report_metadata.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "experimental",
+      "semantics_id": "robot_sf.schema.report_metadata.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/report_metadata.schema.v1.json",
+      "authority": ["schema.report_metadata.v1"]
+    },
+    {
+      "capability_id": "robot_sf.schema.result_job_durability.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.schema.result_job_durability.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/result_job_durability.v1.json",
+      "authority": ["schema.result_job_durability.v1"]
+    },
+    {
+      "capability_id": "robot_sf.schema.scenario_matrix.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.schema.scenario_matrix.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/scenario-matrix.schema.v1.json",
+      "authority": ["schema.scenario_matrix.v1"]
+    },
+    {
+      "capability_id": "robot_sf.protocol.benchmark_result_provenance.v1",
+      "kind": "protocol",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.protocol.benchmark_result_provenance.semantics.v1",
+      "location": "robot_sf/benchmark/result_provenance.py",
+      "authority": [
+        "protocol.result_provenance.identifier",
+        "protocol.result_provenance.contract_test"
+      ],
+      "identifier_input_id": "protocol.result_provenance.identifier"
+    },
+    {
+      "capability_id": "robot_sf.protocol.campaign_result_store.v1",
+      "kind": "protocol",
+      "interface_version": "1.0.0",
+      "status": "experimental",
+      "semantics_id": "robot_sf.protocol.campaign_result_store.semantics.v1",
+      "location": "scripts/tools/campaign_result_store.py",
+      "authority": [
+        "protocol.campaign_result_store.identifier",
+        "protocol.campaign_result_store.contract_test"
+      ],
+      "identifier_input_id": "protocol.campaign_result_store.identifier"
+    },
+    {
+      "capability_id": "robot_sf.protocol.release_manifest.v0",
+      "kind": "protocol",
+      "interface_version": "0.1.0",
+      "status": "experimental",
+      "semantics_id": "robot_sf.protocol.release_manifest.semantics.v0",
+      "location": "robot_sf/benchmark/release_protocol.py",
+      "authority": [
+        "protocol.release_manifest.identifier",
+        "protocol.release_manifest.version",
+        "protocol.release_manifest.contract_test"
+      ],
+      "identifier_input_id": "protocol.release_manifest.identifier"
+    },
+    {
+      "capability_id": "robot_sf.protocol.publication_bundle.v2",
+      "kind": "protocol",
+      "interface_version": "2.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.protocol.publication_bundle.semantics.v2",
+      "location": "robot_sf/benchmark/artifact_publication.py",
+      "authority": [
+        "protocol.publication_bundle.identifier",
+        "protocol.publication_bundle.contract_test"
+      ],
+      "identifier_input_id": "protocol.publication_bundle.identifier"
+    },
+    {
+      "capability_id": "robot_sf.artifact.sha256sums.v1",
+      "kind": "artifact_identity",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.artifact.sha256sums.semantics.v1",
+      "location": "robot_sf/evidence/writers.py",
+      "authority": [
+        "artifact.sha256sums.writer",
+        "artifact.sha256sums.contract_test"
+      ],
+      "convention_identifier": "robot_sf.sha256sums.lower_hex_two_space_path.v1"
+    }
+  ],
+  "canonical_public_fixtures": []
+}

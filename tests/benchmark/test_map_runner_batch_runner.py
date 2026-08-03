@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.map_runner_batch_runner import (
@@ -24,8 +25,9 @@ def _noop_run_map_job(args: tuple) -> dict[str, Any]:
     }
 
 
-def _noop_write(handle: Any, schema: dict, record: dict) -> None:
-    """A stub write_validated_to_handle that writes nothing."""
+def _write_record(handle: Any, schema: dict, record: dict) -> None:
+    """A lightweight writer stub that preserves the batch append contract."""
+    handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
 class _NoopBridgeUpdate:
@@ -119,7 +121,7 @@ class TestExecuteMapJobsSerial:
             schema={},
             workers=1,
             run_map_job=_noop_run_map_job,
-            write_validated_to_handle=_noop_write,
+            write_validated_to_handle=_write_record,
             apply_worker_metadata_bridge=_noop_bridge,
             scenario_id=_scenario_id,
             executor_cls=None,
@@ -129,6 +131,7 @@ class TestExecuteMapJobsSerial:
         assert len(result.episode_records) == 3
         assert result.failures == []
         assert result.batch_runtime_sec >= 0.0
+        assert len(out_path.read_text(encoding="utf-8").splitlines()) == 3
 
     def test_serial_execution_records_failures(self, tmp_path: Path) -> None:
         """Serial execution must record failures without crashing."""
@@ -145,7 +148,7 @@ class TestExecuteMapJobsSerial:
             schema={},
             workers=1,
             run_map_job=failing_job,
-            write_validated_to_handle=_noop_write,
+            write_validated_to_handle=_write_record,
             apply_worker_metadata_bridge=_noop_bridge,
             scenario_id=_scenario_id,
             executor_cls=None,
@@ -165,7 +168,7 @@ class TestExecuteMapJobsSerial:
             schema={},
             workers=1,
             run_map_job=_noop_run_map_job,
-            write_validated_to_handle=_noop_write,
+            write_validated_to_handle=_write_record,
             apply_worker_metadata_bridge=_noop_bridge,
             scenario_id=_scenario_id,
             executor_cls=None,
@@ -184,7 +187,7 @@ class TestExecuteMapJobsSerial:
             schema={},
             workers=1,
             run_map_job=_noop_run_map_job,
-            write_validated_to_handle=_noop_write,
+            write_validated_to_handle=_write_record,
             apply_worker_metadata_bridge=_noop_bridge,
             scenario_id=_scenario_id,
             executor_cls=None,

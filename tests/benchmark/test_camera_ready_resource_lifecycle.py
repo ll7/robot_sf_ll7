@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -138,13 +139,14 @@ class TestCleanupGpuMemoryBeforeExit:
         assert "allocated_mb" in result
         assert "reserved_mb" in result
 
-    def test_no_torch_defaults(self) -> None:
-        """Without torch loaded, torch_available must be False and metrics zero."""
+    def test_no_torch_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When torch is unavailable, cleanup must return deterministic zero metrics."""
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
         result = _cleanup_gpu_memory_before_exit(planner_key="x", kinematics="y")
-        if not result["torch_available"]:
-            assert result["cuda_available"] is False
-            assert result["allocated_mb"] == 0.0
-            assert result["reserved_mb"] == 0.0
+        assert result["torch_available"] is False
+        assert result["cuda_available"] is False
+        assert result["allocated_mb"] == 0.0
+        assert result["reserved_mb"] == 0.0
 
 
 class TestWriteJson:

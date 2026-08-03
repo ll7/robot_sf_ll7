@@ -6,6 +6,7 @@ import io
 import json
 
 import pytest
+from jsonschema import ValidationError
 
 from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle
 
@@ -95,5 +96,5 @@ class TestWriteValidatedToHandle:
             "additionalProperties": True,
         }
         handle = io.StringIO()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             write_validated_to_handle(handle, strict_schema, _valid_record())

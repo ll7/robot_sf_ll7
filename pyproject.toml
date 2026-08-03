@@ -30,6 +30,7 @@ dependencies = [
     "rich>=15.0.0",
     "psutil>=6.1.0",
     "jsonschema>=4.23.0",
+    "rfc8785==0.1.4",
     "shapely>=2.1.2",
     "networkx>=3.6.1,<4.0",
     "pyvisgraph>=0.2.1",

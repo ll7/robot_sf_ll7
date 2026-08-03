@@ -61,6 +61,8 @@ DIAGNOSTIC_STATUS_NOT_EXECUTED = "diagnostic_only_not_executed"
 #: Evaluation surfaces the bounded revalidation protocol declares.
 EVALUATION_SURFACES = ("nominal", "shift", "forgetting")
 
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
 
 @dataclass(frozen=True, slots=True)
 class ContinualAdaptationDiagnosticReport:
@@ -104,6 +106,43 @@ def get_continual_adaptation_output_root() -> Path:
         ``ROBOT_SF_ARTIFACT_ROOT`` override.
     """
     return get_artifact_root() / "continual_adaptation_diagnostics"
+
+
+def _resolve_output_dir(output_dir: str | Path) -> Path:
+    """Resolve an output directory and enforce the repository artifact boundary.
+
+    Repository-local output overrides must stay under the configured artifact
+    root so a caller cannot redirect this launcher into tracked or forbidden
+    repository paths. External temporary directories remain valid for isolated
+    tests and controlled artifact-store integrations.
+
+    Args:
+        output_dir: Requested diagnostic output directory.
+
+    Returns:
+        The resolved output directory.
+
+    Raises:
+        ContinualAdaptationProtocolError: when a repository-local path is outside
+            the configured artifact root.
+    """
+    resolved = Path(output_dir).expanduser().resolve()
+    try:
+        resolved.relative_to(_REPOSITORY_ROOT)
+    except ValueError:
+        return resolved
+
+    artifact_root = get_artifact_root().expanduser().resolve()
+    try:
+        resolved.relative_to(artifact_root)
+    except ValueError as exc:
+        raise ContinualAdaptationProtocolError(
+            [
+                f"output_dir {resolved} is inside the repository but outside the configured "
+                f"artifact root {artifact_root}; diagnostic outputs must remain under output/"
+            ]
+        ) from exc
+    return resolved
 
 
 def build_adaptation_diagnostic(manifest: Mapping[str, Any]) -> dict[str, Any]:
@@ -208,6 +247,8 @@ def run_continual_adaptation_diagnostics(
         source: Optional source path used only for error messages.
         output_dir: Diagnostic output directory. Defaults to
             ``<artifact_root>/continual_adaptation_diagnostics/<run_id>``.
+            Repository-local overrides must remain under the configured artifact
+            root.
 
     Returns:
         The diagnostic report describing the (un-executed) bounded adaptation and
@@ -225,7 +266,7 @@ def run_continual_adaptation_diagnostics(
     evaluations = build_evaluation_diagnostics(manifest)
 
     run_id = str(manifest["run_id"])
-    target_dir = (
+    target_dir = _resolve_output_dir(
         Path(output_dir)
         if output_dir is not None
         else get_continual_adaptation_output_root() / run_id

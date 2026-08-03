@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import robot_sf.research.continual_adaptation_launcher as launcher_module
 from robot_sf.research.continual_adaptation_launcher import (
     CONTINUAL_ADAPTATION_LAUNCHER_MODE,
     EVALUATION_SURFACES,
@@ -157,6 +158,30 @@ def test_schema_violation_raises(tmp_path: Path) -> None:
     del manifest["thresholds"]
     with pytest.raises(ContinualAdaptationProtocolError):
         run_continual_adaptation_diagnostics(manifest, output_dir=tmp_path)
+
+
+def test_repo_local_output_override_stays_under_artifact_root() -> None:
+    """Repository-local output overrides cannot target tracked paths."""
+    output_dir = REPO_ROOT / "docs" / "continual_adaptation_diagnostics_test"
+    with pytest.raises(ContinualAdaptationProtocolError, match="artifact root"):
+        run_continual_adaptation_diagnostics(_load_example_manifest(), output_dir=output_dir)
+    assert not output_dir.exists()
+
+
+def test_repo_local_output_override_inside_artifact_root_is_allowed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A repository-local override under the configured artifact root is allowed."""
+    repository_root = tmp_path / "repo"
+    artifact_root = repository_root / "output"
+    output_dir = artifact_root / "continual_adaptation_diagnostics" / "run"
+    monkeypatch.setattr(launcher_module, "_REPOSITORY_ROOT", repository_root)
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(artifact_root))
+
+    report = run_continual_adaptation_diagnostics(_load_example_manifest(), output_dir=output_dir)
+
+    assert output_dir.is_dir()
+    assert report.output_files[0] == str(output_dir / "adaptation.json")
 
 
 def test_default_output_root_honors_artifact_root(monkeypatch: pytest.MonkeyPatch) -> None:

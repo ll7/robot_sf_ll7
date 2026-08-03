@@ -1889,3 +1889,30 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
     assert second_best is None
     assert second_eval_step == 17_000_000
     assert len(run.logged) == 1
+
+
+def test_issue_2557_base_config_inheritance_equivalence() -> None:
+    """All issue-2557 variants must match their pre-refactor resolved-config fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_2557_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    ablate_dir = Path("configs/training/ppo/ablations")
+    variant_paths = sorted(ablate_dir.glob("expert_ppo_issue_2557_*_seed*_fixed.yaml"))
+    assert len(variant_paths) == 24
+    assert {path.name for path in variant_paths} == set(fingerprints)
+
+    for config_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(config_path)
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[config_path.name], (
+            f"Resolved config {config_path.name} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )

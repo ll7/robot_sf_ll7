@@ -1240,7 +1240,6 @@ def test_issue_6680_predictive_subbase_inheritance_and_v11_equivalence() -> None
     ).resolve()
     predictive_base = yaml.safe_load(predictive_base_path.read_text(encoding="utf-8"))
     assert predictive_base["base_config"] == _ISSUE_576_BR06_BASE_NAME
-    assert "policy_id" not in predictive_base
     # v11 is from scratch, so the sub-base must not manufacture a resume id.
     assert "resume_model_id" not in predictive_base
 

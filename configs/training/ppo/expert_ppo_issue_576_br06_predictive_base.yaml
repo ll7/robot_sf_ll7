@@ -1,12 +1,10 @@
 # Issue 576 (BR-06): shared predictive sub-base for the PPO expert family.
-#
 # Predictive issue_576_br06 variants and the issue-708 from-scratch variant
 # inherit this file after the family base. It contains only leaf keys that are
 # byte-identical across every requested predictive variant. Per-run values and
 # keys missing from any variant remain explicit in their variant files.
-#
-# resume_model_id intentionally remains explicit in the v5-v10 variants: the
-# issue-708 v11 config is a from-scratch run and has no resume model.
+# Direct-loading defaults only; target variants keep per-run values explicit.
+policy_id: ppo_expert_issue_576_br06_predictive_base
 base_config: expert_ppo_issue_576_br06_base.yaml
 seeds:
   - 123
@@ -61,7 +59,9 @@ scenario_sampling:
 convergence:
   plateau_window: 3000
 evaluation:
+  evaluation_episodes: 30
   hold_out_scenarios: []
+  step_schedule: [{every_steps: 500}]
 tracking:
   wandb:
     enabled: true

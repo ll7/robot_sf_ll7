@@ -8,6 +8,8 @@ benchmark/paper claim), the fail-closed gate, and the CLI entry point. No real
 training, evaluation, checkpoint write, or network access is involved.
 """
 
+# evidence-writer-exempt: tests only write throwaway tmp_path fixtures and diagnostic outputs
+
 from __future__ import annotations
 
 import importlib.util

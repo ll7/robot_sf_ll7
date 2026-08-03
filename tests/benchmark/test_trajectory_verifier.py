@@ -570,6 +570,7 @@ def test_non_finite_inputs_raise() -> None:
 # Calibration fixture: thresholds derived from this fixture only.
 # Evaluation tests below use scenarios disjoint from calibration data.
 _CALIBRATION_SOURCE = "test_calibration_fixture_v1"
+_EVALUATION_SOURCE = "test_evaluation_fixture_v1"
 
 
 def _deviation_config(**overrides: object) -> ExecutionDeviationConfig:
@@ -581,6 +582,7 @@ def _deviation_config(**overrides: object) -> ExecutionDeviationConfig:
         "max_input_age_s": 0.5,
         "fail_closed_intervention": "warn",
         "calibration_source": _CALIBRATION_SOURCE,
+        "evaluation_source": _EVALUATION_SOURCE,
     }
     defaults.update(overrides)
     return ExecutionDeviationConfig(**defaults)  # type: ignore[arg-type]
@@ -619,10 +621,15 @@ class TestExecutionDeviationConfig:
         cfg = _deviation_config()
         assert cfg.schema_version == EXECUTION_DEVIATION_SCHEMA
         assert cfg.calibration_source == _CALIBRATION_SOURCE
+        assert cfg.evaluation_source == _EVALUATION_SOURCE
 
     def test_empty_calibration_source_raises(self) -> None:
         with pytest.raises(ValueError, match="calibration_source"):
             ExecutionDeviationConfig(calibration_source="")
+
+    def test_empty_evaluation_source_raises(self) -> None:
+        with pytest.raises(ValueError, match="evaluation_source"):
+            _deviation_config(evaluation_source="")
 
     def test_threshold_ordering_enforced(self) -> None:
         with pytest.raises(ValueError, match="replan_threshold"):
@@ -949,16 +956,12 @@ class TestExecutionDeviationSplitOverlapRejection:
         cfg = _deviation_config()
         assert cfg.calibration_source == _CALIBRATION_SOURCE
         assert cfg.calibration_source != ""
+        assert cfg.evaluation_source == _EVALUATION_SOURCE
+        assert cfg.evaluation_source != cfg.calibration_source
 
-    def test_different_calibration_source_is_distinct(self) -> None:
-        eval_cfg = ExecutionDeviationConfig(
-            calibration_source="evaluation_fixture_v1",
-            warn_threshold=0.5,
-            replan_threshold=1.0,
-            fallback_brake_threshold=2.0,
-        )
-        calib_cfg = _deviation_config()
-        assert eval_cfg.calibration_source != calib_cfg.calibration_source
+    def test_calibration_evaluation_overlap_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="must differ"):
+            _deviation_config(evaluation_source=_CALIBRATION_SOURCE)
 
 
 class TestExecutionDeviationInterventionPrecedence:

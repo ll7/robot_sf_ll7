@@ -739,8 +739,8 @@ class ExecutionDeviationConfig:
 
     This configuration is versioned and separate from
     :class:`TrajectoryVerifierConfig`. Thresholds must be calibrated from an
-    explicitly separate calibration fixture; the ``calibration_source`` field
-    records provenance so that calibration and evaluation data remain disjoint.
+    explicitly separate calibration fixture. The ``calibration_source`` and
+    ``evaluation_source`` fields make that split explicit and reject overlap.
 
     Attributes:
         schema_version: Schema identifier for forward compatibility.
@@ -755,6 +755,9 @@ class ExecutionDeviationConfig:
         calibration_source: Identifier for the calibration fixture used to set
             thresholds. Must be non-empty for a valid configuration; must be
             disjoint from evaluation data.
+        evaluation_source: Identifier for the evaluation fixture that will use
+            this configuration. Must be non-empty and differ from
+            ``calibration_source``.
     """
 
     schema_version: str = EXECUTION_DEVIATION_SCHEMA
@@ -764,6 +767,7 @@ class ExecutionDeviationConfig:
     max_input_age_s: float = 0.5
     fail_closed_intervention: Literal["warn", "fallback_brake"] = "warn"
     calibration_source: str = ""
+    evaluation_source: str = ""
 
     def __post_init__(self) -> None:
         """Validate threshold ordering and fail-closed configuration."""
@@ -791,11 +795,28 @@ class ExecutionDeviationConfig:
                 f"'{INTERVENTION_WARN}' or '{INTERVENTION_FALLBACK_BRAKE}'; "
                 f"got {self.fail_closed_intervention!r}"
             )
-        if not self.calibration_source:
-            raise ValueError(
-                "ExecutionDeviationConfig.calibration_source must be non-empty; "
-                "thresholds must be calibrated from an explicitly separate fixture"
-            )
+        _validate_calibration_evaluation_split(self.calibration_source, self.evaluation_source)
+
+
+def _validate_calibration_evaluation_split(
+    calibration_source: str,
+    evaluation_source: str,
+) -> None:
+    """Require explicit, disjoint calibration and evaluation fixture identifiers."""
+    if not calibration_source:
+        raise ValueError(
+            "ExecutionDeviationConfig.calibration_source must be non-empty; "
+            "thresholds must be calibrated from an explicitly separate fixture"
+        )
+    if not evaluation_source:
+        raise ValueError(
+            "ExecutionDeviationConfig.evaluation_source must be non-empty; "
+            "evaluation provenance is required to enforce a disjoint split"
+        )
+    if evaluation_source == calibration_source:
+        raise ValueError(
+            "ExecutionDeviationConfig.evaluation_source must differ from calibration_source"
+        )
 
 
 @dataclass(frozen=True, slots=True)

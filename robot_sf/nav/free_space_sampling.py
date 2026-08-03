@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from shapely import contains_xy as _shp_contains_xy
 from shapely.geometry import Polygon as _ShapelyPolygon
+from shapely.prepared import PreparedGeometry
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -24,6 +25,8 @@ def _as_shapely_polygons(obstacle_polygons: Iterable) -> list[_ShapelyPolygon]:
     for poly in obstacle_polygons:
         if isinstance(poly, _ShapelyPolygon):
             polygons.append(poly)
+        elif isinstance(poly, PreparedGeometry):
+            polygons.append(poly.context)
         else:
             polygons.append(_ShapelyPolygon(poly))
     return polygons

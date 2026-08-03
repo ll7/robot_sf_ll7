@@ -9,6 +9,7 @@
 - [Compatibility rules](#compatibility-rules)
 - [Change classification](#change-classification)
 - [Revision envelope](#revision-envelope)
+- [Canonical conformance fixture](#canonical-conformance-fixture)
 - [Commands](#commands)
 - [Current limits](#current-limits)
 
@@ -184,6 +185,35 @@ envelopes additionally verify that the source commit exists, the tag resolves
 to that commit, and both bound files are the blobs at that commit. An
 unreleased envelope is a preparation record and is not release evidence.
 
+## Canonical conformance fixture
+
+The v1 contract declares the stable identity, version, and repository path of
+`robot_sf.ecosystem_handoff.v1`. It does not include a content digest for that
+packet. The packet records the contract digest, so hashing packet content inside
+the producer contract would create a contract/fixture digest cycle. A future
+release manifest binds the contract and packet content digests together.
+
+The packet is generated from production serializers and writers at
+`tests/fixtures/ecosystem_handoff/v1/`. It contains one deterministic episode,
+schema and provenance records, table- and figure-ready inputs, an artifact
+manifest, portable `SHA256SUMS`, and five negative variants. It is diagnostic
+conformance material only. It is not benchmark output, software release
+content, or scientific evidence.
+
+Generate and validate the packet:
+
+```text
+uv run python scripts/tools/build_ecosystem_handoff_fixture.py --overwrite
+uv run python scripts/tools/build_ecosystem_handoff_fixture.py --check
+uv run python scripts/tools/build_ecosystem_handoff_fixture.py --validate
+```
+
+The standalone validator at
+`scripts/tools/validate_ecosystem_handoff_fixture.py` imports no Robot SF
+modules. A downstream consumer can copy a packet and run its validator with
+`--packet-dir`, then verify the packet-local checksums with
+`sha256sum -c SHA256SUMS`.
+
 ## Commands
 
 Generate the contract and sidecar:
@@ -229,11 +259,11 @@ declaration.
 
 ## Current limits
 
-The producer contract intentionally declares `canonical_public_fixtures: []`.
-The fixture ownership and publication task is
-[robot_sf_ll7 issue 6711](https://github.com/ll7/robot_sf_ll7/issues/6711).
-Issue 6710 does not invent a public canonical fixture identity before that task
-defines one.
+The producer contract currently declares one canonical conformance fixture as
+defined by [robot_sf_ll7 issue
+6711](https://github.com/ll7/robot_sf_ll7/issues/6711). This declaration is a
+stable identity/version/path reference, not an artifact publication or a
+scientific-evidence approval.
 
 The files under `tests/fixtures/ecosystem_contract/v1/` are internal validator
 fixtures. They test valid and invalid contract transitions. They are not public

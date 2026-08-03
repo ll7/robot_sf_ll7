@@ -213,18 +213,20 @@ def test_affected_cells_avoids_per_cell_world_conversion(monkeypatch):
 
     monkeypatch.setattr(occupancy_grid_utils, "grid_indices_to_world", fail_per_cell_conversion)
 
-    inside_cells = get_affected_cells(10.0, 10.0, 1.25, config)
-    outside_cells = get_affected_cells(20.75, 10.0, 1.0, config)
+    inside_rows, inside_cols = get_affected_cells(10.0, 10.0, 1.25, config)
+    outside_rows, outside_cols = get_affected_cells(20.75, 10.0, 1.0, config)
 
-    assert inside_cells
-    assert outside_cells
+    assert len(inside_rows) > 0
+    assert len(outside_rows) > 0
     assert all(
-        0 <= row < config.grid_height and 0 <= col < config.grid_width for row, col in inside_cells
+        0 <= row < config.grid_height and 0 <= col < config.grid_width
+        for row, col in zip(inside_rows, inside_cols, strict=False)
     )
     assert all(
-        0 <= row < config.grid_height and 0 <= col < config.grid_width for row, col in outside_cells
+        0 <= row < config.grid_height and 0 <= col < config.grid_width
+        for row, col in zip(outside_rows, outside_cols, strict=False)
     )
-    assert any(col == config.grid_width - 1 for _, col in outside_cells)
+    assert any(col == config.grid_width - 1 for col in outside_cols)
 
 
 class TestCircleOverlapWithOccupancyGrid:

@@ -325,6 +325,27 @@ class TestVariableGridConfigObservation:
 class TestEnvironmentResetWithGrid:
     """Test T038: Environment reset with occupancy observation."""
 
+    def test_reset_and_step_accept_explicit_pedestrian_radii(self):
+        """Verify the grid pipeline preserves simulator-provided pedestrian radii."""
+        grid_config = _make_grid_config(width_m=6.0, height_m=6.0, resolution=0.2)
+        config = RobotSimulationConfig(
+            use_occupancy_grid=True,
+            grid_config=grid_config,
+            include_grid_in_observation=True,
+        )
+
+        env = make_robot_env(config=config, seed=42)
+        try:
+            env.simulator.ped_radii = np.full(env.simulator.ped_pos.shape[0], 0.25)
+
+            reset_obs, _info = env.reset(seed=42)
+            assert "occupancy_grid" in reset_obs
+
+            step_obs, *_ = env.step(env.action_space.sample())
+            assert "occupancy_grid" in step_obs
+        finally:
+            env.close()
+
     def test_reset_generates_initial_grid(self):
         """Verify reset() generates initial occupancy grid observation."""
         grid_config = _make_grid_config(width_m=10.0, height_m=10.0, resolution=0.25)

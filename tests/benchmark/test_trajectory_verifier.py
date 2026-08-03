@@ -597,6 +597,7 @@ def _aligned_windows(
     dt_s: float = 0.1,
     robot_speed: float = 1.0,
     deviation: float = 0.0,
+    input_age_s: float | None = 0.0,
 ) -> dict[str, object]:
     """Return aligned predicted/observed windows with a constant position deviation.
 
@@ -615,6 +616,7 @@ def _aligned_windows(
         "predicted_robot_velocities": pred_vel,
         "observed_robot_velocities": obs_vel,
         "dt_s": dt_s,
+        "input_age_s": input_age_s,
     }
 
 
@@ -634,6 +636,11 @@ class TestExecutionDeviationConfig:
     def test_empty_evaluation_source_raises(self) -> None:
         with pytest.raises(ValueError, match="evaluation_source"):
             _deviation_config(evaluation_source="")
+
+    @pytest.mark.parametrize("field_name", ("calibration_source", "evaluation_source"))
+    def test_whitespace_only_source_raises(self, field_name: str) -> None:
+        with pytest.raises(ValueError, match=field_name):
+            _deviation_config(**{field_name: "   "})
 
     def test_threshold_ordering_enforced(self) -> None:
         with pytest.raises(ValueError, match="replan_threshold"):
@@ -711,6 +718,7 @@ class TestExecutionDeviationPedestrianCourseChange:
             predicted_pedestrian_positions=pred_ped,
             observed_pedestrian_positions=obs_ped,
             dt_s=dt,
+            input_age_s=0.0,
             config=cfg,
         )
         components = dict(result.component_deviations)
@@ -734,11 +742,31 @@ class TestExecutionDeviationPedestrianCourseChange:
             predicted_pedestrian_positions=pred_ped,
             observed_pedestrian_positions=obs_ped,
             dt_s=0.1,
+            input_age_s=0.0,
             config=cfg,
         )
         assert result.deviation_score is not None
         assert result.deviation_score >= 3.0
         assert result.intervention == INTERVENTION_FALLBACK_BRAKE
+
+    def test_single_course_change_is_not_diluted_by_crowd_size(self) -> None:
+        """One deviating pedestrian remains detectable among aligned pedestrians."""
+        n_steps = 5
+        pred_ped = np.zeros((n_steps, 10, 2))
+        obs_ped = pred_ped.copy()
+        obs_ped[2:, 7, 0] = 1.0
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((n_steps, 2)),
+            observed_robot_positions=np.zeros((n_steps, 2)),
+            predicted_pedestrian_positions=pred_ped,
+            observed_pedestrian_positions=obs_ped,
+            dt_s=0.1,
+            input_age_s=0.0,
+            config=_deviation_config(warn_threshold=0.5),
+        )
+        assert dict(result.component_deviations)["pedestrian_position"] == pytest.approx(1.0)
+        assert result.intervention == INTERVENTION_WARN
+        assert result.first_threshold_crossing_time_s == pytest.approx(0.2)
 
 
 class TestExecutionDeviationActuatorDelay:
@@ -763,6 +791,7 @@ class TestExecutionDeviationActuatorDelay:
             predicted_robot_velocities=pred_vel,
             observed_robot_velocities=obs_vel,
             dt_s=dt,
+            input_age_s=0.0,
             config=cfg,
         )
         assert result.intervention in (INTERVENTION_WARN, INTERVENTION_REPLAN)
@@ -798,10 +827,20 @@ class TestExecutionDeviationLocalizationBias:
 class TestExecutionDeviationStaleInput:
     """Stale or missing inputs fail closed without fabricating a score."""
 
+    def test_missing_input_age_fails_closed(self) -> None:
+        """A numeric score is unavailable when input freshness is unknown."""
+        result = monitor_execution_deviation(
+            config=_deviation_config(), **_aligned_windows(input_age_s=None)
+        )
+        assert result.intervention == INTERVENTION_WARN
+        assert result.deviation_score is None
+        assert result.input_age_s is None
+        assert result.fail_closed is True
+
     def test_stale_input_fails_closed_warn(self) -> None:
-        windows = _aligned_windows(deviation=0.0)
+        windows = _aligned_windows(deviation=0.0, input_age_s=1.0)
         cfg = _deviation_config(fail_closed_intervention="warn")
-        result = monitor_execution_deviation(config=cfg, input_age_s=1.0, **windows)
+        result = monitor_execution_deviation(config=cfg, **windows)
         assert result.intervention == INTERVENTION_WARN
         assert result.deviation_score is None
         assert result.component_deviations == ()
@@ -809,9 +848,9 @@ class TestExecutionDeviationStaleInput:
         assert result.input_age_s == 1.0
 
     def test_stale_input_fails_closed_fallback_brake(self) -> None:
-        windows = _aligned_windows(deviation=0.0)
+        windows = _aligned_windows(deviation=0.0, input_age_s=1.0)
         cfg = _deviation_config(fail_closed_intervention="fallback_brake")
-        result = monitor_execution_deviation(config=cfg, input_age_s=1.0, **windows)
+        result = monitor_execution_deviation(config=cfg, **windows)
         assert result.intervention == INTERVENTION_FALLBACK_BRAKE
         assert result.deviation_score is None
         assert result.fail_closed is True
@@ -840,9 +879,9 @@ class TestExecutionDeviationStaleInput:
         assert result.deviation_score is None
 
     def test_input_age_at_boundary_not_stale(self) -> None:
-        windows = _aligned_windows(deviation=0.0)
+        windows = _aligned_windows(deviation=0.0, input_age_s=0.5)
         cfg = _deviation_config(max_input_age_s=0.5)
-        result = monitor_execution_deviation(config=cfg, input_age_s=0.5, **windows)
+        result = monitor_execution_deviation(config=cfg, **windows)
         assert result.fail_closed is False
         assert result.deviation_score is not None
 
@@ -850,7 +889,7 @@ class TestExecutionDeviationStaleInput:
     def test_invalid_input_age_fails_closed(self, input_age_s: float) -> None:
         """Invalid input age never yields a numeric deviation result."""
         result = monitor_execution_deviation(
-            config=_deviation_config(), input_age_s=input_age_s, **_aligned_windows()
+            config=_deviation_config(), **_aligned_windows(input_age_s=input_age_s)
         )
         assert result.fail_closed is True
         assert result.deviation_score is None
@@ -967,6 +1006,10 @@ class TestExecutionDeviationSplitOverlapRejection:
         with pytest.raises(ValueError, match="must differ"):
             _deviation_config(evaluation_source=_CALIBRATION_SOURCE)
 
+    def test_padded_calibration_evaluation_overlap_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="must differ"):
+            _deviation_config(evaluation_source=f"  {_CALIBRATION_SOURCE}  ")
+
 
 class TestExecutionDeviationInterventionPrecedence:
     """Intervention labels follow explicit precedence ordering."""
@@ -1033,6 +1076,7 @@ class TestExecutionDeviationMiscellaneous:
             predicted_pedestrian_positions=np.zeros((5, 0, 2)),
             observed_pedestrian_positions=np.zeros((5, 0, 2)),
             dt_s=0.1,
+            input_age_s=0.0,
             config=_deviation_config(),
         )
         assert result.fail_closed is True
@@ -1078,6 +1122,7 @@ class TestExecutionDeviationMiscellaneous:
             predicted_robot_positions=pred_pos,
             observed_robot_positions=obs_pos,
             dt_s=dt,
+            input_age_s=0.0,
             config=cfg,
         )
         assert result.first_threshold_crossing_time_s == pytest.approx(5 * dt)
@@ -1091,6 +1136,7 @@ class TestExecutionDeviationMiscellaneous:
             predicted_robot_positions=predicted,
             observed_robot_positions=observed,
             dt_s=0.1,
+            input_age_s=0.0,
             config=_deviation_config(warn_threshold=0.5),
         )
         assert result.deviation_score == pytest.approx(1.0)
@@ -1116,6 +1162,7 @@ class TestExecutionDeviationMiscellaneous:
             predicted_robot_positions=robot_pos,
             observed_robot_positions=robot_pos,
             dt_s=0.1,
+            input_age_s=0.0,
             config=_deviation_config(),
         )
         assert deviation_result.intervention == INTERVENTION_CONTINUE
@@ -1190,7 +1237,7 @@ class TestExecutionDeviationDiagnosticReport:
         assert report.intervention_denominator == 0
         assert report.intervention_rate is None
 
-    def test_fail_closed_outcomes_are_counted_but_excluded_from_rates(self) -> None:
+    def test_fail_closed_outcomes_are_counted_in_intervention_rate(self) -> None:
         clean = monitor_execution_deviation(config=_deviation_config(), **_aligned_windows())
         fail_closed = monitor_execution_deviation(
             predicted_robot_positions=None,
@@ -1206,7 +1253,7 @@ class TestExecutionDeviationDiagnosticReport:
         )
         assert dict(report.intervention_counts)[INTERVENTION_WARN] == 1
         assert report.fail_closed_count == 1
-        assert report.intervention_denominator == 1
-        assert report.intervention_rate == pytest.approx(0.0)
+        assert report.intervention_denominator == 2
+        assert report.intervention_rate == pytest.approx(0.5)
         assert report.detection_denominator == 0
         assert report.detection_recall is None

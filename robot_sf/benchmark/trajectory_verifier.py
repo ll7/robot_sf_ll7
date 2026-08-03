@@ -804,17 +804,17 @@ def _validate_calibration_evaluation_split(
     evaluation_source: str,
 ) -> None:
     """Require explicit, disjoint calibration and evaluation fixture identifiers."""
-    if not calibration_source:
+    if not isinstance(calibration_source, str) or not calibration_source.strip():
         raise ValueError(
             "ExecutionDeviationConfig.calibration_source must be non-empty; "
             "thresholds must be calibrated from an explicitly separate fixture"
         )
-    if not evaluation_source:
+    if not isinstance(evaluation_source, str) or not evaluation_source.strip():
         raise ValueError(
             "ExecutionDeviationConfig.evaluation_source must be non-empty; "
             "evaluation provenance is required to enforce a disjoint split"
         )
-    if evaluation_source == calibration_source:
+    if evaluation_source.strip() == calibration_source.strip():
         raise ValueError(
             "ExecutionDeviationConfig.evaluation_source must differ from calibration_source"
         )
@@ -970,16 +970,13 @@ def _validate_primary_windows(
     """
     if predicted_robot_positions is None or observed_robot_positions is None:
         return None
-    if input_age_s is not None:
-        try:
-            if (
-                not math.isfinite(input_age_s)
-                or input_age_s < 0.0
-                or input_age_s > cfg.max_input_age_s
-            ):
-                return None
-        except (TypeError, ValueError, OverflowError):
+    if input_age_s is None:
+        return None
+    try:
+        if not math.isfinite(input_age_s) or input_age_s < 0.0 or input_age_s > cfg.max_input_age_s:
             return None
+    except (TypeError, ValueError, OverflowError):
+        return None
     try:
         pred_robot = np.asarray(predicted_robot_positions, dtype=float)
         obs_robot = np.asarray(observed_robot_positions, dtype=float)
@@ -1054,7 +1051,10 @@ def _compute_pedestrian_deviation(
         return np.array([])
     if not np.isfinite(pred_ped).all() or not np.isfinite(obs_ped).all():
         return np.array([])
-    deviation = np.mean(np.linalg.norm(obs_ped - pred_ped, axis=-1), axis=-1)
+    # A mean over pedestrians lets one large course change disappear as crowd
+    # size grows. The monitor is fail-closed, so retain the largest aligned
+    # pedestrian deviation at each timestep before combining components.
+    deviation = np.max(np.linalg.norm(obs_ped - pred_ped, axis=-1), axis=-1)
     return deviation if np.isfinite(deviation).all() else np.array([])
 
 
@@ -1073,9 +1073,10 @@ def summarize_execution_deviation_diagnostics(
 
     Valid clean fixtures form the false-alarm denominator; valid injected-
     deviation fixtures form the detection denominator. A detection requires a
-    warn-or-higher diagnostic intervention. Fail-closed outcomes remain counted
-    by intervention label but are excluded from performance denominators because
-    they have no numeric score or detection timing. Delay is the mean first
+    warn-or-higher diagnostic intervention. Fail-closed outcomes are excluded
+    from false-alarm and detection denominators because they have no numeric
+    score or detection timing, but they remain real emitted interventions and
+    therefore contribute to the intervention rate. Delay is the mean first
     threshold-crossing time among detected injected-deviation fixtures.
 
     Args:
@@ -1092,8 +1093,7 @@ def summarize_execution_deviation_diagnostics(
     detection_count = 0
     detection_denominator = 0
     detection_delays: list[float] = []
-    valid_case_count = 0
-    valid_intervention_count = 0
+    intervention_count = 0
     fail_closed_count = 0
     repair_latencies: list[float] = []
     collision_outcomes: list[bool] = []
@@ -1101,13 +1101,12 @@ def summarize_execution_deviation_diagnostics(
     for case in cases:
         result = case.result
         intervention_counts[result.intervention] += 1
+        if result.intervention != INTERVENTION_CONTINUE:
+            intervention_count += 1
         if result.fail_closed:
             fail_closed_count += 1
         else:
-            valid_case_count += 1
             intervened = result.intervention != INTERVENTION_CONTINUE
-            if intervened:
-                valid_intervention_count += 1
             if case.expected_deviation:
                 detection_denominator += 1
                 if intervened:
@@ -1139,10 +1138,8 @@ def summarize_execution_deviation_diagnostics(
         intervention_counts=tuple(
             (label, intervention_counts[label]) for label in _INTERVENTION_RANK
         ),
-        intervention_denominator=valid_case_count,
-        intervention_rate=(
-            valid_intervention_count / valid_case_count if valid_case_count else None
-        ),
+        intervention_denominator=len(cases),
+        intervention_rate=(intervention_count / len(cases) if cases else None),
         fail_closed_count=fail_closed_count,
         repair_latency_status="available" if repair_latencies else "unavailable",
         repair_latency_s=(float(np.mean(repair_latencies)) if repair_latencies else None),
@@ -1208,8 +1205,9 @@ def monitor_execution_deviation(
         observed_pedestrian_positions: Observed pedestrian positions, shape
             ``(T, N, 2)``, or ``None`` to skip the pedestrian component.
         dt_s: Timestep duration in seconds. Must be positive.
-        input_age_s: Age of the prediction input in seconds. If greater than
-            ``config.max_input_age_s``, the monitor fails closed.
+        input_age_s: Age of the prediction input in seconds. Missing, invalid,
+            or older-than-``config.max_input_age_s`` age fails closed because
+            freshness cannot otherwise be established.
         config: Deviation monitor configuration with an explicit calibration source.
             A configuration is required so threshold provenance cannot be silently
             replaced by an uncalibrated default.

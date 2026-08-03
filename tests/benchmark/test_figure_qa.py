@@ -599,6 +599,52 @@ def test_text_line_overlap_detected() -> None:
     plt.close(fig)
 
 
+def test_tagged_annotation_line_overlap_is_warning() -> None:
+    """Explicit renderer tags downgrade only intentional annotation overlaps."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    line = ax.plot([1.0, 9.0], [5.0, 5.0], "b-")[0]
+    line.set_gid("trace-scene-label-leader")
+    text = ax.text(5.0, 5.0, "annotation", fontsize=14)
+    text.set_gid("trace-scene-time-label")
+    defects = lint_figure(fig)
+    overlaps = [d for d in defects if d.defect_type == "text_line_overlap"]
+    assert overlaps
+    assert all(d.severity == "warn" for d in overlaps)
+    assert all("Expected annotation overlap" in d.message for d in overlaps)
+    plt.close(fig)
+
+
+def test_leader_gid_alone_does_not_downgrade_untagged_text() -> None:
+    """A leader tag cannot exempt text that lacks its intentional-overlap tag."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    line = ax.plot([1.0, 9.0], [5.0, 5.0], "b-")[0]
+    line.set_gid("trace-scene-label-leader")
+    ax.text(5.0, 5.0, "untagged", fontsize=14)
+    defects = lint_figure(fig)
+    overlaps = [d for d in defects if d.defect_type == "text_line_overlap"]
+    assert overlaps
+    assert any(d.severity == "error" for d in overlaps)
+    plt.close(fig)
+
+
+def test_untagged_text_line_overlap_remains_error() -> None:
+    """Renderer tags must not weaken ordinary text-on-line defects."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.plot([1.0, 9.0], [5.0, 5.0], "b-")
+    ax.text(5.0, 5.0, "ordinary", fontsize=14)
+    defects = lint_figure(fig)
+    overlaps = [d for d in defects if d.defect_type == "text_line_overlap"]
+    assert overlaps
+    assert any(d.severity == "error" for d in overlaps)
+    plt.close(fig)
+
+
 def test_text_marker_overlap_detected() -> None:
     """Text on top of a scatter marker should be reported as an error."""
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -608,6 +654,23 @@ def test_text_marker_overlap_detected() -> None:
     ax.text(5.0, 5.0, "X", fontsize=14)
     defects = lint_figure(fig)
     assert any(d.defect_type == "text_marker_overlap" for d in defects)
+    assert any(d.severity == "error" for d in defects if d.defect_type == "text_marker_overlap")
+    plt.close(fig)
+
+
+def test_tagged_time_marker_overlap_is_warning() -> None:
+    """Trace time labels retain marker overlaps as explicit warnings."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.scatter([5.0], [5.0], s=200, c="red")
+    text = ax.text(5.0, 5.0, "t=8s", fontsize=14)
+    text.set_gid("trace-scene-time-label")
+    defects = lint_figure(fig)
+    overlaps = [d for d in defects if d.defect_type == "text_marker_overlap"]
+    assert overlaps
+    assert all(d.severity == "warn" for d in overlaps)
+    assert all("Expected annotation overlap" in d.message for d in overlaps)
     plt.close(fig)
 
 

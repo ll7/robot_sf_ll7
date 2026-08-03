@@ -829,27 +829,37 @@ def _check_text_line_overlap(
 
     for text_artist in text_artists:
         text_bbox = text_artist.get_window_extent(renderer)
+        cx, cy = _bbox_center(text_bbox)
+        label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
+        intentional_overlap = False
+        nonintentional_overlap = False
         for line in lines:
             if _line_bbox_overlaps_text(line, text_bbox, ax, renderer, tolerance):
-                cx, cy = _bbox_center(text_bbox)
-                label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
                 intentional = (
                     text_artist.get_gid() in _INTENTIONAL_TEXT_LINE_TEXT_GIDS
-                    or line.get_gid() in _INTENTIONAL_TEXT_LINE_LINE_GIDS
+                    and line.get_gid() in _INTENTIONAL_TEXT_LINE_LINE_GIDS
                 )
-                defects.append(
-                    FigureDefect(
-                        defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
-                        severity=_SEVERITY_WARN if intentional else _SEVERITY_ERROR,
-                        message=(
-                            f"Expected annotation overlap: Text {label!r} overlaps a line artist."
-                            if intentional
-                            else f"Text {label!r} overlaps a line artist."
-                        ),
-                        location=(cx, cy),
+                if not intentional:
+                    defects.append(
+                        FigureDefect(
+                            defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
+                            severity=_SEVERITY_ERROR,
+                            message=f"Text {label!r} overlaps a line artist.",
+                            location=(cx, cy),
+                        )
                     )
+                    nonintentional_overlap = True
+                    break
+                intentional_overlap = True
+        if intentional_overlap and not nonintentional_overlap:
+            defects.append(
+                FigureDefect(
+                    defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
+                    severity=_SEVERITY_WARN,
+                    message=f"Expected annotation overlap: Text {label!r} overlaps a line artist.",
+                    location=(cx, cy),
                 )
-                break
+            )
 
 
 def _line_bbox_overlaps_text(

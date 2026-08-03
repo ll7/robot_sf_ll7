@@ -1115,8 +1115,9 @@ def _resolve_single_episode_request(
             f"request={request_expected_outcome},mapping={expected_outcome}"
         )
         return base, "provenance-incomplete"
-    if observed_outcome != expected_outcome:
-        if mapped.get("admission_status") == "not_admitted":
+    not_admitted = mapped.get("admission_status") == "not_admitted"
+    if observed_outcome != expected_outcome or not_admitted:
+        if not_admitted:
             episode_id = str(mapped["episode_id"])
             row = {
                 **base,
@@ -1132,7 +1133,9 @@ def _resolve_single_episode_request(
                 "provenance-incomplete" if trace_status == "resolved" else trace_status
             )
             row["reason_code"] = (
-                f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
+                str(mapped.get("exclusion_reason") or "not_admitted").strip()
+                if observed_outcome == expected_outcome
+                else f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
             )
             if trace_status != "resolved":
                 row["reason_code"] += ";" + str(

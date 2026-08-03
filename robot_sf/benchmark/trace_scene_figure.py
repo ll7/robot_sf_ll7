@@ -1237,8 +1237,6 @@ def _select_label_position(
     candidate_offsets: Sequence[tuple[float, float]],
     axes_bbox: Bbox,
     obstacles: _PlacementObstacles,
-    *,
-    avoid_obstacles: bool,
 ) -> tuple[float, float, Bbox]:
     """Pick the best display-space shift for one label.
 
@@ -1256,15 +1254,12 @@ def _select_label_position(
         text_overlap = sum(_bbox_overlap_area(bbox, placed) for placed in obstacles.placed_bboxes)
         marker_hits = 0
         line_hits = 0
-        if avoid_obstacles:
-            # Markers draw above data lines and can sit under a label, so they get
-            # their own cost tier: worse than a line crossing, but never worth
-            # trading for a label-on-label overlap (the one hard defect class).
-            if _bbox_contains_markers(bbox, obstacles.marker_obstacles, _LABEL_MARKER_PADDING_PX):
-                marker_hits = 1
-            line_hits = _count_bbox_line_hits(
-                bbox, obstacles.line_obstacles, obstacles.leader_segments
-            )
+        # Markers draw above data lines and can sit under a label, so they get
+        # their own cost tier: worse than a line crossing, but never worth
+        # trading for a label-on-label overlap (the one hard defect class).
+        if _bbox_contains_markers(bbox, obstacles.marker_obstacles, _LABEL_MARKER_PADDING_PX):
+            marker_hits = 1
+        line_hits = _count_bbox_line_hits(bbox, obstacles.line_obstacles, obstacles.leader_segments)
         leader_crossings = 0
         if math.hypot(shift_x, shift_y) >= _LABEL_LEADER_THRESHOLD_PX:
             final_center = (bbox.x0 + bbox.width / 2, bbox.y0 + bbox.height / 2)
@@ -1391,10 +1386,6 @@ def _place_scene_annotations(ax: Axes) -> None:
             candidate_offsets,
             axes_bbox,
             obstacles,
-            # Zone captions may be drawn inside a small outlined rectangle.  They
-            # must still clear the outline itself; a short leader preserves the
-            # association when the placement pass moves them away from the zone.
-            avoid_obstacles=True,
         )
         if _scene_label_priority(text.get_text()) >= 2 and any(
             _bboxes_collide(final_bbox, placed) for placed in placed_bboxes
@@ -1563,12 +1554,12 @@ def _draw_obstacles(ax: Axes, map_definition: Any, limits: AxisLimits) -> None:
 
 
 def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tuple[float, float]]:
-    """Draw robot start/goal zones, returning the centers of drawn zone labels.
+    """Draw robot start/goal zones and return time-label suppression anchors.
 
     Returns:
-        Centers of the zone labels that were drawn.
+        Zone centers used only to suppress overlapping time-marker labels.
     """
-    drawn_label_centers: list[tuple[float, float]] = []
+    label_suppression_centers: list[tuple[float, float]] = []
     for zones, linestyle, label, marker_point in (
         (map_definition.robot_spawn_zones, "--", "start", episode.robot_xy[0]),
         (map_definition.robot_goal_zones, "-", "goal", episode.robot_xy[-1]),
@@ -1597,8 +1588,8 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
                     # the zone border and cannot be moved without losing the zone
                     # association.  Retain the centre for conservative marker-label
                     # suppression, but render only the outline here.
-                    drawn_label_centers.append(center)
-    return drawn_label_centers
+                    label_suppression_centers.append(center)
+    return label_suppression_centers
 
 
 def _scale_bar_geometry(limits: AxisLimits, length: float, corner: str) -> tuple[float, float]:

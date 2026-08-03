@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+import robot_sf.benchmark.issue_6412_real_reexport as real_reexport
 from robot_sf.benchmark.candidate_trace_resolution import (
     ISSUE_5756_MAPPING_SCHEMA_VERSION,
     ISSUE_5756_PINNED_PROVENANCE,
@@ -16,6 +19,7 @@ from robot_sf.benchmark.candidate_trace_resolution import (
     validate_candidate_trace_resolution,
 )
 from robot_sf.benchmark.issue_6412_real_reexport import (
+    EXPECTED_OUTCOMES_INPUT_SCHEMA_VERSION,
     FIGURE_QA_SCHEMA_VERSION,
     RealReexportPackageError,
     assemble_real_reexport_package,
@@ -31,6 +35,7 @@ from robot_sf.benchmark.trace_reexport_packaging import (
     REAL_REEXPORT_EXCEPTION_SEEDS,
 )
 from scripts.analysis import render_worked_example_trace_figures_issue_5756 as render_cli
+from scripts.tools import package_issue_6412_real_reexport as package_cli
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRACE_FIXTURE = (
@@ -281,7 +286,7 @@ def _synthetic_real_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     )
     expected_path = _write_json(
         tmp_path / "expected.json",
-        {"schema_version": "synthetic_expected.v1", "rows": expected_rows},
+        {"schema_version": EXPECTED_OUTCOMES_INPUT_SCHEMA_VERSION, "rows": expected_rows},
     )
     binding_path = _write_json(
         tmp_path / "binding.json",
@@ -382,19 +387,81 @@ def test_real_package_materializes_resolves_and_finalizes_88_2(tmp_path: Path) -
     assert not list(compact.rglob("*trace*.json"))
 
 
+def test_expected_outcomes_schema_is_checked(tmp_path: Path) -> None:
+    """The assembler rejects an unrelated expected-outcomes document."""
+    binding, request, expected = _synthetic_real_inputs(tmp_path)
+    payload = json.loads(expected.read_text(encoding="utf-8"))
+    payload["schema_version"] = "unrelated_expected_outcomes.v1"
+    expected.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(RealReexportPackageError, match="expected outcomes schema mismatch"):
+        assemble_real_reexport_package(
+            binding_receipt=binding,
+            request_manifest=request,
+            expected_outcomes=expected,
+            output_dir=tmp_path / "package",
+        )
+
+
+def test_missing_planner_identity_is_rejected() -> None:
+    """A row without planner or algo identity fails with a specific error."""
+    with pytest.raises(RealReexportPackageError, match="planner identity"):
+        real_reexport._tuple_key({"scenario_id": "scenario", "seed": 111})
+
+
+def test_checksum_parser_skips_comments_and_rejects_escape(tmp_path: Path) -> None:
+    """Checksum parsing ignores comments but cannot address files outside its root."""
+    root = tmp_path / "root"
+    root.mkdir()
+    good = root / "good.txt"
+    good.write_text("good", encoding="utf-8")
+    digest = hashlib.sha256(good.read_bytes()).hexdigest()
+    sums = root / "SHA256SUMS"
+    sums.write_text(f"\n# generated\n{digest}  good.txt\n", encoding="utf-8")
+    assert real_reexport._parse_sha256sums(sums, root=root) == ((digest, good.resolve()),)
+
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    sums.write_text(
+        f"{hashlib.sha256(outside.read_bytes()).hexdigest()}  ../outside.txt\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RealReexportPackageError, match="escapes root"):
+        real_reexport._parse_sha256sums(sums, root=root)
+
+
+def test_package_cli_converts_missing_completion_field_to_exit_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The export CLI reports malformed completion markers without a traceback."""
+
+    def _missing_review(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise KeyError("human_evidence_owner_review")
+
+    monkeypatch.setattr(package_cli, "export_compact_evidence", _missing_review)
+    assert (
+        package_cli.main(
+            [
+                "export",
+                "--package-dir",
+                str(tmp_path / "package"),
+                "--output-dir",
+                str(tmp_path / "compact"),
+            ]
+        )
+        == 2
+    )
+    assert "human_evidence_owner_review" in capsys.readouterr().err
+
+
 def test_package_refuses_to_overwrite_existing_output(tmp_path: Path) -> None:
     """Assembly is atomic and never overwrites a prior package."""
     binding, request, expected = _synthetic_real_inputs(tmp_path)
     package = tmp_path / "package"
     package.mkdir()
-    try:
+    with pytest.raises(RealReexportPackageError, match="refusing to overwrite"):
         assemble_real_reexport_package(
             binding_receipt=binding,
             request_manifest=request,
             expected_outcomes=expected,
             output_dir=package,
         )
-    except RealReexportPackageError as exc:
-        assert "refusing to overwrite" in str(exc)
-    else:
-        raise AssertionError("existing package was overwritten")

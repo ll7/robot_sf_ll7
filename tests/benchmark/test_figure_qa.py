@@ -616,6 +616,21 @@ def test_tagged_annotation_line_overlap_is_warning() -> None:
     plt.close(fig)
 
 
+def test_leader_gid_alone_does_not_downgrade_untagged_text() -> None:
+    """A leader tag cannot exempt text that lacks its intentional-overlap tag."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    line = ax.plot([1.0, 9.0], [5.0, 5.0], "b-")[0]
+    line.set_gid("trace-scene-label-leader")
+    ax.text(5.0, 5.0, "untagged", fontsize=14)
+    defects = lint_figure(fig)
+    overlaps = [d for d in defects if d.defect_type == "text_line_overlap"]
+    assert overlaps
+    assert any(d.severity == "error" for d in overlaps)
+    plt.close(fig)
+
+
 def test_untagged_text_line_overlap_remains_error() -> None:
     """Renderer tags must not weaken ordinary text-on-line defects."""
     fig, ax = plt.subplots(figsize=(6, 6))

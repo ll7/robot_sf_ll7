@@ -20,17 +20,24 @@ from typing import Any
 
 from robot_sf.benchmark.candidate_trace_resolution import (
     ISSUE_5756_MAPPING_SCHEMA_VERSION,
+    ISSUE_5756_NOT_ADMITTED_TUPLES,
     ISSUE_5756_PINNED_PROVENANCE,
     WORKED_EXAMPLE_OUTCOMES,
     load_episode_mapping,
 )
 from robot_sf.benchmark.trace_reexport_packaging import (
+    EXPECTED_OUTCOMES_SCHEMA as _CANONICAL_EXPECTED_OUTCOMES_SCHEMA,
+)
+from robot_sf.benchmark.trace_reexport_packaging import (
     REAL_REEXPORT_ARMS,
     REAL_REEXPORT_BINDING_SCHEMA,
-    REAL_REEXPORT_EXCEPTION_SEEDS,
 )
 
 PACKAGE_SCHEMA_VERSION = "issue_6412_real_reexport_package.v1"
+_N_REQUESTED = 90
+_N_ADMITTED = 88
+_N_EXCLUDED = 2
+EXPECTED_OUTCOMES_INPUT_SCHEMA_VERSION = _CANONICAL_EXPECTED_OUTCOMES_SCHEMA
 EXPECTED_OUTCOMES_SCHEMA_VERSION = "issue_6412_expected_outcomes.v1"
 EXCLUSION_SCHEMA_VERSION = "issue_6412_exclusion.v1"
 SOURCE_POINTER_SCHEMA_VERSION = "issue_6412_source_pointer.v1"
@@ -55,8 +62,10 @@ _COMPACT_JSON_NAMES = (
     "package_complete.json",
 )
 _EXCLUDED_TUPLES = frozenset(
-    ("ppo", "classic_doorway_medium", seed) for seed in REAL_REEXPORT_EXCEPTION_SEEDS
+    (planner, scenario_id, seed) for scenario_id, planner, seed in ISSUE_5756_NOT_ADMITTED_TUPLES
 )
+if len(_EXCLUDED_TUPLES) != _N_EXCLUDED or _N_ADMITTED + _N_EXCLUDED != _N_REQUESTED:
+    raise RuntimeError("#6412 admission boundary constants do not match the canonical exclusions")
 
 
 class RealReexportPackageError(ValueError):
@@ -112,8 +121,13 @@ def _canonical_outcome(value: Any) -> str | None:
 
 
 def _tuple_key(row: Mapping[str, Any]) -> tuple[str, str, int]:
+    planner_value = row.get("planner")
+    if planner_value is None:
+        planner_value = row.get("algo")
+    if planner_value is None:
+        raise RealReexportPackageError(f"row lacks planner identity: {row!r}")
     try:
-        planner = str(row.get("planner", row.get("algo"))).strip()
+        planner = str(planner_value).strip()
         scenario_id = str(row["scenario_id"]).strip()
         seed = int(row["seed"])
     except (KeyError, TypeError, ValueError) as exc:
@@ -130,19 +144,29 @@ def _load_request_tuples(path: Path) -> tuple[set[tuple[str, str, int]], str]:
     if payload.get("schema_version") != "issue_5446_trace_reexport_list.v1":
         raise RealReexportPackageError("request manifest schema mismatch")
     rows = payload.get("tuples")
-    if not isinstance(rows, list) or payload.get("n_tuples") != 90 or len(rows) != 90:
-        raise RealReexportPackageError("request manifest must contain exactly 90 tuples")
+    if (
+        not isinstance(rows, list)
+        or payload.get("n_tuples") != _N_REQUESTED
+        or len(rows) != _N_REQUESTED
+    ):
+        raise RealReexportPackageError(
+            f"request manifest must contain exactly {_N_REQUESTED} tuples"
+        )
     tuples = {_tuple_key(row) for row in rows if isinstance(row, Mapping)}
-    if len(tuples) != 90:
+    if len(tuples) != _N_REQUESTED:
         raise RealReexportPackageError("request manifest contains invalid or duplicate tuples")
     return tuples, _sha256_file(path)
 
 
 def _load_expected_outcomes(path: Path) -> dict[tuple[str, str, int], dict[str, Any]]:
     payload = _read_json(path, "expected outcomes")
+    if payload.get("schema_version") != EXPECTED_OUTCOMES_INPUT_SCHEMA_VERSION:
+        raise RealReexportPackageError("expected outcomes schema mismatch")
     rows = payload.get("rows")
-    if not isinstance(rows, list) or len(rows) != 90:
-        raise RealReexportPackageError("expected outcomes must contain exactly 90 rows")
+    if not isinstance(rows, list) or len(rows) != _N_REQUESTED:
+        raise RealReexportPackageError(
+            f"expected outcomes must contain exactly {_N_REQUESTED} rows"
+        )
     indexed: dict[tuple[str, str, int], dict[str, Any]] = {}
     for raw in rows:
         if not isinstance(raw, Mapping):
@@ -276,8 +300,18 @@ def _validate_binding_receipt(  # noqa: C901, PLR0912
     summary = payload.get("summary")
     if not isinstance(rows, list) or not isinstance(summary, Mapping):
         raise RealReexportPackageError("binding receipt lacks rows or summary")
-    if summary != {"n_admitted": 88, "n_not_admitted": 2, "n_rows": 90} or len(rows) != 90:
-        raise RealReexportPackageError("binding receipt is not exactly the approved 88/90 boundary")
+    if (
+        summary
+        != {
+            "n_admitted": _N_ADMITTED,
+            "n_not_admitted": _N_EXCLUDED,
+            "n_rows": _N_REQUESTED,
+        }
+        or len(rows) != _N_REQUESTED
+    ):
+        raise RealReexportPackageError(
+            f"binding receipt is not exactly the approved {_N_ADMITTED}/{_N_REQUESTED} boundary"
+        )
     by_key: dict[tuple[str, str, int], dict[str, Any]] = {}
     for raw in rows:
         if not isinstance(raw, Mapping):
@@ -384,6 +418,56 @@ def _write_checksums(root: Path) -> str:
     content = ("\n".join(entries) + "\n").encode("utf-8") if entries else b""
     (root / _CHECKSUMS_NAME).write_bytes(content)
     return _sha256_bytes(content)
+
+
+def _parse_sha256sums(path: Path, *, root: Path) -> tuple[tuple[str, Path], ...]:
+    """Parse a checksum list while constraining every entry to ``root``.
+
+    Returns:
+        Checksum digests paired with their validated, resolved file paths.
+    """
+    root = root.resolve()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RealReexportPackageError(f"checksum list is not readable: {path}") from exc
+
+    entries: list[tuple[str, Path]] = []
+    seen: set[Path] = set()
+    for line_number, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        digest, separator, relative_text = line.partition("  ")
+        relative_text = relative_text.strip()
+        if (
+            not separator
+            or len(digest) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in digest)
+            or not relative_text
+        ):
+            raise RealReexportPackageError(f"invalid checksum entry at {path}:{line_number}")
+        relative_path = Path(relative_text)
+        if relative_path.is_absolute():
+            raise RealReexportPackageError(f"checksum entry escapes root at {path}:{line_number}")
+        resolved = (root / relative_path).resolve()
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise RealReexportPackageError(
+                f"checksum entry escapes root at {path}:{line_number}"
+            ) from exc
+        if not resolved.is_file():
+            raise RealReexportPackageError(
+                f"checksum entry is missing at {path}:{line_number}: {relative_text}"
+            )
+        if resolved in seen:
+            raise RealReexportPackageError(
+                f"duplicate checksum entry at {path}:{line_number}: {relative_text}"
+            )
+        seen.add(resolved)
+        entries.append((digest.lower(), resolved))
+    return tuple(entries)
 
 
 def _compact_resolution_summary(resolution: Mapping[str, Any]) -> dict[str, Any]:
@@ -506,9 +590,9 @@ def assemble_real_reexport_package(
                         "normalized_trace_uri": relative_uri,
                     }
                 )
-        if len(mapping_rows) != 90 or len(exclusions) != 2:
+        if len(mapping_rows) != _N_REQUESTED or len(exclusions) != _N_EXCLUDED:
             raise RealReexportPackageError(
-                "assembled package is not exactly 88 admitted plus 2 excluded"
+                f"assembled package is not exactly {_N_ADMITTED} admitted plus {_N_EXCLUDED} excluded"
             )
         if {
             (str(item["planner"]), str(item["scenario_id"]), int(item["seed"]))
@@ -545,9 +629,9 @@ def assemble_real_reexport_package(
                 "Trace figures are a visualization-only re-export of the pinned #5756 inputs; "
                 "this package is not release-result evidence."
             ),
-            "n_requested": 90,
-            "n_admitted": 88,
-            "n_excluded": 2,
+            "n_requested": _N_REQUESTED,
+            "n_admitted": _N_ADMITTED,
+            "n_excluded": _N_EXCLUDED,
             "excluded_tuples": [list(key) for key in sorted(_EXCLUDED_TUPLES)],
             "execution_commit": str(binding["execution_commit"]),
             "request_manifest_sha256": request_sha256,
@@ -563,9 +647,9 @@ def assemble_real_reexport_package(
             "schema_version": PACKAGE_REPORT_SCHEMA_VERSION,
             "status": "assembled; figure QA pending",
             "visualization_only": True,
-            "n_requested": 90,
-            "n_admitted": 88,
-            "n_excluded": 2,
+            "n_requested": _N_REQUESTED,
+            "n_admitted": _N_ADMITTED,
+            "n_excluded": _N_EXCLUDED,
             "exclusions": exclusions,
             "raw_artifacts": "external_data_hub; keep-out-of-git",
             "normalized_artifacts": "local package only; keep-out-of-git",
@@ -608,7 +692,7 @@ def materialize_resolver_mapping(package_dir: Path, output_path: Path) -> dict[s
     try:
         load_episode_mapping(
             temp_path,
-            expected_count=90,
+            expected_count=_N_REQUESTED,
             expected_provenance=materialized["provenance"],
         )
     finally:
@@ -641,13 +725,15 @@ def finalize_real_reexport_package(
     compact_resolution = _compact_resolution_summary(resolution)
     summary = compact_resolution["summary"]
     if summary != {
-        "n_candidates": 90,
-        "n_resolved": 88,
+        "n_candidates": _N_REQUESTED,
+        "n_resolved": _N_ADMITTED,
         "n_trace_missing": 0,
         "n_schema_mismatch": 0,
-        "n_provenance_incomplete": 2,
+        "n_provenance_incomplete": _N_EXCLUDED,
     }:
-        raise RealReexportPackageError(f"resolver summary is not 88/2: {summary}")
+        raise RealReexportPackageError(
+            f"resolver summary is not {_N_ADMITTED}/{_N_EXCLUDED}: {summary}"
+        )
     _write_json(package_dir / "resolver_summary.json", compact_resolution)
     _write_json(package_dir / "figure_qa.json", dict(figure_qa))
     report = _read_json(package_dir / "package_report.json", "package report")
@@ -679,9 +765,9 @@ def finalize_real_reexport_package(
         "schema_version": PACKAGE_COMPLETE_SCHEMA_VERSION,
         "status": "complete",
         "visualization_only": True,
-        "n_requested": 90,
-        "n_admitted": 88,
-        "n_excluded": 2,
+        "n_requested": _N_REQUESTED,
+        "n_admitted": _N_ADMITTED,
+        "n_excluded": _N_EXCLUDED,
         "sha256sums_sha256": sums_sha256,
         "human_evidence_owner_review": "pending",
     }
@@ -702,13 +788,20 @@ def verify_complete_package(package_dir: Path) -> dict[str, Any]:
     sums_path = package_dir / _CHECKSUMS_NAME
     if _sha256_file(sums_path) != complete.get("sha256sums_sha256"):
         raise RealReexportPackageError("package checksum-list digest mismatch")
-    for line in sums_path.read_text(encoding="utf-8").splitlines():
-        digest, separator, relative = line.partition("  ")
-        if not separator or _sha256_file(package_dir / relative) != digest:
+    for digest, path in _parse_sha256sums(sums_path, root=package_dir):
+        if _sha256_file(path) != digest:
+            relative = path.relative_to(package_dir).as_posix()
             raise RealReexportPackageError(f"package checksum mismatch: {relative}")
     manifest = _read_json(package_dir / "package_manifest.json", "package manifest")
-    if manifest.get("status") != "complete" or manifest.get("n_admitted") != 88:
-        raise RealReexportPackageError("package manifest is not complete 88/2 evidence")
+    if (
+        manifest.get("status") != "complete"
+        or manifest.get("n_requested") != _N_REQUESTED
+        or manifest.get("n_admitted") != _N_ADMITTED
+        or manifest.get("n_excluded") != _N_EXCLUDED
+    ):
+        raise RealReexportPackageError(
+            f"package manifest is not complete {_N_ADMITTED}/{_N_EXCLUDED} evidence"
+        )
     return complete
 
 
@@ -821,9 +914,9 @@ def export_compact_evidence(package_dir: Path, output_dir: Path) -> dict[str, An
             _write_json(staging / name, payload)
 
         exclusions = sorted((package_dir / "exclusions").glob("*.json"))
-        if len(exclusions) != 2:
+        if len(exclusions) != _N_EXCLUDED:
             raise RealReexportPackageError(
-                "compact evidence requires exactly two exclusion records"
+                f"compact evidence requires exactly {_N_EXCLUDED} exclusion records"
             )
         for path in exclusions:
             payload = _read_json(path, path.name)
@@ -836,9 +929,11 @@ def export_compact_evidence(package_dir: Path, output_dir: Path) -> dict[str, An
 
         readme = (
             "# Issue #6412 compact evidence export\n\n"
-            "This directory records the verified visualization-only 88/90 package for "
+            f"This directory records the verified visualization-only {_N_ADMITTED}/{_N_REQUESTED} "
+            "package for "
             "[RobotSF issue #6412](https://github.com/ll7/robot_sf_ll7/issues/6412).\n\n"
-            "The package contains 88 admitted trace mappings and two explicit outcome-mismatch "
+            f"The package contains {_N_ADMITTED} admitted trace mappings and {_N_EXCLUDED} explicit "
+            "outcome-mismatch "
             "exclusions. It does not promote release statistics or dissertation evidence. Raw "
             "and normalized traces, PDFs, and PNGs remain in disposable package storage and are "
             "not committed here. The figure artifact receipt stores their hashes only.\n\n"
@@ -854,9 +949,9 @@ def export_compact_evidence(package_dir: Path, output_dir: Path) -> dict[str, An
             "schema_version": COMPACT_EVIDENCE_SCHEMA_VERSION,
             "status": "complete_compact_export",
             "visualization_only": True,
-            "n_requested": 90,
-            "n_admitted": 88,
-            "n_excluded": 2,
+            "n_requested": _N_REQUESTED,
+            "n_admitted": _N_ADMITTED,
+            "n_excluded": _N_EXCLUDED,
             "human_evidence_owner_review": complete["human_evidence_owner_review"],
             "raw_and_normalized_traces_in_git": False,
             "source_package_complete_sha256": _sha256_file(package_dir / _COMPLETE_NAME),
@@ -890,12 +985,18 @@ def verify_compact_evidence(output_dir: Path) -> dict[str, Any]:  # noqa: C901
         raise RealReexportPackageError("compact evidence schema mismatch")
     if manifest.get("status") != "complete_compact_export":
         raise RealReexportPackageError("compact evidence is not complete")
-    if manifest.get("n_requested") != 90 or manifest.get("n_admitted") != 88:
-        raise RealReexportPackageError("compact evidence is not exactly 88/2")
+    if (
+        manifest.get("n_requested") != _N_REQUESTED
+        or manifest.get("n_admitted") != _N_ADMITTED
+        or manifest.get("n_excluded") != _N_EXCLUDED
+    ):
+        raise RealReexportPackageError(
+            f"compact evidence is not exactly {_N_ADMITTED}/{_N_EXCLUDED}"
+        )
     sums_path = output_dir / _CHECKSUMS_NAME
-    for line in sums_path.read_text(encoding="utf-8").splitlines():
-        digest, separator, relative = line.partition("  ")
-        if not separator or _sha256_file(output_dir / relative) != digest:
+    for digest, path in _parse_sha256sums(sums_path, root=output_dir):
+        if _sha256_file(path) != digest:
+            relative = path.relative_to(output_dir).as_posix()
             raise RealReexportPackageError(f"compact evidence checksum mismatch: {relative}")
     for item in manifest.get("files", []):
         if not isinstance(item, Mapping):
@@ -913,6 +1014,7 @@ def verify_compact_evidence(output_dir: Path) -> dict[str, Any]:  # noqa: C901
 
 __all__ = [
     "COMPACT_EVIDENCE_SCHEMA_VERSION",
+    "EXPECTED_OUTCOMES_INPUT_SCHEMA_VERSION",
     "EXPECTED_OUTCOMES_SCHEMA_VERSION",
     "FIGURE_ARTIFACTS_SCHEMA_VERSION",
     "FIGURE_QA_SCHEMA_VERSION",

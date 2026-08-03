@@ -94,10 +94,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "export":
             manifest = export_compact_evidence(args.package_dir, args.output_dir)
             print(json.dumps(manifest, indent=2, sort_keys=True))
-        else:
+        elif args.command == "verify-export":
             manifest = verify_compact_evidence(args.output_dir)
             print(json.dumps(manifest, indent=2, sort_keys=True))
-    except (OSError, TypeError, ValueError, json.JSONDecodeError, RealReexportPackageError) as exc:
+        else:  # pragma: no cover - argparse restricts the command set
+            raise RealReexportPackageError(f"unknown command: {args.command}")
+    except (OSError, TypeError, ValueError, KeyError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     return 0

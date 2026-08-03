@@ -33,6 +33,7 @@ from robot_sf.benchmark.candidate_trace_resolution import (
     validate_candidate_trace_resolution,
 )
 from robot_sf.benchmark.figure_qa import lint_figure
+from robot_sf.benchmark.issue_6412_real_reexport import FIGURE_QA_SCHEMA_VERSION
 from robot_sf.benchmark.trace_scene_figure import (
     TraceSchemaError,
     load_episode_from_trace_export,
@@ -77,22 +78,25 @@ def _outcome(row: dict[str, Any]) -> str | None:
 
 
 def _require_complete_resolution(resolution: dict[str, Any]) -> None:
-    """Require exactly 88 admitted rows and two named explicit exclusions."""
+    """Require the canonical admitted rows and named explicit exclusions."""
     summary = resolution.get("summary")
     rows = resolution.get("rows")
     if not isinstance(summary, dict) or not isinstance(rows, list):
         raise CandidateTraceResolutionError("resolution has no summary or rows")
+    expected_excluded = set(ISSUE_5756_NOT_ADMITTED_TUPLES)
+    n_excluded = len(expected_excluded)
+    n_admitted = ISSUE_5756_REQUEST_COUNT - n_excluded
     expected = {
         "n_candidates": ISSUE_5756_REQUEST_COUNT,
-        "n_resolved": 88,
+        "n_resolved": n_admitted,
         "n_trace_missing": 0,
         "n_schema_mismatch": 0,
-        "n_provenance_incomplete": 2,
+        "n_provenance_incomplete": n_excluded,
     }
     observed = {key: summary.get(key) for key in expected}
     if observed != expected or len(rows) != ISSUE_5756_REQUEST_COUNT:
         raise CandidateTraceResolutionError(
-            f"rendering requires 88 admitted plus 2 explicit exclusions; "
+            f"rendering requires {n_admitted} admitted plus {n_excluded} explicit exclusions; "
             f"summary={observed}, rows={len(rows)}"
         )
     identities = {(row.get("scenario_id"), row.get("planner_id"), row.get("seed")) for row in rows}
@@ -102,9 +106,9 @@ def _require_complete_resolution(resolution: dict[str, Any]) -> None:
         )
     admitted = [row for row in rows if row.get("admission_status") == "admitted"]
     excluded = [row for row in rows if row.get("admission_status") == "not_admitted"]
-    if len(admitted) != 88 or len(excluded) != 2:
+    if len(admitted) != n_admitted or len(excluded) != n_excluded:
         raise CandidateTraceResolutionError(
-            f"rendering requires 88 admitted and 2 not_admitted rows; "
+            f"rendering requires {n_admitted} admitted and {n_excluded} not_admitted rows; "
             f"admitted={len(admitted)}, excluded={len(excluded)}"
         )
     if any(row.get("resolution_status") != "resolved" for row in admitted):
@@ -120,10 +124,6 @@ def _require_complete_resolution(resolution: dict[str, Any]) -> None:
         )
     excluded_identities = {
         (row.get("scenario_id"), row.get("planner_id"), row.get("seed")) for row in excluded
-    }
-    expected_excluded = {
-        (scenario_id, planner, seed)
-        for scenario_id, planner, seed in ISSUE_5756_NOT_ADMITTED_TUPLES
     }
     if excluded_identities != expected_excluded:
         raise CandidateTraceResolutionError(
@@ -295,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
         if qa_report is not None:
             payload = {
-                "schema_version": "issue_6412_figure_qa.v1",
+                "schema_version": FIGURE_QA_SCHEMA_VERSION,
                 "status": "passed",
                 "visualization_only": True,
                 "claim_boundary": (

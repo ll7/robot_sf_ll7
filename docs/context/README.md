@@ -95,6 +95,10 @@ knowledge, not every transient iteration detail.
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
 * Collision causality, online risk, and Chapter 7 scenario discovery:
   [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md)
+* Issue #6641 runtime radius-binding canary (benchmark 6600 Gate 1):
+  [radius_binding_canary_issue_6641.md](radius_binding_canary_issue_6641.md)
+  records the fail-closed diagnostic-only five-surface radius-binding probes and the
+  `radius_binding_canary.v1` go/no-go verdict contract.
 * Repository rule: [AGENTS.md](../../AGENTS.md)
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)

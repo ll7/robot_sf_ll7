@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+Issue #6641 runtime radius-binding canary (benchmark 6600 Gate 1): a fail-closed,
+diagnostic-only differential probe set that proves the selected collision-envelope radius binds to
+all five binding surfaces (simulator collision geometry, obstacle and pedestrian contact,
+feasibility oracle, metric metadata and output rows, planner inputs) on a geometry-sensitive
+scenario and emits a machine-readable `radius_binding_canary.v1` go/no-go verdict per surface:
+[radius_binding_canary_issue_6641.md](radius_binding_canary_issue_6641.md).
+
 Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
 upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the
 only permissible route is clean-room reimplementation (no upstream code copied, vendored, or

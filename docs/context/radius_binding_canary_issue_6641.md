@@ -5,13 +5,13 @@
 ## Plain-language summary
 
 A social-navigation benchmark only reports what it claims when the one selected
-collision-envelope radius drives, consistently, every place that uses it. Issue
-#6641 adds a small, fail-closed diagnostic — the **radius-binding canary** —
-that loads one geometry-sensitive scenario, traces the selected robot and
-pedestrian radius through five binding surfaces, and emits a machine-readable
-go/no-go verdict per surface. It is `diagnostic-only` evidence: a pre-campaign
-binding check, not a benchmark result, and it never changes the frozen
-0.0.3.post1 metric semantics.
+collision-envelope radius drives, consistently, every place that uses it.
+Issue #6641 adds a small, fail-closed diagnostic — the **radius-binding
+canary** — that loads one geometry-sensitive scenario, traces the selected
+robot and pedestrian radius through five binding surfaces, and emits a
+machine-readable go/no-go verdict per surface. It is `diagnostic-only`
+evidence: a pre-campaign binding check, not a benchmark result, and it never
+changes the frozen 0.0.3.post1 metric semantics.
 
 ## Classification and claim boundary
 

@@ -208,7 +208,7 @@ class BRNEPlanner:
             return self._solve(obs)
         except FileNotFoundError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # broad catch: solver fallback boundary
             if self.config.fallback_on_error:
                 _LOGGER.warning("BRNE solve failed, returning zero motion: %s", exc)
                 return {"v": 0.0, "omega": 0.0}

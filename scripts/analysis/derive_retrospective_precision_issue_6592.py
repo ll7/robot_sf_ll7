@@ -1043,6 +1043,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     report = build_precision_report(rows, family_of=family_of, policy=policy, repo_root=repo_root)
 
+    # Bind the report provenance to the input selected by the CLI.  The
+    # default path is stable, but a custom mapping path must not be reported as
+    # the default file because that would make the packet identify the wrong
+    # provenance when it is reproduced outside the repository tree.
+    report["frozen_input_provenance"]["scenario_family_mapping_path"] = _display_path(
+        family_mapping_path, repo_root
+    )
+
     # Step 4: Add dissertation-facing statement
     report["proposed_dissertation_statement"] = build_dissertation_statement(report)
 

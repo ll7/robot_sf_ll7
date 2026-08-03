@@ -449,6 +449,30 @@ class TestFrozenInputVerification:
         ):
             precision_module.load_and_verify_family_mapping(tampered)
 
+    def test_custom_family_mapping_path_is_recorded(self, precision_module, tmp_path):
+        """The report identifies a custom mapping input instead of the default path."""
+        custom_mapping = tmp_path / "pinned-family-mapping.json"
+        custom_mapping.write_bytes(_FAMILY_MAPPING_PATH.read_bytes())
+        evidence_dir = tmp_path / "evidence"
+        with patch("robot_sf.evidence.writers._maybe_register"):
+            exit_code = precision_module.main(
+                [
+                    "--repo-root",
+                    str(_REPO_ROOT),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--family-mapping-path",
+                    str(custom_mapping),
+                ]
+            )
+        assert exit_code == 0
+        report = json.loads(
+            (evidence_dir / "retrospective_precision_report.json").read_text(encoding="utf-8")
+        )
+        assert report["frozen_input_provenance"]["scenario_family_mapping_path"] == str(
+            custom_mapping.resolve()
+        )
+
     def test_observed_risk_difference_uses_frozen_cells(self, precision_module, precision_run):
         """Observed risk difference is not replaced by the bootstrap mean."""
         report, _ = precision_run

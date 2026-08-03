@@ -427,12 +427,206 @@ def _final_normalize_insufficient(cfg, records: list[dict], video_artifacts: lis
             a.note = NOTE_INSUFFICIENT_REPLAY
 
 
+def _video_artifact_to_dict(a: VideoArtifact) -> dict:
+    """Serialize a VideoArtifact to a plain dict for JSON manifests.
+
+    Returns:
+        Plain dict with all VideoArtifact fields.
+    """
+    return {
+        "artifact_id": a.artifact_id,
+        "scenario_id": a.scenario_id,
+        "episode_id": a.episode_id,
+        "path_mp4": a.path_mp4,
+        "status": a.status,
+        "renderer": a.renderer,
+        "note": a.note,
+        "encode_time_s": a.encode_time_s,
+        "peak_rss_mb": a.peak_rss_mb,
+    }
+
+
+def _write_visual_manifests(
+    reports_dir: Path,
+    plot_artifacts: list[dict],
+    video_artifacts: list[VideoArtifact],
+    perf_meta: dict,
+) -> None:
+    """Write plot, video, and performance manifests to the reports directory."""
+    _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)
+    _write_json(
+        reports_dir / "video_artifacts.json",
+        [_video_artifact_to_dict(a) for a in video_artifacts],
+    )
+    _write_json(reports_dir / "performance_visuals.json", perf_meta)
+
+
+def _compute_video_perf(
+    video_artifacts: list[VideoArtifact],
+    video_start: float,
+    video_end: float,
+) -> dict:
+    """Compute video timing and performance metadata from artifacts.
+
+    Returns:
+        Dict with first_video_time_s, first_video_render_time_s,
+        first_video_peak_rss_mb, videos_time_s, and budget flags.
+    """
+    first_success = next((v for v in video_artifacts if v.status == "success"), None)
+    first_video_time = first_success.encode_time_s if first_success else None
+    first_video_peak = first_success.peak_rss_mb if first_success else None
+    # Render vs encode split (T040A): approximate render time as total video phase minus encode time
+    first_video_render_time = None
+    if (
+        first_success
+        and first_success.encode_time_s is not None
+        and first_success.renderer == RENDERER_SIM_VIEW
+    ):
+        total_video_phase = video_end - video_start
+        enc_time = first_success.encode_time_s
+        if total_video_phase >= enc_time:
+            first_video_render_time = round(total_video_phase - enc_time, 4)
+    videos_time_s = round(video_end - video_start, 4)
+    return {
+        "first_video_time_s": first_video_time,
+        "first_video_render_time_s": first_video_render_time,
+        "first_video_peak_rss_mb": first_video_peak,
+        "videos_time_s": videos_time_s,
+        "video_over_budget": (first_video_time or 0) > 5.0
+        if first_video_time is not None
+        else False,
+        "memory_over_budget": (first_video_peak or 0) > 100
+        if first_video_peak is not None
+        else False,
+    }
+
+
+def _smoke_fallback_video_artifacts(
+    selected_records: list[dict], videos_dir: Path, reason: str
+) -> list[VideoArtifact]:
+    """Synthesize skipped video artifacts when the pipeline returns nothing.
+
+    Returns:
+        List of VideoArtifact entries with skipped status.
+    """
+    out: list[VideoArtifact] = []
+    for r in selected_records:
+        ep_id = r.get("episode_id", "unknown")
+        sc_id = r.get("scenario_id", "unknown")
+        mp4_path = videos_dir / f"{ep_id}.mp4"
+        out.append(
+            VideoArtifact(
+                artifact_id=f"video_{ep_id}",
+                scenario_id=sc_id,
+                episode_id=ep_id,
+                path_mp4=str(mp4_path),
+                status="skipped",
+                renderer=(RENDERER_SIM_VIEW if _SIM_VIEW_AVAILABLE else RENDERER_SYNTHETIC),
+                note=reason,
+            )
+        )
+    return out
+
+
+def _generate_smoke_artifacts(
+    cfg,
+    groups,
+    records,
+    plots_dir: Path,
+    videos_dir: Path,
+    reports_dir: Path,
+) -> dict:
+    """Generate lightweight artifacts in smoke mode (fast-path).
+
+    Avoids heavy encoding work but still emits non-evidence manifests so
+    downstream tooling and tests can observe per-episode degradation notes.
+
+    Returns:
+        Dictionary with plot/video artifacts and performance metadata.
+    """
+    t0 = time.perf_counter()
+    raw_plots = generate_plots(groups, records, plots_dir, cfg)
+    t1 = time.perf_counter()
+    plot_artifacts = _convert_plot_artifacts(raw_plots)
+    # Defensive fallback: ensure tests and downstream consumers always
+    # observe at least one plot artifact entry (skipped diagnostic)
+    # when plot generation produces nothing (e.g. optional deps absent
+    # or unexpected exception in upstream generator).
+    if not plot_artifacts:
+        plot_artifacts = [
+            {
+                "kind": "diagnostic_unavailable",
+                "path_pdf": "",
+                "status": "skipped",
+                "note": "plots-unavailable",
+            }
+        ]
+
+    selected_records = _select_records(records, cfg)
+    replay_map: dict = {}
+    video_artifacts = _build_video_artifacts(cfg, selected_records, videos_dir, replay_map)
+    # Defensive fallback: if video pipeline returned no artifacts but there
+    # are selected records (possible when upstream attempted encodes were
+    # suppressed), synthesize skipped artifacts so manifests remain
+    # informative and tests can assert on note/renderer fields.
+    if not video_artifacts and selected_records:
+        video_artifacts = _smoke_fallback_video_artifacts(
+            selected_records, videos_dir, NOTE_SMOKE_MODE
+        )
+
+    success_count, status_note = _summarize_video_outcomes(video_artifacts)
+    plots_time_s = round(t1 - t0, 4)
+
+    perf_meta = {
+        "plots_time_s": plots_time_s,
+        "videos_time_s": 0.0,
+        "first_video_time_s": None,
+        "first_video_render_time_s": None,
+        "first_video_peak_rss_mb": None,
+        "plots_over_budget": False,
+        "video_over_budget": False,
+        "memory_over_budget": False,
+        "plots_runtime_sec": plots_time_s,
+        "videos_runtime_sec": 0.0,
+        "first_video_encode_time_s": None,
+        "video_success_count": success_count,
+        "video_status_note": status_note,
+    }
+
+    _write_visual_manifests(reports_dir, plot_artifacts, video_artifacts, perf_meta)
+    logger.info(
+        "Visual artifacts (smoke fast-path): plots={} videos={} (smoke={})",
+        len(plot_artifacts),
+        len(video_artifacts),
+        True,
+    )
+    return {"plots": plot_artifacts, "videos": video_artifacts, "performance": perf_meta}
+
+
+def _validate_visual_manifests_if_enabled(reports_dir: Path) -> None:
+    """Run visual manifest validation when ROBOT_SF_VALIDATE_VISUALS=1."""
+    if os.environ.get("ROBOT_SF_VALIDATE_VISUALS") != "1":
+        return
+    contracts_dir = (
+        Path(__file__).parent / "../../../../specs/127-enhance-benchmark-visual/contracts"
+    ).resolve()
+    try:
+        validation_errors = validate_visual_manifests(reports_dir, contracts_dir)
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.error("Visual manifest validation failed: %s", exc)
+        raise
+    if validation_errors:
+        logger.warning("Visual manifest validation errors: {}", validation_errors)
+    else:
+        logger.info("Visual manifests passed validation")
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 
-def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa: PLR0915
+def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:
     """Generate plots/videos plus manifests and performance metadata.
 
     Returns:
@@ -450,99 +644,7 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
     # 'smoke mode'). This keeps smoke tests fast while preserving expected
     # artifact metadata.
     if bool(getattr(cfg, "smoke", False)):
-        smoke = True
-        # Generate lightweight plots (these will be marked 'skipped' when
-        # matplotlib is not available) and video entries (skipped with
-        # NOTE_SMOKE_MODE). Times are zeroed to indicate the fast-path.
-        t0 = time.perf_counter()
-        raw_plots = generate_plots(groups, records, plots_dir, cfg)
-        t1 = time.perf_counter()
-        plot_artifacts = _convert_plot_artifacts(raw_plots)
-        # Defensive fallback: ensure tests and downstream consumers always
-        # observe at least one plot artifact entry (skipped diagnostic)
-        # when plot generation produces nothing (e.g. optional deps absent
-        # or unexpected exception in upstream generator).
-        if not plot_artifacts:
-            plot_artifacts = [
-                {
-                    "kind": "diagnostic_unavailable",
-                    "path_pdf": "",
-                    "status": "skipped",
-                    "note": "plots-unavailable",
-                }
-            ]
-
-        selected_records = _select_records(records, cfg)
-        replay_map: dict = {}
-        video_artifacts = _build_video_artifacts(cfg, selected_records, videos_dir, replay_map)
-        # Defensive fallback: if video pipeline returned no artifacts but there
-        # are selected records (possible when upstream attempted encodes were
-        # suppressed), synthesize skipped artifacts so manifests remain
-        # informative and tests can assert on note/renderer fields.
-        if not video_artifacts and selected_records:
-            # `smoke` local variable is defined above and indicates fast-path
-            reason = NOTE_SMOKE_MODE if bool(smoke) else NOTE_DISABLED
-            video_artifacts = []
-            for r in selected_records:
-                ep_id = r.get("episode_id", "unknown")
-                sc_id = r.get("scenario_id", "unknown")
-                mp4_path = videos_dir / f"{ep_id}.mp4"
-                video_artifacts.append(
-                    VideoArtifact(
-                        artifact_id=f"video_{ep_id}",
-                        scenario_id=sc_id,
-                        episode_id=ep_id,
-                        path_mp4=str(mp4_path),
-                        status="skipped",
-                        renderer=(RENDERER_SIM_VIEW if _SIM_VIEW_AVAILABLE else RENDERER_SYNTHETIC),
-                        note=reason,
-                    )
-                )
-
-        success_count, status_note = _summarize_video_outcomes(video_artifacts)
-
-        perf_meta = {
-            "plots_time_s": round(t1 - t0, 4),
-            "videos_time_s": 0.0,
-            "first_video_time_s": None,
-            "first_video_render_time_s": None,
-            "first_video_peak_rss_mb": None,
-            "plots_over_budget": False,
-            "video_over_budget": False,
-            "memory_over_budget": False,
-            "plots_runtime_sec": round(t1 - t0, 4),
-            "videos_runtime_sec": 0.0,
-            "first_video_encode_time_s": None,
-            "video_success_count": success_count,
-            "video_status_note": status_note,
-        }
-
-        _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)
-        _write_json(
-            reports_dir / "video_artifacts.json",
-            [
-                {
-                    "artifact_id": a.artifact_id,
-                    "scenario_id": a.scenario_id,
-                    "episode_id": a.episode_id,
-                    "path_mp4": a.path_mp4,
-                    "status": a.status,
-                    "renderer": a.renderer,
-                    "note": a.note,
-                    "encode_time_s": a.encode_time_s,
-                    "peak_rss_mb": a.peak_rss_mb,
-                }
-                for a in video_artifacts
-            ],
-        )
-        _write_json(reports_dir / "performance_visuals.json", perf_meta)
-        logger.info(
-            "Visual artifacts (smoke fast-path): plots={} videos={} (smoke={})",
-            len(plot_artifacts),
-            len(video_artifacts),
-            True,
-        )
-        return {"plots": plot_artifacts, "videos": video_artifacts, "performance": perf_meta}
+        return _generate_smoke_artifacts(cfg, groups, records, plots_dir, videos_dir, reports_dir)
 
     # Plots
     t0 = time.perf_counter()
@@ -563,77 +665,29 @@ def generate_visual_artifacts(root: Path, cfg, groups, records) -> dict:  # noqa
     video_end = time.perf_counter()
     _final_normalize_insufficient(cfg, selected_records, video_artifacts)
 
-    first_success = next((v for v in video_artifacts if v.status == "success"), None)
-    first_video_time = first_success.encode_time_s if first_success else None
-    first_video_peak = first_success.peak_rss_mb if first_success else None
-    # Render vs encode split (T040A): approximate render time as total video phase minus encode time
-    first_video_render_time = None
-    if (
-        first_success
-        and first_success.encode_time_s is not None
-        and first_success.renderer == RENDERER_SIM_VIEW
-    ):
-        total_video_phase = video_end - video_start
-        enc_time = first_success.encode_time_s
-        if total_video_phase >= enc_time:
-            first_video_render_time = round(total_video_phase - enc_time, 4)
+    # Performance metadata
     plots_time_s = round(t1 - t0, 4)
-    videos_time_s = round(video_end - video_start, 4)
+    video_perf = _compute_video_perf(video_artifacts, video_start, video_end)
     success_count, status_note = _summarize_video_outcomes(video_artifacts)
     perf_meta = {
         "plots_time_s": plots_time_s,
-        "videos_time_s": videos_time_s,
-        "first_video_time_s": first_video_time,
-        "first_video_render_time_s": first_video_render_time,
-        "first_video_peak_rss_mb": first_video_peak,
+        "videos_time_s": video_perf["videos_time_s"],
+        "first_video_time_s": video_perf["first_video_time_s"],
+        "first_video_render_time_s": video_perf["first_video_render_time_s"],
+        "first_video_peak_rss_mb": video_perf["first_video_peak_rss_mb"],
         "plots_over_budget": plots_time_s > 2.0,
-        "video_over_budget": (first_video_time or 0) > 5.0
-        if first_video_time is not None
-        else False,
-        "memory_over_budget": (first_video_peak or 0) > 100
-        if first_video_peak is not None
-        else False,
+        "video_over_budget": video_perf["video_over_budget"],
+        "memory_over_budget": video_perf["memory_over_budget"],
         # Legacy keys
         "plots_runtime_sec": plots_time_s,
-        "videos_runtime_sec": videos_time_s,
-        "first_video_encode_time_s": first_video_time,
+        "videos_runtime_sec": video_perf["videos_time_s"],
+        "first_video_encode_time_s": video_perf["first_video_time_s"],
         "video_success_count": success_count,
         "video_status_note": status_note,
     }
 
-    _write_json(reports_dir / "plot_artifacts.json", plot_artifacts)
-    _write_json(
-        reports_dir / "video_artifacts.json",
-        [
-            {
-                "artifact_id": a.artifact_id,
-                "scenario_id": a.scenario_id,
-                "episode_id": a.episode_id,
-                "path_mp4": a.path_mp4,
-                "status": a.status,
-                "renderer": a.renderer,
-                "note": a.note,
-                "encode_time_s": a.encode_time_s,
-                "peak_rss_mb": a.peak_rss_mb,
-            }
-            for a in video_artifacts
-        ],
-    )
-    _write_json(reports_dir / "performance_visuals.json", perf_meta)
-
-    if os.environ.get("ROBOT_SF_VALIDATE_VISUALS") == "1":
-        contracts_dir = (
-            Path(__file__).parent / "../../../../specs/127-enhance-benchmark-visual/contracts"
-        ).resolve()
-        try:
-            validation_errors = validate_visual_manifests(reports_dir, contracts_dir)
-        except (RuntimeError, ValueError, OSError) as exc:
-            logger.error("Visual manifest validation failed: %s", exc)
-            raise
-        if validation_errors:
-            logger.warning("Visual manifest validation errors: {}", validation_errors)
-        else:
-            logger.info("Visual manifests passed validation")
+    _write_visual_manifests(reports_dir, plot_artifacts, video_artifacts, perf_meta)
+    _validate_visual_manifests_if_enabled(reports_dir)
 
     logger.info(
         "Visual artifacts generated: plots={} videos={} (disable_videos={} smoke={} mode={})",

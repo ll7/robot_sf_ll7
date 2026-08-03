@@ -27,12 +27,19 @@ not a failed experiment.
   `tests/benchmark/test_radius_rank_stability.py`). The tool fails closed: without a
   Gate 2 sweep summary it returns `blocked_pending_gate2` (exit 2) and promotes no
   ranking interpretation.
+- **Gate 1 canary: merged with a passing receipt.** The Gate 1 binding canary (#6641)
+  was implemented and merged as PR #6663; the machine-readable
+  `radius_binding_canary_report.v1` receipts (`go=true` for 0.5/0.8/1.0 m, all five
+  surfaces bound) are durable artifacts under the ll7-factory run store
+  (e.g. `radius_binding_canary_report_0538.json` in the `ll7-lease-6663-*` runs). The
+  Gate 3 checker was aligned to the canary emitter's surface vocabulary
+  (`metric_metadata_and_output_rows`, not `metric_metadata`); a real receipt now
+  passes `_gate1_canary_receipt_is_passing`.
 - **Analysis: blocked pending Gate 2.** The Gate 2 production sweep (#6642) has not
-  run: Gate 1 (#6641) has not reported a passing binding-canary verdict, and no sweep
-  summary or fail-closed missingness ledger exists anywhere (checked `output/`,
-  `experiments/`, and the artifact store). Per the #6643 stop rule, no scientific
-  verdict may be produced before complete row identities or a fail-closed missingness
-  ledger exists.
+  run: no sweep summary or fail-closed missingness ledger exists anywhere (checked
+  `output/`, `experiments/`, and the artifact store). Per the #6643 stop rule, no
+  scientific verdict may be produced before complete row identities or a fail-closed
+  missingness ledger exists.
 - **Registered diagnostic bundle:** this worktree ran the tool without a sweep
   summary, which registered a durable `blocked_pending_gate2` evidence bundle
   (`diagnostic-only` evidence tier, `interpretation_promoted: false`). The bundle is
@@ -42,12 +49,14 @@ not a failed experiment.
 ## Reproduction
 
 Blocked-mode run (registers the diagnostic bundle; exit 2 is the expected
-fail-closed status, not a scientific verdict):
+fail-closed status, not a scientific verdict). A real Gate 1 receipt may be supplied
+even before Gate 2 so the bundle records its digest and verified status:
 
 ```bash
 uv run python scripts/benchmark/analyze_radius_rank_stability_issue_6643.py \
   --output-dir <bundle-dir> \
   --config configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml \
+  --gate1-canary-receipt <gate1-canary-receipt.json> \
   --print-comments
 ```
 
@@ -70,11 +79,13 @@ declared campaign provenance; otherwise the bundle stays `diagnostic-only`.
 ## Unblock condition
 
 1. Gate 1 (#6641) reports a passing radius-binding-canary verdict on all five binding
-   surfaces.
+   surfaces. **Status: satisfied** — the canary merged as PR #6663 and its
+   machine-readable report records `go=true` for 0.5/0.8/1.0 m; the Gate 3 checker now
+   accepts the emitter's surface vocabulary.
 2. Gate 2 (#6642) produces the 3-radius x 14-planner x 48-cell x seeds 111-140 sweep at
    one immutable campaign commit with complete row identities or a fail-closed
    missingness ledger, excluding fallback/degraded/failed/missing/duplicate/
-   provenance-invalid rows.
+   provenance-invalid rows. **Status: pending — no sweep summary exists yet.**
 3. Re-run the scientific command above on that immutable summary, then post exactly
    one verdict on #6600 and propagate to #3207.
 

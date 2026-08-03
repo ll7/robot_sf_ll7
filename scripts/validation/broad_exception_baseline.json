@@ -11,7 +11,6 @@
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
-      "robot_sf/benchmark/radius_binding_canary.py": 6,
       "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
@@ -106,7 +105,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 185
+    "total": 179
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -256,64 +255,10 @@
     },
     {
       "col_offset": 4,
-      "context": "probe_simulator_collision_geometry",
-      "fingerprint": "7103f6c1940e854d",
-      "handler": "Exception",
-      "lineno": 416,
-      "path": "robot_sf/benchmark/radius_binding_canary.py",
-      "source": "except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors."
-    },
-    {
-      "col_offset": 8,
-      "context": "probe_obstacle_pedestrian_contact",
-      "fingerprint": "f1c23340efd72b0b",
-      "handler": "Exception",
-      "lineno": 502,
-      "path": "robot_sf/benchmark/radius_binding_canary.py",
-      "source": "except Exception as exc:  # noqa: BLE001 - fail closed on probe errors."
-    },
-    {
-      "col_offset": 4,
-      "context": "probe_feasibility_oracle",
-      "fingerprint": "78eb0ede2d419307",
-      "handler": "Exception",
-      "lineno": 627,
-      "path": "robot_sf/benchmark/radius_binding_canary.py",
-      "source": "except Exception as exc:  # noqa: BLE001 - fail closed on oracle errors."
-    },
-    {
-      "col_offset": 4,
-      "context": "probe_metric_metadata_and_output_rows",
-      "fingerprint": "abbc3c7140944560",
-      "handler": "Exception",
-      "lineno": 759,
-      "path": "robot_sf/benchmark/radius_binding_canary.py",
-      "source": "except Exception as exc:  # noqa: BLE001 - fail closed on resolver errors."
-    },
-    {
-      "col_offset": 4,
-      "context": "probe_planner_inputs",
-      "fingerprint": "427542b8dba7c035",
-      "handler": "Exception",
-      "lineno": 844,
-      "path": "robot_sf/benchmark/radius_binding_canary.py",
-      "source": "except Exception as exc:  # noqa: BLE001 - fail closed on builder errors."
-    },
-    {
-      "col_offset": 4,
-      "context": "run_radius_binding_canary",
-      "fingerprint": "d912bb6de29782e4",
-      "handler": "Exception",
-      "lineno": 920,
-      "path": "robot_sf/benchmark/radius_binding_canary.py",
-      "source": "except Exception as exc:  # noqa: BLE001 - fail closed on geometry-load errors."
-    },
-    {
-      "col_offset": 4,
       "context": "_planner_foresight_diagnostics",
       "fingerprint": "47f4987d201584a7",
       "handler": "Exception",
-      "lineno": 330,
+      "lineno": 329,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover - diagnostics must not break policy execution"
     },

@@ -192,6 +192,31 @@ def test_metric_metadata_probe_passes_for_responsive_metric() -> None:
     assert verdict.status == "pass"
     assert verdict.evidence["collisions_responsive_to_radius"] is True
     assert verdict.evidence["resolver_responsive"] is True
+    assert verdict.evidence["episode_builder"] == ("robot_sf.benchmark.runner._build_episode_data")
+
+
+def test_canary_rejects_selected_radius_mismatch(scenario_geometry) -> None:
+    """A CLI-selected radius that differs from the loaded scenario is no-go."""
+    verdict = run_radius_binding_canary(
+        geometry=scenario_geometry,
+        selected_robot_radius_m=0.4,
+        selected_ped_radius_m=0.4,
+    )
+
+    assert verdict.verdict == VERDICT_NO_GO
+    assert verdict.scenario["configured_robot_radius_m"] == pytest.approx(0.3)
+    assert verdict.scenario["configured_ped_radius_m"] == pytest.approx(0.4)
+    assert any(surface.status == "fail" for surface in verdict.surfaces)
+    assert any(
+        surface.evidence.get("selected_configuration_matches") is False
+        for surface in verdict.surfaces
+    )
+
+
+def test_loaded_geometry_records_effective_scenario_radii(scenario_geometry) -> None:
+    """The canary uses radii produced by the canonical scenario loader."""
+    assert scenario_geometry.configured_robot_radius_m == pytest.approx(0.3)
+    assert scenario_geometry.configured_ped_radius_m == pytest.approx(0.4)
 
 
 # --- planner inputs ----------------------------------------------------------

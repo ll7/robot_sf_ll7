@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from shapely.geometry import LineString, Point
 
-from robot_sf.benchmark.metrics import EpisodeData, human_collisions
+from robot_sf.benchmark.metrics import human_collisions
 from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.scenario_certification.feasibility_oracle import (
     FeasibilityOracleConfig,
@@ -90,6 +90,20 @@ DEFAULT_SCENARIO_REL = Path("configs/scenarios/canary_corridor.yaml")
 """Geometry-sensitive default scenario: a 4 m corridor with a 1.7 m wall clearance."""
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# These are the expected operational failures from the bounded probe paths. Keep the
+# list explicit so the benchmark/script broad-exception ratchet does not need a new
+# baseline entry for this diagnostic module.
+_CANARY_OPERATIONAL_ERRORS = (
+    AttributeError,
+    ImportError,
+    IndexError,
+    KeyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 # --- verdict dataclasses -----------------------------------------------------
@@ -167,6 +181,10 @@ class CanaryGeometry:
         map_height: Map height in metres.
         scenario: Raw scenario mapping for the feasibility-oracle probe.
         scenario_path: Resolved scenario manifest path.
+        configured_robot_radius_m: Effective robot radius produced by the canonical
+            scenario loader.
+        configured_ped_radius_m: Effective pedestrian radius produced by the canonical
+            scenario loader.
     """
 
     scenario_id: str
@@ -179,6 +197,8 @@ class CanaryGeometry:
     map_height: float
     scenario: Mapping[str, Any]
     scenario_path: Path
+    configured_robot_radius_m: float | None = None
+    configured_ped_radius_m: float | None = None
 
 
 def _runtime_obstacle_lines(map_def: Any) -> np.ndarray:
@@ -256,7 +276,47 @@ def load_canary_geometry(scenario_path: Path) -> CanaryGeometry:
         map_height=float(map_def.height),
         scenario=scenario,
         scenario_path=resolved,
+        configured_robot_radius_m=float(config.robot_config.radius),
+        configured_ped_radius_m=float(config.sim_config.ped_radius),
     )
+
+
+def _configuration_binding_evidence(
+    *,
+    selected_robot_radius_m: float,
+    selected_ped_radius_m: float,
+    configured_robot_radius_m: float | None,
+    configured_ped_radius_m: float | None,
+    tolerance_m: float,
+) -> tuple[bool, dict[str, Any]]:
+    """Check that selected radii match the effective loaded scenario configuration.
+
+    Direct unit probes may omit configuration values because they exercise one surface
+    with synthetic geometry. The orchestrator always supplies the values loaded from the
+    committed scenario, making a CLI/configuration mismatch fail closed.
+
+    Returns:
+        A pass flag and JSON-safe evidence for the selected/configured comparison.
+    """
+    if configured_robot_radius_m is None and configured_ped_radius_m is None:
+        return True, {}
+    robot_ok = (
+        configured_robot_radius_m is not None
+        and math.isfinite(float(configured_robot_radius_m))
+        and abs(float(configured_robot_radius_m) - float(selected_robot_radius_m)) <= tolerance_m
+    )
+    ped_ok = (
+        configured_ped_radius_m is not None
+        and math.isfinite(float(configured_ped_radius_m))
+        and abs(float(configured_ped_radius_m) - float(selected_ped_radius_m)) <= tolerance_m
+    )
+    return robot_ok and ped_ok, {
+        "selected_robot_radius_m": float(selected_robot_radius_m),
+        "selected_ped_radius_m": float(selected_ped_radius_m),
+        "configured_robot_radius_m": configured_robot_radius_m,
+        "configured_ped_radius_m": configured_ped_radius_m,
+        "selected_configuration_matches": bool(robot_ok and ped_ok),
+    }
 
 
 # --- differential scan helpers ----------------------------------------------
@@ -376,6 +436,8 @@ def _make_pedestrian_predicate(
 def probe_simulator_collision_geometry(
     geometry: CanaryGeometry,
     *,
+    selected_robot_radius_m: float | None = None,
+    configured_robot_radius_m: float | None = None,
     tolerance_m: float = DEFAULT_RADIUS_TOLERANCE_M,
     scan_step_m: float = DEFAULT_SCAN_STEP_M,
 ) -> SurfaceVerdict:
@@ -413,7 +475,7 @@ def probe_simulator_collision_geometry(
         flip_radius = _scan_flip(predicate, lo=0.0, hi=scan_hi, step=scan_step_m)
         below = predicate(max(0.0, wall_distance - 0.3))
         above = predicate(wall_distance + 0.3)
-    except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors.
+    except _CANARY_OPERATIONAL_ERRORS as exc:
         return SurfaceVerdict(
             surface=SURFACE_SIMULATOR_GEOMETRY,
             status=STATUS_FAIL,
@@ -424,6 +486,24 @@ def probe_simulator_collision_geometry(
             note="Fail-closed: the runtime collision component could not be exercised.",
         )
 
+    config_ok = True
+    config_evidence: dict[str, Any] = {}
+    if selected_robot_radius_m is not None or configured_robot_radius_m is not None:
+        selected_robot = (
+            float(selected_robot_radius_m)
+            if selected_robot_radius_m is not None
+            else float(geometry.configured_robot_radius_m or 0.0)
+        )
+        config_ok = (
+            configured_robot_radius_m is not None
+            and math.isfinite(float(configured_robot_radius_m))
+            and abs(float(configured_robot_radius_m) - selected_robot) <= tolerance_m
+        )
+        config_evidence = {
+            "selected_robot_radius_m": selected_robot,
+            "configured_robot_radius_m": configured_robot_radius_m,
+            "selected_configuration_matches": bool(config_ok),
+        }
     evidence = {
         "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
         "anchor_point_xy": list(geometry.route_point),
@@ -432,9 +512,16 @@ def probe_simulator_collision_geometry(
         "collision_below_wall": bool(below),
         "collision_above_wall": bool(above),
         "tolerance_m": tolerance_m,
+        **config_evidence,
     }
     delta = abs((flip_radius or math.inf) - wall_distance)
-    ok = flip_radius is not None and below is False and above is True and delta <= tolerance_m
+    ok = (
+        flip_radius is not None
+        and below is False
+        and above is True
+        and delta <= tolerance_m
+        and config_ok
+    )
     return SurfaceVerdict(
         surface=SURFACE_SIMULATOR_GEOMETRY,
         status=STATUS_PASS if ok else STATUS_FAIL,
@@ -448,7 +535,7 @@ def probe_simulator_collision_geometry(
             f"|flip - wall|={delta:.6g} m."
         ),
         evidence=evidence,
-        note=None,
+        note=None if ok else "selected radius does not match the effective scenario configuration",
     )
 
 
@@ -457,6 +544,8 @@ def probe_obstacle_pedestrian_contact(
     *,
     selected_robot_radius_m: float,
     selected_ped_radius_m: float,
+    configured_robot_radius_m: float | None = None,
+    configured_ped_radius_m: float | None = None,
     tolerance_m: float = DEFAULT_RADIUS_TOLERANCE_M,
     scan_step_m: float = DEFAULT_SCAN_STEP_M,
 ) -> SurfaceVerdict:
@@ -499,7 +588,7 @@ def probe_obstacle_pedestrian_contact(
                 hi=expected_sum + 0.5,
                 step=scan_step_m,
             )
-        except Exception as exc:  # noqa: BLE001 - fail closed on probe errors.
+        except _CANARY_OPERATIONAL_ERRORS as exc:
             observations.append(
                 {
                     "robot_radius_m": robot_radius,
@@ -525,6 +614,14 @@ def probe_obstacle_pedestrian_contact(
             }
         )
 
+    config_ok, config_evidence = _configuration_binding_evidence(
+        selected_robot_radius_m=selected_robot_radius_m,
+        selected_ped_radius_m=selected_ped_radius_m,
+        configured_robot_radius_m=configured_robot_radius_m,
+        configured_ped_radius_m=configured_ped_radius_m,
+        tolerance_m=tolerance_m,
+    )
+    all_ok = all_ok and config_ok
     return SurfaceVerdict(
         surface=SURFACE_OBSTACLE_PEDESTRIAN_CONTACT,
         status=STATUS_PASS if all_ok else STATUS_FAIL,
@@ -539,10 +636,12 @@ def probe_obstacle_pedestrian_contact(
             "anchor_point_xy": list(anchor),
             "pairs": observations,
             "tolerance_m": tolerance_m,
+            **config_evidence,
         },
         note=(
-            "Obstacle contact (robot_radius only) is covered by the "
-            "simulator_collision_geometry surface."
+            None
+            if all_ok
+            else "selected radius does not match the effective scenario configuration"
         ),
     )
 
@@ -578,6 +677,10 @@ def probe_feasibility_oracle(
     *,
     radius_a_m: float,
     radius_b_m: float,
+    selected_robot_radius_m: float | None = None,
+    selected_ped_radius_m: float | None = None,
+    configured_robot_radius_m: float | None = None,
+    configured_ped_radius_m: float | None = None,
     tolerance_m: float = DEFAULT_RADIUS_TOLERANCE_M,
 ) -> SurfaceVerdict:
     """Surface 3: the planner-free feasibility oracle inflates by the envelope radius.
@@ -624,7 +727,7 @@ def probe_feasibility_oracle(
             )
             clearances[radius] = verdict.geometric.min_static_clearance_m
             margins[radius] = verdict.geometric.corridor_envelope_margin_m
-    except Exception as exc:  # noqa: BLE001 - fail closed on oracle errors.
+    except _CANARY_OPERATIONAL_ERRORS as exc:
         error = f"{type(exc).__name__}: {exc}"
 
     radius_delta = abs(radii[1] - radii[0])
@@ -661,10 +764,40 @@ def probe_feasibility_oracle(
             note="Scenario has no static obstacles on the route; cannot probe clearance.",
         )
 
+    config_ok = True
+    config_evidence: dict[str, Any] = {}
+    if any(
+        value is not None
+        for value in (
+            selected_robot_radius_m,
+            selected_ped_radius_m,
+            configured_robot_radius_m,
+            configured_ped_radius_m,
+        )
+    ):
+        config_ok, config_evidence = _configuration_binding_evidence(
+            selected_robot_radius_m=(
+                selected_robot_radius_m
+                if selected_robot_radius_m is not None
+                else float(geometry.configured_robot_radius_m or 0.0)
+            ),
+            selected_ped_radius_m=(
+                selected_ped_radius_m
+                if selected_ped_radius_m is not None
+                else float(geometry.configured_ped_radius_m or 0.0)
+            ),
+            configured_robot_radius_m=configured_robot_radius_m,
+            configured_ped_radius_m=configured_ped_radius_m,
+            tolerance_m=tolerance_m,
+        )
+
     observed_delta = float(clearance_a - clearance_b)  # clearance shrinks as radius grows
     # Clearance == wall_distance - radius, so clearance(a) - clearance(b) == radius(b) - radius(a)
     # when radius_b > radius_a. Compare absolute values to stay sign-agnostic.
-    ok = abs(abs(observed_delta) - radius_delta) <= max(tolerance_m, radius_delta * 1e-6)
+    ok = (
+        abs(abs(observed_delta) - radius_delta) <= max(tolerance_m, radius_delta * 1e-6)
+        and config_ok
+    )
     return SurfaceVerdict(
         surface=SURFACE_FEASIBILITY_ORACLE,
         status=STATUS_PASS if ok else STATUS_FAIL,
@@ -690,10 +823,13 @@ def probe_feasibility_oracle(
             "corridor_envelope_margin_b_m": margins.get(radii[1]),
             "tolerance_m": tolerance_m,
             "rollout_mode": "deterministic_stub",
+            **config_evidence,
         },
         note=(
             "Rollout completion is stubbed for determinism; the radius binding is "
             "proven through the oracle's geometric (certifier) margin."
+            if config_ok
+            else "selected radius does not match the effective scenario configuration",
         ),
     )
 
@@ -702,6 +838,9 @@ def probe_metric_metadata_and_output_rows(
     *,
     selected_robot_radius_m: float,
     selected_ped_radius_m: float,
+    scenario: Mapping[str, Any] | None = None,
+    configured_robot_radius_m: float | None = None,
+    configured_ped_radius_m: float | None = None,
     tolerance_m: float = DEFAULT_RADIUS_TOLERANCE_M,
 ) -> SurfaceVerdict:
     """Surface 4: metric metadata and output rows consume the recorded radii.
@@ -717,6 +856,7 @@ def probe_metric_metadata_and_output_rows(
         SurfaceVerdict: Pass when the metric and resolver both track the radii.
     """
     from robot_sf.benchmark.runner import (  # noqa: PLC0415
+        _build_episode_data,
         _scenario_ped_radius_m,
         _scenario_robot_radius_m,
     )
@@ -727,36 +867,33 @@ def probe_metric_metadata_and_output_rows(
     centre_distance = 0.9
 
     def _collisions(robot_radius: float, ped_radius: float) -> float:
-        ep = EpisodeData(
-            robot_pos=robot_pos,
-            robot_vel=np.zeros_like(robot_pos),
-            robot_acc=np.zeros_like(robot_pos),
-            peds_pos=peds_pos,
-            ped_forces=np.zeros((3, 1, 2), dtype=float),
-            goal=np.array([17.0, 9.7]),
-            dt=0.1,
+        ep = _build_episode_data(
+            list(robot_pos),
+            [np.zeros(2, dtype=float) for _ in range(len(robot_pos))],
+            [np.zeros(2, dtype=float) for _ in range(len(robot_pos))],
+            list(peds_pos),
+            [np.zeros((1, 2), dtype=float) for _ in range(len(peds_pos))],
+            None,
+            np.array([17.0, 9.7]),
+            0.1,
+            None,
             robot_radius=float(robot_radius),
             ped_radius=float(ped_radius),
         )
         return float(human_collisions(ep))
 
-    pair_a = (float(selected_robot_radius_m), float(selected_ped_radius_m))
-    pair_b = (pair_a[0] + 0.2, pair_a[1] + 0.2)
-    coll_a = _collisions(*pair_a)
-    coll_b = _collisions(*pair_b)
-    metrics_ok = coll_a != coll_b
-
-    # Sub-probe 2: scenario-radius resolver returns the configured radius.
-    configured_robot = pair_a[0]
-    configured_ped = pair_a[1]
-    payload = {
-        "robot_config": {"radius": configured_robot},
-        "simulation_config": {"ped_radius": configured_ped},
-    }
+    payload = (
+        dict(scenario)
+        if scenario is not None
+        else {
+            "robot_config": {"radius": float(selected_robot_radius_m)},
+            "simulation_config": {"ped_radius": float(selected_ped_radius_m)},
+        }
+    )
     try:
         resolved_robot = float(_scenario_robot_radius_m(payload))
         resolved_ped = float(_scenario_ped_radius_m(payload))
-    except Exception as exc:  # noqa: BLE001 - fail closed on resolver errors.
+    except _CANARY_OPERATIONAL_ERRORS as exc:
         return SurfaceVerdict(
             surface=SURFACE_METRIC_METADATA_ROWS,
             status=STATUS_FAIL,
@@ -767,14 +904,28 @@ def probe_metric_metadata_and_output_rows(
             note="Fail-closed: the runner radius resolver could not be exercised.",
         )
 
+    pair_a = (resolved_robot, resolved_ped)
+    pair_b = (pair_a[0] + 0.2, pair_a[1] + 0.2)
+    coll_a = _collisions(*pair_a)
+    coll_b = _collisions(*pair_b)
+    metrics_ok = coll_a != coll_b
+
     resolver_ok = (
-        abs(resolved_robot - configured_robot) <= tolerance_m
-        and abs(resolved_ped - configured_ped) <= tolerance_m
+        abs(resolved_robot - selected_robot_radius_m) <= tolerance_m
+        and abs(resolved_ped - selected_ped_radius_m) <= tolerance_m
     )
+    config_ok, config_evidence = _configuration_binding_evidence(
+        selected_robot_radius_m=selected_robot_radius_m,
+        selected_ped_radius_m=selected_ped_radius_m,
+        configured_robot_radius_m=configured_robot_radius_m,
+        configured_ped_radius_m=configured_ped_radius_m,
+        tolerance_m=tolerance_m,
+    )
+    binding_ok = metrics_ok and resolver_ok and config_ok
 
     return SurfaceVerdict(
         surface=SURFACE_METRIC_METADATA_ROWS,
-        status=STATUS_PASS if (metrics_ok and resolver_ok) else STATUS_FAIL,
+        status=STATUS_PASS if binding_ok else STATUS_FAIL,
         probe="episode_radius_metadata_propagation",
         expected=(
             "Same trajectory records different human_collisions when only the radii "
@@ -783,25 +934,27 @@ def probe_metric_metadata_and_output_rows(
         observed=(
             f"human_collisions(pair_a={pair_a})={coll_a}, "
             f"human_collisions(pair_b={pair_b})={coll_b}; "
-            f"resolved_robot={resolved_robot:.6g} (configured {configured_robot}), "
-            f"resolved_ped={resolved_ped:.6g} (configured {configured_ped})."
+            f"resolved_robot={resolved_robot:.6g} (selected {selected_robot_radius_m}), "
+            f"resolved_ped={resolved_ped:.6g} (selected {selected_ped_radius_m})."
         ),
         evidence={
             "metric": "human_collisions",
+            "episode_builder": "robot_sf.benchmark.runner._build_episode_data",
             "centre_distance_m": centre_distance,
             "pair_a": {"robot_radius_m": pair_a[0], "ped_radius_m": pair_a[1]},
             "pair_b": {"robot_radius_m": pair_b[0], "ped_radius_m": pair_b[1]},
             "human_collisions_a": coll_a,
             "human_collisions_b": coll_b,
             "collisions_responsive_to_radius": bool(metrics_ok),
-            "configured_robot_radius_m": configured_robot,
-            "configured_ped_radius_m": configured_ped,
+            "scenario_robot_radius_m": resolved_robot,
+            "scenario_ped_radius_m": resolved_ped,
             "resolved_robot_radius_m": resolved_robot,
             "resolved_ped_radius_m": resolved_ped,
             "resolver_responsive": bool(resolver_ok),
             "tolerance_m": tolerance_m,
+            **config_evidence,
         },
-        note=None,
+        note=None if binding_ok else "selected radius did not reach the production output-row path",
     )
 
 
@@ -809,6 +962,9 @@ def probe_planner_inputs(
     *,
     selected_robot_radius_m: float,
     selected_ped_radius_m: float,
+    scenario: Mapping[str, Any] | None = None,
+    configured_robot_radius_m: float | None = None,
+    configured_ped_radius_m: float | None = None,
     tolerance_m: float = DEFAULT_RADIUS_TOLERANCE_M,
 ) -> SurfaceVerdict:
     """Surface 5: the planner-facing observation carries the configured radii.
@@ -823,13 +979,33 @@ def probe_planner_inputs(
         SurfaceVerdict: Pass when the observation carries the configured radii.
     """
     from robot_sf.baselines.interface import Observation  # noqa: PLC0415
-    from robot_sf.benchmark.runner import _build_observation  # noqa: PLC0415
+    from robot_sf.benchmark.runner import (  # noqa: PLC0415
+        _build_observation,
+        _scenario_ped_radius_m,
+        _scenario_robot_radius_m,
+    )
 
     robot_pos = np.array([10.0, 9.7], dtype=float)
     robot_vel = np.array([0.0, 0.0], dtype=float)
     robot_goal = np.array([17.0, 9.7], dtype=float)
     ped_positions = np.array([[10.0, 8.7], [11.0, 9.7]], dtype=float)
     dt = 0.1
+    effective_robot_radius_m = float(selected_robot_radius_m)
+    effective_ped_radius_m = float(selected_ped_radius_m)
+    if scenario is not None:
+        try:
+            effective_robot_radius_m = float(_scenario_robot_radius_m(dict(scenario)))
+            effective_ped_radius_m = float(_scenario_ped_radius_m(dict(scenario)))
+        except _CANARY_OPERATIONAL_ERRORS as exc:
+            return SurfaceVerdict(
+                surface=SURFACE_PLANNER_INPUTS,
+                status=STATUS_FAIL,
+                probe="planner_observation_radius_payload",
+                expected="Runner scenario-radius resolver runs without error.",
+                observed=f"resolver raised {type(exc).__name__}: {exc}",
+                evidence={},
+                note="Fail-closed: the runner radius resolver could not be exercised.",
+            )
     try:
         observation = _build_observation(
             Observation,
@@ -838,10 +1014,10 @@ def probe_planner_inputs(
             robot_goal,
             ped_positions,
             dt,
-            robot_radius=float(selected_robot_radius_m),
-            ped_radius=float(selected_ped_radius_m),
+            robot_radius=effective_robot_radius_m,
+            ped_radius=effective_ped_radius_m,
         )
-    except Exception as exc:  # noqa: BLE001 - fail closed on builder errors.
+    except _CANARY_OPERATIONAL_ERRORS as exc:
         return SurfaceVerdict(
             surface=SURFACE_PLANNER_INPUTS,
             status=STATUS_FAIL,
@@ -856,11 +1032,22 @@ def probe_planner_inputs(
     agent_payloads = observation.agents
     obs_robot_radius = float(robot_payload.get("radius", math.nan))
     obs_ped_radii = [float(agent.get("radius", math.nan)) for agent in agent_payloads]
-    robot_ok = abs(obs_robot_radius - selected_robot_radius_m) <= tolerance_m
+    robot_ok = abs(obs_robot_radius - effective_robot_radius_m) <= tolerance_m
     agents_ok = bool(agent_payloads) and all(
-        abs(r - selected_ped_radius_m) <= tolerance_m for r in obs_ped_radii
+        abs(r - effective_ped_radius_m) <= tolerance_m for r in obs_ped_radii
     )
-    ok = robot_ok and agents_ok
+    selection_ok, config_evidence = _configuration_binding_evidence(
+        selected_robot_radius_m=selected_robot_radius_m,
+        selected_ped_radius_m=selected_ped_radius_m,
+        configured_robot_radius_m=configured_robot_radius_m,
+        configured_ped_radius_m=configured_ped_radius_m,
+        tolerance_m=tolerance_m,
+    )
+    effective_selection_ok = (
+        abs(effective_robot_radius_m - selected_robot_radius_m) <= tolerance_m
+        and abs(effective_ped_radius_m - selected_ped_radius_m) <= tolerance_m
+    )
+    ok = robot_ok and agents_ok and selection_ok and effective_selection_ok
     return SurfaceVerdict(
         surface=SURFACE_PLANNER_INPUTS,
         status=STATUS_PASS if ok else STATUS_FAIL,
@@ -874,13 +1061,17 @@ def probe_planner_inputs(
             "builder": "robot_sf.benchmark.runner._build_observation",
             "selected_robot_radius_m": float(selected_robot_radius_m),
             "selected_ped_radius_m": float(selected_ped_radius_m),
+            "effective_robot_radius_m": effective_robot_radius_m,
+            "effective_ped_radius_m": effective_ped_radius_m,
             "observed_robot_radius_m": obs_robot_radius,
             "observed_agent_radii_m": obs_ped_radii,
             "robot_payload_carries_radius": bool(robot_ok),
             "agent_payloads_carry_radius": bool(agents_ok),
+            "effective_selection_matches": bool(effective_selection_ok),
             "tolerance_m": tolerance_m,
+            **config_evidence,
         },
-        note=None,
+        note=None if ok else "selected radius did not reach the production planner-input path",
     )
 
 
@@ -917,7 +1108,7 @@ def run_radius_binding_canary(
     ]
     try:
         resolved_geometry = geometry or load_canary_geometry(Path(scenario_path))
-    except Exception as exc:  # noqa: BLE001 - fail closed on geometry-load errors.
+    except _CANARY_OPERATIONAL_ERRORS as exc:
         fail = SurfaceVerdict(
             surface="scenario_geometry",
             status=STATUS_FAIL,
@@ -945,6 +1136,8 @@ def run_radius_binding_canary(
         "map_width_m": resolved_geometry.map_width,
         "map_height_m": resolved_geometry.map_height,
         "obstacle_segment_count": int(resolved_geometry.obstacle_lines_runtime.shape[0]),
+        "configured_robot_radius_m": resolved_geometry.configured_robot_radius_m,
+        "configured_ped_radius_m": resolved_geometry.configured_ped_radius_m,
     }
 
     # Two distinct envelope radii for the feasibility-oracle probe, both below the
@@ -959,12 +1152,18 @@ def run_radius_binding_canary(
 
     surfaces: list[SurfaceVerdict] = [
         probe_simulator_collision_geometry(
-            resolved_geometry, tolerance_m=tolerance_m, scan_step_m=scan_step_m
+            resolved_geometry,
+            selected_robot_radius_m=selected_robot_radius_m,
+            configured_robot_radius_m=resolved_geometry.configured_robot_radius_m,
+            tolerance_m=tolerance_m,
+            scan_step_m=scan_step_m,
         ),
         probe_obstacle_pedestrian_contact(
             resolved_geometry,
             selected_robot_radius_m=selected_robot_radius_m,
             selected_ped_radius_m=selected_ped_radius_m,
+            configured_robot_radius_m=resolved_geometry.configured_robot_radius_m,
+            configured_ped_radius_m=resolved_geometry.configured_ped_radius_m,
             tolerance_m=tolerance_m,
             scan_step_m=scan_step_m,
         ),
@@ -972,16 +1171,26 @@ def run_radius_binding_canary(
             resolved_geometry,
             radius_a_m=radius_a,
             radius_b_m=radius_b,
+            selected_robot_radius_m=selected_robot_radius_m,
+            selected_ped_radius_m=selected_ped_radius_m,
+            configured_robot_radius_m=resolved_geometry.configured_robot_radius_m,
+            configured_ped_radius_m=resolved_geometry.configured_ped_radius_m,
             tolerance_m=tolerance_m,
         ),
         probe_metric_metadata_and_output_rows(
             selected_robot_radius_m=selected_robot_radius_m,
             selected_ped_radius_m=selected_ped_radius_m,
+            scenario=resolved_geometry.scenario,
+            configured_robot_radius_m=resolved_geometry.configured_robot_radius_m,
+            configured_ped_radius_m=resolved_geometry.configured_ped_radius_m,
             tolerance_m=tolerance_m,
         ),
         probe_planner_inputs(
             selected_robot_radius_m=selected_robot_radius_m,
             selected_ped_radius_m=selected_ped_radius_m,
+            scenario=resolved_geometry.scenario,
+            configured_robot_radius_m=resolved_geometry.configured_robot_radius_m,
+            configured_ped_radius_m=resolved_geometry.configured_ped_radius_m,
             tolerance_m=tolerance_m,
         ),
     ]

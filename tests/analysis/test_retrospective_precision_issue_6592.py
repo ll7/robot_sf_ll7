@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 from tests.support.script_loader import load_script_module
@@ -350,10 +351,63 @@ class TestReportSchema:
         for entry in headline:
             assert entry["outcome"] == "collision"
             assert entry["ci_width"] > 0
-            assert entry["mrrd_practical_simulated"] > 0
+            assert entry["mrrd_practical_positive"] > 0
+            assert entry["mrrd_practical_negative"] > 0
+            assert entry["mrrd_practical_observed_direction"] > 0
             assert entry["mrrd_statistical"] > 0
             assert entry["n_families"] == 35
             assert entry["n_cells"] == 1440
+
+    def test_mrrd_numeric_contract_and_signed_tails(self, precision_run):
+        """Statistical MRRD uses half-width and practical MRRD follows RD sign."""
+        report, _ = precision_run
+        z_crit = 1.959963984540054
+        for entry in report["headline_collision_precisions"]:
+            assert entry["mrrd_statistical"] == pytest.approx(z_crit * entry["bootstrap_se"])
+            assert entry["mrrd_practical_normal_approximation"] == pytest.approx(
+                0.02 + z_crit * entry["bootstrap_se"]
+            )
+            assert entry["mrrd_practical_worst_case"] == pytest.approx(
+                max(entry["mrrd_practical_positive"], entry["mrrd_practical_negative"])
+            )
+
+        positive = next(
+            entry
+            for entry in report["headline_collision_precisions"]
+            if entry["planner_pair"] == ["goal", "orca"]
+        )
+        assert positive["mrrd_practical_observed_direction_label"] == "positive"
+        assert positive["mrrd_practical_observed_direction"] == pytest.approx(
+            positive["mrrd_practical_positive"]
+        )
+
+        negative = next(
+            entry
+            for entry in report["headline_collision_precisions"]
+            if entry["planner_pair"] == ["scenario_adaptive_hybrid_orca_v1", "orca"]
+        )
+        assert negative["mrrd_practical_observed_direction_label"] == "negative"
+        assert negative["mrrd_practical_observed_direction"] == pytest.approx(
+            negative["mrrd_practical_negative"]
+        )
+        assert negative["mrrd_practical_negative"] == pytest.approx(0.126097)
+        assert negative["mrrd_practical_negative"] > negative["mrrd_practical_positive"]
+
+    def test_simulate_mrrd_uses_both_signed_percentile_tails(self, precision_module):
+        """Asymmetric bootstrap tails yield distinct positive and negative MRRDs."""
+        samples = np.asarray([-0.04, -0.02, 0.01, 0.02, 0.08], dtype=np.float64)
+        assert precision_module._simulate_mrrd(
+            samples,
+            threshold=0.02,
+            confidence=0.80,
+            direction="positive",
+        ) == pytest.approx(0.062)
+        assert precision_module._simulate_mrrd(
+            samples,
+            threshold=0.02,
+            confidence=0.80,
+            direction="negative",
+        ) == pytest.approx(0.066)
 
     def test_sensitivity_analyses_present(self, precision_run):
         """Report contains sensitivity analyses across event rate grid."""
@@ -369,6 +423,12 @@ class TestReportSchema:
                 assert point["bootstrap_se"] >= 0
                 assert point["outcome"] == "collision"
                 assert point["outcome_model"] == "independent Bernoulli null arms"
+                assert point["mrrd_statistical"] >= 0
+                assert point["mrrd_practical_positive"] >= 0
+                assert point["mrrd_practical_negative"] >= 0
+                assert point["mrrd_practical_worst_case"] == pytest.approx(
+                    max(point["mrrd_practical_positive"], point["mrrd_practical_negative"])
+                )
         assert any(point["bootstrap_se"] > 0 for entry in sensitivity for point in entry["grid"])
 
 

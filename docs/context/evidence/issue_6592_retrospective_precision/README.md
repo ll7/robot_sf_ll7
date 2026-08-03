@@ -29,21 +29,21 @@ minimum-resolvable risk-difference packet derived from the frozen
 
 ## Achieved Precision: Headline Collision Contrasts
 
-| Planner Pair | Observed RD | CI Width | 95% CI | MRRD (practical) |
-| --- | --- | --- | --- | --- |
-| goal vs orca | 0.3194 | 0.2364 | [0.2015, 0.4379] | 0.1380 |
-| guarded_ppo vs orca | 0.1764 | 0.2618 | [0.0355, 0.2973] | 0.1580 |
-| hybrid_rule_v3_fast_progress_static_escape vs orca | -0.0778 | 0.2127 | [-0.1806, 0.0321] | 0.1240 |
-| hybrid_rule_v3_fast_progress_static_escape_continuous vs orca | -0.1347 | 0.1663 | [-0.2191, -0.0527] | 0.1060 |
-| ppo vs orca | -0.0139 | 0.2496 | [-0.1455, 0.1041] | 0.1480 |
-| prediction_planner vs orca | 0.2146 | 0.1736 | [0.1271, 0.3007] | 0.1080 |
-| predictive_mppi vs orca | 0.4118 | 0.2370 | [0.2806, 0.5176] | 0.1470 |
-| risk_dwa vs orca | 0.5083 | 0.2054 | [0.3969, 0.6023] | 0.1290 |
-| sacadrl vs orca | 0.3986 | 0.2424 | [0.2726, 0.5150] | 0.1430 |
-| scenario_adaptive_hybrid_orca_v1 vs orca | -0.0681 | 0.2023 | [-0.1633, 0.0390] | 0.1170 |
-| scenario_adaptive_hybrid_orca_v2_collision_guard vs orca | -0.0722 | 0.2038 | [-0.1682, 0.0356] | 0.1180 |
-| social_force vs orca | 0.2104 | 0.3297 | [0.0540, 0.3837] | 0.1800 |
-| socnav_sampling vs orca | 0.4257 | 0.2407 | [0.3015, 0.5422] | 0.1420 |
+| Planner Pair | Observed RD | CI Width | 95% CI | MRRD (observed direction) | Tail |
+| --- | --- | --- | --- | --- | --- |
+| goal vs orca | 0.3194 | 0.2364 | [0.2015, 0.4379] | 0.1376 | positive |
+| guarded_ppo vs orca | 0.1764 | 0.2618 | [0.0355, 0.2973] | 0.1575 | positive |
+| hybrid_rule_v3_fast_progress_static_escape vs orca | -0.0778 | 0.2127 | [-0.1806, 0.0321] | 0.1290 | negative |
+| hybrid_rule_v3_fast_progress_static_escape_continuous vs orca | -0.1347 | 0.1663 | [-0.2191, -0.0527] | 0.1012 | negative |
+| ppo vs orca | -0.0139 | 0.2496 | [-0.1455, 0.1041] | 0.1419 | negative |
+| prediction_planner vs orca | 0.2146 | 0.1736 | [0.1271, 0.3007] | 0.1077 | positive |
+| predictive_mppi vs orca | 0.4118 | 0.2370 | [0.2806, 0.5176] | 0.1467 | positive |
+| risk_dwa vs orca | 0.5083 | 0.2054 | [0.3969, 0.6023] | 0.1286 | positive |
+| sacadrl vs orca | 0.3986 | 0.2424 | [0.2726, 0.5150] | 0.1422 | positive |
+| scenario_adaptive_hybrid_orca_v1 vs orca | -0.0681 | 0.2023 | [-0.1633, 0.0390] | 0.1261 | negative |
+| scenario_adaptive_hybrid_orca_v2_collision_guard vs orca | -0.0722 | 0.2038 | [-0.1682, 0.0356] | 0.1268 | negative |
+| social_force vs orca | 0.2104 | 0.3297 | [0.0540, 0.3837] | 0.1790 | positive |
+| socnav_sampling vs orca | 0.4257 | 0.2407 | [0.3015, 0.5422] | 0.1413 | positive |
 
 ## Event-Rate Sensitivity
 
@@ -60,9 +60,16 @@ minimum-resolvable risk-difference packet derived from the frozen
   interval estimate actually obtained from the data and design.
 - **Minimum resolvable risk difference (MRRD)** is the smallest true
   effect that the design could resolve as practically separable,
-  derived from the bootstrap standard error. It is a property of the
-  design (family count, cell count, event rate), not of the observed
-  effect size.
+  derived from the shifted bootstrap percentile bounds. Positive
+  effects use the lower tail; negative effects use the upper tail.
+  The contrast table reports the tail matching the observed RD sign
+  and the JSON retains both tails plus their worst case.
+- **Statistical MRRD** is the zero-threshold normal approximation
+  `z_(1-alpha/2) * bootstrap_se`; the practical normal approximation
+  adds the declared threshold. Neither quantity is a CI width.
+- Sensitivity rows have no observed effect direction, so their
+  reported practical MRRD is the larger of the positive and negative
+  shifted-tail values.
 - This packet does NOT report any post-hoc observed-data adequacy
   metric. Such metrics are monotone transformations of the p-value
   and carry no information beyond what the p-value already provides.

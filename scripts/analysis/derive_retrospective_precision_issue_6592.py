@@ -364,11 +364,12 @@ def derive_contrast_precision(
     """Derive achieved precision and minimum resolvable risk difference for one contrast.
 
     Uses the admitted ``_cluster_bootstrap_paired`` primitive by import.
-    The minimum resolvable risk difference (MRRD) is the smallest true effect
-    that would produce a confidence interval whose lower bound exceeds the
-    declared practical-effect threshold.  This is a design-sensitivity measure
-    derived from the bootstrap standard error, NOT an observed-data
-    computation.
+    The statistical MRRD is the normal-approximation absolute effect needed for
+    a zero-threshold shifted confidence bound (``z_crit * SE``).  The practical
+    MRRD is sign-aware: positive effects use the shifted lower bound and
+    negative effects use the shifted upper bound to clear the corresponding
+    signed practical threshold.  These are design-sensitivity measures, NOT
+    observed-data computations.
 
     Returns:
         Precision derivation mapping for one contrast-outcome pair.
@@ -397,21 +398,31 @@ def derive_contrast_precision(
     bootstrap_se = float(np.std(diff_samples, ddof=1))
     observed_rd = float(np.mean(outcomes_a) - np.mean(outcomes_b))
 
-    # Minimum resolvable risk difference: the smallest true effect delta such
-    # that the lower percentile bound of the bootstrap distribution (shifted
-    # to be centered at delta) would exceed the practical-effect threshold.
-    # Computed via the bootstrap SE and the normal critical value as a
-    # transparent closed-form approximation, then verified by simulation.
+    # The statistical MRRD is the zero-threshold normal approximation.  The
+    # practical normal approximation adds the declared signed threshold.  A
+    # two-sided CI has half-width z_crit * SE, not 2 * z_crit * SE.
     z_crit = float(norm.ppf(1.0 - (1.0 - policy.confidence) / 2.0))
-    mrrd_statistical = 2.0 * z_crit * bootstrap_se
-    mrrd_practical = policy.min_risk_difference + z_crit * bootstrap_se
+    mrrd_statistical = z_crit * bootstrap_se
+    mrrd_practical_normal_approximation = policy.min_risk_difference + z_crit * bootstrap_se
 
-    # Simulation-based MRRD: find the smallest delta where the shifted
-    # bootstrap CI lower bound exceeds the practical threshold.
-    mrrd_simulated = _simulate_mrrd(
+    # Empirical shifted-percentile MRRDs retain the bootstrap asymmetry.  The
+    # observed-direction value is used for the headline table, while both
+    # tails and their worst case remain available in the JSON report.
+    mrrd_practical_positive = _simulate_mrrd(
         diff_samples,
         threshold=policy.min_risk_difference,
         confidence=policy.confidence,
+        direction="positive",
+    )
+    mrrd_practical_negative = _simulate_mrrd(
+        diff_samples,
+        threshold=policy.min_risk_difference,
+        confidence=policy.confidence,
+        direction="negative",
+    )
+    observed_direction = "negative" if observed_rd < 0.0 else "positive"
+    mrrd_practical_observed_direction = (
+        mrrd_practical_negative if observed_direction == "negative" else mrrd_practical_positive
     )
 
     n_families = len(families)
@@ -433,8 +444,12 @@ def derive_contrast_precision(
         "bootstrap_samples": policy.bootstrap_samples,
         "confidence": policy.confidence,
         "mrrd_statistical": mrrd_statistical,
-        "mrrd_practical_closed_form": mrrd_practical,
-        "mrrd_practical_simulated": mrrd_simulated,
+        "mrrd_practical_normal_approximation": mrrd_practical_normal_approximation,
+        "mrrd_practical_positive": mrrd_practical_positive,
+        "mrrd_practical_negative": mrrd_practical_negative,
+        "mrrd_practical_observed_direction": mrrd_practical_observed_direction,
+        "mrrd_practical_observed_direction_label": observed_direction,
+        "mrrd_practical_worst_case": max(mrrd_practical_positive, mrrd_practical_negative),
         "practical_effect_threshold": policy.min_risk_difference,
     }
 
@@ -444,30 +459,38 @@ def _simulate_mrrd(
     *,
     threshold: float,
     confidence: float,
-    resolution: float = 0.001,
+    direction: str,
     max_delta: float = 1.0,
 ) -> float:
-    """Find the smallest true effect whose shifted CI lower bound exceeds threshold.
+    """Find the smallest signed effect magnitude whose shifted CI clears threshold.
 
-    Shifts the centered bootstrap distribution by increasing delta values and
-    checks when the equal-tailed percentile CI lower bound first exceeds the
-    practical-effect threshold.  This is a design-sensitivity computation: it
-    asks what effect the design could resolve, not what was observed.
+    The centered bootstrap distribution is shifted analytically rather than
+    searched on a coarse grid.  For a positive effect, the lower percentile
+    bound must be at least ``threshold``.  For a negative effect, the upper
+    percentile bound must be at most ``-threshold``.  This retains asymmetric
+    bootstrap tails and is a design-sensitivity computation: it asks what
+    effect the design could resolve, not what was observed.
 
     Returns:
-        The minimum resolvable risk difference (simulated).
+        The minimum resolvable risk-difference magnitude for ``direction``.
     """
+    if direction not in {"positive", "negative"}:
+        raise RetrospectivePrecisionError(f"unsupported MRRD direction: {direction!r}")
+    if diff_samples.size == 0:
+        raise RetrospectivePrecisionError("MRRD requires non-empty bootstrap samples")
+    if not 0.0 < confidence < 1.0:
+        raise RetrospectivePrecisionError("MRRD confidence must be in the open interval (0, 1)")
+
     centered = diff_samples - float(np.mean(diff_samples))
     alpha = 1.0 - confidence
     lower_pct = 100.0 * (alpha / 2.0)
-    delta = 0.0
-    while delta <= max_delta:
-        shifted = centered + delta
-        lower_bound = float(np.percentile(shifted, lower_pct))
-        if lower_bound >= threshold:
-            return round(delta, 6)
-        delta += resolution
-    return round(max_delta, 6)
+    if direction == "positive":
+        lower_bound = float(np.percentile(centered, lower_pct))
+        delta = threshold - lower_bound
+    else:
+        upper_bound = float(np.percentile(centered, 100.0 - lower_pct))
+        delta = threshold + upper_bound
+    return round(min(max(float(delta), 0.0), max_delta), 6)
 
 
 def derive_sensitivity_grid(
@@ -511,8 +534,20 @@ def derive_sensitivity_grid(
         )
         bootstrap_se = float(np.std(diff_samples, ddof=1))
         z_crit = float(norm.ppf(1.0 - (1.0 - policy.confidence) / 2.0))
-        mrrd_stat = 2.0 * z_crit * bootstrap_se
-        mrrd_pract = policy.min_risk_difference + z_crit * bootstrap_se
+        mrrd_stat = z_crit * bootstrap_se
+        mrrd_pract_normal = policy.min_risk_difference + z_crit * bootstrap_se
+        mrrd_pract_positive = _simulate_mrrd(
+            diff_samples,
+            threshold=policy.min_risk_difference,
+            confidence=policy.confidence,
+            direction="positive",
+        )
+        mrrd_pract_negative = _simulate_mrrd(
+            diff_samples,
+            threshold=policy.min_risk_difference,
+            confidence=policy.confidence,
+            direction="negative",
+        )
 
         results.append(
             {
@@ -523,7 +558,10 @@ def derive_sensitivity_grid(
                 "n_families": len(families),
                 "bootstrap_se": bootstrap_se,
                 "mrrd_statistical": mrrd_stat,
-                "mrrd_practical": mrrd_pract,
+                "mrrd_practical_normal_approximation": mrrd_pract_normal,
+                "mrrd_practical_positive": mrrd_pract_positive,
+                "mrrd_practical_negative": mrrd_pract_negative,
+                "mrrd_practical_worst_case": max(mrrd_pract_positive, mrrd_pract_negative),
             }
         )
 
@@ -661,8 +699,36 @@ def build_precision_report(
         "practical_effect_rule": {
             "min_risk_difference": policy.min_risk_difference,
             "description": (
-                "A risk difference below min_risk_difference is treated as "
-                "practically null even when its interval excludes zero"
+                "A signed risk difference is practically separable only when "
+                "its interval clears the corresponding positive or negative "
+                "threshold; effects with magnitude below min_risk_difference "
+                "are treated as practically null even when their interval "
+                "excludes zero"
+            ),
+        },
+        "mrrd_contract": {
+            "statistical": (
+                "Zero-threshold normal-approximation MRRD: z_(1-alpha/2) * bootstrap_se"
+            ),
+            "practical_normal_approximation": (
+                "For either sign, min_risk_difference + z_(1-alpha/2) * bootstrap_se"
+            ),
+            "positive_direction": (
+                "Smallest delta >= 0 whose shifted equal-tailed lower "
+                "percentile bound is >= +min_risk_difference"
+            ),
+            "negative_direction": (
+                "Smallest delta >= 0 whose shifted equal-tailed upper "
+                "percentile bound is <= -min_risk_difference"
+            ),
+            "contrast_reported_value": (
+                "mrrd_practical_observed_direction, selected by the sign of "
+                "observed_risk_difference; both signed tails are retained"
+            ),
+            "sensitivity_reported_value": (
+                "mrrd_practical_worst_case, the larger signed tail because "
+                "the synthetic null sensitivity rows have no observed effect "
+                "direction"
             ),
         },
         "frozen_input_provenance": {
@@ -732,7 +798,10 @@ def build_precision_report(
         ],
         "terminology_note": (
             "This report uses 'achieved precision' (CI width) and 'minimum "
-            "resolvable risk difference' (MRRD, a design-sensitivity measure). "
+            "resolvable risk difference' (MRRD, a signed-tail-aware "
+            "design-sensitivity measure). Positive and negative practical "
+            "MRRDs use opposite CI tails, and contrast rows report the tail "
+            "matching the observed RD direction. "
             "It does NOT report any post-hoc observed-data adequacy metric, "
             "does NOT claim prospective adequacy, and does NOT claim that "
             "the 30-seed design was chosen via a prospective sizing calculation."
@@ -790,8 +859,8 @@ def render_precision_readme(
         "",
         "## Achieved Precision: Headline Collision Contrasts",
         "",
-        "| Planner Pair | Observed RD | CI Width | 95% CI | MRRD (practical) |",
-        "| --- | --- | --- | --- | --- |",
+        "| Planner Pair | Observed RD | CI Width | 95% CI | MRRD (observed direction) | Tail |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
 
     for cp in headline:
@@ -800,10 +869,11 @@ def render_precision_readme(
         ci_w = cp.get("ci_width", 0.0)
         ci_lo = cp.get("ci_low", 0.0)
         ci_hi = cp.get("ci_high", 0.0)
-        mrrd_p = cp.get("mrrd_practical_simulated", 0.0)
+        mrrd_p = cp.get("mrrd_practical_observed_direction", 0.0)
+        mrrd_direction = cp.get("mrrd_practical_observed_direction_label", "N/A")
         lines.append(
             f"| {pair_str} | {obs_rd:.4f} | {ci_w:.4f} "
-            f"| [{ci_lo:.4f}, {ci_hi:.4f}] | {mrrd_p:.4f} |"
+            f"| [{ci_lo:.4f}, {ci_hi:.4f}] | {mrrd_p:.4f} | {mrrd_direction} |"
         )
 
     lines.extend(
@@ -824,9 +894,16 @@ def render_precision_readme(
             "  interval estimate actually obtained from the data and design.",
             "- **Minimum resolvable risk difference (MRRD)** is the smallest true",
             "  effect that the design could resolve as practically separable,",
-            "  derived from the bootstrap standard error. It is a property of the",
-            "  design (family count, cell count, event rate), not of the observed",
-            "  effect size.",
+            "  derived from the shifted bootstrap percentile bounds. Positive",
+            "  effects use the lower tail; negative effects use the upper tail.",
+            "  The contrast table reports the tail matching the observed RD sign",
+            "  and the JSON retains both tails plus their worst case.",
+            "- **Statistical MRRD** is the zero-threshold normal approximation",
+            "  `z_(1-alpha/2) * bootstrap_se`; the practical normal approximation",
+            "  adds the declared threshold. Neither quantity is a CI width.",
+            "- Sensitivity rows have no observed effect direction, so their",
+            "  reported practical MRRD is the larger of the positive and negative",
+            "  shifted-tail values.",
             "- This packet does NOT report any post-hoc observed-data adequacy",
             "  metric. Such metrics are monotone transformations of the p-value",
             "  and carry no information beyond what the p-value already provides.",
@@ -951,9 +1028,11 @@ def build_dissertation_statement(report: Mapping[str, Any]) -> str:
         f"({' vs '.join(widest.get('planner_pair', []))}). "
         f"The minimum resolvable risk difference under the declared "
         f"practical-effect threshold (>= 0.02) ranges from "
-        f"{min(h.get('mrrd_practical_simulated', 0) for h in headline):.4f} to "
-        f"{max(h.get('mrrd_practical_simulated', 0) for h in headline):.4f} "
-        f"across headline contrasts. This is a design-sensitivity measure, NOT "
+        f"{min(h.get('mrrd_practical_observed_direction', 0) for h in headline):.4f} to "
+        f"{max(h.get('mrrd_practical_observed_direction', 0) for h in headline):.4f} "
+        f"across headline contrasts, using the observed RD direction: positive "
+        f"effects use the lower tail and negative effects use the upper tail. "
+        f"This is a design-sensitivity measure, NOT "
         f"a post-hoc observed-data adequacy computation, and does NOT claim "
         f"prospective adequacy of the 30-seed design. Multiplicity inference uses "
         f"exact two-sided McNemar p-values with Holm step-down over "

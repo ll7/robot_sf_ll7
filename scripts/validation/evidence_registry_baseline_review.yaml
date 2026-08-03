@@ -15,12 +15,12 @@ approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
 latest_reconciliation_issue: 6156
-latest_reviewed_date: 2026-07-30
+latest_reviewed_date: 2026-08-03
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 397
-refreshed_baseline_files_with_findings: 86
+refreshed_baseline_total_findings: 415
+refreshed_baseline_files_with_findings: 89
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -74,6 +74,14 @@ decision_summary: >-
   hash_without_artifact_path finding remains explicitly baselined below. This reconciliation
   changes provenance bookkeeping only; the bundle remains diagnostic-only and both reported
   analyses remain not_identifiable.
+  Package B addendum (issue #6412 / PR #6733): the visualization-only compact re-export package
+  adds three receipt files with eighteen findings. The compact manifest deliberately uses paths
+  relative to its exported package, while the registry linter resolves paths from the repository
+  root; its two figure/output receipts hash disposable or external artifacts that are not copied
+  into Git. The package README and receipts explicitly preserve this boundary and do not claim
+  release evidence. No safe in-place rewrite can recover the external artifacts or change the
+  package-relative schema without a reviewed producer/consumer migration, so these findings are
+  recorded as targeted baseline debt rather than hidden by a global exclusion.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -182,6 +190,35 @@ reviewed_files:
       This is the legacy provenance gap identified by Issue #5972; repairing the external artifact
       binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
       as baseline under the existing strict-CI policy.
+  - path: docs/context/evidence/issue_6412_real_reexport_package/evidence_export.json
+    codes: [artifact_hash_mismatch, uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      Issue #6412 compact export receipt. Its file paths are intentionally relative to the
+      self-contained export directory, so the repository-root evidence linter cannot resolve
+      tracked siblings and reports one bundle-context hash mismatch plus eleven missing locations
+      for package-relative records. The export also declares raw and normalized traces outside
+      Git. Preserve the package contract and exact hashes; changing the schema or recovering the
+      disposable/external artifacts requires a reviewed producer/consumer migration, so this is
+      targeted provenance debt rather than a safe in-place repair.
+  - path: docs/context/evidence/issue_6412_real_reexport_package/figure_artifacts.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Issue #6412 figure receipt hashes generated PDF/PNG outputs while deliberately keeping those
+      binaries in disposable package storage rather than Git. The receipt is visualization-only
+      and carries no release claim; adding a durable artifact path requires external package
+      retention/owner action, so the four hashes remain explicitly baselined pending provenance
+      backfill.
+  - path: docs/context/evidence/issue_6412_real_reexport_package/package_report.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Issue #6412 package report hashes the resolver and figure-QA receipts as compact package
+      provenance, while the source traces and figure binaries remain outside Git. Those two
+      checksums have no adjacent durable artifact path by design; the package remains
+      diagnostic-only and visualization-only, so this targeted legacy provenance gap is
+      baselined pending external retention and owner review.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

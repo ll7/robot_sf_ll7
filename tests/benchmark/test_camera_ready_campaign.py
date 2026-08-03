@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import csv
+import inspect
 import io
 import json
 import math
@@ -19,7 +21,9 @@ import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_modu
 import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
 import robot_sf.benchmark.camera_ready._config_types as camera_ready_config_types_module
 import robot_sf.benchmark.camera_ready._legacy_campaign_facade as camera_ready_legacy_facade
+import robot_sf.benchmark.camera_ready._preflight as camera_ready_preflight_module
 import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
+import robot_sf.benchmark.camera_ready.campaign as camera_ready_campaign_impl_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 import robot_sf.benchmark.camera_ready_campaign_config as camera_ready_campaign_config_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
@@ -118,6 +122,95 @@ def test_camera_ready_campaign_legacy_module_is_package_owned_facade() -> None:
     assert camera_ready_campaign_module.run_campaign is camera_ready_legacy_facade.run_campaign
 
 
+def test_campaign_refactor_functions_remain_focused() -> None:
+    """Issue #6535 keeps coordinators delegated and all focused functions under 80 lines."""
+    source_path = Path(camera_ready_campaign_impl_module.__file__)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    function_nodes = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    function_lengths = {
+        name: node.end_lineno - node.lineno + 1 for name, node in function_nodes.items()
+    }
+
+    focused_function_names = (
+        "_build_subprocess_arm_params",
+        "_parse_subprocess_output",
+        "_collect_subprocess_episodes",
+        "_build_subprocess_run_entry",
+        "_execute_subprocess_arm",
+        "_check_subprocess_stop_on_failure",
+        "_run_campaign_planner_variant_subprocess",
+        "_unpack_campaign_preflight",
+        "_post_run_integrity_and_fairness",
+        "_split_planner_rows_by_group",
+        "_write_campaign_table_artifacts",
+        "_write_breakdown_and_parity_artifacts",
+        "_write_parity_table",
+        "_compute_campaign_outcome_state",
+        "_resolve_snqi_baseline_and_weights",
+        "_validate_snqi_inputs_if_paper_facing",
+        "_compute_snqi_hashes",
+        "_determine_snqi_contract_warnings",
+        "_build_and_write_snqi_section",
+        "_compute_snqi_positioning",
+        "_build_snqi_diagnostics_payload",
+        "_write_seed_variability_section",
+        "_write_actuation_envelope_section",
+        "_build_campaign_execution_metadata",
+        "_build_campaign_metadata_section",
+        "_build_campaign_summary_dict",
+        "_build_release_artifact_urls",
+        "_build_campaign_artifacts_section",
+        "_build_run_meta_preflight_artifacts",
+        "_build_run_meta_seed_variability_metrics",
+        "_build_run_meta",
+        "_build_campaign_manifest_payload",
+        "_write_run_level_files",
+        "_export_publication_bundle_section",
+        "_write_final_campaign_artifacts",
+        "_write_table_and_breakdown_artifacts",
+        "_write_diagnostic_sections",
+        "_assemble_report_artifacts",
+        "_write_campaign_report_artifacts",
+        "_build_summary_and_write_run_files",
+        "_export_and_write_final_artifacts",
+        "_finalize_campaign_outputs",
+        "_build_table_paths_dict",
+        "_prepare_campaign_execution",
+        "_execute_planner_matrix_phase",
+        "_run_campaign_orchestrator",
+        "_build_orchestrator_return",
+    )
+    for function_name in focused_function_names:
+        assert function_lengths[function_name] <= 80, function_name
+
+    expected_phase_calls = {
+        "_run_campaign_planner_variant_subprocess": {
+            "_prepare_campaign_planner_variant_run",
+            "_execute_subprocess_arm",
+            "_parse_subprocess_output",
+            "_collect_subprocess_episodes",
+            "_build_subprocess_run_entry",
+            "_check_subprocess_stop_on_failure",
+        },
+        "_run_campaign_orchestrator": {
+            "_prepare_campaign_execution",
+            "_execute_planner_matrix_phase",
+            "_post_run_integrity_and_fairness",
+            "_write_campaign_report_artifacts",
+            "_finalize_campaign_outputs",
+            "_build_orchestrator_return",
+        },
+    }
+    for function_name, expected_calls in expected_phase_calls.items():
+        actual_calls = {
+            call.func.id
+            for call in ast.walk(function_nodes[function_name])
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+        }
+        missing_calls = expected_calls - actual_calls
+        assert not missing_calls, f"{function_name} is missing phase calls: {sorted(missing_calls)}"
+
+
 def test_camera_ready_config_types_keep_legacy_import_identity() -> None:
     """Config dataclass extraction keeps package and legacy import paths object-identical."""
     public_names = (
@@ -168,6 +261,48 @@ def test_camera_ready_campaign_reexports_package_run_state_helpers() -> None:
         assert getattr(camera_ready_campaign_module, helper_name) is getattr(
             camera_ready_run_state_module, helper_name
         )
+
+
+def test_prepare_campaign_preflight_refactor_respects_function_size_budget() -> None:
+    """The refactor keeps the entry point and manifest builder below the issue's line budget."""
+    for function_name in ("prepare_campaign_preflight", "_build_campaign_manifest_payload"):
+        function = getattr(camera_ready_preflight_module, function_name)
+        source_lines, _ = inspect.getsourcelines(function)
+        assert len(source_lines) < 80, function_name
+
+
+def test_non_paper_comparability_writer_failure_preserves_partial_mapping_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recoverable writer failures preserve the legacy partial comparability assignments."""
+    cfg = SimpleNamespace(
+        comparability_mapping_path=tmp_path / "mapping.yaml",
+        paper_facing=False,
+    )
+    summary = {"mapping_version": "v1", "mapping_hash": "hash"}
+    mapping_path = tmp_path / "mapping.yaml"
+    monkeypatch.setattr(
+        camera_ready_preflight_module,
+        "_build_comparability_summary",
+        lambda *_args, **_kwargs: (summary, mapping_path),
+    )
+
+    def fail_writer(*_args, **_kwargs):
+        raise ValueError("writer failed")
+
+    monkeypatch.setattr(
+        camera_ready_preflight_module,
+        "_write_comparability_artifacts",
+        fail_writer,
+    )
+
+    assert camera_ready_preflight_module._build_comparability_artifacts_if_configured(
+        cfg,
+        reports_dir=tmp_path / "reports",
+        scenarios=[],
+        campaign_id="campaign",
+        created_at_utc="2026-08-02T00:00:00Z",
+    ) == (summary, None, None, mapping_path)
 
 
 def test_campaign_success_counters_core_success_ignores_experimental_failure() -> None:

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -57,8 +57,31 @@ EXPECTED_RELEASE_BASELINE_CONFIG = (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml"
 )
 EXPECTED_ARM_CAMPAIGN_CONFIG = "configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml"
+EXPECTED_ARM_CAMPAIGN_CONFIG_0P5M = "configs/benchmarks/issue_6642_radius_sweep_arm_0p5m.yaml"
+EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M = "configs/benchmarks/issue_6642_radius_sweep_arm_0p8m.yaml"
 EXPECTED_MANIFEST_CONFIG = "configs/benchmarks/issue_6642_radius_sweep_manifest_v1.yaml"
 EXPECTED_ARM_RELEASE_TAG = "issue-6642-radius-sweep-1p0m"
+EXPECTED_ARM_RELEASE_TAG_0P5M = "issue-6642-radius-sweep-0p5m"
+EXPECTED_ARM_RELEASE_TAG_0P8M = "issue-6642-radius-sweep-0p8m"
+
+# Manifest-config key and frozen campaign identity per radius arm key. Every arm
+# has its own tracked campaign config and issue-scoped release tag; the builder
+# resolves all three and the checker rejects any drift on either surface.
+ARM_CONFIG_KEYS: dict[str, str] = {
+    "r0p5": "arm_campaign_config_0p5m",
+    "r0p8": "arm_campaign_config_0p8m",
+    "r1p0": "arm_campaign_config_1p0m",
+}
+EXPECTED_ARM_CAMPAIGN_CONFIGS: dict[str, str] = {
+    "r0p5": EXPECTED_ARM_CAMPAIGN_CONFIG_0P5M,
+    "r0p8": EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M,
+    "r1p0": EXPECTED_ARM_CAMPAIGN_CONFIG,
+}
+EXPECTED_ARM_RELEASE_TAGS: dict[str, str] = {
+    "r0p5": EXPECTED_ARM_RELEASE_TAG_0P5M,
+    "r0p8": EXPECTED_ARM_RELEASE_TAG_0P8M,
+    "r1p0": EXPECTED_ARM_RELEASE_TAG,
+}
 EXPECTED_SCENARIO_NAMES: tuple[str, ...] = tuple(
     sorted(
         (
@@ -185,17 +208,36 @@ class FixedFactors:
     release_tag: str
 
 
+@dataclass(frozen=True)
+class ArmCampaignIdentity:
+    """Resolved campaign identity for one radius arm of the sweep.
+
+    Every radius arm runs from its own tracked campaign config with its own
+    issue-scoped release tag. The builder resolves all three arms and fails
+    closed unless each identity matches the frozen per-arm constants and the
+    manifest config's declared arm campaign config keys.
+    """
+
+    arm_key: str
+    campaign_config: str
+    release_tag: str
+
+
 def build_radius_sweep_manifest(
     manifest_config: Mapping[str, Any],
     *,
     fixed_factors: FixedFactors,
+    arm_identities: Sequence[ArmCampaignIdentity],
     options: ManifestOptions,
 ) -> dict[str, Any]:
     """Build a deterministic preparation-only radius-sweep manifest.
 
     Args:
         manifest_config: Parsed ``issue-6642-radius-sweep-manifest.v1`` YAML mapping.
-        fixed_factors: Fixed factors resolved from the arm campaign config.
+        fixed_factors: Fixed factors resolved from the baseline (1.0 m) arm config.
+        arm_identities: Resolved campaign identities for all three radius arms, in
+            radius order (0.5/0.8/1.0 m). Each identity must match the frozen
+            per-arm campaign config and release tag constants.
         options: Stable manifest-build metadata (config path, git head).
 
     Returns:
@@ -211,7 +253,11 @@ def build_radius_sweep_manifest(
     _validate_fixed_factors(fixed_factors)
     _validate_declared_fixed_factors(manifest_config, fixed_factors)
     radii = _normalize_radii(manifest_config.get("radii"))
-    arms = [_arm_manifest(radius_entry, fixed_factors=fixed_factors) for radius_entry in radii]
+    identities = _validate_arm_identities(manifest_config, arm_identities)
+    arms = [
+        _arm_manifest(radius_entry, fixed_factors=fixed_factors, identity=identity)
+        for radius_entry, identity in zip(radii, identities, strict=True)
+    ]
     expected_episode_count_per_arm = (
         len(fixed_factors.planner_keys) * fixed_factors.scenario_count * len(fixed_factors.seeds)
     )
@@ -340,6 +386,8 @@ def _validate_manifest_config_shape(manifest_config: Mapping[str, Any]) -> None:
         raise RadiusSweepManifestError("manifest config requires a non-empty radii list")
     expected_paths = {
         "release_baseline_config": EXPECTED_RELEASE_BASELINE_CONFIG,
+        "arm_campaign_config_0p5m": EXPECTED_ARM_CAMPAIGN_CONFIG_0P5M,
+        "arm_campaign_config_0p8m": EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M,
         "arm_campaign_config_1p0m": EXPECTED_ARM_CAMPAIGN_CONFIG,
     }
     for key, expected in expected_paths.items():
@@ -370,33 +418,50 @@ def _validate_manifest_config_shape(manifest_config: Mapping[str, Any]) -> None:
         )
 
 
-def _validate_fixed_factors(fixed_factors: FixedFactors) -> None:  # noqa: C901
-    """Fail closed when resolved arm factors do not match the frozen contract."""
+def validate_arm_fixed_factors(factors: FixedFactors, *, arm_key: str) -> None:  # noqa: C901
+    """Fail closed when one arm's resolved factors drift from the frozen contract.
+
+    Every non-radius factor must equal the frozen release surface; only the
+    issue-scoped release tag is arm-specific.
+
+    Args:
+        factors: Fixed factors resolved from one arm campaign config.
+        arm_key: Radius arm key (``r0p5``, ``r0p8``, or ``r1p0``).
+    """
+    expected_release_tag = EXPECTED_ARM_RELEASE_TAGS.get(arm_key)
+    if expected_release_tag is None:
+        raise RadiusSweepManifestError(f"unknown radius arm key {arm_key!r}")
     violations: list[str] = []
-    if fixed_factors.scenario_matrix != EXPECTED_SCENARIO_MATRIX:
+    if factors.scenario_matrix != EXPECTED_SCENARIO_MATRIX:
         violations.append(f"scenario_matrix must be {EXPECTED_SCENARIO_MATRIX!r}")
-    if fixed_factors.scenario_count != EXPECTED_SCENARIO_COUNT:
+    if factors.scenario_count != EXPECTED_SCENARIO_COUNT:
         violations.append(f"scenario_count must be {EXPECTED_SCENARIO_COUNT}")
-    if not _sequence_matches(fixed_factors.scenario_names, EXPECTED_SCENARIO_NAMES):
+    if not _sequence_matches(factors.scenario_names, EXPECTED_SCENARIO_NAMES):
         violations.append("scenario_names must equal the frozen 48-cell release roster")
-    if not _sequence_matches(fixed_factors.planner_keys, RELEASE_PLANNER_KEYS):
+    if not _sequence_matches(factors.planner_keys, RELEASE_PLANNER_KEYS):
         violations.append("planner_keys must equal the frozen 14-key release roster")
-    if fixed_factors.seed_set != EXPECTED_SEED_SET:
+    if factors.seed_set != EXPECTED_SEED_SET:
         violations.append(f"seed_set must be {EXPECTED_SEED_SET!r}")
-    if not _seed_sequence_matches(fixed_factors.seeds, EXPECTED_SEEDS):
+    if not _seed_sequence_matches(factors.seeds, EXPECTED_SEEDS):
         violations.append("seeds must equal the frozen paper_eval_s30 seeds 111-140")
-    if fixed_factors.horizon != EXPECTED_HORIZON:
+    if factors.horizon != EXPECTED_HORIZON:
         violations.append(f"horizon must be {EXPECTED_HORIZON}")
-    if fixed_factors.dt != EXPECTED_DT:
+    if factors.dt != EXPECTED_DT:
         violations.append(f"dt must be {EXPECTED_DT}")
-    if fixed_factors.kinematics != EXPECTED_KINEMATICS:
+    if factors.kinematics != EXPECTED_KINEMATICS:
         violations.append(f"kinematics must be {EXPECTED_KINEMATICS!r}")
-    if fixed_factors.release_tag != EXPECTED_ARM_RELEASE_TAG:
-        violations.append(f"release_tag must be {EXPECTED_ARM_RELEASE_TAG!r}")
+    if factors.release_tag != expected_release_tag:
+        violations.append(f"release_tag must be {expected_release_tag!r}")
     if violations:
         raise RadiusSweepManifestError(
-            "resolved fixed factors violate the radius-sweep contract: " + "; ".join(violations)
+            f"resolved fixed factors for arm {arm_key!r} violate the radius-sweep contract: "
+            + "; ".join(violations)
         )
+
+
+def _validate_fixed_factors(fixed_factors: FixedFactors) -> None:
+    """Fail closed when the baseline (1.0 m) arm factors miss the frozen contract."""
+    validate_arm_fixed_factors(fixed_factors, arm_key=PRODUCTION_RADIUS_KEYS[-1])
 
 
 def _validate_declared_fixed_factors(
@@ -423,6 +488,102 @@ def _validate_declared_fixed_factors(
         raise RadiusSweepManifestError(
             "manifest fixed_factors do not match the resolved arm config: " + "; ".join(mismatches)
         )
+
+
+def validate_arm_campaign_payload(
+    payload: Mapping[str, Any], *, arm_key: str, radius_m: float, baseline: bool
+) -> None:
+    """Fail closed when an arm campaign config's radius_sweep metadata drifts.
+
+    The ``radius_sweep`` block is preparation metadata that the camera-ready
+    loader ignores, so the sweep builder must prove it declares exactly the
+    intended treatment — and stays pending while Gate 1 has not passed — instead
+    of trusting a silently divergent declaration.
+
+    Args:
+        payload: Parsed arm campaign config mapping.
+        arm_key: Expected radius arm key (``r0p5``, ``r0p8``, or ``r1p0``).
+        radius_m: Expected declared radius in metres.
+        baseline: Expected baseline-arm flag.
+    """
+    if not isinstance(payload, Mapping):
+        raise RadiusSweepManifestError("arm campaign config payload must be a mapping")
+    raw = payload.get("radius_sweep")
+    if not isinstance(raw, Mapping):
+        raise RadiusSweepManifestError(
+            f"arm campaign config for {arm_key!r} requires a radius_sweep metadata mapping"
+        )
+    violations: list[str] = []
+    if raw.get("issue") != ISSUE_6642:
+        violations.append(f"radius_sweep.issue must be {ISSUE_6642}")
+    if raw.get("parent_issue") != PARENT_ISSUE_6600:
+        violations.append(f"radius_sweep.parent_issue must be {PARENT_ISSUE_6600}")
+    if raw.get("arm_key") != arm_key:
+        violations.append(f"radius_sweep.arm_key must be {arm_key!r}, got {raw.get('arm_key')!r}")
+    declared_radius = raw.get("radius_m")
+    if not _radius_matches(declared_radius, radius_m):
+        violations.append(f"radius_sweep.radius_m must be {radius_m!r}, got {declared_radius!r}")
+    if raw.get("baseline_arm") is not baseline:
+        violations.append(f"radius_sweep.baseline_arm must be {baseline}")
+    if raw.get("runtime_binding_status") != RUNTIME_BINDING_PENDING_GATE1:
+        violations.append(
+            "radius_sweep.runtime_binding_status must remain "
+            f"{RUNTIME_BINDING_PENDING_GATE1!r} while Gate 1 is pending"
+        )
+    if violations:
+        raise RadiusSweepManifestError(
+            f"arm campaign config radius_sweep metadata for {arm_key!r} violates the "
+            "radius-sweep contract: " + "; ".join(violations)
+        )
+
+
+def _validate_arm_identities(
+    manifest_config: Mapping[str, Any], arm_identities: Sequence[ArmCampaignIdentity]
+) -> list[ArmCampaignIdentity]:
+    """Fail closed unless all three arm identities match the frozen campaign surface.
+
+    Returns:
+        The validated arm identities in radius order.
+    """
+    if not isinstance(arm_identities, (list, tuple)) or len(arm_identities) != len(
+        PRODUCTION_RADIUS_KEYS
+    ):
+        raise RadiusSweepManifestError(
+            f"arm_identities must provide exactly {len(PRODUCTION_RADIUS_KEYS)} "
+            "ArmCampaignIdentity entries in radius order"
+        )
+    validated: list[ArmCampaignIdentity] = []
+    for index, (identity, arm_key) in enumerate(
+        zip(arm_identities, PRODUCTION_RADIUS_KEYS, strict=True)
+    ):
+        if not isinstance(identity, ArmCampaignIdentity):
+            raise RadiusSweepManifestError(
+                f"arm_identities[{index}] must be an ArmCampaignIdentity"
+            )
+        if identity.arm_key != arm_key:
+            raise RadiusSweepManifestError(
+                f"arm_identities[{index}].arm_key must be {arm_key!r}, got {identity.arm_key!r}"
+            )
+        expected_config = EXPECTED_ARM_CAMPAIGN_CONFIGS[arm_key]
+        if identity.campaign_config != expected_config:
+            raise RadiusSweepManifestError(
+                f"arm {arm_key!r} campaign_config must be {expected_config!r}, "
+                f"got {identity.campaign_config!r}"
+            )
+        declared = manifest_config.get(ARM_CONFIG_KEYS[arm_key])
+        if declared != identity.campaign_config:
+            raise RadiusSweepManifestError(
+                f"manifest config {ARM_CONFIG_KEYS[arm_key]} must match the resolved "
+                f"arm {arm_key!r} campaign_config {expected_config!r}, got {declared!r}"
+            )
+        expected_tag = EXPECTED_ARM_RELEASE_TAGS[arm_key]
+        if identity.release_tag != expected_tag:
+            raise RadiusSweepManifestError(
+                f"arm {arm_key!r} release_tag must be {expected_tag!r}, "
+                f"got {identity.release_tag!r}"
+            )
+        validated.append(identity)
+    return validated
 
 
 def _sequence_matches(value: Any, expected: tuple[Any, ...]) -> bool:
@@ -520,7 +681,10 @@ def _radius_matches(value: Any, expected: float) -> bool:
 
 
 def _arm_manifest(
-    radius_entry: Mapping[str, Any], *, fixed_factors: FixedFactors
+    radius_entry: Mapping[str, Any],
+    *,
+    fixed_factors: FixedFactors,
+    identity: ArmCampaignIdentity,
 ) -> dict[str, Any]:
     """Enumerate one radius arm with its planner roster and expected row count.
 
@@ -532,6 +696,8 @@ def _arm_manifest(
         "key": str(radius_entry["key"]),
         "radius_m": radius_m,
         "baseline": bool(radius_entry["baseline"]),
+        "arm_campaign_config": identity.campaign_config,
+        "release_tag": identity.release_tag,
         "runtime_binding_status": RUNTIME_BINDING_PENDING_GATE1,
         "runtime_binding_note": (
             "Declared treatment metadata only. The radius is not yet bound to runtime "
@@ -727,7 +893,7 @@ def _check_arms(arms: Any, violations: list[str]) -> None:
 
 
 def _check_arm_identity(arm: Mapping[str, Any], index: int, violations: list[str]) -> None:
-    """Assert one arm's radius identity and pending runtime status."""
+    """Assert one arm's radius identity, campaign config, and pending runtime status."""
     expected_key = PRODUCTION_RADIUS_KEYS[index]
     arm_key = arm.get("key")
     if arm_key != expected_key:
@@ -737,6 +903,12 @@ def _check_arm_identity(arm: Mapping[str, Any], index: int, violations: list[str
     expected_baseline = index == len(PRODUCTION_RADII) - 1
     if arm.get("baseline") is not expected_baseline:
         violations.append(f"arm {arm_key!r} baseline must be {expected_baseline}")
+    expected_config = EXPECTED_ARM_CAMPAIGN_CONFIGS.get(expected_key)
+    if arm.get("arm_campaign_config") != expected_config:
+        violations.append(f"arm {arm_key!r} arm_campaign_config must be {expected_config!r}")
+    expected_tag = EXPECTED_ARM_RELEASE_TAGS.get(expected_key)
+    if arm.get("release_tag") != expected_tag:
+        violations.append(f"arm {arm_key!r} release_tag must be {expected_tag!r}")
     if arm.get("runtime_binding_status") != RUNTIME_BINDING_PENDING_GATE1:
         violations.append(
             f"arm {arm_key!r} runtime_binding_status must remain "
@@ -916,12 +1088,19 @@ def _check_row_identity_ledger(ledger: Any, violations: list[str]) -> None:
 
 
 __all__ = [
+    "ARM_CONFIG_KEYS",
     "BASELINE_RADIUS",
     "CLAIM_BOUNDARY",
     "EVIDENCE_EXCLUSIONS",
     "EVIDENCE_STATUS",
     "EXPECTED_ARM_CAMPAIGN_CONFIG",
+    "EXPECTED_ARM_CAMPAIGN_CONFIGS",
+    "EXPECTED_ARM_CAMPAIGN_CONFIG_0P5M",
+    "EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M",
     "EXPECTED_ARM_RELEASE_TAG",
+    "EXPECTED_ARM_RELEASE_TAGS",
+    "EXPECTED_ARM_RELEASE_TAG_0P5M",
+    "EXPECTED_ARM_RELEASE_TAG_0P8M",
     "EXPECTED_DT",
     "EXPECTED_HORIZON",
     "EXPECTED_KINEMATICS",
@@ -949,11 +1128,14 @@ __all__ = [
     "RELEASE_PLANNER_KEYS",
     "ROW_IDENTITY_CONTRACT",
     "RUNTIME_BINDING_PENDING_GATE1",
+    "ArmCampaignIdentity",
     "FixedFactors",
     "ManifestOptions",
     "RadiusSweepManifestError",
     "build_radius_sweep_manifest",
     "check_radius_sweep_manifest",
+    "validate_arm_campaign_payload",
+    "validate_arm_fixed_factors",
     "write_radius_sweep_manifest",
     "write_radius_sweep_manifest_check",
 ]

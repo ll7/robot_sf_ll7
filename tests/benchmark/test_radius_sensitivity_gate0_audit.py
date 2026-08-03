@@ -24,8 +24,10 @@ from robot_sf.benchmark.radius_sensitivity_gate0_audit import (
     RE_DERIVABLE,
     REPLAY_REQUIRED,
     TRAJECTORY_DEPENDENT_CATEGORIES,
+    FrozenReleaseEvidenceError,
     build_gate0_decision,
     build_outcome_registry,
+    inspect_frozen_release_evidence,
     load_gate0_decision,
     validate_gate0_decision,
     write_gate0_decision,
@@ -67,17 +69,19 @@ def test_campaign_axis_is_collision_envelope_radius_with_three_arms():
 
 def test_frozen_release_pointer_matches_tracked_evidence():
     decision = build_gate0_decision()
+    evidence = inspect_frozen_release_evidence()
     frozen = decision["frozen_release"]
-    assert frozen["release_tag"] == "0.0.3.post1"
-    assert frozen["episode_rows"] == 20160
-    assert frozen["arms"] == 14
-    assert frozen["rows_per_arm"] == 1440
-    assert frozen["execution_commit"] == "a307ef276d701f8d14dead1aa0513f44ee97c0b0"
-    assert frozen["artifact_pointer"].endswith("artifact_pointer.json")
-    # The audit inspects the row schema and metric contract, not the bundle bytes.
-    assert (
-        "schema" in frozen["row_location"].lower() or "contract" in frozen["row_location"].lower()
-    )
+    assert frozen == evidence["frozen_release"]
+    assert decision["evidence_inspection"] == evidence["inspection"]
+    assert evidence["inspection"]["status"] == "tracked_metadata_inspected_bundle_unavailable"
+    assert evidence["inspection"]["bundle"]["status"] == "unavailable"
+    assert evidence["inspection"]["row_schema"]["schema_version"] == "v1"
+    assert evidence["inspection"]["row_schema"]["required_fields"]
+
+
+def test_frozen_evidence_inspection_fails_closed_for_missing_packet(tmp_path):
+    with pytest.raises(FrozenReleaseEvidenceError, match="artifact pointer"):
+        inspect_frozen_release_evidence(tmp_path)
 
 
 def test_metric_contract_grounding_matches_frozen_constants():
@@ -226,6 +230,14 @@ def test_static_geometry_margin_records_unpinned_map_provenance():
     assert gaps["map_asset_bytes_pinned"] is False
 
 
+def test_kinematic_efficiency_is_trajectory_dependent_but_not_collision_outcome():
+    decision = build_gate0_decision()
+    outcome = _outcomes_by_id(decision)["kinematic_efficiency_metrics"]
+    assert outcome["category"] == "scalar_metric_trajectory_dependent"
+    assert outcome["classification"] == REPLAY_REQUIRED
+    assert outcome["is_collision_contact_feasibility_or_planner_outcome"] is False
+
+
 def test_summary_counts_match_outcomes():
     decision = build_gate0_decision()
     summary = decision["summary"]
@@ -301,6 +313,14 @@ def test_validator_rejects_provenance_gap_flip():
     tampered = copy.deepcopy(decision)
     tampered["metric_contract"]["frozen_provenance_gaps"]["map_asset_bytes_pinned"] = True
     with pytest.raises(ValueError, match="map_asset_bytes_pinned must be false"):
+        validate_gate0_decision(tampered)
+
+
+def test_validator_rejects_unlinked_frozen_release_metadata():
+    decision = build_gate0_decision()
+    tampered = copy.deepcopy(decision)
+    tampered["frozen_release"]["episode_rows"] += 1
+    with pytest.raises(ValueError, match="frozen_release is not linked"):
         validate_gate0_decision(tampered)
 
 

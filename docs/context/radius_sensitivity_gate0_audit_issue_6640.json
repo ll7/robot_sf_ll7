@@ -25,6 +25,78 @@
       "Do not classify an outcome as re-derivable when effective radius or map asset bytes are not retained and pinned by the frozen release provenance."
     ]
   },
+  "evidence_inspection": {
+    "bundle": {
+      "name": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+      "reason": "The release bundle is an external asset; no local bundle directory was supplied.",
+      "sha256": "9bf6ea35a17ce812f0a9c841c3681bc072dcf7ba8c121cbcf05113b8514f4de1",
+      "status": "unavailable"
+    },
+    "cross_checks": {
+      "arms_matches": true,
+      "bundle_sha256_matches": true,
+      "episode_rows_matches": true,
+      "execution_commit_matches": true,
+      "publication_preflight_status": "pass",
+      "reconciliation_status": "pass",
+      "release_tag_matches": true,
+      "row_schema_required_fields_present": true,
+      "rows_per_arm_matches": true
+    },
+    "decision_basis": "tracked_release_evidence_and_frozen_row_schema",
+    "release_manifest": {
+      "declared_effective_radius_fields": [],
+      "declared_map_provenance_fields": [],
+      "path": "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml",
+      "release_tag": "0.0.3.post1",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+      "validation": {
+        "manifest_path": "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml",
+        "problem_count": 0,
+        "problems": [],
+        "status": "valid"
+      }
+    },
+    "row_schema": {
+      "declared_effective_radius_fields": [],
+      "declared_map_provenance_fields": [],
+      "metric_parameter_fields": [
+        "threshold_profile",
+        "threshold_signature"
+      ],
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "required_fields": [
+        "version",
+        "episode_id",
+        "scenario_id",
+        "seed",
+        "metrics",
+        "termination_reason",
+        "outcome",
+        "integrity"
+      ],
+      "schema_version": "v1"
+    },
+    "status": "tracked_metadata_inspected_bundle_unavailable",
+    "tracked_files": {
+      "docs/context/evidence/issue_4364_release_0_0_3_post1/SHA256SUMS": {
+        "verified": true
+      },
+      "docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json": {
+        "sha256": "4389b93a7a25975f49c22516cf86d0c03477dba130ab641b31d6dd5bfcadecbb",
+        "verified": true
+      },
+      "docs/context/evidence/issue_4364_release_0_0_3_post1/collision_reconciliation.json": {
+        "sha256": "82659bd4055c4c66857d8dc3fbc581f4cfaed952a9edfe85c66020cb80e93f5a",
+        "verified": true
+      },
+      "docs/context/evidence/issue_4364_release_0_0_3_post1/publication_preflight.json": {
+        "sha256": "f0a507bd95c8f941e707c22b434b6b345a2f8affa08c1bf6d8a36418cbc977b8",
+        "verified": true
+      }
+    }
+  },
   "frozen_release": {
     "arms": 14,
     "artifact_pointer": "docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json",
@@ -32,8 +104,10 @@
     "collision_reconciliation_pointer": "docs/context/evidence/issue_4364_release_0_0_3_post1/collision_reconciliation.json",
     "episode_rows": 20160,
     "execution_commit": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
+    "release_manifest": "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml",
     "release_tag": "0.0.3.post1",
-    "row_location": "Episode rows live in the attached release bundle, not in git; this audit inspects the row schema and metric contract, not the bundle bytes.",
+    "row_location": "External release asset 'paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz'; tracked row schema and release metadata were inspected, but the bundle bytes are not materialized in the checkout.",
+    "row_schema": "robot_sf/benchmark/schemas/episode.schema.v1.json",
     "rows_per_arm": 1440
   },
   "gate": "gate0_post_hoc_feasibility_audit",
@@ -56,8 +130,42 @@
     },
     "frozen_provenance_gaps": {
       "effective_robot_and_pedestrian_radius_retained": false,
-      "finding": "The frozen release manifest does not declare the effective robot/pedestrian radius and its scenario matrix checksum does not pin the referenced map asset bytes; therefore neither radius metadata nor static-map geometry is re-derivable from the retained release fields.",
+      "finding": "Tracked row schema/config fields do not retain an effective robot/pedestrian radius or map-asset byte digest; the external release bundle is not materialized for row inspection.",
       "map_asset_bytes_pinned": false
+    },
+    "frozen_release_manifest": {
+      "declared_effective_radius_fields": [],
+      "declared_map_provenance_fields": [],
+      "path": "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml",
+      "release_tag": "0.0.3.post1",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+      "validation": {
+        "manifest_path": "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml",
+        "problem_count": 0,
+        "problems": [],
+        "status": "valid"
+      }
+    },
+    "frozen_row_schema": {
+      "declared_effective_radius_fields": [],
+      "declared_map_provenance_fields": [],
+      "metric_parameter_fields": [
+        "threshold_profile",
+        "threshold_signature"
+      ],
+      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "required_fields": [
+        "version",
+        "episode_id",
+        "scenario_id",
+        "seed",
+        "metrics",
+        "termination_reason",
+        "outcome",
+        "integrity"
+      ],
+      "schema_version": "v1"
     },
     "radius_aware_clearance_metrics": [
       "human_collisions",
@@ -66,7 +174,7 @@
       "mean_clearance"
     ],
     "radius_default_inconsistency": {
-      "finding": "Collision-envelope radius default is not uniform across the metric contract; Gate 1 must confirm the per-row effective radius before any post-hoc reclassification.",
+      "finding": "Collision-envelope radius default is not uniform across the metric contract, and the inspected release metadata does not bind an effective per-row radius; Gate 1 must confirm the runtime binding before any post-hoc reclassification.",
       "metrics_episode_data_default_ped_radius_m": 0.4,
       "metrics_episode_data_default_robot_radius_m": 1.0,
       "runner_default_ped_radius_m": 0.35,
@@ -79,7 +187,18 @@
       "mean_distance",
       "robot_ped_within_5m_frac"
     ],
-    "threshold_sensitivity_requires_replay": "robot_sf/benchmark/threshold_sensitivity.py recomputes near-miss/comfort counts from full replay trajectories (replay_steps/replay_peds), never from aggregate frozen rows."
+    "threshold_sensitivity_requires_replay": "robot_sf/benchmark/threshold_sensitivity.py recomputes near-miss/comfort counts from full replay trajectories (replay_steps/replay_peds), never from aggregate frozen rows.",
+    "tracked_evidence_cross_checks": {
+      "arms_matches": true,
+      "bundle_sha256_matches": true,
+      "episode_rows_matches": true,
+      "execution_commit_matches": true,
+      "publication_preflight_status": "pass",
+      "reconciliation_status": "pass",
+      "release_tag_matches": true,
+      "row_schema_required_fields_present": true,
+      "rows_per_arm_matches": true
+    }
   },
   "next_gate": "gate1_binding_canary",
   "outcomes": [
@@ -344,7 +463,7 @@
       "category": "scalar_metric_trajectory_dependent",
       "caveats": [],
       "classification": "replay-required",
-      "is_collision_contact_feasibility_or_planner_outcome": true,
+      "is_collision_contact_feasibility_or_planner_outcome": false,
       "outcome": "Kinematic / efficiency metrics (path efficiency, speed, jerk, curvature, energy, force quantiles, etc.)",
       "outcome_id": "kinematic_efficiency_metrics",
       "radius_binding": "trajectory_via_simulator_and_planner",
@@ -354,6 +473,9 @@
     {
       "category": "metadata_parameter",
       "caveats": [
+        "Evidence inspection status is tracked_metadata_inspected_bundle_unavailable; bundle status is unavailable.",
+        "Observed tracked provenance flags: effective_radius_retained=False, map_asset_bytes_pinned=False.",
+        "Row-schema effective-radius fields: []; release-metadata effective-radius fields: [].",
         "The collision-envelope radius default is not uniform across the metric contract (metrics.py EpisodeData default robot_radius=1.0 m, ped_radius=0.4 m; runner.py default robot_radius=0.3 m, ped_radius=0.35 m). Gate 1 must confirm the per-row effective radius before any reclassification.",
         "A metric constant or default value is not evidence of the effective value used by the frozen release rows."
       ],
@@ -362,12 +484,13 @@
       "outcome": "Retained radius / threshold parameters (robot_radius, ped_radius, COLLISION_DIST, NEAR_MISS_DIST) recoverable from the frozen config and metric constants",
       "outcome_id": "retained_radius_and_threshold_parameters",
       "radius_binding": "parameter_value",
-      "rationale": "The frozen metric constants are known, but the effective per-row robot/pedestrian radius is not retained: the release config does not declare it and the metric and runner defaults disagree. The effective parameter provenance must be recovered before any post-hoc reclassification, so this outcome is replay-required.",
+      "rationale": "Tracked release evidence and the frozen row schema were inspected, but no effective per-row robot/pedestrian radius field was found in the retained metadata. The external bundle is not materialized, so the effective parameter provenance must be recovered before any post-hoc reclassification; this outcome is replay-required.",
       "source_geometry_retained_in_frozen_rows": false
     },
     {
       "category": "static_geometry_diagnostic",
       "caveats": [
+        "Row-schema map-provenance fields: []; release-metadata map-provenance fields: [].",
         "The scenario matrix checksum is not a checksum of its included map assets.",
         "Threshold reclassification of static geometry does NOT, by itself, infer a full radius sweep (stop condition #4).",
         "A positive static margin would not reconstruct scripted-traversal or planner feasibility, which remain replay-required (the #5574 0.5 m probe reclassifies the doorway as solvable yet its scripted traversal still collided)."
@@ -377,7 +500,7 @@
       "outcome": "Static map-geometry feasibility margin (e.g. doorway gap minus swept diameter 2*radius) on frozen map geometry",
       "outcome_id": "static_map_geometry_feasibility_margin",
       "radius_binding": "swept_envelope_parameter_on_frozen_geometry",
-      "rationale": "A static map margin would be a radius-only reparameterisation if the exact map asset were retained. The release manifest hashes the scenario matrix but does not pin the referenced map asset bytes, and the frozen episode rows do not contain the map geometry. The exact geometry provenance must be recovered before this margin can be classified, so it is replay-required.",
+      "rationale": "A static map margin would be a radius-only reparameterisation if the exact map asset were retained. Tracked release metadata exposes a scenario-matrix digest but no map-asset byte digest, and the external bundle is not materialized for row-level inspection. The exact geometry provenance must be recovered before this margin can be classified, so it is replay-required.",
       "source_geometry_retained_in_frozen_rows": false
     }
   ],

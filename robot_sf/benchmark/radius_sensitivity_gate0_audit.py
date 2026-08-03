@@ -1,8 +1,8 @@
 """Gate 0 post-hoc feasibility audit for the collision-envelope radius campaign (issue #6640).
 
 This module records the *post-hoc-versus-replay boundary* for the radius-sensitivity campaign
-defined in parent issue #6600. Gate 0 inspects the frozen ``0.0.3.post1`` release episode rows
-and the metric contract, then emits a machine-readable decision that classifies each
+defined in parent issue #6600. Gate 0 inspects the tracked ``0.0.3.post1`` release evidence,
+canonical frozen row schema, and metric contract, then emits a machine-readable decision that classifies each
 radius-sensitivity outcome as either:
 
 - ``re-derivable`` -- the outcome at a new radius is an exact deterministic function of fields
@@ -14,12 +14,12 @@ radius-sensitivity outcome as either:
   geometry), on per-timestep geometry that the aggregate frozen rows do not retain, or on
   effective radius/map provenance that the frozen release does not pin.
 
-The module is deliberately pure and diagnostic. It does **not** run benchmark episodes, does not
-change any frozen ``0.0.3.post1`` metric semantics, release config, or manifest, does not run any
-production compute, and does not establish a planner ranking or a radius-sensitivity result. It
-only records the decision boundary that Gate 1 (binding canary) and Gate 2 (production sweep)
-must respect. Because the frozen release provenance does not retain the effective radius or pin
-the map asset bytes, this audit intentionally emits no re-derivable outcome.
+The module is diagnostic and read-only with respect to benchmark execution. It does **not** run
+benchmark episodes, change any frozen ``0.0.3.post1`` metric semantics, release config, or
+manifest, run production compute, or establish a planner ranking or a radius-sensitivity result.
+It inspects the tracked release evidence and canonical row schema, records that the external
+bundle is unavailable locally, and emits no re-derivable outcome when the retained provenance does
+not establish the effective radius or pin the map asset bytes.
 
 Stop conditions enforced programmatically by :func:`validate_gate0_decision`:
 
@@ -32,18 +32,23 @@ Stop conditions enforced programmatically by :func:`validate_gate0_decision`:
    outcome.
 
 See parent issue #6600 (Gate 0 spec), validity study #3207 (clearance-semantics foundation in
-:mod:`robot_sf.benchmark.clearance_semantics`), and the frozen release pointer under
-``docs/context/evidence/issue_4364_release_0_0_3_post1/``.
+:mod:`robot_sf.benchmark.clearance_semantics`), the frozen release pointer under
+``docs/context/evidence/issue_4364_release_0_0_3_post1/``, and the canonical row schema at
+``robot_sf/benchmark/schemas/episode.schema.v1.json``.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.benchmark.constants import COLLISION_DIST, NEAR_MISS_DIST
+from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.evidence.writers import write_json
 
 GATE0_DECISION_SCHEMA = "radius_sensitivity_gate0_decision.v1"
@@ -70,6 +75,43 @@ FROZEN_RELEASE_POINTER = (
 )
 FROZEN_RELEASE_COLLISION_RECONCILIATION = (
     "docs/context/evidence/issue_4364_release_0_0_3_post1/collision_reconciliation.json"
+)
+FROZEN_RELEASE_CHECKSUMS = "docs/context/evidence/issue_4364_release_0_0_3_post1/SHA256SUMS"
+FROZEN_RELEASE_PUBLICATION_PREFLIGHT = (
+    "docs/context/evidence/issue_4364_release_0_0_3_post1/publication_preflight.json"
+)
+FROZEN_RELEASE_MANIFEST = (
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml"
+)
+FROZEN_RELEASE_ROW_SCHEMA = "robot_sf/benchmark/schemas/episode.schema.v1.json"
+
+REQUIRED_FROZEN_ROW_SCHEMA_FIELDS = (
+    "version",
+    "episode_id",
+    "scenario_id",
+    "seed",
+    "metrics",
+    "termination_reason",
+    "outcome",
+    "integrity",
+)
+EFFECTIVE_RADIUS_FIELDS = frozenset(
+    {
+        "robot_radius",
+        "ped_radius",
+        "pedestrian_radius",
+        "effective_robot_radius_m",
+        "effective_pedestrian_radius_m",
+        "collision_envelope_radius_m",
+    }
+)
+MAP_PROVENANCE_FIELDS = frozenset(
+    {
+        "map_asset_sha256",
+        "map_asset_bytes_sha256",
+        "map_asset_hashes",
+        "map_bytes_sha256",
+    }
 )
 
 # Metric contract grounding (see robot_sf/benchmark/metrics.py and constants.py).
@@ -175,6 +217,388 @@ class RadiusSensitivityOutcome:
         payload = asdict(self)
         payload["caveats"] = list(self.caveats)
         return payload
+
+
+class FrozenReleaseEvidenceError(ValueError):
+    """Raised when the tracked frozen-release evidence cannot be inspected safely."""
+
+
+def _repository_root(repo_root: str | Path | None = None) -> Path:
+    """Resolve the repository root used for tracked evidence inspection.
+
+    Returns:
+        Repository root path.
+    """
+    return (
+        Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parents[2]
+    )
+
+
+def _load_mapping(path: Path, label: str) -> dict[str, Any]:
+    """Load a JSON/YAML mapping and fail closed on malformed evidence.
+
+    Returns:
+        Parsed mapping payload.
+    """
+    try:
+        payload = (
+            json.loads(path.read_text(encoding="utf-8"))
+            if path.suffix.lower() == ".json"
+            else yaml.safe_load(path.read_text(encoding="utf-8"))
+        )
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise FrozenReleaseEvidenceError(f"could not load {label} from {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise FrozenReleaseEvidenceError(f"{label} must be a mapping: {path}")
+    return payload
+
+
+def _require_mapping(value: Any, label: str) -> dict[str, Any]:
+    """Return a nested mapping or raise a provenance error."""
+    if not isinstance(value, dict):
+        raise FrozenReleaseEvidenceError(f"{label} must be a mapping")
+    return value
+
+
+def _require_int(value: Any, label: str) -> int:
+    """Return an integer evidence field, rejecting booleans and missing values."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise FrozenReleaseEvidenceError(f"{label} must be an integer")
+    return value
+
+
+def _sha256(path: Path) -> str:
+    """Return the SHA-256 digest of a tracked evidence file."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise FrozenReleaseEvidenceError(f"could not hash tracked evidence {path}: {exc}") from exc
+    return digest.hexdigest()
+
+
+def _load_checksums(path: Path) -> dict[str, str]:
+    """Load the compact checksum ledger shipped with the tracked release packet.
+
+    Returns:
+        Mapping from tracked filename to expected SHA-256 digest.
+    """
+    checksums: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise FrozenReleaseEvidenceError(f"could not load checksum ledger {path}: {exc}") from exc
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2 or len(parts[0]) != 64:
+            raise FrozenReleaseEvidenceError(f"malformed checksum entry at {path}:{line_number}")
+        checksums[Path(parts[1]).name] = parts[0]
+    return checksums
+
+
+def _declared_schema_fields(schema: dict[str, Any]) -> set[str]:
+    """Collect fields explicitly declared by nested JSON-schema ``properties`` blocks.
+
+    Returns:
+        Set of explicitly declared schema field names.
+    """
+    fields: set[str] = set()
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                fields.update(str(key) for key in properties)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(schema)
+    return fields
+
+
+def _mapping_keys(payload: Any) -> set[str]:
+    """Collect keys from nested ordinary mappings such as YAML campaign metadata.
+
+    Returns:
+        Set of nested mapping keys.
+    """
+    keys: set[str] = set()
+    if isinstance(payload, dict):
+        keys.update(str(key) for key in payload)
+        for value in payload.values():
+            keys.update(_mapping_keys(value))
+    elif isinstance(payload, list):
+        for value in payload:
+            keys.update(_mapping_keys(value))
+    return keys
+
+
+def _assert_equal(label: str, *values: Any) -> Any:
+    """Require all provenance copies of a value to agree and return the value.
+
+    Returns:
+        The shared evidence value.
+    """
+    if not values or any(value != values[0] for value in values[1:]):
+        raise FrozenReleaseEvidenceError(f"tracked release evidence disagrees for {label}")
+    return values[0]
+
+
+def inspect_frozen_release_evidence(  # noqa: C901, PLR0915
+    repo_root: str | Path | None = None,
+) -> dict[str, Any]:
+    """Inspect and cross-check the tracked evidence backing the Gate 0 decision.
+
+    The release episode bundle is an external asset and is intentionally not downloaded by this
+    diagnostic builder. The tracked pointer, reconciliation summaries, release manifest, checksum
+    ledger, and canonical row schema are still inspected and cross-checked. If any of those
+    sources disagree, the builder fails closed instead of emitting a decision from constants.
+
+    Returns:
+        JSON-serialisable evidence and inspection blocks used by the decision builder.
+    """
+    root = _repository_root(repo_root)
+    pointer_path = root / FROZEN_RELEASE_POINTER
+    reconciliation_path = root / FROZEN_RELEASE_COLLISION_RECONCILIATION
+    checksums_path = root / FROZEN_RELEASE_CHECKSUMS
+    preflight_path = root / FROZEN_RELEASE_PUBLICATION_PREFLIGHT
+    row_schema_path = root / FROZEN_RELEASE_ROW_SCHEMA
+
+    pointer = _load_mapping(pointer_path, "artifact pointer")
+    reconciliation = _load_mapping(reconciliation_path, "collision reconciliation")
+    preflight = _load_mapping(preflight_path, "publication preflight")
+    row_schema = _load_mapping(row_schema_path, "frozen episode row schema")
+
+    checksums = _load_checksums(checksums_path)
+    for path in (pointer_path, reconciliation_path, preflight_path):
+        expected_digest = checksums.get(path.name)
+        if expected_digest is None or expected_digest != _sha256(path):
+            raise FrozenReleaseEvidenceError(
+                f"checksum ledger does not verify tracked evidence file {path}"
+            )
+
+    pointer_artifact = _require_mapping(pointer.get("artifact"), "artifact_pointer.artifact")
+    pointer_contract = _require_mapping(
+        pointer.get("row_contract"), "artifact_pointer.row_contract"
+    )
+    pointer_provenance = _require_mapping(pointer.get("provenance"), "artifact_pointer.provenance")
+    reconciliation_counts = _require_mapping(
+        reconciliation.get("counts"), "collision_reconciliation.counts"
+    )
+    reconciliation_source = _require_mapping(
+        reconciliation.get("source"), "collision_reconciliation.source"
+    )
+    reconciliation_provenance = _require_mapping(
+        reconciliation.get("provenance"), "collision_reconciliation.provenance"
+    )
+    episode_commits = _require_mapping(
+        reconciliation_provenance.get("episode_software_commits"),
+        "collision_reconciliation.provenance.episode_software_commits",
+    )
+
+    release_tag = _assert_equal(
+        "release_tag",
+        pointer.get("release_tag"),
+        reconciliation_source.get("release_tag"),
+        FROZEN_RELEASE_TAG,
+    )
+    bundle_sha256 = _assert_equal(
+        "bundle_sha256",
+        pointer_artifact.get("sha256"),
+        reconciliation_source.get("bundle_sha256"),
+        FROZEN_RELEASE_BUNDLE_SHA256,
+    )
+    episode_rows = _assert_equal(
+        "episode_rows",
+        _require_int(
+            pointer_contract.get("episode_rows"), "artifact_pointer.row_contract.episode_rows"
+        ),
+        _require_int(reconciliation_counts.get("rows"), "collision_reconciliation.counts.rows"),
+        FROZEN_RELEASE_EPISODE_ROWS,
+    )
+    arms = _assert_equal(
+        "arms",
+        _require_int(pointer_contract.get("arms"), "artifact_pointer.row_contract.arms"),
+        _require_int(reconciliation_counts.get("arms"), "collision_reconciliation.counts.arms"),
+        FROZEN_RELEASE_ARMS,
+    )
+    rows_per_arm = _assert_equal(
+        "rows_per_arm",
+        _require_int(
+            pointer_contract.get("rows_per_arm"), "artifact_pointer.row_contract.rows_per_arm"
+        ),
+        FROZEN_RELEASE_ROWS_PER_ARM,
+    )
+    release_manifest_path = str(pointer_provenance.get("release_manifest", "")).strip()
+    if release_manifest_path != FROZEN_RELEASE_MANIFEST:
+        raise FrozenReleaseEvidenceError(
+            "artifact pointer release_manifest does not match the tracked 0.0.3.post1 manifest"
+        )
+    manifest_path = root / release_manifest_path
+    try:
+        manifest = load_release_manifest(manifest_path)
+        manifest_validation = validate_release_manifest(manifest)
+    except (OSError, ValueError) as exc:
+        raise FrozenReleaseEvidenceError(
+            f"could not validate frozen release manifest {manifest_path}: {exc}"
+        ) from exc
+    if manifest_validation.get("status") != "valid":
+        raise FrozenReleaseEvidenceError(
+            f"frozen release manifest validation failed: {manifest_validation.get('problems', [])}"
+        )
+
+    execution_commit = _assert_equal(
+        "execution_commit",
+        pointer_provenance.get("execution_commit"),
+        next(iter(episode_commits)) if len(episode_commits) == 1 else None,
+        FROZEN_RELEASE_EXECUTION_COMMIT,
+    )
+    if (
+        _require_int(episode_commits.get(execution_commit), "episode commit row count")
+        != episode_rows
+    ):
+        raise FrozenReleaseEvidenceError(
+            "collision reconciliation episode commit count does not match episode_rows"
+        )
+    if preflight.get("status") != "pass" or reconciliation.get("status") != "pass":
+        raise FrozenReleaseEvidenceError(
+            "tracked frozen-release validation summaries are not passing"
+        )
+    if (
+        _require_int(
+            reconciliation.get("violation_count"), "collision_reconciliation.violation_count"
+        )
+        != 0
+    ):
+        raise FrozenReleaseEvidenceError("collision reconciliation reports violations")
+
+    schema_properties = _require_mapping(row_schema.get("properties"), "row schema properties")
+    row_schema_required = row_schema.get("required")
+    if not isinstance(row_schema_required, list) or not all(
+        isinstance(field, str) for field in row_schema_required
+    ):
+        raise FrozenReleaseEvidenceError("frozen row schema required must be a string list")
+    missing_required_fields = sorted(
+        set(REQUIRED_FROZEN_ROW_SCHEMA_FIELDS) - set(row_schema_required)
+    )
+    if missing_required_fields:
+        raise FrozenReleaseEvidenceError(
+            f"frozen row schema is missing required fields: {missing_required_fields}"
+        )
+    if row_schema.get("properties", {}).get("version", {}).get("const") != "v1":
+        raise FrozenReleaseEvidenceError("frozen row schema must declare version v1")
+
+    declared_schema_fields = _declared_schema_fields(row_schema)
+    retained_radius_fields = sorted(EFFECTIVE_RADIUS_FIELDS & declared_schema_fields)
+    retained_map_fields = sorted(MAP_PROVENANCE_FIELDS & declared_schema_fields)
+    metric_parameters = _require_mapping(
+        schema_properties.get("metric_parameters"), "row schema metric_parameters"
+    )
+    metric_parameter_fields = sorted(
+        _require_mapping(
+            metric_parameters.get("properties"), "row schema metric_parameters.properties"
+        )
+    )
+    campaign_payload = _load_mapping(
+        manifest.canonical_campaign_config_path, "frozen release campaign configuration"
+    )
+    manifest_fields = _mapping_keys(campaign_payload)
+    manifest_radius_fields = sorted(EFFECTIVE_RADIUS_FIELDS & manifest_fields)
+    manifest_map_fields = sorted(MAP_PROVENANCE_FIELDS & manifest_fields)
+
+    effective_radius_retained = bool(retained_radius_fields or manifest_radius_fields)
+    map_asset_bytes_pinned = bool(retained_map_fields or manifest_map_fields)
+    provenance_gaps = {
+        "effective_robot_and_pedestrian_radius_retained": effective_radius_retained,
+        "map_asset_bytes_pinned": map_asset_bytes_pinned,
+        "finding": (
+            "Tracked row schema/config fields do not retain an effective robot/pedestrian radius "
+            "or map-asset byte digest; the external release bundle is not materialized for row "
+            "inspection."
+            if not effective_radius_retained and not map_asset_bytes_pinned
+            else "Tracked provenance fields require further row-level inspection before reclassification."
+        ),
+    }
+    frozen_release = {
+        "release_tag": release_tag,
+        "episode_rows": episode_rows,
+        "arms": arms,
+        "rows_per_arm": rows_per_arm,
+        "execution_commit": execution_commit,
+        "bundle_sha256": bundle_sha256,
+        "artifact_pointer": FROZEN_RELEASE_POINTER,
+        "collision_reconciliation_pointer": FROZEN_RELEASE_COLLISION_RECONCILIATION,
+        "release_manifest": release_manifest_path,
+        "row_schema": FROZEN_RELEASE_ROW_SCHEMA,
+        "row_location": (
+            f"External release asset {pointer_artifact.get('name')!r}; tracked row schema and "
+            "release metadata were inspected, but the bundle bytes are not materialized in the "
+            "checkout."
+        ),
+    }
+    inspection = {
+        "status": "tracked_metadata_inspected_bundle_unavailable",
+        "decision_basis": "tracked_release_evidence_and_frozen_row_schema",
+        "bundle": {
+            "status": "unavailable",
+            "name": pointer_artifact.get("name"),
+            "sha256": bundle_sha256,
+            "reason": "The release bundle is an external asset; no local bundle directory was supplied.",
+        },
+        "tracked_files": {
+            FROZEN_RELEASE_POINTER: {"sha256": _sha256(pointer_path), "verified": True},
+            FROZEN_RELEASE_COLLISION_RECONCILIATION: {
+                "sha256": _sha256(reconciliation_path),
+                "verified": True,
+            },
+            FROZEN_RELEASE_PUBLICATION_PREFLIGHT: {
+                "sha256": _sha256(preflight_path),
+                "verified": True,
+            },
+            FROZEN_RELEASE_CHECKSUMS: {"verified": True},
+        },
+        "row_schema": {
+            "path": FROZEN_RELEASE_ROW_SCHEMA,
+            "schema_version": row_schema["properties"]["version"]["const"],
+            "required_fields": list(row_schema_required),
+            "declared_effective_radius_fields": retained_radius_fields,
+            "declared_map_provenance_fields": retained_map_fields,
+            "metric_parameter_fields": metric_parameter_fields,
+        },
+        "release_manifest": {
+            "path": release_manifest_path,
+            "release_tag": manifest.release_tag,
+            "scenario_matrix": manifest.scenario_matrix_path.relative_to(root).as_posix(),
+            "scenario_matrix_sha256": manifest.scenario_matrix_sha256,
+            "declared_effective_radius_fields": manifest_radius_fields,
+            "declared_map_provenance_fields": manifest_map_fields,
+            "validation": manifest_validation,
+        },
+        "cross_checks": {
+            "release_tag_matches": True,
+            "bundle_sha256_matches": True,
+            "episode_rows_matches": True,
+            "arms_matches": True,
+            "rows_per_arm_matches": True,
+            "execution_commit_matches": True,
+            "row_schema_required_fields_present": True,
+            "reconciliation_status": reconciliation.get("status"),
+            "publication_preflight_status": preflight.get("status"),
+        },
+    }
+    return {
+        "frozen_release": frozen_release,
+        "provenance_gaps": provenance_gaps,
+        "inspection": inspection,
+    }
 
 
 def _clearance_family_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
@@ -417,12 +841,14 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
             "simulator_contact_outcome",
             "The collision-envelope radius binds simulator collision geometry; contact is a "
             "trajectory-dependent collision/contact outcome (stop condition #3).",
+            True,
         ),
         (
             "geometric_body_pedestrian_contact",
             "Physical body pedestrian contact (geometric-body clearance <= contact threshold)",
             "simulator_contact_outcome",
             "Physical contact is a trajectory-dependent contact outcome (stop condition #3).",
+            True,
         ),
         (
             "trajectory_feasibility_traversal_executed",
@@ -430,6 +856,7 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
             "trajectory_feasibility_outcome",
             "Executed-traversal feasibility is trajectory-dependent (stop condition #3); the "
             "static-map margin reclassification does not reconstruct it.",
+            True,
         ),
         (
             "planner_behaviour_decisions",
@@ -437,6 +864,7 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
             "planner_behaviour_outcome",
             "The radius changes planner inputs and behaviour; planner decisions are "
             "trajectory-dependent (stop condition #3).",
+            True,
         ),
         (
             "planner_rankings_success_typed_collisions_snqi",
@@ -444,12 +872,14 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
             "planner_ranking_outcome",
             "Rankings aggregate radius-arm episodes; re-deriving them requires the per-arm "
             "trajectories (stop condition #3).",
+            True,
         ),
         (
             "scenario_family_conclusions_transitions",
             "Scenario-family conclusions and transitions (e.g. narrow-doorway family)",
             "scenario_family_outcome",
             "Family-level transitions depend on per-arm episode outcomes and are replay-required.",
+            True,
         ),
         (
             "snqi_per_episode",
@@ -457,6 +887,7 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
             "scalar_metric_trajectory_dependent",
             "SNQI consumes collision/clearance and trajectory metrics; re-deriving the cross-arm "
             "value requires the radius-arm trajectory.",
+            True,
         ),
         (
             "kinematic_efficiency_metrics",
@@ -466,10 +897,11 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
             ),
             "scalar_metric_trajectory_dependent",
             "Computed on the radius-arm trajectory; cross-arm values are trajectory-dependent.",
+            False,
         ),
     )
     outcomes: list[RadiusSensitivityOutcome] = []
-    for outcome_id, label, category, rationale in rows:
+    for outcome_id, label, category, rationale, is_collision_family in rows:
         outcomes.append(
             RadiusSensitivityOutcome(
                 outcome_id=outcome_id,
@@ -477,7 +909,7 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
                 category=category,
                 radius_binding="trajectory_via_simulator_and_planner",
                 source_geometry_retained_in_frozen_rows=False,
-                is_collision_contact_feasibility_or_planner_outcome=True,
+                is_collision_contact_feasibility_or_planner_outcome=is_collision_family,
                 classification=REPLAY_REQUIRED,
                 rationale=rationale,
                 caveats=(),
@@ -486,7 +918,9 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
     return tuple(outcomes)
 
 
-def _provenance_blocked_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
+def _provenance_blocked_outcomes(
+    evidence: dict[str, Any],
+) -> tuple[RadiusSensitivityOutcome, ...]:
     """Classify the tempting post-hoc diagnostics as replay-required.
 
     The prior implementation treated these two diagnostics as re-derivable. The frozen release
@@ -497,6 +931,11 @@ def _provenance_blocked_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
     Returns:
         Tuple of the two provenance-blocked diagnostic outcomes.
     """
+    gaps = evidence["provenance_gaps"]
+    inspection = evidence["inspection"]
+    row_schema = inspection["row_schema"]
+    release_manifest = inspection["release_manifest"]
+    bundle_status = inspection["bundle"]["status"]
     return (
         RadiusSensitivityOutcome(
             outcome_id="retained_radius_and_threshold_parameters",
@@ -510,12 +949,19 @@ def _provenance_blocked_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
             is_collision_contact_feasibility_or_planner_outcome=False,
             classification=REPLAY_REQUIRED,
             rationale=(
-                "The frozen metric constants are known, but the effective per-row robot/pedestrian "
-                "radius is not retained: the release config does not declare it and the metric "
-                "and runner defaults disagree. The effective parameter provenance must be recovered "
-                "before any post-hoc reclassification, so this outcome is replay-required."
+                "Tracked release evidence and the frozen row schema were inspected, but no effective "
+                "per-row robot/pedestrian radius field was found in the retained metadata. The "
+                "external bundle is not materialized, so the effective parameter provenance must be "
+                "recovered before any post-hoc reclassification; this outcome is replay-required."
             ),
             caveats=(
+                f"Evidence inspection status is {inspection['status']}; bundle status is {bundle_status}.",
+                "Observed tracked provenance flags: "
+                f"effective_radius_retained={gaps['effective_robot_and_pedestrian_radius_retained']}, "
+                f"map_asset_bytes_pinned={gaps['map_asset_bytes_pinned']}.",
+                f"Row-schema effective-radius fields: {row_schema['declared_effective_radius_fields']!r}; "
+                f"release-metadata effective-radius fields: "
+                f"{release_manifest['declared_effective_radius_fields']!r}.",
                 "The collision-envelope radius default is not uniform across the metric contract "
                 f"(metrics.py EpisodeData default robot_radius={METRICS_EPISODE_DATA_DEFAULT_ROBOT_RADIUS_M} m, "
                 f"ped_radius={METRICS_EPISODE_DATA_DEFAULT_PED_RADIUS_M} m; runner.py default "
@@ -538,12 +984,15 @@ def _provenance_blocked_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
             classification=REPLAY_REQUIRED,
             rationale=(
                 "A static map margin would be a radius-only reparameterisation if the exact map "
-                "asset were retained. The release manifest hashes the scenario matrix but does not "
-                "pin the referenced map asset bytes, and the frozen episode rows do not contain the "
-                "map geometry. The exact geometry provenance must be recovered before this margin "
-                "can be classified, so it is replay-required."
+                "asset were retained. Tracked release metadata exposes a scenario-matrix digest but "
+                "no map-asset byte digest, and the external bundle is not materialized for row-level "
+                "inspection. The exact geometry provenance must be recovered before this margin can "
+                "be classified, so it is replay-required."
             ),
             caveats=(
+                f"Row-schema map-provenance fields: {row_schema['declared_map_provenance_fields']!r}; "
+                f"release-metadata map-provenance fields: "
+                f"{release_manifest['declared_map_provenance_fields']!r}.",
                 "The scenario matrix checksum is not a checksum of its included map assets.",
                 "Threshold reclassification of static geometry does NOT, by itself, infer a full "
                 "radius sweep (stop condition #4).",
@@ -555,15 +1004,20 @@ def _provenance_blocked_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
     )
 
 
-def build_outcome_registry() -> tuple[RadiusSensitivityOutcome, ...]:
-    """Return the full deterministic Gate 0 outcome registry."""
+def build_outcome_registry(
+    evidence: dict[str, Any] | None = None,
+    *,
+    repo_root: str | Path | None = None,
+) -> tuple[RadiusSensitivityOutcome, ...]:
+    """Return the full Gate 0 outcome registry bound to inspected release evidence."""
+    evidence = evidence or inspect_frozen_release_evidence(repo_root)
     return (
         *_clearance_family_outcomes(),
         *_fixed_threshold_collision_outcomes(),
         *_radius_independent_geometry_outcomes(),
         *_success_and_aggregate_outcomes(),
         *_trajectory_simulator_planner_outcomes(),
-        *_provenance_blocked_outcomes(),
+        *_provenance_blocked_outcomes(evidence),
     )
 
 
@@ -579,24 +1033,14 @@ def _campaign_block() -> dict[str, Any]:
     }
 
 
-def _frozen_release_block() -> dict[str, Any]:
-    return {
-        "release_tag": FROZEN_RELEASE_TAG,
-        "episode_rows": FROZEN_RELEASE_EPISODE_ROWS,
-        "arms": FROZEN_RELEASE_ARMS,
-        "rows_per_arm": FROZEN_RELEASE_ROWS_PER_ARM,
-        "execution_commit": FROZEN_RELEASE_EXECUTION_COMMIT,
-        "bundle_sha256": FROZEN_RELEASE_BUNDLE_SHA256,
-        "artifact_pointer": FROZEN_RELEASE_POINTER,
-        "collision_reconciliation_pointer": FROZEN_RELEASE_COLLISION_RECONCILIATION,
-        "row_location": (
-            "Episode rows live in the attached release bundle, not in git; this audit inspects the "
-            "row schema and metric contract, not the bundle bytes."
-        ),
-    }
+def _frozen_release_block(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Return frozen-release identity copied from the inspected evidence packet."""
+    return dict(evidence["frozen_release"])
 
 
-def _metric_contract_block() -> dict[str, Any]:
+def _metric_contract_block(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Return metric-contract metadata plus provenance gaps observed in tracked evidence."""
+    inspection = evidence["inspection"]
     return {
         "radius_aware_clearance_metrics": list(RADIUS_AWARE_CLEARANCE_METRICS),
         "clearance_formula": CLEARANCE_FORMULA,
@@ -615,21 +1059,15 @@ def _metric_contract_block() -> dict[str, Any]:
             "runner_default_robot_radius_m": RUNNER_DEFAULT_ROBOT_RADIUS_M,
             "runner_default_ped_radius_m": RUNNER_DEFAULT_PED_RADIUS_M,
             "finding": (
-                "Collision-envelope radius default is not uniform across the metric contract; "
-                "Gate 1 must confirm the per-row effective radius before any post-hoc "
-                "reclassification."
+                "Collision-envelope radius default is not uniform across the metric contract, and "
+                "the inspected release metadata does not bind an effective per-row radius; Gate 1 "
+                "must confirm the runtime binding before any post-hoc reclassification."
             ),
         },
-        "frozen_provenance_gaps": {
-            "effective_robot_and_pedestrian_radius_retained": False,
-            "map_asset_bytes_pinned": False,
-            "finding": (
-                "The frozen release manifest does not declare the effective robot/pedestrian radius "
-                "and its scenario matrix checksum does not pin the referenced map asset bytes; "
-                "therefore neither radius metadata nor static-map geometry is re-derivable from the "
-                "retained release fields."
-            ),
-        },
+        "frozen_provenance_gaps": dict(evidence["provenance_gaps"]),
+        "frozen_row_schema": dict(inspection["row_schema"]),
+        "frozen_release_manifest": dict(inspection["release_manifest"]),
+        "tracked_evidence_cross_checks": dict(inspection["cross_checks"]),
         "threshold_sensitivity_requires_replay": (
             "robot_sf/benchmark/threshold_sensitivity.py recomputes near-miss/comfort counts from "
             "full replay trajectories (replay_steps/replay_peds), never from aggregate frozen rows."
@@ -678,7 +1116,7 @@ def _summary_block(outcomes: tuple[RadiusSensitivityOutcome, ...]) -> dict[str, 
     }
 
 
-def build_gate0_decision() -> dict[str, Any]:
+def build_gate0_decision(repo_root: str | Path | None = None) -> dict[str, Any]:
     """Build the deterministic Gate 0 decision payload.
 
     The payload is validated in place by :func:`validate_gate0_decision` before it is returned, so
@@ -687,7 +1125,8 @@ def build_gate0_decision() -> dict[str, Any]:
     Returns:
         Validated ``radius_sensitivity_gate0_decision.v1`` decision payload.
     """
-    outcomes = build_outcome_registry()
+    evidence = inspect_frozen_release_evidence(repo_root)
+    outcomes = build_outcome_registry(evidence)
     decision: dict[str, Any] = {
         "schema_version": GATE0_DECISION_SCHEMA,
         "issue": 6640,
@@ -695,16 +1134,17 @@ def build_gate0_decision() -> dict[str, Any]:
         "validity_study_issue": 3207,
         "gate": "gate0_post_hoc_feasibility_audit",
         "campaign": _campaign_block(),
-        "frozen_release": _frozen_release_block(),
-        "metric_contract": _metric_contract_block(),
+        "frozen_release": _frozen_release_block(evidence),
+        "metric_contract": _metric_contract_block(evidence),
         "classification_rubric": _rubric_block(),
         "outcomes": [o.to_dict() for o in outcomes],
         "summary": _summary_block(outcomes),
+        "evidence_inspection": evidence["inspection"],
         "claim_boundary": CLAIM_BOUNDARY,
         "next_gate": "gate1_binding_canary",
         "review_marker": GATE0_REVIEW_MARKER,
     }
-    validate_gate0_decision(decision)
+    validate_gate0_decision(decision, repo_root=repo_root)
     return decision
 
 
@@ -833,6 +1273,26 @@ def _assert_frozen_provenance_gaps(decision: dict[str, Any]) -> None:
             )
 
 
+def _assert_evidence_linkage(decision: dict[str, Any], evidence: dict[str, Any]) -> None:
+    """Ensure emitted provenance blocks are copied from the inspected packet."""
+    if decision.get("frozen_release") != evidence["frozen_release"]:
+        raise ValueError("decision.frozen_release is not linked to tracked release evidence")
+    if decision.get("evidence_inspection") != evidence["inspection"]:
+        raise ValueError("decision.evidence_inspection is not linked to tracked release evidence")
+    metric_contract = decision.get("metric_contract")
+    if not isinstance(metric_contract, dict):
+        raise ValueError("decision.metric_contract must be a dict")
+    expected_blocks = {
+        "frozen_provenance_gaps": evidence["provenance_gaps"],
+        "frozen_row_schema": evidence["inspection"]["row_schema"],
+        "frozen_release_manifest": evidence["inspection"]["release_manifest"],
+        "tracked_evidence_cross_checks": evidence["inspection"]["cross_checks"],
+    }
+    for field, expected in expected_blocks.items():
+        if metric_contract.get(field) != expected:
+            raise ValueError(f"metric_contract.{field} is not linked to tracked release evidence")
+
+
 def _assert_summary_consistent(
     decision: dict[str, Any], outcomes: list[dict[str, Any]], re_derivable_ids: list[str]
 ) -> None:
@@ -855,7 +1315,9 @@ def _assert_summary_consistent(
         raise ValueError("summary.replay_required_outcome_ids does not match the outcomes")
 
 
-def validate_gate0_decision(decision: dict[str, Any]) -> None:
+def validate_gate0_decision(
+    decision: dict[str, Any], *, repo_root: str | Path | None = None
+) -> None:
     """Validate a Gate 0 decision payload against the stop conditions and schema.
 
     Raises:
@@ -872,6 +1334,7 @@ def validate_gate0_decision(decision: dict[str, Any]) -> None:
         raise ValueError("decision.outcomes must be a non-empty list")
 
     _assert_frozen_provenance_gaps(decision)
+    _assert_evidence_linkage(decision, inspect_frozen_release_evidence(repo_root))
     seen_ids: set[str] = set()
     re_derivable_ids: list[str] = []
     for entry in outcomes:
@@ -884,7 +1347,7 @@ def validate_gate0_decision(decision: dict[str, Any]) -> None:
     _assert_summary_consistent(decision, outcomes, re_derivable_ids)
 
 
-def write_gate0_decision(output_path: str | Path) -> Path:
+def write_gate0_decision(output_path: str | Path, *, repo_root: str | Path | None = None) -> Path:
     """Write the deterministic Gate 0 decision JSON and return its path.
 
     The written file is canonical and reproducible: running this function always emits the same
@@ -893,21 +1356,21 @@ def write_gate0_decision(output_path: str | Path) -> Path:
     Returns:
         Path to the written decision JSON.
     """
-    decision = build_gate0_decision()
+    decision = build_gate0_decision(repo_root)
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     write_json(path, decision)
     return path
 
 
-def load_gate0_decision(path: str | Path) -> dict[str, Any]:
+def load_gate0_decision(path: str | Path, *, repo_root: str | Path | None = None) -> dict[str, Any]:
     """Load and validate a Gate 0 decision JSON file.
 
     Returns:
         Validated decision payload.
     """
     decision = json.loads(Path(path).read_text(encoding="utf-8"))
-    validate_gate0_decision(decision)
+    validate_gate0_decision(decision, repo_root=repo_root)
     return decision
 
 
@@ -923,9 +1386,11 @@ __all__ = [
     "RADIUS_INDEPENDENT_GEOMETRY_METRICS",
     "REPLAY_REQUIRED",
     "RE_DERIVABLE",
+    "FrozenReleaseEvidenceError",
     "RadiusSensitivityOutcome",
     "build_gate0_decision",
     "build_outcome_registry",
+    "inspect_frozen_release_evidence",
     "load_gate0_decision",
     "validate_gate0_decision",
     "write_gate0_decision",

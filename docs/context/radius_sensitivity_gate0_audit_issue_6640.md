@@ -3,9 +3,11 @@
 # Issue #6640 — Gate 0 post-hoc feasibility audit (collision-envelope radius sensitivity)
 
 This note records **Gate 0** of the maintainer-approved radius-sensitivity campaign (parent #6600;
-validity study #3207). Gate 0 inspects the frozen `0.0.3.post1` release episode rows and the metric
-contract and emits a machine-readable decision listing which radius-sensitivity outcomes can be
-re-derived from retained fields and which require replay. It runs **no production compute**, changes
+validity study #3207). Gate 0 inspects the tracked `0.0.3.post1` release evidence, canonical frozen
+episode-row schema, and metric contract, then emits a machine-readable decision listing which
+radius-sensitivity outcomes can be re-derived from retained fields and which require replay. The
+external release bundle is not materialized in this checkout, so the builder records that limitation
+and fails closed on the tracked metadata/schema boundary. It runs **no production compute**, changes
 **no** frozen metric semantics, release config, or manifest, and establishes **no** planner ranking,
 radius-sensitivity result, or paper-facing claim.
 
@@ -13,16 +15,17 @@ radius-sensitivity result, or paper-facing claim.
 
 The campaign asks whether planner rankings and scenario-family readings are stable when the robot
 collision-envelope (planning proxy) radius changes across `0.5 m`, `0.8 m`, and the `1.0 m` release
-baseline. Gate 0's job is to decide, *before any replay*, which outcomes the frozen release rows can
-answer on their own.
+baseline. Gate 0's job is to decide, *before any replay*, which outcomes the retained release
+evidence and row schema can support on their own.
 
-**Answer:** none under the frozen release provenance. Because the radius changes both the simulator
+**Answer:** none under the inspected frozen-release provenance. Because the radius changes both the simulator
 collision geometry and planner behaviour, each radius arm produces a *different trajectory*, so any
 metric computed on that trajectory differs across arms and cannot be recovered from the retained
 `1.0 m` baseline rows. The release config also does not retain the effective robot/pedestrian radius,
 and its scenario-matrix checksum does not pin the referenced map asset bytes. Therefore even the
 tempting parameter and static-map margin diagnostics remain replay-required until those provenance
-gaps are closed. This is a fail-closed boundary, **not** a radius sweep.
+gaps are closed. The external bundle remains unavailable for row-level inspection; this is a
+fail-closed boundary, **not** a radius sweep.
 
 ## The decision
 
@@ -37,9 +40,11 @@ uv run python scripts/benchmark/build_radius_sensitivity_gate0_decision.py \
   --validate docs/context/radius_sensitivity_gate0_audit_issue_6640.json
 ```
 
-The decision classifies **24** outcomes: **0 re-derivable**, **24 replay-required**.
+The inspected decision classifies **24** outcomes: **0 re-derivable**, **24 replay-required**. Its
+`evidence_inspection` block records the cross-checks and the unavailable external bundle status.
 
-- Re-derivable: none — the exact effective radius and map asset provenance are not retained/pinned.
+- Re-derivable: none — the tracked row schema/config metadata do not bind an effective radius or
+  map asset byte digest, and the external bundle is unavailable for row-level inspection.
 - Replay-required: every listed outcome, including the
   radius/threshold metadata and static-map margin diagnostics, plus every
   radius-aware clearance family (`human_collisions`, `near_misses`, `min_clearance`,
@@ -95,7 +100,8 @@ The decision classifies **24** outcomes: **0 re-derivable**, **24 replay-require
 
 ## Scope and ownership
 
-- Module: `robot_sf/benchmark/radius_sensitivity_gate0_audit.py` (pure, deterministic, no simulation).
+- Module: `robot_sf/benchmark/radius_sensitivity_gate0_audit.py` (tracked-evidence inspection,
+  deterministic, no simulation).
 - Test: `tests/benchmark/test_radius_sensitivity_gate0_audit.py`.
 - Build/validate CLI: `scripts/benchmark/build_radius_sensitivity_gate0_decision.py`.
 - This is a diagnostic decision record; all current outcomes are replay-required and none is

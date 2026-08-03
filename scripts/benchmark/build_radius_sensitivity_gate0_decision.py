@@ -2,8 +2,8 @@
 
 Emits the machine-readable decision that classifies each collision-envelope radius-sensitivity
 outcome as ``re-derivable`` or ``replay-required`` for the frozen ``0.0.3.post1`` release rows.
-The decision is deterministic and reproducible from the metric contract; running this script
-always writes the same bytes for the same contract.
+The decision is deterministic and reproducible from the tracked release evidence, frozen row
+schema, and metric contract; the builder fails closed when those sources disagree.
 
 Usage:
 

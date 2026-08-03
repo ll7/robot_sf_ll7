@@ -43,6 +43,8 @@ def _episode(*, planner: str, wrapper_arm: str, scenario: str, seed: int) -> dic
     }
 
 
+# evidence-writer-exempt: tests construct temporary campaign fixtures for the audit;
+# they do not write repository evidence artifacts.
 def _write_fixture(root: Path) -> None:
     """Write a complete standard-artifact fixture with two arms."""
     for relative in (
@@ -128,6 +130,6 @@ def test_audit_writes_compact_outputs(tmp_path: Path) -> None:
     assert payload["config_sha256"] == "a" * 64
     assert payload["campaign_root"] == "private_ops:job-13775"
     source_manifest = payload["source_artifacts"]["campaign_manifest.json"]
-    assert source_manifest["artifact_path"].startswith("docs/context/evidence/issue_4830_example/")
+    assert source_manifest["artifact_path"].startswith("private_ops:job-13775/")
     assert source_manifest["location"].startswith("private_ops:job-13775/")
     assert "does not infer missing metric semantics" in paths["readme"].read_text(encoding="utf-8")

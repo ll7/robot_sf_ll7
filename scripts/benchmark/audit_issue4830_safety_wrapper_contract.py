@@ -218,7 +218,9 @@ def audit_campaign(
         if not source_path.is_file():
             continue
         artifact_path = (
-            (Path(artifact_prefix) / relative).as_posix() if artifact_prefix else relative
+            f"{source_root.rstrip('/')}/{relative}"
+            if source_location
+            else ((Path(artifact_prefix) / relative).as_posix() if artifact_prefix else relative)
         )
         source_artifacts[relative] = {
             "artifact_path": artifact_path,

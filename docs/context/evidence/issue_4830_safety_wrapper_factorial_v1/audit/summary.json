@@ -80,67 +80,67 @@
   "schema_version": "robot_sf.issue_4830_safety_wrapper_contract_audit.v1",
   "source_artifacts": {
     "campaign_manifest.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/campaign_manifest.json",
+      "artifact_path": "private_ops:job-13775/campaign_manifest.json",
       "bytes": 20324,
       "location": "private_ops:job-13775/campaign_manifest.json",
       "sha256": "51f926855d452e753803d232de0179428c26561409725c70feebd2a10b64f1bf"
     },
     "manifest.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/manifest.json",
+      "artifact_path": "private_ops:job-13775/manifest.json",
       "bytes": 182,
       "location": "private_ops:job-13775/manifest.json",
       "sha256": "0da65e5eaac5202055dc1e2c5420d2cb8d3d9e1bd10d15f58c0efaaf478bd64a"
     },
     "preflight.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/preflight.json",
+      "artifact_path": "private_ops:job-13775/preflight.json",
       "bytes": 582,
       "location": "private_ops:job-13775/preflight.json",
       "sha256": "25f68398f44458a07562f0d53f63dac70e2fbf014d24d8fa14ac5b29e327c25c"
     },
     "reports/campaign_credibility_scorecard.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_credibility_scorecard.json",
+      "artifact_path": "private_ops:job-13775/reports/campaign_credibility_scorecard.json",
       "bytes": 4129,
       "location": "private_ops:job-13775/reports/campaign_credibility_scorecard.json",
       "sha256": "624969f4fee58998c8318f32820b1afb49ec883af10bf502c488a18a935ea5f0"
     },
     "reports/campaign_integrity.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_integrity.json",
+      "artifact_path": "private_ops:job-13775/reports/campaign_integrity.json",
       "bytes": 313,
       "location": "private_ops:job-13775/reports/campaign_integrity.json",
       "sha256": "484f325d7759f06d9d5bd205f9f94a4004ea5c731dd96701e2fa809051b55641"
     },
     "reports/campaign_report.md": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_report.md",
+      "artifact_path": "private_ops:job-13775/reports/campaign_report.md",
       "bytes": 9708,
       "location": "private_ops:job-13775/reports/campaign_report.md",
       "sha256": "c09a0b831dff397b779277c042446d58d76cc2cd828b88ee9b488470491addaa"
     },
     "reports/campaign_summary.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_summary.json",
+      "artifact_path": "private_ops:job-13775/reports/campaign_summary.json",
       "bytes": 342212,
       "location": "private_ops:job-13775/reports/campaign_summary.json",
       "sha256": "4b6f7c06c8b94efa4ae1a902836f493401147d64367064335114a991bc804f8f"
     },
     "reports/comparability_matrix.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/comparability_matrix.json",
+      "artifact_path": "private_ops:job-13775/reports/comparability_matrix.json",
       "bytes": 7045,
       "location": "private_ops:job-13775/reports/comparability_matrix.json",
       "sha256": "f5786b65f3973ea2b781c7e0ff485f8e0e388b4940738c6c37748d291d1b769d"
     },
     "reports/matrix_summary.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/matrix_summary.json",
+      "artifact_path": "private_ops:job-13775/reports/matrix_summary.json",
       "bytes": 7639,
       "location": "private_ops:job-13775/reports/matrix_summary.json",
       "sha256": "b425cac9f4caaf7bc6e6bfcf2e550b47341c9fc4ed8fb2e33faa77331e9a0dde"
     },
     "reports/post_campaign_stage_status.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/post_campaign_stage_status.json",
+      "artifact_path": "private_ops:job-13775/reports/post_campaign_stage_status.json",
       "bytes": 700,
       "location": "private_ops:job-13775/reports/post_campaign_stage_status.json",
       "sha256": "c1f2e2fb9305e5c55afa23bc984cfd84b80eaa96e92d1a9a4d084f91e4179591"
     },
     "run_meta.json": {
-      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/run_meta.json",
+      "artifact_path": "private_ops:job-13775/run_meta.json",
       "bytes": 4371,
       "location": "private_ops:job-13775/run_meta.json",
       "sha256": "94d5d80538a527aaec89bb8fdc2c4655c3dc912cbe166f9e5ed8a26e172b3d73"

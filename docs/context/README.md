@@ -93,6 +93,9 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Issue #6469 benchmark module reorganization plan (ghost `util`/`utils` confirmation and proposed
+  benchmark domain subdirectories; planning only):
+  [issue_6469_benchmark_reorganization_plan.md](issue_6469_benchmark_reorganization_plan.md)
 * Collision causality, online risk, and Chapter 7 scenario discovery:
   [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md)
 * Repository rule: [AGENTS.md](../../AGENTS.md)

@@ -126,6 +126,10 @@ knowledge, not every transient iteration detail.
   [radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md)
 * Issue #6641 Gate 1 runtime radius-binding canary:
   [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md)
+* Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600):
+  [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
+* Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600):
+  [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 

@@ -1386,9 +1386,10 @@ def _place_scene_annotations(ax: Axes) -> None:
             candidate_offsets,
             axes_bbox,
             obstacles,
-            # Zone/corner captions stay anchored to the region they name: they only
-            # take part in label-on-label avoidance, not track/marker avoidance.
-            avoid_obstacles=text.get_gid() != _ZONE_LABEL_GID,
+            # Zone captions may be drawn inside a small outlined rectangle.  They
+            # must still clear the outline itself; a short leader preserves the
+            # association when the placement pass moves them away from the zone.
+            avoid_obstacles=True,
         )
         _move_text_in_display_space(text, shift_x, shift_y)
         placed_bboxes.append(final_bbox)
@@ -1575,16 +1576,12 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
                 center_y = sum(point[1] for point in vertices) / len(vertices)
                 center = (center_x, center_y)
                 if math.dist(center, marker_point) > _ZONE_LABEL_SUPPRESSION_RADIUS_M:
-                    zone_text = ax.text(
-                        center_x,
-                        center_y,
-                        label,
-                        color=GRAY,
-                        fontsize=_fs(11),
-                        ha="center",
-                        va="center",
-                    )
-                    zone_text.set_gid(_ZONE_LABEL_GID)
+                    # The key-frame annotations below already identify the robot's
+                    # start and terminal state.  A second label at the centre of a
+                    # small outlined zone is not legible: its glyph box intersects
+                    # the zone border and cannot be moved without losing the zone
+                    # association.  Retain the centre for conservative marker-label
+                    # suppression, but render only the outline here.
                     drawn_label_centers.append(center)
     return drawn_label_centers
 
@@ -1896,7 +1893,7 @@ def _draw_timeline(
         f"collision envelope ({collision_envelope_m:g} m)",
         (0.99, collision_envelope_m),
         xycoords=ax.get_yaxis_transform(),
-        xytext=(0, 3),
+        xytext=(0, 12),
         textcoords="offset points",
         color=RED,
         alpha=0.7,
@@ -1928,7 +1925,7 @@ def _draw_timeline(
             "personal space",
             (0.0, comfort_distance_m),
             xycoords=ax.get_yaxis_transform(),
-            xytext=(4, -3) if below_line else (4, 3),
+            xytext=(4, -12) if below_line else (4, 12),
             textcoords="offset points",
             color=GRAY,
             alpha=0.7,

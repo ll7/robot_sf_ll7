@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from robot_sf.gym_env.env_config import EnvSettings
     from robot_sf.nav.map_config import MapDefinition
 
+__all__ = ["DummySimulator", "dummy_factory"]
+
 
 class DummySimulator:
     """Minimal simulator with enough metadata for RobotEnv smoke runs."""

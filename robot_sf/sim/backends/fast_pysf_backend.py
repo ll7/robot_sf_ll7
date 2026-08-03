@@ -14,6 +14,8 @@ if TYPE_CHECKING:  # for type hints only
 
 from robot_sf.sim.simulator import init_simulators
 
+__all__ = ["fast_pysf_factory"]
+
 
 def fast_pysf_factory(env_config: EnvSettings, map_def: MapDefinition, peds: bool) -> Simulator:
     """Create a Fast-PySF simulator using ``init_simulators``.

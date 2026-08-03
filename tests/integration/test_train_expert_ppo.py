@@ -1916,3 +1916,78 @@ def test_issue_2557_base_config_inheritance_equivalence() -> None:
             f"Resolved config {config_path.name} differs from the baseline at "
             f"{baseline['source_revision']}."
         )
+
+
+def test_issue_6679_single_factor_base_config_inheritance_equivalence() -> None:
+    """All 18 single_factor ablation variants must match pre-refactor resolved fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    single_factor_dir = Path("configs/training/ppo/ablations/single_factor")
+    variant_paths = [
+        path
+        for path in sorted(single_factor_dir.glob("*.yaml"))
+        if not path.name.endswith("_base.yaml")
+    ]
+    assert len(variant_paths) == 18
+    assert {path.name for path in variant_paths} == set(fingerprints)
+
+    for config_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(config_path)
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[config_path.name], (
+            f"Resolved config {config_path.name} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )
+
+
+_SINGLE_FACTOR_VARIANTS = [
+    "asymmetric_critic_only_10m_env22_seed123.yaml",
+    "asymmetric_critic_only_10m_env22_seed1337.yaml",
+    "asymmetric_critic_only_10m_env22_seed231.yaml",
+    "asymmetric_critic_only_1m_env22_seed123.yaml",
+    "asymmetric_critic_only_1m_env22_seed1337.yaml",
+    "asymmetric_critic_only_1m_env22_seed231.yaml",
+    "attention_only_10m_env22_seed123.yaml",
+    "attention_only_10m_env22_seed1337.yaml",
+    "attention_only_10m_env22_seed231.yaml",
+    "attention_only_1m_env22_seed123.yaml",
+    "attention_only_1m_env22_seed1337.yaml",
+    "attention_only_1m_env22_seed231.yaml",
+    "reward_curriculum_only_10m_env22_seed123.yaml",
+    "reward_curriculum_only_10m_env22_seed1337.yaml",
+    "reward_curriculum_only_10m_env22_seed231.yaml",
+    "reward_curriculum_only_1m_env22_seed123.yaml",
+    "reward_curriculum_only_1m_env22_seed1337.yaml",
+    "reward_curriculum_only_1m_env22_seed231.yaml",
+]
+
+
+@pytest.mark.parametrize("variant", _SINGLE_FACTOR_VARIANTS)
+def test_issue_6679_single_factor_variant_equivalence(variant: str) -> None:
+    """Parametrized equivalence test covering every migrated single_factor ablation variant."""
+    baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    expected_fingerprint = baseline["variants"][variant]
+
+    config_path = Path("configs/training/ppo/ablations/single_factor") / variant
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+
+    assert actual_fingerprint == expected_fingerprint, (
+        f"Variant {variant} resolved fingerprint {actual_fingerprint} "
+        f"does not match baseline {expected_fingerprint}"
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.policy_id
+    assert len(config.seeds) == 1

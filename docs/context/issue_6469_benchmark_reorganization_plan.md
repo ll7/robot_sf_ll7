@@ -22,17 +22,17 @@ alter any import. It produces only the reorganization plan and the follow-up con
 
 ## Ghost Directory Confirmation
 
-`robot_sf/util/` and `robot_sf/utils/` are untracked husks that only ever contained stale
-`__pycache__/` bytecode from previously deleted modules. Confirmation on this branch:
+`robot_sf/util/` and `robot_sf/utils/` are untracked husks. Any local contents observed under them
+were stale `__pycache__/` bytecode from previously deleted modules. Confirmation on this branch:
 
 - `git ls-files robot_sf/util robot_sf/utils` returns no tracked files.
 - `git status --ignored robot_sf/util robot_sf/utils` reports a clean tree; neither directory is
   present in a fresh checkout because `__pycache__/` is ignored and never committed.
 
 Because no tracked file lives under either path, there is nothing to `git rm` in this issue. A
-fresh clone already satisfies the "removed" acceptance criterion; the directories reappear only as
-ignored bytecode caches when old import paths are exercised, and they disappear on any clean
-checkout. The follow-up contract below includes a guard so the husks are not reintroduced.
+fresh clone already satisfies the "removed" acceptance criterion; any local directories are only
+ignored bytecode caches and disappear on a clean checkout. The follow-up contract below includes a
+guard so the husks are not reintroduced.
 
 ## Current Benchmark State
 
@@ -92,8 +92,9 @@ top-level set substantially, not to force every file into a domain.
 
 ## Migration Contract (for the follow-up, not this issue)
 
-The follow-up must treat the move as an import-contract change, because 158 top-level
-non-`__init__.py` benchmark modules import from `robot_sf.benchmark`. Required discipline:
+The follow-up must treat the move as an import-contract change: at this branch's HEAD, 149
+top-level non-`__init__.py` benchmark modules use absolute `robot_sf.benchmark...` imports.
+Required discipline:
 
 1. Move files with `git mv` so history is preserved; never delete-and-recreate.
 2. Update every `robot_sf.benchmark.<module>` import across `robot_sf/`, `scripts/`, `tests/`, and

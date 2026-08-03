@@ -28,6 +28,7 @@ from scripts.training.train_ppo import (
     _BestCheckpointCandidate,
     _BestCheckpointTracker,
     _build_direct_wandb_training_payload,
+    _deep_merge_config,
     _describe_num_envs_resolution,
     _deterministic_eval_seed_for_episode,
     _DirectWandbMetricsCallback,
@@ -1991,3 +1992,95 @@ def test_issue_6679_single_factor_variant_equivalence(variant: str) -> None:
     config = load_expert_training_config(config_path)
     assert config.policy_id
     assert len(config.seeds) == 1
+
+
+# Issue #6683 (residual child of #6677, parent #6484): config-side removal of
+# the deprecated, ignored evaluation.frequency_episodes field from the 8
+# remaining configs under configs/training/ppo/. Loader and EvaluationSchedule
+# parser support are intentionally untouched; cadence stays step_schedule-driven.
+_ISSUE_6683_CONFIGS = [
+    "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml",
+    "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml",
+    "configs/training/ppo/feature_extractor_sweep_base.yaml",
+    "configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+]
+_ISSUE_6683_INHERITING_CONFIG = (
+    "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml"
+)
+_ISSUE_6683_VARIANTS = [*_ISSUE_6683_CONFIGS, _ISSUE_6683_INHERITING_CONFIG]
+
+
+def _issue_6683_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved-config baseline."""
+    baseline_path = Path("tests/integration/_baseline_issue_6683_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-equivalence.v1"
+    assert isinstance(baseline["source_revision"], str)
+    canonical = json.dumps(baseline["variants"], sort_keys=True, separators=(",", ":"))
+    assert hashlib.sha256(canonical.encode()).hexdigest() == baseline["variants_sha256"]
+    assert set(baseline["variants"]) == set(_ISSUE_6683_VARIANTS)
+    return baseline
+
+
+def _issue_6683_resolved_mapping(rel_path: str) -> dict:
+    """Resolve a #6683 config mapping the way its consumers resolve it.
+
+    The inheriting matrix file's base_config is resolved repo-root-relative,
+    mirroring scripts/training/fixed_feature_extractor_candidates.py, and the
+    deep merge mirrors the loader's base_config semantics.
+    """
+    if rel_path == _ISSUE_6683_INHERITING_CONFIG:
+        matrix = yaml.safe_load(Path(rel_path).read_text(encoding="utf-8"))
+        base_mapping = _load_expert_training_config_mapping(Path(str(matrix["base_config"])))
+        return _deep_merge_config(base_mapping, matrix)
+    return _load_expert_training_config_mapping(Path(rel_path))
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6683_VARIANTS)
+def test_issue_6683_configs_resolve_to_prechange_values(rel_path: str) -> None:
+    """Resolution must equal the frozen origin/main baseline except the dropped field.
+
+    The deprecated evaluation.frequency_episodes field is stripped from the live
+    resolution before the exhaustive mapping comparison (the stored baseline was
+    captured already stripped). Every other resolved value, including
+    step_schedule, evaluation_episodes, and hold_out_scenarios, must be
+    byte-identical. In the feature_extractor_sweep_base.yaml lineage the field
+    previously resolved to 10; after removal it falls to the loader default 0,
+    an intentional ignored-field drop mirroring PR #6513.
+    """
+    baseline = _issue_6683_baseline()
+    expected_mapping = baseline["variants"][rel_path]
+
+    resolved_mapping = _issue_6683_resolved_mapping(rel_path)
+    assert _strip_frequency_episodes(resolved_mapping) == expected_mapping
+
+    if rel_path != _ISSUE_6683_INHERITING_CONFIG:
+        # Exercise the full construction path and pin the post-removal semantics:
+        # cadence stays step_schedule-driven and the deprecated field resolves to
+        # its default everywhere.
+        config = load_expert_training_config(Path(rel_path))
+        assert config.evaluation.step_schedule
+        assert config.evaluation.frequency_episodes == 0
+
+
+def test_issue_6683_frequency_episodes_dropped_and_cadence_retained() -> None:
+    """The deprecated field is gone from exactly the 8 configs; cadence stays explicit."""
+    for rel_path in _ISSUE_6683_CONFIGS:
+        raw_mapping = yaml.safe_load(Path(rel_path).read_text(encoding="utf-8"))
+        evaluation = raw_mapping["evaluation"]
+        assert "frequency_episodes" not in evaluation, rel_path
+        assert evaluation["step_schedule"], rel_path
+        assert "evaluation_episodes" in evaluation, rel_path
+
+    # The inheriting matrix file keeps its base_config reference and carries no
+    # evaluation override of its own.
+    matrix = yaml.safe_load(Path(_ISSUE_6683_INHERITING_CONFIG).read_text(encoding="utf-8"))
+    assert matrix["base_config"] == "configs/training/ppo/feature_extractor_sweep_base.yaml"
+    assert "frequency_episodes" not in matrix.get("evaluation", {})

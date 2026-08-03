@@ -21,6 +21,7 @@ from robot_sf.benchmark.hierarchical_paired_release_inputs import (
     evaluate_hierarchical_paired_release_inputs,
     load_hierarchical_paired_release_input_manifest,
 )
+from robot_sf.evidence.writers import write_json as write_evidence_json
 from robot_sf.planner.prediction_mpc import (
     PredictionMPCPlannerAdapter,
     build_prediction_mpc_config,
@@ -244,7 +245,7 @@ def write_preregistration_plan(plan: Mapping[str, Any], output_dir: str | Path) 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "issue_5355_prediction_mpc_factorial_preregistration_plan.json"
-    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_evidence_json(path, dict(plan))
     return path
 
 

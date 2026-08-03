@@ -105,7 +105,7 @@ input_provenance:
       sha256: 7c5bbdb5d19c548fcf492306efc6c89d712b28047866cb51787cdeab1a05125c
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 655151802b7e6d3ed3be33ff94cac6ad0b8a152c278d97851f3099771b692bad
+      sha256: 01e2477c5741a5404d793b1e8341cb1f2ec714051453790b946e5a8a0a4cc828
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       sha256: 4560b2c5729f0f64c9b91ec3ef3eae034bdf936df7af534d00da8a05f03e23eb

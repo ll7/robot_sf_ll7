@@ -459,6 +459,21 @@ def _load_archive_warm_starts(
                 pedestrian_speed_mps=float(candidate["pedestrian_speed_mps"]),
                 pedestrian_delay_s=float(candidate["pedestrian_delay_s"]),
                 scenario_seed=int(candidate["scenario_seed"]),
+                pedestrian_acceleration_mps2=(
+                    float(candidate["pedestrian_acceleration_mps2"])
+                    if candidate.get("pedestrian_acceleration_mps2") is not None
+                    else None
+                ),
+                group_size=(
+                    int(candidate["group_size"])
+                    if candidate.get("group_size") is not None
+                    else None
+                ),
+                vru_profile=(
+                    str(candidate["vru_profile"])
+                    if candidate.get("vru_profile") is not None
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(
@@ -490,7 +505,7 @@ def _git_head(repo_root: Path) -> str:
             cwd=repo_root,
             timeout=10,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return "unavailable"
     commit = result.stdout.strip()
     return commit if commit else "unavailable"

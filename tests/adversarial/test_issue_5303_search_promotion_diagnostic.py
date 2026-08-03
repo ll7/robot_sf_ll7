@@ -230,6 +230,53 @@ def test_frozen_diagnostic_search_config_accepts_selected_warm_starts() -> None:
     config.validate()
 
 
+def test_archive_warm_start_round_trips_optional_candidate_fields(tmp_path: Path) -> None:
+    """Archive reconstruction retains every supported optional candidate field."""
+    candidate = {
+        **_fixture_candidate(seed=530301, index=0),
+        "pedestrian_acceleration_mps2": 0.25,
+        "group_size": 3,
+        "vru_profile": "elderly",
+    }
+    archive_path = tmp_path / "warm_starts.json"
+    archive_path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "archive_id": "optional-fields",
+                        "candidate": candidate,
+                        "scenario_family": "classic_cross_trap_medium",
+                        "provenance": {"target_planner": "goal"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    warm_start = compare_adversarial_samplers._load_archive_warm_starts(
+        archive_path, ("optional-fields",)
+    )[0]
+
+    assert warm_start.candidate.to_json() == candidate
+
+
+def test_git_head_timeout_returns_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A stalled provenance command remains a controlled unavailable result."""
+    monkeypatch.setattr(
+        compare_adversarial_samplers.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            compare_adversarial_samplers.subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+        ),
+    )
+
+    assert compare_adversarial_samplers._git_head(tmp_path) == "unavailable"
+
+
 def test_diagnostic_rows_preserve_observed_execution_statuses(tmp_path: Path) -> None:
     """Rows retain observed degraded status instead of claiming command-level availability."""
     scenario = tmp_path / "scenario.yaml"

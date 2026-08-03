@@ -92,7 +92,7 @@ top-level set substantially, not to force every file into a domain.
 
 ## Migration Contract (for the follow-up, not this issue)
 
-The follow-up must treat the move as an import-contract change: at this branch's HEAD, 204
+The follow-up must treat the move as an import-contract change: at this branch's HEAD, 158
 top-level non-`__init__.py` benchmark modules use absolute `robot_sf.benchmark...` imports. Reproduce
 that exact top-level inventory from the repository root with:
 
@@ -100,7 +100,7 @@ that exact top-level inventory from the repository root with:
 git grep -l -E '^[[:space:]]*(from|import)[[:space:]]+robot_sf\.benchmark(\.|[[:space:]])' -- robot_sf/benchmark/*.py | sed '/\/__init__\.py$/d' | wc -l
 ```
 
-The dotted-only form reports 203 modules; the migration audit must cover both forms.
+The dotted-only form reports 157 modules; the migration audit must cover both forms.
 Required discipline:
 
 1. Move files with `git mv` so history is preserved; never delete-and-recreate.

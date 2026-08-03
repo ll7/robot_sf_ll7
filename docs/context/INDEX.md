@@ -13,6 +13,12 @@ classic_interactions_francis2023 matrix at one immutable campaign commit; prepar
 benchmark evidence, production compute blocked until the Gate 1 binding canary (#6641) passes:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
 
+Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle (#6600): the
+analysis tooling is merged (PR #6664) and fails closed; the analysis itself is blocked pending
+Gate 2 production sweep rows or a fail-closed missingness ledger, with a registered
+`blocked_pending_gate2` diagnostic bundle and the reproduction/unblock commands:
+[issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md).
+
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
 groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this

@@ -24,10 +24,37 @@ scenario_scope:
     - classic_bottleneck_medium
     - classic_cross_trap_high
     - francis2023_intersection_wait
-  seeds: [111, 112, 113]
+  seeds: [101, 102, 103]
   horizon: 100
   dt: 0.1
   workers: 1
+
+tuning_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_ids:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+  seeds: [101, 102, 103]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+  scenario_list_hash: 113e8f7e23948d12aaf453a8d05c1d48b870d5cbace6b07714df24df782e9490
+
+held_out_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  seed_set: paper_eval_s10
+  seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+  excluded_scenarios:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+
+canary:
+  seed: 101
+  required_eligible_episodes: 6
+  target_eligible_ratio: "6/6"
+  stop_on_ineligible: true
 
 # The target arms are the two prediction-aware MPC rows added to the h600
 # extended roster. Every sensitivity point is applied to both base configs.

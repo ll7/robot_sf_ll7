@@ -40,6 +40,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--check", action="store_true", help="Validate without running episodes")
+    parser.add_argument(
+        "--canary", action="store_true", help="Run canary check (seed 101, 6/6 eligibility)"
+    )
     return parser.parse_args(argv)
 
 
@@ -75,7 +78,7 @@ def _check_summary(config: dict[str, Any]) -> dict[str, Any]:
     plan = build_candidate_plan(config, repo_root=REPO_ROOT)
     target_points = [entry for entry in plan if entry["target"]]
     incumbents = [entry for entry in plan if not entry["target"]]
-    return {
+    res: dict[str, Any] = {
         "status": "ok",
         "issue": 5579,
         "scenario_count": len(scenarios),
@@ -86,6 +89,24 @@ def _check_summary(config: dict[str, Any]) -> dict[str, Any]:
         "incumbent_execution_rows": len(incumbents),
         "episode_row_bound": len(plan) * len(scenarios) * len(config["scenario_scope"]["seeds"]),
     }
+    if "tuning_scope" in config:
+        res["tuning_scope"] = {
+            "scenario_ids": config["tuning_scope"]["scenario_ids"],
+            "seeds": config["tuning_scope"]["seeds"],
+            "scenario_list_hash": config["tuning_scope"]["scenario_list_hash"],
+        }
+    if "held_out_scope" in config:
+        res["held_out_scope"] = {
+            "seeds": config["held_out_scope"]["seeds"],
+            "excluded_scenarios": config["held_out_scope"]["excluded_scenarios"],
+        }
+    if "canary" in config:
+        res["canary"] = {
+            "seed": config["canary"]["seed"],
+            "required_eligible_episodes": config["canary"]["required_eligible_episodes"],
+            "target_eligible_ratio": config["canary"].get("target_eligible_ratio", "6/6"),
+        }
+    return res
 
 
 def run_study(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> dict[str, Any]:
@@ -168,6 +189,80 @@ def _display_path(path: Path) -> str:
         return str(resolved)
 
 
+def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> dict[str, Any]:
+    """Execute the canary phase (6 target arm episodes at seed 101) to verify eligibility."""
+    from robot_sf.benchmark.mpc_tuning_sensitivity import _eligible
+
+    scenarios = selected_scenarios(config, repo_root=REPO_ROOT)
+    canary_cfg = config.get("canary", {})
+    canary_seed = int(canary_cfg.get("seed", 101))
+    required_eligible = int(canary_cfg.get("required_eligible_episodes", 6))
+
+    for scenario in scenarios:
+        scenario["seeds"] = [canary_seed]
+
+    plan = build_candidate_plan(config, repo_root=REPO_ROOT)
+    canary_plan = [
+        entry for entry in plan if entry["target"] and entry["candidate_id"] == "incumbent"
+    ]
+    scope = config["scenario_scope"]
+    source_matrix = REPO_ROOT / scope["source_matrix"]
+    raw_dir = out_dir / "raw"
+    configs_dir = out_dir / "configs"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    all_rows: list[dict[str, Any]] = []
+    for entry in canary_plan:
+        arm_key = str(entry["arm_key"])
+        candidate_id = str(entry["candidate_id"])
+        safe_id = f"canary__{arm_key}__{candidate_id}"
+        algo_config_path = configs_dir / f"{safe_id}.yaml"
+        _write_effective_config(algo_config_path, entry["effective_config"])
+        episodes_path = raw_dir / f"{safe_id}.jsonl"
+        if episodes_path.exists():
+            episodes_path.unlink()
+        summary = run_map_batch(
+            deepcopy(scenarios),
+            episodes_path,
+            schema_path=SCHEMA_PATH,
+            scenario_path=source_matrix,
+            algo=str(entry["algo"]),
+            algo_config_path=str(algo_config_path),
+            horizon=int(scope["horizon"]),
+            dt=float(scope["dt"]),
+            record_forces=False,
+            workers=int(scope["workers"]),
+            resume=False,
+            benchmark_profile="experimental",
+        )
+        availability = summary.get("benchmark_availability") or availability_payload(summary)
+        for record in _read_jsonl(episodes_path):
+            decorated = dict(record)
+            decorated["sensitivity_availability"] = availability
+            all_rows.append(
+                normalize_episode_record(
+                    decorated,
+                    arm_key=arm_key,
+                    candidate_id=candidate_id,
+                )
+            )
+
+    eligible_count = sum(1 for row in all_rows if _eligible(row))
+    status = (
+        "ok"
+        if eligible_count >= required_eligible and len(all_rows) == required_eligible
+        else "failed"
+    )
+    return {
+        "status": status,
+        "canary_seed": canary_seed,
+        "eligible_episodes": eligible_count,
+        "total_episodes": len(all_rows),
+        "required_eligible": required_eligible,
+        "target_eligible_ratio": f"{eligible_count}/{len(all_rows)}",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """Validate or execute the bounded diagnostic."""
     args = _parse_args(argv)
@@ -175,6 +270,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         print(json.dumps(_check_summary(config), sort_keys=True))
         return 0
+    if args.canary:
+        canary_res = run_canary_check(config, out_dir=args.out_dir, config_path=args.config)
+        print(json.dumps(canary_res, sort_keys=True))
+        return 0 if canary_res["status"] == "ok" else 1
     report = run_study(config, out_dir=args.out_dir, config_path=args.config)
     print(
         json.dumps(

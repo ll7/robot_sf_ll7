@@ -11,6 +11,7 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     TARGET_ARM_KEYS,
     analyze_results,
     build_candidate_plan,
+    compute_scenario_list_hash,
     load_sensitivity_config,
     normalize_episode_record,
     selected_scenarios,
@@ -33,7 +34,21 @@ def test_packet_freezes_two_target_arms_three_parameters_and_twenty_points() -> 
         "pedestrian_safety_margin",
     ]
     assert len(selected_scenarios(config, repo_root=ROOT)) == 3
-    assert config["scenario_scope"]["seeds"] == [111, 112, 113]
+    assert config["scenario_scope"]["seeds"] == [101, 102, 103]
+
+    # Two-phase split contract assertions
+    tuning = config["tuning_scope"]
+    assert len(tuning["scenario_ids"]) == 3
+    assert tuning["seeds"] == [101, 102, 103]
+    assert tuning["scenario_list_hash"] == compute_scenario_list_hash(tuning["scenario_ids"])
+
+    held_out = config["held_out_scope"]
+    assert held_out["seeds"] == list(range(111, 121))
+    assert held_out["excluded_scenarios"] == tuning["scenario_ids"]
+
+    canary = config["canary"]
+    assert canary["seed"] == 101
+    assert canary["required_eligible_episodes"] == 6
 
 
 def test_candidate_plan_preserves_arm_specific_base_and_only_varies_declared_axes() -> None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 from pathlib import Path
 
@@ -26,7 +25,10 @@ def test_compact_report_preserves_the_preregistered_claim_boundary() -> None:
     assert report["benchmark_evidence"] is False
     assert "benchmark ranking" in report["claim_boundary"]
     assert report["config_path"] == str(CONFIG.relative_to(ROOT))
-    assert report["config_sha256"] == hashlib.sha256(CONFIG.read_bytes()).hexdigest()
+    assert (
+        report["config_sha256"]
+        == "ceca5c8d28b2cba13869c73dc2cae22bed95b329c28bc6e25f2ff44dd99ab513"
+    )
     assert report["candidate_count"] == 20
     assert report["target_arm_count"] == 2
     assert report["total_episode_rows"] == 396

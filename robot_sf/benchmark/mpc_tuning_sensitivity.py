@@ -65,6 +65,12 @@ def validate_sensitivity_config(
         raise ValueError("claim_boundary must retain the diagnostic/no-ranking boundary")
     _validate_execution_boundary(config.get("execution_boundary"))
     _validate_scenario_scope(config.get("scenario_scope"), repo_root=root)
+    if "tuning_scope" in config:
+        _validate_tuning_scope(config.get("tuning_scope"), repo_root=root)
+    if "held_out_scope" in config:
+        _validate_held_out_scope(config.get("held_out_scope"), repo_root=root)
+    if "canary" in config:
+        _validate_canary(config.get("canary"))
     _validate_arm_list(config.get("target_arms"), expected=TARGET_ARM_KEYS, repo_root=root)
     _validate_arm_list(
         config.get("incumbent_arms"),
@@ -442,6 +448,64 @@ def _validate_scenario_scope(value: Any, *, repo_root: Path) -> None:
         raise ValueError("scenario_scope.horizon and dt must be positive")
 
 
+def compute_scenario_list_hash(scenario_ids: Sequence[str]) -> str:
+    """Return deterministic SHA-256 hex digest of sorted scenario IDs."""
+    sorted_ids = sorted(str(name) for name in scenario_ids)
+    encoded = json.dumps(sorted_ids, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_tuning_scope(value: Any, *, repo_root: Path) -> None:
+    """Validate tuning_scope containing 3 scenario IDs, seeds [101, 102, 103], and scenario_list_hash."""
+    scope = _mapping(value, "tuning_scope")
+    source = _repo_path(str(scope.get("source_matrix", "")), repo_root)
+    if not source.is_file():
+        raise ValueError(f"tuning_scope.source_matrix does not exist: {source}")
+    scenario_ids = scope.get("scenario_ids")
+    if not isinstance(scenario_ids, list) or len(scenario_ids) != 3:
+        raise ValueError("tuning_scope.scenario_ids must contain exactly three scenarios")
+    if len(set(scenario_ids)) != len(scenario_ids) or not all(
+        isinstance(item, str) and item.strip() for item in scenario_ids
+    ):
+        raise ValueError("tuning_scope.scenario_ids must be unique non-empty strings")
+    seeds = scope.get("seeds")
+    if seeds != [101, 102, 103]:
+        raise ValueError("tuning_scope.seeds must be [101, 102, 103]")
+    scenario_list_hash = str(scope.get("scenario_list_hash", "")).strip()
+    expected_hash = compute_scenario_list_hash(scenario_ids)
+    if scenario_list_hash != expected_hash:
+        raise ValueError(
+            f"tuning_scope.scenario_list_hash ({scenario_list_hash!r}) does not match "
+            f"expected SHA-256 hash of sorted scenario_ids ({expected_hash!r})"
+        )
+
+
+def _validate_held_out_scope(value: Any, *, repo_root: Path) -> None:
+    """Validate held_out_scope with seeds [111..120] and frozen scenario exclusion list."""
+    scope = _mapping(value, "held_out_scope")
+    source = _repo_path(str(scope.get("source_matrix", "")), repo_root)
+    if not source.is_file():
+        raise ValueError(f"held_out_scope.source_matrix does not exist: {source}")
+    seeds = scope.get("seeds")
+    expected_seeds = list(range(111, 121))
+    if seeds != expected_seeds:
+        raise ValueError(f"held_out_scope.seeds must be {expected_seeds}")
+    excluded = scope.get("excluded_scenarios")
+    if not isinstance(excluded, list) or len(excluded) == 0:
+        raise ValueError(
+            "held_out_scope.excluded_scenarios must be a non-empty list of scenario IDs"
+        )
+
+
+def _validate_canary(value: Any) -> None:
+    """Validate canary section specifying 6/6 eligibility at seed 101."""
+    canary = _mapping(value, "canary")
+    if canary.get("seed") != 101:
+        raise ValueError("canary.seed must be 101")
+    if canary.get("required_eligible_episodes") != 6:
+        raise ValueError("canary.required_eligible_episodes must be 6")
+
+
 def _validate_arm_list(value: Any, *, expected: Sequence[str], repo_root: Path) -> None:
     """Validate an arm list matches the expected keys in declared order."""
     if not isinstance(value, list) or len(value) != len(expected):
@@ -782,6 +846,7 @@ __all__ = [
     "TOP_PARAMETERS",
     "analyze_results",
     "build_candidate_plan",
+    "compute_scenario_list_hash",
     "config_hash",
     "format_report_markdown",
     "load_sensitivity_config",

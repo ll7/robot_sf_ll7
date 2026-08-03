@@ -108,7 +108,7 @@ def get_continual_adaptation_output_root() -> Path:
     return get_artifact_root() / "continual_adaptation_diagnostics"
 
 
-def _resolve_output_dir(output_dir: str | Path) -> Path:
+def _resolve_output_dir(output_dir: str | Path, *, require_artifact_root: bool = False) -> Path:
     """Resolve an output directory and enforce the repository artifact boundary.
 
     Repository-local output overrides must stay under the configured artifact
@@ -118,31 +118,45 @@ def _resolve_output_dir(output_dir: str | Path) -> Path:
 
     Args:
         output_dir: Requested diagnostic output directory.
+        require_artifact_root: Whether the resolved path must remain below the
+            configured artifact root. This is required for the default path,
+            whose final component comes from the manifest ``run_id``.
 
     Returns:
         The resolved output directory.
 
     Raises:
-        ContinualAdaptationProtocolError: when a repository-local path is outside
-            the configured artifact root.
+        ContinualAdaptationProtocolError: when the default path escapes the
+            configured artifact root, or when an explicit repository-local path
+            is outside that root.
     """
     resolved = Path(output_dir).expanduser().resolve()
+    artifact_root = get_artifact_root().expanduser().resolve()
+    try:
+        resolved.relative_to(artifact_root)
+    except ValueError:
+        if require_artifact_root:
+            raise ContinualAdaptationProtocolError(
+                [
+                    f"output_dir {resolved} escapes the configured artifact root "
+                    f"{artifact_root}; the manifest run_id must keep default diagnostics "
+                    "under output/"
+                ]
+            ) from None
+    else:
+        return resolved
+
     try:
         resolved.relative_to(_REPOSITORY_ROOT)
     except ValueError:
         return resolved
 
-    artifact_root = get_artifact_root().expanduser().resolve()
-    try:
-        resolved.relative_to(artifact_root)
-    except ValueError as exc:
-        raise ContinualAdaptationProtocolError(
-            [
-                f"output_dir {resolved} is inside the repository but outside the configured "
-                f"artifact root {artifact_root}; diagnostic outputs must remain under output/"
-            ]
-        ) from exc
-    return resolved
+    raise ContinualAdaptationProtocolError(
+        [
+            f"output_dir {resolved} is inside the repository but outside the configured "
+            f"artifact root {artifact_root}; diagnostic outputs must remain under output/"
+        ]
+    )
 
 
 def build_adaptation_diagnostic(manifest: Mapping[str, Any]) -> dict[str, Any]:
@@ -269,7 +283,8 @@ def run_continual_adaptation_diagnostics(
     target_dir = _resolve_output_dir(
         Path(output_dir)
         if output_dir is not None
-        else get_continual_adaptation_output_root() / run_id
+        else get_continual_adaptation_output_root() / run_id,
+        require_artifact_root=output_dir is None,
     )
     target_dir.mkdir(parents=True, exist_ok=True)
 

@@ -192,6 +192,24 @@ def test_default_output_root_honors_artifact_root(monkeypatch: pytest.MonkeyPatc
     )
 
 
+def test_default_output_rejects_run_id_that_escapes_artifact_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A manifest run ID cannot redirect the implicit output outside the artifact root."""
+    repository_root = tmp_path / "repo"
+    artifact_root = repository_root / "output"
+    repository_root.mkdir()
+    monkeypatch.setattr(launcher_module, "_REPOSITORY_ROOT", repository_root)
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(artifact_root))
+    manifest = _load_example_manifest()
+    manifest["run_id"] = "../../../escaped"
+
+    with pytest.raises(ContinualAdaptationProtocolError, match="escapes the configured artifact"):
+        run_continual_adaptation_diagnostics(manifest)
+
+    assert not (tmp_path / "escaped").exists()
+
+
 def test_render_markdown_states_diagnostic_boundary(tmp_path: Path) -> None:
     """The rendered summary states the diagnostic-only boundary."""
     report = run_continual_adaptation_diagnostics(_load_example_manifest(), output_dir=tmp_path)

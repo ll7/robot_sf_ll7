@@ -16,6 +16,7 @@ from robot_sf.benchmark.trace_reexport_packaging import (
     RealReexportBindingError,
     bind_real_reexport_arms,
 )
+from robot_sf.benchmark.utils import _config_hash
 from scripts.tools.build_simulation_trace_export import (
     ALLOWLISTED_METADATA_FIELDS,
     SimulationTraceNormalizationError,
@@ -89,7 +90,8 @@ def _row(
         seed=seed,
         mismatch=mismatch,
     )
-    config_hash = f"run-config-{planner}-{scenario_id}"
+    scenario_params = {"algo": planner, "id": scenario_id}
+    config_hash = _config_hash(scenario_params)
     return {
         "episode_id": f"rerun-{planner}-{scenario_id}-{seed}",
         "scenario_id": scenario_id,
@@ -97,7 +99,7 @@ def _row(
         "algo": planner,
         "git_hash": EXECUTION_COMMIT,
         "config_hash": config_hash,
-        "scenario_params": {"algo": planner, "id": scenario_id},
+        "scenario_params": scenario_params,
         "metrics": {"success": outcome["success"]},
         "outcome": {key: value for key, value in outcome.items() if key != "success"},
         "algorithm_metadata": {
@@ -125,12 +127,12 @@ def real_arm_inputs(tmp_path: Path) -> dict[str, Any]:
         config_source = tmp_path / "configs" / f"{arm.key}.yaml"
         config_source.parent.mkdir(parents=True, exist_ok=True)
         config_source.write_text(f"name: {arm.config_name}\n", encoding="utf-8")
-        config_hash = f"run-config-{arm.planner}-{arm.scenario_id}"
+        campaign_config_hash = f"campaign-config-{arm.key}"
         config_evidence[arm.key] = {
             "config_name": arm.config_name,
             "config_path": arm.config_path,
             "source_path": str(config_source),
-            "config_hash": config_hash,
+            "config_hash": campaign_config_hash,
             "sha256": _sha256(config_source),
         }
         _write_json(
@@ -140,7 +142,7 @@ def real_arm_inputs(tmp_path: Path) -> dict[str, Any]:
                 "job_id": arm.job_id,
                 "name": arm.config_name,
                 "config_path": arm.config_path,
-                "config_hash": config_hash,
+                "config_hash": campaign_config_hash,
                 "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
                 "scenario_candidates": [arm.scenario_id],
                 "seed_policy": {"resolved_seeds": list(arm.seeds)},
@@ -297,6 +299,35 @@ def test_real_arm_binding_emits_90_receipts_and_88_plus_2_boundary(
         assert trace_path.is_file()
         assert _sha256(trace_path) == row["normalized_trace_sha256"]
         assert {item["field"] for item in row["removed_fields"]} == set(ALLOWLISTED_METADATA_FIELDS)
+        assert sum(row["removed_field_counts"].values()) == row["removed_field_count"]
+        assert len(row["removed_fields"]) == len(ALLOWLISTED_METADATA_FIELDS)
+
+
+def test_real_arm_binding_recovers_null_job_and_invocation_config(
+    real_arm_inputs: dict[str, Any],
+) -> None:
+    """Manifest-only binding accepts the retrieved null job field and command path."""
+
+    doorway_manifest = real_arm_inputs["roots"]["doorway_ppo"] / "campaign_manifest.json"
+    manifest = json.loads(doorway_manifest.read_text(encoding="utf-8"))
+    manifest["job_id"] = None
+    manifest.pop("config_path")
+    manifest["invoked_command"] = (
+        "python -m robot_sf.benchmark.runner "
+        "--config configs/benchmarks/doorway_butterfly_trace_reexport.yaml "
+        "--output /external/job-13483"
+    )
+    _write_json(doorway_manifest, manifest)
+
+    receipt = bind_real_reexport_arms(
+        real_arm_inputs["roots"],
+        expected_outcomes=real_arm_inputs["release_outcomes"],
+        request_manifest=real_arm_inputs["request_manifest"],
+    )
+
+    doorway = next(arm for arm in receipt["arms"] if arm["arm"] == "doorway_ppo")
+    assert doorway["job_id"] == "13483"
+    assert doorway["config"]["evidence_status"] == "campaign_manifest_invocation"
 
 
 def test_real_arm_binding_rejects_wrong_job_before_normalized_output(

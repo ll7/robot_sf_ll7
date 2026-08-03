@@ -4788,3 +4788,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_4830_safety_wrapper_factorial_v1
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

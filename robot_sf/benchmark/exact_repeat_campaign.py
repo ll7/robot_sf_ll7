@@ -1125,7 +1125,395 @@ def _run_episode_with_downloads_disabled(
             os.environ["ROBOT_SF_DISABLE_MODEL_DOWNLOADS"] = previous
 
 
-def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tracks each target state explicitly.
+def _validate_resolved_bundle(
+    resolved_bundle: Mapping[str, Any],
+) -> tuple[list[Any], Mapping[str, Any], Mapping[str, Any], int, str]:
+    """Validate bundle schema, hashes, and structure before execution.
+
+    Returns:
+        ``(targets, scenario_defs, planner_defs, repeats_per_target, expected_manifest_hash)``
+    """
+    if resolved_bundle.get("schema_version") != RESOLVED_DEFINITIONS_SCHEMA_VERSION:
+        raise ValueError("bundle has an unsupported schema_version")
+    expected_manifest_hash = resolved_bundle.get("manifest_sha256")
+    if not expected_manifest_hash:
+        raise ValueError("bundle is missing manifest_sha256")
+    bundle_bundle_sha = resolved_bundle.get("bundle_sha256")
+    without_sha = {key: value for key, value in resolved_bundle.items() if key != "bundle_sha256"}
+    if bundle_bundle_sha != canonical_sha256(without_sha):
+        raise ValueError("bundle_sha256 does not match the bundle content")
+
+    targets = resolved_bundle.get("targets")
+    if not isinstance(targets, list) or not targets:
+        raise ValueError("bundle contains no targets to execute")
+    scenario_defs = _require_mapping(
+        resolved_bundle.get("scenario_definitions"), "bundle scenario_definitions"
+    )
+    planner_defs = _require_mapping(
+        resolved_bundle.get("planner_definitions"), "bundle planner_definitions"
+    )
+    _, repeats_per_target = _check_manifest_from_bundle(resolved_bundle)
+    return targets, scenario_defs, planner_defs, repeats_per_target, expected_manifest_hash
+
+
+def _setup_campaign_runner(
+    run_episode: Any | None,
+    targets: Sequence[Mapping[str, Any]],
+    planner_defs: Mapping[str, Any],
+) -> tuple[Any, bool]:
+    """Resolve the episode runner and stage model assets when required.
+
+    Returns:
+        ``(run_episode, enforce_model_preflight)``
+    """
+    if run_episode is None:
+        from robot_sf.benchmark.runner import run_episode as _run_episode  # noqa: PLC0415
+
+        run_episode = _run_episode
+
+    # The production runner must stage its complete model set before creating
+    # any episode/fork worker. Test doubles remain injectable without requiring
+    # real registry artifacts.
+    enforce_model_preflight = (
+        getattr(run_episode, "__module__", None) == "robot_sf.benchmark.runner"
+    )
+    if enforce_model_preflight:
+        _preflight_runtime_model_assets(targets, planner_defs)
+    return run_episode, enforce_model_preflight
+
+
+def _prepare_campaign_environment(
+    output_dir: Path,
+    resolved_bundle: Mapping[str, Any],
+    target_filter: list[str] | None,
+    targets: Sequence[Mapping[str, Any]],
+) -> tuple[Path, dict[str, Any], set[str] | None]:
+    """Create output directories, capture environment fingerprint, and apply target filter.
+
+    Returns:
+        ``(cache_dir, env_fingerprint, selected_definition_ids)``
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = output_dir / "target_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    env_fingerprint = _get_environment_fingerprint()
+
+    # Use the bundle's source revision so the host report passes verifier.
+    source = _require_mapping(resolved_bundle.get("source"), "bundle source")
+    source_git_hashes = source.get("source_git_hashes", [])
+    if source_git_hashes:
+        env_fingerprint["git_commit"] = source_git_hashes[0]
+
+    selected_definition_ids: set[str] | None = None
+    if target_filter is not None:
+        filter_set = set(target_filter)
+        selected_definition_ids = {
+            _require_text(target.get("scenario_definition_id"), "target scenario_definition_id")
+            for target in targets
+            if target.get("scenario_definition_id") in filter_set
+        }
+        if not selected_definition_ids:
+            raise ValueError("target_filter removed all targets from the bundle")
+    return cache_dir, env_fingerprint, selected_definition_ids
+
+
+def _resolve_target_definitions(
+    target: Mapping[str, Any],
+    scenario_defs: Mapping[str, Any],
+    planner_defs: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """Resolve and validate scenario/planner definitions for one target.
+
+    Returns:
+        ``(scenario_params, planner_def, planner_algo)``
+    """
+    key = _target_key(target)
+    scenario_def_id = _require_text(
+        target.get("scenario_definition_id"), "target scenario_definition_id"
+    )
+    planner_def_id = _require_text(
+        target.get("planner_definition_id"), "target planner_definition_id"
+    )
+
+    raw_scenario_params = scenario_defs.get(scenario_def_id)
+    if raw_scenario_params is None:
+        raise ValueError(f"bundle missing scenario_definition for {scenario_def_id!r}")
+    scenario_params = dict(
+        _require_mapping(raw_scenario_params, f"scenario_definition {scenario_def_id!r}")
+    )
+    raw_planner_def = planner_defs.get(planner_def_id)
+    if raw_planner_def is None:
+        raise ValueError(f"bundle missing planner_definition for {planner_def_id!r}")
+    planner_def = dict(_require_mapping(raw_planner_def, f"planner_definition {planner_def_id!r}"))
+    planner_algo = _require_text(
+        planner_def.get("algo"), f"planner_definition {planner_def_id!r} algo"
+    )
+    if key[1] != planner_algo:
+        raise ValueError(
+            f"target {key} planner {key[1]!r} does not match "
+            f"planner_definition {planner_def_id!r} algo {planner_algo!r}"
+        )
+    return scenario_params, planner_def, planner_algo
+
+
+def _build_unrunnable_result(
+    key: tuple[str, str, int], target: Mapping[str, Any], planner_algo: str
+) -> dict[str, Any]:
+    """Build a disposition result entry for a planner with no executor on current main.
+
+    Returns:
+        A schema-compatible unrunnable disposition result entry.
+    """
+    return {
+        "scenario_id": key[0],
+        "planner": key[1],
+        "seed": key[2],
+        "horizon": int(target["horizon"]),
+        "source_config_hash": target["source_config_hash"],
+        "repeats": [],
+        "disposition": UNRUNNABLE_DISPOSITION,
+        "disposition_reason": (
+            f"planner {planner_algo!r} has no executor in the exact-repeat "
+            "run_episode baseline registry on current main"
+        ),
+    }
+
+
+def _resolve_campaign_dt(
+    scenario_params: Mapping[str, Any], resolved_bundle: Mapping[str, Any]
+) -> float:
+    """Determine the simulation timestep from scenario config or campaign fallback.
+
+    Returns:
+        The resolved simulation timestep as a float.
+    """
+    sim_config = scenario_params.get("simulation_config", {})
+    if isinstance(sim_config, dict):
+        dt = sim_config.get("dt")
+    else:
+        dt = None
+    if dt is None:
+        from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
+            load_campaign_config,
+        )
+
+        source_cfg_path = resolved_bundle.get("source", {}).get("campaign_config_path")
+        if source_cfg_path:
+            cfg = load_campaign_config((get_repository_root() / source_cfg_path).resolve())
+            dt = cfg.dt
+        if dt is None:
+            dt = 0.1
+    return float(dt)
+
+
+def _execute_target_repeats(  # noqa: PLR0913 - repeat execution requires full target context.
+    run_episode: Any,
+    scenario_params: dict[str, Any],
+    planner_algo: str,
+    planner_def: Mapping[str, Any],
+    seed: int,
+    horizon: int,
+    dt: float,
+    repeats_per_target: int,
+    enforce_model_preflight: bool,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Run all repeats for one target and compute per-repeat fingerprints.
+
+    Returns:
+        ``(records, repeats)`` where records are raw episode outputs and repeats
+        are the fingerprint dicts.
+    """
+    algo_config_path = planner_def.get("planner_config_path")
+    if algo_config_path is not None:
+        algo_config_path = str((get_repository_root() / algo_config_path).resolve())
+
+    records: list[dict[str, Any]] = []
+    repeats: list[dict[str, Any]] = []
+    for _repeat_idx in range(repeats_per_target):
+        run_kwargs = {
+            "seed": seed,
+            "algo": planner_algo,
+            "algo_config_path": algo_config_path,
+            "horizon": horizon,
+            "dt": float(dt),
+            "record_forces": scenario_params.get("record_forces", False),
+        }
+        record = (
+            _run_episode_with_downloads_disabled(run_episode, dict(scenario_params), **run_kwargs)
+            if enforce_model_preflight
+            else run_episode(dict(scenario_params), **run_kwargs)
+        )
+        records.append(record)
+        trajectory_sha = _compute_trajectory_hash(record)
+        outcome = record.get("outcome", {})
+        outcome_binary = 1 if outcome.get("success", False) else 0
+        metrics = record.get("metrics", {})
+        near_misses = _finite_int_or_zero(metrics.get("near_misses"))
+        repeats.append(
+            {
+                "outcome": outcome_binary,
+                "trajectory_sha256": trajectory_sha,
+                "near_misses": near_misses,
+            }
+        )
+    return records, repeats
+
+
+def _build_executed_target_result(
+    key: tuple[str, str, int],
+    target: Mapping[str, Any],
+    records: list[dict[str, Any]],
+    repeats: list[dict[str, Any]],
+    planner_algo: str,
+) -> dict[str, Any]:
+    """Classify repeat failures and build the result entry for an executed target.
+
+    Issue #5498 / #5781: a planner that constructs but does not produce native
+    repeats must not be promoted to a determinism verdict. Two distinct failure
+    classes exist, and they must not be conflated:
+
+    * genuine planner degradation (``policy_step_*_fallback``) — a zero-action
+      substitute produced *inside* the worker. Recorded with the
+      ``unrunnable_on_current_main`` disposition (degraded flag set) so the
+      verifier excludes it from the bitwise-identical claim.
+    * process-isolation / environment failure at the planner-step worker boundary
+      (handshake failure, dead/reparented worker, unsupported fork under xdist,
+      model-cache miss under parallel isolation). This is NOT a planner-runnability
+      defect on main, so it must be recorded with the separate
+      ``process_isolation_failure`` disposition and fail closed rather than misfiled
+      as ``unrunnable_on_current_main``.
+
+    Returns:
+        The classified result entry for the executed target.
+    """
+    any_degraded, any_isolation = _classify_repeat_failure(records)
+    if records and any_isolation:
+        return {
+            "scenario_id": key[0],
+            "planner": key[1],
+            "seed": key[2],
+            "horizon": int(target["horizon"]),
+            "source_config_hash": target["source_config_hash"],
+            "repeats": [],
+            "isolation_failure": True,
+            "disposition": PROCESS_ISOLATION_DISPOSITION,
+            "disposition_reason": (
+                f"planner {planner_algo!r} could not execute natively because the "
+                "planner-step isolation boundary failed (worker handshake/death or "
+                "fork/process-isolation failure under parallel execution); this is an "
+                "environment/process failure, not a planner-runnability defect on "
+                "current main, and is not valid exact-repeat evidence"
+            ),
+        }
+    if records and any_degraded:
+        return {
+            "scenario_id": key[0],
+            "planner": key[1],
+            "seed": key[2],
+            "horizon": int(target["horizon"]),
+            "source_config_hash": target["source_config_hash"],
+            "repeats": [],
+            "degraded": True,
+            "disposition": UNRUNNABLE_DISPOSITION,
+            "disposition_reason": (
+                f"planner {planner_algo!r} had one or more repeats degrade to a "
+                "fallback policy (planner-step worker crashed/timed out); not native "
+                "execution and not valid exact-repeat evidence"
+            ),
+        }
+    divergence = _first_divergence(repeats)
+    result_entry: dict[str, Any] = {
+        "scenario_id": key[0],
+        "planner": key[1],
+        "seed": key[2],
+        "horizon": int(target["horizon"]),
+        "source_config_hash": target["source_config_hash"],
+        "repeats": repeats,
+    }
+    if divergence is not None:
+        result_entry["first_divergence"] = divergence
+    return result_entry
+
+
+def _write_target_cache(
+    cache_file: Path, env_fingerprint: Mapping[str, Any], result_entry: Mapping[str, Any]
+) -> None:
+    """Persist a target result to the resume cache."""
+    cache_data = {
+        "_env_numpy_version": env_fingerprint["numpy_version"],
+        "_env_numba_version": env_fingerprint["numba_version"],
+        "_result": result_entry,
+    }
+    cache_file.write_text(json.dumps(cache_data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _execute_campaign_targets(  # noqa: PLR0913 - campaign state is intentionally explicit.
+    targets: Sequence[Mapping[str, Any]],
+    scenario_defs: Mapping[str, Any],
+    planner_defs: Mapping[str, Any],
+    resolved_bundle: Mapping[str, Any],
+    cache_dir: Path,
+    env_fingerprint: Mapping[str, Any],
+    selected_definition_ids: set[str] | None,
+    run_episode: Any,
+    repeats_per_target: int,
+    enforce_model_preflight: bool,
+) -> list[dict[str, Any]]:
+    """Execute targets in manifest order, preserving cache and disposition behavior.
+
+    Returns:
+        One result entry for every manifest target, in manifest order.
+    """
+    # The runnability predicate reflects current main's ``run_episode`` registry
+    # and is applied even when a runner is injected, so the disposition records a
+    # property of the codebase rather than of the test harness. Imported from the
+    # lightweight baselines package to avoid pulling heavy optional deps.
+    from robot_sf.baselines import is_runnable_algo  # noqa: PLC0415
+
+    results: list[dict[str, Any]] = []
+    for target in targets:
+        key = _target_key(target)
+        scenario_def_id = _require_text(
+            target.get("scenario_definition_id"), "target scenario_definition_id"
+        )
+        cache_file = cache_dir / f"{key[0]}_{key[1]}_{key[2]}.json"
+        cached_result = _cached_result_if_compatible(cache_file, env_fingerprint)
+        if cached_result is not None:
+            results.append(cached_result)
+            continue
+        if selected_definition_ids is not None and scenario_def_id not in selected_definition_ids:
+            raise ValueError(
+                "target_filter requires compatible cached results for omitted targets; "
+                f"missing {key[0]!r}/{key[1]!r}/{key[2]}"
+            )
+
+        scenario_params, planner_def, planner_algo = _resolve_target_definitions(
+            target, scenario_defs, planner_defs
+        )
+        if not is_runnable_algo(planner_algo):
+            result_entry = _build_unrunnable_result(key, target, planner_algo)
+        else:
+            dt = _resolve_campaign_dt(scenario_params, resolved_bundle)
+            records, repeats = _execute_target_repeats(
+                run_episode,
+                scenario_params,
+                planner_algo,
+                planner_def,
+                seed=key[2],
+                horizon=int(target["horizon"]),
+                dt=dt,
+                repeats_per_target=repeats_per_target,
+                enforce_model_preflight=enforce_model_preflight,
+            )
+            result_entry = _build_executed_target_result(
+                key, target, records, repeats, planner_algo
+            )
+        results.append(result_entry)
+        _write_target_cache(cache_file, env_fingerprint, result_entry)
+    return results
+
+
+def execute_campaign(
     resolved_bundle: Mapping[str, Any],
     *,
     output_dir: Path,
@@ -1154,281 +1542,28 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         A host report dict conforming to the ``scenario_exact_repeat_host_result.v1``
         schema, also written to ``output_dir/host_result.json``.
     """
-    if resolved_bundle.get("schema_version") != RESOLVED_DEFINITIONS_SCHEMA_VERSION:
-        raise ValueError("bundle has an unsupported schema_version")
-    expected_manifest_hash = resolved_bundle.get("manifest_sha256")
-    if not expected_manifest_hash:
-        raise ValueError("bundle is missing manifest_sha256")
-    bundle_bundle_sha = resolved_bundle.get("bundle_sha256")
-    without_sha = {key: value for key, value in resolved_bundle.items() if key != "bundle_sha256"}
-    if bundle_bundle_sha != canonical_sha256(without_sha):
-        raise ValueError("bundle_sha256 does not match the bundle content")
-
-    targets = resolved_bundle.get("targets")
-    if not isinstance(targets, list) or not targets:
-        raise ValueError("bundle contains no targets to execute")
-    scenario_defs = _require_mapping(
-        resolved_bundle.get("scenario_definitions"), "bundle scenario_definitions"
+    targets, scenario_defs, planner_defs, repeats_per_target, expected_manifest_hash = (
+        _validate_resolved_bundle(resolved_bundle)
     )
-    planner_defs = _require_mapping(
-        resolved_bundle.get("planner_definitions"), "bundle planner_definitions"
+    run_episode, enforce_model_preflight = _setup_campaign_runner(
+        run_episode, targets, planner_defs
     )
-    _, repeats_per_target = _check_manifest_from_bundle(resolved_bundle)
-
-    # The runnability predicate reflects current main's ``run_episode`` registry
-    # and is applied even when a runner is injected, so the disposition records a
-    # property of the codebase rather than of the test harness. Imported from the
-    # lightweight baselines package to avoid pulling heavy optional deps.
-    from robot_sf.baselines import is_runnable_algo  # noqa: PLC0415
-
-    if run_episode is None:
-        from robot_sf.benchmark.runner import run_episode as _run_episode  # noqa: PLC0415
-
-        run_episode = _run_episode
-
-    # The production runner must stage its complete model set before creating
-    # any episode/fork worker. Test doubles remain injectable without requiring
-    # real registry artifacts.
-    enforce_model_preflight = (
-        getattr(run_episode, "__module__", None) == "robot_sf.benchmark.runner"
+    cache_dir, env_fingerprint, selected_definition_ids = _prepare_campaign_environment(
+        output_dir, resolved_bundle, target_filter, targets
     )
-    if enforce_model_preflight:
-        _preflight_runtime_model_assets(targets, planner_defs)
+    results = _execute_campaign_targets(
+        targets,
+        scenario_defs,
+        planner_defs,
+        resolved_bundle,
+        cache_dir,
+        env_fingerprint,
+        selected_definition_ids,
+        run_episode,
+        repeats_per_target,
+        enforce_model_preflight,
+    )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    cache_dir = output_dir / "target_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    env_fingerprint = _get_environment_fingerprint()
-
-    # Use the bundle's source revision so the host report passes verifier.
-    source = _require_mapping(resolved_bundle.get("source"), "bundle source")
-    source_git_hashes = source.get("source_git_hashes", [])
-    if source_git_hashes:
-        env_fingerprint["git_commit"] = source_git_hashes[0]
-
-    selected_definition_ids: set[str] | None = None
-    if target_filter is not None:
-        filter_set = set(target_filter)
-        selected_definition_ids = {
-            _require_text(target.get("scenario_definition_id"), "target scenario_definition_id")
-            for target in targets
-            if target.get("scenario_definition_id") in filter_set
-        }
-        if not selected_definition_ids:
-            raise ValueError("target_filter removed all targets from the bundle")
-
-    results: list[dict[str, Any]] = []
-
-    for target in targets:
-        key = _target_key(target)
-        scenario_id = key[0]
-        planner = key[1]
-        seed = key[2]
-        scenario_def_id = _require_text(
-            target.get("scenario_definition_id"), "target scenario_definition_id"
-        )
-        planner_def_id = _require_text(
-            target.get("planner_definition_id"), "target planner_definition_id"
-        )
-        horizon = int(target["horizon"])
-
-        cache_key = f"{scenario_id}_{planner}_{seed}"
-        cache_file = cache_dir / f"{cache_key}.json"
-
-        cached_result = _cached_result_if_compatible(cache_file, env_fingerprint)
-
-        if cached_result is not None:
-            results.append(cached_result)
-            continue
-
-        if selected_definition_ids is not None and scenario_def_id not in selected_definition_ids:
-            raise ValueError(
-                "target_filter requires compatible cached results for omitted targets; "
-                f"missing {scenario_id!r}/{planner!r}/{seed}"
-            )
-
-        raw_scenario_params = scenario_defs.get(scenario_def_id)
-        if raw_scenario_params is None:
-            raise ValueError(f"bundle missing scenario_definition for {scenario_def_id!r}")
-        scenario_params = dict(
-            _require_mapping(raw_scenario_params, f"scenario_definition {scenario_def_id!r}")
-        )
-        raw_planner_def = planner_defs.get(planner_def_id)
-        if raw_planner_def is None:
-            raise ValueError(f"bundle missing planner_definition for {planner_def_id!r}")
-        planner_def = dict(
-            _require_mapping(raw_planner_def, f"planner_definition {planner_def_id!r}")
-        )
-        planner_algo = _require_text(
-            planner_def.get("algo"), f"planner_definition {planner_def_id!r} algo"
-        )
-        if planner != planner_algo:
-            raise ValueError(
-                f"target {key} planner {planner!r} does not match "
-                f"planner_definition {planner_def_id!r} algo {planner_algo!r}"
-            )
-
-        # Fail closed on planners the run_episode path cannot construct,
-        # recording an explicit disposition instead of crashing the whole campaign.
-        if not is_runnable_algo(planner_algo):
-            result_entry = {
-                "scenario_id": scenario_id,
-                "planner": planner,
-                "seed": seed,
-                "horizon": horizon,
-                "source_config_hash": target["source_config_hash"],
-                "repeats": [],
-                "disposition": UNRUNNABLE_DISPOSITION,
-                "disposition_reason": (
-                    f"planner {planner_algo!r} has no executor in the exact-repeat "
-                    "run_episode baseline registry on current main"
-                ),
-            }
-            results.append(result_entry)
-            cache_data = {
-                "_env_numpy_version": env_fingerprint["numpy_version"],
-                "_env_numba_version": env_fingerprint["numba_version"],
-                "_result": result_entry,
-            }
-            cache_file.write_text(
-                json.dumps(cache_data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-            )
-            continue
-
-        # Determine DT from resolved bundle execution contract or scenario config
-        sim_config = scenario_params.get("simulation_config", {})
-        if isinstance(sim_config, dict):
-            dt = sim_config.get("dt")
-        else:
-            dt = None
-        if dt is None:
-            from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
-                load_campaign_config,
-            )
-
-            # Fallback: try to load from campaign config referenced by source
-            source_cfg_path = resolved_bundle.get("source", {}).get("campaign_config_path")
-            if source_cfg_path:
-                cfg = load_campaign_config((get_repository_root() / source_cfg_path).resolve())
-                dt = cfg.dt
-            if dt is None:
-                dt = 0.1
-
-        # Build algo config path
-        algo_config_path = planner_def.get("planner_config_path")
-        if algo_config_path is not None:
-            algo_config_path = str((get_repository_root() / algo_config_path).resolve())
-
-        records: list[dict[str, Any]] = []
-        repeats: list[dict[str, Any]] = []
-        for repeat_idx in range(repeats_per_target):
-            run_kwargs = {
-                "seed": seed,
-                "algo": planner_algo,
-                "algo_config_path": algo_config_path,
-                "horizon": horizon,
-                "dt": float(dt),
-                "record_forces": scenario_params.get("record_forces", False),
-            }
-            record = (
-                _run_episode_with_downloads_disabled(
-                    run_episode, dict(scenario_params), **run_kwargs
-                )
-                if enforce_model_preflight
-                else run_episode(dict(scenario_params), **run_kwargs)
-            )
-            records.append(record)
-            trajectory_sha = _compute_trajectory_hash(record)
-            outcome = record.get("outcome", {})
-            outcome_binary = 1 if outcome.get("success", False) else 0
-            metrics = record.get("metrics", {})
-            near_misses = _finite_int_or_zero(metrics.get("near_misses"))
-            repeats.append(
-                {
-                    "outcome": outcome_binary,
-                    "trajectory_sha256": trajectory_sha,
-                    "near_misses": near_misses,
-                }
-            )
-
-        # Issue #5498 / #5781: a planner that constructs but does not produce
-        # native repeats must not be promoted to a determinism verdict. Two distinct
-        # failure classes exist, and they must not be conflated:
-        #
-        #  * genuine planner degradation (``policy_step_*_fallback``) — a zero-action
-        #    substitute produced *inside* the worker. Recorded with the
-        #    ``unrunnable_on_current_main`` disposition (degraded flag set) so the
-        #    verifier excludes it from the bitwise-identical claim.
-        #  * process-isolation / environment failure at the planner-step worker
-        #    boundary (handshake failure, dead/reparented worker, unsupported fork
-        #    under xdist, model-cache miss under parallel isolation). This is NOT a
-        #    planner-runnability defect on main, so it must be recorded with the
-        #    separate ``process_isolation_failure`` disposition and fail closed
-        #    rather than misfiled as ``unrunnable_on_current_main``. Issue #5781:
-        #    this keeps the native-PPO exact-repeat test deterministic under xdist
-        #    and prevents transient infra failures from poisoning the determinism
-        #    signal. Both classes preserve the assertion that a disposition is not
-        #    success evidence.
-        any_degraded, any_isolation = _classify_repeat_failure(records)
-        if records and any_isolation:
-            result_entry = {
-                "scenario_id": scenario_id,
-                "planner": planner,
-                "seed": seed,
-                "horizon": horizon,
-                "source_config_hash": target["source_config_hash"],
-                "repeats": [],
-                "isolation_failure": True,
-                "disposition": PROCESS_ISOLATION_DISPOSITION,
-                "disposition_reason": (
-                    f"planner {planner_algo!r} could not execute natively because the "
-                    "planner-step isolation boundary failed (worker handshake/death or "
-                    "fork/process-isolation failure under parallel execution); this is an "
-                    "environment/process failure, not a planner-runnability defect on "
-                    "current main, and is not valid exact-repeat evidence"
-                ),
-            }
-        elif records and any_degraded:
-            result_entry = {
-                "scenario_id": scenario_id,
-                "planner": planner,
-                "seed": seed,
-                "horizon": horizon,
-                "source_config_hash": target["source_config_hash"],
-                "repeats": [],
-                "degraded": True,
-                "disposition": UNRUNNABLE_DISPOSITION,
-                "disposition_reason": (
-                    f"planner {planner_algo!r} had one or more repeats degrade to a "
-                    "fallback policy (planner-step worker crashed/timed out); not native "
-                    "execution and not valid exact-repeat evidence"
-                ),
-            }
-        else:
-            divergence = _first_divergence(repeats)
-            result_entry = {
-                "scenario_id": scenario_id,
-                "planner": planner,
-                "seed": seed,
-                "horizon": horizon,
-                "source_config_hash": target["source_config_hash"],
-                "repeats": repeats,
-            }
-            if divergence is not None:
-                result_entry["first_divergence"] = divergence
-        results.append(result_entry)
-
-        # Cache the result for resume
-        cache_data = {
-            "_env_numpy_version": env_fingerprint["numpy_version"],
-            "_env_numba_version": env_fingerprint["numba_version"],
-            "_result": result_entry,
-        }
-        cache_file.write_text(
-            json.dumps(cache_data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-
-    # Build host result
     host_result = {
         "schema_version": HOST_REPORT_SCHEMA_VERSION,
         "manifest_sha256": expected_manifest_hash,

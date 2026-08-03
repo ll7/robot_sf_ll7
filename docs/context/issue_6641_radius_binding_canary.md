@@ -33,9 +33,10 @@ The five binding surfaces and the real code path each probe reads:
    reading their bound `config.robot_radius` values.
 
 Semantics are fail-closed: any surface that binds a radius differing from the declared
-target by more than the tolerance, or that cannot be observed, is a no-go that stops the
-campaign. The canary does not change the frozen `0.0.3.post1` metric semantics; it only
-observes which radius each surface binds.
+target by more than the fixed floating-point tolerance, or that cannot be observed, is a
+no-go that stops the campaign. The tolerance is capped at `1e-9` m so callers cannot mask a
+divergent binding by supplying a broad comparison window. The canary does not change the
+frozen `0.0.3.post1` metric semantics; it only observes which radius each surface binds.
 
 ## Run it
 

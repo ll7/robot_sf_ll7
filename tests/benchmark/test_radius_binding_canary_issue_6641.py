@@ -239,6 +239,26 @@ def test_canary_api_rejects_invalid_tolerance(
         )
 
 
+def test_canary_rejects_tolerance_that_could_mask_divergence(
+    narrow_doorway_scenario: dict,
+) -> None:
+    """A caller cannot widen tolerance enough to turn a divergent binding into a pass."""
+    with pytest.raises(ValueError, match="safety bound"):
+        run_radius_binding_canary(
+            narrow_doorway_scenario,
+            0.5,
+            scenario_path=_SCENARIO_PATH,
+            tolerance_m=0.3,
+        )
+    with pytest.raises(ValueError, match="safety bound"):
+        build_report(
+            narrow_doorway_scenario,
+            scenario_path=_SCENARIO_PATH,
+            radii=[0.5],
+            tolerance=0.3,
+        )
+
+
 @pytest.mark.parametrize("raw_tolerance", ["nan", "inf", "-inf", "-1e-9"])
 def test_cli_rejects_invalid_tolerance(monkeypatch: pytest.MonkeyPatch, raw_tolerance: str) -> None:
     """The CLI rejects non-finite and negative tolerance inputs before running probes."""

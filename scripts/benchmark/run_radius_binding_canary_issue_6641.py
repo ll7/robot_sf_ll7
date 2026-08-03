@@ -72,7 +72,10 @@ def parse_args() -> argparse.Namespace:
         "--tolerance",
         type=_parse_tolerance,
         default=DEFAULT_TOLERANCE_M,
-        help="Radius comparison tolerance in metres (default: exact binding).",
+        help=(
+            "Radius comparison tolerance in metres (default: exact binding; capped at "
+            "the canary safety bound)."
+        ),
     )
     parser.add_argument(
         "--out-json",

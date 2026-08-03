@@ -60,10 +60,13 @@ if TYPE_CHECKING:
 #: Machine-readable schema for the emitted canary verdict.
 CANARY_SCHEMA = "radius_binding_canary.v1"
 
-#: Default radius comparison tolerance (metres). Radius binding is exact in the code
-#: paths under test, so any non-trivial delta signals a divergent default or a silently
-#: ignored binding.
-DEFAULT_TOLERANCE_M = 1e-9
+#: Maximum radius comparison tolerance (metres). Radius binding is exact in the code
+#: paths under test, so allowing a caller to choose a larger tolerance could hide a
+#: divergent default or a silently ignored binding.
+MAX_TOLERANCE_M = 1e-9
+
+#: Default radius comparison tolerance (metres).
+DEFAULT_TOLERANCE_M = MAX_TOLERANCE_M
 
 #: Claim boundary recorded on every verdict.
 DIAGNOSTIC_CLAIM_BOUNDARY = (
@@ -222,7 +225,7 @@ def validate_tolerance_m(tolerance_m: float) -> float:
     """Validate and normalize a radius comparison tolerance.
 
     Returns:
-        Finite, non-negative tolerance in metres.
+        Finite, non-negative tolerance in metres no larger than the canary's safe bound.
     """
     try:
         value = float(tolerance_m)
@@ -230,6 +233,11 @@ def validate_tolerance_m(tolerance_m: float) -> float:
         raise ValueError("tolerance_m must be finite and non-negative") from exc
     if not math.isfinite(value) or value < 0.0:
         raise ValueError("tolerance_m must be finite and non-negative")
+    if value > MAX_TOLERANCE_M:
+        raise ValueError(
+            "tolerance_m must not exceed the canary safety bound "
+            f"{MAX_TOLERANCE_M:g} m; larger tolerances could mask divergent bindings"
+        )
     return value
 
 
@@ -924,6 +932,7 @@ __all__ = [
     "CANARY_SCHEMA",
     "DEFAULT_TOLERANCE_M",
     "DIAGNOSTIC_CLAIM_BOUNDARY",
+    "MAX_TOLERANCE_M",
     "SURFACE_CONTACT_LOGIC",
     "SURFACE_FEASIBILITY_ORACLE",
     "SURFACE_METRIC_METADATA",

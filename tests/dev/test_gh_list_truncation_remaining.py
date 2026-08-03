@@ -9,7 +9,7 @@ Call sites covered here:
 
 - ``snapshot_issue_batch.snapshot_claimable_issues`` (``gh issue list``)
 - ``closed_state_label_hygiene`` (``gh search issues`` per label)
-- ``open_issue_closure_audit`` (``gh search issues`` + per-issue ``gh search prs``)
+- ``open_issue_closure_audit`` (retained ``build_truncations`` row-cap guard; production reads are REST-first as of issue #6610)
 - ``watch_pr_ci_status.fetch_recent_successful_ci_durations`` (``gh run list``)
 - ``compact_ci_snapshot._fetch_drift_sample`` (``gh run list``)
 """
@@ -121,7 +121,7 @@ def test_closed_state_build_report_defaults_to_no_truncation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# open_issue_closure_audit (gh search issues + per-issue gh search prs)
+# open_issue_closure_audit (retained build_truncations row-cap guard; REST-first reads as of issue #6610)
 # ---------------------------------------------------------------------------
 
 

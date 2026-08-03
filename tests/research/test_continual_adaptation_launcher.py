@@ -206,6 +206,29 @@ def test_explicit_output_rejects_path_outside_artifact_root(
     assert not output_dir.exists()
 
 
+def test_preexisting_output_symlink_is_replaced_inside_artifact_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An output-file symlink cannot redirect JSON writes outside the artifact root."""
+    artifact_root = tmp_path / "artifact-root"
+    target_dir = artifact_root / "continual_adaptation_diagnostics" / "run"
+    outside_file = tmp_path / "outside" / "escaped.json"
+    outside_file.parent.mkdir()
+    outside_file.write_text("outside sentinel\n", encoding="utf-8")
+    target_dir.mkdir(parents=True)
+    destination = target_dir / "adaptation.json"
+    destination.symlink_to(outside_file)
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(artifact_root))
+
+    run_continual_adaptation_diagnostics(_load_example_manifest(), output_dir=target_dir)
+
+    assert outside_file.read_text(encoding="utf-8") == "outside sentinel\n"
+    assert not destination.is_symlink()
+    assert json.loads(destination.read_text(encoding="utf-8"))["evidence_boundary"] == (
+        CONTINUAL_ADAPTATION_EVIDENCE_BOUNDARY
+    )
+
+
 def test_repository_local_artifact_root_must_be_canonical_output(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

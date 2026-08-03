@@ -28,6 +28,8 @@ modified; this launcher gates on them.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -197,6 +199,36 @@ def _resolve_output_dir(output_dir: str | Path, *, namespace_root: Path | None =
     return resolved
 
 
+def _write_json_atomically(path: Path, payload: dict[str, Any]) -> None:
+    """Write JSON without following a pre-existing destination symlink.
+
+    The temporary file is created beside the destination and atomically replaces
+    the final path. ``os.replace`` replaces a symlink at the destination itself;
+    it does not follow the symlink to an external target.
+
+    Args:
+        path: Destination path below the validated output directory.
+        payload: JSON-serializable payload to write.
+    """
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            temporary_file.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 def build_adaptation_diagnostic(manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Build the diagnostic record for the bounded adaptation.
 
@@ -352,9 +384,7 @@ def run_continual_adaptation_diagnostics(
         "report": diagnostic_report.to_dict(),
     }
     for name, payload in payloads.items():
-        (target_dir / f"{name}.json").write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        _write_json_atomically(target_dir / f"{name}.json", payload)
 
     logger.info(
         "Wrote continual-adaptation diagnostics",

@@ -547,16 +547,37 @@ class OccupancyGrid:
         return layer
 
     @staticmethod
-    def _validate_generate_inputs(obstacles: list[Line2D], pedestrians: list[Circle2D]) -> None:
+    def _validate_generate_inputs(
+        obstacles: list[Line2D],
+        pedestrians: list[Circle2D] | tuple[np.ndarray, np.ndarray],
+    ) -> None:
         """Validate types of generate inputs.
 
         Raises:
-            TypeError: If obstacles or pedestrians are not lists.
+            TypeError: If obstacles or pedestrians are not lists or array tuples.
         """
         if not isinstance(obstacles, list):
             logger.error("Invalid obstacles type: {}, expected list", type(obstacles).__name__)
             raise TypeError(f"obstacles must be list, got {type(obstacles)}")
-        if not isinstance(pedestrians, list):
+        if isinstance(pedestrians, tuple) and len(pedestrians) == 2:
+            positions, radii = pedestrians
+            if not isinstance(positions, np.ndarray) or not isinstance(radii, np.ndarray):
+                logger.error(
+                    "Invalid pedestrians array tuple: positions and radii must be np.ndarray"
+                )
+                raise TypeError(
+                    "pedestrians tuple must contain (np.ndarray positions, np.ndarray radii)"
+                )
+            if positions.ndim != 2 or positions.shape[1] != 2:
+                raise ValueError(
+                    f"pedestrians positions must have shape (N, 2), got {positions.shape}"
+                )
+            if radii.ndim != 1 or radii.shape[0] != positions.shape[0]:
+                raise ValueError(
+                    "pedestrians radii must have shape (N,) matching positions, "
+                    f"got {radii.shape} for {positions.shape}"
+                )
+        elif not isinstance(pedestrians, list):
             logger.error("Invalid pedestrians type: {}, expected list", type(pedestrians).__name__)
             raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")
 
@@ -585,25 +606,37 @@ class OccupancyGrid:
             grid_origin_y = 0.0
         return grid_origin_x, grid_origin_y
 
-    def _transform_to_ego_frame(
+    def _transform_to_ego_frame(  # noqa: C901
         self,
         obstacles: list[Line2D],
         obstacle_polygons: list[Any] | None,
-        pedestrians: list[Circle2D],
-    ) -> tuple[list[Line2D], list[Any] | None, list[Circle2D]]:
+        pedestrians: list[Circle2D] | tuple[np.ndarray, np.ndarray],
+    ) -> tuple[list[Line2D], list[Any] | None, list[Circle2D] | tuple[np.ndarray, np.ndarray]]:
         """Transform obstacles, polygons, and pedestrians into the robot ego frame.
+
+        Uses a vectorized NumPy transform with precomputed trigonometric values
+        instead of per-endpoint scalar ``world_to_ego`` calls (issue #6493).
 
         Returns:
             Tuple of (transformed_obstacles, transformed_polygons, transformed_pedestrians).
         """
+        robot_x, robot_y = self._last_robot_pose.position  # type: ignore[union-attr]
+        theta = self._last_robot_pose.theta  # type: ignore[union-attr]
+        cos_t = np.cos(-theta)
+        sin_t = np.sin(-theta)
 
-        def _to_ego_point(point: tuple[float, float]) -> tuple[float, float]:
-            """Transform one world point into the robot ego frame.
+        def _transform_xy(pts: np.ndarray) -> np.ndarray:
+            """Apply the ego-frame rotation+translation to an (N, 2) point array.
 
             Returns:
-                tuple[float, float]: Ego-frame point coordinates.
+                Transformed (N, 2) array in ego-frame coordinates.
             """
-            return grid_utils.world_to_ego(point[0], point[1], self._last_robot_pose)  # type: ignore[arg-type]
+            dx = pts[:, 0] - robot_x
+            dy = pts[:, 1] - robot_y
+            out = np.empty_like(pts)
+            out[:, 0] = dx * cos_t - dy * sin_t
+            out[:, 1] = dx * sin_t + dy * cos_t
+            return out
 
         def _to_ego_polygon(polygon: Any) -> Any:
             """Transform polygonal obstacle geometry into the robot ego frame.
@@ -619,35 +652,73 @@ class OccupancyGrid:
                 shape = polygon if polygon.is_valid else polygon.buffer(0)
                 if shape.is_empty:
                     return shape
-                # buffer(0) can return a MultiPolygon for self-intersecting inputs
                 if isinstance(shape, _ShapelyMultiPolygon):
                     return _ShapelyMultiPolygon(
                         [_to_ego_polygon(poly) for poly in shape.geoms if not poly.is_empty]
                     )
-                exterior = [_to_ego_point(vertex) for vertex in shape.exterior.coords[:-1]]
-                interiors = [
-                    [_to_ego_point(vertex) for vertex in ring.coords[:-1]]
-                    for ring in shape.interiors
-                ]
+                ext_coords = np.asarray(shape.exterior.coords[:-1], dtype=float)
+                ext_ego = _transform_xy(ext_coords)
+                exterior = [tuple(row) for row in ext_ego]
+                interiors = []
+                for ring in shape.interiors:
+                    ring_coords = np.asarray(ring.coords[:-1], dtype=float)
+                    ring_ego = _transform_xy(ring_coords)
+                    interiors.append([tuple(row) for row in ring_ego])
                 return _ShapelyPolygon(exterior, interiors)
-            return _ShapelyPolygon([_to_ego_point(vertex) for vertex in polygon])
+            verts = np.asarray(polygon, dtype=float)
+            ego_verts = _transform_xy(verts)
+            return _ShapelyPolygon([tuple(row) for row in ego_verts])
 
-        transformed_obstacles: list[Line2D] = [
-            (_to_ego_point(start), _to_ego_point(end)) for start, end in obstacles
-        ]
+        # Vectorized obstacle endpoint transform
+        if obstacles:
+            obs_pts = np.array(
+                [(seg[0][0], seg[0][1], seg[1][0], seg[1][1]) for seg in obstacles],
+                dtype=float,
+            )
+            starts = _transform_xy(obs_pts[:, :2])
+            ends = _transform_xy(obs_pts[:, 2:])
+            transformed_obstacles: list[Line2D] = [
+                ((float(starts[i, 0]), float(starts[i, 1])), (float(ends[i, 0]), float(ends[i, 1])))
+                for i in range(len(obstacles))
+            ]
+        else:
+            transformed_obstacles = []
+
         transformed_polygons: list[Any] | None = None
         if obstacle_polygons is not None:
             transformed_polygons = [_to_ego_polygon(polygon) for polygon in obstacle_polygons]
-        transformed_pedestrians: list[Circle2D] = [
-            (_to_ego_point(center), radius) for center, radius in pedestrians
-        ]
+
+        # Vectorized pedestrian center transform
+        if isinstance(pedestrians, tuple):
+            positions, radii = pedestrians
+            if positions.shape[0] > 0:
+                ped_ego = _transform_xy(np.asarray(positions, dtype=float))
+                transformed_pedestrians: list[Circle2D] | tuple[np.ndarray, np.ndarray] = (
+                    ped_ego,
+                    np.asarray(radii, dtype=float),
+                )
+            else:
+                transformed_pedestrians = (positions, radii)
+        elif pedestrians:
+            ped_pts = np.array(
+                [(circ[0][0], circ[0][1]) for circ in pedestrians],
+                dtype=float,
+            )
+            ped_ego = _transform_xy(ped_pts)
+            transformed_pedestrians = [
+                ((float(ped_ego[i, 0]), float(ped_ego[i, 1])), pedestrians[i][1])
+                for i in range(len(pedestrians))
+            ]
+        else:
+            transformed_pedestrians = []
+
         return transformed_obstacles, transformed_polygons, transformed_pedestrians
 
     def _rasterize_channels(
         self,
         transformed_obstacles: list[Line2D],
         transformed_polygons: list[Any] | None,
-        transformed_pedestrians: list[Circle2D],
+        transformed_pedestrians: list[Circle2D] | tuple[np.ndarray, np.ndarray],
         robot_pose: RobotPose,
         use_ego_frame: bool,
         grid_origin_x: float,
@@ -668,14 +739,26 @@ class OccupancyGrid:
                     grid_origin_y,
                 )
             elif channel == GridChannel.PEDESTRIANS:
-                num_rasterized = rasterization.rasterize_pedestrians(
-                    transformed_pedestrians,
-                    self._grid_data[channel_idx],
-                    self.config,
-                    grid_origin_x,
-                    grid_origin_y,
-                    value=1.0,
-                )
+                if isinstance(transformed_pedestrians, tuple):
+                    positions, radii = transformed_pedestrians
+                    num_rasterized = rasterization.rasterize_pedestrians_array(
+                        positions,
+                        radii,
+                        self._grid_data[channel_idx],
+                        self.config,
+                        grid_origin_x,
+                        grid_origin_y,
+                        value=1.0,
+                    )
+                else:
+                    num_rasterized = rasterization.rasterize_pedestrians(
+                        transformed_pedestrians,
+                        self._grid_data[channel_idx],
+                        self.config,
+                        grid_origin_x,
+                        grid_origin_y,
+                        value=1.0,
+                    )
                 logger.debug("Rasterized {} pedestrians", num_rasterized)
             elif channel == GridChannel.ROBOT:
                 self._rasterize_robot_channel(
@@ -784,7 +867,7 @@ class OccupancyGrid:
     def generate(
         self,
         obstacles: list[Line2D],
-        pedestrians: list[Circle2D],
+        pedestrians: list[Circle2D] | tuple[np.ndarray, np.ndarray],
         robot_pose: RobotPose,
         ego_frame: bool = False,
         obstacle_polygons: list[Any] | None = None,
@@ -794,7 +877,9 @@ class OccupancyGrid:
         Args:
             obstacles: List of line segment obstacles
             obstacle_polygons: Optional list of polygon vertices for filled obstacles
-            pedestrians: List of circular pedestrian objects
+            pedestrians: List of circular pedestrian objects, or a tuple of
+                ``(positions, radii)`` NumPy arrays with shapes ``(N, 2)`` and
+                ``(N,)`` respectively (issue #6493).
             robot_pose: Robot's current pose
             ego_frame: If True, generate grid in robot's ego frame;
                       if False, use world frame
@@ -828,10 +913,15 @@ class OccupancyGrid:
             raise ValueError(f"Invalid grid shape: {shape}")
         self._grid_data = np.zeros(shape, dtype=self.config.dtype)
 
+        num_peds = pedestrians[0].shape[0] if isinstance(pedestrians, tuple) else len(pedestrians)
         logger.debug(
-            f"Generating grid: shape={shape}, obstacles={len(obstacles)}, "
-            f"pedestrians={len(pedestrians)}, ego_frame={use_ego_frame}, "
-            f"origin=({grid_origin_x:.2f}, {grid_origin_y:.2f})"
+            "Generating grid: shape={}, obstacles={}, pedestrians={}, ego_frame={}, origin=({:.2f}, {:.2f})",
+            shape,
+            len(obstacles),
+            num_peds,
+            use_ego_frame,
+            grid_origin_x,
+            grid_origin_y,
         )
 
         if use_ego_frame:

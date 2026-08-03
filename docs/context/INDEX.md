@@ -7,6 +7,12 @@ planner inputs, with a fail-closed machine-readable go/no-go verdict per binding
 (`radius_binding_canary.v1`):
 [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
 
+Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600): dry-run manifest
+pinning the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the 48-cell
+classic_interactions_francis2023 matrix at one immutable campaign commit; preparation only, not
+benchmark evidence, production compute blocked until the Gate 1 binding canary (#6641) passes:
+[issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
+
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
 groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this
@@ -42,6 +48,15 @@ scenario discovery research program:
 Issue #5574 planner-free feasibility oracle and collision-envelope sensitivity evidence for the
 Francis 2023 zero-success candidate cells:
 [README.md](evidence/issue_5574_feasibility_oracle_2026-07-14/README.md).
+
+Issue #6640 Gate 0 post-hoc feasibility audit of the frozen 0.0.3.post1 release rows for the
+collision-envelope radius campaign (parent #6600): machine-readable decision
+(`radius_sensitivity_gate0_decision.v1`) classifying each radius-sensitivity outcome as
+re-derivable-from-retained-fields or replay-required; no outcome is currently re-derivable because
+the effective radius and map-asset provenance are not retained/pinned, every collision/contact/
+feasibility/planner/trajectory outcome is replay-required, and a radius-default inconsistency
+(`metrics.py` 1.0 m vs `runner.py` 0.3 m) is recorded as a Gate 1 input:
+[radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md).
 
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).

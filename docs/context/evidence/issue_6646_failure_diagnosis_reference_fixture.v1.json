@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "failure_diagnosis_reference.v1",
   "fixture_id": "issue-6646-deterministic-diagnosis-quality",
   "fixture_version": 1,

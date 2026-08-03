@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json",
+  "artifact_sha256": "50fa46eab95ae0ee00b10859e60f95bef33a8273621ea9a75c4a5296f5b61c81",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

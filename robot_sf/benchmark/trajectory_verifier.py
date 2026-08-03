@@ -734,6 +734,27 @@ _INTERVENTION_RANK = {
 }
 
 
+def _validate_execution_deviation_components(enabled_components: tuple[str, ...]) -> None:
+    """Require a unique, known component set with robot position enabled."""
+    allowed_components = {
+        "robot_position",
+        "robot_velocity",
+        "pedestrian_position",
+    }
+    if not isinstance(enabled_components, tuple):
+        raise ValueError("ExecutionDeviationConfig.enabled_components must be a tuple")
+    if any(component not in allowed_components for component in enabled_components):
+        raise ValueError(
+            "ExecutionDeviationConfig.enabled_components contains an unknown component"
+        )
+    if len(set(enabled_components)) != len(enabled_components):
+        raise ValueError("ExecutionDeviationConfig.enabled_components must not contain duplicates")
+    if "robot_position" not in enabled_components:
+        raise ValueError(
+            "ExecutionDeviationConfig.enabled_components must include 'robot_position'"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionDeviationConfig:
     """Thresholds and provenance for the execution-time deviation monitor.
@@ -742,6 +763,8 @@ class ExecutionDeviationConfig:
     :class:`TrajectoryVerifierConfig`. Thresholds must be calibrated from an
     explicitly separate calibration fixture. The ``calibration_source`` and
     ``evaluation_source`` fields make that split explicit and reject overlap.
+    Every component named in ``enabled_components`` is required: omitting
+    either member of its predicted/observed input pair fails closed.
 
     Attributes:
         schema_version: Schema identifier for forward compatibility.
@@ -759,6 +782,9 @@ class ExecutionDeviationConfig:
         evaluation_source: Identifier for the evaluation fixture that will use
             this configuration. Must be non-empty and differ from
             ``calibration_source``.
+        enabled_components: State components required for scoring. Robot
+            position is always required; velocity and pedestrian inputs may be
+            omitted only when their components are explicitly disabled here.
     """
 
     schema_version: str = EXECUTION_DEVIATION_SCHEMA
@@ -769,6 +795,9 @@ class ExecutionDeviationConfig:
     fail_closed_intervention: Literal["warn", "fallback_brake"] = "warn"
     calibration_source: str = ""
     evaluation_source: str = ""
+    enabled_components: tuple[
+        Literal["robot_position", "robot_velocity", "pedestrian_position"], ...
+    ] = ("robot_position", "robot_velocity", "pedestrian_position")
 
     def __post_init__(self) -> None:
         """Validate threshold ordering and fail-closed configuration."""
@@ -796,6 +825,7 @@ class ExecutionDeviationConfig:
                 f"'{INTERVENTION_WARN}' or '{INTERVENTION_FALLBACK_BRAKE}'; "
                 f"got {self.fail_closed_intervention!r}"
             )
+        _validate_execution_deviation_components(self.enabled_components)
         _validate_calibration_evaluation_split(self.calibration_source, self.evaluation_source)
 
 
@@ -997,15 +1027,17 @@ def _compute_velocity_deviation(
     predicted_robot_velocities: np.ndarray | None,
     observed_robot_velocities: np.ndarray | None,
     reference_shape: tuple[int, ...],
+    *,
+    enabled: bool,
 ) -> np.ndarray | None:
     """Validate and compute per-timestep robot velocity deviation.
 
     Returns:
-        Per-timestep velocity deviation array, or ``None`` if the velocity
-        component is not provided. Returns an empty array if inputs are
+        Per-timestep velocity deviation array, ``None`` if the component is
+        disabled, or an empty array if an enabled input pair is missing or
         invalid and the caller should fail closed.
     """
-    if predicted_robot_velocities is None and observed_robot_velocities is None:
+    if not enabled:
         return None
     if predicted_robot_velocities is None or observed_robot_velocities is None:
         return np.array([])
@@ -1026,15 +1058,17 @@ def _compute_pedestrian_deviation(
     predicted_pedestrian_positions: np.ndarray | None,
     observed_pedestrian_positions: np.ndarray | None,
     expected_t: int,
+    *,
+    enabled: bool,
 ) -> np.ndarray | None:
     """Validate and compute per-timestep pedestrian position deviation.
 
     Returns:
-        Per-timestep pedestrian deviation array, or ``None`` if the pedestrian
-        component is not provided. Returns an empty array if inputs are invalid
-        and the caller should fail closed.
+        Per-timestep pedestrian deviation array, ``None`` if the component is
+        disabled, or an empty array if an enabled input pair is missing or
+        invalid and the caller should fail closed.
     """
-    if predicted_pedestrian_positions is None and observed_pedestrian_positions is None:
+    if not enabled:
         return None
     if predicted_pedestrian_positions is None or observed_pedestrian_positions is None:
         return np.array([])
@@ -1197,13 +1231,17 @@ def monitor_execution_deviation(
         predicted_robot_positions: Predicted robot positions, shape ``(T, 2)``.
         observed_robot_positions: Observed robot positions, shape ``(T, 2)``.
         predicted_robot_velocities: Predicted robot velocities, shape ``(T, 2)``,
-            or ``None`` to skip the velocity component.
+            or ``None`` only when ``robot_velocity`` is explicitly disabled in
+            ``config.enabled_components``.
         observed_robot_velocities: Observed robot velocities, shape ``(T, 2)``,
-            or ``None`` to skip the velocity component.
+            or ``None`` only when ``robot_velocity`` is explicitly disabled in
+            ``config.enabled_components``.
         predicted_pedestrian_positions: Predicted pedestrian positions, shape
-            ``(T, N, 2)``, or ``None`` to skip the pedestrian component.
+            ``(T, N, 2)``, or ``None`` only when ``pedestrian_position`` is
+            explicitly disabled in ``config.enabled_components``.
         observed_pedestrian_positions: Observed pedestrian positions, shape
-            ``(T, N, 2)``, or ``None`` to skip the pedestrian component.
+            ``(T, N, 2)``, or ``None`` only when ``pedestrian_position`` is
+            explicitly disabled in ``config.enabled_components``.
         dt_s: Timestep duration in seconds. Must be positive.
         input_age_s: Age of the prediction input in seconds. Missing, invalid,
             or older-than-``config.max_input_age_s`` age fails closed because
@@ -1244,7 +1282,10 @@ def monitor_execution_deviation(
     per_timestep_scores.append(robot_per_t)
 
     vel_per_t = _compute_velocity_deviation(
-        predicted_robot_velocities, observed_robot_velocities, pred_robot.shape
+        predicted_robot_velocities,
+        observed_robot_velocities,
+        pred_robot.shape,
+        enabled="robot_velocity" in cfg.enabled_components,
     )
     if vel_per_t is not None:
         velocity_score = _finite_component_score(vel_per_t)
@@ -1254,7 +1295,10 @@ def monitor_execution_deviation(
         per_timestep_scores.append(vel_per_t)
 
     ped_per_t = _compute_pedestrian_deviation(
-        predicted_pedestrian_positions, observed_pedestrian_positions, pred_robot.shape[0]
+        predicted_pedestrian_positions,
+        observed_pedestrian_positions,
+        pred_robot.shape[0],
+        enabled="pedestrian_position" in cfg.enabled_components,
     )
     if ped_per_t is not None:
         pedestrian_score = _finite_component_score(ped_per_t)

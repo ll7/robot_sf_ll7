@@ -610,11 +610,15 @@ def _aligned_windows(
     obs_pos[:, 1] += deviation
     pred_vel = np.tile([robot_speed, 0.0], (n_steps, 1))
     obs_vel = pred_vel.copy()
+    pred_ped = np.zeros((n_steps, 1, 2))
+    obs_ped = pred_ped.copy()
     return {
         "predicted_robot_positions": pred_pos,
         "observed_robot_positions": obs_pos,
         "predicted_robot_velocities": pred_vel,
         "observed_robot_velocities": obs_vel,
+        "predicted_pedestrian_positions": pred_ped,
+        "observed_pedestrian_positions": obs_ped,
         "dt_s": dt_s,
         "input_age_s": input_age_s,
     }
@@ -628,6 +632,11 @@ class TestExecutionDeviationConfig:
         assert cfg.schema_version == EXECUTION_DEVIATION_SCHEMA
         assert cfg.calibration_source == _CALIBRATION_SOURCE
         assert cfg.evaluation_source == _EVALUATION_SOURCE
+        assert cfg.enabled_components == (
+            "robot_position",
+            "robot_velocity",
+            "pedestrian_position",
+        )
 
     def test_empty_calibration_source_raises(self) -> None:
         with pytest.raises(ValueError, match="calibration_source"):
@@ -668,6 +677,18 @@ class TestExecutionDeviationConfig:
     def test_invalid_fail_closed_intervention_raises(self) -> None:
         with pytest.raises(ValueError, match="fail_closed_intervention"):
             _deviation_config(fail_closed_intervention="continue")
+
+    @pytest.mark.parametrize(
+        "enabled_components",
+        (
+            (),
+            ("robot_position", "unknown"),
+            ("robot_position", "robot_position"),
+        ),
+    )
+    def test_invalid_enabled_components_raise(self, enabled_components: tuple[str, ...]) -> None:
+        with pytest.raises(ValueError, match="enabled_components"):
+            _deviation_config(enabled_components=enabled_components)
 
 
 class TestExecutionDeviationCleanExecution:
@@ -711,7 +732,10 @@ class TestExecutionDeviationPedestrianCourseChange:
         pred_ped = np.tile([3.0, 2.0], (n, 1, 1)).astype(float)
         obs_ped = pred_ped.copy()
         obs_ped[3:, 0, 0] += 1.5  # course change: 1.5m x-deviation from step 3
-        cfg = _deviation_config(warn_threshold=0.3)
+        cfg = _deviation_config(
+            warn_threshold=0.3,
+            enabled_components=("robot_position", "pedestrian_position"),
+        )
         result = monitor_execution_deviation(
             predicted_robot_positions=pred_robot,
             observed_robot_positions=obs_robot,
@@ -735,7 +759,9 @@ class TestExecutionDeviationPedestrianCourseChange:
         pred_ped = np.zeros((n, 1, 2))
         obs_ped = np.zeros((n, 1, 2))
         obs_ped[:, 0, 0] = 3.0  # large pedestrian deviation (single ped)
-        cfg = _deviation_config()
+        cfg = _deviation_config(
+            enabled_components=("robot_position", "pedestrian_position"),
+        )
         result = monitor_execution_deviation(
             predicted_robot_positions=pred_robot,
             observed_robot_positions=obs_robot,
@@ -762,7 +788,10 @@ class TestExecutionDeviationPedestrianCourseChange:
             observed_pedestrian_positions=obs_ped,
             dt_s=0.1,
             input_age_s=0.0,
-            config=_deviation_config(warn_threshold=0.5),
+            config=_deviation_config(
+                warn_threshold=0.5,
+                enabled_components=("robot_position", "pedestrian_position"),
+            ),
         )
         assert dict(result.component_deviations)["pedestrian_position"] == pytest.approx(1.0)
         assert result.intervention == INTERVENTION_WARN
@@ -784,7 +813,10 @@ class TestExecutionDeviationActuatorDelay:
         pred_vel = np.tile([1.0, 0.0], (n, 1))
         obs_vel = np.zeros_like(pred_vel)
         obs_vel[2:] = pred_vel[:-2]
-        cfg = _deviation_config(warn_threshold=0.1)
+        cfg = _deviation_config(
+            warn_threshold=0.1,
+            enabled_components=("robot_position", "robot_velocity"),
+        )
         result = monitor_execution_deviation(
             predicted_robot_positions=pred_pos,
             observed_robot_positions=obs_pos,
@@ -896,6 +928,47 @@ class TestExecutionDeviationStaleInput:
         assert result.input_age_s is None
 
 
+class TestExecutionDeviationRequiredComponents:
+    """Enabled state components are required rather than silently skipped."""
+
+    def test_missing_velocity_pair_fails_closed(self) -> None:
+        windows = _aligned_windows()
+        windows["predicted_robot_velocities"] = None
+        windows["observed_robot_velocities"] = None
+        windows["predicted_pedestrian_positions"] = np.zeros((10, 1, 2))
+        windows["observed_pedestrian_positions"] = np.zeros((10, 1, 2))
+
+        result = monitor_execution_deviation(config=_deviation_config(), **windows)
+
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+        assert result.component_deviations == ()
+
+    def test_missing_pedestrian_pair_fails_closed(self) -> None:
+        windows = _aligned_windows()
+        windows["predicted_pedestrian_positions"] = None
+        windows["observed_pedestrian_positions"] = None
+
+        result = monitor_execution_deviation(config=_deviation_config(), **windows)
+
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+        assert result.component_deviations == ()
+
+    def test_explicitly_disabled_components_may_be_absent(self) -> None:
+        result = monitor_execution_deviation(
+            predicted_robot_positions=np.zeros((5, 2)),
+            observed_robot_positions=np.zeros((5, 2)),
+            dt_s=0.1,
+            input_age_s=0.0,
+            config=_deviation_config(enabled_components=("robot_position",)),
+        )
+
+        assert result.fail_closed is False
+        assert result.deviation_score == pytest.approx(0.0)
+        assert result.component_deviations == (("robot_position", 0.0),)
+
+
 class TestExecutionDeviationMisalignedInputs:
     """Misaligned or non-finite inputs fail closed."""
 
@@ -956,7 +1029,7 @@ class TestExecutionDeviationMisalignedInputs:
         assert result.fail_closed is True
 
     def test_velocity_shape_mismatch_fails_closed(self) -> None:
-        cfg = _deviation_config()
+        cfg = _deviation_config(enabled_components=("robot_position", "robot_velocity"))
         result = monitor_execution_deviation(
             predicted_robot_positions=np.zeros((5, 2)),
             observed_robot_positions=np.zeros((5, 2)),
@@ -968,7 +1041,7 @@ class TestExecutionDeviationMisalignedInputs:
         assert result.fail_closed is True
 
     def test_pedestrian_shape_mismatch_fails_closed(self) -> None:
-        cfg = _deviation_config()
+        cfg = _deviation_config(enabled_components=("robot_position", "pedestrian_position"))
         result = monitor_execution_deviation(
             predicted_robot_positions=np.zeros((5, 2)),
             observed_robot_positions=np.zeros((5, 2)),
@@ -980,7 +1053,7 @@ class TestExecutionDeviationMisalignedInputs:
         assert result.fail_closed is True
 
     def test_pedestrian_time_mismatch_fails_closed(self) -> None:
-        cfg = _deviation_config()
+        cfg = _deviation_config(enabled_components=("robot_position", "pedestrian_position"))
         result = monitor_execution_deviation(
             predicted_robot_positions=np.zeros((5, 2)),
             observed_robot_positions=np.zeros((5, 2)),
@@ -1077,7 +1150,7 @@ class TestExecutionDeviationMiscellaneous:
             observed_pedestrian_positions=np.zeros((5, 0, 2)),
             dt_s=0.1,
             input_age_s=0.0,
-            config=_deviation_config(),
+            config=_deviation_config(enabled_components=("robot_position", "pedestrian_position")),
         )
         assert result.fail_closed is True
         assert result.deviation_score is None
@@ -1117,7 +1190,10 @@ class TestExecutionDeviationMiscellaneous:
         obs_pos = np.zeros((n, 2))
         # Deviation appears only at step 5 onward.
         obs_pos[5:, 0] = 1.0
-        cfg = _deviation_config(warn_threshold=0.5)
+        cfg = _deviation_config(
+            warn_threshold=0.5,
+            enabled_components=("robot_position",),
+        )
         result = monitor_execution_deviation(
             predicted_robot_positions=pred_pos,
             observed_robot_positions=obs_pos,
@@ -1137,7 +1213,10 @@ class TestExecutionDeviationMiscellaneous:
             observed_robot_positions=observed,
             dt_s=0.1,
             input_age_s=0.0,
-            config=_deviation_config(warn_threshold=0.5),
+            config=_deviation_config(
+                warn_threshold=0.5,
+                enabled_components=("robot_position",),
+            ),
         )
         assert result.deviation_score == pytest.approx(1.0)
         assert result.first_threshold_crossing_time_s == pytest.approx(0.0)
@@ -1163,7 +1242,7 @@ class TestExecutionDeviationMiscellaneous:
             observed_robot_positions=robot_pos,
             dt_s=0.1,
             input_age_s=0.0,
-            config=_deviation_config(),
+            config=_deviation_config(enabled_components=("robot_position",)),
         )
         assert deviation_result.intervention == INTERVENTION_CONTINUE
         assert verifier_result.claim_boundary != deviation_result.claim_boundary

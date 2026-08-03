@@ -37,7 +37,7 @@ guard so the husks are not reintroduced.
 
 ## Current Benchmark State
 
-`robot_sf/benchmark/` has grown to **280 top-level non-`__init__.py` modules** (**281 top-level
+`robot_sf/benchmark/` has grown to **281 top-level non-`__init__.py` modules** (**282 top-level
 `.py` files including `__init__.py`**) plus existing subdirectories.
 The flat namespace mixes domain modules, issue-specific modules, cross-cutting preflight/readiness
 helpers, and schema/data directories. Existing subdirectories show that domain grouping is viable:
@@ -67,7 +67,7 @@ Two structural smells are already visible and should be resolved by the follow-u
 ## Proposed Domain Subdirectory Groupings
 
 The grouping below is illustrative and conservative. Counts are filename-prefix counts over the
-280 top-level non-`__init__.py` modules; some modules are cross-cutting and final assignment is a
+281 top-level non-`__init__.py` modules; some modules are cross-cutting and final assignment is a
 follow-up decision, not a claim made here. The issue-specific modules named in Issue #6469 (for
 example
 `issue_5302_oracle_gap.py`, `issue_4142_dpcbf_dense_runner.py`) are assigned to the domain they
@@ -93,7 +93,7 @@ top-level set substantially, not to force every file into a domain.
 
 ## Migration Contract (for the follow-up, not this issue)
 
-The follow-up must treat the move as an import-contract change: at this branch's HEAD, 158
+The follow-up must treat the move as an import-contract change: at this branch's HEAD, 159
 top-level non-`__init__.py` benchmark modules use absolute `robot_sf.benchmark...` imports. Reproduce
 that exact top-level inventory from the repository root with:
 
@@ -101,7 +101,7 @@ that exact top-level inventory from the repository root with:
 git grep -l -E '^[[:space:]]*(from|import)[[:space:]]+robot_sf\.benchmark(\.|[[:space:]])' -- robot_sf/benchmark/*.py | sed '/\/__init__\.py$/d' | wc -l
 ```
 
-The dotted-only form reports 157 modules; the migration audit must cover both forms.
+The dotted-only form reports 158 modules; the migration audit must cover both forms.
 Required discipline:
 
 1. Move files with `git mv` so history is preserved; never delete-and-recreate.
@@ -113,7 +113,7 @@ Required discipline:
 4. Resolve the `schema/` vs `schemas/` collision and the `map_runner` split as explicit, recorded
    decisions in the follow-up note.
 5. Keep each domain move independently reviewable: one domain (or one tightly coupled domain
-   cluster) per PR, not one 280-file rewrite.
+   cluster) per PR, not one 281-file rewrite.
 
 ### Proof plan for each move PR
 

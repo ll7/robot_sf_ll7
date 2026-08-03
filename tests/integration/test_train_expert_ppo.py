@@ -28,6 +28,7 @@ from scripts.training.train_ppo import (
     _BestCheckpointCandidate,
     _BestCheckpointTracker,
     _build_direct_wandb_training_payload,
+    _deep_merge_config,
     _describe_num_envs_resolution,
     _deterministic_eval_seed_for_episode,
     _DirectWandbMetricsCallback,
@@ -1991,3 +1992,63 @@ def test_issue_6679_single_factor_variant_equivalence(variant: str) -> None:
     config = load_expert_training_config(config_path)
     assert config.policy_id
     assert len(config.seeds) == 1
+
+
+_ISSUE_6683_CONFIG_DIR = Path("configs/training/ppo")
+_ISSUE_6683_VARIANTS = [
+    "ablations/issue_4018_density_curriculum_smoke.yaml",
+    "ablations/issue_4018_fixed_density_smoke.yaml",
+    "feature_extractor_sweep_base.yaml",
+    "issue_4014_ppo_lstm_recurrent_smoke.yaml",
+    "issue_4014_ppo_mamba_smoke.yaml",
+    "issue_4014_ppo_mamba_smoke_matched.yaml",
+    "issue_4014_ppo_smoke_matched.yaml",
+    "issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+    "feature_extractor_candidates_12m_issue193.yaml",
+]
+_ISSUE_6683_CANDIDATE_VARIANT = "feature_extractor_candidates_12m_issue193.yaml"
+
+
+def _issue_6683_resolved_mapping(config_path: Path) -> dict:
+    """Resolve one affected config, including the matrix's root-relative base path."""
+    if config_path.name != _ISSUE_6683_CANDIDATE_VARIANT:
+        return _load_expert_training_config_mapping(config_path)
+
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert isinstance(raw, dict)
+    base_config = raw.get("base_config")
+    assert isinstance(base_config, str)
+    base_path = (Path(__file__).resolve().parents[2] / base_config).resolve()
+    overlay = {key: value for key, value in raw.items() if key != "base_config"}
+    return _deep_merge_config(_load_expert_training_config_mapping(base_path), overlay)
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6683_VARIANTS)
+def test_issue_6683_remaining_ppo_configs_drop_only_frequency_episodes(variant: str) -> None:
+    """The eight config edits preserve resolved values except the ignored field drop."""
+    baseline_path = Path("tests/integration/_baseline_issue_6683_resolved.json").resolve()
+    assert baseline_path.exists(), "Pre-change baseline missing; capture it from origin/main"
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-mapping.v1"
+    assert isinstance(baseline["source_revision"], str)
+    assert set(baseline["variants"]) == {Path(item).name for item in _ISSUE_6683_VARIANTS}
+
+    config_path = (_ISSUE_6683_CONFIG_DIR / variant).resolve()
+    resolved = _issue_6683_resolved_mapping(config_path)
+    expected = baseline["variants"][config_path.name]
+
+    # The deprecated field is the only permitted resolved difference. In the
+    # sweep-base lineage its old value was 10; absence now selects the loader's
+    # default of 0, while step_schedule remains the cadence source.
+    assert _strip_frequency_episodes(resolved) == _strip_frequency_episodes(expected)
+    evaluation = resolved.get("evaluation")
+    assert isinstance(evaluation, dict)
+    assert "frequency_episodes" not in evaluation
+    assert evaluation.get("frequency_episodes", 0) == 0
+    assert evaluation.get("step_schedule")
+
+    # The eight direct PPO configs also exercise the parser's existing default.
+    if config_path.name != _ISSUE_6683_CANDIDATE_VARIANT:
+        config = load_expert_training_config(config_path)
+        assert config.evaluation.frequency_episodes == 0
+        assert config.evaluation.step_schedule

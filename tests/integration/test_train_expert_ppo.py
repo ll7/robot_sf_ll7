@@ -1239,16 +1239,7 @@ def test_load_expert_training_config_base_config_cycle_raises_value_error(
 
 
 def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> None:
-    """A missing/nonexistent base_config must fail closed.
-
-    The resolver raises FileNotFoundError (an OSError) for a missing base_config;
-    a cycle raises ValueError (covered above). Issue #6490 expected a ValueError
-    here as well, but the byte-frozen resolver in scripts/training/train_ppo.py
-    surfaces missing-base as FileNotFoundError. The run still fails closed
-    (no silent wrong values), so this asserts the actual fail-closed behavior;
-    narrowing missing-base to ValueError is tracked as a follow-up because
-    scripts/training/train_ppo.py is out of scope for this refactor.
-    """
+    """A missing/nonexistent base_config must fail closed with a ValueError."""
     scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
     config_path = tmp_path / "missing_base.yaml"
     config_path.write_text(
@@ -1262,7 +1253,7 @@ def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> Non
         ),
         encoding="utf-8",
     )
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ValueError, match="does not exist"):
         _load_expert_training_config_mapping(config_path)
 
 

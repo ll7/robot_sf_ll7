@@ -11,13 +11,15 @@ radius-sensitivity outcome as either:
   outcome; or
 - ``replay-required`` -- the outcome depends on the radius-arm trajectory (which differs across
   arms because the collision-envelope radius changes planner behaviour and simulator collision
-  geometry) or on per-timestep geometry that the aggregate frozen rows do not retain.
+  geometry), on per-timestep geometry that the aggregate frozen rows do not retain, or on
+  effective radius/map provenance that the frozen release does not pin.
 
 The module is deliberately pure and diagnostic. It does **not** run benchmark episodes, does not
 change any frozen ``0.0.3.post1`` metric semantics, release config, or manifest, does not run any
 production compute, and does not establish a planner ranking or a radius-sensitivity result. It
 only records the decision boundary that Gate 1 (binding canary) and Gate 2 (production sweep)
-must respect.
+must respect. Because the frozen release provenance does not retain the effective radius or pin
+the map asset bytes, this audit intentionally emits no re-derivable outcome.
 
 Stop conditions enforced programmatically by :func:`validate_gate0_decision`:
 
@@ -26,6 +28,8 @@ Stop conditions enforced programmatically by :func:`validate_gate0_decision`:
 2. A re-derivable outcome requires its source geometry and semantics to be retained exactly.
 3. The decision lists every outcome with exactly one classification.
 4. Threshold reclassification of static geometry does not, by itself, infer a full radius sweep.
+5. An unretained effective radius or unpinned map asset is not enough evidence for a re-derivable
+   outcome.
 
 See parent issue #6600 (Gate 0 spec), validity study #3207 (clearance-semantics foundation in
 :mod:`robot_sf.benchmark.clearance_semantics`), and the frozen release pointer under
@@ -112,9 +116,9 @@ CLAIM_BOUNDARY = (
     "post-hoc-versus-replay boundary for the collision-envelope radius campaign. It does not run "
     "benchmark episodes, change frozen 0.0.3.post1 metric semantics, configs, or manifests, run "
     "production compute, or establish a radius-sensitivity result, planner ranking, feasibility "
-    "verdict, or paper-facing benchmark evidence. Re-derivable entries are narrow diagnostics "
-    "(retained parameters; static-map-geometry threshold reclassification) and must not be read as "
-    "a radius sweep."
+    "verdict, or paper-facing benchmark evidence. No current outcome qualifies as re-derivable "
+    "because the effective radius and map asset provenance are not retained/pinned; this decision "
+    "must not be read as a radius sweep."
 )
 
 # Outcome categories that are unconditionally replay-required by stop condition #3.
@@ -469,11 +473,16 @@ def _trajectory_simulator_planner_outcomes() -> tuple[RadiusSensitivityOutcome, 
     return tuple(outcomes)
 
 
-def _re_derivable_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
-    """The narrow re-derivable set: retained parameters and static-map-geometry margin only.
+def _provenance_blocked_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
+    """Classify the tempting post-hoc diagnostics as replay-required.
+
+    The prior implementation treated these two diagnostics as re-derivable. The frozen release
+    manifest does not record the effective per-row robot/pedestrian radius, and its scenario
+    matrix checksum does not pin the referenced map asset bytes. Until those provenance gaps are
+    closed, neither diagnostic satisfies the exact-retention rule.
 
     Returns:
-        Tuple of the two narrow re-derivable diagnostic outcomes.
+        Tuple of the two provenance-blocked diagnostic outcomes.
     """
     return (
         RadiusSensitivityOutcome(
@@ -484,13 +493,14 @@ def _re_derivable_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
             ),
             category="metadata_parameter",
             radius_binding="parameter_value",
-            source_geometry_retained_in_frozen_rows=True,
+            source_geometry_retained_in_frozen_rows=False,
             is_collision_contact_feasibility_or_planner_outcome=False,
-            classification=RE_DERIVABLE,
+            classification=REPLAY_REQUIRED,
             rationale=(
-                "These are frozen parameters, not trajectory outcomes. The metric constants and "
-                "the frozen campaign config are retained/checksummed assets; the radius value is "
-                "recoverable from retained metadata without replay."
+                "The frozen metric constants are known, but the effective per-row robot/pedestrian "
+                "radius is not retained: the release config does not declare it and the metric "
+                "and runner defaults disagree. The effective parameter provenance must be recovered "
+                "before any post-hoc reclassification, so this outcome is replay-required."
             ),
             caveats=(
                 "The collision-envelope radius default is not uniform across the metric contract "
@@ -498,8 +508,8 @@ def _re_derivable_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
                 f"ped_radius={METRICS_EPISODE_DATA_DEFAULT_PED_RADIUS_M} m; runner.py default "
                 f"robot_radius={RUNNER_DEFAULT_ROBOT_RADIUS_M} m, ped_radius={RUNNER_DEFAULT_PED_RADIUS_M} m). "
                 "Gate 1 must confirm the per-row effective radius before any reclassification.",
-                "Re-deriving a parameter is not a radius-sensitivity outcome; it only documents "
-                "what was retained.",
+                "A metric constant or default value is not evidence of the effective value used by "
+                "the frozen release rows.",
             ),
         ),
         RadiusSensitivityOutcome(
@@ -510,37 +520,37 @@ def _re_derivable_outcomes() -> tuple[RadiusSensitivityOutcome, ...]:
             ),
             category="static_geometry_diagnostic",
             radius_binding="swept_envelope_parameter_on_frozen_geometry",
-            source_geometry_retained_in_frozen_rows=True,
+            source_geometry_retained_in_frozen_rows=False,
             is_collision_contact_feasibility_or_planner_outcome=False,
-            classification=RE_DERIVABLE,
+            classification=REPLAY_REQUIRED,
             rationale=(
-                "The static map geometry is a frozen, radius-independent asset; reclassifying the "
-                "margin at a new radius only reparameterises the swept-envelope threshold "
-                "(margin = gap - 2*radius). This is the cheap post-hoc feasibility check the parent "
-                "issue endorses (see issue #5574 planner-free oracle)."
+                "A static map margin would be a radius-only reparameterisation if the exact map "
+                "asset were retained. The release manifest hashes the scenario matrix but does not "
+                "pin the referenced map asset bytes, and the frozen episode rows do not contain the "
+                "map geometry. The exact geometry provenance must be recovered before this margin "
+                "can be classified, so it is replay-required."
             ),
             caveats=(
+                "The scenario matrix checksum is not a checksum of its included map assets.",
                 "Threshold reclassification of static geometry does NOT, by itself, infer a full "
-                "radius sweep (stop condition #5).",
-                "A positive static margin does not reconstruct scripted-traversal or planner "
+                "radius sweep (stop condition #4).",
+                "A positive static margin would not reconstruct scripted-traversal or planner "
                 "feasibility, which remain replay-required (the #5574 0.5 m probe reclassifies the "
                 "doorway as solvable yet its scripted traversal still collided).",
-                "The map geometry must be read from the frozen map asset (matrix_sha256), not "
-                "inferred from aggregate episode rows.",
             ),
         ),
     )
 
 
 def build_outcome_registry() -> tuple[RadiusSensitivityOutcome, ...]:
-    """Return the full deterministic Gate 0 outcome registry, ordered replay-required first."""
+    """Return the full deterministic Gate 0 outcome registry."""
     return (
         *_clearance_family_outcomes(),
         *_fixed_threshold_collision_outcomes(),
         *_radius_independent_geometry_outcomes(),
         *_success_and_aggregate_outcomes(),
         *_trajectory_simulator_planner_outcomes(),
-        *_re_derivable_outcomes(),
+        *_provenance_blocked_outcomes(),
     )
 
 
@@ -597,6 +607,16 @@ def _metric_contract_block() -> dict[str, Any]:
                 "reclassification."
             ),
         },
+        "frozen_provenance_gaps": {
+            "effective_robot_and_pedestrian_radius_retained": False,
+            "map_asset_bytes_pinned": False,
+            "finding": (
+                "The frozen release manifest does not declare the effective robot/pedestrian radius "
+                "and its scenario matrix checksum does not pin the referenced map asset bytes; "
+                "therefore neither radius metadata nor static-map geometry is re-derivable from the "
+                "retained release fields."
+            ),
+        },
         "threshold_sensitivity_requires_replay": (
             "robot_sf/benchmark/threshold_sensitivity.py recomputes near-miss/comfort counts from "
             "full replay trajectories (replay_steps/replay_peds), never from aggregate frozen rows."
@@ -608,14 +628,16 @@ def _rubric_block() -> dict[str, Any]:
     return {
         "re_derivable": (
             "The outcome at a new radius is an exact deterministic function of fields retained in "
-            "the frozen release rows plus the radius metadata, under the frozen metric semantics, "
+            "the frozen release rows plus radius metadata and pinned source assets, under the "
+            "frozen metric semantics, "
             "AND it is not a trajectory-dependent planner/obstacle-contact/feasibility/collision "
             "outcome, AND it is not a threshold-count over a non-retained per-timestep distribution."
         ),
         "replay_required": (
             "The outcome depends on the radius-arm trajectory (which differs across arms because "
             "the collision-envelope radius changes planner behaviour and simulator collision "
-            "geometry) or on per-timestep geometry the aggregate frozen rows do not retain."
+            "geometry), on per-timestep geometry the aggregate frozen rows do not retain, or on "
+            "effective radius/map provenance that the frozen release does not pin."
         ),
         "stop_conditions": [
             "Do not modify frozen 0.0.3.post1 metric semantics or any release config or manifest.",
@@ -625,6 +647,8 @@ def _rubric_block() -> dict[str, Any]:
             "contact, feasibility, and collision outcomes must be classified replay-required.",
             "The output lists every outcome as re-derivable or replay-required.",
             "Do not infer a full sweep from threshold reclassification alone.",
+            "Do not classify an outcome as re-derivable when effective radius or map asset bytes "
+            "are not retained and pinned by the frozen release provenance.",
         ],
     }
 
@@ -671,13 +695,9 @@ def build_gate0_decision() -> dict[str, Any]:
     return decision
 
 
-ALLOWED_RE_DERIVABLE_IDS = frozenset(
-    {
-        "retained_radius_and_threshold_parameters",
-        "static_map_geometry_feasibility_margin",
-    }
-)
-STATIC_MARGIN_OUTCOME_ID = "static_map_geometry_feasibility_margin"
+# No outcome currently meets the exact-retention rule. Keep this explicit so a future change cannot
+# silently turn an unpinned parameter or map source into benchmark evidence.
+ALLOWED_RE_DERIVABLE_IDS = frozenset()
 
 
 def _validate_outcome_entry(entry: Any, seen_ids: set[str]) -> str | None:
@@ -747,28 +767,34 @@ def _assert_re_derivable_constraints(
         )
 
 
-def _assert_narrow_re_derivable_set(
-    re_derivable_ids: list[str], outcomes: list[dict[str, Any]]
-) -> None:
-    """Stop condition #5: the re-derivable set must be narrow and must not read as a sweep."""
+def _assert_narrow_re_derivable_set(re_derivable_ids: list[str]) -> None:
+    """Stop condition #5: only explicitly retained outcomes may be re-derivable."""
     extra = set(re_derivable_ids) - ALLOWED_RE_DERIVABLE_IDS
     if extra:
         raise ValueError(
-            "re-derivable set exceeds the narrow allowed diagnostics and would imply a sweep: "
+            "re-derivable set contains outcomes without exact retained provenance and would imply "
+            "a sweep: "
             f"{sorted(extra)}"
         )
-    if STATIC_MARGIN_OUTCOME_ID not in re_derivable_ids:
-        return
-    caveats: list[str] = []
-    for entry in outcomes:
-        if entry.get("outcome_id") == STATIC_MARGIN_OUTCOME_ID:
-            caveats = list(entry.get("caveats") or ())
-            break
-    lowered = [str(c).lower() for c in caveats]
-    if not any("does not" in c and "full" in c and "sweep" in c for c in lowered):
-        raise ValueError(
-            "static_map_geometry_feasibility_margin must carry the no-full-sweep caveat"
-        )
+
+
+def _assert_frozen_provenance_gaps(decision: dict[str, Any]) -> None:
+    """Enforce the provenance blockers that make this Gate 0 decision fail closed."""
+    metric_contract = decision.get("metric_contract")
+    if not isinstance(metric_contract, dict):
+        raise ValueError("decision.metric_contract must be a dict")
+    gaps = metric_contract.get("frozen_provenance_gaps")
+    if not isinstance(gaps, dict):
+        raise ValueError("metric_contract.frozen_provenance_gaps must be a dict")
+    for field in (
+        "effective_robot_and_pedestrian_radius_retained",
+        "map_asset_bytes_pinned",
+    ):
+        if gaps.get(field) is not False:
+            raise ValueError(
+                f"metric_contract.frozen_provenance_gaps.{field} must be false for this Gate 0 "
+                "decision"
+            )
 
 
 def _assert_summary_consistent(
@@ -784,6 +810,13 @@ def _assert_summary_consistent(
         raise ValueError("summary.replay_required_count does not match the outcomes")
     if summary.get("total_outcomes") != len(outcomes):
         raise ValueError("summary.total_outcomes does not match the outcomes")
+    replay_required_ids = [
+        entry["outcome_id"] for entry in outcomes if entry.get("classification") == REPLAY_REQUIRED
+    ]
+    if summary.get("re_derivable_outcome_ids") != re_derivable_ids:
+        raise ValueError("summary.re_derivable_outcome_ids does not match the outcomes")
+    if summary.get("replay_required_outcome_ids") != replay_required_ids:
+        raise ValueError("summary.replay_required_outcome_ids does not match the outcomes")
 
 
 def validate_gate0_decision(decision: dict[str, Any]) -> None:
@@ -802,6 +835,7 @@ def validate_gate0_decision(decision: dict[str, Any]) -> None:
     if not isinstance(outcomes, list) or not outcomes:
         raise ValueError("decision.outcomes must be a non-empty list")
 
+    _assert_frozen_provenance_gaps(decision)
     seen_ids: set[str] = set()
     re_derivable_ids: list[str] = []
     for entry in outcomes:
@@ -810,7 +844,7 @@ def validate_gate0_decision(decision: dict[str, Any]) -> None:
             re_derivable_ids.append(re_derivable_id)
 
     # Stop condition #4: every outcome has exactly one classification (enforced per entry above).
-    _assert_narrow_re_derivable_set(re_derivable_ids, outcomes)
+    _assert_narrow_re_derivable_set(re_derivable_ids)
     _assert_summary_consistent(decision, outcomes, re_derivable_ids)
 
 

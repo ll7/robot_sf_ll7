@@ -197,27 +197,33 @@ def test_radius_aware_clearance_metrics_are_all_replay_required():
         assert outcomes[outcome_id]["classification"] == REPLAY_REQUIRED
 
 
-def test_re_derivable_set_is_narrow_and_retains_source_geometry():
-    """Stop conditions #2 and #5: only narrow, exactly-retained diagnostics are re-derivable."""
+def test_unretained_radius_and_map_provenance_are_replay_required():
+    """Gate 0 must fail closed when exact radius or map provenance is absent."""
     decision = build_gate0_decision()
-    re_derivable = [o for o in decision["outcomes"] if o["classification"] == RE_DERIVABLE]
-    assert {o["outcome_id"] for o in re_derivable} == {
+    outcomes = _outcomes_by_id(decision)
+    provenance_blocked = {
         "retained_radius_and_threshold_parameters",
         "static_map_geometry_feasibility_margin",
     }
-    for outcome in re_derivable:
-        assert outcome["source_geometry_retained_in_frozen_rows"] is True
+    for outcome_id in provenance_blocked:
+        outcome = outcomes[outcome_id]
+        assert outcome["classification"] == REPLAY_REQUIRED
+        assert outcome["source_geometry_retained_in_frozen_rows"] is False
         assert outcome["is_collision_contact_feasibility_or_planner_outcome"] is False
 
+    assert [o for o in decision["outcomes"] if o["classification"] == RE_DERIVABLE] == []
 
-def test_static_geometry_margin_carries_no_full_sweep_caveat():
+
+def test_static_geometry_margin_records_unpinned_map_provenance():
     decision = build_gate0_decision()
     outcomes = _outcomes_by_id(decision)
     static = outcomes["static_map_geometry_feasibility_margin"]
     caveats = " ".join(static["caveats"]).lower()
-    assert "does not" in caveats
-    assert "full" in caveats
-    assert "sweep" in caveats
+    assert "matrix checksum" in caveats
+    assert "map asset" in caveats
+    gaps = decision["metric_contract"]["frozen_provenance_gaps"]
+    assert gaps["effective_robot_and_pedestrian_radius_retained"] is False
+    assert gaps["map_asset_bytes_pinned"] is False
 
 
 def test_summary_counts_match_outcomes():
@@ -229,15 +235,15 @@ def test_summary_counts_match_outcomes():
     assert summary["total_outcomes"] == total
     assert summary["re_derivable_count"] == re_derivable
     assert summary["replay_required_count"] == replay
-    assert summary["replay_required_count"] >= 18
-    assert summary["re_derivable_count"] == 2
+    assert summary["replay_required_count"] == 24
+    assert summary["re_derivable_count"] == 0
 
 
 def test_decision_is_deterministic():
     first = build_gate0_decision()
     second = build_gate0_decision()
     assert first == second
-    # Registry order is stable (replay-required block first, re-derivable last).
+    # Registry order is stable.
     ids = [o["outcome_id"] for o in first["outcomes"]]
     assert ids[0] == "human_collisions_count"
     assert ids[-1] == "static_map_geometry_feasibility_margin"
@@ -273,13 +279,33 @@ def test_validator_rejects_re_derivable_without_retained_geometry():
     tampered = copy.deepcopy(decision)
     for outcome in tampered["outcomes"]:
         if outcome["outcome_id"] == "retained_radius_and_threshold_parameters":
+            outcome["classification"] = RE_DERIVABLE
             outcome["source_geometry_retained_in_frozen_rows"] = False
     with pytest.raises(ValueError, match="must retain its source geometry"):
         validate_gate0_decision(tampered)
 
 
+def test_validator_rejects_pinned_looking_provenance_without_gate_evidence():
+    decision = build_gate0_decision()
+    tampered = copy.deepcopy(decision)
+    for outcome in tampered["outcomes"]:
+        if outcome["outcome_id"] == "static_map_geometry_feasibility_margin":
+            outcome["classification"] = RE_DERIVABLE
+            outcome["source_geometry_retained_in_frozen_rows"] = True
+    with pytest.raises(ValueError, match="without exact retained provenance"):
+        validate_gate0_decision(tampered)
+
+
+def test_validator_rejects_provenance_gap_flip():
+    decision = build_gate0_decision()
+    tampered = copy.deepcopy(decision)
+    tampered["metric_contract"]["frozen_provenance_gaps"]["map_asset_bytes_pinned"] = True
+    with pytest.raises(ValueError, match="map_asset_bytes_pinned must be false"):
+        validate_gate0_decision(tampered)
+
+
 def test_validator_rejects_over_broad_re_derivable_set():
-    """Stop condition #5: an extra re-derivable entry implies a sweep and must be rejected."""
+    """Stop condition #5: an unapproved re-derivable entry must be rejected."""
     decision = build_gate0_decision()
     tampered = copy.deepcopy(decision)
     extra = copy.deepcopy(tampered["outcomes"][0])

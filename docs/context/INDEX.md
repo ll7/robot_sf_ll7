@@ -33,9 +33,9 @@ Francis 2023 zero-success candidate cells:
 Issue #6640 Gate 0 post-hoc feasibility audit of the frozen 0.0.3.post1 release rows for the
 collision-envelope radius campaign (parent #6600): machine-readable decision
 (`radius_sensitivity_gate0_decision.v1`) classifying each radius-sensitivity outcome as
-re-derivable-from-retained-fields or replay-required; only narrow retained-parameter and
-static-map-geometry threshold diagnostics are re-derivable, every collision/contact/feasibility/
-planner/trajectory outcome is replay-required, and a radius-default inconsistency
+re-derivable-from-retained-fields or replay-required; no outcome is currently re-derivable because
+the effective radius and map-asset provenance are not retained/pinned, every collision/contact/
+feasibility/planner/trajectory outcome is replay-required, and a radius-default inconsistency
 (`metrics.py` 1.0 m vs `runner.py` 0.3 m) is recorded as a Gate 1 input:
 [radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md).
 

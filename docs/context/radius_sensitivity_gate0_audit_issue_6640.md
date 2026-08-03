@@ -16,13 +16,13 @@ collision-envelope (planning proxy) radius changes across `0.5 m`, `0.8 m`, and 
 baseline. Gate 0's job is to decide, *before any replay*, which outcomes the frozen release rows can
 answer on their own.
 
-**Answer:** almost none. Because the radius changes both the simulator collision geometry and planner
-behaviour, each radius arm produces a *different trajectory*, so any metric computed on that
-trajectory differs across arms and cannot be recovered from the retained `1.0 m` baseline rows. The
-only quantities that survive post-hoc are narrow diagnostics: the retained radius/threshold
-parameters themselves, and a static-map-geometry threshold reclassification (e.g. doorway-gap margin
-= `gap − 2 × radius`) on frozen map geometry. The latter is a cheap feasibility probe, **not** a
-radius sweep.
+**Answer:** none under the frozen release provenance. Because the radius changes both the simulator
+collision geometry and planner behaviour, each radius arm produces a *different trajectory*, so any
+metric computed on that trajectory differs across arms and cannot be recovered from the retained
+`1.0 m` baseline rows. The release config also does not retain the effective robot/pedestrian radius,
+and its scenario-matrix checksum does not pin the referenced map asset bytes. Therefore even the
+tempting parameter and static-map margin diagnostics remain replay-required until those provenance
+gaps are closed. This is a fail-closed boundary, **not** a radius sweep.
 
 ## The decision
 
@@ -37,11 +37,11 @@ uv run python scripts/benchmark/build_radius_sensitivity_gate0_decision.py \
   --validate docs/context/radius_sensitivity_gate0_audit_issue_6640.json
 ```
 
-The decision classifies **24** outcomes: **2 re-derivable**, **22 replay-required**.
+The decision classifies **24** outcomes: **0 re-derivable**, **24 replay-required**.
 
-- Re-derivable: `retained_radius_and_threshold_parameters`,
-  `static_map_geometry_feasibility_margin`.
-- Replay-required: every collision/contact/feasibility/planner/trajectory outcome, including the
+- Re-derivable: none — the exact effective radius and map asset provenance are not retained/pinned.
+- Replay-required: every listed outcome, including the
+  radius/threshold metadata and static-map margin diagnostics, plus every
   radius-aware clearance family (`human_collisions`, `near_misses`, `min_clearance`,
   `mean_clearance`), the fixed-threshold counts (`wall_collisions`, `agent_collisions`), the
   radius-independent geometry metrics (`clearing_distance_min`, `min_distance`, …), binary
@@ -65,11 +65,13 @@ The decision classifies **24** outcomes: **2 re-derivable**, **22 replay-require
 - **Threshold reclassification requires replay.** `robot_sf/benchmark/threshold_sensitivity.py`
   recomputes near-miss/comfort counts from full replay trajectories (`replay_steps`/`replay_peds`),
   never from aggregate frozen rows.
-- **Static geometry is the exception.** The planner-free oracle (#5574) measures the doorway gap on
-  the frozen map; reparameterising the swept envelope (`margin = gap − 2 × radius`) is a cheap,
-  replay-free diagnostic. A positive static margin does **not** reconstruct scripted-traversal or
-  planner feasibility — the #5574 `0.5 m` probe reclassifies the narrow doorway as solvable yet its
-  scripted traversal still collided.
+- **Static geometry is provenance-blocked here.** A planner-free oracle (#5574) could measure the
+  doorway gap and reparameterise the swept envelope (`margin = gap − 2 × radius`) without replaying
+  a learned planner, but this release manifest hashes only the scenario matrix, not its included map
+  asset bytes. The exact geometry must therefore be recovered before that margin is re-derivable.
+  Even a positive static margin would not reconstruct scripted-traversal or planner feasibility —
+  the #5574 `0.5 m` probe reclassifies the narrow doorway as solvable yet its scripted traversal
+  still collided.
 
 ## Findings and risks for later gates
 
@@ -81,6 +83,10 @@ The decision classifies **24** outcomes: **2 re-derivable**, **22 replay-require
   before any reclassification, and must prove the radius binds consistently to simulator collision
   geometry, obstacle/pedestrian contact, feasibility/oracle calculations, metric metadata, and
   planner inputs.
+- **Frozen provenance gaps are Gate 0 blockers for post-hoc reclassification.** The effective
+  per-row robot/pedestrian radius is not manifest-declared, and the scenario matrix checksum does
+  not checksum the referenced map assets. Gate 1 or a provenance-preserving replay must close both
+  gaps before either diagnostic can be reclassified.
 - **Success has two gates.** The frozen collision reconciliation warns the bundle lacks
   `reached_goal_step`/`horizon` inputs to recompute the success-timing gate, so binary `success` is
   replay-required on both its collision and timing components.
@@ -92,5 +98,5 @@ The decision classifies **24** outcomes: **2 re-derivable**, **22 replay-require
 - Module: `robot_sf/benchmark/radius_sensitivity_gate0_audit.py` (pure, deterministic, no simulation).
 - Test: `tests/benchmark/test_radius_sensitivity_gate0_audit.py`.
 - Build/validate CLI: `scripts/benchmark/build_radius_sensitivity_gate0_decision.py`.
-- This is a diagnostic decision record; the re-derivable entries are narrow retained-parameter and
-  static-geometry diagnostics and must not be read as radius-sensitivity evidence.
+- This is a diagnostic decision record; all current outcomes are replay-required and none is
+  radius-sensitivity evidence.

@@ -12,16 +12,17 @@
     "scenario_surface": "classic_interactions_francis2023_48_cells",
     "seeds": "paper_eval_s30 (111-140)"
   },
-  "claim_boundary": "radius_sensitivity_gate0_decision_diagnostic_only: a machine-readable decision recording the post-hoc-versus-replay boundary for the collision-envelope radius campaign. It does not run benchmark episodes, change frozen 0.0.3.post1 metric semantics, configs, or manifests, run production compute, or establish a radius-sensitivity result, planner ranking, feasibility verdict, or paper-facing benchmark evidence. Re-derivable entries are narrow diagnostics (retained parameters; static-map-geometry threshold reclassification) and must not be read as a radius sweep.",
+  "claim_boundary": "radius_sensitivity_gate0_decision_diagnostic_only: a machine-readable decision recording the post-hoc-versus-replay boundary for the collision-envelope radius campaign. It does not run benchmark episodes, change frozen 0.0.3.post1 metric semantics, configs, or manifests, run production compute, or establish a radius-sensitivity result, planner ranking, feasibility verdict, or paper-facing benchmark evidence. No current outcome qualifies as re-derivable because the effective radius and map asset provenance are not retained/pinned; this decision must not be read as a radius sweep.",
   "classification_rubric": {
-    "re_derivable": "The outcome at a new radius is an exact deterministic function of fields retained in the frozen release rows plus the radius metadata, under the frozen metric semantics, AND it is not a trajectory-dependent planner/obstacle-contact/feasibility/collision outcome, AND it is not a threshold-count over a non-retained per-timestep distribution.",
-    "replay_required": "The outcome depends on the radius-arm trajectory (which differs across arms because the collision-envelope radius changes planner behaviour and simulator collision geometry) or on per-timestep geometry the aggregate frozen rows do not retain.",
+    "re_derivable": "The outcome at a new radius is an exact deterministic function of fields retained in the frozen release rows plus radius metadata and pinned source assets, under the frozen metric semantics, AND it is not a trajectory-dependent planner/obstacle-contact/feasibility/collision outcome, AND it is not a threshold-count over a non-retained per-timestep distribution.",
+    "replay_required": "The outcome depends on the radius-arm trajectory (which differs across arms because the collision-envelope radius changes planner behaviour and simulator collision geometry), on per-timestep geometry the aggregate frozen rows do not retain, or on effective radius/map provenance that the frozen release does not pin.",
     "stop_conditions": [
       "Do not modify frozen 0.0.3.post1 metric semantics or any release config or manifest.",
       "Do not run any production SLURM compute.",
       "Post-hoc reclassification is allowed only for quantities whose source geometry and semantics are retained exactly; trajectory-dependent planner behaviour, obstacle contact, feasibility, and collision outcomes must be classified replay-required.",
       "The output lists every outcome as re-derivable or replay-required.",
-      "Do not infer a full sweep from threshold reclassification alone."
+      "Do not infer a full sweep from threshold reclassification alone.",
+      "Do not classify an outcome as re-derivable when effective radius or map asset bytes are not retained and pinned by the frozen release provenance."
     ]
   },
   "frozen_release": {
@@ -52,6 +53,11 @@
         "threshold_m": 0.25,
         "uses_radius_in_formula": false
       }
+    },
+    "frozen_provenance_gaps": {
+      "effective_robot_and_pedestrian_radius_retained": false,
+      "finding": "The frozen release manifest does not declare the effective robot/pedestrian radius and its scenario matrix checksum does not pin the referenced map asset bytes; therefore neither radius metadata nor static-map geometry is re-derivable from the retained release fields.",
+      "map_asset_bytes_pinned": false
     },
     "radius_aware_clearance_metrics": [
       "human_collisions",
@@ -349,42 +355,39 @@
       "category": "metadata_parameter",
       "caveats": [
         "The collision-envelope radius default is not uniform across the metric contract (metrics.py EpisodeData default robot_radius=1.0 m, ped_radius=0.4 m; runner.py default robot_radius=0.3 m, ped_radius=0.35 m). Gate 1 must confirm the per-row effective radius before any reclassification.",
-        "Re-deriving a parameter is not a radius-sensitivity outcome; it only documents what was retained."
+        "A metric constant or default value is not evidence of the effective value used by the frozen release rows."
       ],
-      "classification": "re-derivable",
+      "classification": "replay-required",
       "is_collision_contact_feasibility_or_planner_outcome": false,
       "outcome": "Retained radius / threshold parameters (robot_radius, ped_radius, COLLISION_DIST, NEAR_MISS_DIST) recoverable from the frozen config and metric constants",
       "outcome_id": "retained_radius_and_threshold_parameters",
       "radius_binding": "parameter_value",
-      "rationale": "These are frozen parameters, not trajectory outcomes. The metric constants and the frozen campaign config are retained/checksummed assets; the radius value is recoverable from retained metadata without replay.",
-      "source_geometry_retained_in_frozen_rows": true
+      "rationale": "The frozen metric constants are known, but the effective per-row robot/pedestrian radius is not retained: the release config does not declare it and the metric and runner defaults disagree. The effective parameter provenance must be recovered before any post-hoc reclassification, so this outcome is replay-required.",
+      "source_geometry_retained_in_frozen_rows": false
     },
     {
       "category": "static_geometry_diagnostic",
       "caveats": [
-        "Threshold reclassification of static geometry does NOT, by itself, infer a full radius sweep (stop condition #5).",
-        "A positive static margin does not reconstruct scripted-traversal or planner feasibility, which remain replay-required (the #5574 0.5 m probe reclassifies the doorway as solvable yet its scripted traversal still collided).",
-        "The map geometry must be read from the frozen map asset (matrix_sha256), not inferred from aggregate episode rows."
+        "The scenario matrix checksum is not a checksum of its included map assets.",
+        "Threshold reclassification of static geometry does NOT, by itself, infer a full radius sweep (stop condition #4).",
+        "A positive static margin would not reconstruct scripted-traversal or planner feasibility, which remain replay-required (the #5574 0.5 m probe reclassifies the doorway as solvable yet its scripted traversal still collided)."
       ],
-      "classification": "re-derivable",
+      "classification": "replay-required",
       "is_collision_contact_feasibility_or_planner_outcome": false,
       "outcome": "Static map-geometry feasibility margin (e.g. doorway gap minus swept diameter 2*radius) on frozen map geometry",
       "outcome_id": "static_map_geometry_feasibility_margin",
       "radius_binding": "swept_envelope_parameter_on_frozen_geometry",
-      "rationale": "The static map geometry is a frozen, radius-independent asset; reclassifying the margin at a new radius only reparameterises the swept-envelope threshold (margin = gap - 2*radius). This is the cheap post-hoc feasibility check the parent issue endorses (see issue #5574 planner-free oracle).",
-      "source_geometry_retained_in_frozen_rows": true
+      "rationale": "A static map margin would be a radius-only reparameterisation if the exact map asset were retained. The release manifest hashes the scenario matrix but does not pin the referenced map asset bytes, and the frozen episode rows do not contain the map geometry. The exact geometry provenance must be recovered before this margin can be classified, so it is replay-required.",
+      "source_geometry_retained_in_frozen_rows": false
     }
   ],
   "parent_issue": 6600,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "radius_sensitivity_gate0_decision.v1",
   "summary": {
-    "re_derivable_count": 2,
-    "re_derivable_outcome_ids": [
-      "retained_radius_and_threshold_parameters",
-      "static_map_geometry_feasibility_margin"
-    ],
-    "replay_required_count": 22,
+    "re_derivable_count": 0,
+    "re_derivable_outcome_ids": [],
+    "replay_required_count": 24,
     "replay_required_outcome_ids": [
       "human_collisions_count",
       "near_misses_count",
@@ -407,7 +410,9 @@
       "planner_rankings_success_typed_collisions_snqi",
       "scenario_family_conclusions_transitions",
       "snqi_per_episode",
-      "kinematic_efficiency_metrics"
+      "kinematic_efficiency_metrics",
+      "retained_radius_and_threshold_parameters",
+      "static_map_geometry_feasibility_margin"
     ],
     "total_outcomes": 24
   },

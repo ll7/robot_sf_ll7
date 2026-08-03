@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from fractions import Fraction
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -18,17 +19,23 @@ from robot_sf.benchmark.failure_diagnosis import (
     CORRECTION_STATUSES,
     DEFAULT_CORRECTION_STATUS,
     DETECTION_METHOD_PREDICATE,
+    DIAGNOSIS_QUALITY_SOURCE,
     DIAGNOSIS_SEVERITIES,
     DIAGNOSIS_SOURCE,
+    FAILURE_DIAGNOSIS_QUALITY_SCHEMA_VERSION,
+    FAILURE_DIAGNOSIS_REFERENCE_SCHEMA_VERSION,
     FAILURE_DIAGNOSIS_SCHEMA_VERSION,
     FAILURE_LEVELS,
     FailureDiagnosisError,
     build_failure_diagnosis_payload,
+    compare_failure_diagnosis_to_reference,
     diagnose_from_trace_failure_predicate,
     diagnose_from_trace_failure_predicates,
+    evaluate_failure_diagnosis_quality,
     unknown_failure_diagnosis_record,
     validate_failure_diagnosis_payload,
     validate_failure_diagnosis_record,
+    validate_failure_diagnosis_reference_fixture,
 )
 from robot_sf.benchmark.failure_mechanism_classifier import FAILURE_MECHANISM_LABELS
 from robot_sf.benchmark.failure_mechanism_taxonomy import (
@@ -66,6 +73,112 @@ def _predicate(  # noqa: PLR0913
         severity=severity,
         validity_status=validity_status,
     )
+
+
+def _reference_fixture() -> dict[str, Any]:
+    """Load the independently authored issue #6646 reference fixture."""
+    path = Path("docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _quality_candidates() -> dict[str, Any]:
+    """Build deterministic diagnosis rows paired with the reviewed fixture."""
+    return {
+        "collision_case": diagnose_from_trace_failure_predicate(
+            _predicate("collision", time_interval_s=[1.0, 1.5], severity="critical")
+        ).to_dict(),
+        "near_miss_case": diagnose_from_trace_failure_predicate(
+            _predicate(
+                "clearance_critical_interaction",
+                time_interval_s=[2.0, 3.0],
+                severity="medium",
+            )
+        ).to_dict(),
+        "low_progress_case": diagnose_from_trace_failure_predicate(
+            _predicate("low_progress", time_interval_s=[4.0, 6.0], severity="medium")
+        ).to_dict(),
+        "oscillation_case": diagnose_from_trace_failure_predicate(
+            _predicate("oscillatory_local_control", time_interval_s=[7.0, 8.0], severity="medium")
+        ).to_dict(),
+        "no_failure_case": {"detected": False, "status": "available"},
+        "unavailable_case": {"detected": True, "status": "degraded"},
+    }
+
+
+def test_reviewed_reference_fixture_is_versioned_and_provenance_complete() -> None:
+    """The committed fixture keeps review and independent trace pointers explicit."""
+    fixture = validate_failure_diagnosis_reference_fixture(_reference_fixture())
+
+    assert fixture["schema_version"] == FAILURE_DIAGNOSIS_REFERENCE_SCHEMA_VERSION
+    assert fixture["review"] == {
+        "status": "reviewed",
+        "reviewer": "robot_sf_fixture_review",
+        "adjudication_status": "adjudicated",
+        "independent_of_automated_diagnosis": True,
+    }
+    assert len(fixture["records"]) >= 5
+    assert all(record["source_trace"] for record in fixture["records"])
+    assert all(record["provenance_status"] == "complete" for record in fixture["records"])
+
+
+def test_quality_report_computes_detection_onset_type_and_severity_metrics() -> None:
+    """The approved deterministic slice reports all four quality metric families."""
+    report = evaluate_failure_diagnosis_quality(_quality_candidates(), _reference_fixture())
+
+    assert report["schema_version"] == FAILURE_DIAGNOSIS_QUALITY_SCHEMA_VERSION
+    assert report["evaluation_source"] == DIAGNOSIS_QUALITY_SOURCE
+    assert report["detection"]["confusion_counts"] == {
+        "true_positive": 4,
+        "true_negative": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+    }
+    assert report["detection"]["agreement"] == 1.0
+    assert report["detection"]["denominator"] == 5
+    assert report["detection"]["excluded_count"] == 1
+    assert report["onset"]["denominator"] == 4
+    assert report["onset"]["mean_interval_overlap"] == pytest.approx(5.0 / 6.0)
+    assert report["onset"]["mean_absolute_midpoint_error_s"] == pytest.approx(0.125)
+    assert report["failure_type"]["denominator"] == 3
+    assert report["failure_type"]["exact_match"] == 1.0
+    assert report["failure_type"]["macro_f1"] == 1.0
+    assert report["severity"]["denominator"] == 4
+    assert report["severity"]["exact_match"] == 1.0
+    assert report["severity"]["macro_f1"] == 1.0
+    assert report["case_comparisons"][-1]["metrics"]["detection"]["status"] == "excluded"
+
+
+def test_quality_metrics_exclude_unreviewed_and_degraded_rows_without_forcing_labels() -> None:
+    """Ineligible rows remain visible and cannot become accuracy evidence."""
+    fixture = _reference_fixture()
+    fixture["records"][0]["review"] = {"status": "unreviewed"}
+    fixture["records"][1]["source_trace"] = {}
+    candidates = _quality_candidates()
+    candidates["near_miss_case"] = {"detected": True, "status": "degraded"}
+
+    report = compare_failure_diagnosis_to_reference(candidates, fixture)
+
+    assert report["detection"]["denominator"] == 3
+    assert report["detection"]["excluded_count"] == 3
+    assert "reference_unreviewed" in report["detection"]["excluded_reasons"]
+    assert "reference_provenance_incomplete" in report["detection"]["excluded_reasons"]
+    assert "diagnosis_status:degraded" in report["detection"]["excluded_reasons"]
+    by_case = {row["case_id"]: row for row in report["case_comparisons"]}
+    assert by_case["oscillation_case"]["reference"]["failure_type"] == "unknown"
+    assert by_case["no_failure_case"]["reference"]["detected"] == "not_detected"
+
+
+def test_quality_macro_f1_penalizes_known_type_confusion() -> None:
+    """Macro-F1 uses only known, detected cases and penalizes a wrong class."""
+    candidates = _quality_candidates()
+    candidates["low_progress_case"] = diagnose_from_trace_failure_predicate(
+        _predicate("collision", time_interval_s=[4.0, 6.0], severity="medium")
+    ).to_dict()
+
+    report = evaluate_failure_diagnosis_quality(candidates, _reference_fixture())
+
+    assert report["failure_type"]["exact_match"] == pytest.approx(2.0 / 3.0)
+    assert report["failure_type"]["macro_f1"] == pytest.approx(5.0 / 9.0)
 
 
 def test_onset_interval_pinned_from_predicate_time_interval() -> None:

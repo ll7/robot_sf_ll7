@@ -215,6 +215,51 @@ def test_non_deprecation_status_transition_is_breaking() -> None:
     assert any("changed status" in reason for reason in report["reasons"])
 
 
+def test_new_required_feature_and_capability_are_breaking_together() -> None:
+    """A new producer-required validator feature cannot be additive."""
+    baseline = builder._mapping(builder.load_json(FIXTURES / "valid_initial.json"), "valid fixture")
+    candidate = copy.deepcopy(baseline)
+    candidate["contract_version"] = "2.0.0"
+    candidate["minimum_consumer_features"].append("new.required.validator.v1")
+    candidate["minimum_consumer_features"] = sorted(candidate["minimum_consumer_features"])
+    candidate["capabilities"].append(
+        {
+            **copy.deepcopy(candidate["capabilities"][0]),
+            "capability_id": "robot_sf.schema.extra.v1",
+            "schema_id": "https://robot-sf.dev/schemas/extra.v1.json",
+            "semantics_id": "robot_sf.schema.extra.semantics.v1",
+            "status": "experimental",
+        }
+    )
+    candidate["change"] = {
+        "declared_type": "breaking",
+        "based_on_contract_digest": baseline["contract_digest"]["value"],
+    }
+    candidate = _seal_contract(candidate)
+
+    report = builder.check_declared_change(baseline, candidate, schema=_schema())
+
+    assert report["valid"] is True
+    assert report["detected_change"] == "breaking"
+    assert any("required consumer feature" in reason for reason in report["reasons"])
+
+
+def test_non_initial_contract_version_must_increase() -> None:
+    """A changed digest cannot reuse or lower the baseline semantic version."""
+    baseline = builder._mapping(builder.load_json(FIXTURES / "valid_initial.json"), "valid fixture")
+    candidate = copy.deepcopy(baseline)
+    candidate["change"] = {
+        "declared_type": "additive",
+        "based_on_contract_digest": baseline["contract_digest"]["value"],
+    }
+    candidate = _seal_contract(candidate)
+
+    report = builder.check_declared_change(baseline, candidate, schema=_schema())
+
+    assert report["valid"] is False
+    assert any("must be greater" in error for error in report["errors"])
+
+
 def test_schema_rejects_fields_from_another_capability_kind() -> None:
     """A schema capability must not carry an unrelated CLI command contract."""
     contract = builder._mapping(builder.load_json(FIXTURES / "valid_initial.json"), "valid fixture")
@@ -271,6 +316,21 @@ def test_revision_envelope_binds_commit_contract_and_lock(tmp_path: Path) -> Non
             root=tmp_path,
             contract_schema_path=contract_schema_path,
             revision_schema_path=revision_schema_path,
+        )
+
+
+def test_tagged_revision_envelope_requires_real_git_provenance() -> None:
+    """A tagged/released envelope must bind to an existing commit and tag."""
+    with pytest.raises(builder.ContractError, match="Git provenance query failed"):
+        builder.build_revision_envelope(
+            root=ROOT,
+            contract_path=builder.DEFAULT_CONTRACT_PATH,
+            contract_schema_path=builder.DEFAULT_CONTRACT_SCHEMA_PATH,
+            revision_schema_path=builder.DEFAULT_REVISION_SCHEMA_PATH,
+            lock_path=builder.DEFAULT_LOCK_PATH,
+            source_commit="1" * 40,
+            release_status="tagged",
+            release_tag="ecosystem-contract/test",
         )
 
 

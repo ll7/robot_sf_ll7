@@ -18,6 +18,7 @@ import ast
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import tomllib
 from collections.abc import Mapping, Sequence
@@ -130,6 +131,61 @@ def sha256_file(path: Path) -> str:
         return sha256_bytes(path.read_bytes())
     except OSError as exc:
         raise ContractError(f"cannot read digest input {path}: {exc}") from exc
+
+
+def _git_output(root: Path, *arguments: str) -> bytes:
+    """Run one bounded read-only Git query for release provenance."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *arguments],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ContractError(f"Git provenance query failed for {' '.join(arguments)}") from exc
+    return result.stdout
+
+
+def _verify_git_binding(
+    *,
+    root: Path,
+    source_commit: str,
+    release_status: str,
+    release_tag: str | None,
+    contract_relative: str,
+    contract_file: Path,
+    lock_relative: str,
+    lock_file: Path,
+) -> None:
+    """Verify commit, tag target, and bound blobs in a tagged/released checkout."""
+    resolved_commit = (
+        _git_output(root, "rev-parse", "--verify", f"{source_commit}^{{commit}}")
+        .decode("ascii")
+        .strip()
+    )
+    if resolved_commit != source_commit:
+        raise ContractError(
+            f"source_commit does not resolve to the requested Git commit: {source_commit}"
+        )
+    if release_status in {"tagged", "released"}:
+        if not release_tag:
+            raise ContractError("tagged/released envelopes require a release tag")
+        tag_target = (
+            _git_output(root, "rev-parse", "--verify", f"refs/tags/{release_tag}^{{commit}}")
+            .decode("ascii")
+            .strip()
+        )
+        if tag_target != source_commit:
+            raise ContractError(
+                f"release tag {release_tag!r} does not resolve to source_commit {source_commit}"
+            )
+    for relative, local_file, label in (
+        (contract_relative, contract_file, "contract"),
+        (lock_relative, lock_file, "lock"),
+    ):
+        committed_bytes = _git_output(root, "show", f"{source_commit}:{relative}")
+        if sha256_bytes(committed_bytes) != sha256_file(local_file):
+            raise ContractError(f"{label} bytes do not match the source commit {source_commit}")
 
 
 def _reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -1443,6 +1499,12 @@ def classify_contract_change(
     breaking: list[str] = []
     deprecated: list[str] = []
     additive: list[str] = []
+    baseline_features = set(baseline["minimum_consumer_features"])
+    candidate_features = set(candidate["minimum_consumer_features"])
+    for feature in sorted(candidate_features - baseline_features):
+        breaking.append(
+            f"added required consumer feature {feature}; existing consumers may reject the contract"
+        )
     for capability_id in sorted(set(baseline_caps) - set(candidate_caps)):
         breaking.append(f"removed capability {capability_id}")
     for capability_id in sorted(set(candidate_caps) - set(baseline_caps)):
@@ -1482,7 +1544,11 @@ def check_declared_change(
     if declared != actual:
         errors.append(f"candidate declares {declared!r}, but the detected change is {actual!r}")
     baseline_major = _semver(baseline["contract_version"], "baseline.contract_version")[0]
-    candidate_major = _semver(candidate["contract_version"], "candidate.contract_version")[0]
+    baseline_version = _semver(baseline["contract_version"], "baseline.contract_version")
+    candidate_version = _semver(candidate["contract_version"], "candidate.contract_version")
+    candidate_major = candidate_version[0]
+    if declared != "initial" and candidate_version <= baseline_version:
+        errors.append("non-initial candidate contract_version must be greater than the baseline")
     if actual == "breaking" and candidate_major <= baseline_major:
         errors.append("breaking changes require a new contract major")
     if actual in {"additive", "deprecated", "unchanged"} and candidate_major != baseline_major:
@@ -1523,6 +1589,17 @@ def build_revision_envelope(
     lock_relative, lock_file = _root_relative_existing_path(
         root, lock_path, "revision envelope lock path"
     )
+    if release_status in {"tagged", "released"}:
+        _verify_git_binding(
+            root=root,
+            source_commit=source_commit,
+            release_status=release_status,
+            release_tag=release_tag,
+            contract_relative=contract_relative,
+            contract_file=contract_file,
+            lock_relative=lock_relative,
+            lock_file=lock_file,
+        )
     validate_contract_path(
         contract_file,
         schema_path=_path_argument(root, contract_schema_path),
@@ -1582,6 +1659,19 @@ def validate_revision_envelope_path(
                 schema_path=_path_argument(root, contract_schema_path),
                 root=root,
             )
+    if envelope["release_status"] in {"tagged", "released"}:
+        contract_relative = str(envelope["contract"]["path"])
+        lock_relative = str(envelope["lock"]["path"])
+        _verify_git_binding(
+            root=root,
+            source_commit=str(envelope["source_commit"]),
+            release_status=str(envelope["release_status"]),
+            release_tag=str(envelope.get("release_tag")),
+            contract_relative=contract_relative,
+            contract_file=root / contract_relative,
+            lock_relative=lock_relative,
+            lock_file=root / lock_relative,
+        )
     return envelope
 
 

@@ -146,7 +146,8 @@ of `additive`, `deprecated`, or `breaking`.
 V1 classifies a new capability ID as additive. It classifies an explicit
 deprecation record as deprecated. Removal, interface-major change, semantics-ID
 change, CLI command or exit-code change, schema/protocol/convention identity
-change, and changed deprecation semantics are breaking.
+change, changed deprecation semantics, and a newly required consumer-validator
+feature are breaking.
 
 V1 treats every changed authoritative selector digest for an existing
 capability as breaking. It does this even when the interface has a same-major
@@ -159,8 +160,9 @@ A transition to `deprecated` uses the deprecation class. Every other status
 transition is breaking because status is an explicit consumer match field.
 
 Breaking changes require a new contract major. Additive, deprecation, and
-unchanged records must preserve the contract major. A breaking change labeled
-as additive fails validation.
+unchanged records must preserve the contract major. Every non-initial candidate
+version must also be strictly greater than its baseline. A breaking change
+labeled as additive fails validation.
 
 ## Revision envelope
 
@@ -177,7 +179,10 @@ Release assembly can create a separate revision envelope. The envelope binds:
 - The generator path, version, and canonicalization profile.
 
 The envelope is also canonical RFC 8785 JSON. Validation resolves both bound
-paths inside the repository and recomputes both digests.
+paths inside the repository and recomputes both digests. Tagged and released
+envelopes additionally verify that the source commit exists, the tag resolves
+to that commit, and both bound files are the blobs at that commit. An
+unreleased envelope is a preparation record and is not release evidence.
 
 ## Commands
 

@@ -141,6 +141,19 @@ TRAJECTORY_DEPENDENT_CATEGORIES = frozenset(
 RE_DERIVABLE = "re-derivable"
 REPLAY_REQUIRED = "replay-required"
 VALID_CLASSIFICATIONS = frozenset({RE_DERIVABLE, REPLAY_REQUIRED})
+REQUIRED_OUTCOME_FIELDS = frozenset(
+    {
+        "outcome_id",
+        "outcome",
+        "category",
+        "radius_binding",
+        "source_geometry_retained_in_frozen_rows",
+        "is_collision_contact_feasibility_or_planner_outcome",
+        "classification",
+        "rationale",
+        "caveats",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -700,6 +713,27 @@ def build_gate0_decision() -> dict[str, Any]:
 ALLOWED_RE_DERIVABLE_IDS = frozenset()
 
 
+def _validate_outcome_schema_fields(entry: dict[str, Any]) -> None:
+    """Validate the required fields and types of one outcome entry."""
+    missing_fields = REQUIRED_OUTCOME_FIELDS - entry.keys()
+    if missing_fields:
+        raise ValueError(f"each outcome is missing required fields: {sorted(missing_fields)}")
+
+    for field in ("outcome_id", "outcome", "category", "radius_binding", "rationale"):
+        if not isinstance(entry[field], str) or not entry[field].strip():
+            raise ValueError(f"outcome field {field!r} must be a non-empty string")
+    for field in (
+        "source_geometry_retained_in_frozen_rows",
+        "is_collision_contact_feasibility_or_planner_outcome",
+    ):
+        if not isinstance(entry[field], bool):
+            raise ValueError(f"outcome field {field!r} must be a boolean")
+    if not isinstance(entry["caveats"], list) or not all(
+        isinstance(caveat, str) and caveat.strip() for caveat in entry["caveats"]
+    ):
+        raise ValueError("outcome field 'caveats' must be a list of non-empty strings")
+
+
 def _validate_outcome_entry(entry: Any, seen_ids: set[str]) -> str | None:
     """Validate one outcome entry and return its id when it is re-derivable.
 
@@ -708,6 +742,8 @@ def _validate_outcome_entry(entry: Any, seen_ids: set[str]) -> str | None:
     """
     if not isinstance(entry, dict):
         raise ValueError("each outcome must be a dict")
+    _validate_outcome_schema_fields(entry)
+
     outcome_id = entry.get("outcome_id")
     if not isinstance(outcome_id, str) or not outcome_id:
         raise ValueError("each outcome needs a non-empty string outcome_id")

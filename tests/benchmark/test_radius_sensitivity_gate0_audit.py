@@ -3,8 +3,8 @@
 These tests pin the post-hoc-versus-replay boundary for the collision-envelope radius campaign
 (parent #6600) and enforce the immutable stop conditions: trajectory-dependent planner,
 obstacle-contact, feasibility, and collision outcomes are always replay-required; the
-re-derivable set is narrow (retained parameters + static-map-geometry threshold reclassification)
-and must not read as a radius sweep.
+re-derivable set is currently empty because the frozen release has unresolved effective-radius and
+map-provenance gaps; the decision must not read as a radius sweep.
 """
 
 from __future__ import annotations
@@ -329,6 +329,34 @@ def test_validator_rejects_bad_schema_and_empty_outcomes():
     empty["outcomes"] = []
     with pytest.raises(ValueError, match="non-empty list"):
         validate_gate0_decision(empty)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "outcome",
+        "category",
+        "radius_binding",
+        "source_geometry_retained_in_frozen_rows",
+        "is_collision_contact_feasibility_or_planner_outcome",
+        "rationale",
+        "caveats",
+    ],
+)
+def test_validator_rejects_outcome_missing_required_schema_field(field):
+    decision = build_gate0_decision()
+    tampered = copy.deepcopy(decision)
+    del tampered["outcomes"][0][field]
+    with pytest.raises(ValueError, match="missing required fields"):
+        validate_gate0_decision(tampered)
+
+
+def test_validator_rejects_malformed_outcome_field_types():
+    decision = build_gate0_decision()
+    tampered = copy.deepcopy(decision)
+    tampered["outcomes"][0]["is_collision_contact_feasibility_or_planner_outcome"] = "false"
+    with pytest.raises(ValueError, match="must be a boolean"):
+        validate_gate0_decision(tampered)
 
 
 def test_registry_is_consistent_with_decision():

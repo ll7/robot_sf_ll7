@@ -1,0 +1,41 @@
+# Issue #6474 nominal social-compliance cross-planner campaign scenario matrix.
+#
+# Purpose:
+#   Freeze the exact six #6102 medium-band scenario identifiers for the
+#   #6474 social-compliance cross-planner comparison.  These six identifiers
+#   are copied verbatim from the registered #6102 robot speed-tier campaign
+#   (configs/scenarios/classic_interactions.yaml) so the social-compliance
+#   comparison reuses the same frozen scenario content rather than a new suite.
+#
+# Frozen scenario identifiers (exact #6102 medium-band subset, in frozen order):
+#   - classic_head_on_corridor_medium
+#   - classic_doorway_medium
+#   - classic_group_crossing_medium
+#   - classic_merging_medium
+#   - classic_overtaking_medium
+#   - classic_station_platform_medium
+#
+# Scenario content hash (SHA-256 over the six selected scenario payloads,
+# serialized canonically in the frozen order above, as loaded from
+# configs/scenarios/classic_interactions.yaml):
+#   b9edec86c0c94650ab3e22b0a2404c9d006a65ed8f22545007f13eecb07cdbee
+#
+# This matrix is a preregistration surface for issue #6474 / child #6638.
+# It establishes NO planner ranking, fairness, ethics, safety, legibility,
+# social-validity, or real-world claim.  Fallback or degraded rows are
+# unavailable and cannot count as successful evidence.  See the preregistration
+# document docs/context/evidence/issue_6474_social_compliance_preregistration.json
+# for the full claim boundary, multiplicity family, and stop rules.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - classic_interactions.yaml
+select_scenarios:
+  - classic_head_on_corridor_medium
+  - classic_doorway_medium
+  - classic_group_crossing_medium
+  - classic_merging_medium
+  - classic_overtaking_medium
+  - classic_station_platform_medium
+map_search_paths:
+  - ../../maps/svg_maps

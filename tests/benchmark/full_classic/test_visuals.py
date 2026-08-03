@@ -2,27 +2,43 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import json
 import sys
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-# ``visuals`` imports the SimulationView stack, whose optional pygame dependency
-# is not installed in the core test lane.  Stub it only while importing the
-# unit under test; the exercised paths below replace all renderer interactions.
-_injected_pygame = "pygame" not in sys.modules
-if _injected_pygame:
-    sys.modules["pygame"] = MagicMock()
+_RENDER_SIM_VIEW_MODULE = "robot_sf.benchmark.full_classic.render_sim_view"
+
+
+def _install_render_sim_view_stub_if_pygame_missing() -> ModuleType | None:
+    """Install the narrow Full Classic renderer seam when pygame is unavailable."""
+    if importlib.util.find_spec("pygame") is not None:
+        return None
+    if _RENDER_SIM_VIEW_MODULE in sys.modules:
+        return None
+
+    stub = ModuleType(_RENDER_SIM_VIEW_MODULE)
+
+    def generate_frames(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("SimulationView not available (pygame missing)")
+
+    stub.generate_frames = generate_frames  # type: ignore[attr-defined]
+    sys.modules[_RENDER_SIM_VIEW_MODULE] = stub
+    return stub
+
+
+_render_sim_view_stub = _install_render_sim_view_stub_if_pygame_missing()
 from robot_sf.benchmark.full_classic import visuals  # noqa: E402
 from robot_sf.benchmark.full_classic.visual_constants import (  # noqa: E402
     NOTE_SMOKE_MODE,
     RENDERER_SIM_VIEW,
 )
 
-if _injected_pygame:
-    del sys.modules["pygame"]
+if sys.modules.get(_RENDER_SIM_VIEW_MODULE) is _render_sim_view_stub:
+    del sys.modules[_RENDER_SIM_VIEW_MODULE]
 
 
 def _config(**overrides: object) -> SimpleNamespace:
@@ -36,6 +52,14 @@ def _config(**overrides: object) -> SimpleNamespace:
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def test_import_does_not_mock_renderer_pygame() -> None:
+    """Importing this test module must not poison shared renderer module state."""
+    pygame = pytest.importorskip("pygame")
+    sim_view = importlib.import_module("robot_sf.render.sim_view")
+
+    assert sim_view.pygame is pygame
 
 
 def test_smoke_path_writes_skipped_fallback_artifacts(

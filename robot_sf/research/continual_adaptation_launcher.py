@@ -108,55 +108,93 @@ def get_continual_adaptation_output_root() -> Path:
     return get_artifact_root() / "continual_adaptation_diagnostics"
 
 
-def _resolve_output_dir(output_dir: str | Path, *, require_artifact_root: bool = False) -> Path:
+def _validated_artifact_root() -> Path:
+    """Resolve the artifact root and reject repository-local tracked locations.
+
+    External roots are supported for temporary directories and controlled artifact
+    stores. A root inside this repository must stay below the canonical ``output/``
+    directory so an environment override cannot redirect diagnostics into tracked or
+    forbidden paths.
+
+    Returns:
+        The resolved, validated artifact root.
+
+    Raises:
+        ContinualAdaptationProtocolError: when a repository-local artifact root is
+            outside the canonical ``output/`` directory.
+    """
+    artifact_root = get_artifact_root().expanduser().resolve()
+    repository_root = _REPOSITORY_ROOT.resolve()
+    canonical_repository_artifact_root = (repository_root / "output").resolve()
+
+    try:
+        artifact_root.relative_to(repository_root)
+    except ValueError:
+        return artifact_root
+
+    try:
+        artifact_root.relative_to(canonical_repository_artifact_root)
+    except ValueError:
+        raise ContinualAdaptationProtocolError(
+            [
+                f"configured artifact root {artifact_root} is inside the repository but "
+                f"outside canonical output {canonical_repository_artifact_root}; diagnostic "
+                "outputs must never target tracked or forbidden repository paths"
+            ]
+        ) from None
+    return artifact_root
+
+
+def _resolve_output_dir(output_dir: str | Path, *, namespace_root: Path | None = None) -> Path:
     """Resolve an output directory and enforce the repository artifact boundary.
 
-    Repository-local output overrides must stay under the configured artifact
-    root so a caller cannot redirect this launcher into tracked or forbidden
-    repository paths. External temporary directories remain valid for isolated
-    tests and controlled artifact-store integrations.
+    Every output must stay under the validated configured artifact root. External
+    temporary directories remain valid when they are configured as that root. The
+    default run path has the narrower continual-adaptation diagnostic namespace as
+    its required root so a path-valued ``run_id`` cannot reach a sibling namespace.
 
     Args:
         output_dir: Requested diagnostic output directory.
-        require_artifact_root: Whether the resolved path must remain below the
-            configured artifact root. This is required for the default path,
-            whose final component comes from the manifest ``run_id``.
+        namespace_root: Optional narrower namespace that must contain the output.
 
     Returns:
         The resolved output directory.
 
     Raises:
-        ContinualAdaptationProtocolError: when the default path escapes the
-            configured artifact root, or when an explicit repository-local path
-            is outside that root.
+        ContinualAdaptationProtocolError: when the artifact root is invalid or the
+            output escapes its required boundary.
     """
     resolved = Path(output_dir).expanduser().resolve()
-    artifact_root = get_artifact_root().expanduser().resolve()
-    try:
-        resolved.relative_to(artifact_root)
-    except ValueError:
-        if require_artifact_root:
-            raise ContinualAdaptationProtocolError(
-                [
-                    f"output_dir {resolved} escapes the configured artifact root "
-                    f"{artifact_root}; the manifest run_id must keep default diagnostics "
-                    "under output/"
-                ]
-            ) from None
-    else:
-        return resolved
-
-    try:
-        resolved.relative_to(_REPOSITORY_ROOT)
-    except ValueError:
-        return resolved
-
-    raise ContinualAdaptationProtocolError(
-        [
-            f"output_dir {resolved} is inside the repository but outside the configured "
-            f"artifact root {artifact_root}; diagnostic outputs must remain under output/"
-        ]
+    artifact_root = _validated_artifact_root()
+    required_root = (
+        Path(namespace_root).expanduser().resolve() if namespace_root is not None else artifact_root
     )
+    try:
+        required_root.relative_to(artifact_root)
+    except ValueError:
+        raise ContinualAdaptationProtocolError(
+            [
+                f"diagnostic output namespace {required_root} escapes the configured "
+                f"artifact root {artifact_root}"
+            ]
+        ) from None
+
+    try:
+        resolved.relative_to(required_root)
+    except ValueError:
+        boundary_name = (
+            "diagnostic output namespace"
+            if namespace_root is not None
+            else "configured artifact root"
+        )
+        raise ContinualAdaptationProtocolError(
+            [
+                f"output_dir {resolved} escapes the {boundary_name} {required_root}; "
+                "diagnostic outputs must remain below that boundary"
+            ]
+        ) from None
+
+    return resolved
 
 
 def build_adaptation_diagnostic(manifest: Mapping[str, Any]) -> dict[str, Any]:
@@ -259,10 +297,9 @@ def run_continual_adaptation_diagnostics(
         manifest: A ``continual_adaptation_run.v1`` mapping. Schema-validated by
             the protocol checker.
         source: Optional source path used only for error messages.
-        output_dir: Diagnostic output directory. Defaults to
+        output_dir: Diagnostic output directory below the configured artifact root. Defaults to
             ``<artifact_root>/continual_adaptation_diagnostics/<run_id>``.
-            Repository-local overrides must remain under the configured artifact
-            root.
+            Repository-local artifact roots must remain under canonical ``output/``.
 
     Returns:
         The diagnostic report describing the (un-executed) bounded adaptation and
@@ -280,11 +317,10 @@ def run_continual_adaptation_diagnostics(
     evaluations = build_evaluation_diagnostics(manifest)
 
     run_id = str(manifest["run_id"])
+    diagnostic_output_root = get_continual_adaptation_output_root()
     target_dir = _resolve_output_dir(
-        Path(output_dir)
-        if output_dir is not None
-        else get_continual_adaptation_output_root() / run_id,
-        require_artifact_root=output_dir is None,
+        Path(output_dir) if output_dir is not None else diagnostic_output_root / run_id,
+        namespace_root=diagnostic_output_root if output_dir is None else None,
     )
     target_dir.mkdir(parents=True, exist_ok=True)
 

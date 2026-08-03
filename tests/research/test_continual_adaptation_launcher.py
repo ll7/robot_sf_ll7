@@ -49,6 +49,12 @@ def _load_example_manifest() -> dict:
     return load_continual_adaptation_run(EXAMPLE_MANIFEST_PATH)
 
 
+@pytest.fixture(autouse=True)
+def _keep_diagnostic_outputs_in_test_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Keep every explicit launcher output under the configured test artifact root."""
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
+
+
 def test_example_manifest_launch_writes_diagnostic_outputs(tmp_path: Path) -> None:
     """The shipped example manifest is protocol-valid and writes all diagnostics."""
     manifest = _load_example_manifest()
@@ -184,6 +190,37 @@ def test_repo_local_output_override_inside_artifact_root_is_allowed(
     assert report.output_files[0] == str(output_dir / "adaptation.json")
 
 
+def test_explicit_output_rejects_path_outside_artifact_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An explicit output cannot bypass the configured artifact-root boundary."""
+    artifact_root = tmp_path / "artifacts"
+    output_dir = tmp_path / "outside" / "run"
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(artifact_root))
+
+    with pytest.raises(ContinualAdaptationProtocolError, match="configured artifact root"):
+        run_continual_adaptation_diagnostics(_load_example_manifest(), output_dir=output_dir)
+
+    assert not output_dir.exists()
+
+
+def test_repository_local_artifact_root_must_be_canonical_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A repository-local artifact root cannot point at tracked or forbidden paths."""
+    repository_root = tmp_path / "repo"
+    artifact_root = repository_root / "docs" / "context" / "evidence"
+    output_dir = artifact_root / "continual_adaptation_diagnostics" / "run"
+    repository_root.mkdir()
+    monkeypatch.setattr(launcher_module, "_REPOSITORY_ROOT", repository_root)
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(artifact_root))
+
+    with pytest.raises(ContinualAdaptationProtocolError, match="canonical output"):
+        run_continual_adaptation_diagnostics(_load_example_manifest(), output_dir=output_dir)
+
+    assert not artifact_root.exists()
+
+
 def test_default_output_root_honors_artifact_root(monkeypatch: pytest.MonkeyPatch) -> None:
     """The default diagnostic root lives under the (overridable) artifact root."""
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", "/tmp/ca_artifact_root")
@@ -192,22 +229,22 @@ def test_default_output_root_honors_artifact_root(monkeypatch: pytest.MonkeyPatc
     )
 
 
-def test_default_output_rejects_run_id_that_escapes_artifact_root(
+def test_default_output_rejects_run_id_that_escapes_diagnostic_namespace(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A manifest run ID cannot redirect the implicit output outside the artifact root."""
+    """A manifest run ID cannot redirect output into a sibling artifact namespace."""
     repository_root = tmp_path / "repo"
     artifact_root = repository_root / "output"
     repository_root.mkdir()
     monkeypatch.setattr(launcher_module, "_REPOSITORY_ROOT", repository_root)
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(artifact_root))
     manifest = _load_example_manifest()
-    manifest["run_id"] = "../../../escaped"
+    manifest["run_id"] = "../sibling-namespace"
 
-    with pytest.raises(ContinualAdaptationProtocolError, match="escapes the configured artifact"):
+    with pytest.raises(ContinualAdaptationProtocolError, match="diagnostic output namespace"):
         run_continual_adaptation_diagnostics(manifest)
 
-    assert not (tmp_path / "escaped").exists()
+    assert not (artifact_root / "sibling-namespace").exists()
 
 
 def test_render_markdown_states_diagnostic_boundary(tmp_path: Path) -> None:

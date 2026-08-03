@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.artifact_catalog import (
+    ARTIFACT_CATALOG_SCHEMA_V2,
     ARTIFACT_CATALOG_SCHEMA_VERSION,
     ArtifactCatalogValidationError,
     _is_local_only_path,
@@ -43,6 +44,63 @@ def test_load_valid_catalog_as_typed_metadata() -> None:
         "tab_planner_execution_modes",
     ]
     assert catalog.artifacts[0].outputs["png"].path == "fig_benchmark_outcome_matrix.png"
+
+
+def test_v2_schema_requires_figure_semantics_and_loads_typed_metadata(tmp_path: Path) -> None:
+    """v2 figures require explicit publication metadata while v1 remains unchanged."""
+    figure = tmp_path / "figure.png"
+    figure.write_bytes(b"fixture figure")
+    caption = tmp_path / "caption.md"
+    caption.write_text("caption\n", encoding="utf-8")
+    ref = {"path": figure.name, "sha256": sha256_file(figure)}
+    payload = {
+        "schema_version": ARTIFACT_CATALOG_SCHEMA_V2,
+        "catalog_id": "v2_fixture",
+        "artifacts": [
+            {
+                "artifact_id": "fig_v2",
+                "artifact_kind": "figure",
+                "source_kind": "fixture",
+                "source_files": [ref],
+                "outputs": {"bin": ref},
+                "generation_command": "pytest fixture",
+                "generation_commit": "44f4f364",
+                "claim_boundary": "fixture only",
+                "caption_file": {
+                    "path": caption.name,
+                    "sha256": sha256_file(caption),
+                },
+                "figure_semantics": {
+                    "metric_id": "fixture_metric",
+                    "unit": "count",
+                    "desirability": "not_applicable",
+                    "support": 0,
+                    "denominator": 0,
+                    "comparison": False,
+                    "uncertainty_declared": False,
+                    "uncertainty_method": None,
+                    "tie_policy": "not_applicable",
+                    "legend_series": [],
+                    "legend_complete": True,
+                    "accessibility_palette_contract": None,
+                },
+            }
+        ],
+    }
+    catalog_path = tmp_path / "catalog.yaml"
+    catalog_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    assert validate_artifact_catalog(catalog_path) == []
+    catalog = load_artifact_catalog(catalog_path)
+    assert catalog.schema_version == ARTIFACT_CATALOG_SCHEMA_V2
+    assert catalog.artifacts[0].figure_semantics is not None
+
+    del payload["artifacts"][0]["figure_semantics"]
+    catalog_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    issues = validate_artifact_catalog(catalog_path)
+    assert any(
+        issue.path == "/artifacts/0" and "figure_semantics" in issue.message for issue in issues
+    )
 
 
 @pytest.mark.parametrize(

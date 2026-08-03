@@ -93,6 +93,9 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Issue #6469 benchmark module reorganization plan (ghost `util`/`utils` confirmation and proposed
+  benchmark domain subdirectories; planning only):
+  [issue_6469_benchmark_reorganization_plan.md](issue_6469_benchmark_reorganization_plan.md)
 * Collision causality, online risk, and Chapter 7 scenario discovery:
   [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
@@ -119,6 +122,8 @@ knowledge, not every transient iteration detail.
   [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md)
 * Issue #5579 MPC tuning-budget sensitivity packet:
   [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md)
+* Issue #6641 Gate 1 runtime radius-binding canary:
+  [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 

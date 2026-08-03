@@ -7,6 +7,11 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.passing_clearance import (
+    PassingClearanceContract,
+    resolve_passing_clearance_contract,
+)
+
 SOCIAL_COMPLIANCE_SCHEMA_VERSION = "social-compliance-metric-contract.v1"
 SOCIAL_COMPLIANCE_CLAIM_CLASS = "diagnostic_proxy"
 
@@ -97,6 +102,7 @@ def build_social_compliance_episode_block(
     data: Any,
     *,
     comfort_radius_m: float = 1.2,
+    passing_clearance_contract: PassingClearanceContract | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Emit the contract block, computing only signals supported by native episode data.
 
@@ -114,13 +120,15 @@ def build_social_compliance_episode_block(
         return unavailable_social_compliance_block()
     if peds_pos.shape[1] == 0:
         return unavailable_social_compliance_block(no_pedestrians=True)
-    try:
-        timestep = float(dt)
-        radius = float(comfort_radius_m)
-        robot_radius = float(getattr(data, "robot_radius", None))
-        ped_radius = float(getattr(data, "ped_radius", None))
-    except (TypeError, ValueError):
+    parameters = _resolve_social_parameters(
+        data,
+        dt=dt,
+        comfort_radius_m=comfort_radius_m,
+        passing_clearance_contract=passing_clearance_contract,
+    )
+    if parameters is None:
         return unavailable_social_compliance_block()
+    timestep, radius, robot_radius, ped_radius, contract = parameters
     if (
         not math.isfinite(timestep)
         or timestep <= 0.0
@@ -151,7 +159,54 @@ def build_social_compliance_episode_block(
     block = unavailable_social_compliance_block()
     block["metrics"]["comfort_exposure_person_s"] = row
     block["parameters"] = {"comfort_radius_m": radius, "timestep_seconds": timestep}
+    if contract is not None:
+        block["parameters"]["passing_clearance_contract"] = contract.to_dict()
+        block["parameters"]["passing_clearance_contract_hash"] = contract.profile_hash
     return block
+
+
+def _resolve_social_parameters(
+    data: Any,
+    *,
+    dt: object,
+    comfort_radius_m: float,
+    passing_clearance_contract: PassingClearanceContract | dict[str, Any] | None,
+) -> tuple[float, float, float, float, PassingClearanceContract | None] | None:
+    """Resolve timestep, comfort radius, and footprint radii for one episode.
+
+    Returns:
+        ``(timestep, surface radius, robot radius, pedestrian radius, contract)``
+        or ``None`` when the supplied parameters are unavailable.
+    """
+    try:
+        timestep = float(dt)
+        contract = resolve_passing_clearance_contract(passing_clearance_contract)
+        if contract is None:
+            radius = float(comfort_radius_m)
+            robot_radius = float(getattr(data, "robot_radius", None))
+            ped_radius = float(getattr(data, "ped_radius", None))
+        else:
+            radius = contract.desired_clearance_m
+            if radius is None:
+                radius = contract.minimum_clearance_m
+            if radius is None:
+                return None
+            robot_radius = contract.robot_radius_m
+            ped_radius = contract.pedestrian_radius_m
+    except (TypeError, ValueError):
+        return None
+    if (
+        not math.isfinite(timestep)
+        or timestep <= 0.0
+        or not math.isfinite(radius)
+        or radius < 0.0
+        or not math.isfinite(robot_radius)
+        or robot_radius < 0.0
+        or not math.isfinite(ped_radius)
+        or ped_radius < 0.0
+    ):
+        return None
+    return timestep, radius, robot_radius, ped_radius, contract
 
 
 __all__ = [

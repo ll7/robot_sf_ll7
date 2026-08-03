@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from robot_sf.adversarial.attribution import FailureAttribution
-    from robot_sf.adversarial.certification import CertificationStatus
+    from robot_sf.adversarial.certification_types import CertificationStatus
 
 #: Frozen candidate timing dimensions that the #5303 search-promotion path must bind to a
 #: concrete pedestrian. The side-effect-free promotion preflight rejects any of these that

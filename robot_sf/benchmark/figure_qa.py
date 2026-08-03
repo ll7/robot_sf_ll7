@@ -19,6 +19,7 @@ from PIL import Image
 from robot_sf.benchmark.artifact_catalog import (
     ArtifactCatalog,
     ArtifactCatalogEntry,
+    FigureSemantics,
     load_artifact_catalog,
 )
 
@@ -43,6 +44,7 @@ class FigureQA:
     artifact_id: str
     check: str
     message: str
+    severity: str = "error"
 
 
 def check_figure_file(
@@ -120,6 +122,7 @@ def check_figure_entry(
     catalog_dir: Path,
     required_formats: frozenset[str] = _DEFAULT_REQUIRED_FORMATS,
     allowed_formats: frozenset[str] = _DEFAULT_ALLOWED_FORMATS,
+    semantic_checks: bool = False,
 ) -> list[FigureQA]:
     """Run QA checks on a single catalog figure entry.
 
@@ -129,6 +132,7 @@ def check_figure_entry(
         catalog_dir: Directory used to resolve relative file paths.
         required_formats: Output formats that every figure entry must include.
         allowed_formats:  Output formats permitted for figure entries.
+        semantic_checks: Whether to validate artifact_catalog.v2 figure metadata.
 
     Returns:
         List of ``FigureQA`` results.  Empty means all checks passed.
@@ -137,6 +141,8 @@ def check_figure_entry(
         return []
 
     issues: list[FigureQA] = []
+    if semantic_checks:
+        issues.extend(_check_figure_semantics(entry))
     output_formats = {output_key.lower() for output_key in entry.outputs}
     for required_format in sorted(required_formats):
         if required_format not in output_formats:
@@ -183,6 +189,131 @@ def check_figure_entry(
     return issues
 
 
+def _check_figure_semantics(entry: ArtifactCatalogEntry) -> list[FigureQA]:
+    """Validate declared v2 publication metadata without inspecting pixels.
+
+    Returns:
+        Stable metadata-QA findings. Empty means the declaration is internally
+        consistent, apart from explicitly unavailable accessibility metadata.
+    """
+
+    semantics = entry.figure_semantics
+    if semantics is None:
+        return [
+            FigureQA(
+                entry.artifact_id,
+                "semantic_metadata",
+                "artifact_catalog.v2 figure is missing figure_semantics metadata",
+            )
+        ]
+
+    issues = _check_semantic_scalar_fields(entry, semantics)
+    if semantics.comparison:
+        issues.extend(_check_comparison_semantics(entry, semantics))
+    issues.extend(_check_accessibility_semantics(entry, semantics))
+    return issues
+
+
+def _check_semantic_scalar_fields(
+    entry: ArtifactCatalogEntry,
+    semantics: FigureSemantics,
+) -> list[FigureQA]:
+    """Validate scalar figure-semantic declarations.
+
+    Returns:
+        Scalar metadata findings.
+    """
+
+    issues: list[FigureQA] = []
+    if not semantics.metric_id.strip():
+        issues.append(FigureQA(entry.artifact_id, "semantic_metric", "metric_id must be non-empty"))
+    if not semantics.unit.strip():
+        issues.append(FigureQA(entry.artifact_id, "semantic_unit", "unit must be non-empty"))
+    if semantics.support < 0:
+        issues.append(
+            FigureQA(entry.artifact_id, "semantic_support", "support must be non-negative")
+        )
+    if semantics.denominator < 0:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_denominator",
+                "denominator must be non-negative",
+            )
+        )
+    if semantics.support > semantics.denominator:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_support",
+                "support cannot exceed denominator",
+            )
+        )
+    if not semantics.tie_policy.strip():
+        issues.append(FigureQA(entry.artifact_id, "semantic_ties", "tie_policy must be non-empty"))
+    return issues
+
+
+def _check_comparison_semantics(
+    entry: ArtifactCatalogEntry,
+    semantics: FigureSemantics,
+) -> list[FigureQA]:
+    """Validate comparison-specific uncertainty and legend declarations.
+
+    Returns:
+        Comparison metadata findings.
+    """
+
+    issues: list[FigureQA] = []
+    if not semantics.uncertainty_declared:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_uncertainty",
+                "comparison figures must declare uncertainty",
+            )
+        )
+    if not semantics.legend_series:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_legend",
+                "comparison figures must declare legend series identities",
+            )
+        )
+    if not semantics.legend_complete:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_legend",
+                "legend completeness must be true for comparison figures",
+            )
+        )
+    return issues
+
+
+def _check_accessibility_semantics(
+    entry: ArtifactCatalogEntry,
+    semantics: FigureSemantics,
+) -> list[FigureQA]:
+    """Report accessibility metadata that cannot be checked deterministically.
+
+    Returns:
+        An unavailable finding when no deterministic palette contract exists.
+    """
+
+    if semantics.accessibility_palette_contract is not None:
+        return []
+    return [
+        FigureQA(
+            entry.artifact_id,
+            "semantic_accessibility",
+            "no deterministic accessibility palette contract was declared",
+            severity="unavailable",
+        )
+    ]
+
+
 def validate_figures_in_catalog(
     catalog: ArtifactCatalog,
     *,
@@ -211,6 +342,7 @@ def validate_figures_in_catalog(
                 catalog_dir=catalog_dir,
                 required_formats=required_formats,
                 allowed_formats=allowed_formats,
+                semantic_checks=catalog.schema_version == "artifact_catalog.v2",
             )
         )
     return issues

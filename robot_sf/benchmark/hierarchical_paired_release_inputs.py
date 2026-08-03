@@ -1,14 +1,16 @@
 """Fail-closed input readiness reporting for issue #5351's release analysis.
 
 The hierarchical paired analysis is intentionally downstream of the #4364
-successor release.  This module records that dependency in a machine-readable
-manifest and prevents a missing release tag or typed-ledger export from being
-mistaken for an analysable release dataset.  It does not compute statistics,
-change frozen metric semantics, or promote a benchmark claim.
+successor release. This module records that dependency in a machine-readable
+manifest and prevents a missing release tag, typed-ledger export, or invalid
+analysis report from being mistaken for an analysable release dataset. It does
+not compute statistics, change frozen metric semantics, or promote a benchmark
+claim.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -27,6 +29,12 @@ HIERARCHICAL_PAIRED_RELEASE_INPUT_REPORT_SCHEMA = (
 )
 BLOCKED_MISSING_SUCCESSOR_ROWS = "blocked_missing_successor_release_rows"
 INPUTS_READY_ANALYSIS_NOT_RUN = "inputs_ready_analysis_not_run"
+ANALYSIS_DELIVERED_REVIEW_PENDING = "analysis_delivered_review_pending"
+BLOCKED_INVALID_ANALYSIS_ARTIFACT = "blocked_invalid_analysis_artifact"
+DEFAULT_ANALYSIS_REPORT_RELATIVE_PATH = (
+    "docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/"
+    "hierarchical_paired_release_analysis_report.json"
+)
 _REQUIRED_PROTOCOL_IDS = (
     "paired_effects",
     "hierarchical_intervals",
@@ -70,7 +78,7 @@ def validate_hierarchical_paired_release_input_manifest(
     """Validate the static contract without requiring unavailable release artifacts.
 
     The manifest remains valid while blocked; runtime presence is evaluated separately so
-    that the pre-release contract can be reviewed before #4364 produces its successor rows.
+    that the input contract and its delivered analysis remain distinct from claim admission.
 
     Returns:
         A shallow-normalized manifest mapping.
@@ -98,18 +106,57 @@ def evaluate_hierarchical_paired_release_inputs(
     """Evaluate the successor-release prerequisites and emit a claim-gate report.
 
     Returns:
-        A deterministic report.  Even when inputs are present, its claim gate remains
-        blocked until the downstream statistical analysis is actually implemented and run.
+        A deterministic report. Input presence and analysis delivery are separate
+        states; the claim gate remains blocked pending human review.
     """
 
     normalized = validate_hierarchical_paired_release_input_manifest(manifest)
     root = Path(repo_root).resolve()
     successor_release = dict(normalized["successor_release"])
-    blockers = _successor_release_blockers(successor_release, repo_root=root)
-    status = BLOCKED_MISSING_SUCCESSOR_ROWS if blockers else INPUTS_READY_ANALYSIS_NOT_RUN
-    protocol_status = (
-        "blocked_missing_successor_release_rows" if blockers else "declared_pending_analysis"
-    )
+    successor_blockers = _successor_release_blockers(successor_release, repo_root=root)
+    blockers = list(successor_blockers)
+    analysis_artifact = _evaluate_analysis_artifact(root)
+    if not blockers and analysis_artifact["status"] == BLOCKED_INVALID_ANALYSIS_ARTIFACT:
+        blockers.append(
+            {
+                "field": "analysis_artifact",
+                "reason": str(analysis_artifact["reason"]),
+            }
+        )
+
+    if blockers:
+        status = (
+            BLOCKED_INVALID_ANALYSIS_ARTIFACT
+            if analysis_artifact["status"] == BLOCKED_INVALID_ANALYSIS_ARTIFACT
+            and not successor_blockers
+            else BLOCKED_MISSING_SUCCESSOR_ROWS
+        )
+        protocol_status = status
+        claim_gate = {
+            "status": "blocked_analysis_not_run",
+            "reason": (
+                "successor-release inputs are missing"
+                if status == BLOCKED_MISSING_SUCCESSOR_ROWS
+                else "the tracked analysis artifact failed validation"
+            ),
+        }
+        analysis_executed = False
+    elif analysis_artifact["status"] == ANALYSIS_DELIVERED_REVIEW_PENDING:
+        status = ANALYSIS_DELIVERED_REVIEW_PENDING
+        protocol_status = "delivered_analysis_pending_human_review"
+        claim_gate = {
+            "status": "blocked_review_pending",
+            "reason": str(analysis_artifact["claim_gate_reason"]),
+        }
+        analysis_executed = True
+    else:
+        status = INPUTS_READY_ANALYSIS_NOT_RUN
+        protocol_status = "declared_pending_analysis"
+        claim_gate = {
+            "status": "blocked_analysis_not_run",
+            "reason": "inputs are present but the hierarchical paired analysis has not run",
+        }
+        analysis_executed = False
     return {
         "schema_version": HIERARCHICAL_PAIRED_RELEASE_INPUT_REPORT_SCHEMA,
         "issue": 5351,
@@ -118,6 +165,7 @@ def evaluate_hierarchical_paired_release_inputs(
         "evidence_status": "not_benchmark_evidence",
         "successor_release": successor_release,
         "blocking_prerequisites": blockers,
+        "analysis_artifact": analysis_artifact,
         "protocol_conformance": [
             {
                 "id": item["id"],
@@ -126,19 +174,72 @@ def evaluate_hierarchical_paired_release_inputs(
             }
             for item in normalized["protocol"]
         ],
-        "claim_gate": {
-            "status": "blocked_analysis_not_run",
-            "reason": (
-                "successor-release inputs are missing"
-                if blockers
-                else "inputs are present but the hierarchical paired analysis has not run"
-            ),
-        },
+        "claim_gate": claim_gate,
         "semantics": {
             "benchmark_metrics_changed": False,
-            "analysis_executed": False,
+            "analysis_executed": analysis_executed,
             "claim_promotion": "none",
         },
+    }
+
+
+def _evaluate_analysis_artifact(repo_root: Path) -> dict[str, Any]:
+    """Check the tracked #5351 report without promoting its interpretation.
+
+    Returns:
+        Machine-readable presence, validity, checksum, and claim-gate state.
+    """
+
+    report_path = repo_root / DEFAULT_ANALYSIS_REPORT_RELATIVE_PATH
+    base: dict[str, Any] = {
+        "path": DEFAULT_ANALYSIS_REPORT_RELATIVE_PATH,
+        "present": report_path.is_file(),
+        "status": "not_present",
+    }
+    if not report_path.is_file():
+        return base
+
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            **base,
+            "status": BLOCKED_INVALID_ANALYSIS_ARTIFACT,
+            "reason": f"analysis report is unreadable: {exc}",
+        }
+    if not isinstance(payload, Mapping):
+        return {
+            **base,
+            "status": BLOCKED_INVALID_ANALYSIS_ARTIFACT,
+            "reason": "analysis report must be a JSON object",
+        }
+    if payload.get("issue") != 5351 or payload.get("analysis_executed") is not True:
+        return {
+            **base,
+            "status": BLOCKED_INVALID_ANALYSIS_ARTIFACT,
+            "reason": "analysis report must identify issue 5351 with analysis_executed=true",
+        }
+    if payload.get("evidence_status") != "not_benchmark_evidence":
+        return {
+            **base,
+            "status": BLOCKED_INVALID_ANALYSIS_ARTIFACT,
+            "reason": "analysis report must retain evidence_status=not_benchmark_evidence",
+        }
+    claim_gate = payload.get("claim_gate")
+    if not isinstance(claim_gate, Mapping) or claim_gate.get("status") != "blocked_review_pending":
+        return {
+            **base,
+            "status": BLOCKED_INVALID_ANALYSIS_ARTIFACT,
+            "reason": "analysis report must retain claim_gate.status=blocked_review_pending",
+        }
+    return {
+        **base,
+        "status": ANALYSIS_DELIVERED_REVIEW_PENDING,
+        "analysis_executed": True,
+        "evidence_status": str(payload["evidence_status"]),
+        "claim_gate_status": str(claim_gate["status"]),
+        "claim_gate_reason": str(claim_gate.get("reason", "human review is required")),
+        "sha256": sha256_file(report_path),
     }
 
 
@@ -317,7 +418,10 @@ def _nonempty_string(value: Any) -> bool:
 
 
 __all__ = [
+    "ANALYSIS_DELIVERED_REVIEW_PENDING",
+    "BLOCKED_INVALID_ANALYSIS_ARTIFACT",
     "BLOCKED_MISSING_SUCCESSOR_ROWS",
+    "DEFAULT_ANALYSIS_REPORT_RELATIVE_PATH",
     "HIERARCHICAL_PAIRED_RELEASE_INPUT_MANIFEST_SCHEMA",
     "HIERARCHICAL_PAIRED_RELEASE_INPUT_REPORT_SCHEMA",
     "INPUTS_READY_ANALYSIS_NOT_RUN",

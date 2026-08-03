@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import matplotlib
@@ -18,6 +19,7 @@ from robot_sf.benchmark.artifact_catalog import (
     ArtifactCatalog,
     ArtifactCatalogEntry,
     ArtifactFileRef,
+    FigureSemantics,
     sha256_file,
 )
 from robot_sf.benchmark.figure_qa import (
@@ -249,6 +251,113 @@ def test_catalog_custom_allowed_format_passes_format_checks(tmp_path: Path) -> N
     )
 
     assert issues == []
+
+
+def _v2_figure_entry(
+    tmp_path: Path,
+    *,
+    semantics: FigureSemantics | None = None,
+) -> ArtifactCatalogEntry:
+    """Create a checksummed v2 figure entry for semantic-QA tests."""
+    figure = _create_png(tmp_path / "fig_v2.png")
+    caption = tmp_path / "caption_v2.md"
+    caption.write_text("# v2 figure\n", encoding="utf-8")
+    file_ref = ArtifactFileRef(path=figure.name, sha256=sha256_file(figure))
+    caption_ref = ArtifactFileRef(path=caption.name, sha256=sha256_file(caption))
+    return ArtifactCatalogEntry(
+        artifact_id="fig_v2",
+        artifact_kind="figure",
+        source_kind="benchmark_campaign",
+        source_files=[file_ref],
+        outputs={"png": file_ref},
+        generation_command="pytest fixture",
+        generation_commit="0000000",
+        claim_boundary="metadata fixture only",
+        caption_file=caption_ref,
+        figure_semantics=semantics
+        or FigureSemantics(
+            metric_id="success_rate",
+            unit="fraction",
+            desirability="higher_is_better",
+            support=10,
+            denominator=10,
+            comparison=True,
+            uncertainty_declared=True,
+            uncertainty_method="bootstrap_ci95",
+            tie_policy="declared_exact_ties",
+            legend_series=["planner_a", "planner_b"],
+            legend_complete=True,
+            accessibility_palette_contract="palette.v1",
+        ),
+    )
+
+
+def test_v2_semantic_metadata_passes(tmp_path: Path) -> None:
+    """A complete v2 semantic declaration passes metadata QA."""
+    issues = check_figure_entry(
+        _v2_figure_entry(tmp_path),
+        catalog_dir=tmp_path,
+        semantic_checks=True,
+    )
+    assert issues == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_check"),
+    [
+        ("metric_id", "", "semantic_metric"),
+        ("unit", "", "semantic_unit"),
+        ("support", 11, "semantic_support"),
+        ("denominator", -1, "semantic_denominator"),
+        ("tie_policy", "", "semantic_ties"),
+    ],
+)
+def test_v2_required_semantic_fields_fail_closed(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    expected_check: str,
+) -> None:
+    """Malformed declared semantic fields produce stable error check IDs."""
+    valid = _v2_figure_entry(tmp_path).figure_semantics
+    assert valid is not None
+    entry = _v2_figure_entry(tmp_path, semantics=replace(valid, **{field: value}))
+    issues = check_figure_entry(entry, catalog_dir=tmp_path, semantic_checks=True)
+    _assert_check(issues, expected_check, "fig_v2")
+    assert all(issue.severity == "error" for issue in issues if issue.check == expected_check)
+
+
+def test_v2_comparison_requires_uncertainty_and_legend(tmp_path: Path) -> None:
+    """Comparison figures must declare uncertainty and complete legend identities."""
+    valid = _v2_figure_entry(tmp_path).figure_semantics
+    assert valid is not None
+    semantics = replace(
+        valid,
+        uncertainty_declared=False,
+        legend_series=[],
+        legend_complete=False,
+    )
+    issues = check_figure_entry(
+        _v2_figure_entry(tmp_path, semantics=semantics),
+        catalog_dir=tmp_path,
+        semantic_checks=True,
+    )
+    _assert_check(issues, "semantic_uncertainty", "fig_v2")
+    assert sum(issue.check == "semantic_legend" for issue in issues) == 2
+
+
+def test_v2_without_accessibility_contract_is_unavailable(tmp_path: Path) -> None:
+    """Accessibility remains unavailable without a deterministic palette contract."""
+    valid = _v2_figure_entry(tmp_path).figure_semantics
+    assert valid is not None
+    entry = _v2_figure_entry(
+        tmp_path,
+        semantics=replace(valid, accessibility_palette_contract=None),
+    )
+    issues = check_figure_entry(entry, catalog_dir=tmp_path, semantic_checks=True)
+    accessibility = [issue for issue in issues if issue.check == "semantic_accessibility"]
+    assert len(accessibility) == 1
+    assert accessibility[0].severity == "unavailable"
 
 
 def test_catalog_missing_required_png_format(tmp_path: Path) -> None:

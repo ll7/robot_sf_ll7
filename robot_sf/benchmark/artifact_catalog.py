@@ -18,8 +18,16 @@ from jsonschema import Draft202012Validator
 from robot_sf.common.json_pointer import json_pointer
 from robot_sf.errors import RobotSfError
 
-ARTIFACT_CATALOG_SCHEMA_VERSION = "artifact_catalog.v1"
+ARTIFACT_CATALOG_SCHEMA_V1 = "artifact_catalog.v1"
+ARTIFACT_CATALOG_SCHEMA_V2 = "artifact_catalog.v2"
+# Keep the historical constant as the default for callers that create v1
+# catalogs. New catalogs opt in to v2 explicitly.
+ARTIFACT_CATALOG_SCHEMA_VERSION = ARTIFACT_CATALOG_SCHEMA_V1
 ARTIFACT_CATALOG_SCHEMA_FILE = Path(__file__).with_name("schemas") / "artifact_catalog.v1.json"
+_ARTIFACT_CATALOG_SCHEMA_FILES = {
+    ARTIFACT_CATALOG_SCHEMA_V1: Path(__file__).with_name("schemas") / "artifact_catalog.v1.json",
+    ARTIFACT_CATALOG_SCHEMA_V2: Path(__file__).with_name("schemas") / "artifact_catalog.v2.json",
+}
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _LOCAL_ONLY_PREFIXES = (
     "output/",
@@ -49,6 +57,24 @@ class ArtifactFileRef:
 
 
 @dataclass(frozen=True, slots=True)
+class FigureSemantics:
+    """Declared publication semantics for an ``artifact_catalog.v2`` figure."""
+
+    metric_id: str
+    unit: str
+    desirability: str
+    support: int
+    denominator: int
+    comparison: bool
+    uncertainty_declared: bool
+    uncertainty_method: str | None
+    tie_policy: str
+    legend_series: list[str]
+    legend_complete: bool
+    accessibility_palette_contract: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ArtifactCatalogEntry:
     """One reusable figure or table artifact entry."""
 
@@ -61,6 +87,7 @@ class ArtifactCatalogEntry:
     generation_commit: str
     claim_boundary: str
     caption_file: ArtifactFileRef | None = None
+    figure_semantics: FigureSemantics | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,14 +120,20 @@ class ArtifactCatalogValidationError(RobotSfError, ValueError):
         super().__init__(prefix + "; ".join(f"{issue.path}: {issue.message}" for issue in issues))
 
 
-def load_artifact_catalog_schema() -> dict[str, Any]:
-    """Load the public ``artifact_catalog.v1`` JSON Schema.
+def load_artifact_catalog_schema(
+    schema_version: str = ARTIFACT_CATALOG_SCHEMA_VERSION,
+) -> dict[str, Any]:
+    """Load the public artifact catalog JSON Schema.
 
     Returns:
         Parsed JSON Schema dictionary.
     """
 
-    return json.loads(ARTIFACT_CATALOG_SCHEMA_FILE.read_text(encoding="utf-8"))
+    try:
+        schema_file = _ARTIFACT_CATALOG_SCHEMA_FILES[schema_version]
+    except KeyError as exc:
+        raise ValueError(f"unsupported artifact catalog schema: {schema_version}") from exc
+    return json.loads(schema_file.read_text(encoding="utf-8"))
 
 
 def load_artifact_catalog(path: Path) -> ArtifactCatalog:
@@ -173,7 +206,9 @@ def validate_artifact_catalog_payload(
 def _schema_validation_issues(payload: Mapping[str, Any]) -> list[ArtifactCatalogIssue]:
     """Return JSON Schema validation issues."""
 
-    validator = Draft202012Validator(load_artifact_catalog_schema())
+    schema_version = payload.get("schema_version", ARTIFACT_CATALOG_SCHEMA_VERSION)
+    schema = load_artifact_catalog_schema(str(schema_version))
+    validator = Draft202012Validator(schema)
     return [
         ArtifactCatalogIssue(json_pointer(error.absolute_path), error.message)
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
@@ -393,6 +428,37 @@ def _catalog_from_payload(payload: Mapping[str, Any]) -> ArtifactCatalog:
                     if artifact.get("caption_file") is not None
                     else None
                 ),
+                figure_semantics=(
+                    FigureSemantics(
+                        metric_id=str(artifact["figure_semantics"]["metric_id"]),
+                        unit=str(artifact["figure_semantics"]["unit"]),
+                        desirability=str(artifact["figure_semantics"]["desirability"]),
+                        support=int(artifact["figure_semantics"]["support"]),
+                        denominator=int(artifact["figure_semantics"]["denominator"]),
+                        comparison=bool(artifact["figure_semantics"]["comparison"]),
+                        uncertainty_declared=bool(
+                            artifact["figure_semantics"]["uncertainty_declared"]
+                        ),
+                        uncertainty_method=(
+                            str(artifact["figure_semantics"]["uncertainty_method"])
+                            if artifact["figure_semantics"].get("uncertainty_method") is not None
+                            else None
+                        ),
+                        tie_policy=str(artifact["figure_semantics"]["tie_policy"]),
+                        legend_series=[
+                            str(item) for item in artifact["figure_semantics"]["legend_series"]
+                        ],
+                        legend_complete=bool(artifact["figure_semantics"]["legend_complete"]),
+                        accessibility_palette_contract=(
+                            str(artifact["figure_semantics"]["accessibility_palette_contract"])
+                            if artifact["figure_semantics"].get("accessibility_palette_contract")
+                            is not None
+                            else None
+                        ),
+                    )
+                    if artifact.get("figure_semantics") is not None
+                    else None
+                ),
             )
             for artifact in payload["artifacts"]
         ],
@@ -444,12 +510,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 __all__ = [
+    "ARTIFACT_CATALOG_SCHEMA_V1",
+    "ARTIFACT_CATALOG_SCHEMA_V2",
     "ARTIFACT_CATALOG_SCHEMA_VERSION",
     "ArtifactCatalog",
     "ArtifactCatalogEntry",
     "ArtifactCatalogIssue",
     "ArtifactCatalogValidationError",
     "ArtifactFileRef",
+    "FigureSemantics",
     "artifact_catalog_from_dict",
     "load_artifact_catalog",
     "load_artifact_catalog_schema",

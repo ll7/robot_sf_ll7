@@ -15,6 +15,7 @@ def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     """A JSON input produces both deterministic output surfaces."""
     input_path = tmp_path / "input.json"
     output_path = tmp_path / "out" / "ranking.json"
+    repeat_output_path = tmp_path / "out" / "ranking-repeat.json"
     summary_path = tmp_path / "out" / "ranking.md"
     input_path.write_text(
         json.dumps(
@@ -42,7 +43,9 @@ def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
         )
         == 0
     )
+    assert main([str(input_path), "--output", str(repeat_output_path)]) == 0
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "tie_aware_ranking.v1"
     assert [item["key"] for item in payload["items"]] == ["b", "a"]
+    assert output_path.read_bytes() == repeat_output_path.read_bytes()
     assert "# Tie-aware ranking summary" in summary_path.read_text(encoding="utf-8")

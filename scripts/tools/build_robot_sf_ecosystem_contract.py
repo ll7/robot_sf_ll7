@@ -848,11 +848,16 @@ def _validate_registry_fixtures(registry: Mapping[str, Any]) -> None:
     fixture_ids: set[str] = set()
     for index, raw in enumerate(fixtures):
         fixture = _mapping(raw, f"registry.canonical_public_fixtures[{index}]")
-        _assert_exact_keys(fixture, {"fixture_id", "path"}, f"canonical fixture {index}")
+        _assert_exact_keys(
+            fixture,
+            {"fixture_id", "fixture_version", "path"},
+            f"canonical fixture {index}",
+        )
         fixture_id = _identifier(fixture.get("fixture_id"), f"canonical fixture {index}.fixture_id")
         if fixture_id in fixture_ids:
             raise ContractError(f"duplicate canonical fixture ID: {fixture_id}")
         fixture_ids.add(fixture_id)
+        _semver(fixture.get("fixture_version"), f"canonical fixture {index}.fixture_version")
         _string(fixture.get("path"), f"canonical fixture {index}.path")
 
 
@@ -919,18 +924,24 @@ def _build_capability(
 
 
 def _build_fixture_records(root: Path, registry: Mapping[str, Any]) -> list[dict[str, str]]:
-    """Resolve optional public fixture records without inventing fixture identities."""
+    """Resolve fixture locations without hashing mutable fixture contents.
+
+    The producer contract declares a stable fixture identity, version, and
+    location. It must not hash the fixture itself: the fixture records this
+    contract digest, so hashing the fixture here would create a digest cycle.
+    Release manifests bind both content digests later.
+    """
     records: list[dict[str, str]] = []
     for index, raw in enumerate(registry["canonical_public_fixtures"]):
         declaration = _mapping(raw, f"canonical fixture {index}")
-        relative, path = _repo_relative_path(
+        relative, _path = _repo_relative_path(
             root, declaration["path"], f"canonical fixture {index}.path"
         )
         records.append(
             {
                 "fixture_id": str(declaration["fixture_id"]),
+                "fixture_version": str(declaration["fixture_version"]),
                 "path": relative,
-                "sha256": sha256_file(path),
             }
         )
     return sorted(records, key=lambda item: item["fixture_id"])
@@ -1121,6 +1132,7 @@ def _contract_fixture_rows(contract: Mapping[str, Any]) -> list[dict[str, Any]]:
     fixture_ids = [str(item["fixture_id"]) for item in rows]
     _assert_sorted_unique(fixture_ids, "canonical fixture IDs")
     for item in rows:
+        _semver(item.get("fixture_version"), f"canonical fixture {item['fixture_id']} version")
         _normalized_repo_path(item["path"], f"canonical fixture {item['fixture_id']} path")
     features = [str(item) for item in contract["minimum_consumer_features"]]
     _assert_sorted_unique(features, "minimum consumer features")
@@ -1133,7 +1145,7 @@ def _verify_contract_sources(
     input_rows: Sequence[Mapping[str, Any]],
     fixture_rows: Sequence[Mapping[str, Any]],
 ) -> None:
-    """Re-resolve authoritative inputs and public fixture digests."""
+    """Re-resolve authoritative inputs and fixture locations."""
     for record in input_rows:
         resolved = _resolve_public_input(root, record)
         actual = resolved.public_record["sha256"]
@@ -1143,15 +1155,9 @@ def _verify_contract_sources(
                 f"expected {actual}, got {record['sha256']}"
             )
     for fixture in fixture_rows:
-        _relative, path = _repo_relative_path(
+        _relative, _path = _repo_relative_path(
             root, fixture["path"], f"canonical fixture {fixture['fixture_id']}"
         )
-        actual = sha256_file(path)
-        if fixture["sha256"] != actual:
-            raise ContractError(
-                f"stale canonical fixture digest for {fixture['fixture_id']}: "
-                f"expected {actual}, got {fixture['sha256']}"
-            )
 
 
 def validate_contract_document(

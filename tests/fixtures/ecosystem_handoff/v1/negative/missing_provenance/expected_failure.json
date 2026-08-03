@@ -1,0 +1,5 @@
+{
+  "expected_reason_code": "missing_provenance",
+  "schema_version": "robot_sf_ecosystem_negative_fixture.v1",
+  "variant_id": "missing_provenance"
+}

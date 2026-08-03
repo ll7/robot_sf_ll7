@@ -99,11 +99,22 @@ def test_contract_keeps_revision_data_out_of_the_invariant_payload() -> None:
     assert contract["compatibility_policy"]["revision_fields_role"] == "provenance_only"
 
 
-def test_contract_does_not_invent_public_fixtures_before_issue_6711() -> None:
-    """The v1 registry must leave public fixture declaration to the fixture task."""
+def test_contract_declares_fixture_identity_without_content_digest() -> None:
+    """The producer declares fixture identity, version, and path only.
+
+    The fixture records this contract digest. Hashing fixture content in the
+    producer contract would therefore create a contract/fixture digest cycle.
+    Release manifests bind both content digests later.
+    """
     contract = builder._mapping(builder.load_json(CONTRACT_PATH), "committed contract")
 
-    assert contract["canonical_public_fixtures"] == []
+    assert contract["canonical_public_fixtures"] == [
+        {
+            "fixture_id": "robot_sf.ecosystem_handoff.v1",
+            "fixture_version": "1.0.0",
+            "path": "tests/fixtures/ecosystem_handoff/v1/fixture_manifest.json",
+        }
+    ]
 
 
 @pytest.mark.parametrize(

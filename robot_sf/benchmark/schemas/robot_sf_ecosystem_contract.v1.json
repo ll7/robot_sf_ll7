@@ -391,16 +391,16 @@
     "canonical_fixture": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["fixture_id", "path", "sha256"],
+      "required": ["fixture_id", "fixture_version", "path"],
       "properties": {
         "fixture_id": {
           "$ref": "#/$defs/identifier"
         },
+        "fixture_version": {
+          "$ref": "#/$defs/semver"
+        },
         "path": {
           "$ref": "#/$defs/repo_path"
-        },
-        "sha256": {
-          "$ref": "#/$defs/sha256"
         }
       }
     }

@@ -2071,3 +2071,77 @@ def test_issue_6679_single_factor_variant_equivalence(variant: str) -> None:
     config = load_expert_training_config(config_path)
     assert config.policy_id
     assert len(config.seeds) == 1
+
+
+_ISSUE_739_BASE_NAME = "expert_ppo_issue_739_base.yaml"
+
+_ISSUE_739_VARIANT_PATHS = [
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_baseline.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_grid_goal.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_selective.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_core.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_tuned.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_opt_scale.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_sampling.yaml",
+    "configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml",
+]
+
+
+def test_issue_6682_issue_739_base_config_inheritance_equivalence() -> None:
+    """All issue-739 family variants must match their pre-refactor resolved fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_6682_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    ablate_dir = Path("configs/training/ppo/ablations")
+    stage_variant_paths = sorted(ablate_dir.glob("expert_ppo_issue_739_stage*.yaml"))
+    assert len(stage_variant_paths) == 7
+    variant_paths = [str(path) for path in stage_variant_paths]
+    variant_paths.append("configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml")
+    assert set(variant_paths) == set(fingerprints)
+
+    base_path = ablate_dir / _ISSUE_739_BASE_NAME
+    assert base_path.exists()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert "base_config" not in base_yaml
+
+    for rel_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(Path(rel_path))
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[rel_path], (
+            f"Resolved config {rel_path} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_739_VARIANT_PATHS)
+def test_issue_6682_issue_739_variant_equivalence(rel_path: str) -> None:
+    """Parametrized equivalence test covering every migrated issue-739 family variant."""
+    baseline_path = Path("tests/integration/_baseline_issue_6682_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    expected_fingerprint = baseline["variants"][rel_path]
+
+    config_path = Path(rel_path)
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+
+    assert actual_fingerprint == expected_fingerprint, (
+        f"Variant {rel_path} resolved fingerprint {actual_fingerprint} "
+        f"does not match baseline {expected_fingerprint}"
+    )
+
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    base_path = (config_path.parent / raw["base_config"]).resolve()
+    assert base_path.name == _ISSUE_739_BASE_NAME
+    assert base_path.exists()
+
+    config = load_expert_training_config(config_path)
+    assert config.policy_id

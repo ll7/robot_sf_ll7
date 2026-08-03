@@ -698,6 +698,22 @@ class TestPedestrianOccupancyForecast:
         arc = np.array([[0.0, 0.0], [0.1, 0.0], [0.2, 0.0]])
         assert not fc.arc_occupied(arc, 5)
 
+    @pytest.mark.parametrize("invalid_radius", [float("nan"), float("inf"), -0.1, 0.0])
+    def test_invalid_pedestrian_radius_fails_closed_even_without_pedestrians(
+        self, invalid_radius: float
+    ) -> None:
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.zeros((0, 2)),
+            velocities=np.zeros((0, 2)),
+            heading=0.0,
+            config=SippLatticeConfig(),
+            pedestrian_radius=invalid_radius,
+        )
+        assert fc.status == "failed"
+        assert not fc.usable
+        assert fc.pedestrian_radius is None
+        assert math.isfinite(fc.combined_radius)
+
     def test_empty_forecast_still_enforces_trusted_horizon(self) -> None:
         cfg = SippLatticeConfig(
             time_slot_duration=0.2,
@@ -1572,6 +1588,27 @@ class TestSpaceTimeFeasibilityOracle:
         payload = space_time_feasibility_result_to_dict(result)
         assert payload["witness_found"] is False
         assert payload["witness_valid"] is False
+
+    def test_payload_suppresses_contradictory_witness_metadata(self) -> None:
+        result = SpaceTimeFeasibilityResult(
+            verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
+            witness=(MotionPrimitive(0.0, 0.0, 0.2, PrimitiveKind.WAIT),),
+            witness_valid=True,
+            search_result_type="bounded_safe_wait",
+            bound_termination="horizon",
+            expansions=10,
+            horizon_reached=40,
+            safe_interval_rejections=3,
+            forecast_status="ok",
+            discretization=_discretization_stub(),
+        )
+
+        payload = space_time_feasibility_result_to_dict(result)
+
+        assert payload["witness_found"] is False
+        assert payload["witness_valid"] is False
+        assert payload["witness_length"] == 0
+        assert payload["witness_commands"] == []
 
 
 class TestSpaceTimeEpisodeClassification:

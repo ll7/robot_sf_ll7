@@ -1122,13 +1122,27 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
         A :class:`PedestrianOccupancyForecast` with an explicit ``status`` flag.
     """
     slot_duration = float(config.time_slot_duration)
-    combined_radius = (
-        float(config.robot_radius) + float(config.safety_margin) + float(pedestrian_radius)
-    )
+    robot_envelope_radius = float(config.robot_radius) + float(config.safety_margin)
     horizon_slots = max(
         0,
         math.floor(float(config.pedestrian_forecast_horizon_s) / slot_duration + 1e-9),
     )
+    try:
+        pedestrian_radius_value = float(pedestrian_radius)
+    except (TypeError, ValueError, OverflowError):
+        return _failed_forecast(
+            slot_duration=slot_duration,
+            combined_radius=robot_envelope_radius,
+            horizon_slots=horizon_slots,
+        )
+    if not (isfinite(pedestrian_radius_value) and pedestrian_radius_value > 0.0):
+        return _failed_forecast(
+            slot_duration=slot_duration,
+            combined_radius=robot_envelope_radius,
+            horizon_slots=horizon_slots,
+        )
+    pedestrian_radius = pedestrian_radius_value
+    combined_radius = robot_envelope_radius + pedestrian_radius
     if not isfinite(float(heading)):
         return _failed_forecast(
             slot_duration=slot_duration,
@@ -2482,8 +2496,8 @@ def space_time_feasibility_result_to_dict(
     Returns:
         A ``space_time_feasibility_oracle.v1`` diagnostic payload.
     """
-    witness = result.witness or ()
-    witness_valid = bool(witness) and bool(result.witness_valid)
+    has_valid_witness = result.feasible
+    witness = result.witness if has_valid_witness else ()
     return {
         "schema_version": SPACE_TIME_FEASIBILITY_SCHEMA,
         "issue": SPACE_TIME_FEASIBILITY_ISSUE,
@@ -2492,8 +2506,8 @@ def space_time_feasibility_result_to_dict(
         "scenario_id": scenario_id,
         "episode_id": episode_id,
         "verdict": result.verdict,
-        "witness_found": result.feasible,
-        "witness_valid": witness_valid,
+        "witness_found": has_valid_witness,
+        "witness_valid": has_valid_witness,
         "witness_length": len(witness),
         "witness_commands": [list(primitive.as_command()) for primitive in witness],
         "episode_annotation": episode_annotation,

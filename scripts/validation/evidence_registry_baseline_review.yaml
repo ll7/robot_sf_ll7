@@ -82,6 +82,13 @@ decision_summary: >-
   release evidence. No safe in-place rewrite can recover the external artifacts or change the
   package-relative schema without a reviewed producer/consumer migration, so these findings are
   recorded as targeted baseline debt rather than hidden by a global exclusion.
+  Merge-base reconciliation addendum (PR #6739): immediately before this refresh, current main
+  carried 397 findings across 86 files. The historical prior_baseline_commit remains the
+  repository ratchet anchor at 9fa96c01bf1c8152459f5fa8c481e938fb1e6725; its intermediate 38
+  findings across 13 paths are already covered by the existing reviewed_files entries. The only
+  new merge-base delta in this refresh is eighteen findings across the three Issue #6412 receipt
+  files, all explicitly dispositioned above. This preserves the historical anchor while making
+  the current-main comparison auditable.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the

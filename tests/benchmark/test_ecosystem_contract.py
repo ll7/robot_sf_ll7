@@ -155,7 +155,7 @@ def test_invalid_contract_fixtures_fail_closed(fixture_name: str, message: str) 
 def test_malformed_contract_fixture_fails_before_schema_validation() -> None:
     """Malformed JSON must produce a typed input error, not partial data."""
     with pytest.raises(builder.ContractError, match="malformed JSON document"):
-        builder.load_json(FIXTURES / "malformed.json")
+        builder.load_json(FIXTURES / "malformed.fixture")
 
 
 def test_compatibility_matches_capability_identity_not_whole_digest() -> None:

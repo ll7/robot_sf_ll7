@@ -79,6 +79,9 @@ VERDICT_NO_GO = "no-go"
 DEFAULT_RADIUS_TOLERANCE_M = 5e-3
 # Step size for the differential radius/distance scans.
 DEFAULT_SCAN_STEP_M = 1e-3
+# Keep malformed or adversarial scan parameters from turning this bounded diagnostic
+# into an unbounded loop. The committed corridor uses only a few thousand samples.
+_MAX_SCAN_SAMPLES = 100_000
 
 # Canonical selected radii for the canary. The robot radius matches the
 # simulator's small-envelope benchmark default; the pedestrian radius matches the
@@ -335,7 +338,12 @@ def _scan_flip(
     flip. Returns ``None`` when the predicate never flips within the range or when
     the initial sample is already True (no detectable boundary).
     """
+    if not all(math.isfinite(float(value)) for value in (lo, hi, step)):
+        return None
     if lo >= hi or step <= 0.0:
+        return None
+    span = hi - lo
+    if not math.isfinite(span) or math.ceil(span / step) > _MAX_SCAN_SAMPLES:
         return None
     if predicate(lo):
         return None
@@ -706,17 +714,17 @@ def probe_feasibility_oracle(
             note="Probe requires two distinct envelope radii.",
         )
 
-    config = FeasibilityOracleConfig(
-        scenario_path=geometry.scenario_path,
-        envelope_radii_m=radii,
-        rollout_algo="goal",
-        rollout_seed=0,
-    )
-    runner = _stub_completion_runner()
     clearances: dict[float, float | None] = {}
     margins: dict[float, float | None] = {}
     error: str | None = None
     try:
+        config = FeasibilityOracleConfig(
+            scenario_path=geometry.scenario_path,
+            envelope_radii_m=radii,
+            rollout_algo="goal",
+            rollout_seed=0,
+        )
+        runner = _stub_completion_runner()
         for radius in radii:
             scenario = make_envelope_scenario(geometry.scenario, envelope_radius_m=radius)
             verdict = run_feasibility_oracle(

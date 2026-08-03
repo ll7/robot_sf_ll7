@@ -9,12 +9,14 @@ verdict schema, and one end-to-end run on the committed geometry-sensitive
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from robot_sf.benchmark.radius_binding_canary import (
+    _MAX_SCAN_SAMPLES,
     CANARY_SURFACES,
     DEFAULT_SCENARIO_REL,
     RADIUS_BINDING_CANARY_SCHEMA,
@@ -97,6 +99,27 @@ def test_scan_flip_returns_none_when_initially_true() -> None:
     assert _scan_flip(predicate, lo=0.0, hi=2.0, step=1e-3) is None
 
 
+def test_scan_flip_returns_none_for_nonfinite_bounds() -> None:
+    """Non-finite scan bounds fail closed instead of creating an infinite loop."""
+
+    assert _scan_flip(lambda _radius: False, lo=0.0, hi=math.inf, step=1e-3) is None
+
+
+def test_scan_flip_returns_none_when_sample_budget_would_be_exceeded() -> None:
+    """An arbitrarily fine scan is rejected before the loop becomes unbounded."""
+
+    step = 1e-3
+    assert (
+        _scan_flip(
+            lambda _radius: False,
+            lo=0.0,
+            hi=(_MAX_SCAN_SAMPLES + 1) * step,
+            step=step,
+        )
+        is None
+    )
+
+
 # --- simulator collision geometry -------------------------------------------
 
 
@@ -177,6 +200,14 @@ def test_feasibility_oracle_probe_rejects_equal_radii() -> None:
     """Equal envelope radii cannot probe a delta and must fail closed."""
     geometry = _synthetic_geometry()
     verdict = probe_feasibility_oracle(geometry, radius_a_m=0.5, radius_b_m=0.5)
+    assert verdict.status == "fail"
+
+
+def test_feasibility_oracle_probe_fails_closed_for_nonfinite_radius() -> None:
+    """Invalid envelope radii become a surface failure rather than an exception."""
+    geometry = _synthetic_geometry()
+    verdict = probe_feasibility_oracle(geometry, radius_a_m=0.5, radius_b_m=math.inf)
+    assert verdict.surface == SURFACE_FEASIBILITY_ORACLE
     assert verdict.status == "fail"
 
 

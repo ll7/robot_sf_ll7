@@ -19,8 +19,10 @@ from robot_sf.benchmark.issue_6412_real_reexport import (
     FIGURE_QA_SCHEMA_VERSION,
     RealReexportPackageError,
     assemble_real_reexport_package,
+    export_compact_evidence,
     finalize_real_reexport_package,
     materialize_resolver_mapping,
+    verify_compact_evidence,
     verify_complete_package,
 )
 from robot_sf.benchmark.trace_reexport_packaging import (
@@ -351,11 +353,33 @@ def test_real_package_materializes_resolves_and_finalizes_88_2(tmp_path: Path) -
         "visualization_only": True,
         "n_figures": 2,
         "n_error_defects": 0,
-        "figures": [],
+        "figures": [
+            {
+                "figure": "doorway_ppo_seed113_vs_114.pdf",
+                "status": "passed",
+                "n_error_defects": 0,
+            },
+            {
+                "figure": "double_bottleneck_goal_vs_ppo_seed118.pdf",
+                "status": "passed",
+                "n_error_defects": 0,
+            },
+        ],
     }
+    for name in (
+        "doorway_ppo_seed113_vs_114.pdf",
+        "double_bottleneck_goal_vs_ppo_seed118.pdf",
+    ):
+        _write_json(package / "figures" / name, {"synthetic": True})
+        _write_json(package / "figures" / name.replace(".pdf", ".png"), {"synthetic": True})
     finalize_real_reexport_package(package, resolution=resolution, figure_qa=figure_qa)
     assert verify_complete_package(package)["status"] == "complete"
     assert len(materialized["rows"]) == 90
+    compact = tmp_path / "compact-evidence"
+    export_manifest = export_compact_evidence(package, compact)
+    assert export_manifest["status"] == "complete_compact_export"
+    assert verify_compact_evidence(compact)["n_admitted"] == 88
+    assert not list(compact.rglob("*trace*.json"))
 
 
 def test_package_refuses_to_overwrite_existing_output(tmp_path: Path) -> None:

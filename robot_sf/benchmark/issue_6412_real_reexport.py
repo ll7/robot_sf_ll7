@@ -38,9 +38,22 @@ PACKAGE_REPORT_SCHEMA_VERSION = "issue_6412_package_report.v1"
 FIGURE_QA_SCHEMA_VERSION = "issue_6412_figure_qa.v1"
 RESOLUTION_SUMMARY_SCHEMA_VERSION = "issue_6412_resolution_summary.v1"
 PACKAGE_COMPLETE_SCHEMA_VERSION = "issue_6412_package_complete.v1"
+COMPACT_EVIDENCE_SCHEMA_VERSION = "issue_6412_compact_evidence.v1"
+FIGURE_ARTIFACTS_SCHEMA_VERSION = "issue_6412_figure_artifacts.v1"
 
 _CHECKSUMS_NAME = "SHA256SUMS"
 _COMPLETE_NAME = "package_complete.json"
+_COMPACT_MANIFEST_NAME = "evidence_export.json"
+_COMPACT_JSON_NAMES = (
+    "package_manifest.json",
+    "source_pointer.json",
+    "expected_outcomes.json",
+    "mapping_receipt.json",
+    "resolver_summary.json",
+    "figure_qa.json",
+    "package_report.json",
+    "package_complete.json",
+)
 _EXCLUDED_TUPLES = frozenset(
     ("ppo", "classic_doorway_medium", seed) for seed in REAL_REEXPORT_EXCEPTION_SEEDS
 )
@@ -699,13 +712,216 @@ def verify_complete_package(package_dir: Path) -> dict[str, Any]:
     return complete
 
 
+def _assert_no_private_paths(payload: Any, *, label: str) -> None:
+    """Reject machine-local paths from compact evidence JSON."""
+
+    private_markers = ("/Users/", "/private/", "/tmp/", "\\Users\\", "\\Temp\\")
+
+    def visit(value: Any, location: str) -> None:
+        if isinstance(value, Mapping):
+            for key, nested in value.items():
+                visit(nested, f"{location}.{key}")
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                visit(nested, f"{location}[{index}]")
+        elif isinstance(value, str):
+            if value.startswith("/") or any(marker in value for marker in private_markers):
+                raise RealReexportPackageError(
+                    f"compact evidence contains a machine-local path at {label}{location}"
+                )
+
+    visit(payload, "")
+
+
+def _write_compact_checksums(root: Path) -> str:
+    """Write checksums for every compact export file except the checksum file itself.
+
+    Returns:
+        SHA-256 digest of the written checksum-list bytes.
+    """
+
+    entries = []
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        relative = path.relative_to(root).as_posix()
+        if relative == _CHECKSUMS_NAME:
+            continue
+        entries.append(f"{_sha256_file(path)}  {relative}")
+    content = ("\n".join(entries) + "\n").encode("utf-8") if entries else b""
+    (root / _CHECKSUMS_NAME).write_bytes(content)
+    return _sha256_bytes(content)
+
+
+def _figure_artifact_receipt(package_dir: Path, figure_qa: Mapping[str, Any]) -> dict[str, Any]:
+    """Hash the generated figure outputs without copying the binaries to Git.
+
+    Returns:
+        Compact figure-output hash receipt.
+    """
+
+    reports = figure_qa.get("figures")
+    if not isinstance(reports, list) or not reports:
+        raise RealReexportPackageError("figure QA has no figure records")
+    figures: list[dict[str, Any]] = []
+    for report in reports:
+        if not isinstance(report, Mapping) or report.get("status") != "passed":
+            raise RealReexportPackageError("figure QA contains an incomplete figure record")
+        figure_name = str(report.get("figure", "")).strip()
+        if not figure_name:
+            raise RealReexportPackageError("figure QA contains a blank figure name")
+        pdf_path = package_dir / "figures" / figure_name
+        png_path = pdf_path.with_suffix(".png")
+        if not pdf_path.is_file() or not png_path.is_file():
+            raise RealReexportPackageError(
+                f"figure output pair is missing for compact receipt: {figure_name}"
+            )
+        figures.append(
+            {
+                "figure": figure_name,
+                "status": "passed",
+                "n_error_defects": int(report.get("n_error_defects", -1)),
+                "outputs": {
+                    "pdf": {"sha256": _sha256_file(pdf_path), "bytes": pdf_path.stat().st_size},
+                    "png": {"sha256": _sha256_file(png_path), "bytes": png_path.stat().st_size},
+                },
+            }
+        )
+    return {
+        "schema_version": FIGURE_ARTIFACTS_SCHEMA_VERSION,
+        "visualization_only": True,
+        "raw_and_normalized_traces_in_git": False,
+        "figures": figures,
+    }
+
+
+def export_compact_evidence(package_dir: Path, output_dir: Path) -> dict[str, Any]:
+    """Export only compact #6412 receipts from a verified disposable package.
+
+    Raw and normalized traces, PDFs, and PNGs remain in the disposable package.
+    The export contains manifests, source pointers, exclusions, checksums, resolver
+    and QA receipts, plus hashes of the generated figure outputs.
+
+    Returns:
+        The compact evidence export manifest.
+    """
+
+    package_dir = package_dir.resolve()
+    output_dir = output_dir.resolve()
+    if output_dir.exists():
+        raise RealReexportPackageError(
+            f"refusing to overwrite existing evidence export: {output_dir}"
+        )
+    complete = verify_complete_package(package_dir)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent))
+    try:
+        payloads: dict[str, Any] = {}
+        for name in _COMPACT_JSON_NAMES:
+            payload = _read_json(package_dir / name, name)
+            _assert_no_private_paths(payload, label=name)
+            payloads[name] = payload
+            _write_json(staging / name, payload)
+
+        exclusions = sorted((package_dir / "exclusions").glob("*.json"))
+        if len(exclusions) != 2:
+            raise RealReexportPackageError(
+                "compact evidence requires exactly two exclusion records"
+            )
+        for path in exclusions:
+            payload = _read_json(path, path.name)
+            _assert_no_private_paths(payload, label=path.name)
+            _write_json(staging / "exclusions" / path.name, payload)
+
+        figure_artifacts = _figure_artifact_receipt(package_dir, payloads["figure_qa.json"])
+        _assert_no_private_paths(figure_artifacts, label="figure_artifacts.json")
+        _write_json(staging / "figure_artifacts.json", figure_artifacts)
+
+        readme = (
+            "# Issue #6412 compact evidence export\n\n"
+            "This directory records the verified visualization-only 88/90 package for "
+            "[RobotSF issue #6412](https://github.com/ll7/robot_sf_ll7/issues/6412).\n\n"
+            "The package contains 88 admitted trace mappings and two explicit outcome-mismatch "
+            "exclusions. It does not promote release statistics or dissertation evidence. Raw "
+            "and normalized traces, PDFs, and PNGs remain in disposable package storage and are "
+            "not committed here. The figure artifact receipt stores their hashes only.\n\n"
+            "Human evidence-owner review remains pending. The mapping receipt uses relative "
+            "package URIs and is a compact provenance receipt, not a self-contained trace bundle.\n"
+        )
+        (staging / "README.md").write_text(readme, encoding="utf-8")
+
+        compact_files = sorted(
+            path.relative_to(staging).as_posix() for path in staging.rglob("*") if path.is_file()
+        )
+        manifest = {
+            "schema_version": COMPACT_EVIDENCE_SCHEMA_VERSION,
+            "status": "complete_compact_export",
+            "visualization_only": True,
+            "n_requested": 90,
+            "n_admitted": 88,
+            "n_excluded": 2,
+            "human_evidence_owner_review": complete["human_evidence_owner_review"],
+            "raw_and_normalized_traces_in_git": False,
+            "source_package_complete_sha256": _sha256_file(package_dir / _COMPLETE_NAME),
+            "source_package_sha256sums_sha256": complete["sha256sums_sha256"],
+            "files": [
+                {"path": relative, "sha256": _sha256_file(staging / relative)}
+                for relative in compact_files
+            ],
+        }
+        _write_json(staging / _COMPACT_MANIFEST_NAME, manifest)
+        _write_compact_checksums(staging)
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staging, output_dir)
+        return manifest
+    except Exception:
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise
+
+
+def verify_compact_evidence(output_dir: Path) -> dict[str, Any]:  # noqa: C901
+    """Verify compact-export checksums, boundary counts, and path redaction.
+
+    Returns:
+        The verified compact evidence manifest.
+    """
+
+    output_dir = output_dir.resolve()
+    manifest = _read_json(output_dir / _COMPACT_MANIFEST_NAME, "compact evidence manifest")
+    if manifest.get("schema_version") != COMPACT_EVIDENCE_SCHEMA_VERSION:
+        raise RealReexportPackageError("compact evidence schema mismatch")
+    if manifest.get("status") != "complete_compact_export":
+        raise RealReexportPackageError("compact evidence is not complete")
+    if manifest.get("n_requested") != 90 or manifest.get("n_admitted") != 88:
+        raise RealReexportPackageError("compact evidence is not exactly 88/2")
+    sums_path = output_dir / _CHECKSUMS_NAME
+    for line in sums_path.read_text(encoding="utf-8").splitlines():
+        digest, separator, relative = line.partition("  ")
+        if not separator or _sha256_file(output_dir / relative) != digest:
+            raise RealReexportPackageError(f"compact evidence checksum mismatch: {relative}")
+    for item in manifest.get("files", []):
+        if not isinstance(item, Mapping):
+            raise RealReexportPackageError("compact evidence file record is invalid")
+        path = output_dir / str(item.get("path", ""))
+        if _sha256_file(path) != item.get("sha256"):
+            raise RealReexportPackageError(f"compact evidence file digest mismatch: {path.name}")
+        if path.suffix == ".json":
+            _assert_no_private_paths(_read_json(path, path.name), label=path.name)
+    figure_artifacts = _read_json(output_dir / "figure_artifacts.json", "figure artifacts")
+    if figure_artifacts.get("schema_version") != FIGURE_ARTIFACTS_SCHEMA_VERSION:
+        raise RealReexportPackageError("figure artifact receipt schema mismatch")
+    return manifest
+
+
 __all__ = [
+    "COMPACT_EVIDENCE_SCHEMA_VERSION",
     "EXPECTED_OUTCOMES_SCHEMA_VERSION",
+    "FIGURE_ARTIFACTS_SCHEMA_VERSION",
     "FIGURE_QA_SCHEMA_VERSION",
     "PACKAGE_SCHEMA_VERSION",
     "RealReexportPackageError",
     "assemble_real_reexport_package",
+    "export_compact_evidence",
     "finalize_real_reexport_package",
     "materialize_resolver_mapping",
+    "verify_compact_evidence",
     "verify_complete_package",
 ]

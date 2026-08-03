@@ -11,8 +11,10 @@ from pathlib import Path
 from robot_sf.benchmark.issue_6412_real_reexport import (
     RealReexportPackageError,
     assemble_real_reexport_package,
+    export_compact_evidence,
     finalize_real_reexport_package,
     materialize_resolver_mapping,
+    verify_compact_evidence,
     verify_complete_package,
 )
 
@@ -47,6 +49,15 @@ def _parser() -> argparse.ArgumentParser:
 
     verify = subparsers.add_parser("verify", help="verify a finalized local package")
     verify.add_argument("--package-dir", type=Path, required=True)
+
+    export = subparsers.add_parser(
+        "export", help="export compact receipts from a verified local package"
+    )
+    export.add_argument("--package-dir", type=Path, required=True)
+    export.add_argument("--output-dir", type=Path, required=True)
+
+    verify_export = subparsers.add_parser("verify-export", help="verify a compact evidence export")
+    verify_export.add_argument("--output-dir", type=Path, required=True)
     return parser
 
 
@@ -77,9 +88,15 @@ def main(argv: list[str] | None = None) -> int:
                 figure_qa=figure_qa,
             )
             print(json.dumps(complete, indent=2, sort_keys=True))
-        else:
+        elif args.command == "verify":
             complete = verify_complete_package(args.package_dir)
             print(json.dumps(complete, indent=2, sort_keys=True))
+        elif args.command == "export":
+            manifest = export_compact_evidence(args.package_dir, args.output_dir)
+            print(json.dumps(manifest, indent=2, sort_keys=True))
+        else:
+            manifest = verify_compact_evidence(args.output_dir)
+            print(json.dumps(manifest, indent=2, sort_keys=True))
     except (OSError, TypeError, ValueError, json.JSONDecodeError, RealReexportPackageError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

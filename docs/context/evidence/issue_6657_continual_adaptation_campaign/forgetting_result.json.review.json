@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_6657_continual_adaptation_campaign/forgetting_result.json",
+  "artifact_sha256": "e86afc9d700b96aa9cd487eeedf942b8c586cdfe3ab0a215823ec2c4896c28de",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

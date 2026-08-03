@@ -567,7 +567,9 @@ def run_geometry_family_preflight(
                 )
                 oracle = envelope_sensitivity_verdict_to_dict(oracle_verdict, issue="6644")
                 oracle["execution_status"] = "available"
-            except Exception as exc:  # noqa: BLE001 - preflight must record missingness.
+            except (FileNotFoundError, OSError, RuntimeError, ValueError) as exc:
+                # Expected operational failures remain explicit and fail closed. Do not
+                # hide programming errors or malformed records behind a blocked row.
                 oracle = _fake_blocked_oracle(variant, f"oracle_error: {exc}")
 
             records.append(

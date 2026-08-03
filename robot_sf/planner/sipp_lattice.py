@@ -929,8 +929,10 @@ class PedestrianOccupancyForecast:
         pedestrian_radius: Pedestrian radius used to build the forecast, when
             available. Older manually constructed forecasts may leave this unset.
         horizon_slots: Slots beyond which the forecast is not trusted.
-        status: ``"ok"`` (dynamic state usable), ``"static"`` (no velocities,
-            stationary assumption), or ``"failed"`` (malformed dynamic input).
+        status: ``"ok"`` (dynamic state usable), ``"static"`` (no active
+            pedestrians), or ``"failed"`` (malformed or incomplete dynamic
+            input). Missing velocities for active pedestrians fail closed rather
+            than silently assuming that they are stationary.
     """
 
     positions: np.ndarray
@@ -1115,8 +1117,9 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
 ) -> PedestrianOccupancyForecast:
     """Construct a time-indexed pedestrian forecast, failing closed on bad input.
 
-    Missing velocities mean stationary pedestrians; malformed dynamic state is
-    classified ``"failed"`` and cannot back success evidence.
+    Active pedestrians require velocities. Missing velocities and malformed
+    dynamic state are classified ``"failed"`` and cannot back success evidence;
+    an empty scene remains a usable ``"static"`` forecast.
 
     Returns:
         A :class:`PedestrianOccupancyForecast` with an explicit ``status`` flag.
@@ -1201,13 +1204,10 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             pedestrian_radius=pedestrian_radius,
         )
     if raw_velocities.size == 0:
-        return PedestrianOccupancyForecast(
-            positions=positions,
-            velocities=np.zeros_like(positions),
+        return _failed_forecast(
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
-            status="static",
             pedestrian_radius=pedestrian_radius,
         )
 
@@ -2238,8 +2238,10 @@ class SpaceTimeFeasibilityOracle:
             start_speed: Robot start linear speed in m/s.
             goal: Goal position as ``(x, y)``.
             forecast: Time-indexed pedestrian occupancy forecast.
-            static_blocked: Optional footprint-inflated static-occupancy checker
-                returning ``True`` when an arc collides with static obstacles.
+            static_blocked: Footprint-inflated static-occupancy checker returning
+                ``True`` when an arc collides with scenario boundaries or static
+                obstacles. Missing or non-callable checkers fail closed because a
+                route that ignores scenario geometry is not a feasibility witness.
             start_angular_velocity: Robot start angular velocity in rad/s.
 
         Returns:
@@ -2256,6 +2258,21 @@ class SpaceTimeFeasibilityOracle:
                 witness_valid=False,
                 search_result_type="invalid_forecast",
                 bound_termination="invalid_forecast",
+                expansions=0,
+                horizon_reached=0,
+                safe_interval_rejections=0,
+                forecast_status=forecast.status,
+                discretization=discretization,
+            )
+        if not callable(static_blocked):
+            # A dynamic-only route can cross walls or scenario boundaries. It
+            # must never back a local-policy-failure annotation.
+            return SpaceTimeFeasibilityResult(
+                verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
+                witness=None,
+                witness_valid=False,
+                search_result_type="missing_static_occupancy",
+                bound_termination="missing_static_occupancy",
                 expansions=0,
                 horizon_reached=0,
                 safe_interval_rejections=0,
@@ -2394,7 +2411,9 @@ class SpaceTimeFeasibilityOracle:
         if state is None:
             return False
         cursor, goal_position, heading, speed, angular_velocity = state
-        if static_blocked is not None and static_blocked(cursor[None, :]):
+        if not callable(static_blocked):
+            return False
+        if static_blocked(cursor[None, :]):
             return False
         if forecast.arc_occupied(cursor[None, :], 0):
             return False
@@ -2409,7 +2428,7 @@ class SpaceTimeFeasibilityOracle:
             arc_positions = self._collision_model._unicycle_arc_positions(
                 primitive.as_command(), heading, primitive.duration, cursor
             )
-            if static_blocked is not None and static_blocked(arc_positions):
+            if static_blocked(arc_positions):
                 return False
             if forecast.arc_occupied(arc_positions, slot, primitive.duration):
                 return False

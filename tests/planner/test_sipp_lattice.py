@@ -732,7 +732,7 @@ class TestPedestrianOccupancyForecast:
         assert fc.arc_occupied(arc, -1, 0.2)
         assert fc.arc_occupied(arc, 2)
 
-    def test_missing_velocities_is_static_stationary(self) -> None:
+    def test_missing_velocities_for_active_pedestrians_fail_closed(self) -> None:
         fc = build_pedestrian_occupancy_forecast(
             positions=np.array([[0.3, 0.0]]),
             velocities=None,
@@ -740,11 +740,9 @@ class TestPedestrianOccupancyForecast:
             config=SippLatticeConfig(),
             pedestrian_radius=0.3,
         )
-        assert fc.status == "static"
-        # Stationary pedestrian occupies the same cell at every slot.
-        arc = np.array([[0.3, 0.0]])
-        assert fc.arc_occupied(arc, 0)
-        assert fc.arc_occupied(arc, 10)
+        assert fc.status == "failed"
+        assert not fc.usable
+        assert fc.arc_occupied(np.array([[10.0, 10.0]]), 0)
 
     def test_geometrically_clear_arc_rejected_when_temporally_occupied(self) -> None:
         # Pedestrian is far now (arc clear at slot 0) but crosses the arc later.
@@ -1257,6 +1255,11 @@ def _wall_blocked(arc_positions):
     return bool(np.any((arc[:, 0] >= 0.45) & (arc[:, 0] <= 0.55)))
 
 
+def _open_static_space(_arc_positions):
+    """Explicitly certify that the synthetic open-space fixture has no static obstacle."""
+    return False
+
+
 def _discretization_stub():
     """Minimal discretization for constructing results without running a search."""
     return SpaceTimeDiscretization(
@@ -1319,6 +1322,7 @@ class TestSpaceTimeFeasibilityOracle:
             start_speed=0.0,
             goal=np.array([1.0, 0.0]),
             forecast=forecast,
+            static_blocked=_open_static_space,
         )
         assert result.verdict == FEASIBILITY_FEASIBLE
         assert result.feasible
@@ -1380,6 +1384,7 @@ class TestSpaceTimeFeasibilityOracle:
             start_speed=0.0,
             goal=np.array([1.0, 0.0]),
             forecast=forecast,
+            static_blocked=_open_static_space,
         )
         assert result.witness
         collision = cfg.to_collision_model()
@@ -1419,6 +1424,7 @@ class TestSpaceTimeFeasibilityOracle:
                 start_speed=0.0,
                 goal=goal,
                 forecast=forecast,
+                static_blocked=_open_static_space,
             )
             assert result.verdict in {FEASIBILITY_FEASIBLE, FEASIBILITY_NOT_PROVEN_FEASIBLE}
             verdicts[label] = result.verdict
@@ -1443,6 +1449,7 @@ class TestSpaceTimeFeasibilityOracle:
                 start_speed=0.0,
                 goal=np.array([1.0, 0.0]),
                 forecast=forecast,
+                static_blocked=_open_static_space,
             )
             for _ in range(2)
         ]
@@ -1498,6 +1505,38 @@ class TestSpaceTimeFeasibilityOracle:
             static_blocked=lambda _arc: True,
         )
 
+    def test_assess_without_static_occupancy_fails_closed(self) -> None:
+        """A dynamic-only route cannot back a scenario-feasibility witness."""
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        result = oracle.assess(
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([0.6, 0.0]),
+            forecast=_oracle_forecast(cfg, [], []),
+        )
+
+        assert result.verdict == FEASIBILITY_NOT_PROVEN_FEASIBLE
+        assert result.bound_termination == "missing_static_occupancy"
+        assert result.expansions == 0
+
+    def test_verify_witness_rejects_missing_static_occupancy(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        wait = (MotionPrimitive(0.0, 0.0, cfg.primitive_duration, PrimitiveKind.WAIT),)
+
+        assert not oracle._verify_witness(
+            wait,
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.zeros(2),
+            start_angular_velocity=0.0,
+            forecast=_oracle_forecast(cfg, [], []),
+            static_blocked=None,
+        )
+
     def test_verify_witness_rejects_goal_mismatch(self) -> None:
         cfg = _oracle_config()
         oracle = SpaceTimeFeasibilityOracle(cfg)
@@ -1511,7 +1550,7 @@ class TestSpaceTimeFeasibilityOracle:
             goal=np.array([1.0, 0.0]),
             start_angular_velocity=0.0,
             forecast=forecast,
-            static_blocked=None,
+            static_blocked=_open_static_space,
         )
 
     def test_discretization_records_forecast_collision_envelope(self) -> None:
@@ -1554,6 +1593,7 @@ class TestSpaceTimeFeasibilityOracle:
             start_speed=0.0,
             goal=np.array([1.0, 0.0]),
             forecast=forecast,
+            static_blocked=_open_static_space,
         )
         payload = space_time_feasibility_result_to_dict(
             result,
@@ -1773,6 +1813,7 @@ class TestSpaceTimeFeasibilityAnnotation:
             start_speed=0.0,
             goal=np.array([1.0, 0.0]),
             forecast=forecast,
+            static_blocked=_open_static_space,
         )
         annotation = classify_episode_feasibility(result, episode_succeeded=False)
         payload = build_space_time_feasibility_annotation(

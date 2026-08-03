@@ -1,0 +1,50 @@
+{
+  "claim_boundary": "conformance-only; not scientific or benchmark evidence",
+  "files": [
+    {
+      "kind": "fixture_identity",
+      "path": "fixture_manifest.json",
+      "sha256": "aeba3a724624052e1ffee180da81071dfc01c6a455e53d7fbff922469136dd3a",
+      "size_bytes": 1954
+    },
+    {
+      "kind": "contract_identity",
+      "path": "contract_reference.json",
+      "sha256": "3f671bd3de9580f81e471728f7728324e45fb06ec936e56105a9772be631a565",
+      "size_bytes": 323
+    },
+    {
+      "kind": "schema",
+      "path": "episode.schema.v1.json",
+      "sha256": "fb1488a4e9d8352decd047641bf488c88abf0fa3cb3ce193cbd3c8564ebc8a91",
+      "size_bytes": 2195
+    },
+    {
+      "kind": "episode_rows",
+      "path": "episodes.jsonl",
+      "sha256": "1d5e4f612a2d33eeee4ac159a1e81d78816b241a1da95331d9ded486c349395e",
+      "size_bytes": 2307
+    },
+    {
+      "kind": "provenance",
+      "path": "episodes.jsonl.provenance.json",
+      "sha256": "9bde11eb2c7ebe816f50d3c68bb493283fd2a9c2031021bbb8923d26a2bf0f82",
+      "size_bytes": 2968
+    },
+    {
+      "kind": "table_ready_input",
+      "path": "table_input.csv",
+      "sha256": "3c480189beaf53b1f2b02c461d5d18f523e16f87a7f7300af8754fee677e4c9a",
+      "size_bytes": 1002
+    },
+    {
+      "kind": "figure_ready_input",
+      "path": "figure_input.json",
+      "sha256": "c52f81c7f6a492cb6343002a12b5219a31403db383f9ca3f92297b8df1226e26",
+      "size_bytes": 429
+    }
+  ],
+  "fixture_id": "robot_sf.ecosystem_handoff.v1",
+  "schema_version": "robot_sf_ecosystem_artifact_manifest.v1",
+  "self_excluded_from_manifest": true
+}

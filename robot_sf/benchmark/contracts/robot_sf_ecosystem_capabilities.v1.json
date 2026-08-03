@@ -369,5 +369,11 @@
       "convention_identifier": "robot_sf.sha256sums.lower_hex_two_space_path.v1"
     }
   ],
-  "canonical_public_fixtures": []
+  "canonical_public_fixtures": [
+    {
+      "fixture_id": "robot_sf.ecosystem_handoff.v1",
+      "fixture_version": "1.0.0",
+      "path": "tests/fixtures/ecosystem_handoff/v1/fixture_manifest.json"
+    }
+  ]
 }

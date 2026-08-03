@@ -1991,3 +1991,33 @@ def test_issue_6679_single_factor_variant_equivalence(variant: str) -> None:
     config = load_expert_training_config(config_path)
     assert config.policy_id
     assert len(config.seeds) == 1
+
+
+_ISSUE_739_VARIANTS = [
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_baseline.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_grid_goal.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_selective.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_core.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_tuned.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_opt_scale.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_sampling.yaml",
+    "configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml",
+]
+
+
+@pytest.mark.parametrize("config_name", _ISSUE_739_VARIANTS)
+def test_issue_6682_issue_739_variant_equivalence(config_name: str) -> None:
+    """Every migrated issue-739 config must retain its frozen resolved mapping."""
+    baseline_path = Path("tests/integration/_baseline_issue_6682_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    config_path = Path(config_name)
+    expected_fingerprint = baseline["variants"][config_path.name]
+
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+
+    assert actual_fingerprint == expected_fingerprint, (
+        f"Variant {config_path.name} resolved fingerprint {actual_fingerprint} "
+        f"does not match baseline {baseline['source_revision']}"
+    )

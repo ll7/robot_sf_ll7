@@ -1,0 +1,56 @@
+# Shared base for the issue-739 PPO ablations and 12M baseline retrain.
+# Variant files keep policy, path, seed/sampling, reward, observation, and schedule choices explicit.
+# Launch a named variant file, not this inheritance source.
+num_envs: 2
+worker_mode: subproc
+total_timesteps: 8192
+best_checkpoint_metric: success_rate
+feature_extractor: grid_socnav
+feature_extractor_kwargs:
+  grid_channels: [32, 64, 64]
+  grid_kernel_sizes: [5, 3, 3]
+  dropout_rate: 0.1
+ppo_hyperparams:
+  ent_coef: 0.008
+  clip_range: 0.1
+env_overrides:
+  observation_mode: socnav_struct
+  use_occupancy_grid: true
+  include_grid_in_observation: true
+  predictive_foresight_enabled: true
+  predictive_foresight_model_id: predictive_proxy_selected_v2_full
+  predictive_foresight_device: cpu
+  predictive_foresight_max_agents: 16
+  predictive_foresight_horizon_steps: 8
+  predictive_foresight_rollout_dt: 0.2
+  predictive_foresight_near_distance: 0.7
+  predictive_foresight_front_corridor_length: 3.0
+  predictive_foresight_front_corridor_half_width: 1.0
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 3.0
+    max_angular_speed: 1.0
+    allow_backwards: true
+  grid_config:
+    resolution: 0.2
+    width: 32.0
+    height: 32.0
+    channels: [obstacles, pedestrians, combined]
+    use_ego_frame: true
+    center_on_robot: true
+  peds_have_obstacle_forces: true
+  sim_config:
+    prf_config:
+      is_active: true
+    max_peds_per_group: 3
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+evaluation:
+  hold_out_scenarios: []
+  randomize_seeds: false
+  full_policy_analysis_videos: false
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: false

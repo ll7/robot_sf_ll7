@@ -1,0 +1,14 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "761d4bc86ba279133746b9001650cc04e377aa28",
+  "variants": {
+    "expert_ppo_issue_739_stage1_baseline.yaml": "f27154bf806c12b6b436c4fe9b0432f63b6852dba8390d5e0e33611c41529220",
+    "expert_ppo_issue_739_stage1_obs_grid_goal.yaml": "1d9cb10ecd3c183ebcb28f9e9ba4b36f146d7cd85b15ab765b7ed2752e01648f",
+    "expert_ppo_issue_739_stage1_obs_selective.yaml": "93db135e6e3f3410dfdcdf2aedb99c7e4ec6dfdbd19633e48b4b91be338529c9",
+    "expert_ppo_issue_739_stage1_reward_core.yaml": "96faf7d6ff161638a37ef3b5c0fcc197e5b4ff52d0855e46a477d7f209b91152",
+    "expert_ppo_issue_739_stage1_reward_tuned.yaml": "753ff648c235a5359b5e5287a3ef902838e6476b78cfc7c7b914172691c7eb81",
+    "expert_ppo_issue_739_stage2_opt_scale.yaml": "c0683c0ee5442d178142eb267c00a33fc585cb5d74cfa877a29ce333ab43a12e",
+    "expert_ppo_issue_739_stage2_sampling.yaml": "234f259a3e26ac7ac64f9dcff4594f3cca388bc8d6914d6da52fb745aabe31f0",
+    "expert_ppo_issue_739_12m_baseline_retrain.yaml": "5ad0d76a7e2dc86bd39dd754ead93ac1673c573dadbf38d332dbc0ac0025c191"
+  }
+}

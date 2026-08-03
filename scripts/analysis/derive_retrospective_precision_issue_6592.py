@@ -13,7 +13,8 @@ frozen ``0.0.3.post1`` successor rows used by issue #5351 and derives:
 5. The minimum paired risk difference resolvable under the declared
    practical-effect rule (min_risk_difference >= 0.02).
 6. Sensitivity to plausible event rates under the admitted hierarchy.
-7. Multiplicity handling for exposed contrasts (Holm step-down).
+7. Multiplicity inference for exposed contrasts (exact McNemar p-values with
+   Holm step-down adjustment), kept separate from descriptive precision.
 8. Explicit exclusions for rare-event, family-generalization, and
    non-independent interpretations the data cannot support.
 
@@ -43,8 +44,10 @@ from robot_sf.benchmark.hierarchical_paired_release_analysis import (
     AnalysisPolicy,
     _cluster_bootstrap_paired,
     _ordered_families,
+    _paired_mcnemar_p_value,
     _percentile_interval,
     build_matched_cells_from_ledger_rows,
+    holm_multiplicity,
 )
 from robot_sf.errors import RobotSfError
 from robot_sf.evidence.writers import write_json, write_text
@@ -553,6 +556,7 @@ def build_precision_report(
     contrast_precisions: list[dict[str, Any]] = []
     sensitivity_entries: list[dict[str, Any]] = []
     multiplicity_labels: list[str] = []
+    multiplicity_p_values: list[float] = []
 
     for pair in planner_pairs:
         cells = build_matched_cells_from_ledger_rows(rows, planner_pair=pair, family_of=family_of)
@@ -570,8 +574,11 @@ def build_precision_report(
         for outcome in ("collision", "near_miss", "timeout"):
             precision = derive_contrast_precision(cells, outcome=outcome, policy=policy)
             precision["planner_pair"] = list(pair)
+            p_value = _paired_mcnemar_p_value(cells, outcome=outcome)
+            precision["raw_p_value"] = p_value
             contrast_precisions.append(precision)
             multiplicity_labels.append(f"{pair[0]}:{pair[1]}:{outcome}")
+            multiplicity_p_values.append(p_value)
 
         # Sensitivity grid for the collision outcome (primary)
         sensitivity = derive_sensitivity_grid(cells, outcome="collision", policy=policy)
@@ -583,9 +590,34 @@ def build_precision_report(
             }
         )
 
-    # Multiplicity: Holm step-down over all exposed contrasts
-    # (same method as the admitted #5351 analysis)
     n_contrasts = len(contrast_precisions)
+    multiplicity_alpha = round(1.0 - policy.confidence, 12)
+    multiplicity_decisions = holm_multiplicity(
+        multiplicity_p_values,
+        alpha=multiplicity_alpha,
+    )
+    if len(multiplicity_decisions) != n_contrasts:
+        raise RetrospectivePrecisionError(
+            "multiplicity decision count does not match exposed contrast count"
+        )
+
+    serialized_multiplicity_decisions: list[dict[str, Any]] = []
+    for precision, label, decision in zip(
+        contrast_precisions,
+        multiplicity_labels,
+        multiplicity_decisions,
+        strict=True,
+    ):
+        precision["holm_adjusted_p_value"] = decision.adjusted_p_value
+        precision["rejected_at_family_wise_alpha"] = decision.rejected
+        serialized_multiplicity_decisions.append(
+            {
+                "comparison": label,
+                "raw_p_value": decision.raw_p_value,
+                "adjusted_p_value": decision.adjusted_p_value,
+                "rejected": decision.rejected,
+            }
+        )
 
     # Headline contrasts: collision outcomes only (the admitted primary estimand)
     headline = [cp for cp in contrast_precisions if cp["outcome"] == "collision"]
@@ -649,10 +681,16 @@ def build_precision_report(
         "sensitivity_analyses": sensitivity_entries,
         "multiplicity": {
             "method": "holm_step_down",
+            "alpha": multiplicity_alpha,
             "n_exposed_contrasts": n_contrasts,
+            "inference": "exact two-sided McNemar test on matched binary outcomes",
+            "decisions": serialized_multiplicity_decisions,
             "note": (
-                "Holm step-down correction over all exposed contrasts, "
-                "matching the admitted #5351 multiplicity policy"
+                "Holm step-down correction is applied to the exact two-sided "
+                "McNemar p-values for all exposed contrasts, matching the admitted "
+                "#5351 multiplicity policy. The descriptive percentile precision "
+                "intervals and MRRDs are reported without multiplicity adjustment; "
+                "these decisions do not alter those values."
             ),
         },
         "exclusions": [
@@ -717,6 +755,7 @@ def render_precision_readme(
     estimand = report.get("estimand", {})
     interval = report.get("interval_construction", {})
     provenance = report.get("frozen_input_provenance", {})
+    multiplicity = report.get("multiplicity", {})
     exclusions = report.get("exclusions", [])
 
     lines = [
@@ -805,6 +844,23 @@ def render_precision_readme(
             f"- Families: {provenance.get('family_count', 'N/A')}",
             "",
             "## Material Exclusions",
+            "",
+        ]
+    )
+
+    lines.extend(
+        [
+            "## Multiplicity Inference",
+            "",
+            f"- Method: `{multiplicity.get('method', 'N/A')}` over "
+            f"{multiplicity.get('n_exposed_contrasts', 'N/A')} exposed contrasts "
+            f"at alpha={multiplicity.get('alpha', 'N/A')}",
+            f"- Test: {multiplicity.get('inference', 'N/A')}",
+            "- Each contrast row in the JSON report records its raw p-value, "
+            "Holm-adjusted p-value, and family-wise rejection decision.",
+            "- Holm is applied to inferential decisions only. The descriptive "
+            "percentile precision intervals and MRRDs in the table above are "
+            "not multiplicity-adjusted and are not changed by these decisions.",
             "",
         ]
     )
@@ -899,9 +955,11 @@ def build_dissertation_statement(report: Mapping[str, Any]) -> str:
         f"{max(h.get('mrrd_practical_simulated', 0) for h in headline):.4f} "
         f"across headline contrasts. This is a design-sensitivity measure, NOT "
         f"a post-hoc observed-data adequacy computation, and does NOT claim "
-        f"prospective adequacy of the 30-seed design. Multiplicity: Holm step-down over "
+        f"prospective adequacy of the 30-seed design. Multiplicity inference uses "
+        f"exact two-sided McNemar p-values with Holm step-down over "
         f"{report.get('multiplicity', {}).get('n_exposed_contrasts', 'N/A')} "
-        f"exposed contrasts. Material exclusions: rare-event degeneracy, "
+        f"exposed contrasts; the descriptive precision intervals and MRRDs are "
+        f"not multiplicity-adjusted. Material exclusions: rare-event degeneracy, "
         f"family-generalization beyond the 35 observed families, and "
         f"non-independent cell interpretation. Claim promotion requires "
         f"separate human review."

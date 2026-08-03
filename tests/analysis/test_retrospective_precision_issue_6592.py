@@ -314,12 +314,33 @@ class TestReportSchema:
         assert "non_independent_interpretation" in exclusion_types
         assert "prospective_sizing" in exclusion_types
 
-    def test_multiplicity_handling(self, precision_run):
-        """Report contains multiplicity handling with Holm step-down."""
+    def test_multiplicity_handling(self, precision_module, precision_run):
+        """Report computes and reports the admitted 39-contrast Holm inference."""
         report, _ = precision_run
         mult = report["multiplicity"]
         assert mult["method"] == "holm_step_down"
+        assert mult["alpha"] == pytest.approx(0.05)
         assert mult["n_exposed_contrasts"] == 39
+        assert mult["inference"] == ("exact two-sided McNemar test on matched binary outcomes")
+        assert len(mult["decisions"]) == 39
+        assert "descriptive percentile precision intervals and MRRDs" in mult["note"]
+
+        expected = precision_module.holm_multiplicity(
+            [contrast["raw_p_value"] for contrast in report["contrast_precisions"]],
+            alpha=0.05,
+        )
+        for contrast, decision, expected_decision in zip(
+            report["contrast_precisions"],
+            mult["decisions"],
+            expected,
+            strict=True,
+        ):
+            assert decision["raw_p_value"] == pytest.approx(contrast["raw_p_value"])
+            assert decision["adjusted_p_value"] == pytest.approx(contrast["holm_adjusted_p_value"])
+            assert decision["rejected"] is contrast["rejected_at_family_wise_alpha"]
+            assert decision["raw_p_value"] == pytest.approx(expected_decision.raw_p_value)
+            assert decision["adjusted_p_value"] == pytest.approx(expected_decision.adjusted_p_value)
+            assert decision["rejected"] is expected_decision.rejected
 
     def test_headline_contrasts_have_precision(self, precision_run):
         """Each headline collision contrast has CI width and MRRD."""

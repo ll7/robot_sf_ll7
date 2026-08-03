@@ -95,7 +95,9 @@ def main(argv: list[str] | None = None) -> int:
         scan_step_m=args.scan_step_m,
     )
     payload = canary_verdict_to_dict(verdict)
-    text = json.dumps(payload, indent=2, sort_keys=True)
+    # Reject any accidental non-finite value instead of emitting JavaScript-style
+    # NaN/Infinity tokens that are not valid machine-readable JSON.
+    text = json.dumps(payload, allow_nan=False, indent=2, sort_keys=True)
     print(text)
     if args.out is not None:
         out_path = args.out if args.out.is_absolute() else _REPO_ROOT / args.out

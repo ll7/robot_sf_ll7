@@ -58,6 +58,12 @@ uv run python scripts/benchmark/run_radius_binding_canary_issue_6641.py \
 ```
 
 Exit code is 0 on `go` and non-zero (fail-closed) on any `no-go` surface.
+Numeric inputs are validated before scenario loading: robot and pedestrian radii
+must be finite and non-negative, the tolerance must be finite and within the
+fail-closed 0–0.05 m policy window, and the scan step must be finite and
+positive. Invalid inputs and scenario setup failures still emit the five
+canonical surface rows; a rejected non-finite selected radius is serialized as
+`null` rather than a non-standard JSON number.
 
 ## Owner surfaces
 

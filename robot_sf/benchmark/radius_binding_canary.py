@@ -77,6 +77,9 @@ VERDICT_NO_GO = "no-go"
 # A radius binding is accepted when the observed radius-sensitive boundary tracks
 # the configured radius within this absolute tolerance (metres).
 DEFAULT_RADIUS_TOLERANCE_M = 5e-3
+# Keep caller-provided acceptance windows bounded: a tolerance that is large
+# enough to hide a radius-binding mismatch defeats this fail-closed diagnostic.
+MAX_RADIUS_TOLERANCE_M = 10.0 * DEFAULT_RADIUS_TOLERANCE_M
 # Step size for the differential radius/distance scans.
 DEFAULT_SCAN_STEP_M = 1e-3
 # Keep malformed or adversarial scan parameters from turning this bounded diagnostic
@@ -107,6 +110,100 @@ _CANARY_OPERATIONAL_ERRORS = (
     TypeError,
     ValueError,
 )
+
+
+def _safe_finite_float(value: Any) -> float | None:
+    """Return a finite float or ``None`` for invalid machine-facing input."""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _validate_canary_inputs(
+    *,
+    selected_robot_radius_m: Any,
+    selected_ped_radius_m: Any,
+    tolerance_m: Any,
+    scan_step_m: Any,
+) -> list[str]:
+    """Return fail-closed validation errors for all numeric canary inputs."""
+    errors: list[str] = []
+    for name, value in (
+        ("selected_robot_radius_m", selected_robot_radius_m),
+        ("selected_ped_radius_m", selected_ped_radius_m),
+    ):
+        numeric = _safe_finite_float(value)
+        if numeric is None:
+            errors.append(f"{name} must be finite; received {value!r}")
+        elif numeric < 0.0:
+            errors.append(f"{name} must be non-negative; received {numeric!r}")
+
+    tolerance = _safe_finite_float(tolerance_m)
+    if tolerance is None:
+        errors.append(f"tolerance_m must be finite; received {tolerance_m!r}")
+    elif tolerance < 0.0:
+        errors.append(f"tolerance_m must be non-negative; received {tolerance!r}")
+    elif tolerance > MAX_RADIUS_TOLERANCE_M:
+        errors.append(
+            "tolerance_m exceeds the fail-closed policy limit "
+            f"{MAX_RADIUS_TOLERANCE_M!r} m; received {tolerance!r}"
+        )
+
+    scan_step = _safe_finite_float(scan_step_m)
+    if scan_step is None:
+        errors.append(f"scan_step_m must be finite; received {scan_step_m!r}")
+    elif scan_step <= 0.0:
+        errors.append(f"scan_step_m must be positive; received {scan_step!r}")
+    return errors
+
+
+def _input_validation_surface_failures(
+    *,
+    scenario_path: Path | str,
+    errors: Sequence[str],
+) -> list[SurfaceVerdict]:
+    """Return one canonical failed row per surface for invalid canary inputs."""
+    observed = "; ".join(errors)
+    return [
+        SurfaceVerdict(
+            surface=surface,
+            status=STATUS_FAIL,
+            probe="input_validation",
+            expected="Canary numeric inputs are finite, non-negative, and within policy.",
+            observed=observed,
+            evidence={
+                "scenario_path": str(scenario_path),
+                "input_validation_errors": list(errors),
+            },
+            note="Fail-closed: invalid input prevented all surface probes.",
+        )
+        for surface in CANARY_SURFACES
+    ]
+
+
+def _scenario_setup_surface_failures(
+    *,
+    scenario_path: Path | str,
+    error: str,
+) -> list[SurfaceVerdict]:
+    """Return one canonical failed row per surface for scenario setup failure."""
+    return [
+        SurfaceVerdict(
+            surface=surface,
+            status=STATUS_FAIL,
+            probe="scenario_setup",
+            expected="Scenario geometry loads before this binding surface is probed.",
+            observed=error,
+            evidence={
+                "scenario_path": str(scenario_path),
+                "setup_error": error,
+            },
+            note="Fail-closed: scenario setup failed; this surface was not probed.",
+        )
+        for surface in CANARY_SURFACES
+    ]
 
 
 # --- verdict dataclasses -----------------------------------------------------
@@ -144,8 +241,10 @@ class CanaryVerdict:
         claim_boundary: Plain-language claim this canary does and does not make.
         evidence_status: Evidence-grade label (``diagnostic-only`` for this canary).
         scenario: Scenario identity and parsed geometry facts used by the probes.
-        selected_robot_radius_m: Primary selected robot envelope radius (metres).
-        selected_ped_radius_m: Primary selected pedestrian radius (metres).
+        selected_robot_radius_m: Primary selected robot envelope radius (metres), or
+            ``None`` when input validation rejected the supplied value.
+        selected_ped_radius_m: Primary selected pedestrian radius (metres), or
+            ``None`` when input validation rejected the supplied value.
         surfaces: Per-surface verdicts in ``CANARY_SURFACES`` order.
         verdict: ``go`` only when every surface is ``pass``; otherwise ``no-go``.
         caveats: Caveats and fallback/degraded exclusions.
@@ -156,8 +255,8 @@ class CanaryVerdict:
     claim_boundary: str
     evidence_status: str
     scenario: dict[str, Any]
-    selected_robot_radius_m: float
-    selected_ped_radius_m: float
+    selected_robot_radius_m: float | None
+    selected_ped_radius_m: float | None
     surfaces: list[SurfaceVerdict]
     verdict: str
     caveats: list[str]
@@ -1114,24 +1213,42 @@ def run_radius_binding_canary(
         "Feasibility-oracle rollout completion is deterministically stubbed; the "
         "radius binding is proven via the oracle's geometric (certifier) margin.",
     ]
+    input_errors = _validate_canary_inputs(
+        selected_robot_radius_m=selected_robot_radius_m,
+        selected_ped_radius_m=selected_ped_radius_m,
+        tolerance_m=tolerance_m,
+        scan_step_m=scan_step_m,
+    )
+    if input_errors:
+        return _assemble_verdict(
+            selected_robot_radius_m=_safe_finite_float(selected_robot_radius_m),
+            selected_ped_radius_m=_safe_finite_float(selected_ped_radius_m),
+            scenario_facts={
+                "scenario_path": str(scenario_path),
+                "input_validation_errors": input_errors,
+            },
+            surfaces=_input_validation_surface_failures(
+                scenario_path=scenario_path,
+                errors=input_errors,
+            ),
+            caveats=[
+                *caveats,
+                "Input validation failed before scenario loading or surface probing.",
+            ],
+        )
     try:
         resolved_geometry = geometry or load_canary_geometry(Path(scenario_path))
     except _CANARY_OPERATIONAL_ERRORS as exc:
-        fail = SurfaceVerdict(
-            surface="scenario_geometry",
-            status=STATUS_FAIL,
-            probe="load_canary_geometry",
-            expected="Geometry-sensitive scenario loads and yields a wall distance.",
-            observed=f"load raised {type(exc).__name__}: {exc}",
-            evidence={"scenario_path": str(scenario_path)},
-            note="Fail-closed: cannot run surface probes without scenario geometry.",
-        )
+        setup_error = f"load raised {type(exc).__name__}: {exc}"
         return _assemble_verdict(
             selected_robot_radius_m=selected_robot_radius_m,
             selected_ped_radius_m=selected_ped_radius_m,
-            scenario_facts={"scenario_path": str(scenario_path)},
-            surfaces=[fail],
-            caveats=caveats,
+            scenario_facts={"scenario_path": str(scenario_path), "setup_error": setup_error},
+            surfaces=_scenario_setup_surface_failures(
+                scenario_path=scenario_path,
+                error=setup_error,
+            ),
+            caveats=[*caveats, "Scenario setup failed before any surface probe ran."],
         )
 
     scenario_facts = {
@@ -1213,8 +1330,8 @@ def run_radius_binding_canary(
 
 def _assemble_verdict(
     *,
-    selected_robot_radius_m: float,
-    selected_ped_radius_m: float,
+    selected_robot_radius_m: float | None,
+    selected_ped_radius_m: float | None,
     scenario_facts: Mapping[str, Any],
     surfaces: Sequence[SurfaceVerdict],
     caveats: Sequence[str],
@@ -1232,8 +1349,8 @@ def _assemble_verdict(
         claim_boundary=CANARY_CLAIM_BOUNDARY,
         evidence_status="diagnostic-only",
         scenario=dict(scenario_facts),
-        selected_robot_radius_m=float(selected_robot_radius_m),
-        selected_ped_radius_m=float(selected_ped_radius_m),
+        selected_robot_radius_m=_safe_finite_float(selected_robot_radius_m),
+        selected_ped_radius_m=_safe_finite_float(selected_ped_radius_m),
         surfaces=list(surfaces),
         verdict=verdict,
         caveats=list(caveats),
@@ -1270,6 +1387,7 @@ __all__ = [
     "DEFAULT_SCENARIO_REL",
     "DEFAULT_SELECTED_PED_RADIUS_M",
     "DEFAULT_SELECTED_ROBOT_RADIUS_M",
+    "MAX_RADIUS_TOLERANCE_M",
     "RADIUS_BINDING_CANARY_SCHEMA",
     "STATUS_FAIL",
     "STATUS_PASS",

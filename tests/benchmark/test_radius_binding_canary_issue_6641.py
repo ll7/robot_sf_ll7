@@ -9,6 +9,7 @@ verdict schema, and one end-to-end run on the committed geometry-sensitive
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from robot_sf.benchmark.radius_binding_canary import (
     _MAX_SCAN_SAMPLES,
     CANARY_SURFACES,
     DEFAULT_SCENARIO_REL,
+    MAX_RADIUS_TOLERANCE_M,
     RADIUS_BINDING_CANARY_SCHEMA,
     SURFACE_FEASIBILITY_ORACLE,
     SURFACE_METRIC_METADATA_ROWS,
@@ -38,6 +40,7 @@ from robot_sf.benchmark.radius_binding_canary import (
     probe_simulator_collision_geometry,
     run_radius_binding_canary,
 )
+from scripts.benchmark.run_radius_binding_canary_issue_6641 import main as run_canary_cli
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -243,6 +246,65 @@ def test_canary_rejects_selected_radius_mismatch(scenario_geometry) -> None:
         surface.evidence.get("selected_configuration_matches") is False
         for surface in verdict.surfaces
     )
+
+
+@pytest.mark.parametrize(
+    "tolerance_m",
+    [math.nan, math.inf, -1.0, MAX_RADIUS_TOLERANCE_M + 1e-6],
+)
+def test_canary_rejects_out_of_policy_tolerance_before_probing(
+    scenario_geometry,
+    tolerance_m: float,
+) -> None:
+    """Unbounded or invalid tolerance cannot turn a configuration mismatch into ``go``."""
+    verdict = run_radius_binding_canary(
+        geometry=scenario_geometry,
+        selected_robot_radius_m=0.31,
+        selected_ped_radius_m=0.4,
+        tolerance_m=tolerance_m,
+    )
+
+    assert verdict.verdict == VERDICT_NO_GO
+    assert [surface.surface for surface in verdict.surfaces] == list(CANARY_SURFACES)
+    assert all(surface.status == "fail" for surface in verdict.surfaces)
+    assert all(surface.probe == "input_validation" for surface in verdict.surfaces)
+    payload = canary_verdict_to_dict(verdict)
+    json.dumps(payload, allow_nan=False)
+
+
+def test_canary_preserves_canonical_surfaces_when_scenario_load_fails(tmp_path: Path) -> None:
+    """A missing scenario yields five setup-failure rows, not a sixth ad hoc surface."""
+    verdict = run_radius_binding_canary(scenario_path=tmp_path / "missing.yaml")
+
+    assert verdict.verdict == VERDICT_NO_GO
+    assert [surface.surface for surface in verdict.surfaces] == list(CANARY_SURFACES)
+    assert all(surface.status == "fail" for surface in verdict.surfaces)
+    assert all(surface.probe == "scenario_setup" for surface in verdict.surfaces)
+    assert all("setup_error" in surface.evidence for surface in verdict.surfaces)
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--robot-radius", "nan"),
+        ("--ped-radius", "-0.1"),
+        ("--tolerance-m", "inf"),
+        ("--scan-step-m", "0"),
+    ],
+)
+def test_cli_invalid_numeric_inputs_emit_strict_json(
+    capsys: pytest.CaptureFixture[str],
+    option: str,
+    value: str,
+) -> None:
+    """Invalid CLI numbers fail closed without non-standard NaN/Infinity JSON."""
+    assert run_canary_cli([option, value]) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["verdict"] == VERDICT_NO_GO
+    assert [surface["surface"] for surface in payload["surfaces"]] == list(CANARY_SURFACES)
+    assert all(surface["status"] == "fail" for surface in payload["surfaces"])
+    json.dumps(payload, allow_nan=False)
 
 
 def test_loaded_geometry_records_effective_scenario_radii(scenario_geometry) -> None:

@@ -1916,3 +1916,151 @@ def test_issue_2557_base_config_inheritance_equivalence() -> None:
             f"Resolved config {config_path.name} differs from the baseline at "
             f"{baseline['source_revision']}."
         )
+
+
+# Issue #6681: the three issue_791 seed-replica groups were migrated to shared
+# base configs via the existing base_config resolver. The constants below pin
+# that contract and the frozen pre-change resolved-config baseline.
+_ISSUE_791_ABLATE_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_791_BASELINE_PATH = Path("tests/integration/_baseline_issue_791_seed_replicas_resolved.json")
+
+# Every migrated issue_791 seed-replica variant and its shared base config.
+# Frozen in the pre-change baseline at origin/main c8a10c04; the resolver must
+# reconstruct each variant's mapping byte-identically from the base + overrides.
+_ISSUE_791_MIGRATED_VARIANTS = {
+    # Group (a): all_scenarios_10m_env22_large_capacity leader + seed replicas.
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    # Group (b): reward_curriculum_promotion_10m eval_aligned_large_capacity
+    # leader + seed231/seed1337 variants and their _fixed counterparts.
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    # Group (c): reward_curriculum_promotion_3m eval_aligned seed replicas.
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+}
+
+# Known silent divergence pinned by the migration: only the all_scenarios leader
+# carries env_factory_kwargs.peds_have_obstacle_forces; the seed replicas must
+# keep its absence. Every resolved mapping stays byte-identical to origin/main.
+_ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE = {
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": True,
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": False,
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": False,
+}
+
+# Not migrated, but inherits the group (a) leader via base_config; its resolved
+# mapping must stay unchanged too.
+_ISSUE_791_BEST_CKPT_GUARD = (
+    "expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml"
+)
+
+
+def _issue_791_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for ``config_path``."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _issue_791_baseline() -> dict:
+    """Load the frozen pre-change resolved-config baseline for the migration."""
+    assert _ISSUE_791_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_791_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+@pytest.mark.parametrize("variant", sorted(_ISSUE_791_MIGRATED_VARIANTS))
+def test_issue_791_seed_replicas_resolve_to_prechange_values(variant: str) -> None:
+    """Each migrated issue_791 seed-replica variant matches its pre-refactor mapping.
+
+    The base_config deep-merge must reconstruct the exact pre-change resolved
+    mapping for every migrated variant, including the preserved
+    peds_have_obstacle_forces divergence.
+    """
+    path = (_ISSUE_791_ABLATE_DIR / variant).resolve()
+    baseline = _issue_791_baseline()
+
+    actual_fingerprint = _issue_791_fingerprint(path)
+    assert actual_fingerprint == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    # Exercise the full construction path so the loader does not diverge from the
+    # resolver output after inheritance.
+    config = load_expert_training_config(path)
+    assert config.policy_id
+
+
+@pytest.mark.parametrize("variant", sorted(_ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE))
+def test_issue_791_peds_have_obstacle_forces_divergence_preserved(variant: str) -> None:
+    """The all_scenarios leader keeps env_factory_kwargs.peds_have_obstacle_forces.
+
+    The replicas keep its absence; the shared env_overrides value stays common.
+    This pins the silent divergence the migration must preserve exactly.
+    """
+    resolved = _load_expert_training_config_mapping((_ISSUE_791_ABLATE_DIR / variant).resolve())
+    expects_override = _ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE[variant]
+
+    assert resolved["env_overrides"]["peds_have_obstacle_forces"] is True
+    if expects_override:
+        assert resolved["env_factory_kwargs"]["peds_have_obstacle_forces"] is True
+    else:
+        assert "peds_have_obstacle_forces" not in resolved["env_factory_kwargs"]
+
+
+def test_issue_791_bases_inheritance_and_no_self_reference() -> None:
+    """Every migrated variant inherits its shared base and the bases stay lean."""
+    for variant, base_name in _ISSUE_791_MIGRATED_VARIANTS.items():
+        variant_path = (_ISSUE_791_ABLATE_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        assert variant_yaml["base_config"] == base_name
+
+        base_path = (_ISSUE_791_ABLATE_DIR / base_name).resolve()
+        base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+        # A base must not self-inherit and carries no launch identity.
+        assert "base_config" not in base_yaml
+        assert "policy_id" not in base_yaml
+
+
+def test_issue_791_best_ckpt_inheriting_leader_guard_unchanged() -> None:
+    """A config inheriting the group (a) leader must resolve unchanged too.
+
+    expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml uses
+    the all_scenarios leader as its base_config, so converting the leader to
+    inherit from a shared base must leave its resolved mapping identical.
+    """
+    baseline = _issue_791_baseline()
+    path = (_ISSUE_791_ABLATE_DIR / _ISSUE_791_BEST_CKPT_GUARD).resolve()
+    assert (
+        _issue_791_fingerprint(path) == baseline["non_migrated_guards"][_ISSUE_791_BEST_CKPT_GUARD]
+    )

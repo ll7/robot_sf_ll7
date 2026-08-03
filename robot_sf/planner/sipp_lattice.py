@@ -965,6 +965,9 @@ class PedestrianOccupancyForecast:
             slot_duration = float(self.slot_duration)
             combined_radius = float(self.combined_radius)
             horizon_slots = float(self.horizon_slots)
+            pedestrian_radius = (
+                None if self.pedestrian_radius is None else float(self.pedestrian_radius)
+            )
         except (TypeError, ValueError, OverflowError):
             return None
         if (
@@ -978,6 +981,10 @@ class PedestrianOccupancyForecast:
             or not (isfinite(combined_radius) and combined_radius >= 0.0)
             or not (isfinite(horizon_slots) and horizon_slots >= 0.0)
             or not horizon_slots.is_integer()
+            or (
+                pedestrian_radius is not None
+                and not (isfinite(pedestrian_radius) and pedestrian_radius > 0.0)
+            )
         ):
             return None
         return (
@@ -1146,7 +1153,16 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
         )
     pedestrian_radius = pedestrian_radius_value
     combined_radius = robot_envelope_radius + pedestrian_radius
-    if not isfinite(float(heading)):
+    try:
+        heading_value = float(heading)
+    except (TypeError, ValueError, OverflowError):
+        return _failed_forecast(
+            slot_duration=slot_duration,
+            combined_radius=combined_radius,
+            horizon_slots=horizon_slots,
+            pedestrian_radius=pedestrian_radius,
+        )
+    if not isfinite(heading_value):
         return _failed_forecast(
             slot_duration=slot_duration,
             combined_radius=combined_radius,
@@ -1226,7 +1242,7 @@ def build_pedestrian_occupancy_forecast(  # noqa: C901
             pedestrian_radius=pedestrian_radius,
         )
 
-    world_velocities = _rotate_ego_velocities_to_world(raw_velocities[:count], float(heading))
+    world_velocities = _rotate_ego_velocities_to_world(raw_velocities[:count], heading_value)
     return PedestrianOccupancyForecast(
         positions=positions,
         velocities=world_velocities,
@@ -2071,7 +2087,13 @@ COMPARISON_INDETERMINATE = "indeterminate"
 #: These mirror ``robot_sf.scenario_certification.feasibility_oracle`` constants;
 #: they are duplicated as literals here to avoid importing that heavy module.
 _STATIC_INFEASIBLE_BY_CONSTRUCTION = "infeasible_by_construction"
-_STATIC_UNDECIDED_STATUSES = frozenset({"blocked", "time_truncated"})
+_STATIC_FEASIBLE = "feasible"
+_STATIC_BLOCKED = "blocked"
+_STATIC_TIME_TRUNCATED = "time_truncated"
+_STATIC_UNDECIDED_STATUSES = frozenset({_STATIC_BLOCKED, _STATIC_TIME_TRUNCATED})
+_STATIC_KNOWN_STATUSES = frozenset(
+    {_STATIC_FEASIBLE, _STATIC_INFEASIBLE_BY_CONSTRUCTION, *_STATIC_UNDECIDED_STATUSES}
+)
 
 
 @dataclass(frozen=True)
@@ -2200,24 +2222,74 @@ class SpaceTimeFeasibilityOracle:
         Returns:
             The discretization parameters binding for this assessment.
         """
-        combined_radius = float(forecast.combined_radius)
-        pedestrian_radius = forecast.pedestrian_radius
-        if pedestrian_radius is None:
-            pedestrian_radius = (
-                combined_radius - float(self.config.robot_radius) - float(self.config.safety_margin)
-            )
+        robot_radius = float(self.config.robot_radius)
+        safety_margin = float(self.config.safety_margin)
+        default_pedestrian_radius = float(self.config.pedestrian_radius)
+        robot_envelope_radius = robot_radius + safety_margin
+        default_combined_radius = robot_envelope_radius + default_pedestrian_radius
+        try:
+            combined_radius = float(forecast.combined_radius)
+        except (TypeError, ValueError, OverflowError):
+            combined_radius = float("nan")
+        try:
+            forecast_horizon_slots = float(forecast.horizon_slots)
+        except (TypeError, ValueError, OverflowError):
+            forecast_horizon_slots = float("nan")
+        if not (isfinite(combined_radius) and combined_radius >= robot_envelope_radius):
+            combined_radius = default_combined_radius
+            pedestrian_radius = default_pedestrian_radius
+        else:
+            pedestrian_radius = forecast.pedestrian_radius
+            try:
+                pedestrian_radius = None if pedestrian_radius is None else float(pedestrian_radius)
+            except (TypeError, ValueError, OverflowError):
+                pedestrian_radius = None
+            if pedestrian_radius is None:
+                inferred_pedestrian_radius = combined_radius - robot_envelope_radius
+                pedestrian_radius = (
+                    inferred_pedestrian_radius
+                    if isfinite(inferred_pedestrian_radius) and inferred_pedestrian_radius > 0.0
+                    else default_pedestrian_radius
+                )
+            elif not (isfinite(pedestrian_radius) and pedestrian_radius > 0.0):
+                pedestrian_radius = default_pedestrian_radius
+            combined_radius = max(combined_radius, robot_envelope_radius + pedestrian_radius)
+        if not (isfinite(forecast_horizon_slots) and forecast_horizon_slots >= 0.0):
+            forecast_horizon_slots = 0.0
+        elif not forecast_horizon_slots.is_integer():
+            forecast_horizon_slots = math.floor(forecast_horizon_slots)
         return SpaceTimeDiscretization(
             xy_resolution=float(self.config.xy_resolution),
             time_slot_duration=float(self.config.time_slot_duration),
             planning_horizon_slots=min(
-                int(self.config.planning_horizon_slots), int(forecast.horizon_slots)
+                int(self.config.planning_horizon_slots), int(forecast_horizon_slots)
             ),
-            forecast_horizon_slots=int(forecast.horizon_slots),
+            forecast_horizon_slots=int(forecast_horizon_slots),
             combined_radius=combined_radius,
-            robot_radius=float(self.config.robot_radius),
+            robot_radius=robot_radius,
             pedestrian_radius=float(pedestrian_radius),
-            safety_margin=float(self.config.safety_margin),
+            safety_margin=safety_margin,
         )
+
+    @staticmethod
+    def _static_arc_blocked(
+        static_blocked: Callable[[np.ndarray], bool] | None,
+        arc_positions: np.ndarray,
+    ) -> bool:
+        """Evaluate static occupancy conservatively, failing closed on bad callbacks.
+
+        Returns:
+            ``True`` when the arc is blocked or the callback is malformed.
+        """
+        if not callable(static_blocked):
+            return True
+        try:
+            blocked = static_blocked(arc_positions)
+        except Exception:  # noqa: BLE001 - a failed occupancy check must not prove safety.
+            return True
+        if not isinstance(blocked, (bool, np.bool_)):
+            return True
+        return bool(blocked)
 
     def assess(
         self,
@@ -2250,14 +2322,19 @@ class SpaceTimeFeasibilityOracle:
             else (including a failed forecast) is not-proven-feasible.
         """
         discretization = self._discretization(forecast)
-        if not forecast.usable:
+        forecast_geometry_valid = forecast._validated_geometry() is not None
+        if not forecast.usable or not forecast_geometry_valid:
             # Fail closed: degraded/invalid dynamic input never backs feasibility.
             return SpaceTimeFeasibilityResult(
                 verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
                 witness=None,
                 witness_valid=False,
-                search_result_type="invalid_forecast",
-                bound_termination="invalid_forecast",
+                search_result_type=(
+                    "invalid_forecast" if not forecast.usable else "invalid_forecast_geometry"
+                ),
+                bound_termination=(
+                    "invalid_forecast" if not forecast.usable else "invalid_forecast_geometry"
+                ),
                 expansions=0,
                 horizon_reached=0,
                 safe_interval_rejections=0,
@@ -2280,6 +2357,14 @@ class SpaceTimeFeasibilityOracle:
                 discretization=discretization,
             )
 
+        def safe_static_blocked(arc_positions: np.ndarray) -> bool:
+            """Adapt the caller's checker to the oracle's fail-closed contract.
+
+            Returns:
+                ``True`` when the caller's checker blocks the arc or fails.
+            """
+            return self._static_arc_blocked(static_blocked, arc_positions)
+
         result = self._search.search(
             start_pos=start_pos,
             start_heading=start_heading,
@@ -2287,7 +2372,7 @@ class SpaceTimeFeasibilityOracle:
             start_angular_velocity=start_angular_velocity,
             goal=goal,
             forecast=forecast,
-            static_blocked=static_blocked,
+            static_blocked=safe_static_blocked,
         )
 
         reached_goal = result.result_type == "native_plan" and result.bound_termination == "goal"
@@ -2314,7 +2399,7 @@ class SpaceTimeFeasibilityOracle:
             goal=np.asarray(goal, dtype=float),
             start_angular_velocity=float(start_angular_velocity),
             forecast=forecast,
-            static_blocked=static_blocked,
+            static_blocked=safe_static_blocked,
         )
         return SpaceTimeFeasibilityResult(
             verdict=FEASIBILITY_FEASIBLE if witness_valid else FEASIBILITY_NOT_PROVEN_FEASIBLE,
@@ -2413,7 +2498,7 @@ class SpaceTimeFeasibilityOracle:
         cursor, goal_position, heading, speed, angular_velocity = state
         if not callable(static_blocked):
             return False
-        if static_blocked(cursor[None, :]):
+        if self._static_arc_blocked(static_blocked, cursor[None, :]):
             return False
         if forecast.arc_occupied(cursor[None, :], 0):
             return False
@@ -2428,7 +2513,7 @@ class SpaceTimeFeasibilityOracle:
             arc_positions = self._collision_model._unicycle_arc_positions(
                 primitive.as_command(), heading, primitive.duration, cursor
             )
-            if static_blocked(arc_positions):
+            if self._static_arc_blocked(static_blocked, arc_positions):
                 return False
             if forecast.arc_occupied(arc_positions, slot, primitive.duration):
                 return False
@@ -2574,7 +2659,25 @@ def compare_with_static_feasibility(
         ``explanation`` keys.
     """
     space_time_feasible = result.feasible
-    if static_feasible is None:
+    static_inputs_consistent = static_status is None or (
+        static_status in _STATIC_KNOWN_STATUSES
+        and (
+            (static_status == _STATIC_FEASIBLE and static_feasible is True)
+            or (
+                static_status in {_STATIC_INFEASIBLE_BY_CONSTRUCTION, _STATIC_TIME_TRUNCATED}
+                and static_feasible is False
+            )
+            or (static_status == _STATIC_BLOCKED and static_feasible is None)
+        )
+    )
+    if not static_inputs_consistent:
+        comparison_verdict = COMPARISON_INDETERMINATE
+        explanation = (
+            "The static oracle supplied contradictory or unsupported feasibility metadata "
+            f"(feasible={static_feasible!r}, status={static_status!r}), so the comparison "
+            "is indeterminate."
+        )
+    elif static_feasible is None:
         comparison_verdict = COMPARISON_INDETERMINATE
         explanation = (
             "The static oracle returned no verdict (blocked) for this cell, so the "

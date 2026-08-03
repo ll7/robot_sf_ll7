@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 
 import numpy as np
@@ -9,6 +10,7 @@ import pytest
 
 from robot_sf.planner.sipp_lattice import (
     MotionPrimitive,
+    PedestrianOccupancyForecast,
     PrimitiveKind,
     SippKinodynamicCollisionModel,
     SippLatticeConfig,
@@ -713,6 +715,17 @@ class TestPedestrianOccupancyForecast:
         assert not fc.usable
         assert fc.pedestrian_radius is None
         assert math.isfinite(fc.combined_radius)
+
+    def test_invalid_heading_fails_closed(self) -> None:
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.zeros((0, 2)),
+            velocities=np.zeros((0, 2)),
+            heading="not-a-number",
+            config=SippLatticeConfig(),
+            pedestrian_radius=0.3,
+        )
+        assert fc.status == "failed"
+        assert not fc.usable
 
     def test_empty_forecast_still_enforces_trusted_horizon(self) -> None:
         cfg = SippLatticeConfig(
@@ -1521,6 +1534,51 @@ class TestSpaceTimeFeasibilityOracle:
         assert result.bound_termination == "missing_static_occupancy"
         assert result.expansions == 0
 
+    def test_static_occupancy_errors_fail_closed(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = _oracle_forecast(cfg, [], [])
+
+        def raising_static_blocked(_arc_positions):
+            raise RuntimeError("static occupancy unavailable")
+
+        result = oracle.assess(
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([0.6, 0.0]),
+            forecast=forecast,
+            static_blocked=raising_static_blocked,
+        )
+
+        assert result.verdict == FEASIBILITY_NOT_PROVEN_FEASIBLE
+        assert result.witness is None
+
+    def test_malformed_forecast_has_json_safe_diagnostic_metadata(self) -> None:
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = PedestrianOccupancyForecast(
+            positions="malformed",
+            velocities=np.zeros((0, 2)),
+            slot_duration=cfg.time_slot_duration,
+            combined_radius=float("nan"),
+            horizon_slots=40,
+            status="ok",
+        )
+
+        result = oracle.assess(
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([0.6, 0.0]),
+            forecast=forecast,
+            static_blocked=_open_static_space,
+        )
+
+        assert result.verdict == FEASIBILITY_NOT_PROVEN_FEASIBLE
+        assert result.bound_termination == "invalid_forecast_geometry"
+        json.dumps(space_time_feasibility_result_to_dict(result), allow_nan=False)
+
     def test_verify_witness_rejects_missing_static_occupancy(self) -> None:
         cfg = _oracle_config()
         oracle = SpaceTimeFeasibilityOracle(cfg)
@@ -1708,6 +1766,25 @@ class TestSpaceTimeStaticOracleComparison:
     def test_indeterminate_when_static_blocked(self) -> None:
         comparison = compare_with_static_feasibility(
             _feasible_result_stub(), static_feasible=None, static_status="blocked"
+        )
+        assert comparison["comparison_verdict"] == COMPARISON_INDETERMINATE
+
+    @pytest.mark.parametrize(
+        ("static_feasible", "static_status"),
+        [
+            (True, "infeasible_by_construction"),
+            (False, "feasible"),
+            (None, "time_truncated"),
+            (False, "unsupported"),
+        ],
+    )
+    def test_indeterminate_for_inconsistent_static_metadata(
+        self, static_feasible, static_status
+    ) -> None:
+        comparison = compare_with_static_feasibility(
+            _feasible_result_stub(),
+            static_feasible=static_feasible,
+            static_status=static_status,
         )
         assert comparison["comparison_verdict"] == COMPARISON_INDETERMINATE
 

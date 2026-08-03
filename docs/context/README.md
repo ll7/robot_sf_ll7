@@ -122,6 +122,8 @@ knowledge, not every transient iteration detail.
   [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md)
 * Issue #5579 MPC tuning-budget sensitivity packet:
   [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md)
+* Issue #6640 Gate 0 radius-sensitivity post-hoc feasibility audit:
+  [radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md)
 * Issue #6641 Gate 1 runtime radius-binding canary:
   [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md)
 

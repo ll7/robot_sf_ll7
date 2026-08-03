@@ -1,7 +1,7 @@
 {
   "schema_version": "benchmark-amv-coverage-summary.v1",
   "campaign_id": "issue_6095_nominal_discriminability_v1_20260725_final",
-  "generated_at_utc": "2026-07-25T14:49:50.021824Z",
+  "generated_at_utc": "2026-08-03T01:35:44.735704Z",
   "profile_name": "amv-paper-v1",
   "contract_version": "1",
   "coverage_enforcement": "warn",

@@ -1,7 +1,7 @@
 {
   "schema_version": "benchmark-preflight-validate-config.v1",
   "campaign_id": "issue_6095_stress_discriminability_v1_20260725_final",
-  "generated_at_utc": "2026-07-25T05:05:53.339378Z",
+  "generated_at_utc": "2026-08-03T01:35:52.684090Z",
   "config_path": "configs/benchmarks/issue_6095_stress_discriminability_v1.yaml",
   "config_sha256": "e8f8b56097964568da4784054d23e1c590c14d32634c8ec6d465f735d1208dc6",
   "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",

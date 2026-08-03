@@ -32,12 +32,11 @@ Preflight outputs generated via `scripts/tools/run_camera_ready_benchmark.py --m
 
 ## Exact Preflight Provenance
 
-The nominal packet was regenerated from source revision
-`83b9de4284ab49a6338116fdc5f13ebc5e34f40b` with the canonical
-metadata-only preflight command after normalizing repository-resident scenario
-file references for its matrix hash. The stress packet remains from
-`c24325e76a7c831941e0efe7ac8b25e231b9574b`; it contains no route override
-and its matrix hash is unchanged. Each preflight artifact records the
+Both packets were regenerated together from source revision
+`d791c08f70b9af20f93babd5f1f17b06d581a185` with the canonical metadata-only
+preflight command after rebasing onto current `main`. The nominal matrix hash
+continues to normalize repository-resident scenario file references; the stress
+packet has no route override and its matrix hash is unchanged. Each preflight artifact records the
 repository-relative source config and its full source-file SHA-256.
 
 | Property | Nominal | Stress |

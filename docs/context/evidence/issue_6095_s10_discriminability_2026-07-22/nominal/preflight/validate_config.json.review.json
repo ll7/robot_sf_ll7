@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/validate_config.json",
-  "artifact_sha256": "a053975d34cabaf56f16addae7e8abcea5f8cbd8f06a31976ad54108285f7fa5",
+  "artifact_sha256": "58b3cd567a80cf4e8086cf4fd55424578c45eb1e4b2969e4b8e62b4f1931beb5",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

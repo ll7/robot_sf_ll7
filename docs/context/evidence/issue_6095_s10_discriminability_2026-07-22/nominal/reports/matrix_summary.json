@@ -40,9 +40,9 @@
       "observation_noise.enabled": false,
       "observation_noise_hash": "0a5609f0b2b1",
       "config_hash": "60448a7228d1a450",
-      "git_commit": "83b9de4284ab49a6338116fdc5f13ebc5e34f40b",
+      "git_commit": "d791c08f70b9af20f93babd5f1f17b06d581a185",
       "campaign_id": "issue_6095_nominal_discriminability_v1_20260725_final",
-      "created_at_utc": "2026-07-25T14:49:50.021824Z"
+      "created_at_utc": "2026-08-03T01:35:44.735704Z"
     },
     {
       "scenario_matrix": "configs/scenarios/nominal_v1.yaml",
@@ -83,9 +83,9 @@
       "observation_noise.enabled": false,
       "observation_noise_hash": "0a5609f0b2b1",
       "config_hash": "60448a7228d1a450",
-      "git_commit": "83b9de4284ab49a6338116fdc5f13ebc5e34f40b",
+      "git_commit": "d791c08f70b9af20f93babd5f1f17b06d581a185",
       "campaign_id": "issue_6095_nominal_discriminability_v1_20260725_final",
-      "created_at_utc": "2026-07-25T14:49:50.021824Z"
+      "created_at_utc": "2026-08-03T01:35:44.735704Z"
     }
   ]
 }

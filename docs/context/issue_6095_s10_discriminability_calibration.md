@@ -27,9 +27,8 @@ the campaign preflight rather than creating a fallback result row.
 
 ## Preflight Results
 
-The nominal config passed metadata-only preflight on source revision
-`83b9de4284ab49a6338116fdc5f13ebc5e34f40b`; the unchanged stress packet is
-from `c24325e76a7c831941e0efe7ac8b25e231b9574b`. The packet records each
+Both configs passed metadata-only preflight together on rebased source revision
+`d791c08f70b9af20f93babd5f1f17b06d581a185`. The packet records each
 repository-relative source config and its full SHA-256:
 
 | Property | Nominal | Stress |

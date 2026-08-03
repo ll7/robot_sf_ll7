@@ -87,6 +87,21 @@ BINDING_SURFACES: tuple[str, ...] = (
     SURFACE_PLANNER_INPUTS,
 )
 
+# Probe/setup failures that should become machine-readable no-go verdicts. Keep this
+# explicit so the canary's fail-closed boundary does not add an unreviewed broad catch.
+_CANARY_PROBE_ERRORS: tuple[type[Exception], ...] = (
+    ArithmeticError,
+    AssertionError,
+    AttributeError,
+    ImportError,
+    LookupError,
+    OSError,
+    RuntimeError,
+    StopIteration,
+    TypeError,
+    ValueError,
+)
+
 #: Fixed radius treatment from the #6600 campaign (metres): 0.5, 0.8, and the 1.0 m
 #: release baseline.
 CAMPAIGN_ENVELOPE_RADII_M: tuple[float, ...] = (0.5, 0.8, 1.0)
@@ -203,12 +218,28 @@ class RadiusBindingCanaryVerdict:
     tolerance_m: float
 
 
+def validate_tolerance_m(tolerance_m: float) -> float:
+    """Validate and normalize a radius comparison tolerance.
+
+    Returns:
+        Finite, non-negative tolerance in metres.
+    """
+    try:
+        value = float(tolerance_m)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("tolerance_m must be finite and non-negative") from exc
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError("tolerance_m must be finite and non-negative")
+    return value
+
+
 def _radius_matches(observed: float | None, expected: float, tolerance_m: float) -> bool:
     """Return whether an observed radius matches the declared target within tolerance."""
+    tolerance = validate_tolerance_m(tolerance_m)
     return (
         observed is not None
         and math.isfinite(float(observed))
-        and abs(float(observed) - float(expected)) <= tolerance_m
+        and abs(float(observed) - float(expected)) <= tolerance
     )
 
 
@@ -269,6 +300,7 @@ def probe_sim_collision_geometry(
     Returns:
         Verdict with ``observed_radius_m`` = the robot collision envelope radius.
     """
+    tolerance_m = validate_tolerance_m(tolerance_m)
     surface = SURFACE_SIM_COLLISION_GEOMETRY
     try:
         if require_runtime and runtime_binding is None:
@@ -311,7 +343,7 @@ def probe_sim_collision_geometry(
             },
             note="" if bound else "simulator collision geometry did not bind the declared radius",
         )
-    except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors.
+    except _CANARY_PROBE_ERRORS as exc:
         return _failed_verdict(surface, target_radius_m, tolerance_m, exc)
 
 
@@ -336,6 +368,7 @@ def probe_contact_logic(
         Verdict with ``observed_radius_m`` = the robot radius bound into the contact
         boundary.
     """
+    tolerance_m = validate_tolerance_m(tolerance_m)
     surface = SURFACE_CONTACT_LOGIC
     try:
         if require_runtime and runtime_binding is None:
@@ -473,7 +506,7 @@ def probe_contact_logic(
             },
             note=note,
         )
-    except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors.
+    except _CANARY_PROBE_ERRORS as exc:
         return _failed_verdict(surface, target_radius_m, tolerance_m, exc)
 
 
@@ -506,6 +539,7 @@ def probe_feasibility_oracle(
     Returns:
         Verdict with ``observed_radius_m`` = the oracle geometric envelope radius.
     """
+    tolerance_m = validate_tolerance_m(tolerance_m)
     surface = SURFACE_FEASIBILITY_ORACLE
     try:
         # The campaign declares the radius through make_envelope_scenario, which writes
@@ -562,7 +596,7 @@ def probe_feasibility_oracle(
             },
             note=note,
         )
-    except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors.
+    except _CANARY_PROBE_ERRORS as exc:
         return _failed_verdict(surface, target_radius_m, tolerance_m, exc)
 
 
@@ -584,6 +618,7 @@ def probe_metric_metadata(
     Returns:
         Verdict with ``observed_radius_m`` = the runner-recorded output-row radius.
     """
+    tolerance_m = validate_tolerance_m(tolerance_m)
     surface = SURFACE_METRIC_METADATA
     try:
         import numpy as np  # noqa: PLC0415
@@ -632,7 +667,7 @@ def probe_metric_metadata(
             },
             note=note,
         )
-    except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors.
+    except _CANARY_PROBE_ERRORS as exc:
         return _failed_verdict(surface, target_radius_m, tolerance_m, exc)
 
 
@@ -658,6 +693,7 @@ def probe_planner_inputs(
     Returns:
         Verdict with ``observed_radius_m`` = the radius bound into the planner force inputs.
     """
+    tolerance_m = validate_tolerance_m(tolerance_m)
     surface = SURFACE_PLANNER_INPUTS
     try:
         if require_runtime and runtime_binding is None:
@@ -734,7 +770,7 @@ def probe_planner_inputs(
             },
             note=note,
         )
-    except Exception as exc:  # noqa: BLE001 - canary must fail closed on probe errors.
+    except _CANARY_PROBE_ERRORS as exc:
         return _failed_verdict(surface, target_radius_m, tolerance_m, exc)
 
 
@@ -764,6 +800,7 @@ def run_radius_binding_canary(
         Machine-readable canary verdict; ``go`` is ``True`` only when all five surfaces
         bind the declared radius.
     """
+    tolerance_m = validate_tolerance_m(tolerance_m)
     if not math.isfinite(float(target_radius_m)) or float(target_radius_m) <= 0.0:
         raise ValueError("target_radius_m must be finite and positive")
     declared = make_envelope_scenario(scenario, envelope_radius_m=float(target_radius_m))
@@ -777,7 +814,7 @@ def run_radius_binding_canary(
             dict(declared), scenario_path=scenario_path
         )
         runtime_binding = _build_runtime_binding(shared_config)
-    except Exception as exc:  # noqa: BLE001 - a canary must fail closed on setup errors.
+    except _CANARY_PROBE_ERRORS as exc:
         # The simulator-facing surfaces share this initialization. If it is not observable,
         # report every surface as no-go instead of letting the runner emit a usage error.
         surfaces = _failed_surfaces(BINDING_SURFACES, target_radius_m, tolerance_m, exc)
@@ -902,4 +939,5 @@ __all__ = [
     "probe_sim_collision_geometry",
     "run_radius_binding_canary",
     "surface_verdict_to_dict",
+    "validate_tolerance_m",
 ]

@@ -29,6 +29,7 @@ from robot_sf.benchmark.radius_binding_canary import (
     DIAGNOSTIC_CLAIM_BOUNDARY,
     canary_verdict_to_dict,
     run_radius_binding_canary,
+    validate_tolerance_m,
 )
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -36,6 +37,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_SCENARIO = _REPO_ROOT / "configs/scenarios/single/francis2023_narrow_doorway.yaml"
 _CAMPAIGN_ID = "issue_6600_gate_1"
 _REPORT_SCHEMA = "radius_binding_canary_report.v1"
+
+
+def _parse_tolerance(raw_value: str) -> float:
+    """Parse a finite, non-negative radius comparison tolerance for the CLI."""
+    try:
+        return validate_tolerance_m(float(raw_value))
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,7 +70,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--tolerance",
-        type=float,
+        type=_parse_tolerance,
         default=DEFAULT_TOLERANCE_M,
         help="Radius comparison tolerance in metres (default: exact binding).",
     )
@@ -95,6 +104,7 @@ def build_report(
     tolerance: float,
 ) -> dict:
     """Run the canary at each radius and assemble the machine-readable report."""
+    tolerance = validate_tolerance_m(tolerance)
     if not radii:
         raise ValueError("radii must contain at least one target radius")
     verdicts = [

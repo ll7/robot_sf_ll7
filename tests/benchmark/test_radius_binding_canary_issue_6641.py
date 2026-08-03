@@ -14,6 +14,8 @@ simulate a silently divergent binding and an unobservable surface.
 from __future__ import annotations
 
 import json
+import math
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,7 +31,7 @@ from robot_sf.benchmark.radius_binding_canary import (
 )
 from robot_sf.scenario_certification.feasibility_oracle import make_envelope_scenario
 from robot_sf.training.scenario_loader import load_scenarios
-from scripts.benchmark.run_radius_binding_canary_issue_6641 import build_report
+from scripts.benchmark.run_radius_binding_canary_issue_6641 import build_report, parse_args
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/single/francis2023_narrow_doorway.yaml"
@@ -214,3 +216,37 @@ def test_report_rejects_empty_radius_probe(narrow_doorway_scenario: dict) -> Non
             radii=[],
             tolerance=1e-9,
         )
+
+
+@pytest.mark.parametrize("invalid_tolerance", [math.nan, math.inf, -math.inf, -1e-9])
+def test_canary_api_rejects_invalid_tolerance(
+    narrow_doorway_scenario: dict, invalid_tolerance: float
+) -> None:
+    """The API rejects tolerance values that could turn divergence into a pass."""
+    with pytest.raises(ValueError, match="tolerance_m must be finite and non-negative"):
+        run_radius_binding_canary(
+            narrow_doorway_scenario,
+            0.5,
+            scenario_path=_SCENARIO_PATH,
+            tolerance_m=invalid_tolerance,
+        )
+    with pytest.raises(ValueError, match="tolerance_m must be finite and non-negative"):
+        build_report(
+            narrow_doorway_scenario,
+            scenario_path=_SCENARIO_PATH,
+            radii=[0.5],
+            tolerance=invalid_tolerance,
+        )
+
+
+@pytest.mark.parametrize("raw_tolerance", ["nan", "inf", "-inf", "-1e-9"])
+def test_cli_rejects_invalid_tolerance(monkeypatch: pytest.MonkeyPatch, raw_tolerance: str) -> None:
+    """The CLI rejects non-finite and negative tolerance inputs before running probes."""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_radius_binding_canary_issue_6641", f"--tolerance={raw_tolerance}"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args()
+    assert exc_info.value.code == 2

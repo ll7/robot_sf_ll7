@@ -12,6 +12,7 @@ from robot_sf.benchmark.trajectory_verifier import (
     DECISION_FALLBACK_BRAKE,
     DECISION_WARN,
     EXECUTION_DEVIATION_CLAIM_BOUNDARY,
+    EXECUTION_DEVIATION_REPORT_SCHEMA,
     EXECUTION_DEVIATION_SCHEMA,
     INTERVENTION_CONTINUE,
     INTERVENTION_FALLBACK_BRAKE,
@@ -27,10 +28,13 @@ from robot_sf.benchmark.trajectory_verifier import (
     TRAJECTORY_VERIFIER_CLAIM_BOUNDARY,
     TRAJECTORY_VERIFIER_SCHEMA,
     ExecutionDeviationConfig,
+    ExecutionDeviationDiagnosticCase,
+    ExecutionDeviationDiagnosticReport,
     ExecutionDeviationResult,
     TrajectoryVerifierConfig,
     VerifierResult,
     monitor_execution_deviation,
+    summarize_execution_deviation_diagnostics,
     verify_episode_trace_window,
     verify_trajectory,
 )
@@ -1078,6 +1082,21 @@ class TestExecutionDeviationMiscellaneous:
         )
         assert result.first_threshold_crossing_time_s == pytest.approx(5 * dt)
 
+    def test_transient_threshold_crossing_has_matching_warn_intervention(self) -> None:
+        """A one-step crossing cannot report detection while returning continue."""
+        predicted = np.zeros((10, 2))
+        observed = predicted.copy()
+        observed[0, 0] = 1.0
+        result = monitor_execution_deviation(
+            predicted_robot_positions=predicted,
+            observed_robot_positions=observed,
+            dt_s=0.1,
+            config=_deviation_config(warn_threshold=0.5),
+        )
+        assert result.deviation_score == pytest.approx(1.0)
+        assert result.first_threshold_crossing_time_s == pytest.approx(0.0)
+        assert result.intervention == INTERVENTION_WARN
+
     def test_separate_from_trajectory_verifier(self) -> None:
         """The deviation monitor does not alter verify_trajectory semantics."""
         robot_pos, robot_vel, ped_pos, ped_vel = _straight_trajectory(
@@ -1101,3 +1120,93 @@ class TestExecutionDeviationMiscellaneous:
         )
         assert deviation_result.intervention == INTERVENTION_CONTINUE
         assert verifier_result.claim_boundary != deviation_result.claim_boundary
+
+
+class TestExecutionDeviationDiagnosticReport:
+    """Diagnostic reporting is explicit about counts, denominators, and gaps."""
+
+    def test_reports_available_detection_and_intervention_metrics(self) -> None:
+        clean = monitor_execution_deviation(config=_deviation_config(), **_aligned_windows())
+        detected = monitor_execution_deviation(
+            config=_deviation_config(warn_threshold=0.5), **_aligned_windows(deviation=1.0)
+        )
+        report = summarize_execution_deviation_diagnostics(
+            (
+                ExecutionDeviationDiagnosticCase(clean, expected_deviation=False),
+                ExecutionDeviationDiagnosticCase(
+                    detected,
+                    expected_deviation=True,
+                    collision_or_near_miss=False,
+                    repair_latency_s=0.25,
+                ),
+            )
+        )
+        assert isinstance(report, ExecutionDeviationDiagnosticReport)
+        assert report.false_alarm_count == 0
+        assert report.false_alarm_denominator == 1
+        assert report.false_alarm_rate == pytest.approx(0.0)
+        assert report.detection_count == 1
+        assert report.detection_denominator == 1
+        assert report.detection_recall == pytest.approx(1.0)
+        assert report.detection_delay_s == pytest.approx(0.0)
+        assert report.detection_delay_denominator == 1
+        assert dict(report.intervention_counts) == {
+            INTERVENTION_CONTINUE: 1,
+            INTERVENTION_WARN: 1,
+            INTERVENTION_REPLAN: 0,
+            INTERVENTION_FALLBACK_BRAKE: 0,
+        }
+        assert report.intervention_denominator == 2
+        assert report.intervention_rate == pytest.approx(0.5)
+        assert report.repair_latency_status == "available"
+        assert report.repair_latency_s == pytest.approx(0.25)
+        assert report.residual_collision_near_miss_status == "available"
+        assert report.residual_collision_near_miss_rate == pytest.approx(0.0)
+        assert report.schema_version == EXECUTION_DEVIATION_REPORT_SCHEMA
+
+    def test_marks_missing_collision_and_repair_evidence_unavailable(self) -> None:
+        report = summarize_execution_deviation_diagnostics(
+            (
+                ExecutionDeviationDiagnosticCase(
+                    monitor_execution_deviation(config=_deviation_config(), **_aligned_windows()),
+                    expected_deviation=False,
+                ),
+            )
+        )
+        assert report.repair_latency_status == "unavailable"
+        assert report.repair_latency_s is None
+        assert report.repair_latency_denominator == 0
+        assert report.residual_collision_near_miss_status == "unavailable"
+        assert report.residual_collision_near_miss_rate is None
+        assert report.residual_collision_near_miss_denominator == 0
+
+    def test_missing_performance_denominators_are_not_fabricated(self) -> None:
+        report = summarize_execution_deviation_diagnostics(())
+        assert report.false_alarm_denominator == 0
+        assert report.false_alarm_rate is None
+        assert report.detection_denominator == 0
+        assert report.detection_recall is None
+        assert report.detection_delay_s is None
+        assert report.intervention_denominator == 0
+        assert report.intervention_rate is None
+
+    def test_fail_closed_outcomes_are_counted_but_excluded_from_rates(self) -> None:
+        clean = monitor_execution_deviation(config=_deviation_config(), **_aligned_windows())
+        fail_closed = monitor_execution_deviation(
+            predicted_robot_positions=None,
+            observed_robot_positions=None,
+            dt_s=0.1,
+            config=_deviation_config(),
+        )
+        report = summarize_execution_deviation_diagnostics(
+            (
+                ExecutionDeviationDiagnosticCase(clean, expected_deviation=False),
+                ExecutionDeviationDiagnosticCase(fail_closed, expected_deviation=True),
+            )
+        )
+        assert dict(report.intervention_counts)[INTERVENTION_WARN] == 1
+        assert report.fail_closed_count == 1
+        assert report.intervention_denominator == 1
+        assert report.intervention_rate == pytest.approx(0.0)
+        assert report.detection_denominator == 0
+        assert report.detection_recall is None

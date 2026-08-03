@@ -27,7 +27,7 @@ import numpy as np
 from robot_sf.common.validation import _require_finite_ndarray as _require_finite
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
 TRAJECTORY_VERIFIER_SCHEMA = "trajectory_verifier.v1"
 TRAJECTORY_VERIFIER_CLAIM_BOUNDARY = (
@@ -714,6 +714,7 @@ def verify_episode_trace_window(
 # ---------------------------------------------------------------------------
 
 EXECUTION_DEVIATION_SCHEMA = "execution_deviation.v1"
+EXECUTION_DEVIATION_REPORT_SCHEMA = "execution_deviation_report.v1"
 EXECUTION_DEVIATION_CLAIM_BOUNDARY = (
     "offline execution-time deviation diagnostic; not an online model; "
     "not a control-loop intervention; not a safety, detection-performance, "
@@ -826,11 +827,13 @@ class ExecutionDeviationResult:
     Attributes:
         intervention: One of ``continue``, ``warn``, ``replan``, ``fallback_brake``.
             These are offline diagnostic labels only.
-        deviation_score: Aggregate deviation score, or ``None`` when inputs were
-            invalid and the fail-closed path was taken (score is never fabricated).
-        component_deviations: Per-component deviation scores keyed by component
-            name (``robot_position``, ``robot_velocity``, ``pedestrian_position``).
-            Empty when inputs were invalid.
+        deviation_score: Peak aggregate deviation score over the trace window, or
+            ``None`` when inputs were invalid and the fail-closed path was taken
+            (score is never fabricated). This is the same aggregation used for
+            the intervention and threshold-crossing time.
+        component_deviations: Per-component peak deviation scores keyed by
+            component name (``robot_position``, ``robot_velocity``,
+            ``pedestrian_position``). Empty when inputs were invalid.
         first_threshold_crossing_time_s: Time in seconds of the first timestep
             where the per-timestep aggregate deviation exceeded the warn
             threshold, or ``None`` if no crossing occurred or inputs were invalid.
@@ -848,6 +851,64 @@ class ExecutionDeviationResult:
     input_age_s: float | None
     fail_closed: bool
     schema_version: str = EXECUTION_DEVIATION_SCHEMA
+    claim_boundary: str = EXECUTION_DEVIATION_CLAIM_BOUNDARY
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionDeviationDiagnosticCase:
+    """One labeled offline monitor outcome for diagnostic aggregation.
+
+    ``expected_deviation`` identifies a fixture with a known injected execution
+    deviation. Collision/near-miss and repair-latency evidence are optional so
+    their absence is represented explicitly in the aggregate report rather
+    than being fabricated from monitor output.
+    """
+
+    result: ExecutionDeviationResult
+    expected_deviation: bool
+    collision_or_near_miss: bool | None = None
+    repair_latency_s: float | None = None
+
+    def __post_init__(self) -> None:
+        """Reject malformed optional evidence rather than silently coercing it."""
+        if self.collision_or_near_miss is not None and not isinstance(
+            self.collision_or_near_miss, bool
+        ):
+            raise ValueError("collision_or_near_miss must be bool or None")
+        if self.repair_latency_s is not None and (
+            not math.isfinite(self.repair_latency_s) or self.repair_latency_s < 0.0
+        ):
+            raise ValueError("repair_latency_s must be finite and >= 0 when provided")
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionDeviationDiagnosticReport:
+    """Offline diagnostic aggregation for labeled execution-monitor fixtures.
+
+    Performance values are ``None`` when their denominators or source evidence
+    are absent. This report is diagnostic-only: it does not establish benchmark
+    detection performance or safety.
+    """
+
+    false_alarm_count: int
+    false_alarm_denominator: int
+    false_alarm_rate: float | None
+    detection_count: int
+    detection_denominator: int
+    detection_recall: float | None
+    detection_delay_s: float | None
+    detection_delay_denominator: int
+    intervention_counts: tuple[tuple[str, int], ...]
+    intervention_denominator: int
+    intervention_rate: float | None
+    fail_closed_count: int
+    repair_latency_status: Literal["available", "unavailable"]
+    repair_latency_s: float | None
+    repair_latency_denominator: int
+    residual_collision_near_miss_status: Literal["available", "unavailable"]
+    residual_collision_near_miss_rate: float | None
+    residual_collision_near_miss_denominator: int
+    schema_version: str = EXECUTION_DEVIATION_REPORT_SCHEMA
     claim_boundary: str = EXECUTION_DEVIATION_CLAIM_BOUNDARY
 
 
@@ -998,11 +1059,100 @@ def _compute_pedestrian_deviation(
 
 
 def _finite_component_score(per_timestep: np.ndarray) -> float | None:
-    """Return a finite mean component score, or ``None`` for invalid values."""
+    """Return a finite peak component score, or ``None`` for invalid values."""
     if per_timestep.size == 0 or not np.isfinite(per_timestep).all():
         return None
-    score = float(np.mean(per_timestep))
+    score = float(np.max(per_timestep))
     return score if math.isfinite(score) else None
+
+
+def summarize_execution_deviation_diagnostics(
+    cases: Sequence[ExecutionDeviationDiagnosticCase],
+) -> ExecutionDeviationDiagnosticReport:
+    """Summarize labeled monitor fixtures without fabricating unavailable evidence.
+
+    Valid clean fixtures form the false-alarm denominator; valid injected-
+    deviation fixtures form the detection denominator. A detection requires a
+    warn-or-higher diagnostic intervention. Fail-closed outcomes remain counted
+    by intervention label but are excluded from performance denominators because
+    they have no numeric score or detection timing. Delay is the mean first
+    threshold-crossing time among detected injected-deviation fixtures.
+
+    Args:
+        cases: Labeled, offline execution-monitor outcomes. An empty sequence is
+            valid and produces explicit unavailable rates.
+
+    Returns:
+        A diagnostic-only report with rates where denominators exist and
+        ``unavailable`` collision/repair surfaces where evidence is absent.
+    """
+    intervention_counts = dict.fromkeys(_INTERVENTION_RANK, 0)
+    false_alarm_count = 0
+    false_alarm_denominator = 0
+    detection_count = 0
+    detection_denominator = 0
+    detection_delays: list[float] = []
+    valid_case_count = 0
+    valid_intervention_count = 0
+    fail_closed_count = 0
+    repair_latencies: list[float] = []
+    collision_outcomes: list[bool] = []
+
+    for case in cases:
+        result = case.result
+        intervention_counts[result.intervention] += 1
+        if result.fail_closed:
+            fail_closed_count += 1
+        else:
+            valid_case_count += 1
+            intervened = result.intervention != INTERVENTION_CONTINUE
+            if intervened:
+                valid_intervention_count += 1
+            if case.expected_deviation:
+                detection_denominator += 1
+                if intervened:
+                    detection_count += 1
+                    if result.first_threshold_crossing_time_s is not None:
+                        detection_delays.append(result.first_threshold_crossing_time_s)
+            else:
+                false_alarm_denominator += 1
+                if intervened:
+                    false_alarm_count += 1
+        if case.repair_latency_s is not None:
+            repair_latencies.append(case.repair_latency_s)
+        if case.collision_or_near_miss is not None:
+            collision_outcomes.append(case.collision_or_near_miss)
+
+    return ExecutionDeviationDiagnosticReport(
+        false_alarm_count=false_alarm_count,
+        false_alarm_denominator=false_alarm_denominator,
+        false_alarm_rate=(
+            false_alarm_count / false_alarm_denominator if false_alarm_denominator else None
+        ),
+        detection_count=detection_count,
+        detection_denominator=detection_denominator,
+        detection_recall=(
+            detection_count / detection_denominator if detection_denominator else None
+        ),
+        detection_delay_s=(float(np.mean(detection_delays)) if detection_delays else None),
+        detection_delay_denominator=len(detection_delays),
+        intervention_counts=tuple(
+            (label, intervention_counts[label]) for label in _INTERVENTION_RANK
+        ),
+        intervention_denominator=valid_case_count,
+        intervention_rate=(
+            valid_intervention_count / valid_case_count if valid_case_count else None
+        ),
+        fail_closed_count=fail_closed_count,
+        repair_latency_status="available" if repair_latencies else "unavailable",
+        repair_latency_s=(float(np.mean(repair_latencies)) if repair_latencies else None),
+        repair_latency_denominator=len(repair_latencies),
+        residual_collision_near_miss_status=("available" if collision_outcomes else "unavailable"),
+        residual_collision_near_miss_rate=(
+            sum(collision_outcomes) / len(collision_outcomes) if collision_outcomes else None
+        ),
+        residual_collision_near_miss_denominator=len(collision_outcomes),
+    )
 
 
 def _require_execution_deviation_config(
@@ -1115,7 +1265,9 @@ def monitor_execution_deviation(
         component_scores["pedestrian_position"] = pedestrian_score
         per_timestep_scores.append(ped_per_t)
 
-    # --- Aggregate score and first threshold-crossing time ---
+    # --- Peak-over-window score, intervention, and first threshold crossing ---
+    # All threshold-facing fields use ``max_t(max_component(component[t]))``:
+    # a transient threshold crossing therefore has a warn-or-higher intervention.
     deviation_score = max(component_scores.values()) if component_scores else 0.0
     first_crossing: float | None = None
     if per_timestep_scores:
@@ -1140,6 +1292,7 @@ __all__ = [
     "DECISION_FALLBACK_BRAKE",
     "DECISION_WARN",
     "EXECUTION_DEVIATION_CLAIM_BOUNDARY",
+    "EXECUTION_DEVIATION_REPORT_SCHEMA",
     "EXECUTION_DEVIATION_SCHEMA",
     "INTERVENTION_CONTINUE",
     "INTERVENTION_FALLBACK_BRAKE",
@@ -1155,10 +1308,13 @@ __all__ = [
     "TRAJECTORY_VERIFIER_CLAIM_BOUNDARY",
     "TRAJECTORY_VERIFIER_SCHEMA",
     "ExecutionDeviationConfig",
+    "ExecutionDeviationDiagnosticCase",
+    "ExecutionDeviationDiagnosticReport",
     "ExecutionDeviationResult",
     "TrajectoryVerifierConfig",
     "VerifierResult",
     "monitor_execution_deviation",
+    "summarize_execution_deviation_diagnostics",
     "verify_episode_trace_window",
     "verify_trajectory",
 ]

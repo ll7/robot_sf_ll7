@@ -410,6 +410,21 @@ def _function_names(path: Path) -> set[str]:
     }
 
 
+def _passes_keyword_to_call(path: Path, *, callee_attr: str, keyword: str) -> bool:
+    """Return whether a static ``*.callee_attr`` call receives ``keyword``."""
+    tree = _read_python_ast(path)
+    if tree is None:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != callee_attr:
+            continue
+        if any(item.arg == keyword for item in node.keywords):
+            return True
+    return False
+
+
 def _parser_options(path: Path) -> set[str]:
     """Return literal ``add_argument`` options from a runner source file."""
     tree = _read_python_ast(path)
@@ -1872,23 +1887,11 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             "the frozen fit-family warm starts must exist and validate against the declared "
             "diagnostic search space: " + "; ".join(warm_start_errors)
         )
-    checks["step3_warm_start_wiring"] = (
-        "_load_archive_warm_starts" in runner_functions
-        and "warm_start" in _function_names(runner_path)
-        if runner_path
-        else False
+    checks["step3_warm_start_wiring"] = bool(
+        runner_path
+        and "_load_archive_warm_starts" in runner_functions
+        and _passes_keyword_to_call(runner_path, callee_attr="from_files", keyword="warm_start")
     )
-    # The command and parser checks above prove the frozen IDs reach the runner; this source
-    # check makes the SearchConfig handoff explicit without importing execution surfaces.
-    if runner_path and runner_path.is_file():
-        try:
-            runner_source = runner_path.read_text(encoding="utf-8")
-        except OSError:
-            runner_source = ""
-        checks["step3_warm_start_wiring"] = checks["step3_warm_start_wiring"] or (
-            "_load_archive_warm_starts" in runner_source
-            and "warm_start=warm_starts" in runner_source
-        )
     if not checks["step3_warm_start_wiring"]:
         blockers.append(
             "the frozen fit-family warm-start archive IDs must be wired into SearchConfig"

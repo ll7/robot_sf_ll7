@@ -116,8 +116,13 @@ def _validate_episode_provenance(
                 f"episode algorithm metadata status: {metadata_status}",
             )
             enriched["preflight"] = preflight_payload
-    elif resolve_execution_mode(effective_metadata) == "unknown":
-        return "episode algorithm metadata execution mode was missing or malformed"
+    else:
+        episode_mode = resolve_execution_mode(metadata)
+        summary_mode = resolve_execution_mode(effective_metadata)
+        if episode_mode == "unknown" or summary_mode == "unknown":
+            return "episode algorithm metadata execution mode was missing or malformed"
+        if episode_mode != summary_mode:
+            return "episode and summary algorithm metadata execution modes disagree"
 
     # A direct runner may omit the preflight block entirely, in which case the
     # validated episode metadata is the authoritative provenance source.  When

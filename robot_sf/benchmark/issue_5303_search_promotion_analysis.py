@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D, SearchSpaceConfig
+from robot_sf.adversarial.objectives import constraints_first_lexicographic_score
 from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
     DEFAULT_MANIFEST_PATH,
     preflight_issue_5303_contract,
@@ -434,13 +435,13 @@ def _certification_errors(value: Any) -> list[str]:
     return errors
 
 
-def _constraints_first_objective_band_errors(
+def _constraints_first_objective_value_errors(
     objective_value: Any, outcome: dict[str, Any]
 ) -> list[str]:
-    """Validate that one objective value remains in its frozen outcome tier.
+    """Validate that one objective value matches the frozen shared formula.
 
     Returns:
-        Tier errors, or an empty list when the value is finite and in-band.
+        Value errors, or an empty list when the value is finite and exact.
     """
     if (
         isinstance(objective_value, bool)
@@ -448,20 +449,13 @@ def _constraints_first_objective_band_errors(
         or not math.isfinite(float(objective_value))
     ):
         return []
-    if outcome["collision_or_severe_intrusion"]:
-        lower_bound = 4.0
-        tier = "collision/severe-intrusion"
-    elif outcome["liveness_or_goal_completion"]:
-        lower_bound = 2.0
-        tier = "liveness"
-    else:
-        lower_bound = 0.0
-        tier = "comfort/efficiency"
     score = float(objective_value)
-    if not lower_bound <= score < lower_bound + 1.0:
+    expected = constraints_first_lexicographic_score(outcome)
+    if expected is None:
+        return ["objective_value cannot be derived from the frozen observed outcome"]
+    if not math.isclose(score, expected, rel_tol=0.0, abs_tol=1e-12):
         return [
-            f"objective_value {score} is outside the frozen {tier} tier "
-            f"[{lower_bound}, {lower_bound + 1})"
+            f"objective_value {score} does not match the frozen constraints-first value {expected}"
         ]
     return []
 
@@ -693,8 +687,10 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             "confirmation_seeds": [],
             "second_context_seed": None,
         }
-        if not isinstance(seed_lineage, dict) or any(
-            seed_lineage.get(key) != value for key, value in expected_seed_lineage.items()
+        if (
+            not isinstance(seed_lineage, dict)
+            or set(seed_lineage) != set(expected_seed_lineage)
+            or any(seed_lineage.get(key) != value for key, value in expected_seed_lineage.items())
         ):
             blockers.append(f"row {row_number} seed_lineage does not match the diagnostic attempt")
 
@@ -758,10 +754,10 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
         ):
             blockers.append(f"row {row_number} objective_value must be finite")
         elif not outcome_errors:
-            objective_band_errors = _constraints_first_objective_band_errors(
+            objective_value_errors = _constraints_first_objective_value_errors(
                 objective_value, constraints_first_outcome
             )
-            blockers.extend(f"row {row_number} {error}" for error in objective_band_errors)
+            blockers.extend(f"row {row_number} {error}" for error in objective_value_errors)
         certification = row.get("certification")
         certification_errors = _certification_errors(certification)
         if certification_errors:

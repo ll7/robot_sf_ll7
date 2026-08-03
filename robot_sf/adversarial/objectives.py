@@ -182,6 +182,43 @@ def _unavailable_constraints_first_outcome() -> dict[str, Any]:
     }
 
 
+def constraints_first_lexicographic_score(outcome: dict[str, Any]) -> float | None:
+    """Return the frozen scalar score for one observed constraints-first outcome.
+
+    This pure projection-level form is shared by the search objective and the
+    diagnostic verifier so an outcome row cannot self-hash a score that merely
+    occupies the right tier while disagreeing with its recorded soft metrics.
+    """
+    if outcome.get("status") != "observed":
+        return None
+    comfort = outcome.get("comfort_and_efficiency")
+    if not isinstance(comfort, dict):
+        return None
+    try:
+        near_miss_count = max(0.0, float(comfort.get("near_misses", 0.0)))
+    except (TypeError, ValueError):
+        near_miss_count = 0.0
+    try:
+        parsed_snqi = float(comfort.get("snqi"))
+    except (TypeError, ValueError):
+        parsed_snqi = math.nan
+    if not math.isfinite(near_miss_count):
+        near_miss_count = 0.0
+    near_miss_component = near_miss_count / (1.0 + near_miss_count)
+    snqi_component = 1.0 / (1.0 + max(0.0, parsed_snqi)) if math.isfinite(parsed_snqi) else 0.0
+    soft_component = min(0.999, max(near_miss_component, snqi_component))
+    if outcome.get("collision_or_severe_intrusion") is True:
+        return float(4.0 + soft_component)
+    if outcome.get("liveness_or_goal_completion") is True:
+        return float(2.0 + soft_component)
+    if (
+        outcome.get("collision_or_severe_intrusion") is False
+        and outcome.get("liveness_or_goal_completion") is False
+    ):
+        return float(soft_component)
+    return None
+
+
 def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float | None:
     """Score adversarial outcomes with bounded, constraints-first tiers.
 
@@ -198,25 +235,7 @@ def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float
     projection = constraints_first_outcome_projection(record)
     if projection["status"] != "observed":
         return None
-    metrics = record["metrics"]
-    collision_or_intrusion = projection["collision_or_severe_intrusion"]
-    liveness_failure = projection["liveness_or_goal_completion"]
-
-    near_miss_count = max(0.0, _metric(metrics, "near_misses"))
-    near_miss_component = near_miss_count / (1.0 + near_miss_count)
-    snqi = metrics.get("snqi")
-    try:
-        parsed_snqi = float(snqi)
-    except (TypeError, ValueError):
-        parsed_snqi = math.nan
-    snqi_component = 1.0 / (1.0 + max(0.0, parsed_snqi)) if math.isfinite(parsed_snqi) else 0.0
-    soft_component = min(0.999, max(near_miss_component, snqi_component))
-
-    if collision_or_intrusion:
-        return float(4.0 + soft_component)
-    if liveness_failure:
-        return float(2.0 + soft_component)
-    return float(soft_component)
+    return constraints_first_lexicographic_score(projection)
 
 
 _OBJECTIVES: dict[str, ObjectiveFn] = {

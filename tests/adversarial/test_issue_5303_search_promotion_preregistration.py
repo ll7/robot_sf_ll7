@@ -236,6 +236,7 @@ def test_warm_start_space_errors_fail_closed_for_malformed_inputs(tmp_path: Path
 
 
 def test_preflight_schema_and_contract_schema_versions() -> None:
+    """Frozen schema versions prevent incompatible contract or report interpretation."""
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
     assert SCHEMA_VERSION == "issue_5303_search_promotion_preflight.v1"
     assert contract["schema_version"] == CONTRACT_SCHEMA_VERSION
@@ -895,6 +896,7 @@ def test_permutation_power_math() -> None:
 
 
 def test_power_analysis_fields_match_recomputed_math() -> None:
+    """Committed power fields must match recomputation so diagnostic limits remain honest."""
     result = preflight_issue_5303_contract(repo_root=REPO_ROOT)
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
     power = contract["power_analysis"]

@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest_path=args.manifest,
             repo_root=args.repo_root,
         )
-    except FileNotFoundError as exc:
+    except OSError as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
         return 2
     dump_preflight_payload(result, args.output)

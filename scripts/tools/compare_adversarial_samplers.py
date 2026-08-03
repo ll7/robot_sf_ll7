@@ -447,16 +447,26 @@ def _load_archive_warm_starts(
             raise ValueError(f"warm-start record has no source scenario family: {record_id}")
         if not isinstance(planner, str) or not planner.strip():
             raise ValueError(f"warm-start record has no source planner: {record_id}")
+        try:
+            candidate_spec = CandidateSpec(
+                start=Pose2D(
+                    x=float(start["x"]), y=float(start["y"]), theta=float(start.get("theta", 0.0))
+                ),
+                goal=Pose2D(
+                    x=float(goal["x"]), y=float(goal["y"]), theta=float(goal.get("theta", 0.0))
+                ),
+                spawn_time_s=float(candidate["spawn_time_s"]),
+                pedestrian_speed_mps=float(candidate["pedestrian_speed_mps"]),
+                pedestrian_delay_s=float(candidate["pedestrian_delay_s"]),
+                scenario_seed=int(candidate["scenario_seed"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"warm-start record has malformed candidate fields: {record_id}"
+            ) from exc
         warm_starts.append(
             WarmStartCandidate(
-                candidate=CandidateSpec(
-                    start=Pose2D(**start),
-                    goal=Pose2D(**goal),
-                    spawn_time_s=float(candidate["spawn_time_s"]),
-                    pedestrian_speed_mps=float(candidate["pedestrian_speed_mps"]),
-                    pedestrian_delay_s=float(candidate["pedestrian_delay_s"]),
-                    scenario_seed=int(candidate["scenario_seed"]),
-                ),
+                candidate=candidate_spec,
                 scenario=scenario,
                 planner=planner,
             )
@@ -469,7 +479,7 @@ def _constraints_first_outcome(record: dict[str, Any]) -> dict[str, Any]:
     return constraints_first_outcome_projection(record)
 
 
-def _git_head() -> str:
+def _git_head(repo_root: Path) -> str:
     """Return the checked-out commit, or a fail-closed unavailable marker."""
     try:
         result = subprocess.run(
@@ -477,6 +487,8 @@ def _git_head() -> str:
             check=True,
             capture_output=True,
             text=True,
+            cwd=repo_root,
+            timeout=10,
         )
     except (OSError, subprocess.CalledProcessError):
         return "unavailable"
@@ -855,6 +867,12 @@ def render_durable_comparison_table(
             " the promotion endpoint or authorize transfer; a larger re-preregistration is"
             " required before any `promote` decision."
         )
+        if any_degraded:
+            decision += (
+                " Fallback/degraded candidate execution was observed in"
+                f" {len(degraded_rows)} row(s); those attempts remain in the"
+                " intention-to-search denominator and are never admitted."
+            )
     elif any_degraded:
         decision = (
             "**STOP / fail closed.** One or more comparison rows report"
@@ -1166,23 +1184,10 @@ def _require_issue_5303_preflight_if_requested(
         detail = "; ".join(preflight.blockers) or "unknown frozen-contract failure"
         raise RuntimeError(f"issue #5303 preflight failed before diagnostic execution: {detail}")
     _require_issue_5303_frozen_bindings(args, repo_root=repo_root)
-    contract_path = _resolve_issue_5303_diagnostic_path(args.contract, repo_root=repo_root)
-    assert contract_path is not None
-    try:
-        contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
-        raise RuntimeError("issue #5303 diagnostic authorization could not be verified") from exc
-    future_run = contract.get("future_run_declaration") if isinstance(contract, dict) else None
-    diagnostic_run = (
-        future_run.get("separately_justified_diagnostic_search_run")
-        if isinstance(future_run, dict)
-        else None
+    raise RuntimeError(
+        "issue #5303 diagnostic execution is not authorized; the frozen command "
+        "is retained for preflight binding proof only"
     )
-    if not isinstance(diagnostic_run, dict) or diagnostic_run.get("authorized") is not True:
-        raise RuntimeError(
-            "issue #5303 diagnostic execution is not authorized; the frozen command "
-            "is retained for preflight binding proof only"
-        )
 
 
 def _resolve_issue_5303_diagnostic_path(value: Path | None, *, repo_root: Path) -> Path | None:
@@ -1339,15 +1344,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         assert args.scenario_family is not None
         assert args.execution_context_label is not None
         assert outcomes_jsonl is not None
-        if not args.algo_config.is_file() or not args.reference_algo_config.is_file():
+        algo_config = _resolve_issue_5303_diagnostic_path(args.algo_config, repo_root=repo_root)
+        reference_algo_config = _resolve_issue_5303_diagnostic_path(
+            args.reference_algo_config, repo_root=repo_root
+        )
+        assert algo_config is not None and reference_algo_config is not None
+        if not algo_config.is_file() or not reference_algo_config.is_file():
             raise FileNotFoundError("issue #5303 planner configuration path does not exist")
-        execution_commit = _git_head()
+        execution_commit = _git_head(repo_root)
         if execution_commit == "unavailable":
             raise RuntimeError("issue #5303 diagnostic execution requires a resolvable git HEAD")
         diagnostic_context = Issue5303DiagnosticContext(
             scenario_family=str(args.scenario_family),
-            target_planner_config=args.algo_config,
-            neutral_reference_planner_config=args.reference_algo_config,
+            target_planner_config=algo_config,
+            neutral_reference_planner_config=reference_algo_config,
             execution_mode="adapter",
             execution_context_label=str(args.execution_context_label),
             execution_commit=execution_commit,

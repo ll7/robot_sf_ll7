@@ -123,7 +123,7 @@ def _diagnostic_row(
             },
         },
         "objective": step3_execution["diagnostic_objective"],
-        "objective_value": 0.0,
+        "objective_value": 0.999,
         "primary_failure_mechanism": "success",
         "stable_attribution_evidence": "not_collected_diagnostic_only",
         "certification": {
@@ -615,14 +615,14 @@ def test_diagnostic_analysis_rejects_incomplete_execution_provenance(
     assert any(expected_text in item for item in result.blockers)
 
 
-def test_diagnostic_analysis_rejects_objective_outside_frozen_outcome_tier(
+def test_diagnostic_analysis_rejects_objective_drift_within_the_frozen_outcome_tier(
     tmp_path: Path,
 ) -> None:
-    """A self-hashed row cannot move a soft outcome into a higher objective tier."""
+    """A self-hashed row cannot alter a soft score while remaining in its tier."""
     outcomes = tmp_path / "outcomes.jsonl"
     _write_complete_outcomes(outcomes)
     rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
-    rows[0]["objective_value"] = 2.0
+    rows[0]["objective_value"] = 0.25
     rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
     outcomes.write_text(
         "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
@@ -636,7 +636,9 @@ def test_diagnostic_analysis_rejects_objective_outside_frozen_outcome_tier(
     )
 
     assert result.ready is False
-    assert any("outside the frozen comfort/efficiency tier" in item for item in result.blockers)
+    assert any(
+        "does not match the frozen constraints-first value" in item for item in result.blockers
+    )
 
 
 def test_diagnostic_analysis_rejects_out_of_domain_soft_metrics(tmp_path: Path) -> None:

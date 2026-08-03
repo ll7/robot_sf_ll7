@@ -1,0 +1,183 @@
+{
+  "campaign_id": "issue4830_safety_wrapper_factorial_v1",
+  "campaign_root": "private_ops:job-13775",
+  "claim_boundary": "This audit validates campaign execution and records the boundary between the camera-ready artifact surface and the issue #3501 normalized paired-row report. It does not infer missing metric semantics, promote evidence, or make a safety claim.",
+  "config_path": "configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml",
+  "config_sha256": "a507d55282eaf95b8d67c8e2a0764786db9eddc30905531fb5b14da913a97be4",
+  "factorial_contract": {
+    "blocked_metrics": [
+      "exact_collision_probability",
+      "near_miss_probability",
+      "min_predicted_separation_m",
+      "completion_probability",
+      "progress_at_timeout",
+      "false_positive_stop_rate",
+      "stop_yield_latency_s",
+      "wrapper_intervention_rate"
+    ],
+    "normalized_metric_values_record_count": 0,
+    "reason": "Camera-ready episode records do not contain the issue #3501 metric_values row contract. Candidate fields with similar names remain unadmitted because their semantics are not identical to the required quantities.",
+    "required_metric_names": [
+      "exact_collision_probability",
+      "near_miss_probability",
+      "min_predicted_separation_m",
+      "completion_probability",
+      "progress_at_timeout",
+      "false_positive_stop_rate",
+      "stop_yield_latency_s",
+      "wrapper_intervention_rate"
+    ],
+    "status": "blocked"
+  },
+  "issue": 4830,
+  "producing_commit": "8b5ce0b1ca5b7845ae05b0fdc07761079c75d380",
+  "roster": {
+    "arm_episode_counts": {
+      "orca__wrapper_off": 144,
+      "orca__wrapper_on": 144,
+      "prediction_planner__wrapper_off": 144,
+      "prediction_planner__wrapper_on": 144,
+      "social_force__wrapper_off": 144,
+      "social_force__wrapper_on": 144
+    },
+    "episode_record_count": 864,
+    "expected_arm_keys": [
+      "orca__wrapper_off",
+      "orca__wrapper_on",
+      "social_force__wrapper_off",
+      "social_force__wrapper_on",
+      "prediction_planner__wrapper_off",
+      "prediction_planner__wrapper_on"
+    ],
+    "malformed_record_count": 0,
+    "missing_arm_keys": [],
+    "non_pairing_counts": [],
+    "observed_arm_keys": [
+      "orca__wrapper_off",
+      "orca__wrapper_on",
+      "prediction_planner__wrapper_off",
+      "prediction_planner__wrapper_on",
+      "social_force__wrapper_off",
+      "social_force__wrapper_on"
+    ],
+    "planner_wrapper_pair_counts": {
+      "orca": {
+        "wrapper_off": 144,
+        "wrapper_on": 144
+      },
+      "prediction_planner": {
+        "wrapper_off": 144,
+        "wrapper_on": 144
+      },
+      "social_force": {
+        "wrapper_off": 144,
+        "wrapper_on": 144
+      }
+    },
+    "unexpected_arm_keys": [],
+    "unique_pairing_key_count": 432
+  },
+  "schema_version": "robot_sf.issue_4830_safety_wrapper_contract_audit.v1",
+  "source_artifacts": {
+    "campaign_manifest.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/campaign_manifest.json",
+      "bytes": 20324,
+      "location": "private_ops:job-13775/campaign_manifest.json",
+      "sha256": "51f926855d452e753803d232de0179428c26561409725c70feebd2a10b64f1bf"
+    },
+    "manifest.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/manifest.json",
+      "bytes": 182,
+      "location": "private_ops:job-13775/manifest.json",
+      "sha256": "0da65e5eaac5202055dc1e2c5420d2cb8d3d9e1bd10d15f58c0efaaf478bd64a"
+    },
+    "preflight.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/preflight.json",
+      "bytes": 582,
+      "location": "private_ops:job-13775/preflight.json",
+      "sha256": "25f68398f44458a07562f0d53f63dac70e2fbf014d24d8fa14ac5b29e327c25c"
+    },
+    "reports/campaign_credibility_scorecard.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_credibility_scorecard.json",
+      "bytes": 4129,
+      "location": "private_ops:job-13775/reports/campaign_credibility_scorecard.json",
+      "sha256": "624969f4fee58998c8318f32820b1afb49ec883af10bf502c488a18a935ea5f0"
+    },
+    "reports/campaign_integrity.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_integrity.json",
+      "bytes": 313,
+      "location": "private_ops:job-13775/reports/campaign_integrity.json",
+      "sha256": "484f325d7759f06d9d5bd205f9f94a4004ea5c731dd96701e2fa809051b55641"
+    },
+    "reports/campaign_report.md": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_report.md",
+      "bytes": 9708,
+      "location": "private_ops:job-13775/reports/campaign_report.md",
+      "sha256": "c09a0b831dff397b779277c042446d58d76cc2cd828b88ee9b488470491addaa"
+    },
+    "reports/campaign_summary.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/campaign_summary.json",
+      "bytes": 342212,
+      "location": "private_ops:job-13775/reports/campaign_summary.json",
+      "sha256": "4b6f7c06c8b94efa4ae1a902836f493401147d64367064335114a991bc804f8f"
+    },
+    "reports/comparability_matrix.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/comparability_matrix.json",
+      "bytes": 7045,
+      "location": "private_ops:job-13775/reports/comparability_matrix.json",
+      "sha256": "f5786b65f3973ea2b781c7e0ff485f8e0e388b4940738c6c37748d291d1b769d"
+    },
+    "reports/matrix_summary.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/matrix_summary.json",
+      "bytes": 7639,
+      "location": "private_ops:job-13775/reports/matrix_summary.json",
+      "sha256": "b425cac9f4caaf7bc6e6bfcf2e550b47341c9fc4ed8fb2e33faa77331e9a0dde"
+    },
+    "reports/post_campaign_stage_status.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/post_campaign_stage_status.json",
+      "bytes": 700,
+      "location": "private_ops:job-13775/reports/post_campaign_stage_status.json",
+      "sha256": "c1f2e2fb9305e5c55afa23bc984cfd84b80eaa96e92d1a9a4d084f91e4179591"
+    },
+    "run_meta.json": {
+      "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/run_meta.json",
+      "bytes": 4371,
+      "location": "private_ops:job-13775/run_meta.json",
+      "sha256": "94d5d80538a527aaec89bb8fdc2c4655c3dc912cbe166f9e5ed8a26e172b3d73"
+    }
+  },
+  "source_location": "private_ops:job-13775",
+  "source_presence": {
+    "non_null_record_counts": {
+      "algorithm_metadata.safety_wrapper": 432,
+      "event_ledger.exact_events.collision": 864,
+      "metrics.clearing_distance_min": 864,
+      "metrics.collisions": 864,
+      "metrics.near_misses": 864,
+      "metrics.success": 864,
+      "metrics.wrapper_intervention_rate": 432
+    },
+    "record_count": 864
+  },
+  "standard_campaign": {
+    "benchmark_success": true,
+    "campaign_execution_status": "completed",
+    "campaign_id": "issue4830_safety_wrapper_factorial_v1",
+    "evidence_status": "valid",
+    "fallback_or_degraded_rows": 0,
+    "git_hash": "8b5ce0b1ca5b7845ae05b0fdc07761079c75d380",
+    "integrity_status": "valid",
+    "missing_artifacts": [],
+    "post_campaign_stage_status": "completed",
+    "status": "valid",
+    "successful_runs": 6,
+    "total_episodes": 864,
+    "total_runs": 6,
+    "unexpected_failed_runs": 0
+  },
+  "stop_conditions": [
+    "Do not run the existing #3501 paired report builder until normalized metric_values rows exist.",
+    "Do not map clearing distance, progress, or diagnostic false-stop fields to different metric names without a reviewed semantic contract.",
+    "Do not promote this campaign to dissertation evidence from this audit alone."
+  ]
+}

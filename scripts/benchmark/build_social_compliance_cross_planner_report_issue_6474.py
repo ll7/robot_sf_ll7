@@ -64,6 +64,14 @@ PREFLIGHT_CONFIG_PATH = (
     REPO_ROOT / "configs/benchmarks/issue_6481_social_compliance_preflight_smoke.yaml"
 )
 
+# Independent pins keep ``--check-only`` fail-closed when a future edit changes a
+# frozen input and its recorded provenance hash together.  These values are
+# deliberately not derived from the files being checked.
+FROZEN_CAMPAIGN_CONFIG_SHA256 = "fed85cef7ac43817d0aa47a3ac10f9e7f4b50b4be6410e796fdf3d837e69811e"
+FROZEN_SCENARIO_MATRIX_SHA256 = "8c87eac284b51108d992521b1cdbef3edc28d13a3e0c5c34933a76f076ce3d6f"
+FROZEN_SCENARIO_CONTENT_SHA256 = "b9edec86c0c94650ab3e22b0a2404c9d006a65ed8f22545007f13eecb07cdbee"
+FROZEN_PREREGISTRATION_SHA256 = "a87b3dd80f2133d3213b121fa62dd22e4ef29ad9861f3c9a2f1f2e72b11eb925"
+
 # --- Frozen campaign design (mirrors the campaign config and preregistration) ---
 
 PLANNERS = ("goal", "social_force", "orca")
@@ -249,6 +257,18 @@ def validate_preregistration_contract(manifest: dict[str, Any]) -> None:
     This intentionally reads only tracked configs and evidence. It does not load
     campaign output, execute a benchmark, or submit work.
     """
+    _require_contract(
+        _file_sha256(CAMPAIGN_CONFIG_PATH) == FROZEN_CAMPAIGN_CONFIG_SHA256,
+        "campaign config no longer matches the frozen SHA-256",
+    )
+    _require_contract(
+        _file_sha256(SCENARIO_MATRIX_PATH) == FROZEN_SCENARIO_MATRIX_SHA256,
+        "scenario matrix no longer matches the frozen SHA-256",
+    )
+    _require_contract(
+        _file_sha256(PREREGISTRATION_PATH) == FROZEN_PREREGISTRATION_SHA256,
+        "preregistration document no longer matches the frozen SHA-256",
+    )
     campaign = load_campaign_config(CAMPAIGN_CONFIG_PATH)
     preflight = load_campaign_config(PREFLIGHT_CONFIG_PATH)
     matrix_rows = load_scenario_matrix(SCENARIO_MATRIX_PATH)
@@ -288,15 +308,20 @@ def validate_preregistration_contract(manifest: dict[str, Any]) -> None:
         evidence.get("evidence_status") == "not_benchmark_evidence", "evidence class drift"
     )
     _require_contract(
-        provenance.get("config_sha256") == _file_sha256(CAMPAIGN_CONFIG_PATH), "config hash drift"
+        provenance.get("config_sha256") == FROZEN_CAMPAIGN_CONFIG_SHA256,
+        "recorded config hash drift",
     )
     _require_contract(
-        provenance.get("scenario_matrix_sha256") == _file_sha256(SCENARIO_MATRIX_PATH),
-        "scenario matrix hash drift",
+        provenance.get("scenario_matrix_sha256") == FROZEN_SCENARIO_MATRIX_SHA256,
+        "recorded scenario matrix hash drift",
     )
     _require_contract(
-        provenance.get("scenario_content_sha256") == _selected_scenario_content_sha256(),
-        "selected scenario content hash drift",
+        provenance.get("scenario_content_sha256") == FROZEN_SCENARIO_CONTENT_SHA256,
+        "recorded scenario content hash drift",
+    )
+    _require_contract(
+        _selected_scenario_content_sha256() == FROZEN_SCENARIO_CONTENT_SHA256,
+        "selected scenario content no longer matches the frozen SHA-256",
     )
     _require_contract(tuple(design.get("planners", ())) == PLANNERS, "evidence planner drift")
     _require_contract(tuple(design.get("seeds", ())) == SEEDS, "evidence seed drift")

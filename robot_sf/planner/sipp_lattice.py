@@ -1095,6 +1095,43 @@ class PedestrianOccupancyForecast:
         return bool(np.any(distances_squared <= combined_radius * combined_radius))
 
 
+def _forecast_contract_error(
+    forecast: PedestrianOccupancyForecast,
+    config: SippLatticeConfig,
+) -> str | None:
+    """Return a fail-closed error for forecast/config contract mismatches.
+
+    The SIPP lattice interprets one slot using the configured time base and
+    uses the forecast collision envelope directly. A forecast that disagrees
+    with either contract cannot safely back a route witness.
+    """
+    if not forecast.usable:
+        return "invalid_forecast"
+    geometry = forecast._validated_geometry()
+    if geometry is None:
+        return "invalid_forecast_geometry"
+
+    _, _, slot_duration, combined_radius, _ = geometry
+    if not math.isclose(
+        slot_duration,
+        float(config.time_slot_duration),
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        return "incompatible_forecast_time_base"
+
+    robot_envelope_radius = float(config.robot_radius) + float(config.safety_margin)
+    minimum_combined_radius = robot_envelope_radius + float(config.pedestrian_radius)
+    if combined_radius + 1e-9 < minimum_combined_radius:
+        return "incompatible_forecast_collision_envelope"
+
+    if forecast.pedestrian_radius is not None:
+        pedestrian_radius = float(forecast.pedestrian_radius)
+        if combined_radius + 1e-9 < robot_envelope_radius + pedestrian_radius:
+            return "incompatible_forecast_collision_envelope"
+    return None
+
+
 def _failed_forecast(
     *,
     slot_duration: float,
@@ -1449,6 +1486,18 @@ class SippLatticeSearch:
         Returns:
             A :class:`SippSearchResult` classifying the outcome and any plan.
         """
+        forecast_contract_error = _forecast_contract_error(forecast, self.config)
+        if forecast_contract_error is not None:
+            return SippSearchResult(
+                plan=[_wait_primitive(self.config)],
+                result_type="bounded_safe_wait",
+                bound_termination=forecast_contract_error,
+                expansions=0,
+                horizon_reached=0,
+                safe_interval_rejections=0,
+                chosen_cost=None,
+            )
+
         goal_tolerance = float(self.config.goal_tolerance)
         horizon_slots = min(int(self.config.planning_horizon_slots), int(forecast.horizon_slots))
         max_expansions = int(self.config.max_expansions)
@@ -1456,16 +1505,6 @@ class SippLatticeSearch:
 
         start_position = np.asarray(start_pos, dtype=float)
         goal_position = np.asarray(goal, dtype=float)
-        if not forecast.usable:
-            return SippSearchResult(
-                plan=[_wait_primitive(self.config)],
-                result_type="bounded_safe_wait",
-                bound_termination="invalid_forecast",
-                expansions=0,
-                horizon_reached=0,
-                safe_interval_rejections=0,
-                chosen_cost=None,
-            )
         if (
             start_position.shape != (2,)
             or goal_position.shape != (2,)
@@ -2235,7 +2274,7 @@ class SpaceTimeFeasibilityOracle:
             forecast_horizon_slots = float(forecast.horizon_slots)
         except (TypeError, ValueError, OverflowError):
             forecast_horizon_slots = float("nan")
-        if not (isfinite(combined_radius) and combined_radius >= robot_envelope_radius):
+        if not (isfinite(combined_radius) and combined_radius + 1e-9 >= default_combined_radius):
             combined_radius = default_combined_radius
             pedestrian_radius = default_pedestrian_radius
         else:
@@ -2322,19 +2361,15 @@ class SpaceTimeFeasibilityOracle:
             else (including a failed forecast) is not-proven-feasible.
         """
         discretization = self._discretization(forecast)
-        forecast_geometry_valid = forecast._validated_geometry() is not None
-        if not forecast.usable or not forecast_geometry_valid:
+        forecast_contract_error = _forecast_contract_error(forecast, self.config)
+        if forecast_contract_error is not None:
             # Fail closed: degraded/invalid dynamic input never backs feasibility.
             return SpaceTimeFeasibilityResult(
                 verdict=FEASIBILITY_NOT_PROVEN_FEASIBLE,
                 witness=None,
                 witness_valid=False,
-                search_result_type=(
-                    "invalid_forecast" if not forecast.usable else "invalid_forecast_geometry"
-                ),
-                bound_termination=(
-                    "invalid_forecast" if not forecast.usable else "invalid_forecast_geometry"
-                ),
+                search_result_type=forecast_contract_error,
+                bound_termination=forecast_contract_error,
                 expansions=0,
                 horizon_reached=0,
                 safe_interval_rejections=0,
@@ -2424,6 +2459,7 @@ class SpaceTimeFeasibilityOracle:
         goal: np.ndarray,
         start_angular_velocity: float,
         forecast: PedestrianOccupancyForecast,
+        config: SippLatticeConfig,
     ) -> tuple[np.ndarray, np.ndarray, float, float, float] | None:
         """Validate the scalar and vector state used for witness replay.
 
@@ -2431,7 +2467,7 @@ class SpaceTimeFeasibilityOracle:
             The normalized cursor, goal, heading, speed, and angular velocity,
             or ``None`` for malformed or unusable input.
         """
-        if not witness or not forecast.usable:
+        if not witness or _forecast_contract_error(forecast, config) is not None:
             return None
         try:
             cursor = np.asarray(start_pos, dtype=float)
@@ -2492,6 +2528,7 @@ class SpaceTimeFeasibilityOracle:
             goal=goal,
             start_angular_velocity=start_angular_velocity,
             forecast=forecast,
+            config=self.config,
         )
         if state is None:
             return False

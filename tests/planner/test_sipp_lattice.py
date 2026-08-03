@@ -862,6 +862,43 @@ class TestSippLatticeSearch:
         assert result.bound_termination == "goal"
         assert len(result.plan) >= 1
 
+    @pytest.mark.parametrize(
+        ("slot_duration", "combined_radius", "expected_termination"),
+        [
+            (0.05, 0.35, "incompatible_forecast_time_base"),
+            (0.2, 0.01, "incompatible_forecast_collision_envelope"),
+        ],
+    )
+    def test_incompatible_forecast_contract_fails_closed_before_search(
+        self,
+        slot_duration: float,
+        combined_radius: float,
+        expected_termination: str,
+    ) -> None:
+        """SIPP does not expand nodes for a forecast on an incompatible contract."""
+        cfg = _fast_config()
+        search = SippLatticeSearch(cfg, cfg.to_primitive_set().build(), cfg.to_collision_model())
+        forecast = PedestrianOccupancyForecast(
+            positions=np.array([[0.5, 0.25]]),
+            velocities=np.zeros((1, 2)),
+            slot_duration=slot_duration,
+            combined_radius=combined_radius,
+            horizon_slots=15,
+            status="ok",
+        )
+
+        result = search.search(
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+        )
+
+        assert result.result_type == "bounded_safe_wait"
+        assert result.bound_termination == expected_termination
+        assert result.expansions == 0
+
     def test_expansion_bound_terminates_deterministically(self) -> None:
         # A tiny expansion budget with a far goal must return a classified result.
         cfg = _fast_config(max_expansions=1, planning_horizon_slots=3)
@@ -1385,6 +1422,84 @@ class TestSpaceTimeFeasibilityOracle:
         assert result.forecast_status == "failed"
         assert result.witness is None
         assert result.expansions == 0
+
+    def test_incompatible_forecast_collision_envelope_fails_closed(self) -> None:
+        """A forecast below the configured collision envelope cannot back a witness."""
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = PedestrianOccupancyForecast(
+            positions=np.array([[0.5, 0.25]]),
+            velocities=np.zeros((1, 2)),
+            slot_duration=cfg.time_slot_duration,
+            combined_radius=0.01,
+            horizon_slots=40,
+            status="ok",
+        )
+
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+            static_blocked=_open_static_space,
+        )
+
+        assert result.verdict == FEASIBILITY_NOT_PROVEN_FEASIBLE
+        assert result.search_result_type == "incompatible_forecast_collision_envelope"
+        assert result.bound_termination == "incompatible_forecast_collision_envelope"
+        assert result.expansions == 0
+        assert result.witness is None
+        assert result.discretization.combined_radius == pytest.approx(0.35)
+        assert not oracle._verify_witness(
+            (MotionPrimitive(0.0, 0.0, cfg.primitive_duration, PrimitiveKind.WAIT),),
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.zeros(2),
+            start_angular_velocity=0.0,
+            forecast=forecast,
+            static_blocked=_open_static_space,
+        )
+
+    def test_incompatible_forecast_time_base_fails_closed(self) -> None:
+        """A forecast sampled on another time base cannot back a SIPP witness."""
+        cfg = _oracle_config()
+        oracle = SpaceTimeFeasibilityOracle(cfg)
+        forecast = PedestrianOccupancyForecast(
+            positions=np.array([[0.5, -1.5]]),
+            velocities=np.array([[0.0, 1.75]]),
+            slot_duration=0.05,
+            combined_radius=0.35,
+            horizon_slots=40,
+            status="ok",
+        )
+
+        result = oracle.assess(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([1.0, 0.0]),
+            forecast=forecast,
+            static_blocked=_open_static_space,
+        )
+
+        assert result.verdict == FEASIBILITY_NOT_PROVEN_FEASIBLE
+        assert result.search_result_type == "incompatible_forecast_time_base"
+        assert result.bound_termination == "incompatible_forecast_time_base"
+        assert result.expansions == 0
+        assert result.witness is None
+        assert result.discretization.time_slot_duration == pytest.approx(cfg.time_slot_duration)
+        assert not oracle._verify_witness(
+            (MotionPrimitive(0.0, 0.0, cfg.primitive_duration, PrimitiveKind.WAIT),),
+            start_pos=np.zeros(2),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.zeros(2),
+            start_angular_velocity=0.0,
+            forecast=forecast,
+            static_blocked=_open_static_space,
+        )
 
     def test_witness_replays_collision_free_under_frozen_discretization(self) -> None:
         """The returned witness independently replays as collision-free."""

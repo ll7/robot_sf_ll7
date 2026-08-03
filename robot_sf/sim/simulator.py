@@ -722,12 +722,19 @@ class Simulator:
 
         The instance is cached during ``__post_init__`` to avoid an ``isinstance``
         scan of ``self.pysf_sim.forces`` on every simulation step (issue #6493).
+        Simulators built without ``__post_init__`` (for example, seams that inject
+        ``pysf_sim`` directly) lazily scan once and cache the result on first use,
+        preserving the call-time lookup contract.
 
         Returns:
             The ``SocialForce`` instance from the physics engine's force list.
         """
-        if self._cached_social_force is not None:
-            return self._cached_social_force
+        cached = self._cached_social_force
+        if cached is None:
+            cached = next((f for f in self.pysf_sim.forces if isinstance(f, SocialForce)), None)
+            self._cached_social_force = cached
+        if cached is not None:
+            return cached
         raise RuntimeError(
             "PySocialForce SocialForce component is unavailable for the pairwise pedestrian model"
         )

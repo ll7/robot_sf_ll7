@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schemas/robot_sf_ecosystem_contract.v1.json",
+  "title": "Robot SF ecosystem producer contract v1",
+  "description": "Revision-invariant inventory of public producer capabilities and their authoritative inputs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_version",
+    "producer",
+    "canonicalization",
+    "contract_digest",
+    "change",
+    "compatibility_policy",
+    "minimum_consumer_features",
+    "revision_envelope_schema_version",
+    "authoritative_inputs",
+    "capabilities",
+    "canonical_public_fixtures"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "robot_sf_ecosystem_contract.v1"
+    },
+    "contract_version": {
+      "$ref": "#/$defs/semver"
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer_id", "repository_url", "supported_python"],
+      "properties": {
+        "producer_id": {
+          "const": "robot_sf"
+        },
+        "repository_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/ll7/robot_sf_ll7$"
+        },
+        "supported_python": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "canonicalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "hash_algorithm", "trailing_lf"],
+      "properties": {
+        "profile": {
+          "const": "RFC8785"
+        },
+        "hash_algorithm": {
+          "const": "sha256"
+        },
+        "trailing_lf": {
+          "const": false
+        }
+      }
+    },
+    "contract_digest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "scope", "value"],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "scope": {
+          "const": "canonical_document_without_contract_digest"
+        },
+        "value": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared_type", "based_on_contract_digest"],
+      "properties": {
+        "declared_type": {
+          "enum": ["initial", "additive", "deprecated", "breaking"]
+        },
+        "based_on_contract_digest": {
+          "oneOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "compatibility_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "match_fields",
+        "whole_contract_digest_role",
+        "revision_fields_role",
+        "additive_change_rule",
+        "deprecation_rule",
+        "breaking_change_rule"
+      ],
+      "properties": {
+        "match_fields": {
+          "const": ["capability_id", "interface_major", "status", "semantics_id"]
+        },
+        "whole_contract_digest_role": {
+          "const": "provenance_only"
+        },
+        "revision_fields_role": {
+          "const": "provenance_only"
+        },
+        "additive_change_rule": {
+          "const": "same_contract_major_and_explicit_additive_record"
+        },
+        "deprecation_rule": {
+          "const": "same_contract_major_and_explicit_deprecation_record"
+        },
+        "breaking_change_rule": {
+          "const": "new_contract_major_and_explicit_breaking_record"
+        }
+      }
+    },
+    "minimum_consumer_features": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
+    },
+    "revision_envelope_schema_version": {
+      "const": "robot_sf_ecosystem_revision_envelope.v1"
+    },
+    "authoritative_inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/authoritative_input"
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "canonical_public_fixtures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/canonical_fixture"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "repo_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!\\.{1,2}(?:/|$))(?!.*\\/(?:\\.{1,2})(?:/|$))(?!.*//)(?!.*\\/$).+$"
+    },
+    "authoritative_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_id", "kind", "path", "selector", "sha256"],
+      "properties": {
+        "input_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": [
+            "capability_registry",
+            "json_schema",
+            "toml_project_field",
+            "toml_project_script",
+            "python_constant",
+            "python_symbol",
+            "python_test"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/repo_path"
+        },
+        "selector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "exit_code": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "meaning"],
+      "properties": {
+        "code": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "meaning": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "deprecation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason_code", "removal_contract_version"],
+      "properties": {
+        "reason_code": {
+          "$ref": "#/$defs/identifier"
+        },
+        "replacement_capability_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "removal_contract_version": {
+          "$ref": "#/$defs/semver"
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "entrypoint_target", "argv", "exit_codes"],
+      "properties": {
+        "entrypoint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entrypoint_target": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exit_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/exit_code"
+          }
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_id",
+        "kind",
+        "interface_version",
+        "status",
+        "semantics_id",
+        "location",
+        "authority"
+      ],
+      "properties": {
+        "capability_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": ["cli", "schema", "protocol", "artifact_identity"]
+        },
+        "interface_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "status": {
+          "enum": ["stable", "beta", "experimental", "deprecated"]
+        },
+        "semantics_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "location": {
+          "$ref": "#/$defs/repo_path"
+        },
+        "authority": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "schema_id": {
+          "type": "string",
+          "format": "uri"
+        },
+        "json_schema_draft": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        },
+        "command": {
+          "$ref": "#/$defs/command"
+        },
+        "protocol_identifier": {
+          "type": "string",
+          "minLength": 1
+        },
+        "convention_identifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "deprecation": {
+          "$ref": "#/$defs/deprecation"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "schema"}}},
+          "then": {
+            "required": ["schema_id", "json_schema_draft"],
+            "not": {
+              "anyOf": [
+                {"required": ["command"]},
+                {"required": ["protocol_identifier"]},
+                {"required": ["convention_identifier"]}
+              ]
+            }
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "cli"}}},
+          "then": {
+            "required": ["command"],
+            "not": {
+              "anyOf": [
+                {"required": ["schema_id"]},
+                {"required": ["json_schema_draft"]},
+                {"required": ["protocol_identifier"]},
+                {"required": ["convention_identifier"]}
+              ]
+            }
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "protocol"}}},
+          "then": {
+            "required": ["protocol_identifier"],
+            "not": {
+              "anyOf": [
+                {"required": ["schema_id"]},
+                {"required": ["json_schema_draft"]},
+                {"required": ["command"]},
+                {"required": ["convention_identifier"]}
+              ]
+            }
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "artifact_identity"}}},
+          "then": {
+            "required": ["convention_identifier"],
+            "not": {
+              "anyOf": [
+                {"required": ["schema_id"]},
+                {"required": ["json_schema_draft"]},
+                {"required": ["command"]},
+                {"required": ["protocol_identifier"]}
+              ]
+            }
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "deprecated"}}},
+          "then": {"required": ["deprecation"]}
+        }
+      ]
+    },
+    "canonical_fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_id", "path", "sha256"],
+      "properties": {
+        "fixture_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "path": {
+          "$ref": "#/$defs/repo_path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

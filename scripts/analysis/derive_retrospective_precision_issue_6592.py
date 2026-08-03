@@ -847,9 +847,12 @@ def render_precision_readme(
             "",
         ]
     )
+    for exc in exclusions:
+        lines.append(f"- **{exc['type']}**: {exc['reason']}")
 
     lines.extend(
         [
+            "",
             "## Multiplicity Inference",
             "",
             f"- Method: `{multiplicity.get('method', 'N/A')}` over "
@@ -864,9 +867,6 @@ def render_precision_readme(
             "",
         ]
     )
-
-    for exc in exclusions:
-        lines.append(f"- **{exc['type']}**: {exc['reason']}")
 
     lines.extend(
         [

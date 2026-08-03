@@ -81,6 +81,11 @@ minimum-resolvable risk-difference packet derived from the frozen
 
 ## Material Exclusions
 
+- **rare_event**: The cluster bootstrap percentile interval is not validated for event rates near zero; contrasts where both arms have near-zero event rates produce degenerate intervals that cannot support precision claims
+- **family_generalization**: The 35 scenario families are the resampling unit, not a random sample from a super-population; precision statements apply to these specific families, not to unseen scenario types
+- **non_independent_interpretation**: Within-family correlation is preserved by the cluster bootstrap; treating individual cells as independent would artificially narrow intervals and overstate precision
+- **prospective_sizing**: The 30 seeds per scenario were not chosen via a prospective sizing calculation for any specific target effect; the MRRD is a retrospective design-sensitivity measure, not a prospective adequacy claim
+
 ## Multiplicity Inference
 
 - Method: `holm_step_down` over 39 exposed contrasts at alpha=0.05
@@ -88,10 +93,6 @@ minimum-resolvable risk-difference packet derived from the frozen
 - Each contrast row in the JSON report records its raw p-value, Holm-adjusted p-value, and family-wise rejection decision.
 - Holm is applied to inferential decisions only. The descriptive percentile precision intervals and MRRDs in the table above are not multiplicity-adjusted and are not changed by these decisions.
 
-- **rare_event**: The cluster bootstrap percentile interval is not validated for event rates near zero; contrasts where both arms have near-zero event rates produce degenerate intervals that cannot support precision claims
-- **family_generalization**: The 35 scenario families are the resampling unit, not a random sample from a super-population; precision statements apply to these specific families, not to unseen scenario types
-- **non_independent_interpretation**: Within-family correlation is preserved by the cluster bootstrap; treating individual cells as independent would artificially narrow intervals and overstate precision
-- **prospective_sizing**: The 30 seeds per scenario were not chosen via a prospective sizing calculation for any specific target effect; the MRRD is a retrospective design-sensitivity measure, not a prospective adequacy claim
 
 ## Reproducibility
 

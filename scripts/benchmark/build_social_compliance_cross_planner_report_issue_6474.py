@@ -172,7 +172,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--episode-rows",
         type=Path,
-        help="per-episode rows (JSON list or CSV with JSON-encoded nested metric fields)",
+        help=(
+            "per-episode rows (JSON/CSV, a JSONL file, or a directory containing "
+            "episodes.jsonl files)"
+        ),
     )
     parser.add_argument(
         "--config",
@@ -227,6 +230,28 @@ def _file_sha256(path: Path) -> str | None:
     if not path.exists():
         return None
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _path_sha256(path: Path | None) -> str | None:
+    """Return a deterministic SHA-256 for a file or a directory tree."""
+
+    if path is None or not path.exists():
+        return None
+    if path.is_file():
+        return _file_sha256(path)
+    if not path.is_dir():
+        return None
+    digest = hashlib.sha256()
+    files = sorted(item for item in path.rglob("*") if item.is_file())
+    for item in files:
+        relative = item.relative_to(path).as_posix().encode("utf-8")
+        file_digest = _file_sha256(item)
+        if file_digest is None:  # pragma: no cover - a file cannot disappear in normal use
+            raise AnalysisError(f"input file disappeared while hashing: {item}")
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
+        digest.update(file_digest.encode("ascii"))
+    return digest.hexdigest()
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -306,28 +331,342 @@ def _load_csv_rows(path: Path) -> list[dict[str, Any]]:
         ]
 
 
-def _load_rows_from_path(path: Path) -> list[dict[str, Any]]:
-    """Load per-episode rows from JSON or CSV with JSON-encoded nested fields."""
+def _load_jsonl_rows(path: Path) -> list[dict[str, Any]]:
+    """Load strict JSONL episode rows and fail closed on malformed lines."""
+
+    rows: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                raise AnalysisError(
+                    f"JSONL episode-rows file has a blank line: {path}:{line_number}"
+                )
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise AnalysisError(f"JSONL row {path}:{line_number} is not valid JSON") from error
+            if not isinstance(payload, dict):
+                raise AnalysisError(f"JSONL row {path}:{line_number} is not an object")
+            rows.append(payload)
+    return rows
+
+
+def _parse_bool(value: Any) -> bool | None:
+    """Parse JSON and summary-file boolean spellings without guessing."""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+        return value.strip().lower() == "true"
+    return None
+
+
+def _campaign_summary_path(manifest_path: Path) -> Path | None:
+    """Find the canonical campaign summary adjacent to a retrieved manifest."""
+
+    candidate = manifest_path.parent / "reports" / "campaign_summary.json"
+    return candidate if candidate.is_file() else None
+
+
+def _load_campaign_status_context(
+    campaign_manifest: Path | None,
+) -> dict[str, dict[str, Any]] | None:
+    """Load planner execution status from the retrieved campaign summary.
+
+    Raw episode JSONL rows contain episode outcomes (for example ``failure`` or
+    ``collision``), not the campaign-level benchmark-success state.  The
+    summary is therefore the authoritative source for the status fields that
+    the analysis contract requires.  Missing context is retained as ``None``
+    so raw input fails closed instead of receiving invented status values.
+    """
+
+    if campaign_manifest is None:
+        return None
+    if not campaign_manifest.is_file():
+        raise AnalysisError(f"campaign manifest not found: {campaign_manifest}")
+    summary_path = _campaign_summary_path(campaign_manifest)
+    if summary_path is None:
+        return None
+    try:
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise AnalysisError(f"campaign summary is not valid JSON: {summary_path}") from error
+    if not isinstance(payload, dict) or not isinstance(payload.get("planner_rows"), list):
+        raise AnalysisError(f"campaign summary has no planner_rows list: {summary_path}")
+    context: dict[str, dict[str, Any]] = {}
+    for index, planner_row in enumerate(payload["planner_rows"]):
+        if not isinstance(planner_row, dict):
+            raise AnalysisError(f"campaign summary planner row {index} is not an object")
+        planner = _normalise_text(planner_row.get("algo") or planner_row.get("planner_key"))
+        if planner in context:
+            raise AnalysisError(f"campaign summary has duplicate planner row: {planner!r}")
+        context[planner] = {
+            "execution_mode": planner_row.get("execution_mode"),
+            "readiness_status": planner_row.get("readiness_status"),
+            "availability_status": planner_row.get("availability_status"),
+            "benchmark_success": _parse_bool(planner_row.get("benchmark_success")),
+            "summary_path": str(summary_path),
+        }
+    return context
+
+
+def _flatten_raw_episode_row(
+    raw_row: dict[str, Any],
+    *,
+    index: int,
+    campaign_status: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Convert one camera-ready episode record to the analysis row contract."""
+
+    metrics = raw_row.get("metrics")
+    social = metrics.get("social_compliance") if isinstance(metrics, dict) else None
+    metadata = raw_row.get("algorithm_metadata")
+    kinematics = metadata.get("planner_kinematics") if isinstance(metadata, dict) else None
+    if (
+        not isinstance(social, dict)
+        or not isinstance(metadata, dict)
+        or not isinstance(kinematics, dict)
+    ):
+        raise AnalysisError(f"raw episode row {index} lacks required social-compliance metadata")
+
+    planner = _normalise_text(raw_row.get("algo"))
+    if campaign_status is None or planner not in campaign_status:
+        raise AnalysisError(
+            "raw JSONL input requires campaign summary planner status context; "
+            f"missing context for {planner!r} (pass --campaign-manifest beside reports/campaign_summary.json)",
+        )
+    status = campaign_status[planner]
+    raw_execution_mode = _normalise_text(kinematics.get("execution_mode"))
+    expected_execution_mode = _normalise_text(status.get("execution_mode"))
+    adapter_active = kinematics.get("adapter_active")
+    metadata_status = _normalise_text(metadata.get("status"))
+    execution_mode_consistent = (
+        raw_execution_mode in NATIVE_EXECUTION_MODES
+        and expected_execution_mode == raw_execution_mode
+        and isinstance(adapter_active, bool)
+        and adapter_active is (raw_execution_mode == "adapter")
+        and metadata_status == "ok"
+    )
+
+    schema_version = social.get("schema_version")
+    claim_class = social.get("claim_class")
+    metric_rows = social.get("metrics")
+    if (
+        schema_version != SOCIAL_COMPLIANCE_SCHEMA_VERSION
+        or claim_class != SOCIAL_COMPLIANCE_CLAIM_CLASS
+        or not isinstance(metric_rows, dict)
+        or set(metric_rows) != set(METRIC_IDS)
+    ):
+        raise AnalysisError(f"raw episode row {index} has an invalid social-compliance schema")
+
+    result_provenance = raw_row.get("result_provenance")
+    source_commit = raw_row.get("git_hash")
+    if not isinstance(source_commit, str) and isinstance(result_provenance, dict):
+        source_commit = result_provenance.get("repo_commit")
+
+    statuses: dict[str, Any] = {}
+    values: dict[str, Any] = {}
+    support_counts: dict[str, Any] = {}
+    denominators: dict[str, Any] = {}
+    unavailable_reasons: dict[str, Any] = {}
+    for metric_id in METRIC_IDS:
+        metric_row = metric_rows[metric_id]
+        if not isinstance(metric_row, dict):
+            raise AnalysisError(f"raw episode row {index} metric {metric_id} is not an object")
+        if metric_row.get("id", metric_id) != metric_id:
+            raise AnalysisError(f"raw episode row {index} metric id does not match {metric_id}")
+        statuses[metric_id] = metric_row.get("status")
+        values[metric_id] = metric_row.get("value")
+        support_counts[metric_id] = metric_row.get("support_count")
+        denominators[metric_id] = metric_row.get("denominator")
+        unavailable_reasons[metric_id] = metric_row.get("unavailable_reason")
+
+    return {
+        "planner": planner,
+        "scenario_id": raw_row.get("scenario_id"),
+        "seed": raw_row.get("seed"),
+        "execution_mode": raw_execution_mode,
+        "readiness_status": status.get("readiness_status"),
+        "benchmark_success": status.get("benchmark_success"),
+        "availability_status": status.get("availability_status"),
+        "execution_mode_consistent": execution_mode_consistent,
+        "social_compliance_schema_version": schema_version,
+        "statuses": statuses,
+        "values": values,
+        "support_counts": support_counts,
+        "unavailable_reasons": unavailable_reasons,
+        "denominators": denominators,
+        "schema_valid": True,
+        "all_families_present": True,
+        "campaign_source_commit_sha": source_commit,
+    }
+
+
+def _normalise_loaded_rows(
+    rows: Sequence[dict[str, Any]],
+    *,
+    campaign_status: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Normalize raw camera-ready rows while preserving already-flat rows."""
+
+    normalised: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        metrics = row.get("metrics")
+        if isinstance(metrics, dict) and isinstance(metrics.get("social_compliance"), dict):
+            normalised.append(
+                _flatten_raw_episode_row(
+                    row,
+                    index=index,
+                    campaign_status=campaign_status,
+                ),
+            )
+        else:
+            normalised.append(row)
+    return normalised
+
+
+def _campaign_source_commit(
+    campaign_manifest: Path | None,
+    rows: Sequence[dict[str, Any]],
+) -> str | None:
+    """Resolve and cross-check the producing commit recorded by the campaign."""
+
+    candidates: set[str] = set()
+    if campaign_manifest is not None:
+        try:
+            payload = json.loads(campaign_manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise AnalysisError(
+                f"cannot read campaign manifest provenance: {campaign_manifest}"
+            ) from error
+        git_metadata = payload.get("git") if isinstance(payload, dict) else None
+        manifest_commit = git_metadata.get("commit") if isinstance(git_metadata, dict) else None
+        if isinstance(manifest_commit, str) and manifest_commit.strip():
+            candidates.add(manifest_commit.strip())
+    for row in rows:
+        source_commit = row.get("campaign_source_commit_sha")
+        if isinstance(source_commit, str) and source_commit.strip():
+            candidates.add(source_commit.strip())
+    if len(candidates) > 1:
+        raise AnalysisError(f"campaign source commit provenance disagrees: {sorted(candidates)}")
+    return next(iter(candidates), None)
+
+
+def _load_rows_from_directory(
+    path: Path,
+    *,
+    campaign_status: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Load and normalize all deterministic ``episodes.jsonl`` files below a directory."""
+
+    files = sorted(item for item in path.rglob("episodes.jsonl") if item.is_file())
+    if not files:
+        raise AnalysisError(f"episode rows directory has no episodes.jsonl files: {path}")
+    rows: list[dict[str, Any]] = []
+    for item in files:
+        rows.extend(_load_jsonl_rows(item))
+    return _normalise_loaded_rows(rows, campaign_status=campaign_status)
+
+
+def _load_json_rows(
+    path: Path,
+    *,
+    campaign_status: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Load and normalize a JSON list or a known wrapper object."""
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise AnalysisError(f"JSON episode-rows payload is not valid JSON: {path}") from error
+    candidates: list[Any]
+    if isinstance(payload, list):
+        candidates = payload
+    elif isinstance(payload, dict):
+        candidates = next(
+            (
+                candidate
+                for key in ("rows", "episode_rows", "social_compliance_rows")
+                if isinstance(candidate := payload.get(key), list)
+            ),
+            [],
+        )
+    else:
+        candidates = []
+    if not candidates or not all(isinstance(row, dict) for row in candidates):
+        raise AnalysisError(f"JSON episode-rows payload at {path} is not a list of rows")
+    return _normalise_loaded_rows(candidates, campaign_status=campaign_status)
+
+
+def _load_rows_from_path(
+    path: Path,
+    *,
+    campaign_status: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Load flat rows or normalize raw JSONL episode rows from a file/tree."""
 
     if not path.exists():
         raise AnalysisError(f"episode rows file not found: {path}")
+    if path.is_dir():
+        return _load_rows_from_directory(path, campaign_status=campaign_status)
     suffix = path.suffix.lower()
+    if suffix == ".jsonl":
+        return _normalise_loaded_rows(
+            _load_jsonl_rows(path),
+            campaign_status=campaign_status,
+        )
     if suffix == ".json":
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, list):
-            return [row for row in payload if isinstance(row, dict)]
-        if isinstance(payload, dict):
-            for key in ("rows", "episode_rows", "social_compliance_rows"):
-                candidate = payload.get(key)
-                if isinstance(candidate, list):
-                    return [row for row in candidate if isinstance(row, dict)]
-        raise AnalysisError(f"JSON episode-rows payload at {path} is not a list of rows")
+        return _load_json_rows(path, campaign_status=campaign_status)
     if suffix in {".csv", ".tsv"}:
         return _load_csv_rows(path)
     raise AnalysisError(f"unsupported episode-rows format: {path}")
 
 
-def _extract_rows_from_manifest(manifest_path: Path) -> list[dict[str, Any]]:
+def _embedded_manifest_rows(
+    payload: dict[str, Any],
+    *,
+    campaign_status: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
+    """Return normalized rows embedded directly in a campaign manifest."""
+
+    for key in ("social_compliance_rows", "episode_rows", "rows"):
+        candidate = payload.get(key)
+        if isinstance(candidate, list):
+            if not all(isinstance(row, dict) for row in candidate):
+                raise AnalysisError(f"campaign manifest field {key!r} contains non-object rows")
+            return _normalise_loaded_rows(candidate, campaign_status=campaign_status)
+    return None
+
+
+def _pointed_manifest_rows(
+    payload: dict[str, Any],
+    manifest_path: Path,
+    *,
+    campaign_status: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
+    """Load rows from a supported relative or absolute manifest artifact pointer."""
+
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return None
+    for key in ("social_compliance_rows", "episode_rows", "seed_episode_rows_json"):
+        pointer = artifacts.get(key)
+        if not isinstance(pointer, str) or not pointer:
+            continue
+        pointer_path = Path(pointer)
+        candidate_path = (
+            pointer_path if pointer_path.is_absolute() else manifest_path.parent / pointer_path
+        )
+        if candidate_path.exists():
+            return _load_rows_from_path(candidate_path, campaign_status=campaign_status)
+    return None
+
+
+def _extract_rows_from_manifest(
+    manifest_path: Path,
+    *,
+    campaign_status: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Best-effort extraction of per-episode rows from a campaign manifest.
 
     The nominal campaign runner's exact per-episode artifact layout is defined
@@ -337,30 +676,27 @@ def _extract_rows_from_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     is robust to the sibling's final choice.
     """
 
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not manifest_path.is_file():
+        raise AnalysisError(f"campaign manifest not found: {manifest_path}")
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise AnalysisError(f"campaign manifest is not valid JSON: {manifest_path}") from error
     if not isinstance(payload, dict):
         raise AnalysisError(f"campaign manifest is not a JSON object: {manifest_path}")
-    for key in ("social_compliance_rows", "episode_rows", "rows"):
-        candidate = payload.get(key)
-        if isinstance(candidate, list):
-            return [row for row in candidate if isinstance(row, dict)]
-    # Look for an explicit artifact pointer.
-    artifacts = payload.get("artifacts")
-    if isinstance(artifacts, dict):
-        for key in ("social_compliance_rows", "episode_rows", "seed_episode_rows_json"):
-            pointer = artifacts.get(key)
-            if isinstance(pointer, str) and pointer:
-                pointer_path = Path(pointer)
-                candidate_path = (
-                    pointer_path
-                    if pointer_path.is_absolute()
-                    else manifest_path.parent / pointer_path
-                )
-                if candidate_path.exists():
-                    return _load_rows_from_path(candidate_path)
+    embedded = _embedded_manifest_rows(payload, campaign_status=campaign_status)
+    if embedded is not None:
+        return embedded
+    pointed = _pointed_manifest_rows(
+        payload,
+        manifest_path,
+        campaign_status=campaign_status,
+    )
+    if pointed is not None:
+        return pointed
     sibling = manifest_path.with_name(manifest_path.stem + "_social_compliance_rows.json")
     if sibling.exists():
-        return _load_rows_from_path(sibling)
+        return _load_rows_from_path(sibling, campaign_status=campaign_status)
     raise AnalysisError(
         "campaign manifest does not expose per-episode social-compliance rows; "
         "pass them explicitly via --episode-rows",
@@ -373,10 +709,11 @@ def load_episode_rows(
 ) -> list[dict[str, Any]]:
     """Load per-episode rows, preferring an explicit --episode-rows path."""
 
+    campaign_status = _load_campaign_status_context(campaign_manifest)
     if episode_rows is not None:
-        return _load_rows_from_path(episode_rows)
+        return _load_rows_from_path(episode_rows, campaign_status=campaign_status)
     if campaign_manifest is not None:
-        return _extract_rows_from_manifest(campaign_manifest)
+        return _extract_rows_from_manifest(campaign_manifest, campaign_status=campaign_status)
     raise AnalysisError("no input: provide --episode-rows or --campaign-manifest")
 
 
@@ -932,12 +1269,21 @@ def build_report_markdown(
     lines.append("")
     lines.append(f"- campaign config: `{provenance.get('config_path', 'unknown')}`")
     lines.append(f"- config sha256: `{provenance.get('config_sha256') or 'absent'}`")
-    lines.append(f"- commit sha: `{provenance.get('commit_sha', 'unknown')}`")
+    lines.append(f"- analysis commit sha: `{provenance.get('commit_sha', 'unknown')}`")
+    lines.append(
+        f"- campaign source commit sha: `{provenance.get('campaign_source_commit_sha') or 'absent'}`",
+    )
     lines.append(
         f"- campaign manifest: `{provenance.get('campaign_manifest', 'none (self-test)')}`"
     )
     lines.append(
         f"- campaign manifest sha256: `{provenance.get('campaign_manifest_sha256') or 'absent'}`",
+    )
+    lines.append(
+        f"- episode rows: `{provenance.get('episode_rows', 'embedded or absent')}`",
+    )
+    lines.append(
+        f"- episode rows sha256: `{provenance.get('episode_rows_sha256') or 'absent'}`",
     )
     lines.append(f"- rows validated: {validation_report['row_count']}")
     lines.append(f"- benchmark-capable rows: {validation_report['valid_row_count']}")
@@ -1079,6 +1425,9 @@ def write_artifacts(
                 "config_path": provenance.get("config_path"),
                 "config_sha256": provenance.get("config_sha256"),
                 "commit_sha": provenance.get("commit_sha"),
+                "campaign_source_commit_sha": provenance.get("campaign_source_commit_sha"),
+                "episode_rows": provenance.get("episode_rows"),
+                "episode_rows_sha256": provenance.get("episode_rows_sha256"),
                 "report_path": str(report_path),
                 "summary_path": str(summary_path),
                 "row_count": validation_report["row_count"],
@@ -1376,10 +1725,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "config_path": str(args.config),
         "config_sha256": _file_sha256(args.config),
         "commit_sha": _git_head_sha(args.repo_root),
+        "campaign_source_commit_sha": _campaign_source_commit(args.campaign_manifest, rows),
         "campaign_manifest": str(args.campaign_manifest) if args.campaign_manifest else None,
         "campaign_manifest_sha256": _file_sha256(args.campaign_manifest)
         if args.campaign_manifest
         else None,
+        "episode_rows": str(args.episode_rows) if args.episode_rows else None,
+        "episode_rows_sha256": _path_sha256(args.episode_rows),
         "planner_pairs": [list(pair) for pair in FROZEN_PLANNER_PAIRS],
     }
     report_markdown = build_report_markdown(

@@ -135,3 +135,145 @@ def test_fallback_execution_rows_are_rejected() -> None:
     )
     with pytest.raises(issue6474.AnalysisError):
         issue6474.validate_rows([row])
+
+
+def _raw_episode(
+    *,
+    planner: str = "goal",
+    scenario_id: str = "classic_head_on_corridor_medium",
+    seed: int = 111,
+    execution_mode: str = "native",
+    adapter_active: bool = False,
+) -> dict[str, object]:
+    """Build the raw camera-ready episode shape used by the adapter tests."""
+
+    metrics: dict[str, dict[str, object]] = {}
+    for metric_id, (_family, units, denominator) in issue6474.METRIC_CONTRACT.items():
+        metrics[metric_id] = {
+            "id": metric_id,
+            "status": "available",
+            "support_count": 12,
+            "denominator": denominator,
+            "units": units,
+            "value": 1.25,
+        }
+    return {
+        "algo": planner,
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "status": "collision",
+        "metrics": {
+            "social_compliance": {
+                "schema_version": issue6474.SOCIAL_COMPLIANCE_SCHEMA_VERSION,
+                "claim_class": issue6474.SOCIAL_COMPLIANCE_CLAIM_CLASS,
+                "metrics": metrics,
+            },
+        },
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_kinematics": {
+                "execution_mode": execution_mode,
+                "adapter_active": adapter_active,
+            },
+        },
+    }
+
+
+def _write_raw_input(
+    tmp_path: Path,
+    *,
+    raw_rows: list[dict[str, object]],
+    execution_mode: str = "native",
+    benchmark_success: str = "true",
+) -> tuple[Path, Path]:
+    """Write a minimal manifest, campaign summary, and raw JSONL tree."""
+
+    manifest_path = tmp_path / "campaign_manifest.json"
+    manifest_path.write_text(json.dumps({"campaign_id": "test"}), encoding="utf-8")
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "campaign_summary.json").write_text(
+        json.dumps(
+            {
+                "planner_rows": [
+                    {
+                        "algo": "goal",
+                        "execution_mode": execution_mode,
+                        "readiness_status": execution_mode,
+                        "availability_status": "available",
+                        "benchmark_success": benchmark_success,
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    episode_path = tmp_path / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    episode_path.parent.mkdir(parents=True)
+    episode_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in raw_rows),
+        encoding="utf-8",
+    )
+    return manifest_path, episode_path.parent.parent
+
+
+def test_raw_jsonl_directory_is_normalized_with_campaign_status_context(tmp_path: Path) -> None:
+    """Raw episode outcomes must be separated from campaign execution status."""
+
+    manifest_path, runs_path = _write_raw_input(
+        tmp_path,
+        raw_rows=[
+            _raw_episode(seed=111),
+            _raw_episode(seed=112),
+        ],
+    )
+
+    rows = issue6474.load_episode_rows(manifest_path, runs_path)
+
+    assert [row["seed"] for row in rows] == [111, 112]
+    assert rows[0]["execution_mode"] == "native"
+    assert rows[0]["readiness_status"] == "native"
+    assert rows[0]["benchmark_success"] is True
+    assert rows[0]["execution_mode_consistent"] is True
+    assert rows[0]["statuses"]["comfort_exposure_person_s"] == "available"
+    assert rows[0]["values"]["comfort_exposure_person_s"] == 1.25
+
+
+def test_raw_execution_mode_mismatch_is_fail_closed() -> None:
+    """The adapter must not mark inconsistent raw metadata as benchmark-success."""
+
+    raw = _raw_episode(execution_mode="adapter", adapter_active=True)
+    context = {
+        "goal": {
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+            "benchmark_success": True,
+        },
+    }
+
+    row = issue6474._flatten_raw_episode_row(raw, index=0, campaign_status=context)
+
+    assert row["execution_mode_consistent"] is False
+    with pytest.raises(issue6474.AnalysisError, match="benchmark-success campaign status"):
+        issue6474.validate_rows([row])
+
+
+def test_raw_jsonl_requires_summary_status_context(tmp_path: Path) -> None:
+    """Raw records without campaign-level status evidence must fail closed."""
+
+    raw_path = tmp_path / "episodes.jsonl"
+    raw_path.write_text(json.dumps(_raw_episode()) + "\n", encoding="utf-8")
+
+    with pytest.raises(issue6474.AnalysisError, match="requires campaign summary"):
+        issue6474._load_rows_from_path(raw_path)
+
+
+def test_malformed_jsonl_fails_closed(tmp_path: Path) -> None:
+    """A malformed raw artifact must not produce a partial analysis."""
+
+    raw_path = tmp_path / "episodes.jsonl"
+    raw_path.write_text('{"algo": "goal"}\nnot-json\n', encoding="utf-8")
+
+    with pytest.raises(issue6474.AnalysisError, match="not valid JSON"):
+        issue6474._load_rows_from_path(raw_path)

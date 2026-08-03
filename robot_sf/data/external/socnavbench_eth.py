@@ -131,7 +131,7 @@ def load_traversible(root: Path | str | None = None) -> tuple[float, np.ndarray]
             f"Unsafe pickle rejected for {layout.traversible_pickle}: {exc}. "
             f"Re-stage official {ASSET_ID} assets if this is a legitimate file."
         ) from exc
-    except Exception as exc:  # pragma: no cover - depends on malformed external bytes.
+    except Exception as exc:  # pragma: no cover - malformed external bytes; fail closed
         raise SocNavBenchEthDataError(
             f"Could not load {layout.traversible_pickle}. Re-stage official "
             f"{ASSET_ID} assets and re-run the shape test."

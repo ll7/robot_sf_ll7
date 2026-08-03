@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
 import math
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +22,42 @@ from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 SCHEMA_VERSION = SIMULATION_TRACE_EXPORT_SCHEMA_VERSION
+NORMALIZATION_RECEIPT_SCHEMA = "simulation_trace_export.normalization_receipt.v1"
+NORMALIZATION_POLICY_VERSION = "simulation_trace_export.allowlisted_metadata.v1"
+
+# These fields were emitted by the pinned #5756 re-export commit but are not
+# part of simulation_trace_export.v1.  The paths are intentionally restricted
+# to pedestrian objects; the same names in any other location are unknown
+# fields and must fail closed.
+ALLOWLISTED_METADATA_FIELDS: dict[str, str] = {
+    "track_confidence": "pinned-commit pedestrian tracking metadata; not canonical trace state",
+    "visibility_evidence_reason": (
+        "pinned-commit pedestrian visibility metadata; not canonical trace state"
+    ),
+    "visibility_evidence_status": (
+        "pinned-commit pedestrian visibility metadata; not canonical trace state"
+    ),
+    "visibility_state": "pinned-commit pedestrian visibility metadata; not canonical trace state",
+}
+
+_TRACE_FIELDS = {
+    "schema_version",
+    "trace_id",
+    "source",
+    "evidence_boundary",
+    "coordinate_frame",
+    "units",
+    "frames",
+}
+_SOURCE_FIELDS = {"scenario_id", "seed", "planner_id", "episode_id", "generated_by"}
+_UNIT_FIELDS = {"position", "heading", "time", "velocity"}
+_FRAME_FIELDS = {"step", "time_s", "robot", "pedestrians", "planner"}
+_ROBOT_FIELDS = {"position", "heading", "velocity", "radius"}
+_PEDESTRIAN_FIELDS = {"id", "position", "velocity", "radius"}
+
+
+class SimulationTraceNormalizationError(ValueError):
+    """Raised when a trace contains an unallowlisted or unsafe extra field."""
 
 
 def _source_metadata_path(source: Path) -> Path | None:
@@ -54,6 +93,180 @@ def _load_source_metadata(source_path: Path) -> dict[str, Any]:
     if not isinstance(metadata, dict):
         raise ValueError(f"metadata file {metadata_path} must contain a JSON object")
     return metadata
+
+
+def _canonical_json_bytes(payload: Any, *, newline: bool = True) -> bytes:
+    """Serialize JSON in the byte representation used by trace receipts."""
+
+    data = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
+        "utf-8"
+    )
+    return data + (b"\n" if newline else b"")
+
+
+def _canonical_sha256(payload: Any) -> str:
+    """Hash a JSON payload in the canonical trace-export representation."""
+
+    return hashlib.sha256(_canonical_json_bytes(payload, newline=True)).hexdigest()
+
+
+def _check_allowed_keys(value: Mapping[str, Any], *, allowed: set[str], path: str) -> None:
+    """Reject fields that are not part of the normalized trace contract."""
+
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        joined = ", ".join(repr(field) for field in unknown)
+        raise SimulationTraceNormalizationError(f"{path}: unallowlisted extra field(s): {joined}")
+
+
+def _remove_path(payload: dict[str, Any], path: str) -> None:
+    """Remove one previously recorded JSON-pointer-like field path."""
+
+    parts = [part for part in path.split("/") if part]
+    current: Any = payload
+    for part in parts[:-1]:
+        current = current[int(part)] if isinstance(current, list) else current[part]
+    final = parts[-1]
+    if isinstance(current, list):
+        del current[int(final)]
+    else:
+        del current[final]
+
+
+def normalize_simulation_trace_export(
+    payload: Mapping[str, Any],
+    *,
+    source: Path | str | None = None,
+    source_sha256: str | None = None,
+    provenance: Mapping[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Normalize a trace with the versioned, four-field metadata allowlist.
+
+    The normalized payload is validated against ``simulation_trace_export.v1``.  Only
+    the four pinned-commit pedestrian visibility/tracking fields are removed.  Every
+    other extra field is rejected, and the receipt records the exact field paths and
+    machine-readable reasons for all removals.
+
+    Args:
+        payload: Candidate ``simulation_trace_export.v1`` mapping.
+        source: Optional source label used in validation and the receipt.
+        source_sha256: SHA-256 of the raw source trace/row bytes. When omitted, the
+            canonical input payload is hashed so direct callers still receive a
+            complete digest pair.
+        provenance: Optional JSON-safe source job/campaign/config/commit metadata.
+
+    Returns:
+        The normalized payload and its compact transformation receipt.
+
+    Raises:
+        SimulationTraceNormalizationError: if an extra field is not explicitly
+            allowlisted or the normalized payload changes anything else.
+        SimulationTraceExportValidationError: if the normalized payload does not
+            satisfy the public trace schema or semantic ordering rules.
+    """
+
+    if not isinstance(payload, Mapping):
+        raise SimulationTraceNormalizationError("trace payload must be an object")
+
+    normalized: dict[str, Any] = copy.deepcopy(dict(payload))
+    _check_allowed_keys(normalized, allowed=_TRACE_FIELDS, path="/")
+
+    source_value = normalized.get("source")
+    if isinstance(source_value, Mapping):
+        _check_allowed_keys(source_value, allowed=_SOURCE_FIELDS, path="/source")
+    units = normalized.get("units")
+    if isinstance(units, Mapping):
+        _check_allowed_keys(units, allowed=_UNIT_FIELDS, path="/units")
+
+    removed_fields: list[dict[str, str]] = []
+    frames = normalized.get("frames")
+    if isinstance(frames, list):
+        for frame_index, frame in enumerate(frames):
+            frame_path = f"/frames/{frame_index}"
+            if not isinstance(frame, Mapping):
+                continue
+            _check_allowed_keys(frame, allowed=_FRAME_FIELDS, path=frame_path)
+
+            robot = frame.get("robot")
+            if isinstance(robot, Mapping):
+                _check_allowed_keys(robot, allowed=_ROBOT_FIELDS, path=f"{frame_path}/robot")
+
+            # The public schema intentionally leaves planner and selected-action
+            # metadata open for renderer-neutral planner diagnostics (for example
+            # the existing ``amv`` block).  Preserve those schema-valid fields;
+            # closed schema objects and pedestrian metadata remain fail-closed.
+
+            pedestrians = frame.get("pedestrians")
+            if not isinstance(pedestrians, list):
+                continue
+            for pedestrian_index, pedestrian in enumerate(pedestrians):
+                if not isinstance(pedestrian, Mapping):
+                    continue
+                pedestrian_path = f"{frame_path}/pedestrians/{pedestrian_index}"
+                unknown = sorted(set(pedestrian) - _PEDESTRIAN_FIELDS)
+                unallowlisted = [
+                    field for field in unknown if field not in ALLOWLISTED_METADATA_FIELDS
+                ]
+                if unallowlisted:
+                    joined = ", ".join(repr(field) for field in unallowlisted)
+                    raise SimulationTraceNormalizationError(
+                        f"{pedestrian_path}: unallowlisted extra field(s): {joined}"
+                    )
+                for field in sorted(set(pedestrian) & set(ALLOWLISTED_METADATA_FIELDS)):
+                    field_path = f"{pedestrian_path}/{field}"
+                    del pedestrian[field]
+                    removed_fields.append(
+                        {
+                            "path": field_path,
+                            "field": field,
+                            "reason": ALLOWLISTED_METADATA_FIELDS[field],
+                        }
+                    )
+
+    # This comparison is deliberately structural: it proves that normalization
+    # removed exactly the receipt-listed metadata paths and changed no positions,
+    # velocities, timing, IDs, controls, or other canonical payload values.
+    expected = copy.deepcopy(dict(payload))
+    for removed in removed_fields:
+        _remove_path(expected, removed["path"])
+    if normalized != expected:
+        raise SimulationTraceNormalizationError(
+            "normalization changed semantic payload outside the allowlisted metadata fields"
+        )
+
+    simulation_trace_export_from_dict(normalized, source=source)
+    raw_digest = source_sha256 or _canonical_sha256(payload)
+    if len(raw_digest) != 64 or any(char not in "0123456789abcdefABCDEF" for char in raw_digest):
+        raise SimulationTraceNormalizationError(
+            "raw trace SHA-256 must be a 64-character hex digest"
+        )
+    if isinstance(source, Path):
+        try:
+            actual_source_digest = _sha256(source)
+        except OSError as exc:
+            raise SimulationTraceNormalizationError(
+                f"raw trace source is unavailable: {source}"
+            ) from exc
+        if actual_source_digest != raw_digest.lower():
+            raise SimulationTraceNormalizationError(
+                "raw trace SHA-256 disagrees with the source bytes"
+            )
+    normalized_digest = _canonical_sha256(normalized)
+    receipt: dict[str, Any] = {
+        "schema_version": NORMALIZATION_RECEIPT_SCHEMA,
+        "trace_schema_version": SCHEMA_VERSION,
+        "normalization_policy": NORMALIZATION_POLICY_VERSION,
+        "status": "complete",
+        "source": {"label": str(source) if source is not None else None},
+        "raw_trace_sha256": raw_digest.lower(),
+        "normalized_trace_sha256": normalized_digest,
+        "removed_fields": removed_fields,
+        "removed_field_count": len(removed_fields),
+        "allowlisted_fields": dict(ALLOWLISTED_METADATA_FIELDS),
+        "semantic_payload_unchanged": True,
+        "provenance": dict(provenance) if provenance is not None else {},
+    }
+    return normalized, receipt
 
 
 def _pose(record_state: dict[str, Any]) -> tuple[float, float, float]:
@@ -218,7 +431,7 @@ def _frames_from_aggregate_records(
     return frames
 
 
-def build_simulation_trace_export(
+def _build_simulation_trace_export(
     source: Path,
     *,
     planner_id: str | None = None,
@@ -374,7 +587,53 @@ def build_simulation_trace_export(
         "frames": frames,
     }
 
-    simulation_trace_export_from_dict(payload, source=source)
+    return payload
+
+
+def build_simulation_trace_export_with_receipt(
+    source: Path,
+    *,
+    planner_id: str | None = None,
+    scenario_id: str | None = None,
+    source_signature: str | None = None,
+    provenance: Mapping[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build and normalize one trace, returning its payload and receipt."""
+
+    raw_payload = _build_simulation_trace_export(
+        source,
+        planner_id=planner_id,
+        scenario_id=scenario_id,
+        source_signature=source_signature,
+    )
+    return normalize_simulation_trace_export(
+        raw_payload,
+        source=source,
+        source_sha256=source_signature or _sha256(source),
+        provenance=provenance,
+    )
+
+
+def build_simulation_trace_export(
+    source: Path,
+    *,
+    planner_id: str | None = None,
+    scenario_id: str | None = None,
+    source_signature: str | None = None,
+) -> dict[str, Any]:
+    """Build and validate one renderer-neutral timeline payload.
+
+    This compatibility wrapper preserves the original dictionary-only API.  Call
+    :func:`build_simulation_trace_export_with_receipt` when provenance and digest
+    evidence are required.
+    """
+
+    payload, _receipt = build_simulation_trace_export_with_receipt(
+        source,
+        planner_id=planner_id,
+        scenario_id=scenario_id,
+        source_signature=source_signature,
+    )
     return payload
 
 
@@ -384,16 +643,22 @@ def write_simulation_trace_export(
     output: Path,
     planner_id: str | None = None,
     scenario_id: str | None = None,
+    receipt: Path | None = None,
+    provenance: Mapping[str, Any] | None = None,
 ) -> Path:
-    """Write a validated analysis-workbench timeline payload."""
+    """Write a validated timeline payload and optional transformation receipt."""
 
-    payload = build_simulation_trace_export(
+    payload, receipt_payload = build_simulation_trace_export_with_receipt(
         source,
         planner_id=planner_id,
         scenario_id=scenario_id,
+        provenance=provenance,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    output.write_bytes(_canonical_json_bytes(payload))
+    if receipt is not None:
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_bytes(_canonical_json_bytes(receipt_payload))
     return output
 
 
@@ -407,6 +672,18 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, required=True, help="Output simulation export path.")
     parser.add_argument("--planner-id", default=None, help="Planner contract identifier override.")
     parser.add_argument("--scenario-id", default=None, help="Scenario identifier override.")
+    parser.add_argument(
+        "--receipt",
+        type=Path,
+        default=None,
+        help="Optional compact normalization receipt destination.",
+    )
+    parser.add_argument(
+        "--provenance",
+        type=Path,
+        default=None,
+        help="Optional JSON object containing source job/campaign/config/commit provenance.",
+    )
     return parser
 
 
@@ -417,11 +694,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        provenance: Mapping[str, Any] | None = None
+        if args.provenance is not None:
+            raw_provenance = json.loads(args.provenance.read_text(encoding="utf-8"))
+            if not isinstance(raw_provenance, Mapping):
+                raise ValueError("provenance file must contain a JSON object")
+            provenance = dict(raw_provenance)
         output = write_simulation_trace_export(
             source=args.source,
             output=args.output,
             planner_id=args.planner_id,
             scenario_id=args.scenario_id,
+            receipt=args.receipt,
+            provenance=provenance,
         )
     except (OSError, ValueError, SimulationTraceExportValidationError) as exc:
         print(f"{exc}", file=sys.stderr)

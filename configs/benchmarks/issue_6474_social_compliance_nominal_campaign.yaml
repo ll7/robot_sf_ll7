@@ -1,0 +1,94 @@
+# Issue #6474 nominal social-compliance cross-planner campaign.
+#
+# Purpose:
+#   Freeze the exact nominal campaign config for the #6474 social-compliance
+#   cross-planner comparison, satisfying the Domain-Aware Approval "Next gate":
+#   freeze the exact manifest, aggregation version, multiplicity family, and
+#   stop rules before any SLURM submission.  This config is preregistration-
+#   only; production execution is separately gated via a follow-up SLURM child
+#   issue.  No campaign is run and no output is committed by this file alone.
+#
+# Claim boundary (from Domain-Aware Approval in #6474):
+#   Target claim: estimate within-simulator planner-pair differences for the
+#   versioned social-compliance metric families (comfort_exposure and any other
+#   available families).  No universal planner superiority, fairness,
+#   deployment-ethics, legibility, social-validity, safety, welfare, real-world,
+#   or composite-score claim.  Fallback, degraded, missing, or invalid rows are
+#   excluded rather than zero-imputed.
+#
+# Comparators and execution-mode note:
+#   goal runs natively; social_force and orca are velocity-vector planners that
+#   execute through declared benchmark-capable compatibility adapters
+#   (NATIVE_EXECUTION_MODES = {native, adapter}).  Every row's mode must be
+#   recorded; no row may use fallback or degraded execution as success evidence.
+#
+# Frozen design:
+#   - planners: goal (native), social_force (adapter), orca (adapter) -- 3 arms
+#   - scenarios: six frozen #6102 medium-band identifiers -- 6 scenarios
+#     (scenario content hash recorded in
+#      configs/scenarios/issue_6474_social_compliance_nominal.yaml and in the
+#      preregistration document)
+#   - seeds: 111-140 paired -- 30 paired seeds
+#   - horizon 250 steps and dt=0.1, matching the #6481 preflight smoke so the
+#     social-compliance emission path exercised here is the same one already
+#     proven to survive a native/adapter cross-planner run
+#   - exact coverage: 6 x 3 x 30 = 540 unique cells
+#   - social-compliance metric emission is on by default (always emitted by
+#     compute_all_metrics); export_publication_bundle and paper_facing are false
+#
+# Canonical validation:
+#   DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+#     uv run python -m robot_sf.benchmark.cli validate-config \
+#       --matrix configs/scenarios/issue_6474_social_compliance_nominal.yaml
+#
+# Preregistration document:
+#   docs/context/evidence/issue_6474_social_compliance_preregistration.json
+#
+# Analysis script (estimand declaration; does not execute the campaign):
+#   scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py
+
+name: issue_6474_social_compliance_nominal_campaign
+paper_facing: false
+scenario_matrix: configs/scenarios/issue_6474_social_compliance_nominal.yaml
+
+seed_policy:
+  mode: fixed-list
+  seeds: [
+    111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
+    121, 122, 123, 124, 125, 126, 127, 128, 129, 130,
+    131, 132, 133, 134, 135, 136, 137, 138, 139, 140,
+  ]
+
+workers: 1
+horizon: 250
+dt: 0.1
+record_forces: false
+resume: false
+stop_on_failure: false
+bootstrap_samples: 2000
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+
+planners:
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast

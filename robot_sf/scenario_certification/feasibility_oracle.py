@@ -1446,7 +1446,7 @@ def _get_certified_route_waypoints(
     try:
         config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
         certificate = _default_certifier(scenario, scenario_path)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - config or certifier errors mean no waypoints
         return []
 
     for route_cert in certificate.route_certificates or []:
@@ -1500,7 +1500,7 @@ def _replan_astar_path(
     planner = ClassicGlobalPlanner(map_def, planner_config)
     try:
         path, _info = planner.plan(start, goal, algorithm="a_star", allow_inflation_fallback=False)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - A* planner surface is unknown; degrade to no path
         return []
 
     if not path:
@@ -1587,7 +1587,7 @@ def planned_path_clearance_verdict(
         }
     try:
         config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - robot-config errors fail closed
         return {**fallback, "blocker": f"robot_config_error: {exc}"}
 
     map_def, start, goal, route_blocker = _resolve_scenario_map_and_route(config, scenario)
@@ -1612,7 +1612,7 @@ def planned_path_clearance_verdict(
             obstacle_union,
             robot_radius,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - clearance errors fail closed
         return {**fallback, "blocker": f"clearance_measurement_error: {exc}"}
     if min_vertex_clearance is None or min_path_clearance is None:
         return {**fallback, "blocker": "clearance_measurement_is_non_finite"}
@@ -1742,7 +1742,7 @@ def _run_route_follow_intervention(
                     "claim_boundary": record.get("claim_boundary") or DIAGNOSTIC_CLAIM_BOUNDARY,
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - route-follow errors block that radius
             route_follow_results.append(
                 {
                     "envelope_radius_m": radius,
@@ -1788,7 +1788,7 @@ def _run_clearance_comparison(
                     "inflated_collision_free_path": inflated_path,
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - certify errors block that radius
             clearance_comparison.append(
                 {
                     "envelope_radius_m": radius,
@@ -1822,7 +1822,7 @@ def _run_planned_path_clearance_checks(
             )
             verdict = {**verdict, "envelope_radius_m": float(radius)}
             planned_path_clearance.append(verdict)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - clearance verdict errors block that radius
             planned_path_clearance.append(
                 {
                     "envelope_radius_m": float(radius),

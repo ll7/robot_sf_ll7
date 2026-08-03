@@ -217,7 +217,7 @@ class DrlVoPlanner:
             try:
                 action = self._predict_action(obs)
                 return action
-            except Exception as exc:
+            except Exception as exc:  # broad catch: inference errors fall back or propagate
                 logger.warning("DRL-VO model prediction failed: {}", exc)
                 if not self.config.fallback_to_goal:
                     raise

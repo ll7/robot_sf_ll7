@@ -114,7 +114,7 @@ def capture_frames(env: Any, stride: int = 1) -> list[np.ndarray]:
         logger.warning("capture_frames found no RGB frame data")
         return []
 
-    except Exception as e:
+    except Exception as e:  # broad catch: log frame-capture context then re-raise
         logger.error(f"Frame capture failed: {e}")
         raise
 

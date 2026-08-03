@@ -2102,6 +2102,7 @@ def build_sipp_lattice_search_adapter(
 SPACE_TIME_FEASIBILITY_SCHEMA = "space_time_feasibility_oracle.v1"
 SPACE_TIME_FEASIBILITY_ISSUE = "6471"
 SPACE_TIME_FEASIBILITY_REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
+SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY = "diagnostic_only_not_benchmark_evidence"
 
 #: A collision-free space-time route witness was found and independently replayed.
 FEASIBILITY_FEASIBLE = "feasible"
@@ -2114,6 +2115,13 @@ EPISODE_LOCAL_POLICY_FAILURE = "local_policy_failure"
 EPISODE_NOT_PROVEN_FEASIBLE = "not_proven_feasible"
 #: Episode annotation: the benchmark episode already succeeded.
 EPISODE_SUCCEEDED = "episode_succeeded"
+
+_SPACE_TIME_FEASIBILITY_VERDICTS = frozenset(
+    {FEASIBILITY_FEASIBLE, FEASIBILITY_NOT_PROVEN_FEASIBLE}
+)
+_SPACE_TIME_EPISODE_ANNOTATIONS = frozenset(
+    {EPISODE_LOCAL_POLICY_FAILURE, EPISODE_NOT_PROVEN_FEASIBLE, EPISODE_SUCCEEDED}
+)
 
 #: Comparison verdicts against the static (planner-free) feasibility oracle.
 COMPARISON_CONSISTENT_FEASIBLE = "consistent_feasible"
@@ -2213,7 +2221,7 @@ class SpaceTimeFeasibilityResult:
     safe_interval_rejections: int
     forecast_status: str
     discretization: SpaceTimeDiscretization
-    claim_boundary: str = "diagnostic_only_not_benchmark_evidence"
+    claim_boundary: str = SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY
 
     @property
     def feasible(self) -> bool:
@@ -2618,6 +2626,36 @@ def classify_episode_feasibility(
     return EPISODE_NOT_PROVEN_FEASIBLE
 
 
+def _validate_space_time_payload_contract(
+    result: SpaceTimeFeasibilityResult,
+    *,
+    episode_annotation: str | None,
+) -> None:
+    """Reject result metadata that would overstate the diagnostic claim boundary."""
+    if (
+        not isinstance(result.verdict, str)
+        or result.verdict not in _SPACE_TIME_FEASIBILITY_VERDICTS
+    ):
+        raise ValueError(f"unsupported space-time feasibility verdict: {result.verdict!r}")
+    if result.claim_boundary != SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY:
+        raise ValueError(
+            "space-time feasibility claim_boundary must remain "
+            f"{SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY!r}; got {result.claim_boundary!r}"
+        )
+    if episode_annotation is None:
+        return
+    if (
+        not isinstance(episode_annotation, str)
+        or episode_annotation not in _SPACE_TIME_EPISODE_ANNOTATIONS
+    ):
+        raise ValueError(f"unsupported space-time episode_annotation: {episode_annotation!r}")
+    result_annotation = (
+        EPISODE_LOCAL_POLICY_FAILURE if result.feasible else EPISODE_NOT_PROVEN_FEASIBLE
+    )
+    if episode_annotation not in {EPISODE_SUCCEEDED, result_annotation}:
+        raise ValueError("episode_annotation is inconsistent with the serialized space-time result")
+
+
 def space_time_feasibility_result_to_dict(
     result: SpaceTimeFeasibilityResult,
     *,
@@ -2636,14 +2674,19 @@ def space_time_feasibility_result_to_dict(
 
     Returns:
         A ``space_time_feasibility_oracle.v1`` diagnostic payload.
+
+    Raises:
+        ValueError: If the verdict, claim boundary, or episode annotation would
+            violate the diagnostic-only payload contract.
     """
+    _validate_space_time_payload_contract(result, episode_annotation=episode_annotation)
     has_valid_witness = result.feasible
     witness = result.witness if has_valid_witness else ()
     return {
         "schema_version": SPACE_TIME_FEASIBILITY_SCHEMA,
         "issue": SPACE_TIME_FEASIBILITY_ISSUE,
         "review_marker": SPACE_TIME_FEASIBILITY_REVIEW_MARKER,
-        "claim_boundary": result.claim_boundary,
+        "claim_boundary": SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY,
         "scenario_id": scenario_id,
         "episode_id": episode_id,
         "verdict": result.verdict,
@@ -2694,7 +2737,12 @@ def compare_with_static_feasibility(
     Returns:
         A diagnostic comparison payload with ``comparison_verdict`` and
         ``explanation`` keys.
+
+    Raises:
+        ValueError: If the result verdict or claim boundary violates the
+            diagnostic-only payload contract.
     """
+    _validate_space_time_payload_contract(result, episode_annotation=None)
     space_time_feasible = result.feasible
     static_inputs_consistent = static_status is None or (
         static_status in _STATIC_KNOWN_STATUSES
@@ -2764,7 +2812,7 @@ def compare_with_static_feasibility(
     return {
         "schema_version": SPACE_TIME_FEASIBILITY_SCHEMA,
         "issue": SPACE_TIME_FEASIBILITY_ISSUE,
-        "claim_boundary": result.claim_boundary,
+        "claim_boundary": SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY,
         "comparison_verdict": comparison_verdict,
         "explanation": explanation,
         "space_time_feasible": space_time_feasible,

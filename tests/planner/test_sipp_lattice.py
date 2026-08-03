@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -1822,6 +1823,57 @@ class TestSpaceTimeFeasibilityOracle:
         assert payload["witness_valid"] is False
         assert payload["witness_length"] == 0
         assert payload["witness_commands"] == []
+
+    def test_payload_rejects_unsupported_verdict(self) -> None:
+        result = replace(_not_proven_result_stub(), verdict="scenario_infeasible")
+
+        with pytest.raises(ValueError, match="unsupported space-time feasibility verdict"):
+            space_time_feasibility_result_to_dict(result)
+
+    def test_payload_rejects_unsupported_episode_annotation(self) -> None:
+        with pytest.raises(ValueError, match="unsupported space-time episode_annotation"):
+            space_time_feasibility_result_to_dict(
+                _not_proven_result_stub(),
+                episode_annotation="scenario_infeasible",
+            )
+
+    @pytest.mark.parametrize(
+        ("result_factory", "episode_annotation"),
+        [
+            (_feasible_result_stub, EPISODE_NOT_PROVEN_FEASIBLE),
+            (_not_proven_result_stub, EPISODE_LOCAL_POLICY_FAILURE),
+        ],
+    )
+    def test_payload_rejects_inconsistent_episode_annotation(
+        self, result_factory, episode_annotation
+    ) -> None:
+        with pytest.raises(ValueError, match="episode_annotation is inconsistent"):
+            space_time_feasibility_result_to_dict(
+                result_factory(),
+                episode_annotation=episode_annotation,
+            )
+
+    def test_payload_rejects_forged_claim_boundary(self) -> None:
+        result = replace(
+            _not_proven_result_stub(),
+            claim_boundary="paper_grade_benchmark_evidence",
+        )
+
+        with pytest.raises(ValueError, match="claim_boundary"):
+            space_time_feasibility_result_to_dict(result)
+
+    def test_static_comparison_rejects_forged_claim_boundary(self) -> None:
+        result = replace(
+            _not_proven_result_stub(),
+            claim_boundary="paper_grade_benchmark_evidence",
+        )
+
+        with pytest.raises(ValueError, match="claim_boundary"):
+            compare_with_static_feasibility(
+                result,
+                static_feasible=True,
+                static_status="feasible",
+            )
 
 
 class TestSpaceTimeEpisodeClassification:

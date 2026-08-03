@@ -1,5 +1,14 @@
 # Context Retrieval Index
 
+Issue #6644 oracle-first narrow-doorway geometry-family preflight for the #6600
+collision-envelope campaign: versioned manifest
+(`issue_6644_narrow_doorway_geometry_family.v1`) over a 15-cell
+`gap_width_m` x `constriction_depth_m` matrix around the authored 2.0 m opening, margin derived
+as `gap_width_m - 2 * envelope_radius_m`, planner-free envelope-sensitivity oracle runs before
+any planner path, planner lanes stay `not_run` until a separately approved issue-owned campaign
+packet, diagnostic within-simulator geometry evidence only:
+[issue_6644_narrow_doorway_geometry_family.md](issue_6644_narrow_doorway_geometry_family.md).
+
 Issue #6641 Gate 1 runtime radius-binding canary for the #6600 collision-envelope campaign:
 prove a declared `robot_config.radius` propagates consistently to simulator collision geometry,
 obstacle/pedestrian contact logic, feasibility/oracle, metric metadata and output rows, and

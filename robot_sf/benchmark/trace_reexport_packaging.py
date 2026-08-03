@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shlex
 import shutil
 import tarfile
 import tempfile
@@ -30,7 +32,10 @@ from robot_sf.benchmark.camera_ready._config import (
 )
 from robot_sf.benchmark.camera_ready._util import _hash_payload, _jsonable_repo_relative
 from robot_sf.benchmark.utils import _config_hash
-from scripts.tools.build_simulation_trace_export import build_simulation_trace_export
+from scripts.tools.build_simulation_trace_export import (
+    build_simulation_trace_export,
+    build_simulation_trace_export_with_receipt,
+)
 
 EXPECTED_OUTCOMES_SCHEMA = "issue_5756_expected_outcomes.v1"
 MAPPING_RECEIPT_SCHEMA = "issue_5756_trace_reexport_mapping_receipt.v1"
@@ -56,6 +61,41 @@ RELEASE_TAG = "0.0.3"
 REPORT_COMMIT = "e2ac534c9d6bb750346b1e0724638c91306e410a"
 #: Schema the candidate-trace resolver (#5615) consumes for the #5756 episode mapping.
 RESOLVER_MAPPING_SCHEMA = "issue_5756_trace_mapping_receipt.v1"
+REAL_REEXPORT_BINDING_SCHEMA = "issue_6411_real_reexport_binding.v1"
+REAL_REEXPORT_RECEIPT_SCHEMA = "issue_6411_trace_transformation_receipt.v1"
+REAL_REEXPORT_CONFIG_EVIDENCE_SCHEMA = "issue_6411_config_evidence.v1"
+
+REAL_REEXPORT_SEEDS = tuple(range(111, 141))
+REAL_REEXPORT_EXCEPTION_SEEDS = (128, 130)
+REAL_REEXPORT_ARM_SPECS = (
+    {
+        "key": "doorway_ppo",
+        "job_id": "13483",
+        "planner": "ppo",
+        "scenario_id": "classic_doorway_medium",
+        "config_name": "doorway_butterfly_trace_reexport",
+        "config_path": "configs/benchmarks/doorway_butterfly_trace_reexport.yaml",
+        "not_admitted_seeds": REAL_REEXPORT_EXCEPTION_SEEDS,
+    },
+    {
+        "key": "double_bottleneck_goal",
+        "job_id": "13487",
+        "planner": "goal",
+        "scenario_id": "classic_realworld_double_bottleneck_high",
+        "config_name": "double_bottleneck_upset_goal",
+        "config_path": "configs/benchmarks/dbneck_goal.yaml",
+        "not_admitted_seeds": (),
+    },
+    {
+        "key": "double_bottleneck_ppo",
+        "job_id": "13488",
+        "planner": "ppo",
+        "scenario_id": "classic_realworld_double_bottleneck_high",
+        "config_name": "double_bottleneck_upset_ppo",
+        "config_path": "configs/benchmarks/dbneck_ppo.yaml",
+        "not_admitted_seeds": (),
+    },
+)
 
 _CANONICAL_CONFIG = Path("configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml")
 _SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions_francis2023.yaml")
@@ -72,6 +112,10 @@ _OUTCOME_FIELDS = ("success", "route_complete", "collision_event", "timeout_even
 
 class TraceReexportPackagingError(ValueError):
     """Raised when any frozen packaging contract is not satisfied."""
+
+
+class RealReexportBindingError(TraceReexportPackagingError):
+    """Raised when a real #5756 arm cannot be provenance-bound safely."""
 
 
 @dataclass(frozen=True)
@@ -104,6 +148,33 @@ class CampaignExpectation:
         return {
             (self.planner, scenario, seed) for scenario in self.scenarios for seed in self.seeds
         }
+
+
+@dataclass(frozen=True)
+class RealReexportArm:
+    """Immutable identity contract for one real #5756 re-export arm."""
+
+    key: str
+    job_id: str
+    planner: str
+    scenario_id: str
+    config_name: str
+    config_path: str
+    seeds: tuple[int, ...] = REAL_REEXPORT_SEEDS
+    not_admitted_seeds: tuple[int, ...] = ()
+
+    @property
+    def tuples(self) -> set[tuple[str, str, int]]:
+        """Return this arm's exact planner/scenario/seed tuple set."""
+
+        return {(self.planner, self.scenario_id, seed) for seed in self.seeds}
+
+
+REAL_REEXPORT_ARMS = tuple(RealReexportArm(**spec) for spec in REAL_REEXPORT_ARM_SPECS)
+REAL_REEXPORT_ARMS_BY_KEY = {arm.key: arm for arm in REAL_REEXPORT_ARMS}
+REAL_REEXPORT_REQUEST_TUPLES = frozenset(
+    tuple_value for arm in REAL_REEXPORT_ARMS for tuple_value in arm.tuples
+)
 
 
 def _canonical_bytes(payload: Any, *, newline: bool = False) -> bytes:
@@ -674,6 +745,931 @@ def _verify_rerun_row(  # noqa: C901
         ):
             raise TraceReexportPackagingError(f"rerun row {key!r} PPO load/fallback mismatch")
     _outcome(row, key)
+
+
+def real_reexport_arms() -> tuple[RealReexportArm, ...]:
+    """Return the immutable three-arm #5756 provenance contract."""
+
+    return REAL_REEXPORT_ARMS
+
+
+def real_reexport_request_tuples() -> set[tuple[str, str, int]]:
+    """Return the requested 90 planner/scenario/seed tuples."""
+
+    tuples: set[tuple[str, str, int]] = set()
+    for arm in REAL_REEXPORT_ARMS:
+        tuples.update(arm.tuples)
+    return tuples
+
+
+def _first_manifest_value(manifest: Mapping[str, Any], *paths: tuple[str, ...]) -> Any:
+    """Return the first present value from a list of nested manifest paths."""
+
+    for path in paths:
+        current: Any = manifest
+        for part in path:
+            if not isinstance(current, Mapping) or part not in current:
+                break
+            current = current[part]
+        else:
+            return current
+    return None
+
+
+def _required_manifest_text(
+    manifest: Mapping[str, Any], label: str, *paths: tuple[str, ...]
+) -> str:
+    """Read one required manifest identity value as non-empty text.
+
+    Returns:
+        The stripped manifest value.
+    """
+
+    value = _first_manifest_value(manifest, *paths)
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise RealReexportBindingError(f"real-arm manifest lacks {label}")
+    normalized = str(value).strip()
+    if not normalized:
+        raise RealReexportBindingError(f"real-arm manifest lacks {label}")
+    return normalized
+
+
+def _manifest_seed_list(manifest: Mapping[str, Any]) -> list[int]:
+    """Read the resolved seed list from a campaign manifest.
+
+    Returns:
+        The unique resolved seed values in manifest order.
+    """
+
+    value = _first_manifest_value(
+        manifest,
+        ("seed_policy", "resolved_seeds"),
+        ("seed_policy", "seeds"),
+        ("resolved_seeds",),
+        ("seeds",),
+    )
+    if not isinstance(value, list) or any(isinstance(seed, bool) for seed in value):
+        raise RealReexportBindingError("real-arm manifest lacks a list of resolved seeds")
+    try:
+        seeds = [int(seed) for seed in value]
+    except (TypeError, ValueError) as exc:
+        raise RealReexportBindingError("real-arm manifest resolved seeds are not integers") from exc
+    if len(seeds) != len(set(seeds)):
+        raise RealReexportBindingError("real-arm manifest resolved seeds contain duplicates")
+    return seeds
+
+
+def _manifest_planner(manifest: Mapping[str, Any]) -> str:
+    """Read the single planner key from a campaign manifest.
+
+    Returns:
+        The planner key.
+    """
+
+    planners = manifest.get("planners")
+    if isinstance(planners, list):
+        if len(planners) != 1 or not isinstance(planners[0], Mapping):
+            raise RealReexportBindingError("real-arm manifest must declare exactly one planner")
+        value = planners[0].get("key") or planners[0].get("planner")
+    else:
+        value = _first_manifest_value(manifest, ("planner",), ("algorithm",))
+    if not isinstance(value, str) or not value.strip():
+        raise RealReexportBindingError("real-arm manifest lacks a planner key")
+    return value.strip()
+
+
+def _manifest_config_path(manifest: Mapping[str, Any]) -> str | None:
+    """Extract the config path from manifest fields or the recorded invocation.
+
+    Returns:
+        The normalized repository-relative config path, or ``None`` when absent.
+    """
+
+    direct = _first_manifest_value(
+        manifest,
+        ("config_path",),
+        ("config", "path"),
+        ("config_file",),
+    )
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    for field in ("invoked_command", "command"):
+        command = manifest.get(field)
+        if not isinstance(command, str):
+            continue
+        try:
+            tokens = shlex.split(command)
+        except ValueError as exc:
+            raise RealReexportBindingError(
+                f"manifest {field} is not a valid shell command: {exc}"
+            ) from exc
+        for index, token in enumerate(tokens[:-1]):
+            if token == "--config":
+                value = tokens[index + 1].strip()
+                if value:
+                    return value
+    return None
+
+
+def _source_job_id(manifest: Mapping[str, Any], source_root: Path) -> str | None:
+    """Recover a missing scheduler job id from the immutable retrieval root.
+
+    Returns:
+        The unique job id found in the source identity, or ``None`` when ambiguous.
+    """
+
+    candidates = [str(source_root)]
+    for field in ("results_root", "output_root", "campaign_id", "invoked_command", "command"):
+        value = manifest.get(field)
+        if isinstance(value, str):
+            candidates.append(value)
+    job_ids = {
+        match for value in candidates for match in re.findall(r"(?<!\d)job[-_](\d+)(?!\d)", value)
+    }
+    if len(job_ids) == 1:
+        return next(iter(job_ids))
+    return None
+
+
+def _compact_source_evidence(source_root: Path, manifest_path: Path) -> list[dict[str, str]]:
+    """Hash the compact source records that bind a real campaign invocation.
+
+    Returns:
+        Hash records for the manifest and available compact run/preflight records.
+    """
+
+    candidates = [manifest_path]
+    summary = source_root / "run_summary.yaml"
+    if summary.is_file():
+        candidates.append(summary)
+    preflight = sorted(source_root.rglob("preflight/validate_config.json"))
+    if len(preflight) == 1:
+        candidates.append(preflight[0])
+    elif len(preflight) > 1:
+        raise RealReexportBindingError(
+            f"source root must contain at most one preflight validate record; found {len(preflight)}"
+        )
+    return [
+        {
+            "kind": "campaign_manifest" if path == manifest_path else path.name,
+            "path": str(path),
+            "sha256": _sha256_file(path),
+        }
+        for path in candidates
+    ]
+
+
+def _manifest_job_id(manifest: Mapping[str, Any], source_root: Path) -> str:
+    """Read a scheduler job id, recovering it from immutable source metadata when needed.
+
+    Returns:
+        The normalized scheduler job id.
+    """
+
+    declared_job_id = _first_manifest_value(
+        manifest,
+        ("job_id",),
+        ("slurm_job_id",),
+        ("provenance", "job_id"),
+        ("provenance", "slurm_job_id"),
+        ("run_provenance", "job_id"),
+        ("run_provenance", "slurm_job_id"),
+    )
+    if declared_job_id is None or (
+        isinstance(declared_job_id, str) and not declared_job_id.strip()
+    ):
+        recovered_job_id = _source_job_id(manifest, source_root)
+        if recovered_job_id is None:
+            raise RealReexportBindingError("real-arm manifest lacks job_id")
+        return recovered_job_id
+    if isinstance(declared_job_id, bool) or not isinstance(declared_job_id, (str, int)):
+        raise RealReexportBindingError("real-arm manifest lacks job_id")
+    normalized = str(declared_job_id).strip()
+    if not normalized:
+        raise RealReexportBindingError("real-arm manifest lacks job_id")
+    return normalized
+
+
+def _read_config_evidence(  # noqa: C901, PLR0912, PLR0915
+    evidence: Path | Mapping[str, Any] | None,
+    *,
+    arm: RealReexportArm,
+    manifest: Mapping[str, Any],
+    source_root: Path,
+    manifest_path: Path,
+) -> dict[str, Any]:
+    """Load and verify an independent config-path/hash evidence descriptor.
+
+    Returns:
+        A normalized, verified config provenance mapping.
+    """
+
+    descriptor: Mapping[str, Any] | None
+    descriptor_path: Path | None = None
+    auto_manifest_evidence = False
+    if evidence is None:
+        candidate = _first_manifest_value(
+            manifest,
+            ("config_provenance",),
+            ("provenance", "config"),
+        )
+        descriptor = candidate if isinstance(candidate, Mapping) else None
+        auto_manifest_evidence = descriptor is None
+    elif isinstance(evidence, Mapping):
+        descriptor = evidence
+    else:
+        descriptor_path = Path(evidence)
+        if not descriptor_path.is_file():
+            raise RealReexportBindingError(f"config evidence is unavailable: {descriptor_path}")
+        try:
+            parsed = yaml.safe_load(descriptor_path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            raise RealReexportBindingError(
+                f"cannot read config evidence {descriptor_path}: {exc}"
+            ) from exc
+        if not isinstance(parsed, Mapping):
+            raise RealReexportBindingError("config evidence must contain an object")
+        descriptor = parsed
+
+    if descriptor is None and auto_manifest_evidence:
+        descriptor = {}
+    if descriptor is None:
+        raise RealReexportBindingError(
+            f"{arm.key} has no independent manifest/config evidence descriptor"
+        )
+
+    nested = descriptor.get("config_provenance")
+    if isinstance(nested, Mapping):
+        descriptor = nested
+    config_name = descriptor.get("config_name") or descriptor.get("name")
+    if config_name is not None and config_name != arm.config_name:
+        raise RealReexportBindingError(f"{arm.key} config name evidence mismatch")
+    config_path_value = (
+        descriptor.get("config_path")
+        or descriptor.get("path")
+        or descriptor.get("file")
+        or _first_manifest_value(
+            descriptor,
+            ("config_reconstruction", "reconstructed_file"),
+        )
+        or _manifest_config_path(manifest)
+    )
+    if not isinstance(config_path_value, str) or not config_path_value.strip():
+        raise RealReexportBindingError(f"{arm.key} config path evidence is unavailable")
+    if config_path_value != arm.config_path:
+        raise RealReexportBindingError(f"{arm.key} config path evidence mismatch")
+
+    expected_config_hash = _first_manifest_value(
+        manifest,
+        ("config_hash",),
+        ("config", "hash"),
+        ("provenance", "config_hash"),
+        ("run_identification", "config_hash_from_run"),
+    )
+    evidence_config_hash = descriptor.get("config_hash") or descriptor.get("run_config_hash")
+    if evidence_config_hash is None:
+        evidence_config_hash = _first_manifest_value(
+            descriptor,
+            ("provenance", "config_hash"),
+            ("run_identification", "config_hash_from_run"),
+        )
+    if not isinstance(expected_config_hash, str) or not expected_config_hash:
+        raise RealReexportBindingError(f"{arm.key} manifest lacks config_hash")
+    if evidence_config_hash is None and auto_manifest_evidence:
+        evidence_config_hash = expected_config_hash
+    if evidence_config_hash != expected_config_hash:
+        raise RealReexportBindingError(f"{arm.key} config hash evidence mismatch")
+
+    expected_sha = descriptor.get("sha256") or descriptor.get("config_sha256")
+    if expected_sha is None:
+        expected_sha = _first_manifest_value(
+            descriptor,
+            ("config_provenance", "sha256"),
+            ("run_identification", "config_sha256"),
+            ("config_reconstruction", "sha256"),
+        )
+    if expected_sha is None:
+        expected_sha = _first_manifest_value(
+            manifest,
+            ("config_sha256",),
+            ("config", "sha256"),
+            ("provenance", "config_sha256"),
+        )
+    config_source_value = descriptor.get("source_path") or descriptor.get("local_path")
+    config_path = Path(str(config_source_value or config_path_value))
+    if not config_path.is_absolute():
+        candidates = [
+            config_path,
+            source_root / config_path,
+            descriptor_path.parent / config_path if descriptor_path else Path(),
+        ]
+        config_path = next(
+            (candidate for candidate in candidates if candidate.is_file()), config_path
+        )
+    actual_sha: str | None = None
+    evidence_status = "config_file"
+    evidence_paths: list[dict[str, str]] = []
+    if config_path.is_file() and not auto_manifest_evidence:
+        actual_sha = _sha256_file(config_path)
+        if expected_sha is not None:
+            if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+                raise RealReexportBindingError(
+                    f"{arm.key} config evidence has an invalid SHA-256 digest"
+                )
+            _require_digest(actual_sha, expected_sha.lower(), f"{arm.key} config")
+        evidence_paths = [
+            {
+                "kind": "config_file",
+                "path": str(config_path),
+                "sha256": actual_sha,
+            }
+        ]
+    elif auto_manifest_evidence:
+        evidence_status = "campaign_manifest_invocation"
+        evidence_paths = _compact_source_evidence(source_root, manifest_path)
+        if not any(item["kind"] == "campaign_manifest" for item in evidence_paths):
+            raise RealReexportBindingError(f"{arm.key} campaign manifest evidence is unavailable")
+    else:
+        raise RealReexportBindingError(f"{arm.key} config source is unavailable: {config_path}")
+    return {
+        "schema_version": REAL_REEXPORT_CONFIG_EVIDENCE_SCHEMA,
+        "config_name": arm.config_name,
+        "config_path": arm.config_path,
+        "config_hash": expected_config_hash,
+        "config_sha256": actual_sha,
+        "evidence_status": evidence_status,
+        "evidence_paths": evidence_paths,
+        "evidence_path": str(descriptor_path) if descriptor_path else None,
+    }
+
+
+def _discover_real_arm_inputs(
+    root: Path, arm: RealReexportArm
+) -> tuple[Path, Path, dict[str, Any]]:
+    """Find exactly one campaign manifest and one arm episode JSONL.
+
+    Returns:
+        The manifest path, episode JSONL path, and parsed manifest.
+    """
+
+    root = root.resolve()
+    if not root.is_dir():
+        raise RealReexportBindingError(f"{arm.key} source root is unavailable: {root}")
+    manifests = sorted(root.rglob("campaign_manifest.json"))
+    if len(manifests) != 1:
+        raise RealReexportBindingError(
+            f"{arm.key} source must contain exactly one campaign_manifest.json; found {len(manifests)}"
+        )
+    manifest_path = manifests[0]
+    manifest = _read_json_object(manifest_path)
+    episodes = sorted(root.rglob("runs/*/episodes.jsonl"))
+    if len(episodes) != 1:
+        raise RealReexportBindingError(
+            f"{arm.key} source must contain exactly one runs/*/episodes.jsonl; found {len(episodes)}"
+        )
+    return manifest_path, episodes[0], manifest
+
+
+def _read_real_rows_with_raw_bytes(
+    data: bytes, label: str
+) -> list[tuple[dict[str, Any], bytes, int]]:
+    """Parse real-arm JSONL while retaining each source line for digest binding.
+
+    Returns:
+        Parsed row, exact UTF-8 source line bytes, and one-based source line number.
+    """
+
+    rows: list[tuple[dict[str, Any], bytes, int]] = []
+    for line_number, raw_line in enumerate(data.splitlines(keepends=True), 1):
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RealReexportBindingError(f"{label}:{line_number}: invalid JSON: {exc}") from exc
+        if not isinstance(row, dict):
+            raise RealReexportBindingError(f"{label}:{line_number}: expected a JSON object")
+        rows.append((row, raw_line, line_number))
+    if not rows:
+        raise RealReexportBindingError(f"{label}: contains no rows")
+    return rows
+
+
+def _verify_real_arm_manifest(
+    manifest: Mapping[str, Any], *, arm: RealReexportArm, source_root: Path
+) -> dict[str, str]:
+    """Verify job, commit, config, planner, scenario, and seed identity.
+
+    Returns:
+        The normalized identity fields used by row-level checks and receipts.
+    """
+
+    job_id = _manifest_job_id(manifest, source_root)
+    if job_id != arm.job_id:
+        raise RealReexportBindingError(
+            f"{arm.key} job mismatch: expected {arm.job_id}, got {job_id}"
+        )
+    commit = _required_manifest_text(
+        manifest,
+        "execution commit",
+        ("git", "commit"),
+        ("execution_commit",),
+        ("git_hash",),
+        ("provenance", "execution_commit"),
+    )
+    if commit != EXECUTION_COMMIT:
+        raise RealReexportBindingError(f"{arm.key} execution commit mismatch")
+    config_name = _required_manifest_text(
+        manifest,
+        "config name",
+        ("name",),
+        ("config_name",),
+        ("config", "name"),
+    )
+    if config_name != arm.config_name:
+        raise RealReexportBindingError(
+            f"{arm.key} config name mismatch: expected {arm.config_name}, got {config_name}"
+        )
+    config_path = _manifest_config_path(manifest)
+    if config_path != arm.config_path:
+        raise RealReexportBindingError(f"{arm.key} config path mismatch")
+    scenarios = _first_manifest_value(
+        manifest,
+        ("scenario_candidates",),
+        ("scenarios",),
+    )
+    if scenarios != [arm.scenario_id]:
+        raise RealReexportBindingError(f"{arm.key} scenario candidate mismatch")
+    seeds = _manifest_seed_list(manifest)
+    if seeds != list(arm.seeds):
+        raise RealReexportBindingError(f"{arm.key} resolved seed set mismatch")
+    planner = _manifest_planner(manifest)
+    if planner != arm.planner:
+        raise RealReexportBindingError(f"{arm.key} planner mismatch")
+    scenario_matrix = _first_manifest_value(
+        manifest,
+        ("scenario_matrix",),
+        ("scenario", "matrix"),
+    )
+    if scenario_matrix != _SCENARIO_MATRIX.as_posix():
+        raise RealReexportBindingError(f"{arm.key} scenario matrix mismatch")
+    config_hash = _first_manifest_value(
+        manifest,
+        ("config_hash",),
+        ("config", "hash"),
+        ("provenance", "config_hash"),
+        ("run_identification", "config_hash_from_run"),
+    )
+    if not isinstance(config_hash, str) or not config_hash.strip():
+        raise RealReexportBindingError(f"{arm.key} manifest lacks config_hash")
+    return {
+        "job_id": job_id,
+        "execution_commit": commit,
+        "config_name": config_name,
+        "config_hash": config_hash.strip(),
+        "campaign": str(manifest.get("campaign_id") or manifest.get("name") or arm.key),
+    }
+
+
+def _real_outcome_index(  # noqa: C901
+    expected_outcomes: Path | Mapping[Any, Any],
+) -> dict[tuple[str, str, int], dict[str, bool]]:
+    """Load release outcome evidence keyed by the requested tuple.
+
+    Returns:
+        Canonical outcome booleans keyed by planner/scenario/seed.
+    """
+
+    if isinstance(expected_outcomes, Path):
+        payload = _read_json_object(expected_outcomes)
+        rows = payload.get("rows")
+    else:
+        rows = expected_outcomes.get("rows") if isinstance(expected_outcomes, Mapping) else None
+        if rows is None:
+            rows = expected_outcomes
+    if isinstance(rows, Mapping):
+        indexed: dict[tuple[str, str, int], dict[str, bool]] = {}
+        for raw_key, value in rows.items():
+            if (
+                not isinstance(raw_key, tuple)
+                or len(raw_key) != 3
+                or not isinstance(value, Mapping)
+            ):
+                raise RealReexportBindingError(
+                    "expected outcome mapping keys must be tuple identities"
+                )
+            key = (str(raw_key[0]), str(raw_key[1]), int(raw_key[2]))
+            if set(_OUTCOME_FIELDS) <= set(value):
+                indexed[key] = {
+                    field: _strict_bool(value[field], field=field, key=key)
+                    for field in _OUTCOME_FIELDS
+                }
+            else:
+                raise RealReexportBindingError(f"expected outcome row {key!r} lacks outcome fields")
+        return indexed
+    if not isinstance(rows, list):
+        raise RealReexportBindingError("expected outcomes must contain a rows list")
+    indexed = {}
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise RealReexportBindingError("expected outcome row must be an object")
+        key = _tuple_from_request(row)
+        if key in indexed:
+            raise RealReexportBindingError(f"duplicate expected outcome tuple: {key!r}")
+        if isinstance(row.get("metrics"), Mapping) and isinstance(row.get("outcome"), Mapping):
+            indexed[key] = _outcome(row, key)
+        else:
+            if not set(_OUTCOME_FIELDS) <= set(row):
+                raise RealReexportBindingError(f"expected outcome row {key!r} lacks outcome fields")
+            indexed[key] = {
+                field: _strict_bool(row[field], field=field, key=key) for field in _OUTCOME_FIELDS
+            }
+    return indexed
+
+
+def _verify_real_row_config_hash(
+    row: Mapping[str, Any], *, key: tuple[str, str, int], params: Mapping[str, Any]
+) -> None:
+    """Verify the row hash binds the exact scenario parameters."""
+
+    row_config_hash = row.get("config_hash")
+    if not isinstance(row_config_hash, str) or not row_config_hash.strip():
+        raise RealReexportBindingError(f"real rerun row {key!r} lacks scenario config hash")
+    if row_config_hash != _config_hash(dict(params)):
+        raise RealReexportBindingError(f"real rerun row {key!r} scenario/config hash mismatch")
+
+
+def _verify_real_algorithm_config(
+    metadata: Mapping[str, Any], *, key: tuple[str, str, int]
+) -> None:
+    """Verify optional algorithm configuration provenance when the row provides it."""
+
+    algorithm_config_hash = metadata.get("config_hash")
+    algorithm_config = metadata.get("config")
+    if algorithm_config_hash is None:
+        return
+    if not isinstance(algorithm_config_hash, str) or not algorithm_config_hash.strip():
+        raise RealReexportBindingError(f"real rerun row {key!r} algorithm config hash is invalid")
+    if (
+        isinstance(algorithm_config, Mapping)
+        and _config_hash(dict(algorithm_config)) != algorithm_config_hash
+    ):
+        raise RealReexportBindingError(f"real rerun row {key!r} algorithm config hash mismatch")
+
+
+def _verify_real_rerun_row(row: Mapping[str, Any], *, key: tuple[str, str, int]) -> None:
+    """Verify a real row's identity, pinned commit, native trace, and config binding."""
+
+    if row.get("git_hash") != EXECUTION_COMMIT:
+        raise RealReexportBindingError(f"real rerun row {key!r} execution commit mismatch")
+    params = row.get("scenario_params")
+    if not isinstance(params, Mapping) or params.get("algo") != key[0]:
+        raise RealReexportBindingError(f"real rerun row {key!r} planner/config mismatch")
+    _verify_real_row_config_hash(row, key=key, params=params)
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        raise RealReexportBindingError(f"real rerun row {key!r} lacks algorithm_metadata")
+    kinematics = metadata.get("planner_kinematics")
+    if (
+        not isinstance(kinematics, Mapping)
+        or kinematics.get("robot_kinematics") != "differential_drive"
+    ):
+        raise RealReexportBindingError(
+            f"real rerun row {key!r} is not differential-drive execution"
+        )
+    trace = metadata.get("simulation_step_trace")
+    if (
+        not isinstance(trace, Mapping)
+        or trace.get("schema_version") != "simulation-step-trace.v1"
+        or not isinstance(trace.get("steps"), list)
+        or not trace["steps"]
+    ):
+        raise RealReexportBindingError(f"real rerun row {key!r} lacks a non-empty simulation trace")
+    _verify_real_algorithm_config(metadata, key=key)
+    _outcome(row, key)
+
+
+def _real_row_trace_receipt(  # noqa: PLR0913
+    row: Mapping[str, Any],
+    *,
+    arm: RealReexportArm,
+    source_root: Path,
+    episodes_path: Path,
+    row_index: int,
+    raw_row_bytes: bytes,
+    manifest_identity: Mapping[str, str],
+    config_evidence: Mapping[str, Any],
+    normalized_path: Path | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Normalize one real row and return its payload plus enriched receipt.
+
+    Returns:
+        The normalized trace payload and its transformation receipt.
+    """
+
+    key = (arm.planner, arm.scenario_id, int(row["seed"]))
+    raw_row_sha256 = _sha256_bytes(raw_row_bytes)
+    provenance = {
+        "job_id": arm.job_id,
+        "campaign": manifest_identity["campaign"],
+        "config_name": arm.config_name,
+        "config_path": arm.config_path,
+        "config_hash": config_evidence["config_hash"],
+        "config_sha256": config_evidence["config_sha256"],
+        "execution_commit": EXECUTION_COMMIT,
+    }
+    metadata = row.get("algorithm_metadata")
+    algorithm_config_hash = metadata.get("config_hash") if isinstance(metadata, Mapping) else None
+    with tempfile.TemporaryDirectory(prefix="issue-6411-row-") as isolated_dir:
+        isolated_path = Path(isolated_dir) / "episode.jsonl"
+        isolated_path.write_bytes(raw_row_bytes)
+        payload, transform_receipt = build_simulation_trace_export_with_receipt(
+            isolated_path,
+            planner_id=arm.planner,
+            scenario_id=arm.scenario_id,
+            source_signature=raw_row_sha256,
+            provenance=provenance,
+        )
+    trace = load_simulation_trace_export_from_payload(payload)
+    if trace.source.episode_id != str(row.get("episode_id")):
+        raise RealReexportBindingError(f"real rerun row {key!r} trace episode ID mismatch")
+    if normalized_path is not None:
+        _write_json(normalized_path, payload)
+        _require_digest(
+            _sha256_file(normalized_path),
+            transform_receipt["normalized_trace_sha256"],
+            f"normalized trace {key!r}",
+        )
+    removed_fields = transform_receipt["removed_fields"]
+    removed_field_representatives: dict[str, dict[str, Any]] = {}
+    removed_field_counts: dict[str, int] = {}
+    for item in removed_fields:
+        field = str(item["field"])
+        removed_field_counts[field] = removed_field_counts.get(field, 0) + 1
+        removed_field_representatives.setdefault(field, dict(item))
+    compact_removed_fields = [
+        removed_field_representatives[field] for field in sorted(removed_field_representatives)
+    ]
+    removed_field_paths_sha256 = _sha256_bytes(_canonical_bytes(removed_fields))
+    enriched = {
+        "schema_version": REAL_REEXPORT_RECEIPT_SCHEMA,
+        "status": "complete",
+        "arm": arm.key,
+        "job_id": arm.job_id,
+        "execution_commit": EXECUTION_COMMIT,
+        "campaign": manifest_identity["campaign"],
+        "config": dict(config_evidence),
+        "source": {
+            "root": str(source_root),
+            "episodes_path": str(episodes_path),
+            "episodes_sha256": _sha256_file(episodes_path),
+            "row_index": row_index,
+            "episode_id": str(row["episode_id"]),
+        },
+        "planner": key[0],
+        "scenario_id": key[1],
+        "seed": key[2],
+        "raw_trace_sha256": raw_row_sha256,
+        "row_config_hash": str(row["config_hash"]),
+        "algorithm_config_hash": algorithm_config_hash,
+        "normalized_trace_sha256": transform_receipt["normalized_trace_sha256"],
+        "trace_schema_version": transform_receipt["trace_schema_version"],
+        "normalization_policy": transform_receipt["normalization_policy"],
+        "removed_fields": compact_removed_fields,
+        "removed_field_counts": removed_field_counts,
+        "removed_field_paths_sha256": removed_field_paths_sha256,
+        "removed_field_count": len(removed_fields),
+        "semantic_payload_unchanged": transform_receipt["semantic_payload_unchanged"],
+        "normalized_trace_path": str(normalized_path) if normalized_path else None,
+    }
+    return payload, enriched
+
+
+def load_simulation_trace_export_from_payload(payload: Mapping[str, Any]) -> Any:
+    """Validate a normalized payload without exposing the schema helper publicly.
+
+    Returns:
+        The typed simulation trace export.
+    """
+
+    return simulation_trace_export_from_dict(payload)
+
+
+def bind_real_reexport_arms(  # noqa: C901, PLR0912, PLR0915
+    arm_roots: Mapping[str, Path],
+    *,
+    expected_outcomes: Path | Mapping[Any, Any],
+    config_evidence: Mapping[str, Path | Mapping[str, Any]] | None = None,
+    request_manifest: Path | None = None,
+    normalized_output_dir: Path | None = None,
+    receipt_path: Path | None = None,
+) -> dict[str, Any]:
+    """Bind and normalize the three real #5756 arms without making a package.
+
+    Every arm must provide one unambiguous campaign manifest and one episode JSONL
+    tree.  The manifest/config descriptors must independently identify the pinned
+    job, config, planner, scenario, 30-seed matrix, and execution commit.  Release
+    outcomes are required so the two doorway exceptions are represented as
+    ``outcome_mismatch`` / ``not_admitted`` rather than silently dropped or relabeled.
+    When ``normalized_output_dir`` is supplied, only normalized traces are written;
+    this function never creates a complete 90-row package.
+
+    Returns:
+        A compact binding receipt covering all 90 source rows and the explicit 88+2
+        outcome boundary.
+    """
+
+    expected_keys = {arm.key for arm in REAL_REEXPORT_ARMS}
+    if set(arm_roots) != expected_keys:
+        raise RealReexportBindingError(
+            f"real arm roots must cover exactly {sorted(expected_keys)}; got {sorted(arm_roots)}"
+        )
+    if config_evidence is not None and set(config_evidence) != expected_keys:
+        raise RealReexportBindingError("config evidence must cover exactly the three real arms")
+
+    request_tuples = real_reexport_request_tuples()
+    request_digest = None
+    if request_manifest is not None:
+        request_manifest = request_manifest.resolve()
+        if not request_manifest.is_file():
+            raise RealReexportBindingError(f"request manifest is unavailable: {request_manifest}")
+        request_payload = _read_json_object(request_manifest)
+        if request_payload.get("schema_version") != "issue_5446_trace_reexport_list.v1":
+            raise RealReexportBindingError("request manifest schema mismatch")
+        rows = request_payload.get("tuples")
+        if not isinstance(rows, list) or request_payload.get("n_tuples") != 90:
+            raise RealReexportBindingError("request manifest must declare exactly 90 tuples")
+        indexed = {_tuple_from_request(row) for row in rows if isinstance(row, Mapping)}
+        if indexed != request_tuples or len(rows) != 90:
+            raise RealReexportBindingError(
+                "request manifest does not prove the exact 90-tuple contract"
+            )
+        request_digest = _sha256_file(request_manifest)
+
+    release_outcomes = _real_outcome_index(expected_outcomes)
+    if set(release_outcomes) != request_tuples:
+        raise RealReexportBindingError(
+            "release outcome evidence does not cover the exact 90 tuples"
+        )
+
+    staging_dir: Path | None = None
+    final_output: Path | None = None
+    if normalized_output_dir is not None:
+        final_output = normalized_output_dir.resolve()
+        if final_output.exists():
+            raise RealReexportBindingError(
+                f"normalized output already exists; refusing to overwrite: {final_output}"
+            )
+        final_output.parent.mkdir(parents=True, exist_ok=True)
+        staging_dir = Path(
+            tempfile.mkdtemp(prefix=f".{final_output.name}.staging-", dir=final_output.parent)
+        )
+
+    receipt_rows: list[dict[str, Any]] = []
+    arm_receipts: list[dict[str, Any]] = []
+    try:
+        for arm in REAL_REEXPORT_ARMS:
+            source_root = Path(arm_roots[arm.key]).resolve()
+            manifest_path, episodes_path, manifest = _discover_real_arm_inputs(source_root, arm)
+            manifest_identity = _verify_real_arm_manifest(
+                manifest, arm=arm, source_root=source_root
+            )
+            config_descriptor = config_evidence.get(arm.key) if config_evidence else None
+            config = _read_config_evidence(
+                config_descriptor,
+                arm=arm,
+                manifest=manifest,
+                source_root=source_root,
+                manifest_path=manifest_path,
+            )
+            rows_with_raw = _read_real_rows_with_raw_bytes(
+                episodes_path.read_bytes(), str(episodes_path)
+            )
+            rows = [row for row, _raw_bytes, _line_number in rows_with_raw]
+            indexed = _index_rows(rows, planner_hint=arm.planner)
+            raw_by_key = {
+                _row_tuple(row, planner_hint=arm.planner): (raw_bytes, line_number)
+                for row, raw_bytes, line_number in rows_with_raw
+            }
+            if set(indexed) != arm.tuples:
+                missing = sorted(arm.tuples - set(indexed))
+                extra = sorted(set(indexed) - arm.tuples)
+                raise RealReexportBindingError(
+                    f"{arm.key} tuple set mismatch; missing={missing[:3]}, extra={extra[:3]}"
+                )
+            arm_rows: list[dict[str, Any]] = []
+            for key in sorted(arm.tuples):
+                row = indexed[key]
+                raw_row_bytes, source_line_number = raw_by_key[key]
+                _verify_real_rerun_row(row, key=key)
+                rerun_outcome = _outcome(row, key)
+                release_outcome = release_outcomes[key]
+                mismatch = rerun_outcome != release_outcome
+                expected_exception = key[2] in arm.not_admitted_seeds
+                if mismatch != expected_exception:
+                    raise RealReexportBindingError(
+                        f"{key!r} outcome boundary mismatch; expected exception={expected_exception}"
+                    )
+                outcome_status = "outcome_mismatch" if mismatch else "outcome_match"
+                admission_status = "not_admitted" if mismatch else "admitted"
+                normalized_path = None
+                if staging_dir is not None:
+                    normalized_path = (
+                        staging_dir / arm.key / arm.scenario_id / f"seed-{key[2]}.json"
+                    )
+                    normalized_path.parent.mkdir(parents=True, exist_ok=True)
+                _payload, row_receipt = _real_row_trace_receipt(
+                    row,
+                    arm=arm,
+                    source_root=source_root,
+                    episodes_path=episodes_path,
+                    row_index=source_line_number,
+                    raw_row_bytes=raw_row_bytes,
+                    manifest_identity=manifest_identity,
+                    config_evidence=config,
+                    normalized_path=normalized_path,
+                )
+                if (
+                    normalized_path is not None
+                    and staging_dir is not None
+                    and final_output is not None
+                ):
+                    row_receipt["normalized_trace_path"] = str(
+                        final_output / normalized_path.relative_to(staging_dir)
+                    )
+                row_receipt.update(
+                    {
+                        "release_outcome": _canonical_outcome_from_row(release_outcome),
+                        "rerun_outcome": _canonical_outcome_from_row(rerun_outcome),
+                        "outcome_status": outcome_status,
+                        "admission_status": admission_status,
+                    }
+                )
+                arm_rows.append(row_receipt)
+                receipt_rows.append(row_receipt)
+            arm_receipts.append(
+                {
+                    "arm": arm.key,
+                    "job_id": arm.job_id,
+                    "planner": arm.planner,
+                    "scenario_id": arm.scenario_id,
+                    "config": config,
+                    "manifest_path": str(manifest_path),
+                    "manifest_sha256": _sha256_file(manifest_path),
+                    "episodes_path": str(episodes_path),
+                    "episodes_sha256": _sha256_file(episodes_path),
+                    "n_rows": len(arm_rows),
+                }
+            )
+
+        mismatch_rows = [row for row in receipt_rows if row["outcome_status"] == "outcome_mismatch"]
+        expected_mismatches = {
+            ("ppo", "classic_doorway_medium", seed) for seed in REAL_REEXPORT_EXCEPTION_SEEDS
+        }
+        observed_mismatches = {
+            (row["planner"], row["scenario_id"], row["seed"]) for row in mismatch_rows
+        }
+        if observed_mismatches != expected_mismatches or len(receipt_rows) != 90:
+            raise RealReexportBindingError("real re-export exception boundary is not exactly 88+2")
+        receipt: dict[str, Any] = {
+            "schema_version": REAL_REEXPORT_BINDING_SCHEMA,
+            "status": "complete",
+            "execution_commit": EXECUTION_COMMIT,
+            "trace_schema_version": receipt_rows[0]["trace_schema_version"],
+            "normalization_policy": receipt_rows[0]["normalization_policy"],
+            "request_contract": {
+                "schema_version": "issue_5446_trace_reexport_list.v1",
+                "n_tuples": len(request_tuples),
+                "sha256": request_digest,
+            },
+            "arms": arm_receipts,
+            "rows": receipt_rows,
+            "summary": {
+                "n_rows": len(receipt_rows),
+                "n_admitted": len(receipt_rows) - len(mismatch_rows),
+                "n_not_admitted": len(mismatch_rows),
+            },
+            "exception_boundary": [
+                {
+                    "planner": "ppo",
+                    "scenario_id": "classic_doorway_medium",
+                    "seed": seed,
+                    "outcome_status": "outcome_mismatch",
+                    "admission_status": "not_admitted",
+                }
+                for seed in REAL_REEXPORT_EXCEPTION_SEEDS
+            ],
+            "package_status": "not_created; package assembly belongs to issue #6412",
+        }
+        if receipt_path is not None:
+            _write_json(receipt_path.resolve(), receipt)
+        if staging_dir is not None and final_output is not None:
+            os.replace(staging_dir, final_output)
+            staging_dir = None
+        return receipt
+    finally:
+        if staging_dir is not None and staging_dir.exists():
+            shutil.rmtree(staging_dir)
 
 
 def _release_selection(
@@ -1275,13 +2271,22 @@ def build_resolver_mapping_receipt(
 
 
 __all__ = [
+    "REAL_REEXPORT_ARMS",
+    "REAL_REEXPORT_ARMS_BY_KEY",
+    "REAL_REEXPORT_EXCEPTION_SEEDS",
+    "REAL_REEXPORT_REQUEST_TUPLES",
     "CampaignExpectation",
     "FrozenTraceReexportContract",
+    "RealReexportArm",
+    "RealReexportBindingError",
     "TraceReexportPackagingError",
+    "bind_real_reexport_arms",
     "build_resolver_mapping_receipt",
     "campaign_expectations",
     "canonical_sha256",
     "default_resolver_mapping_path",
     "expected_outcomes_payload_for_rows",
     "package_trace_reexport",
+    "real_reexport_arms",
+    "real_reexport_request_tuples",
 ]

@@ -19,6 +19,8 @@ Success Criteria:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 from shapely.geometry import Polygon as _ShapelyPolygon
@@ -670,3 +672,241 @@ class TestGenerateStructuredLoggerPaths:
 
         assert grid_data.shape == grid.shape
         assert grid.is_initialized
+
+
+class TestVectorizedParity:
+    """Parity tests for issue #6493 vectorization changes."""
+
+    def test_ego_frame_vectorized_matches_scalar_world_to_ego(self):
+        """Vectorized ego-frame grid matches scalar world_to_ego for obstacles and peds."""
+        from robot_sf.nav.occupancy_grid_utils import world_to_ego
+
+        config = GridConfig(
+            resolution=0.2,
+            width=10.0,
+            height=10.0,
+            channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS],
+        )
+        obstacles = [
+            ((1.0, 2.0), (3.0, 4.0)),
+            ((5.0, 1.0), (7.0, 8.0)),
+            ((0.5, 9.0), (9.5, 0.5)),
+        ]
+        pedestrians = [
+            ((2.0, 3.0), 0.5),
+            ((6.0, 7.0), 0.3),
+            ((8.0, 1.0), 0.8),
+        ]
+        robot_pose = ((5.0, 5.0), np.pi / 4)
+
+        # Generate with the vectorized path
+        grid_vec = OccupancyGrid(config=config)
+        grid_vec_data = grid_vec.generate(
+            obstacles=obstacles,
+            pedestrians=pedestrians,
+            robot_pose=robot_pose,
+            ego_frame=True,
+        )
+
+        # Manually compute scalar ego-frame transform and generate
+        def scalar_to_ego(px, py):
+            return world_to_ego(px, py, robot_pose)
+
+        scalar_obstacles = [
+            (scalar_to_ego(s[0], s[1]), scalar_to_ego(e[0], e[1])) for s, e in obstacles
+        ]
+        scalar_pedestrians = [(scalar_to_ego(c[0], c[1]), r) for c, r in pedestrians]
+
+        grid_scalar = OccupancyGrid(config=config)
+        grid_scalar._last_robot_pose = grid_vec._last_robot_pose
+        grid_scalar._grid_origin = grid_vec._grid_origin
+        grid_scalar._last_use_ego_frame = True
+        grid_scalar._grid_data = np.zeros(
+            (config.num_channels, config.grid_height, config.grid_width),
+            dtype=config.dtype,
+        )
+        grid_scalar._rasterize_channels(
+            scalar_obstacles,
+            None,
+            scalar_pedestrians,
+            robot_pose,
+            True,
+            grid_vec._grid_origin[0],
+            grid_vec._grid_origin[1],
+        )
+
+        np.testing.assert_allclose(
+            grid_vec_data,
+            grid_scalar._grid_data,
+            atol=1e-6,
+            err_msg="Vectorized ego-frame grid must match scalar world_to_ego grid",
+        )
+
+    def test_ego_frame_polygon_parity(self):
+        """Vectorized ego-frame polygon transform matches scalar per-vertex transform."""
+        from robot_sf.nav.occupancy_grid_utils import world_to_ego
+
+        config = GridConfig(
+            resolution=0.25,
+            width=8.0,
+            height=8.0,
+            channels=[GridChannel.OBSTACLES],
+        )
+        polygon_verts = [(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]
+        robot_pose = ((4.0, 4.0), np.pi / 6)
+
+        grid_vec = OccupancyGrid(config=config)
+        grid_vec_data = grid_vec.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=robot_pose,
+            ego_frame=True,
+            obstacle_polygons=[polygon_verts],
+        )
+
+        # Scalar transform
+        scalar_verts = [world_to_ego(x, y, robot_pose) for x, y in polygon_verts]
+        grid_scalar = OccupancyGrid(config=config)
+        grid_scalar._last_robot_pose = grid_vec._last_robot_pose
+        grid_scalar._grid_origin = grid_vec._grid_origin
+        grid_scalar._last_use_ego_frame = True
+        grid_scalar._grid_data = np.zeros(
+            (config.num_channels, config.grid_height, config.grid_width),
+            dtype=config.dtype,
+        )
+        grid_scalar._rasterize_channels(
+            [],
+            [scalar_verts],
+            [],
+            robot_pose,
+            True,
+            grid_vec._grid_origin[0],
+            grid_vec._grid_origin[1],
+        )
+
+        np.testing.assert_allclose(
+            grid_vec_data,
+            grid_scalar._grid_data,
+            atol=1e-6,
+            err_msg="Vectorized polygon ego-frame grid must match scalar transform",
+        )
+
+    def test_pedestrian_array_rasterization_matches_list_path(self):
+        """rasterize_pedestrians_array produces identical grid to rasterize_pedestrians."""
+        from robot_sf.nav.occupancy_grid_rasterization import (
+            rasterize_pedestrians,
+            rasterize_pedestrians_array,
+        )
+
+        config = GridConfig(resolution=0.1, width=10.0, height=10.0)
+        pedestrians = [
+            ((2.0, 3.0), 0.5),
+            ((6.0, 7.0), 0.3),
+            ((8.0, 1.0), 0.8),
+            ((1.0, 9.0), 0.4),
+        ]
+
+        grid_list = np.zeros((config.grid_height, config.grid_width), dtype=config.dtype)
+        rasterize_pedestrians(pedestrians, grid_list, config)
+
+        positions = np.array([[c[0], c[1]] for c, r in pedestrians], dtype=float)
+        radii = np.array([r for c, r in pedestrians], dtype=float)
+        grid_array = np.zeros((config.grid_height, config.grid_width), dtype=config.dtype)
+        rasterize_pedestrians_array(positions, radii, grid_array, config)
+
+        np.testing.assert_array_equal(
+            grid_list,
+            grid_array,
+            err_msg="Array pedestrian rasterization must match list-based path cell-for-cell",
+        )
+
+    def test_generate_accepts_array_pedestrians(self):
+        """generate() with array pedestrians produces same grid as list pedestrians."""
+        config = GridConfig(
+            resolution=0.2,
+            width=10.0,
+            height=10.0,
+            channels=[GridChannel.PEDESTRIANS],
+        )
+        pedestrians_list = [
+            ((2.0, 3.0), 0.5),
+            ((6.0, 7.0), 0.3),
+            ((8.0, 1.0), 0.8),
+        ]
+        positions = np.array([[2.0, 3.0], [6.0, 7.0], [8.0, 1.0]])
+        radii = np.array([0.5, 0.3, 0.8])
+        robot_pose = ((5.0, 5.0), 0.0)
+
+        grid_list = OccupancyGrid(config=config)
+        data_list = grid_list.generate(
+            obstacles=[], pedestrians=pedestrians_list, robot_pose=robot_pose
+        )
+
+        grid_arr = OccupancyGrid(config=config)
+        data_arr = grid_arr.generate(
+            obstacles=[], pedestrians=(positions, radii), robot_pose=robot_pose
+        )
+
+        np.testing.assert_array_equal(
+            data_list,
+            data_arr,
+            err_msg="Array pedestrians in generate() must match list pedestrians",
+        )
+
+    def test_generate_rejects_mismatched_array_pedestrians(self):
+        """Array positions and radii must describe the same pedestrian population."""
+        config = GridConfig(channels=[GridChannel.PEDESTRIANS])
+        grid = OccupancyGrid(config=config)
+
+        with pytest.raises(ValueError, match="matching positions"):
+            grid.generate(
+                obstacles=[],
+                pedestrians=(np.zeros((2, 2)), np.ones(1)),
+                robot_pose=((0.0, 0.0), 0.0),
+            )
+
+    def test_get_affected_cells_returns_numpy_arrays(self):
+        """get_affected_cells returns (row_indices, col_indices) NumPy arrays."""
+        from robot_sf.nav.occupancy_grid_utils import get_affected_cells
+
+        config = GridConfig(resolution=0.1, width=10.0, height=10.0)
+        rows, cols = get_affected_cells(5.0, 5.0, 0.3, config)
+        assert isinstance(rows, np.ndarray)
+        assert isinstance(cols, np.ndarray)
+        assert rows.dtype == np.intp
+        assert cols.dtype == np.intp
+        assert len(rows) == len(cols)
+        assert len(rows) == 36
+
+    def test_get_affected_cells_returns_empty_for_degenerate_bounds(self):
+        """Degenerate grid bounds should produce empty integer arrays."""
+        from robot_sf.nav.occupancy_grid_utils import get_affected_cells
+
+        config = SimpleNamespace(
+            resolution=0.1,
+            width=1.0,
+            height=1.0,
+            grid_width=10,
+            grid_height=0,
+        )
+        rows, cols = get_affected_cells(0.5, 0.5, 0.3, config)
+
+        assert rows.size == 0
+        assert cols.size == 0
+        assert rows.dtype == np.intp
+        assert cols.dtype == np.intp
+
+    def test_free_space_sampling_vectorized_rejects_obstacles(self):
+        """Vectorized free-space sampling still rejects obstacle-intersecting points."""
+        from shapely.geometry import Point, Polygon
+
+        from robot_sf.nav.free_space_sampling import sample_free_points_in_bounds
+
+        obstacle = Polygon([(2.0, 2.0), (2.0, 8.0), (8.0, 8.0), (8.0, 2.0)])
+        rng = np.random.default_rng(42)
+        result = sample_free_points_in_bounds(
+            (0.0, 10.0, 0.0, 10.0), 20, obstacle_polygons=[obstacle], rng=rng
+        )
+        assert len(result) == 20
+        for x, y in result:
+            assert not obstacle.contains(Point(x, y))

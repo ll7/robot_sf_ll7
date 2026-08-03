@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+Issue #6641 Gate 1 runtime radius-binding canary for the #6600 collision-envelope campaign:
+prove a declared `robot_config.radius` propagates consistently to simulator collision geometry,
+obstacle/pedestrian contact logic, feasibility/oracle, metric metadata and output rows, and
+planner inputs, with a fail-closed machine-readable go/no-go verdict per binding surface
+(`radius_binding_canary.v1`):
+[issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
+
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
 groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this

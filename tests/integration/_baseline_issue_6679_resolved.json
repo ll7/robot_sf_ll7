@@ -1,0 +1,24 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "c8a10c04b40c569428d299d88dfc3b3b1e369483",
+  "variants": {
+    "asymmetric_critic_only_10m_env22_seed123.yaml": "3c84ceeddd043f30bf4daf60622904bfd9ca9a715652490e9f5610f54d1d2f0f",
+    "asymmetric_critic_only_10m_env22_seed1337.yaml": "f15fc5f36b81d40a1941370413cbbcc515411bcb75bc9d4fb23c027d5670a713",
+    "asymmetric_critic_only_10m_env22_seed231.yaml": "06854ae02d99d3624b7b63b2de7cb13e25d12f99f3726d04c73353f34d7b49a3",
+    "asymmetric_critic_only_1m_env22_seed123.yaml": "7513d672e4bb21859740678baf1d0e701487966efaace2d54356d3144c86499d",
+    "asymmetric_critic_only_1m_env22_seed1337.yaml": "4c65325a62b3cfc842a42acba541bee2e43a13824b3a187ce35bb29a08be243e",
+    "asymmetric_critic_only_1m_env22_seed231.yaml": "590494e5ca770302b5e33fe6101e31b88d553fe79d8cb034567835b33caf663d",
+    "attention_only_10m_env22_seed123.yaml": "c1daaa08ff07023f65af031fa39ff19552b6a86b716f4efe64c1cc2b41f0312e",
+    "attention_only_10m_env22_seed1337.yaml": "fdcc94b34b283fde8bd571a360564df1a2caa589d369db19b41414783a843310",
+    "attention_only_10m_env22_seed231.yaml": "25fcca82a6eeadd5da8ff571c7eb5ff14608a07a3c6ae0d49da8f1e4dff17ea5",
+    "attention_only_1m_env22_seed123.yaml": "a871e4d47e5def7a72765bf4ab51688e087df8056e8229af38fbbd9c794e6a49",
+    "attention_only_1m_env22_seed1337.yaml": "c66f39eaa395c7cd70a1695fa3e04ea10b1a10741e25b6251848eceb818a167d",
+    "attention_only_1m_env22_seed231.yaml": "884416f0f6c2459eee04214ae1a68cf71d283bc506f8ebdbd1e53743a5aa8890",
+    "reward_curriculum_only_10m_env22_seed123.yaml": "6fb8fc45bfb021b746aaac81687bdd784169a740ead3576d29e70a1c17e08b73",
+    "reward_curriculum_only_10m_env22_seed1337.yaml": "9dbb1fe589e60c931714d7d90ec8d6c0ea095877f6fd79aac65f178cd8f7f517",
+    "reward_curriculum_only_10m_env22_seed231.yaml": "a1e27e099a3eb3ecfff2f502ef98a10257d112231e6bb07e8d0887f0590f389e",
+    "reward_curriculum_only_1m_env22_seed123.yaml": "08505079b2301ad8848fe68ecf0eadb855982736a4dfe2f0bfd8248dc6049623",
+    "reward_curriculum_only_1m_env22_seed1337.yaml": "3bb8be460e01f98092de583ea6e1f0c7232d9d22b94f509690b2a9f5794c516a",
+    "reward_curriculum_only_1m_env22_seed231.yaml": "676cf9e77c8120a96559052cf0becde8bf9618f364e86a74f466e2c1e4240fd8"
+  }
+}

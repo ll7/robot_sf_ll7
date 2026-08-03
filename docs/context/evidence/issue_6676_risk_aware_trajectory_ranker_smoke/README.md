@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#6676, 2026-08-03) - NEEDS-REVIEW -->
+
 # Risk-aware trajectory ranker smoke comparison
 
 This diagnostic compares deterministic motion primitives with finite radial-basis-function (RBF) candidate proposals under the same held-out start states, local goals, actor predictions, candidate budget, risk estimator, and deterministic hard gates.

@@ -29,6 +29,11 @@ Issue #5579 MPC tuning-budget archaeology and completed bounded sensitivity diag
 prediction-MPC arms, 20-point shared grid, fixed paired slice, and blocked fail-closed read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
 
+Issue #6700 SLURM compute run for the preregistered two-phase matched-budget MPC tuning-sensitivity
+campaign — blocked on this lane (not authorized to submit, no SLURM tooling, two-phase packet
+refreeze and passed native canary not yet on main); blocker and enabling gate:
+[issue_6700_mpc_tuning_campaign_compute_blocker.md](issue_6700_mpc_tuning_campaign_compute_blocker.md).
+
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7
 scenario discovery research program:
 [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).

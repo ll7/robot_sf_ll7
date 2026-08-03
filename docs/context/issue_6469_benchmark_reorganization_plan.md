@@ -22,8 +22,9 @@ alter any import. It produces only the reorganization plan and the follow-up con
 
 ## Ghost Directory Confirmation
 
-`robot_sf/util/` and `robot_sf/utils/` are untracked husks. Any local contents observed under them
-were stale `__pycache__/` bytecode from previously deleted modules. Confirmation on this branch:
+`robot_sf/util/` and `robot_sf/utils/` were untracked husks in the local checkout observed for
+Issue #6469. Any local contents observed under them were stale `__pycache__/` bytecode from
+previously deleted modules. Confirmation on this branch:
 
 - `git ls-files robot_sf/util robot_sf/utils` returns no tracked files.
 - `git status --ignored robot_sf/util robot_sf/utils` reports a clean tree; neither directory is
@@ -41,7 +42,7 @@ guard so the husks are not reintroduced.
 The flat namespace mixes domain modules, issue-specific modules, cross-cutting preflight/readiness
 helpers, and schema/data directories. Existing subdirectories show that domain grouping is viable:
 
-| Existing subdirectory | Top-level `.py` count | Notes |
+| Existing subdirectory | Direct `.py` count | Notes |
 | --- | --- | --- |
 | `camera_ready/` | 14 | release campaign surface |
 | `full_classic/` | 18 | classic benchmark variant |

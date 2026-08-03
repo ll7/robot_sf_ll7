@@ -192,7 +192,7 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
                 try:
                     with lidar_batch_context(coordinator, env_idx):
                         return env.step(action)
-                except BaseException as exc:
+                except BaseException as exc:  # broad catch: abort coordinator on any exit
                     coordinator.abort(exc)
                     raise
 

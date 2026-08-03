@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from robot_sf.adversarial.certification_types import CertificationStatus
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateSpec
@@ -26,30 +27,6 @@ _ELIGIBILITY_SEVERITY = {
     "stress_only": 1,
     "excluded": 2,
 }
-
-
-@dataclass(frozen=True)
-class CertificationStatus:
-    """Certification outcome for a generated candidate."""
-
-    schema_version: str
-    status: str
-    reason: str
-    details: dict[str, Any]
-
-    @property
-    def passed(self) -> bool:
-        """Return True when the candidate is certified valid."""
-        return self.status == "passed"
-
-    def to_json(self) -> dict[str, Any]:
-        """Return a JSON-serializable payload."""
-        return {
-            "schema_version": self.schema_version,
-            "status": self.status,
-            "reason": self.reason,
-            "details": dict(self.details),
-        }
 
 
 def passed_status(reason: str = "certification not required") -> CertificationStatus:
@@ -112,7 +89,8 @@ def certify_candidate(
             candidate=candidate,
             scenario_yaml_path=scenario_yaml_path,
         )
-    except Exception as exc:  # pragma: no cover - defensive against future adapter errors
+    # The adapter surface is unknown, so any error becomes a failed certification.
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover
         return failed_status(
             "scenario_cert.v1 raised during certification", details={"error": repr(exc)}
         )

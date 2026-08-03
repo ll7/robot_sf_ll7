@@ -28,7 +28,8 @@ The legacy `robot_sf/benchmark/ranking.py` was not changed.
 ## Implemented behavior
 
 - Exact canonical score equality produces `exact_tie` and tie groups.
-- Disjoint declared uncertainty intervals produce `strict_before`.
+- Strict order is emitted only from an approved paired comparison.
+- Disjoint marginal intervals without that approval remain `non_identifiable`.
 - Interval overlap or contact produces `non_identifiable`.
 - Incomplete uncertainty produces `non_identifiable`.
 - Missing or invalid support, excluded rows, and invalid evidence produce

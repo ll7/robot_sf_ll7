@@ -89,7 +89,7 @@ def build_tie_aware_ranking(
     _ensure_unique_keys(items)
     ordered_items = _order_items(items, display_order)
     overrides = _normalise_pairwise_comparisons(pairwise_comparisons, items)
-    relations = _build_relations(ordered_items, metric_payload, overrides)
+    relations = _build_relations(ordered_items, overrides)
     groups, tie_groups, group_ids = _build_groups(ordered_items, relations)
     rank_ranges = _compute_rank_ranges(groups, relations, group_ids)
     output_items = [
@@ -389,22 +389,18 @@ def _normalise_pairwise_comparisons(
 
 def _build_relations(
     items: Sequence[_Item],
-    metric: Mapping[str, Any],
     overrides: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     relations: list[dict[str, Any]] = []
     for index, left in enumerate(items):
         for right in items[index + 1 :]:
-            relations.append(
-                _compare_pair(left, right, bool(metric["higher_is_better"]), overrides)
-            )
+            relations.append(_compare_pair(left, right, overrides))
     return relations
 
 
 def _compare_pair(
     left: _Item,
     right: _Item,
-    higher_is_better: bool,
     overrides: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> dict[str, Any]:
     pair = tuple(sorted((left.key, right.key)))
@@ -415,6 +411,10 @@ def _compare_pair(
             else right.comparability_reason
         )
         return _relation(left, right, "incomparable", reason)
+    if left.score == right.score:
+        if not left.has_uncertainty and not right.has_uncertainty:
+            return _relation(left, right, "exact_tie", "exact_score_equality")
+        return _relation(left, right, "non_identifiable", "interval_contact_for_equal_scores")
     if pair in overrides:
         override = overrides[pair]
         return _relation(
@@ -425,39 +425,29 @@ def _compare_pair(
             better=str(override["better"]),
             worse=str(override["worse"]),
         )
-    if left.score == right.score:
-        if not left.has_uncertainty and not right.has_uncertainty:
-            return _relation(left, right, "exact_tie", "exact_score_equality")
-        return _relation(left, right, "non_identifiable", "interval_contact_for_equal_scores")
     if not left.has_uncertainty and not right.has_uncertainty:
-        better = left if _score_is_better(left, right, higher_is_better) else right
-        worse = right if better is left else left
-        return _relation(left, right, "strict_before", "point_score_order", better.key, worse.key)
+        return _relation(left, right, "non_identifiable", "no_approved_pairwise_comparison")
     if not left.has_uncertainty or not right.has_uncertainty:
         return _relation(left, right, "non_identifiable", "incomplete_uncertainty")
-    if _interval_is_strict(left, right, higher_is_better):
-        return _relation(
-            left, right, "strict_before", "disjoint_uncertainty_intervals", left.key, right.key
-        )
-    if _interval_is_strict(right, left, higher_is_better):
-        return _relation(
-            left, right, "strict_before", "disjoint_uncertainty_intervals", right.key, left.key
-        )
-    return _relation(left, right, "non_identifiable", "interval_overlap_or_contact")
+    if _intervals_overlap_or_contact(left, right):
+        return _relation(left, right, "non_identifiable", "interval_overlap_or_contact")
+    return _relation(
+        left,
+        right,
+        "non_identifiable",
+        "no_approved_pairwise_comparison_for_disjoint_marginal_intervals",
+    )
 
 
-def _score_is_better(left: _Item, right: _Item, higher_is_better: bool) -> bool:
-    return left.score > right.score if higher_is_better else left.score < right.score
-
-
-def _interval_is_strict(left: _Item, right: _Item, higher_is_better: bool) -> bool:
+def _intervals_overlap_or_contact(left: _Item, right: _Item) -> bool:
     assert left.uncertainty_low is not None
     assert left.uncertainty_high is not None
     assert right.uncertainty_low is not None
     assert right.uncertainty_high is not None
-    if higher_is_better:
-        return left.uncertainty_low > right.uncertainty_high
-    return left.uncertainty_high < right.uncertainty_low
+    return not (
+        left.uncertainty_high < right.uncertainty_low
+        or right.uncertainty_high < left.uncertainty_low
+    )
 
 
 def _relation(
@@ -637,6 +627,8 @@ def _policy_payload() -> dict[str, Any]:
         "uncertainty": {
             "interval_overlap_or_contact": "non_identifiable",
             "incomplete_interval": "non_identifiable",
+            "strict_order_requires_approved_pairwise_comparison": True,
+            "disjoint_marginal_intervals_are_not_sufficient": True,
             "statistical_equivalence_is_not_inferred": True,
         },
         "partial_order": {

@@ -35,6 +35,15 @@ def test_exact_ties_and_rank_ranges_do_not_use_catalog_order() -> None:
         [_row("zeta", 1), _row("alpha", 1), _row("omega", 2)],
         metric={"id": "loss", "higher_is_better": False},
         display_order=["alpha", "omega", "zeta"],
+        pairwise_comparisons=[
+            {
+                "better": "alpha",
+                "worse": "omega",
+                "relation": "strict_before",
+                "approved": True,
+                "reason": "approved_loss_comparison",
+            }
+        ],
     )
 
     tie = _relation(payload, "alpha", "zeta")
@@ -47,7 +56,7 @@ def test_exact_ties_and_rank_ranges_do_not_use_catalog_order() -> None:
 
 
 def test_intervals_separate_strict_order_from_non_identifiability() -> None:
-    """Disjoint intervals order items; overlap or contact stays non-identifiable."""
+    """Marginal intervals do not create strict order without paired approval."""
     payload = build_tie_aware_ranking(
         [
             _row("high", 0.9, uncertainty={"low": 0.8, "high": 0.95, "source": "seed"}),
@@ -60,11 +69,14 @@ def test_intervals_separate_strict_order_from_non_identifiability() -> None:
     high_middle = _relation(payload, "high", "middle")
     middle_low = _relation(payload, "low", "middle")
     high_low = _relation(payload, "high", "low")
-    assert high_middle["relation"] == "strict_before"
-    assert high_middle["better"] == "high"
+    assert high_middle["relation"] == "non_identifiable"
+    assert (
+        high_middle["reason"] == "no_approved_pairwise_comparison_for_disjoint_marginal_intervals"
+    )
     assert middle_low["relation"] == "non_identifiable"
-    assert high_low["relation"] == "strict_before"
-    assert high_low["reason"] == "disjoint_uncertainty_intervals"
+    assert middle_low["reason"] == "interval_overlap_or_contact"
+    assert high_low["relation"] == "non_identifiable"
+    assert high_low["reason"] == "no_approved_pairwise_comparison_for_disjoint_marginal_intervals"
 
 
 def test_missing_support_and_excluded_rows_are_incomparable() -> None:

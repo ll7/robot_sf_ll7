@@ -2,6 +2,17 @@
 
 Status: proposal (planning only; not benchmark evidence)
 
+## Contents
+
+- [Ghost Directory Confirmation](#ghost-directory-confirmation)
+- [Current Benchmark State](#current-benchmark-state)
+- [Proposed Domain Subdirectory Groupings](#proposed-domain-subdirectory-groupings)
+- [Migration Contract](#migration-contract-for-the-follow-up-not-this-issue)
+  - [Proof plan for each move PR](#proof-plan-for-each-move-pr)
+- [Follow-Up Issue Contract](#follow-up-issue-contract)
+- [Boundaries And Caveats](#boundaries-and-caveats)
+- [Links](#links)
+
 This note records the bounded repository-hygiene outcome for
 [Issue #6469](https://github.com/ll7/robot_sf_ll7/issues/6469). It confirms that the
 ghost utility directories carry no tracked files, and it proposes a domain-subdirectory

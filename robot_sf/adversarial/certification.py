@@ -112,7 +112,8 @@ def certify_candidate(
             candidate=candidate,
             scenario_yaml_path=scenario_yaml_path,
         )
-    except Exception as exc:  # pragma: no cover - defensive against future adapter errors
+    # The adapter surface is unknown, so any error becomes a failed certification.
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover
         return failed_status(
             "scenario_cert.v1 raised during certification", details={"error": repr(exc)}
         )

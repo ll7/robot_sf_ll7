@@ -122,7 +122,7 @@ def create_sensors_from_config(sensor_configs: list[dict[str, Any]]) -> list[Sen
                 idx,
                 config,
             )
-        except Exception as e:
+        except Exception as e:  # broad catch: factory surface unknown; surface as RuntimeError
             msg = (
                 f"Failed to instantiate sensor '{sensor_type}' at index {idx} "
                 f"with config {config}: {e}"
@@ -263,7 +263,7 @@ class MergedObservationFusion:
             try:
                 sensor.step(state)
                 obs[f"custom.{name}"] = sensor.get_observation()
-            except Exception as e:  # pragma: no cover - defensive logging only
+            except Exception as e:  # pragma: no cover - log sensor identity then re-raise
                 logger.error("Sensor '{}' failed: {}", name, e)
                 raise
         return obs

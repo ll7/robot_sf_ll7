@@ -354,7 +354,7 @@ def _write_trajectory_overlay_plot(result: OptimizationResult, run_dir: Path) ->
         )
         fig.tight_layout()
         fig.savefig(overlay_path, dpi=200, bbox_inches="tight")
-    except Exception as exc:
+    except Exception as exc:  # broad catch: diagnostic plot wraps any failure as RuntimeError
         raise RuntimeError(
             f"Failed to write trajectory overlay plot at {overlay_path}: {exc}"
         ) from exc

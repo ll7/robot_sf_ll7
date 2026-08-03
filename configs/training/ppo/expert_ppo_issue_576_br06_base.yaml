@@ -2,21 +2,19 @@
 #
 # Variant configs (expert_ppo_issue_576_br06_v*.yaml) inherit these shared
 # settings via `base_config: expert_ppo_issue_576_br06_base.yaml` and override
-# only their per-run settings: policy_id, reward profile, seeds, num_envs,
-# worker_mode, total_timesteps, evaluation cadence, tracking metadata,
-# warm-start/resume ids, PPO hyperparameters, scenario sampling, and any
-# predictive-foresight env_overrides.
+# only their per-run settings. Predictive variants add the
+# `expert_ppo_issue_576_br06_predictive_base.yaml` sub-base for their own
+# byte-identical shared settings.
 #
 # The base holds only values that are byte-identical across every variant, so
 # each variant still resolves to exactly its pre-inheritance effective values.
 # The deterministic equivalence test in
 # tests/integration/test_train_expert_ppo.py guards that contract.
 #
-# Note: predictive-foresight env_overrides and the predictive-family shared
-# keys (ppo_hyperparams, resume_model_id, scenario_sampling,
-# best_checkpoint_metric) are NOT in this base because four v2/v3 variants do
-# not use them; pulling them in here would change those variants' effective
-# values. They remain explicit per variant.
+# Note: predictive-foresight env_overrides and predictive-family shared keys
+# are kept out of this base because the non-predictive v2/v3/v4 variants do not
+# use every one of them; pulling them in here would change their values. The
+# predictive sub-base is chained here only for the predictive variants.
 scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
 feature_extractor: grid_socnav
 feature_extractor_kwargs:

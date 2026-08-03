@@ -1,0 +1,68 @@
+# Issue 576 (BR-06): shared predictive sub-base for the PPO expert family.
+#
+# Predictive issue_576_br06 variants and the issue-708 from-scratch variant
+# inherit this file after the family base. It contains only leaf keys that are
+# byte-identical across every requested predictive variant. Per-run values and
+# keys missing from any variant remain explicit in their variant files.
+#
+# resume_model_id intentionally remains explicit in the v5-v10 variants: the
+# issue-708 v11 config is a from-scratch run and has no resume model.
+base_config: expert_ppo_issue_576_br06_base.yaml
+seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
+randomize_seeds: true
+total_timesteps: 30000000
+best_checkpoint_metric: success_rate
+ppo_hyperparams:
+  learning_rate: 7.5e-5
+  batch_size: 256
+  n_epochs: 4
+  ent_coef: 0.008
+  clip_range: 0.1
+  target_kl: 0.02
+env_overrides:
+  predictive_foresight_enabled: true
+  predictive_foresight_device: cpu
+  predictive_foresight_rollout_dt: 0.2
+  predictive_foresight_near_distance: 0.7
+  predictive_foresight_front_corridor_length: 3.0
+  predictive_foresight_front_corridor_half_width: 1.0
+env_factory_kwargs:
+  reward_name: route_completion_v3
+  reward_kwargs:
+    weights:
+      living: -0.015
+      near_miss: -3.0
+      ttc_risk: -2.8
+      comfort: -0.5
+      smoothness: -0.18
+      stagnation: -2.0
+scenario_sampling:
+  strategy: random
+  profile_strategy: cycle
+  weights:
+    classic_cross_trap_medium: 3.0
+    classic_cross_trap_high: 4.0
+    classic_doorway_low: 3.0
+    classic_doorway_high: 4.0
+    classic_bottleneck_medium: 3.0
+    classic_bottleneck_high: 3.5
+    classic_realworld_double_bottleneck_high: 4.0
+    classic_group_crossing_medium: 2.5
+    classic_group_crossing_high: 3.0
+    classic_merging_medium: 2.5
+    classic_overtaking_medium: 2.5
+    classic_head_on_corridor_medium: 2.0
+    classic_t_intersection_medium: 2.0
+convergence:
+  plateau_window: 3000
+evaluation:
+  hold_out_scenarios: []
+tracking:
+  wandb:
+    enabled: true
+    project: robot_sf

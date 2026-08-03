@@ -758,6 +758,26 @@ _ISSUE_576_BR06_VARIANTS = [
     "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml",
     "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml",
 ]
+_ISSUE_576_BR06_PREDICTIVE_BASE_NAME = "expert_ppo_issue_576_br06_predictive_base.yaml"
+_ISSUE_576_BR06_PREDICTIVE_VARIANTS = {
+    "expert_ppo_issue_576_br06_v5_predictive_foresight.yaml",
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml",
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml",
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml",
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml",
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml",
+}
+_ISSUE_708_BR06_V11_NAME = (
+    "expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml"
+)
+# Captured from the resolved origin/main config at 26c5f5a6358dc8fdc659d0dae7c9a28f73d0b8b4,
+# before the predictive sub-base migration.
+_ISSUE_708_BR06_V11_PRECHANGE_FINGERPRINT = (
+    "cae43138a72f7256a4d3edfb37a584167ffbccfeba97c898cc6fba3157a300fe"
+)
 # The five variants that previously carried the deprecated
 # evaluation.frequency_episodes field (ignored by train_ppo.py in favor of
 # step_schedule). The migration drops it from exactly these files.
@@ -1178,8 +1198,12 @@ def test_issue_576_br06_family_overrides_remain_explicit(variant: str) -> None:
     assert config.resume_model_id == resume_model_id
     assert config.tracking["wandb"].get("group") == wandb_group
     assert config.tracking["wandb"].get("tags") == wandb_tags
-    # Plateau window remains an explicit per-variant override (not in the base).
-    assert "plateau_window" in variant_yaml["convergence"]
+    # Predictive variants inherit the shared plateau window from their sub-base;
+    # non-predictive variants retain their explicit override.
+    if variant in _ISSUE_576_BR06_PREDICTIVE_VARIANTS:
+        assert "plateau_window" not in variant_yaml.get("convergence", {})
+    else:
+        assert "plateau_window" in variant_yaml["convergence"]
 
 
 def test_issue_576_br06_base_inheritance_and_frequency_episodes_drop() -> None:
@@ -1195,13 +1219,60 @@ def test_issue_576_br06_base_inheritance_and_frequency_episodes_drop() -> None:
     for variant in _ISSUE_576_BR06_VARIANTS:
         variant_path = (_ISSUE_576_BR06_FAMILY_DIR / variant).resolve()
         variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
-        assert variant_yaml["base_config"] == _ISSUE_576_BR06_BASE_NAME
+        expected_base = (
+            _ISSUE_576_BR06_PREDICTIVE_BASE_NAME
+            if variant in _ISSUE_576_BR06_PREDICTIVE_VARIANTS
+            else _ISSUE_576_BR06_BASE_NAME
+        )
+        assert variant_yaml["base_config"] == expected_base
         # The deprecated field is dropped everywhere (it was only ever present
         # in the five variants listed below, and ignored in favor of step_schedule).
         assert "frequency_episodes" not in variant_yaml.get("evaluation", {})
         # Cadence source remains explicit per variant.
         assert variant_yaml["evaluation"]["step_schedule"]
     assert len(_ISSUE_576_BR06_DROPPED_FREQUENCY_EPISODES) == 5
+
+
+def test_issue_6680_predictive_subbase_inheritance_and_v11_equivalence() -> None:
+    """Predictive variants chain through the sub-base without changing v11."""
+    predictive_base_path = (
+        _ISSUE_576_BR06_FAMILY_DIR / _ISSUE_576_BR06_PREDICTIVE_BASE_NAME
+    ).resolve()
+    predictive_base = yaml.safe_load(predictive_base_path.read_text(encoding="utf-8"))
+    assert predictive_base["base_config"] == _ISSUE_576_BR06_BASE_NAME
+    assert "policy_id" not in predictive_base
+    # v11 is from scratch, so the sub-base must not manufacture a resume id.
+    assert "resume_model_id" not in predictive_base
+
+    for variant in sorted(_ISSUE_576_BR06_PREDICTIVE_VARIANTS):
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_576_BR06_FAMILY_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_576_BR06_PREDICTIVE_BASE_NAME
+
+    v11_path = (_ISSUE_576_BR06_FAMILY_DIR / _ISSUE_708_BR06_V11_NAME).resolve()
+    v11_yaml = yaml.safe_load(v11_path.read_text(encoding="utf-8"))
+    assert v11_yaml["base_config"] == _ISSUE_576_BR06_PREDICTIVE_BASE_NAME
+    assert "resume_model_id" not in v11_yaml
+    # This key is absent from v10 and therefore remains explicit in the other
+    # variants instead of being promoted into the shared sub-base.
+    assert "peds_have_obstacle_forces" not in predictive_base["env_factory_kwargs"]
+    assert (
+        "peds_have_obstacle_forces"
+        not in yaml.safe_load(
+            (
+                _ISSUE_576_BR06_FAMILY_DIR
+                / "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml"
+            ).read_text(encoding="utf-8")
+        )["env_factory_kwargs"]
+    )
+
+    resolved = _load_expert_training_config_mapping(v11_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    assert (
+        hashlib.sha256(canonical.encode()).hexdigest() == _ISSUE_708_BR06_V11_PRECHANGE_FINGERPRINT
+    )
+    assert load_expert_training_config(v11_path).resume_model_id is None
 
 
 def test_load_expert_training_config_base_config_cycle_raises_value_error(

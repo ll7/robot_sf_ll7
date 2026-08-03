@@ -139,7 +139,7 @@ def _build_obstacle_union(map_def: MapDefinition, robot_radius_m: float = 0.0):
                 if robot_radius_m > 0.0:
                     poly = poly.buffer(robot_radius_m)
                 polys.append(poly)
-            except Exception:  # noqa: BLE001  # invalid geometry — skip
+            except Exception:  # noqa: BLE001 - invalid shapely geometry; skip this polygon
                 continue
     # Include map bounds as boundary obstacles
     w, h = map_def.width, map_def.height

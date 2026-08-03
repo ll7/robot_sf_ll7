@@ -56,12 +56,14 @@ if TYPE_CHECKING:
 # Frozen-input provenance constants (from issue #5351 admitted artifact)
 # ---------------------------------------------------------------------------
 EXPECTED_ROWS_SHA256 = "c45c2ed8defdadaf47c001277e6bf9ca0c2238c101570d1d64be8015060febea"
+EXPECTED_FAMILY_MAPPING_SHA256 = "edd5dbed94bc4795255e7728e627fe8fb3282ab5efde8f64dfb92181758ef510"
 EXPECTED_TOTAL_ROWS = 20160
 EXPECTED_ARMS_COUNT = 14
 EXPECTED_ROWS_PER_ARM = 1440
 EXPECTED_FAMILY_COUNT = 35
 EXPECTED_RELEASE_TAG = "0.0.3.post1"
 EXPECTED_PUBLICATION_COMMIT = "ded9027d2928512c14bc241397e0ab1d8f586654"
+FAMILY_MAPPING_SCHEMA_VERSION = "retrospective_precision_family_mapping.v1"
 
 # ---------------------------------------------------------------------------
 # Report schema and claim boundary
@@ -85,6 +87,9 @@ DEFAULT_EVIDENCE_DIR = "docs/context/evidence/issue_6592_retrospective_precision
 DEFAULT_ROWS_PATH = (
     "docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl"
 )
+DEFAULT_FAMILY_MAPPING_PATH = (
+    "docs/context/evidence/issue_6592_retrospective_precision/scenario_family_mapping.json"
+)
 
 # Sensitivity grid: plausible baseline event rates for collision-like outcomes.
 SENSITIVITY_EVENT_RATES = (0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50)
@@ -106,6 +111,44 @@ def sha256_file(path: Path) -> str:
         while chunk := fh.read(65536):
             hasher.update(chunk)
     return hasher.hexdigest()
+
+
+def _parse_json_object_line(line: str, *, line_no: int, rows_path: Path) -> dict[str, Any]:
+    """Parse one frozen-row JSON line and require an object payload."""
+    try:
+        row = json.loads(line)
+    except json.JSONDecodeError as exc:
+        raise RetrospectivePrecisionError(
+            f"corrupt JSON at line {line_no} in {rows_path}: {exc}"
+        ) from exc
+    if not isinstance(row, dict):
+        raise RetrospectivePrecisionError(
+            f"row at line {line_no} in {rows_path} must be a JSON object"
+        )
+    return row
+
+
+def _verify_frozen_row_structure(rows: Sequence[Mapping[str, Any]]) -> None:
+    """Verify the pinned row count and planner-arm cardinality."""
+    if len(rows) != EXPECTED_TOTAL_ROWS:
+        raise RetrospectivePrecisionError(
+            f"row count mismatch: expected {EXPECTED_TOTAL_ROWS} "
+            f"({EXPECTED_ARMS_COUNT} arms x {EXPECTED_ROWS_PER_ARM}), got {len(rows)}"
+        )
+
+    planners = sorted({str(row.get("planner", "")) for row in rows})
+    if "" in planners:
+        raise RetrospectivePrecisionError("frozen rows must carry a non-empty planner")
+    if len(planners) != EXPECTED_ARMS_COUNT:
+        raise RetrospectivePrecisionError(
+            f"arm count mismatch: expected {EXPECTED_ARMS_COUNT}, got {len(planners)}: {planners}"
+        )
+    for planner in planners:
+        count = sum(1 for row in rows if str(row.get("planner")) == planner)
+        if count != EXPECTED_ROWS_PER_ARM:
+            raise RetrospectivePrecisionError(
+                f"arm {planner!r} has {count} rows, expected {EXPECTED_ROWS_PER_ARM}"
+            )
 
 
 def load_and_verify_frozen_rows(rows_path: Path) -> list[dict[str, Any]]:
@@ -132,32 +175,72 @@ def load_and_verify_frozen_rows(rows_path: Path) -> list[dict[str, Any]]:
             stripped = line.strip()
             if not stripped:
                 continue
-            try:
-                rows.append(json.loads(stripped))
-            except json.JSONDecodeError as exc:
-                raise RetrospectivePrecisionError(
-                    f"corrupt JSON at line {line_no} in {rows_path}: {exc}"
-                ) from exc
+            rows.append(_parse_json_object_line(stripped, line_no=line_no, rows_path=rows_path))
 
-    if len(rows) != EXPECTED_TOTAL_ROWS:
-        raise RetrospectivePrecisionError(
-            f"row count mismatch: expected {EXPECTED_TOTAL_ROWS} "
-            f"({EXPECTED_ARMS_COUNT} arms x {EXPECTED_ROWS_PER_ARM}), got {len(rows)}"
-        )
-
-    planners = sorted({str(r["planner"]) for r in rows})
-    if len(planners) != EXPECTED_ARMS_COUNT:
-        raise RetrospectivePrecisionError(
-            f"arm count mismatch: expected {EXPECTED_ARMS_COUNT}, got {len(planners)}: {planners}"
-        )
-    for planner in planners:
-        count = sum(1 for r in rows if str(r["planner"]) == planner)
-        if count != EXPECTED_ROWS_PER_ARM:
-            raise RetrospectivePrecisionError(
-                f"arm {planner!r} has {count} rows, expected {EXPECTED_ROWS_PER_ARM}"
-            )
-
+    _verify_frozen_row_structure(rows)
     return rows
+
+
+def _normalize_family_mapping_payload(payload: Any) -> dict[str, str]:
+    """Validate and normalize a pinned family-mapping JSON payload."""
+    if not isinstance(payload, dict):
+        raise RetrospectivePrecisionError("scenario-family mapping must be a JSON object")
+    if payload.get("schema_version") != FAMILY_MAPPING_SCHEMA_VERSION:
+        raise RetrospectivePrecisionError(
+            f"scenario-family mapping schema_version must be {FAMILY_MAPPING_SCHEMA_VERSION!r}"
+        )
+    if payload.get("source_issue") != 5351:
+        raise RetrospectivePrecisionError("scenario-family mapping source_issue must be 5351")
+    mapping = payload.get("scenario_to_family")
+    if not isinstance(mapping, dict):
+        raise RetrospectivePrecisionError(
+            "scenario-family mapping scenario_to_family must be an object"
+        )
+    if payload.get("family_count") != EXPECTED_FAMILY_COUNT:
+        raise RetrospectivePrecisionError(
+            "scenario-family mapping family_count must be "
+            f"{EXPECTED_FAMILY_COUNT}, got {payload.get('family_count')!r}"
+        )
+    normalized: dict[str, str] = {}
+    for scenario_id, family in mapping.items():
+        if not isinstance(scenario_id, str) or not scenario_id.strip():
+            raise RetrospectivePrecisionError(
+                "scenario-family mapping scenario IDs must be non-empty strings"
+            )
+        if not isinstance(family, str) or not family.strip():
+            raise RetrospectivePrecisionError(
+                f"scenario-family mapping family for {scenario_id!r} must be non-empty"
+            )
+        normalized[scenario_id] = family
+    return normalized
+
+
+def load_and_verify_family_mapping(mapping_path: Path) -> dict[str, str]:
+    """Load the checksum-pinned scenario-family mapping used by the admitted analysis.
+
+    The source ledger rows retain scenario IDs but not the release archive's
+    scenario_params.metadata.archetype field. Keeping the reconstructed
+    mapping as a separately hashed input prevents a later config edit from
+    silently changing the outer bootstrap partition.
+
+    Returns:
+        Mapping from frozen scenario IDs to their admitted scenario families.
+    """
+    if not mapping_path.is_file():
+        raise RetrospectivePrecisionError(f"scenario-family mapping not found: {mapping_path}")
+    actual_sha256 = sha256_file(mapping_path)
+    if actual_sha256 != EXPECTED_FAMILY_MAPPING_SHA256:
+        raise RetrospectivePrecisionError(
+            "scenario-family mapping SHA-256 mismatch: "
+            f"expected {EXPECTED_FAMILY_MAPPING_SHA256}, got {actual_sha256}"
+        )
+    try:
+        payload = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RetrospectivePrecisionError(
+            f"could not parse scenario-family mapping {mapping_path}: {exc}"
+        ) from exc
+    return _normalize_family_mapping_payload(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +321,32 @@ def verify_family_count(
     return len(families)
 
 
+def verify_family_mapping_against_configs(
+    rows: Sequence[Mapping[str, Any]],
+    family_of: Mapping[str, str],
+    *,
+    repo_root: Path,
+) -> int:
+    """Verify the pinned family partition agrees with current scenario metadata.
+
+    Returns:
+        The verified family count.
+    """
+    n_families = verify_family_count(rows, family_of)
+    configured = build_family_of_from_configs(repo_root)
+    scenario_ids = sorted({str(row["scenario_id"]) for row in rows})
+    mismatches = [
+        (scenario_id, family_of[scenario_id], configured.get(scenario_id))
+        for scenario_id in scenario_ids
+        if configured.get(scenario_id) != family_of[scenario_id]
+    ]
+    if mismatches:
+        raise RetrospectivePrecisionError(
+            f"scenario-family mapping disagrees with current scenario configs: {mismatches[:5]}"
+        )
+    return n_families
+
+
 # ---------------------------------------------------------------------------
 # Precision derivation
 # ---------------------------------------------------------------------------
@@ -283,7 +392,7 @@ def derive_contrast_precision(
     ci_low, ci_high = _percentile_interval(diff_samples, policy.confidence)
     ci_width = ci_high - ci_low
     bootstrap_se = float(np.std(diff_samples, ddof=1))
-    observed_rd = float(np.mean(diff_samples))
+    observed_rd = float(np.mean(outcomes_a) - np.mean(outcomes_b))
 
     # Minimum resolvable risk difference: the smallest true effect delta such
     # that the lower percentile bound of the bootstrap distribution (shifted
@@ -374,17 +483,22 @@ def derive_sensitivity_grid(
     Returns:
         List of sensitivity entries, one per grid rate.
     """
+    if outcome not in {"collision", "near_miss", "timeout"}:
+        raise RetrospectivePrecisionError(f"unsupported outcome: {outcome!r}")
+    if not cells:
+        raise RetrospectivePrecisionError("sensitivity analysis requires matched cells")
     families = _ordered_families(cells)
     n_cells = len(cells)
     rng = np.random.default_rng(policy.bootstrap_seed)
     results: list[dict[str, Any]] = []
 
     for rate in SENSITIVITY_EVENT_RATES:
-        # Synthesize paired outcomes: arm_a has the baseline rate, arm_b has
-        # rate + delta for varying delta.  For the sensitivity grid we compute
-        # the MRRD at each baseline rate with a fixed small delta.
-        synthetic_a = (rng.random(n_cells) < rate).astype(int)
-        synthetic_b = synthetic_a.copy()
+        # Draw independent null-arm outcomes at the same baseline rate. This
+        # gives the sensitivity probe a non-degenerate paired-risk variance
+        # while keeping its expected risk difference at zero. The observed
+        # cell-to-family assignment is still reused by the cluster bootstrap.
+        synthetic_a = rng.binomial(1, rate, size=n_cells)
+        synthetic_b = rng.binomial(1, rate, size=n_cells)
 
         diff_samples, _ = _cluster_bootstrap_paired(
             outcomes_a=synthetic_a.tolist(),
@@ -400,6 +514,8 @@ def derive_sensitivity_grid(
         results.append(
             {
                 "baseline_event_rate": rate,
+                "outcome": outcome,
+                "outcome_model": "independent Bernoulli null arms",
                 "n_cells": n_cells,
                 "n_families": len(families),
                 "bootstrap_se": bootstrap_se,
@@ -504,6 +620,12 @@ def build_precision_report(
             "bootstrap_samples": policy.bootstrap_samples,
             "bootstrap_seed": policy.bootstrap_seed,
         },
+        "sensitivity_model": {
+            "outcome_generation": "independent Bernoulli null arms at each baseline event rate",
+            "expected_risk_difference": 0.0,
+            "resampling_partition": "observed scenario-family clusters",
+            "interpretation": "synthetic design-sensitivity calibration, not observed evidence",
+        },
         "practical_effect_rule": {
             "min_risk_difference": policy.min_risk_difference,
             "description": (
@@ -515,6 +637,8 @@ def build_precision_report(
             "release_tag": EXPECTED_RELEASE_TAG,
             "publication_commit": EXPECTED_PUBLICATION_COMMIT,
             "successor_rows_sha256": EXPECTED_ROWS_SHA256,
+            "scenario_family_mapping_sha256": EXPECTED_FAMILY_MAPPING_SHA256,
+            "scenario_family_mapping_path": DEFAULT_FAMILY_MAPPING_PATH,
             "total_rows": EXPECTED_TOTAL_ROWS,
             "arms_count": EXPECTED_ARMS_COUNT,
             "rows_per_arm": EXPECTED_ROWS_PER_ARM,
@@ -623,6 +747,7 @@ def render_precision_readme(
         f"| Confidence level | {interval.get('confidence', 'N/A')} |",
         f"| Interval method | {interval.get('method', 'N/A')} |",
         f"| Bootstrap samples | {interval.get('bootstrap_samples', 'N/A')} |",
+        f"| Family mapping SHA-256 | {provenance.get('scenario_family_mapping_sha256', 'N/A')} |",
         "",
         "## Achieved Precision: Headline Collision Contrasts",
         "",
@@ -644,6 +769,15 @@ def render_precision_readme(
 
     lines.extend(
         [
+            "",
+            "## Event-Rate Sensitivity",
+            "",
+            "- The grid uses independent Bernoulli null-arm draws at each",
+            "  baseline event rate, so its expected paired risk difference is zero.",
+            "- It reuses the observed matched-cell to scenario-family assignment",
+            "  for the one-stage cluster bootstrap.",
+            "- These rows are synthetic design-sensitivity calibration, not",
+            "  observed evidence and not a claim about any unseen event rate.",
             "",
             "## Key Distinction: Achieved Precision vs. Post-Hoc Adequacy",
             "",
@@ -714,7 +848,11 @@ def write_sha256sums(evidence_dir: Path) -> Path:
     sums_path = evidence_dir / "SHA256SUMS"
     entries: list[str] = []
     for artifact in sorted(evidence_dir.iterdir()):
-        if artifact.name == "SHA256SUMS" or not artifact.is_file():
+        if (
+            artifact.name == "SHA256SUMS"
+            or artifact.name.endswith(".review.json")
+            or not artifact.is_file()
+        ):
             continue
         digest = sha256_file(artifact)
         entries.append(f"{digest}  {artifact.name}")
@@ -804,6 +942,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help=f"Path to frozen successor_rows.jsonl (default: {DEFAULT_ROWS_PATH}).",
     )
+    parser.add_argument(
+        "--family-mapping-path",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the checksum-pinned scenario-family mapping "
+            f"(default: {DEFAULT_FAMILY_MAPPING_PATH})."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -813,6 +960,9 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = args.repo_root.resolve()
     evidence_dir = (args.evidence_dir or (repo_root / DEFAULT_EVIDENCE_DIR)).resolve()
     rows_path = (args.rows_path or (repo_root / DEFAULT_ROWS_PATH)).resolve()
+    family_mapping_path = (
+        args.family_mapping_path or (repo_root / DEFAULT_FAMILY_MAPPING_PATH)
+    ).resolve()
 
     print("--- Issue #6592 Retrospective Precision Derivation ---")
 
@@ -823,8 +973,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Step 2: Build and verify family mapping
     print("Reconstructing scenario-family mapping from configs...")
-    family_of = build_family_of_from_configs(repo_root)
-    n_families = verify_family_count(rows, family_of)
+    family_of = load_and_verify_family_mapping(family_mapping_path)
+    n_families = verify_family_mapping_against_configs(rows, family_of, repo_root=repo_root)
     print(f"Verified {n_families} scenario families (outer resampling unit).")
 
     # Step 3: Build precision report

@@ -32,7 +32,16 @@ _ROWS_PATH = (
     / "issue_5351_hierarchical_paired_release_analysis"
     / "successor_rows.jsonl"
 )
+_FAMILY_MAPPING_PATH = (
+    _REPO_ROOT
+    / "docs"
+    / "context"
+    / "evidence"
+    / "issue_6592_retrospective_precision"
+    / "scenario_family_mapping.json"
+)
 _EXPECTED_ROWS_SHA256 = "c45c2ed8defdadaf47c001277e6bf9ca0c2238c101570d1d64be8015060febea"
+_EXPECTED_FAMILY_MAPPING_SHA256 = "edd5dbed94bc4795255e7728e627fe8fb3282ab5efde8f64dfb92181758ef510"
 
 
 @pytest.fixture(scope="module")
@@ -143,6 +152,16 @@ class TestDeterminism:
             assert artifact.name in recorded, f"{artifact.name} missing from SHA256SUMS"
             actual = _sha256(artifact)
             assert actual == recorded[artifact.name], f"SHA256SUMS mismatch for {artifact.name}"
+
+    def test_committed_sha256sums_cover_family_mapping(self):
+        """The committed evidence checksum list covers the pinned mapping, not its sidecar."""
+        sums_path = _FAMILY_MAPPING_PATH.with_name("SHA256SUMS")
+        recorded = {
+            line.split("  ", 1)[1]: line.split("  ", 1)[0]
+            for line in sums_path.read_text(encoding="utf-8").strip().splitlines()
+        }
+        assert recorded["scenario_family_mapping.json"] == _sha256(_FAMILY_MAPPING_PATH)
+        assert "SHA256SUMS.review.json" not in recorded
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +303,7 @@ class TestReportSchema:
         assert prov["arms_count"] == 14
         assert prov["rows_per_arm"] == 1440
         assert prov["family_count"] == 35
+        assert prov["scenario_family_mapping_sha256"] == _EXPECTED_FAMILY_MAPPING_SHA256
 
     def test_exclusions_present(self, precision_run):
         """Report contains material exclusions for rare-event, family, and independence."""
@@ -326,6 +346,9 @@ class TestReportSchema:
             for point in grid:
                 assert point["n_families"] == 35
                 assert point["bootstrap_se"] >= 0
+                assert point["outcome"] == "collision"
+                assert point["outcome_model"] == "independent Bernoulli null arms"
+        assert any(point["bootstrap_se"] > 0 for entry in sensitivity for point in entry["grid"])
 
 
 # ---------------------------------------------------------------------------
@@ -383,8 +406,40 @@ class TestFrozenInputVerification:
         assert len(rows) == 20160
 
     def test_family_mapping_produces_35(self, precision_module):
-        """build_family_of_from_configs produces exactly 35 families for frozen rows."""
+        """The pinned family mapping produces the admitted 35 cluster units."""
         rows = precision_module.load_and_verify_frozen_rows(_ROWS_PATH)
-        family_of = precision_module.build_family_of_from_configs(_REPO_ROOT)
-        n_families = precision_module.verify_family_count(rows, family_of)
+        family_of = precision_module.load_and_verify_family_mapping(_FAMILY_MAPPING_PATH)
+        n_families = precision_module.verify_family_mapping_against_configs(
+            rows, family_of, repo_root=_REPO_ROOT
+        )
         assert n_families == 35
+
+    def test_family_mapping_sha256(self):
+        """The durable family partition is checksum-pinned."""
+        assert _sha256(_FAMILY_MAPPING_PATH) == _EXPECTED_FAMILY_MAPPING_SHA256
+
+    def test_family_mapping_tamper_fails_closed(self, precision_module, tmp_path):
+        """A modified family partition is rejected before analysis."""
+        tampered = tmp_path / "scenario_family_mapping.json"
+        tampered.write_bytes(_FAMILY_MAPPING_PATH.read_bytes() + b"\n")
+        with pytest.raises(
+            precision_module.RetrospectivePrecisionError,
+            match="scenario-family mapping SHA-256 mismatch",
+        ):
+            precision_module.load_and_verify_family_mapping(tampered)
+
+    def test_observed_risk_difference_uses_frozen_cells(self, precision_module, precision_run):
+        """Observed risk difference is not replaced by the bootstrap mean."""
+        report, _ = precision_run
+        rows = precision_module.load_and_verify_frozen_rows(_ROWS_PATH)
+        family_of = precision_module.load_and_verify_family_mapping(_FAMILY_MAPPING_PATH)
+        cells = precision_module.build_matched_cells_from_ledger_rows(
+            rows, planner_pair=("goal", "orca"), family_of=family_of
+        )
+        expected = sum(cell.collision_a - cell.collision_b for cell in cells) / len(cells)
+        entry = next(
+            item
+            for item in report["contrast_precisions"]
+            if item["planner_pair"] == ["goal", "orca"] and item["outcome"] == "collision"
+        )
+        assert entry["observed_risk_difference"] == pytest.approx(expected)

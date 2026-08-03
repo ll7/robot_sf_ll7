@@ -17,7 +17,7 @@
       "mrrd_statistical": 0.239218521986222,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.3191597662122464,
+      "observed_risk_difference": 0.3194444444444444,
       "outcome": "collision",
       "planner_pair": [
         "goal",
@@ -39,7 +39,7 @@
       "mrrd_statistical": 0.15038982528677566,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.0164699826625316,
+      "observed_risk_difference": -0.02013888888888893,
       "outcome": "near_miss",
       "planner_pair": [
         "goal",
@@ -61,7 +61,7 @@
       "mrrd_statistical": 0.09013692009921097,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.036654278355431356,
+      "observed_risk_difference": -0.03611111111111111,
       "outcome": "timeout",
       "planner_pair": [
         "goal",
@@ -83,7 +83,7 @@
       "mrrd_statistical": 0.25904511095167304,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.17298708924690157,
+      "observed_risk_difference": 0.17638888888888887,
       "outcome": "collision",
       "planner_pair": [
         "guarded_ppo",
@@ -105,7 +105,7 @@
       "mrrd_statistical": 0.3012979280136172,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.1025178747579584,
+      "observed_risk_difference": -0.10833333333333334,
       "outcome": "near_miss",
       "planner_pair": [
         "guarded_ppo",
@@ -127,7 +127,7 @@
       "mrrd_statistical": 0.2553457114532806,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.2687812335048483,
+      "observed_risk_difference": 0.26875000000000004,
       "outcome": "timeout",
       "planner_pair": [
         "guarded_ppo",
@@ -149,7 +149,7 @@
       "mrrd_statistical": 0.20926047142540938,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.07685082256716527,
+      "observed_risk_difference": -0.07777777777777778,
       "outcome": "collision",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
@@ -171,7 +171,7 @@
       "mrrd_statistical": 0.14257768436738885,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.01218537920925836,
+      "observed_risk_difference": -0.015277777777777835,
       "outcome": "near_miss",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
@@ -193,7 +193,7 @@
       "mrrd_statistical": 0.1022485483896821,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.001972268431613807,
+      "observed_risk_difference": -0.001388888888888884,
       "outcome": "timeout",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
@@ -215,7 +215,7 @@
       "mrrd_statistical": 0.16386556183439013,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.1338719561382615,
+      "observed_risk_difference": -0.13472222222222222,
       "outcome": "collision",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
@@ -237,7 +237,7 @@
       "mrrd_statistical": 0.14345632261137845,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.06552033686082308,
+      "observed_risk_difference": -0.06805555555555554,
       "outcome": "near_miss",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
@@ -259,7 +259,7 @@
       "mrrd_statistical": 0.09595577349883759,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.044069109333646495,
+      "observed_risk_difference": 0.04444444444444445,
       "outcome": "timeout",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
@@ -281,7 +281,7 @@
       "mrrd_statistical": 0.2538500562720615,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.017789719361867178,
+      "observed_risk_difference": -0.013888888888888895,
       "outcome": "collision",
       "planner_pair": [
         "ppo",
@@ -303,7 +303,7 @@
       "mrrd_statistical": 0.1778228782281067,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.08561463781184066,
+      "observed_risk_difference": -0.0854166666666667,
       "outcome": "near_miss",
       "planner_pair": [
         "ppo",
@@ -325,7 +325,7 @@
       "mrrd_statistical": 0.09498279427004526,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.021741776434200836,
+      "observed_risk_difference": -0.021527777777777774,
       "outcome": "timeout",
       "planner_pair": [
         "ppo",
@@ -347,7 +347,7 @@
       "mrrd_statistical": 0.175112857354985,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.2148261532384449,
+      "observed_risk_difference": 0.21458333333333335,
       "outcome": "collision",
       "planner_pair": [
         "prediction_planner",
@@ -369,7 +369,7 @@
       "mrrd_statistical": 0.12451204860358307,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.006642805348062646,
+      "observed_risk_difference": -0.009027777777777746,
       "outcome": "near_miss",
       "planner_pair": [
         "prediction_planner",
@@ -391,7 +391,7 @@
       "mrrd_statistical": 0.08993176027146725,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.03383562085433702,
+      "observed_risk_difference": -0.03333333333333333,
       "outcome": "timeout",
       "planner_pair": [
         "prediction_planner",
@@ -413,7 +413,7 @@
       "mrrd_statistical": 0.24018792207918177,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.4072879438108655,
+      "observed_risk_difference": 0.41180555555555554,
       "outcome": "collision",
       "planner_pair": [
         "predictive_mppi",
@@ -435,7 +435,7 @@
       "mrrd_statistical": 0.2669525602418867,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.08588717350151474,
+      "observed_risk_difference": -0.09166666666666667,
       "outcome": "near_miss",
       "planner_pair": [
         "predictive_mppi",
@@ -457,7 +457,7 @@
       "mrrd_statistical": 0.19709105613615663,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.11482965386625733,
+      "observed_risk_difference": 0.11388888888888889,
       "outcome": "timeout",
       "planner_pair": [
         "predictive_mppi",
@@ -479,7 +479,7 @@
       "mrrd_statistical": 0.20609825309284077,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.5055210957507462,
+      "observed_risk_difference": 0.5083333333333333,
       "outcome": "collision",
       "planner_pair": [
         "risk_dwa",
@@ -501,7 +501,7 @@
       "mrrd_statistical": 0.27504015148829525,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.04912423553551628,
+      "observed_risk_difference": -0.05555555555555558,
       "outcome": "near_miss",
       "planner_pair": [
         "risk_dwa",
@@ -523,7 +523,7 @@
       "mrrd_statistical": 0.19000438821539345,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.09837824435991557,
+      "observed_risk_difference": 0.09791666666666667,
       "outcome": "timeout",
       "planner_pair": [
         "risk_dwa",
@@ -545,7 +545,7 @@
       "mrrd_statistical": 0.24356021071419315,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.3948339456235292,
+      "observed_risk_difference": 0.39861111111111114,
       "outcome": "collision",
       "planner_pair": [
         "sacadrl",
@@ -567,7 +567,7 @@
       "mrrd_statistical": 0.21320276353750572,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.15191546521532517,
+      "observed_risk_difference": -0.15694444444444444,
       "outcome": "near_miss",
       "planner_pair": [
         "sacadrl",
@@ -589,7 +589,7 @@
       "mrrd_statistical": 0.08996183520438827,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.03594961398015778,
+      "observed_risk_difference": -0.035416666666666666,
       "outcome": "timeout",
       "planner_pair": [
         "sacadrl",
@@ -611,7 +611,7 @@
       "mrrd_statistical": 0.2031630816347807,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.0670843506462211,
+      "observed_risk_difference": -0.06805555555555554,
       "outcome": "collision",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
@@ -633,7 +633,7 @@
       "mrrd_statistical": 0.14383356867881425,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.012843606550865538,
+      "observed_risk_difference": -0.015972222222222276,
       "outcome": "near_miss",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
@@ -655,7 +655,7 @@
       "mrrd_statistical": 0.10164682414555846,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.005447168185797581,
+      "observed_risk_difference": -0.004861111111111108,
       "outcome": "timeout",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
@@ -677,7 +677,7 @@
       "mrrd_statistical": 0.20264590413951905,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.07119683389351221,
+      "observed_risk_difference": -0.07222222222222222,
       "outcome": "collision",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
@@ -699,7 +699,7 @@
       "mrrd_statistical": 0.14383356867881425,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.012843606550865538,
+      "observed_risk_difference": -0.015972222222222276,
       "outcome": "near_miss",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
@@ -721,7 +721,7 @@
       "mrrd_statistical": 0.1027133118060745,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.001334684938506495,
+      "observed_risk_difference": -0.000694444444444442,
       "outcome": "timeout",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
@@ -743,7 +743,7 @@
       "mrrd_statistical": 0.3275700018236969,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.21302867287243288,
+      "observed_risk_difference": 0.2104166666666667,
       "outcome": "collision",
       "planner_pair": [
         "social_force",
@@ -765,7 +765,7 @@
       "mrrd_statistical": 0.28142647141947125,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.10246585674187045,
+      "observed_risk_difference": -0.10208333333333336,
       "outcome": "near_miss",
       "planner_pair": [
         "social_force",
@@ -787,7 +787,7 @@
       "mrrd_statistical": 0.29572667934230557,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.45238138826898366,
+      "observed_risk_difference": 0.45625000000000004,
       "outcome": "timeout",
       "planner_pair": [
         "social_force",
@@ -809,7 +809,7 @@
       "mrrd_statistical": 0.24342463300143893,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.4227302040198083,
+      "observed_risk_difference": 0.4256944444444445,
       "outcome": "collision",
       "planner_pair": [
         "socnav_sampling",
@@ -831,7 +831,7 @@
       "mrrd_statistical": 0.22684863795005,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.1384155887859577,
+      "observed_risk_difference": -0.13958333333333334,
       "outcome": "near_miss",
       "planner_pair": [
         "socnav_sampling",
@@ -853,7 +853,7 @@
       "mrrd_statistical": 0.09013692009921097,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.036654278355431356,
+      "observed_risk_difference": -0.03611111111111111,
       "outcome": "timeout",
       "planner_pair": [
         "socnav_sampling",
@@ -896,6 +896,8 @@
     "publication_commit": "ded9027d2928512c14bc241397e0ab1d8f586654",
     "release_tag": "0.0.3.post1",
     "rows_per_arm": 1440,
+    "scenario_family_mapping_path": "docs/context/evidence/issue_6592_retrospective_precision/scenario_family_mapping.json",
+    "scenario_family_mapping_sha256": "edd5dbed94bc4795255e7728e627fe8fb3282ab5efde8f64dfb92181758ef510",
     "successor_rows_sha256": "c45c2ed8defdadaf47c001277e6bf9ca0c2238c101570d1d64be8015060febea",
     "total_rows": 20160
   },
@@ -912,7 +914,7 @@
       "mrrd_statistical": 0.239218521986222,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.3191597662122464,
+      "observed_risk_difference": 0.3194444444444444,
       "outcome": "collision",
       "planner_pair": [
         "goal",
@@ -934,7 +936,7 @@
       "mrrd_statistical": 0.25904511095167304,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.17298708924690157,
+      "observed_risk_difference": 0.17638888888888887,
       "outcome": "collision",
       "planner_pair": [
         "guarded_ppo",
@@ -956,7 +958,7 @@
       "mrrd_statistical": 0.20926047142540938,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.07685082256716527,
+      "observed_risk_difference": -0.07777777777777778,
       "outcome": "collision",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
@@ -978,7 +980,7 @@
       "mrrd_statistical": 0.16386556183439013,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.1338719561382615,
+      "observed_risk_difference": -0.13472222222222222,
       "outcome": "collision",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
@@ -1000,7 +1002,7 @@
       "mrrd_statistical": 0.2538500562720615,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.017789719361867178,
+      "observed_risk_difference": -0.013888888888888895,
       "outcome": "collision",
       "planner_pair": [
         "ppo",
@@ -1022,7 +1024,7 @@
       "mrrd_statistical": 0.175112857354985,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.2148261532384449,
+      "observed_risk_difference": 0.21458333333333335,
       "outcome": "collision",
       "planner_pair": [
         "prediction_planner",
@@ -1044,7 +1046,7 @@
       "mrrd_statistical": 0.24018792207918177,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.4072879438108655,
+      "observed_risk_difference": 0.41180555555555554,
       "outcome": "collision",
       "planner_pair": [
         "predictive_mppi",
@@ -1066,7 +1068,7 @@
       "mrrd_statistical": 0.20609825309284077,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.5055210957507462,
+      "observed_risk_difference": 0.5083333333333333,
       "outcome": "collision",
       "planner_pair": [
         "risk_dwa",
@@ -1088,7 +1090,7 @@
       "mrrd_statistical": 0.24356021071419315,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.3948339456235292,
+      "observed_risk_difference": 0.39861111111111114,
       "outcome": "collision",
       "planner_pair": [
         "sacadrl",
@@ -1110,7 +1112,7 @@
       "mrrd_statistical": 0.2031630816347807,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.0670843506462211,
+      "observed_risk_difference": -0.06805555555555554,
       "outcome": "collision",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
@@ -1132,7 +1134,7 @@
       "mrrd_statistical": 0.20264590413951905,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": -0.07119683389351221,
+      "observed_risk_difference": -0.07222222222222222,
       "outcome": "collision",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
@@ -1154,7 +1156,7 @@
       "mrrd_statistical": 0.3275700018236969,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.21302867287243288,
+      "observed_risk_difference": 0.2104166666666667,
       "outcome": "collision",
       "planner_pair": [
         "social_force",
@@ -1176,7 +1178,7 @@
       "mrrd_statistical": 0.24342463300143893,
       "n_cells": 1440,
       "n_families": 35,
-      "observed_risk_difference": 0.4227302040198083,
+      "observed_risk_difference": 0.4256944444444445,
       "outcome": "collision",
       "planner_pair": [
         "socnav_sampling",
@@ -1211,75 +1213,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1292,75 +1312,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1373,75 +1411,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1454,75 +1510,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1535,75 +1609,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1616,75 +1708,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1697,75 +1807,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1778,75 +1906,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1859,75 +2005,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -1940,75 +2104,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -2021,75 +2203,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -2102,75 +2302,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -2183,75 +2401,93 @@
       "grid": [
         {
           "baseline_event_rate": 0.01,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.003402793641588345,
+          "mrrd_practical": 0.02666935298433505,
+          "mrrd_statistical": 0.013338705968670105,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.02,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.00435470765547661,
+          "mrrd_practical": 0.028535070167935016,
+          "mrrd_statistical": 0.017070140335870027,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.05,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.009609126370260634,
+          "mrrd_practical": 0.03883354160860494,
+          "mrrd_statistical": 0.03766708321720988,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.1,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.010329229237105855,
+          "mrrd_practical": 0.04024491729278561,
+          "mrrd_statistical": 0.040489834585571226,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.15,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016727417084748807,
+          "mrrd_practical": 0.05278513504048765,
+          "mrrd_statistical": 0.0655702700809753,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.2,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.0130502184516623,
+          "mrrd_practical": 0.04557795815563818,
+          "mrrd_statistical": 0.051155916311276355,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.3,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.020492220473159243,
+          "mrrd_practical": 0.060164014090646464,
+          "mrrd_statistical": 0.08032802818129292,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.4,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.016773801786037993,
+          "mrrd_practical": 0.052876047384448094,
+          "mrrd_statistical": 0.0657520947688962,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         },
         {
           "baseline_event_rate": 0.5,
-          "bootstrap_se": 0.0,
-          "mrrd_practical": 0.02,
-          "mrrd_statistical": 0.0,
+          "bootstrap_se": 0.01950834332951222,
+          "mrrd_practical": 0.058235650323886154,
+          "mrrd_statistical": 0.07647130064777231,
           "n_cells": 1440,
-          "n_families": 35
+          "n_families": 35,
+          "outcome": "collision",
+          "outcome_model": "independent Bernoulli null arms"
         }
       ],
       "outcome": "collision",
@@ -2261,6 +2497,12 @@
       ]
     }
   ],
+  "sensitivity_model": {
+    "expected_risk_difference": 0.0,
+    "interpretation": "synthetic design-sensitivity calibration, not observed evidence",
+    "outcome_generation": "independent Bernoulli null arms at each baseline event rate",
+    "resampling_partition": "observed scenario-family clusters"
+  },
   "source_issue": 5351,
   "terminology_note": "This report uses 'achieved precision' (CI width) and 'minimum resolvable risk difference' (MRRD, a design-sensitivity measure). It does NOT report any post-hoc observed-data adequacy metric, does NOT claim prospective adequacy, and does NOT claim that the 30-seed design was chosen via a prospective sizing calculation."
 }

@@ -1100,6 +1100,36 @@ def _finite_component_score(per_timestep: np.ndarray) -> float | None:
     return score if math.isfinite(score) else None
 
 
+def _stable_nonnegative_mean(values: Sequence[float]) -> float | None:
+    """Return a finite mean for non-negative timing evidence without sum overflow."""
+    if not values or any(not math.isfinite(value) or value < 0.0 for value in values):
+        return None
+    scale = max(values)
+    if scale == 0.0:
+        return 0.0
+    normalized_sum = math.fsum(value / scale for value in values)
+    mean = scale * min(1.0, normalized_sum / len(values))
+    return mean if math.isfinite(mean) else None
+
+
+def _first_threshold_crossing_time(
+    per_timestep_scores: Sequence[np.ndarray],
+    warn_threshold: float,
+    dt_s: float,
+) -> tuple[float | None, bool]:
+    """Return the first warn crossing time and whether that time is representable."""
+    if not per_timestep_scores:
+        return None, True
+    aggregate_per_t = np.maximum.reduce(per_timestep_scores)
+    crossings = np.where(aggregate_per_t > warn_threshold)[0]
+    if crossings.size == 0:
+        return None, True
+    crossing_time = float(crossings[0]) * dt_s
+    if not math.isfinite(crossing_time):
+        return None, False
+    return crossing_time, True
+
+
 def summarize_execution_deviation_diagnostics(
     cases: Sequence[ExecutionDeviationDiagnosticCase],
 ) -> ExecutionDeviationDiagnosticReport:
@@ -1167,7 +1197,7 @@ def summarize_execution_deviation_diagnostics(
         detection_recall=(
             detection_count / detection_denominator if detection_denominator else None
         ),
-        detection_delay_s=(float(np.mean(detection_delays)) if detection_delays else None),
+        detection_delay_s=_stable_nonnegative_mean(detection_delays),
         detection_delay_denominator=len(detection_delays),
         intervention_counts=tuple(
             (label, intervention_counts[label]) for label in _INTERVENTION_RANK
@@ -1176,7 +1206,7 @@ def summarize_execution_deviation_diagnostics(
         intervention_rate=(intervention_count / len(cases) if cases else None),
         fail_closed_count=fail_closed_count,
         repair_latency_status="available" if repair_latencies else "unavailable",
-        repair_latency_s=(float(np.mean(repair_latencies)) if repair_latencies else None),
+        repair_latency_s=_stable_nonnegative_mean(repair_latencies),
         repair_latency_denominator=len(repair_latencies),
         residual_collision_near_miss_status=("available" if collision_outcomes else "unavailable"),
         residual_collision_near_miss_rate=(
@@ -1311,12 +1341,11 @@ def monitor_execution_deviation(
     # All threshold-facing fields use ``max_t(max_component(component[t]))``:
     # a transient threshold crossing therefore has a warn-or-higher intervention.
     deviation_score = max(component_scores.values()) if component_scores else 0.0
-    first_crossing: float | None = None
-    if per_timestep_scores:
-        aggregate_per_t = np.maximum.reduce(per_timestep_scores)
-        crossings = np.where(aggregate_per_t > cfg.warn_threshold)[0]
-        if crossings.size > 0:
-            first_crossing = float(crossings[0]) * dt_s
+    first_crossing, crossing_valid = _first_threshold_crossing_time(
+        per_timestep_scores, cfg.warn_threshold, dt_s
+    )
+    if not crossing_valid:
+        return _fail_closed_result(cfg, input_age_s)
 
     return ExecutionDeviationResult(
         intervention=_intervention_for_score(deviation_score, cfg),

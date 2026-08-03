@@ -1222,6 +1222,22 @@ class TestExecutionDeviationMiscellaneous:
         assert result.first_threshold_crossing_time_s == pytest.approx(0.0)
         assert result.intervention == INTERVENTION_WARN
 
+    def test_unrepresentable_crossing_time_fails_closed(self) -> None:
+        """A non-finite crossing timestamp cannot escape as valid diagnostic output."""
+        predicted = np.zeros((3, 2))
+        observed = predicted.copy()
+        observed[2, 0] = 1.0
+        result = monitor_execution_deviation(
+            predicted_robot_positions=predicted,
+            observed_robot_positions=observed,
+            dt_s=1.0e308,
+            input_age_s=0.0,
+            config=_deviation_config(enabled_components=("robot_position",)),
+        )
+        assert result.fail_closed is True
+        assert result.deviation_score is None
+        assert result.first_threshold_crossing_time_s is None
+
     def test_separate_from_trajectory_verifier(self) -> None:
         """The deviation monitor does not alter verify_trajectory semantics."""
         robot_pos, robot_vel, ped_pos, ped_vel = _straight_trajectory(
@@ -1305,6 +1321,27 @@ class TestExecutionDeviationDiagnosticReport:
         assert report.residual_collision_near_miss_status == "unavailable"
         assert report.residual_collision_near_miss_rate is None
         assert report.residual_collision_near_miss_denominator == 0
+
+    def test_finite_timing_mean_does_not_overflow(self) -> None:
+        """Finite timing evidence remains finite when a naive sum would overflow."""
+        clean = monitor_execution_deviation(config=_deviation_config(), **_aligned_windows())
+        report = summarize_execution_deviation_diagnostics(
+            (
+                ExecutionDeviationDiagnosticCase(
+                    clean,
+                    expected_deviation=False,
+                    repair_latency_s=1.0e308,
+                ),
+                ExecutionDeviationDiagnosticCase(
+                    clean,
+                    expected_deviation=False,
+                    repair_latency_s=1.0e308,
+                ),
+            )
+        )
+        assert report.repair_latency_status == "available"
+        assert report.repair_latency_s == pytest.approx(1.0e308)
+        assert report.repair_latency_s is not None and math.isfinite(report.repair_latency_s)
 
     def test_missing_performance_denominators_are_not_fabricated(self) -> None:
         report = summarize_execution_deviation_diagnostics(())

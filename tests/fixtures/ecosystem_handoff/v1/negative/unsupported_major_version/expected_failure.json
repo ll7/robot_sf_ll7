@@ -1,0 +1,5 @@
+{
+  "expected_reason_code": "unsupported_major_version",
+  "schema_version": "robot_sf_ecosystem_negative_fixture.v1",
+  "variant_id": "unsupported_major_version"
+}

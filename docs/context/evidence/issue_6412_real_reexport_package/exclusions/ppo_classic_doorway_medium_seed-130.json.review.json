@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6412_real_reexport_package/exclusions/ppo_classic_doorway_medium_seed-130.json",
+  "artifact_sha256": "8d74d6f76f491089af96ee366804da871f4c28fe2c03b954a50543dc32aebf6d",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

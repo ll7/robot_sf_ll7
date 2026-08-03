@@ -29,6 +29,7 @@ from robot_sf.benchmark.radius_binding_canary import (
 )
 from robot_sf.scenario_certification.feasibility_oracle import make_envelope_scenario
 from robot_sf.training.scenario_loader import load_scenarios
+from scripts.benchmark.run_radius_binding_canary_issue_6641 import build_report
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/single/francis2023_narrow_doorway.yaml"
@@ -202,3 +203,14 @@ def test_canary_rejects_non_positive_target(narrow_doorway_scenario: dict) -> No
     """A non-positive target radius is rejected before any probe runs."""
     with pytest.raises(ValueError, match="target_radius_m"):
         run_radius_binding_canary(narrow_doorway_scenario, 0.0, scenario_path=_SCENARIO_PATH)
+
+
+def test_report_rejects_empty_radius_probe(narrow_doorway_scenario: dict) -> None:
+    """An empty radius list cannot produce a fail-open go verdict."""
+    with pytest.raises(ValueError, match="at least one target radius"):
+        build_report(
+            narrow_doorway_scenario,
+            scenario_path=_SCENARIO_PATH,
+            radii=[],
+            tolerance=1e-9,
+        )

@@ -95,6 +95,8 @@ def build_report(
     tolerance: float,
 ) -> dict:
     """Run the canary at each radius and assemble the machine-readable report."""
+    if not radii:
+        raise ValueError("radii must contain at least one target radius")
     verdicts = [
         canary_verdict_to_dict(
             run_radius_binding_canary(

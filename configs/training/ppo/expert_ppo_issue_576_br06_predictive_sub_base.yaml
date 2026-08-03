@@ -35,6 +35,17 @@ seeds:
   - 1337
 randomize_seeds: true
 total_timesteps: 30000000
+# Keep this intermediate overlay independently loadable. Every predictive
+# child explicitly overrides the same convergence value below, so inheritance
+# does not change any child's effective configuration.
+policy_id: ppo_expert_br06_predictive_sub_base
+convergence:
+  plateau_window: 3000
+evaluation:
+  evaluation_episodes: 30
+  hold_out_scenarios: []
+  step_schedule:
+    - every_steps: 1000000
 # Shared predictive-foresight env_overrides – keys that are byte-identical
 # across all predictive variants. Per-variant keys (model_id, max_agents,
 # horizon_steps, ego_conditioning) remain explicit in each variant.

@@ -15,8 +15,13 @@ import pytest
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.near_miss_ttc import (
     DIAGNOSTIC_TTC_THRESHOLD_S,
+    NearMissEncounterRecord,
+    NearMissEncounterSummary,
+    NearMissThresholdProfile,
     NearMissTtcInputError,
+    build_near_miss_encounter_decision_packet,
     build_ttc_near_miss_decision_packet,
+    compute_near_miss_encounters,
     compute_ttc_near_miss_diagnostic,
     near_miss_ttc_input_readiness,
     render_ttc_near_miss_decision_packet_markdown,
@@ -385,3 +390,209 @@ def test_decision_packet_json_safe_dict_handles_numpy_scalars():
     assert payload["diagnostic"]["numpy_float"] == 1.25
     assert payload["diagnostic"]["numpy_int"] == 3
     assert payload["diagnostic"]["bool_flag"] is True
+
+
+# --- Encounter-level aggregation tests (issue #6709) --------------------------
+
+
+def test_encounter_threshold_profile_factories_and_validation():
+    """Threshold profiles create versioned identities and validate invalid inputs."""
+    ttc_prof = NearMissThresholdProfile.ttc_v1(ttc_threshold_s=1.5, max_gap_steps=2)
+    assert ttc_prof.profile_id == "ttc_diagnostic_v1"
+    assert ttc_prof.mode == "ttc"
+    assert ttc_prof.ttc_threshold_s == 1.5
+    assert ttc_prof.max_gap_steps == 2
+
+    dist_prof = NearMissThresholdProfile.distance_v1(distance_threshold_m=0.8)
+    assert dist_prof.profile_id == "distance_d_near_v1"
+    assert dist_prof.mode == "distance"
+    assert dist_prof.distance_threshold_m == 0.8
+
+    comb_prof = NearMissThresholdProfile.combined_v1(distance_threshold_m=0.8, ttc_threshold_s=1.5)
+    assert comb_prof.profile_id == "combined_diagnostic_v1"
+    assert comb_prof.mode == "combined"
+
+    with pytest.raises(ValueError, match="profile_id must be a non-empty string"):
+        NearMissThresholdProfile(profile_id="")
+
+    with pytest.raises(ValueError, match="mode must be one of"):
+        NearMissThresholdProfile(profile_id="invalid", mode="unknown")
+
+    with pytest.raises(ValueError, match="ttc_threshold_s must be finite and positive"):
+        NearMissThresholdProfile.ttc_v1(ttc_threshold_s=-1.0)
+
+
+def test_encounter_aggregation_fast_head_on_episode():
+    """Fast head-on approach groups contiguous timesteps into an encounter record."""
+    n = 6
+    robot_pos = np.zeros((n, 2))
+    robot_pos[:, 0] = np.arange(n) * 0.5  # 0.0 .. 2.5 m
+    peds_pos = np.zeros((n, 1, 2))
+    peds_pos[:, 0, 0] = 10.0 - np.arange(n) * 0.5  # 10.0 .. 7.5 m, closing speed ~10 m/s
+
+    data = _make_episode(robot_pos, peds_pos)
+    profile = NearMissThresholdProfile.ttc_v1(ttc_threshold_s=1.0)
+    summary = compute_near_miss_encounters(data, profile=profile)
+
+    assert isinstance(summary, NearMissEncounterSummary)
+    assert summary.status == "ok"
+    assert summary.evidence_status == "diagnostic-only"
+    assert summary.total_encounters > 0
+    assert summary.encounters_by_actor[0] == summary.total_encounters
+
+    record = summary.records[0]
+    assert isinstance(record, NearMissEncounterRecord)
+    assert record.actor_id == 0
+    assert record.start_step >= 0
+    assert record.end_step >= record.start_step
+    assert record.duration_steps == record.end_step - record.start_step + 1
+    assert np.isclose(record.duration_s, record.duration_steps * data.dt)
+    assert np.isfinite(record.min_clearance_m)
+    assert np.isfinite(record.min_ttc_s)
+    assert record.min_ttc_s < 1.0
+    assert record.max_closing_speed_mps > 5.0
+    assert record.contact_terminated is False
+    assert record.threshold_profile_id == "ttc_diagnostic_v1"
+    assert np.isnan(record.pet_s)
+
+
+def test_encounter_aggregation_opening_episode():
+    """Opening episode produces zero encounter records."""
+    data = _slow_opening_episode()
+    summary = compute_near_miss_encounters(
+        data, profile=NearMissThresholdProfile.ttc_v1(ttc_threshold_s=2.0)
+    )
+
+    assert summary.status == "no-encounters"
+    assert summary.total_encounters == 0
+    assert summary.records == ()
+    assert summary.encounters_by_actor == {0: 0}
+    assert np.isnan(summary.min_encounter_clearance_m)
+    assert np.isnan(summary.min_encounter_ttc_s)
+
+
+def test_encounter_aggregation_multiple_actors_independent():
+    """Encounters are segmented independently per actor without cross-actor merging."""
+    n = 6
+    robot_pos = np.zeros((n, 2))
+    peds_pos = np.zeros((n, 2, 2))
+
+    # Actor 0: close to robot (clearance 0.2 m) at steps 1..2
+    peds_pos[:, 0, 0] = 5.0
+    peds_pos[1:3, 0, 0] = 1.6  # surface clearance 1.6 - 1.4 = 0.2 m
+
+    # Actor 1: close to robot (clearance 0.2 m) at steps 3..4
+    peds_pos[:, 1, 0] = 10.0
+    peds_pos[3:5, 1, 0] = 1.6
+
+    data = _make_episode(robot_pos, peds_pos)
+    profile = NearMissThresholdProfile.distance_v1(distance_threshold_m=0.5)
+    summary = compute_near_miss_encounters(data, profile=profile)
+
+    assert summary.status == "ok"
+    assert summary.total_encounters == 2
+    assert summary.encounters_by_actor == {0: 1, 1: 1}
+
+    rec0 = summary.records[0]
+    rec1 = summary.records[1]
+
+    assert rec0.actor_id == 0
+    assert rec0.start_step == 1 and rec0.end_step == 2
+
+    assert rec1.actor_id == 1
+    assert rec1.start_step == 3 and rec1.end_step == 4
+
+
+def test_encounter_aggregation_max_gap_steps_splits_or_merges():
+    """Gaps beyond max_gap_steps split encounters; within max_gap_steps merge them."""
+    n = 8
+    robot_pos = np.zeros((n, 2))
+    peds_pos = np.zeros((n, 1, 2))
+
+    # Ped 0 close at step 1 and step 3, but gap at step 2
+    peds_pos[:, 0, 0] = 5.0
+    peds_pos[1, 0, 0] = 1.6
+    peds_pos[2, 0, 0] = 5.0  # gap
+    peds_pos[3, 0, 0] = 1.6
+
+    data = _make_episode(robot_pos, peds_pos)
+
+    # max_gap_steps = 0 -> split into 2 encounters
+    summary_split = compute_near_miss_encounters(
+        data,
+        profile=NearMissThresholdProfile.distance_v1(distance_threshold_m=0.5, max_gap_steps=0),
+    )
+    assert summary_split.total_encounters == 2
+
+    # max_gap_steps = 1 -> merge into 1 encounter (steps 1..3)
+    summary_merged = compute_near_miss_encounters(
+        data,
+        profile=NearMissThresholdProfile.distance_v1(distance_threshold_m=0.5, max_gap_steps=1),
+    )
+    assert summary_merged.total_encounters == 1
+    assert summary_merged.records[0].start_step == 1
+    assert summary_merged.records[0].end_step == 3
+
+
+def test_encounter_aggregation_contact_termination():
+    """Contact (clearance < contact_threshold) terminates the encounter with contact_terminated=True."""
+    n = 6
+    robot_pos = np.zeros((n, 2))
+    peds_pos = np.zeros((n, 1, 2))
+
+    # Steps 1..2: near miss (clearance 0.2 m). Step 3: contact (center 1.0 m -> clearance -0.4 m)
+    peds_pos[:, 0, 0] = 5.0
+    peds_pos[1:3, 0, 0] = 1.6
+    peds_pos[3, 0, 0] = 1.0  # body overlap
+
+    data = _make_episode(robot_pos, peds_pos)
+    profile = NearMissThresholdProfile.distance_v1(distance_threshold_m=0.5, max_gap_steps=0)
+    summary = compute_near_miss_encounters(data, profile=profile)
+
+    assert summary.status == "ok"
+    assert summary.total_encounters == 1
+    rec = summary.records[0]
+    assert rec.start_step == 1
+    assert rec.end_step == 3
+    assert rec.contact_terminated is True
+    assert summary.contact_terminated_encounters == 1
+
+
+def test_encounter_aggregation_fails_closed_on_invalid_dt():
+    """Invalid timing (dt) causes encounter aggregation to return unsupported-inputs."""
+    data = _fast_head_on_episode()
+    data.dt = 0.0
+    summary = compute_near_miss_encounters(data)
+
+    assert summary.status == "unsupported-inputs"
+    assert summary.total_encounters == 0
+    assert summary.records == ()
+    assert summary.readiness.ready is False
+    assert any("dt" in reason for reason in summary.unsupported_reasons)
+
+
+def test_encounter_aggregation_no_pedestrians():
+    """Zero pedestrians yields no-pedestrians summary."""
+    robot_pos = np.zeros((4, 2))
+    peds_pos = np.zeros((4, 0, 2))
+    data = _make_episode(robot_pos, peds_pos)
+    summary = compute_near_miss_encounters(data)
+
+    assert summary.status == "no-pedestrians"
+    assert summary.total_encounters == 0
+    assert summary.records == ()
+    assert summary.readiness.ready is True
+
+
+def test_encounter_decision_packet_and_json_serialization():
+    """Decision packet and summary payloads produce valid strict JSON."""
+    data = _fast_head_on_episode()
+    packet = build_near_miss_encounter_decision_packet(data)
+
+    assert packet["issue"] == "#6709"
+    assert packet["evidence_status"] == "diagnostic-only"
+    assert packet["diagnostic_status"] == "ok"
+
+    # Serializes to valid JSON without error or NaN
+    payload_str = json.dumps(packet, allow_nan=False)
+    assert "enc_actor0_0" in payload_str

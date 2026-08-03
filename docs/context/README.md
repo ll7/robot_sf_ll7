@@ -119,6 +119,8 @@ knowledge, not every transient iteration detail.
   [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md)
 * Issue #5579 MPC tuning-budget sensitivity packet:
   [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md)
+* Issue #6641 Gate 1 runtime radius-binding canary:
+  [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 

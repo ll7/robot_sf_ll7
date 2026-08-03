@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+Issue #6641 Gate 1 runtime radius-binding canary for the #6600 collision-envelope campaign:
+prove a declared `robot_config.radius` propagates consistently to simulator collision geometry,
+obstacle/pedestrian contact logic, feasibility/oracle, metric metadata and output rows, and
+planner inputs, with a fail-closed machine-readable go/no-go verdict per binding surface
+(`radius_binding_canary.v1`):
+[issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
+
 Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
 upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the
 only permissible route is clean-room reimplementation (no upstream code copied, vendored, or

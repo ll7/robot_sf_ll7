@@ -568,6 +568,15 @@ class OccupancyGrid:
                 raise TypeError(
                     "pedestrians tuple must contain (np.ndarray positions, np.ndarray radii)"
                 )
+            if positions.ndim != 2 or positions.shape[1] != 2:
+                raise ValueError(
+                    f"pedestrians positions must have shape (N, 2), got {positions.shape}"
+                )
+            if radii.ndim != 1 or radii.shape[0] != positions.shape[0]:
+                raise ValueError(
+                    "pedestrians radii must have shape (N,) matching positions, "
+                    f"got {radii.shape} for {positions.shape}"
+                )
         elif not isinstance(pedestrians, list):
             logger.error("Invalid pedestrians type: {}, expected list", type(pedestrians).__name__)
             raise TypeError(f"pedestrians must be list, got {type(pedestrians)}")

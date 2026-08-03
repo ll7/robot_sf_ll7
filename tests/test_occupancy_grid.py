@@ -19,6 +19,8 @@ Success Criteria:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 from shapely.geometry import Polygon as _ShapelyPolygon
@@ -851,6 +853,18 @@ class TestVectorizedParity:
             err_msg="Array pedestrians in generate() must match list pedestrians",
         )
 
+    def test_generate_rejects_mismatched_array_pedestrians(self):
+        """Array positions and radii must describe the same pedestrian population."""
+        config = GridConfig(channels=[GridChannel.PEDESTRIANS])
+        grid = OccupancyGrid(config=config)
+
+        with pytest.raises(ValueError, match="matching positions"):
+            grid.generate(
+                obstacles=[],
+                pedestrians=(np.zeros((2, 2)), np.ones(1)),
+                robot_pose=((0.0, 0.0), 0.0),
+            )
+
     def test_get_affected_cells_returns_numpy_arrays(self):
         """get_affected_cells returns (row_indices, col_indices) NumPy arrays."""
         from robot_sf.nav.occupancy_grid_utils import get_affected_cells
@@ -863,6 +877,24 @@ class TestVectorizedParity:
         assert cols.dtype == np.intp
         assert len(rows) == len(cols)
         assert len(rows) == 36
+
+    def test_get_affected_cells_returns_empty_for_degenerate_bounds(self):
+        """Degenerate grid bounds should produce empty integer arrays."""
+        from robot_sf.nav.occupancy_grid_utils import get_affected_cells
+
+        config = SimpleNamespace(
+            resolution=0.1,
+            width=1.0,
+            height=1.0,
+            grid_width=10,
+            grid_height=0,
+        )
+        rows, cols = get_affected_cells(0.5, 0.5, 0.3, config)
+
+        assert rows.size == 0
+        assert cols.size == 0
+        assert rows.dtype == np.intp
+        assert cols.dtype == np.intp
 
     def test_free_space_sampling_vectorized_rejects_obstacles(self):
         """Vectorized free-space sampling still rejects obstacle-intersecting points."""

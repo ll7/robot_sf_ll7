@@ -1,0 +1,105 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "failure_diagnosis_reference.v1",
+  "fixture_id": "issue-6646-deterministic-diagnosis-quality",
+  "fixture_version": 1,
+  "review": {
+    "status": "reviewed",
+    "reviewer": "robot_sf_fixture_review",
+    "adjudication_status": "adjudicated",
+    "independent_of_automated_diagnosis": true
+  },
+  "provenance": {
+    "status": "complete",
+    "source_trace_uri": "fixture://issue-6646/reviewed-reference-v1",
+    "created_independently_of_automated_diagnosis": true,
+    "creation_note": "Hand-authored labels and trace pointers are versioned before comparison."
+  },
+  "records": [
+    {
+      "case_id": "collision_case",
+      "detected": true,
+      "onset_interval_s": [1.0, 1.5],
+      "failure_type": "collision",
+      "severity": "critical",
+      "source_trace": {
+        "trace_id": "fixture-trace-collision",
+        "predicate_id": "collision",
+        "time_interval_s": [1.0, 1.5],
+        "steps": [10, 15],
+        "evidence_fields": {"event": "contact"}
+      }
+    },
+    {
+      "case_id": "near_miss_case",
+      "detected": true,
+      "onset_interval_s": [2.5, 3.5],
+      "failure_type": "near_miss",
+      "severity": "major",
+      "source_trace": {
+        "trace_id": "fixture-trace-near-miss",
+        "predicate_id": "clearance_critical_interaction",
+        "time_interval_s": [2.5, 3.5],
+        "steps": [25, 35],
+        "evidence_fields": {"distance_m": 0.35}
+      }
+    },
+    {
+      "case_id": "low_progress_case",
+      "detected": true,
+      "onset_interval_s": [4.0, 6.0],
+      "failure_type": "timeout_without_progress",
+      "severity": "major",
+      "source_trace": {
+        "trace_id": "fixture-trace-low-progress",
+        "predicate_id": "low_progress",
+        "time_interval_s": [4.0, 6.0],
+        "steps": [40, 60],
+        "evidence_fields": {"progress_m": 0.02}
+      }
+    },
+    {
+      "case_id": "oscillation_case",
+      "detected": true,
+      "onset_interval_s": [7.0, 8.0],
+      "failure_type": "unknown",
+      "severity": "major",
+      "source_trace": {
+        "trace_id": "fixture-trace-oscillation",
+        "predicate_id": "oscillatory_local_control",
+        "time_interval_s": [7.0, 8.0],
+        "steps": [70, 80],
+        "evidence_fields": {"direction_reversals": 4}
+      }
+    },
+    {
+      "case_id": "no_failure_case",
+      "detected": false,
+      "onset_interval_s": null,
+      "failure_type": "unknown",
+      "severity": "unknown",
+      "source_trace": {
+        "trace_id": "fixture-trace-clean",
+        "predicate_id": "no_failure_observed",
+        "time_interval_s": [null, null],
+        "steps": [null, null],
+        "evidence_fields": {"outcome": "success"}
+      }
+    },
+    {
+      "case_id": "unavailable_case",
+      "status": "unavailable",
+      "detected": "unavailable",
+      "onset_interval_s": null,
+      "failure_type": "unavailable",
+      "severity": "unavailable",
+      "source_trace": {
+        "trace_id": "fixture-trace-unavailable",
+        "predicate_id": "collision",
+        "time_interval_s": [null, null],
+        "steps": [null, null],
+        "evidence_fields": {"availability": "missing"}
+      }
+    }
+  ]
+}

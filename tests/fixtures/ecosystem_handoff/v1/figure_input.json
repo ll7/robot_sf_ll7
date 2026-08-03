@@ -1,0 +1,18 @@
+{
+  "claim_boundary": "conformance-only; not a scientific figure",
+  "fixture_id": "robot_sf.ecosystem_handoff.v1",
+  "schema_version": "robot_sf_ecosystem_figure_input.v1",
+  "series": [
+    {
+      "points": [
+        {
+          "collisions": 0,
+          "episode_id": "ecosystem-handoff-v1-episode-0001",
+          "steps": 4,
+          "success": 1.0
+        }
+      ],
+      "series_id": "fixture_conformance"
+    }
+  ]
+}

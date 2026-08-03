@@ -1,0 +1,56 @@
+{
+  "config": {
+    "clock": "2026-01-01T00:00:00Z",
+    "execution_mode": "conformance",
+    "fixture_id": "robot_sf.ecosystem_handoff.v1",
+    "fixture_version": "1.0.0",
+    "scenario_id": "conformance.minimal_success",
+    "seed": 271828,
+    "sha256": "8be75a0e6f13356a"
+  },
+  "contract": {
+    "digest": "3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+    "path": "robot_sf/benchmark/contracts/robot_sf_ecosystem_contract.v1.json",
+    "schema_version": "robot_sf_ecosystem_contract.v1",
+    "version": "1.0.0"
+  },
+  "evidence": {
+    "admissible": false,
+    "claim_boundary": "Conformance material only; it supports no planner, safety, dissertation, or benchmark claim.",
+    "class": "diagnostic"
+  },
+  "expected_consumer_assertions": [
+    "contract_version_and_digest_match",
+    "positive_episode_schema_and_provenance_validate",
+    "fallback_and_degraded_rows_are_not_admissible_success",
+    "artifact_manifest_and_sha256sums_verify",
+    "table_and_figure_inputs_are_derived_from_episode_rows"
+  ],
+  "fixture_id": "robot_sf.ecosystem_handoff.v1",
+  "fixture_version": "2.0.0",
+  "negative_variants": [
+    "checksum_mismatch",
+    "missing_provenance",
+    "unsupported_major_version",
+    "fallback_or_degraded_success",
+    "duplicate_artifact_identity"
+  ],
+  "payload": {
+    "artifact_manifest": "artifact_manifest.json",
+    "checksums": "SHA256SUMS",
+    "contract_reference": "contract_reference.json",
+    "episodes": "episodes.jsonl",
+    "figure": "figure_input.json",
+    "provenance": "episodes.jsonl.provenance.json",
+    "schema": "episode.schema.v1.json",
+    "table": "table_input.csv"
+  },
+  "producer": {
+    "repository_url": "https://github.com/ll7/robot_sf_ll7",
+    "source_identity": {
+      "contract_digest": "3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+      "kind": "digest_bound_contract"
+    }
+  },
+  "schema_version": "robot_sf_ecosystem_handoff_fixture.v2"
+}

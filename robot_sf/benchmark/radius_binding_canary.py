@@ -829,7 +829,7 @@ def probe_feasibility_oracle(
             "Rollout completion is stubbed for determinism; the radius binding is "
             "proven through the oracle's geometric (certifier) margin."
             if config_ok
-            else "selected radius does not match the effective scenario configuration",
+            else "selected radius does not match the effective scenario configuration"
         ),
     )
 

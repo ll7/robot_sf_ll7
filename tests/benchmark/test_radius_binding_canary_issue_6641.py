@@ -167,6 +167,7 @@ def test_feasibility_oracle_probe_requires_real_scenario(scenario_geometry) -> N
     )
     assert verdict.surface == SURFACE_FEASIBILITY_ORACLE
     assert verdict.status == "pass"
+    assert isinstance(verdict.note, str)
     expected_delta = abs(radius_b - radius_a)
     observed_delta = abs(verdict.evidence["clearance_delta_m"])
     assert abs(observed_delta - expected_delta) <= max(5e-3, expected_delta * 1e-6)

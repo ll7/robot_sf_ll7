@@ -1,0 +1,160 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_6474_social_compliance_preregistration.v1",
+  "issue": 6474,
+  "child_issue": 6638,
+  "title": "Nominal social-compliance cross-planner campaign preregistration for issue #6474",
+  "status": "preregistration_only",
+  "evidence_status": "not_benchmark_evidence",
+  "evidence_tier": "nominal_benchmark_evidence_candidate",
+  "evidence_tier_note": "Nominal benchmark evidence candidate ONLY, and only contingent on full, complete, native-or-declared-adapter campaign completion with declared provenance. This preregistration alone is not benchmark evidence and supports no claim until the full campaign completes under its own execution gate.",
+  "approval": {
+    "required": true,
+    "source": "issue #6474 body (Domain-Aware Approval)",
+    "status": "approved",
+    "date": "2026-08-02",
+    "scope": "Approval gates the preregistration design (config and script changes). Production execution is separately gated via SLURM submission under a follow-up child issue.",
+    "next_gate": "Freeze the exact manifest, aggregation version, multiplicity family, and stop rules before any SLURM submission. This preregistration satisfies that Next gate.",
+    "validity": "Config/script changes only; no execution output is committed and no SLURM job is submitted by this preregistration."
+  },
+  "provenance": {
+    "freeze_commit": "abd35c7f470c989d49898bb480bfbbefccc98818",
+    "base_origin_main": "1cf0973bf3c0737be7217f583ac28260c7c91c15",
+    "campaign_config": "configs/benchmarks/issue_6474_social_compliance_nominal_campaign.yaml",
+    "config_sha256": "fed85cef7ac43817d0aa47a3ac10f9e7f4b50b4be6410e796fdf3d837e69811e",
+    "scenario_matrix": "configs/scenarios/issue_6474_social_compliance_nominal.yaml",
+    "scenario_matrix_sha256": "8c87eac284b51108d992521b1cdbef3edc28d13a3e0c5c34933a76f076ce3d6f",
+    "scenario_content_sha256": "b9edec86c0c94650ab3e22b0a2404c9d006a65ed8f22545007f13eecb07cdbee",
+    "scenario_content_hash_method": "SHA-256 over the six selected scenario payloads serialized as canonical JSON (sort_keys=True, separators=(',',':')) in the frozen #6102 DECLARED_SCENARIOS order, loaded from configs/scenarios/classic_interactions.yaml.",
+    "metric_contract": "configs/benchmarks/social_compliance_metric_contract_v1.yaml",
+    "metric_contract_schema_version": "social-compliance-metric-contract.v1",
+    "aggregation_version": "robot_sf.benchmark.aggregate social-compliance flatten/group path keyed to social-compliance-metric-contract.v1 (per-episode reducers: mean, median, p95, max; campaign reducers: mean, median, bootstrap_ci95)",
+    "analysis_script": "scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py",
+    "analysis_script_status": "preregistration stub: declares estimands only; does not execute the campaign"
+  },
+  "design": {
+    "planners": ["goal", "social_force", "orca"],
+    "planner_execution_modes": {
+      "goal": "native",
+      "social_force": "adapter",
+      "orca": "adapter"
+    },
+    "planner_execution_mode_note": "goal runs natively; social_force and orca are velocity-vector planners that execute through declared benchmark-capable compatibility adapters (NATIVE_EXECUTION_MODES = {native, adapter}). Every row's mode must be recorded.",
+    "planner_pairs": [
+      ["goal", "social_force"],
+      ["goal", "orca"],
+      ["social_force", "orca"]
+    ],
+    "seeds": [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140],
+    "seed_policy": {
+      "mode": "fixed-list",
+      "seeds": [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140],
+      "count": 30,
+      "pairing": "Paired seeds matched across planners within each seed; bootstrap resamples whole paired seed blocks."
+    },
+    "scenarios": [
+      "classic_head_on_corridor_medium",
+      "classic_doorway_medium",
+      "classic_group_crossing_medium",
+      "classic_merging_medium",
+      "classic_overtaking_medium",
+      "classic_station_platform_medium"
+    ],
+    "scenario_families": [
+      "head_on_corridor",
+      "doorway",
+      "group_crossing",
+      "merging",
+      "overtaking",
+      "station_platform"
+    ],
+    "scenario_source": "Six frozen #6102 medium-band scenario identifiers copied verbatim from configs/scenarios/classic_interactions.yaml (the registered #6102 robot speed-tier campaign scenario source).",
+    "metric_families": [
+      "comfort_exposure",
+      "distributional_inconvenience",
+      "flow_disruption",
+      "legibility_progress",
+      "pedestrian_deviation"
+    ],
+    "metric_direction": "lower_is_better",
+    "horizon_steps": 250,
+    "dt_seconds": 0.1,
+    "horizon_dt_note": "Matches the #6481 preflight smoke so the social-compliance emission path exercised here is the same one already proven to survive a native/adapter cross-planner run.",
+    "kinematics": ["differential_drive"],
+    "expected_cell_count": 540,
+    "coverage_formula": "6 scenarios x 3 planners x 30 seeds = 540 unique cells",
+    "export_publication_bundle": false,
+    "paper_facing": false
+  },
+  "estimands": {
+    "primary": "paired_mean_difference_per_episode",
+    "scope": "By metric family and scenario family; declared per planner pair.",
+    "definition": "For each planner pair and metric family, the mean over episodes of the per-episode difference between the two planners' metric-family values, paired by seed and restricted to rows where the metric family is available for both planners in the pair.",
+    "resampling_unit": "paired_seed_block",
+    "bootstrap_replicates": 2000,
+    "bootstrap_confidence": 0.95,
+    "bootstrap_seed": 123,
+    "ci_method": "paired_bootstrap_percentile_ci95",
+    "support_and_denominators": "Support counts and the contract denominator are declared beside every mean, median, percentile, or distributional statistic. Unavailable samples are excluded from numeric reducers, never zero-imputed."
+  },
+  "multiplicity": {
+    "family": "holm_bonferroni",
+    "scope": "planner-pair-by-metric-family decisions",
+    "num_decisions": 15,
+    "decision_count_formula": "3 planner pairs x 5 metric families = 15",
+    "familywise_alpha": 0.05,
+    "rule": "Stepwise Holm-Bonferroni adjusted p-values across the 15 exposed planner-pair-by-metric-family decisions. No unapproved composite social-compliance ranking is produced."
+  },
+  "claim_boundary": {
+    "target_claim": "Estimate within-simulator planner-pair differences for the versioned social-compliance metric families (comfort_exposure and any other available families).",
+    "comparators": "goal (native), social_force (adapter), orca (adapter).",
+    "forbidden_claims": [
+      "No universal planner superiority or universal-ranking claim.",
+      "No fairness, deployment-ethics, or welfare claim.",
+      "No legibility or social-validity claim.",
+      "No safety, physical-severity, or real-world claim.",
+      "No composite social-compliance ranking beyond the declared per-estimand paired differences.",
+      "No claim beyond the simulator-defined, versioned social-compliance metric families."
+    ],
+    "evidence_ceiling": "Nominal benchmark evidence only for simulator-defined metrics, contingent on full campaign completion."
+  },
+  "interpretation_boundary": {
+    "scope": "Within-simulator, six-scenario, three-planner, paired-seed comparison only.",
+    "external_validity": "None. Results do not generalize to other scenarios, planners, seeds, simulators, or real-world deployment.",
+    "metric_class": "diagnostic_proxy social-compliance metrics; simulation-only proxies for robot influence on pedestrians.",
+    "ranking_note": "Descriptive per-estimand paired differences only; not a planner ranking."
+  },
+  "exclusions": {
+    "rule": "Fallback, degraded, missing, invalid, or unsupported rows are EXCLUDED from numeric reducers and reported with their status and reason. They are never zero-imputed and never counted as successful evidence.",
+    "execution_mode_policy": "Only native and declared benchmark-capable adapter rows are eligible. Fallback or degraded execution is recorded as unavailable and cannot count as success evidence."
+  },
+  "stop_rules": [
+    "Stop before execution on planner, scenario, row-count, or schema mismatch against the frozen design.",
+    "Stop with a blocked/partial classification if any row uses fallback or degraded execution, or if required provenance (config SHA, scenario hash, execution mode) is absent.",
+    "Exclude (do not zero-impute) fallback, degraded, missing, or invalid rows; report their status and support denominator explicitly.",
+    "Stop promotion of an estimand whose support is insufficient to compute the declared paired effect and bootstrap CI95, and report the insufficient-support reason.",
+    "No fairness, deployment-ethics, legibility, social-validity, safety, welfare, real-world, universal-ranking, or composite-score claim may be made from this campaign.",
+    "Stop and record a blocker if the frozen manifest, aggregation version, multiplicity family, or stop rules drift after execution begins; no dimension, threshold, or preregistration clause may be changed after registered execution begins.",
+    "Treat the result as diagnostic/blocked rather than benchmark-success evidence if the full 540-cell native-or-adapter matrix is not complete with declared provenance."
+  ],
+  "execution_gating": {
+    "production_execution": "Separately gated via a follow-up SLURM child issue created after this preregistration is merged.",
+    "slurm_job_submitted": false,
+    "output_committed": false,
+    "authorization_note": "Production execution requires its own authorization gate; this preregistration does not authorize any SLURM submission."
+  },
+  "related_issues": {
+    "parent": 6474,
+    "this_child": 6638,
+    "closed_preflight_child": 6481,
+    "metric_contract": 3061,
+    "scenario_source": 6102,
+    "follow_up_slurm_child": "to be created after this preregistration is merged"
+  },
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check",
+    "uv run pytest tests/benchmark/test_social_compliance_metrics.py tests/benchmark/test_social_compliance_preflight_smoke.py tests/benchmark/test_social_compliance_metric_contract.py -q",
+    "DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python -m robot_sf.benchmark.cli validate-config --matrix configs/scenarios/issue_6474_social_compliance_nominal.yaml"
+  ]
+}

@@ -34,11 +34,18 @@ def test_ratchet_step_is_a_blocking_gate() -> None:
 def test_ratchet_step_propagates_check_exit_code() -> None:
     """A piped ``--check`` invocation must not mask the ratchet exit code."""
     run_lines = [line.strip() for line in _ratchet_step()["run"].splitlines() if line.strip()]
-    for index, line in enumerate(run_lines):
-        if "evidence_registry_ratchet.py --check" not in line or "|" not in line:
-            continue
-        assert any(earlier == "set -o pipefail" for earlier in run_lines[:index]), (
-            "the piped --check invocation must run after `set -o pipefail`; otherwise "
-            "the log pipe swallows the ratchet's non-zero exit code and the gate "
-            "reports success while FAILED (issue #6740)"
-        )
+    piped_check_indices = [
+        index
+        for index, line in enumerate(run_lines)
+        if "evidence_registry_ratchet.py --check" in line and "|" in line
+    ]
+    assert len(piped_check_indices) == 1, (
+        "the ratchet step must contain exactly one piped `--check` invocation so the "
+        "fail-closed exit-code contract is exercised"
+    )
+    index = piped_check_indices[0]
+    assert any(earlier == "set -o pipefail" for earlier in run_lines[:index]), (
+        "the piped --check invocation must run after `set -o pipefail`; otherwise "
+        "the log pipe swallows the ratchet's non-zero exit code and the gate "
+        "reports success while FAILED (issue #6740)"
+    )

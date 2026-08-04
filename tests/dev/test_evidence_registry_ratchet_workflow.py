@@ -15,16 +15,26 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/evidence-registry-ratchet.yml"
 
 
-def _ratchet_step() -> dict:
+def _ratchet_job() -> dict:
+    """Return the evidence-registry ratchet job from the workflow definition."""
     workflow = yaml.load(WORKFLOW_PATH.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
-    for step in workflow["jobs"]["evidence-registry-ratchet"]["steps"]:
+    return workflow["jobs"]["evidence-registry-ratchet"]
+
+
+def _ratchet_step() -> dict:
+    """Return the blocking ratchet step from the workflow definition."""
+    for step in _ratchet_job()["steps"]:
         if step.get("id") == "ratchet":
             return step
     raise AssertionError("evidence-registry-ratchet.yml has no step with id 'ratchet'")
 
 
 def test_ratchet_step_is_a_blocking_gate() -> None:
-    """The PR ratchet gate must stay blocking, not advisory."""
+    """The PR ratchet job and step must stay blocking, not advisory."""
+    job = _ratchet_job()
+    assert job.get("continue-on-error") in (None, "false"), (
+        "the evidence-registry ratchet job must fail the check on net-new findings"
+    )
     step = _ratchet_step()
     assert step.get("continue-on-error") in (None, "false"), (
         "the evidence-registry ratchet step must fail the job on net-new findings"

@@ -51,6 +51,17 @@ def test_backend_exports_resolve_on_pre_change_paths(name: str) -> None:
     assert module.__name__ == f"robot_sf.sim.backends.{name}"
 
 
+@pytest.mark.parametrize("name", BACKENDS_FACADE_ALL)
+def test_backends_lazy_resolver_returns_the_submodule(name: str) -> None:
+    """The lazy resolver returns the backend submodule on demand.
+
+    Calls the resolver directly so the branch stays covered even when other
+    test modules already imported the submodule and bound the attribute.
+    """
+    resolved = backends_facade.__getattr__(name)
+    assert resolved is importlib.import_module(f"robot_sf.sim.backends.{name}")
+
+
 def test_dummy_backend_declares_its_factory_surface() -> None:
     """dummy_backend exports DummySimulator and dummy_factory unchanged."""
     dummy_backend = importlib.import_module("robot_sf.sim.backends.dummy_backend")

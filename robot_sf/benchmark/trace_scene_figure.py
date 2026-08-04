@@ -883,7 +883,12 @@ def _scene_label_priority(text: str) -> int:
 
     if text.startswith("t="):
         return 2 if "(stopped)" in text else 4
-    if text.startswith("ped ") or "distant pedestrians" in text:
+    if "distant pedestrians" in text:
+        # Keep the compact filtered-count note anchored before pedestrian labels are
+        # displaced; otherwise a long note can move into the label it was meant to
+        # avoid in a narrow comparison panel.
+        return 1
+    if text.startswith("ped "):
         return 3
     if text.endswith(" m") and not text.startswith("d_min"):
         return 3
@@ -1232,8 +1237,6 @@ def _select_label_position(
     candidate_offsets: Sequence[tuple[float, float]],
     axes_bbox: Bbox,
     obstacles: _PlacementObstacles,
-    *,
-    avoid_obstacles: bool,
 ) -> tuple[float, float, Bbox]:
     """Pick the best display-space shift for one label.
 
@@ -1251,15 +1254,12 @@ def _select_label_position(
         text_overlap = sum(_bbox_overlap_area(bbox, placed) for placed in obstacles.placed_bboxes)
         marker_hits = 0
         line_hits = 0
-        if avoid_obstacles:
-            # Markers draw above data lines and can sit under a label, so they get
-            # their own cost tier: worse than a line crossing, but never worth
-            # trading for a label-on-label overlap (the one hard defect class).
-            if _bbox_contains_markers(bbox, obstacles.marker_obstacles, _LABEL_MARKER_PADDING_PX):
-                marker_hits = 1
-            line_hits = _count_bbox_line_hits(
-                bbox, obstacles.line_obstacles, obstacles.leader_segments
-            )
+        # Markers draw above data lines and can sit under a label, so they get
+        # their own cost tier: worse than a line crossing, but never worth
+        # trading for a label-on-label overlap (the one hard defect class).
+        if _bbox_contains_markers(bbox, obstacles.marker_obstacles, _LABEL_MARKER_PADDING_PX):
+            marker_hits = 1
+        line_hits = _count_bbox_line_hits(bbox, obstacles.line_obstacles, obstacles.leader_segments)
         leader_crossings = 0
         if math.hypot(shift_x, shift_y) >= _LABEL_LEADER_THRESHOLD_PX:
             final_center = (bbox.x0 + bbox.width / 2, bbox.y0 + bbox.height / 2)
@@ -1316,17 +1316,17 @@ def _add_label_leader(
     original_data = data_from_display(original_center)
     leader_end_data = data_from_display(leader_end)
     leader_segments.append((original_center, leader_end))
-    ax.add_line(
-        Line2D(
-            [original_data[0], leader_end_data[0]],
-            [original_data[1], leader_end_data[1]],
-            color=GRAY,
-            linewidth=0.45,
-            alpha=0.65,
-            zorder=6,
-            clip_on=True,
-        )
+    leader = Line2D(
+        [original_data[0], leader_end_data[0]],
+        [original_data[1], leader_end_data[1]],
+        color=GRAY,
+        linewidth=0.45,
+        alpha=0.65,
+        zorder=6,
+        clip_on=True,
     )
+    leader.set_gid("trace-scene-label-leader")
+    ax.add_line(leader)
 
 
 def _place_scene_annotations(ax: Axes) -> None:
@@ -1386,10 +1386,16 @@ def _place_scene_annotations(ax: Axes) -> None:
             candidate_offsets,
             axes_bbox,
             obstacles,
-            # Zone/corner captions stay anchored to the region they name: they only
-            # take part in label-on-label avoidance, not track/marker avoidance.
-            avoid_obstacles=text.get_gid() != _ZONE_LABEL_GID,
         )
+        if _scene_label_priority(text.get_text()) >= 2 and any(
+            _bboxes_collide(final_bbox, placed) for placed in placed_bboxes
+        ):
+            # Time and pedestrian labels are secondary to key-frame labels and the
+            # filtered-count note.  If the bounded escape search cannot place one
+            # without a hard text-text collision, omit the label and retain the
+            # underlying marker/track rather than emitting an unreadable overlap.
+            text.set_visible(False)
+            continue
         _move_text_in_display_space(text, shift_x, shift_y)
         placed_bboxes.append(final_bbox)
         if math.hypot(shift_x, shift_y) >= _LABEL_LEADER_THRESHOLD_PX:
@@ -1434,7 +1440,7 @@ def _draw_robot_time_markers(
         offset, horizontal_alignment, vertical_alignment = _marker_label_layout(
             marker_points, label_spec.marker_position
         )
-        ax.annotate(
+        label = ax.annotate(
             label_spec.text,
             (x, y),
             xytext=offset,
@@ -1444,6 +1450,7 @@ def _draw_robot_time_markers(
             ha=horizontal_alignment,
             va=vertical_alignment,
         )
+        label.set_gid("trace-scene-time-label")
     return label_specs
 
 
@@ -1547,12 +1554,12 @@ def _draw_obstacles(ax: Axes, map_definition: Any, limits: AxisLimits) -> None:
 
 
 def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tuple[float, float]]:
-    """Draw robot start/goal zones, returning the centers of drawn zone labels.
+    """Draw robot start/goal zones and return time-label suppression anchors.
 
     Returns:
-        Centers of the zone labels that were drawn.
+        Zone centers used only to suppress overlapping time-marker labels.
     """
-    drawn_label_centers: list[tuple[float, float]] = []
+    label_suppression_centers: list[tuple[float, float]] = []
     for zones, linestyle, label, marker_point in (
         (map_definition.robot_spawn_zones, "--", "start", episode.robot_xy[0]),
         (map_definition.robot_goal_zones, "-", "goal", episode.robot_xy[-1]),
@@ -1575,18 +1582,14 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
                 center_y = sum(point[1] for point in vertices) / len(vertices)
                 center = (center_x, center_y)
                 if math.dist(center, marker_point) > _ZONE_LABEL_SUPPRESSION_RADIUS_M:
-                    zone_text = ax.text(
-                        center_x,
-                        center_y,
-                        label,
-                        color=GRAY,
-                        fontsize=_fs(11),
-                        ha="center",
-                        va="center",
-                    )
-                    zone_text.set_gid(_ZONE_LABEL_GID)
-                    drawn_label_centers.append(center)
-    return drawn_label_centers
+                    # The key-frame annotations below already identify the robot's
+                    # start and terminal state.  A second label at the centre of a
+                    # small outlined zone is not legible: its glyph box intersects
+                    # the zone border and cannot be moved without losing the zone
+                    # association.  Retain the centre for conservative marker-label
+                    # suppression, but render only the outline here.
+                    label_suppression_centers.append(center)
+    return label_suppression_centers
 
 
 def _scale_bar_geometry(limits: AxisLimits, length: float, corner: str) -> tuple[float, float]:
@@ -1819,7 +1822,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
                 direction_y = label_anchor[1] - nearest_robot_label[1]
                 offset_x = 12 if direction_x >= 0 else -12
                 offset_y = 12 if direction_y >= 0 else -12
-        ax.annotate(
+        label = ax.annotate(
             f"ped {ped_id}",
             label_anchor,
             xytext=(offset_x, offset_y),
@@ -1829,6 +1832,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
             ha="left" if offset_x >= 0 else "right",
             va="bottom" if offset_y >= 0 else "top",
         )
+        label.set_gid("trace-scene-pedestrian-label")
 
     # No scale bar: the axes are labelled in metres with numeric ticks, so it is redundant.
     if pedestrian_selection.filtered_count:
@@ -1836,7 +1840,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
             0.02,
             0.02,
             f"{pedestrian_selection.filtered_count} distant pedestrians not drawn "
-            f"(>{pedestrian_selection.radius_m:g} m)",
+            f"\n(>{pedestrian_selection.radius_m:g} m)",
             transform=ax.transAxes,
             ha="left",
             va="bottom",
@@ -1896,7 +1900,7 @@ def _draw_timeline(
         f"collision envelope ({collision_envelope_m:g} m)",
         (0.99, collision_envelope_m),
         xycoords=ax.get_yaxis_transform(),
-        xytext=(0, 3),
+        xytext=(0, 12),
         textcoords="offset points",
         color=RED,
         alpha=0.7,
@@ -1905,6 +1909,7 @@ def _draw_timeline(
         va="bottom",
         zorder=4,
     )
+    envelope_label.set_gid("trace-scene-reference-label")
     envelope_label.set_path_effects(reference_label_halo)
     lower_y, upper_y = ax.get_ylim()
     if (
@@ -1928,7 +1933,7 @@ def _draw_timeline(
             "personal space",
             (0.0, comfort_distance_m),
             xycoords=ax.get_yaxis_transform(),
-            xytext=(4, -3) if below_line else (4, 3),
+            xytext=(4, -12) if below_line else (4, 12),
             textcoords="offset points",
             color=GRAY,
             alpha=0.7,
@@ -1937,6 +1942,7 @@ def _draw_timeline(
             va="top" if below_line else "bottom",
             zorder=4,
         )
+        comfort_label.set_gid("trace-scene-reference-label")
         comfort_label.set_path_effects(reference_label_halo)
     ax.set_xlabel("time (s)")
     # Print layouts wrap the y-label: the rotated one-line form is taller than the

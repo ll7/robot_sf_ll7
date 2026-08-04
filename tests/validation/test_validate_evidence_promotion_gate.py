@@ -149,3 +149,30 @@ def test_validate_all_ignores_non_directory_scan_roots(tmp_path: Path) -> None:
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload["validation_summary"]["total_validated"] == 0
+
+
+def test_output_json_writes_marked_file_and_keeps_stdout_unmarked(tmp_path: Path) -> None:
+    """--output-json routes through the shared writer while stdout keeps its schema."""
+    note = tmp_path / "note.md"
+    note.write_text(
+        "\n".join(
+            [
+                "# Smoke Evidence",
+                "",
+                "COMMAND: uv run python scripts/validation/example.py",
+                "COMMIT: 2072e083a6554cbc03638f0941e5c5c74317ef6c",
+                "SUMMARY JSON: output/summary.json",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_json = tmp_path / "validation_result.json"
+
+    result = run_validator("--context-note", str(note), "--output-json", str(output_json))
+
+    assert result.returncode == 0
+    stdout_payload = json.loads(result.stdout)
+    assert "review_marker" not in stdout_payload
+    file_payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert file_payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert file_payload == {"review_marker": "AI-GENERATED NEEDS-REVIEW", **stdout_payload}

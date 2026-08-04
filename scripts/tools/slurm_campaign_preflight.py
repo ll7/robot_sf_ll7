@@ -18,7 +18,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 SCHEMA_VERSION = "robot-sf-slurm-campaign-preflight.v1"
 PLACEHOLDER_RE = re.compile(r"<[^<>\s][^<>]*>")
 BRACE_PLACEHOLDER_RE = re.compile(r"\{[^{}\s][^{}]*\}")
@@ -137,41 +136,25 @@ def _validate_cell(cell: dict[str, Any], path: str, blockers: list[str]) -> str:
     return key
 
 
-def preflight(
+def _commit_identity(
     manifest: dict[str, Any],
     *,
-    manifest_path: Path,
-    canary_key: str = "",
-    expected_public_commit: str = "",
-    actual_public_commit: str = "",
-    public_repo: Path | None = None,
-    output_root: Path | None = None,
-) -> dict[str, Any]:
-    blockers: list[str] = []
-    blockers.extend(_placeholder_blockers(manifest))
-    campaign_id = str(manifest.get("campaign_id", "") or "").strip()
-    if not campaign_id:
-        blockers.append("campaign_id is missing")
-
+    expected_public_commit: str,
+    actual_public_commit: str,
+    public_repo: Path | None,
+    blockers: list[str],
+) -> tuple[str, str, str]:
     expected = (
-        expected_public_commit
-        or str(manifest.get("expected_public_commit", "") or "").strip()
+        expected_public_commit or str(manifest.get("expected_public_commit", "") or "").strip()
     )
     actual_source = "argument" if actual_public_commit else "manifest"
-    actual = (
-        actual_public_commit or str(manifest.get("public_commit", "") or "").strip()
-    )
+    actual = actual_public_commit or str(manifest.get("public_commit", "") or "").strip()
     if public_repo is not None:
         repository_actual = _repository_head(public_repo)
         actual_source = "repository"
         if not repository_actual:
-            blockers.append(
-                f"public repository HEAD could not be resolved: {public_repo}"
-            )
-        elif (
-            actual_public_commit
-            and actual_public_commit.lower() != repository_actual.lower()
-        ):
+            blockers.append(f"public repository HEAD could not be resolved: {public_repo}")
+        elif actual_public_commit and actual_public_commit.lower() != repository_actual.lower():
             blockers.append(
                 "actual public commit does not match the supplied public repository HEAD"
             )
@@ -192,17 +175,18 @@ def preflight(
         and expected.lower() != actual.lower()
     ):
         blockers.append(f"public commit mismatch: expected {expected}, actual {actual}")
+    return expected, actual, actual_source
 
+
+def _packet_identity(
+    manifest: dict[str, Any], *, manifest_path: Path, blockers: list[str]
+) -> tuple[str, Path | None, str]:
     packet = manifest.get("packet")
     if not isinstance(packet, dict):
         blockers.append("packet identity is missing")
         packet = {}
     config_value = str(packet.get("config", "") or "").strip()
-    config = (
-        _anchored_path(config_value, manifest_path.resolve().parent)
-        if config_value
-        else None
-    )
+    config = _anchored_path(config_value, manifest_path.resolve().parent) if config_value else None
     if not config_value:
         blockers.append("packet.config is missing")
     elif config.is_symlink():
@@ -214,28 +198,26 @@ def preflight(
         blockers.append("packet.sha256 is missing")
     elif not re.fullmatch(r"[0-9a-f]{64}", packet_hash):
         blockers.append("packet.sha256 is not a SHA-256 digest")
-    if (
-        config is not None
-        and config.is_file()
-        and packet_hash
-        and _sha256(config) != packet_hash
-    ):
+    if config is not None and config.is_file() and packet_hash and _sha256(config) != packet_hash:
         blockers.append("packet.sha256 does not match packet.config")
+    return config_value, config, packet_hash
 
+
+def _cell_contract(
+    manifest: dict[str, Any],
+    *,
+    manifest_path: Path,
+    canary_key: str,
+    blockers: list[str],
+) -> tuple[list[tuple[int, dict[str, Any]]], list[str], dict[str, str]]:
     cells = manifest.get("cells")
     if not isinstance(cells, list) or not cells:
         blockers.append("campaign cells are missing")
         cells = []
-    malformed_indexes = [
-        index for index, cell in enumerate(cells) if not isinstance(cell, dict)
-    ]
-    for index in malformed_indexes:
-        blockers.append(f"cells[{index}] must be an object")
-    dict_cells = [
-        (index, cell) for index, cell in enumerate(cells) if isinstance(cell, dict)
-    ]
-    keys: list[str] = []
-    output_roots: dict[str, str] = {}
+    for index, cell in enumerate(cells):
+        if not isinstance(cell, dict):
+            blockers.append(f"cells[{index}] must be an object")
+    dict_cells = [(index, cell) for index, cell in enumerate(cells) if isinstance(cell, dict)]
     selected = [
         (index, cell)
         for index, cell in dict_cells
@@ -243,79 +225,147 @@ def preflight(
     ]
     if canary_key and not selected:
         blockers.append(f"canary key not found: {canary_key}")
+    keys: list[str] = []
+    output_roots: dict[str, str] = {}
     for index, cell in selected:
         key = _validate_cell(cell, f"cells[{index}]", blockers)
         if key in keys:
             blockers.append(f"duplicate campaign cell key: {key}")
         keys.append(key)
-        output_root_value = str(cell.get("output_root", "") or "").strip()
-        if output_root_value:
-            normalized_root = _check_output_root(
-                output_root_value,
-                label=f"cells[{index}].output_root",
-                anchor=manifest_path.resolve().parent,
-                blockers=blockers,
-            )
-            normalized_key = os.fspath(normalized_root)
-        else:
-            normalized_key = ""
-        if normalized_key and normalized_key in output_roots:
-            blockers.append(
-                f"campaign cells {output_roots[normalized_key]} and {key} share output_root {normalized_key}"
-            )
-        elif normalized_key:
-            output_roots[normalized_key] = key
-
+        _record_cell_output_root(
+            cell,
+            index=index,
+            key=key,
+            manifest_path=manifest_path,
+            output_roots=output_roots,
+            blockers=blockers,
+        )
     if not canary_key:
         for _index, cell in dict_cells:
             if str(cell.get("key", "")) not in keys:
                 keys.append(str(cell.get("key", "")))
+    return dict_cells, keys, output_roots
 
+
+def _record_cell_output_root(
+    cell: dict[str, Any],
+    *,
+    index: int,
+    key: str,
+    manifest_path: Path,
+    output_roots: dict[str, str],
+    blockers: list[str],
+) -> None:
+    output_root_value = str(cell.get("output_root", "") or "").strip()
+    if not output_root_value:
+        return
+    normalized_root = _check_output_root(
+        output_root_value,
+        label=f"cells[{index}].output_root",
+        anchor=manifest_path.resolve().parent,
+        blockers=blockers,
+    )
+    normalized_key = os.fspath(normalized_root)
+    if normalized_key in output_roots:
+        blockers.append(
+            f"campaign cells {output_roots[normalized_key]} and {key} share output_root {normalized_key}"
+        )
+    else:
+        output_roots[normalized_key] = key
+
+
+def _campaign_contract(
+    manifest: dict[str, Any],
+    *,
+    dict_cells: list[tuple[int, dict[str, Any]]],
+    blockers: list[str],
+) -> bool:
     paired = manifest.get("paired_keys", [])
     if paired:
-        all_keys = {
-            str(cell.get("key", "")) for cell in cells if isinstance(cell, dict)
-        }
+        all_keys = {str(cell.get("key", "")) for _index, cell in dict_cells}
         for key in paired:
             if str(key) not in all_keys:
                 blockers.append(f"paired campaign cell is missing: {key}")
-
     aggregate = manifest.get("aggregate")
     if not isinstance(aggregate, dict):
         blockers.append("aggregate artifact contract is missing")
         aggregate = {}
-    if str(aggregate.get("status", "") or "").lower() not in GOOD_STATUS:
+    aggregate_status_ok = str(aggregate.get("status", "") or "").lower() in GOOD_STATUS
+    aggregate_contract = str(aggregate.get("artifact_contract", "") or "").strip()
+    if not aggregate_status_ok:
         blockers.append("aggregate status is not ready")
-    if not str(aggregate.get("artifact_contract", "") or "").strip():
+    if not aggregate_contract:
         blockers.append("aggregate artifact_contract is missing")
+    return aggregate_status_ok and bool(aggregate_contract)
 
-    aggregate_validated = str(
-        aggregate.get("status", "") or ""
-    ).lower() in GOOD_STATUS and bool(
-        str(aggregate.get("artifact_contract", "") or "").strip()
+
+def _output_root_contract(
+    output_root: Path | None,
+    *,
+    manifest_path: Path,
+    output_roots: dict[str, str],
+    blockers: list[str],
+) -> None:
+    if output_root is None:
+        return
+    normalized_output_root = _check_output_root(
+        os.fspath(output_root),
+        label="output root",
+        anchor=manifest_path.resolve().parent,
+        blockers=blockers,
     )
-    if output_root is not None:
-        normalized_output_root = _check_output_root(
-            os.fspath(output_root),
-            label="output root",
-            anchor=manifest_path.resolve().parent,
-            blockers=blockers,
+    normalized_output_key = os.fspath(normalized_output_root)
+    if normalized_output_key in output_roots:
+        blockers.append(
+            f"output root overlaps campaign cell {output_roots[normalized_output_key]}: {normalized_output_key}"
         )
-        normalized_output_key = os.fspath(normalized_output_root)
-        if normalized_output_key in output_roots:
-            blockers.append(
-                f"output root overlaps campaign cell {output_roots[normalized_output_key]}: {normalized_output_key}"
-            )
 
+
+def preflight(
+    manifest: dict[str, Any],
+    *,
+    manifest_path: Path,
+    canary_key: str = "",
+    expected_public_commit: str = "",
+    actual_public_commit: str = "",
+    public_repo: Path | None = None,
+    output_root: Path | None = None,
+) -> dict[str, Any]:
+    """Validate a campaign manifest and return a no-submit admission report."""
+    blockers = _placeholder_blockers(manifest)
+    campaign_id = str(manifest.get("campaign_id", "") or "").strip()
+    if not campaign_id:
+        blockers.append("campaign_id is missing")
+    expected, actual, actual_source = _commit_identity(
+        manifest,
+        expected_public_commit=expected_public_commit,
+        actual_public_commit=actual_public_commit,
+        public_repo=public_repo,
+        blockers=blockers,
+    )
+    config_value, config, packet_hash = _packet_identity(
+        manifest, manifest_path=manifest_path, blockers=blockers
+    )
+    dict_cells, keys, output_roots = _cell_contract(
+        manifest,
+        manifest_path=manifest_path,
+        canary_key=canary_key,
+        blockers=blockers,
+    )
+    aggregate_validated = _campaign_contract(manifest, dict_cells=dict_cells, blockers=blockers)
+    _output_root_contract(
+        output_root,
+        manifest_path=manifest_path,
+        output_roots=output_roots,
+        blockers=blockers,
+    )
     canary_safe = not blockers
     full_campaign_safe = canary_safe and not canary_key
     submit_safe = full_campaign_safe
 
-    report = {
+    return {
         "schema_version": SCHEMA_VERSION,
-        "status": (
-            "blocked" if blockers else "canary_ready" if canary_key else "ready"
-        ),
+        "status": "blocked" if blockers else "canary_ready" if canary_key else "ready",
         "submit_safe": submit_safe,
         "canary_safe": canary_safe,
         "full_campaign_safe": full_campaign_safe,
@@ -351,7 +401,6 @@ def preflight(
         },
         "planner_keys": keys,
     }
-    return report
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -371,6 +420,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the no-submit campaign preflight CLI."""
     args = _parser().parse_args(argv)
     try:
         manifest = _load(args.manifest)
@@ -409,9 +459,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         for blocker in report["blockers"]:
             print(f"blocker: {blocker}", file=sys.stderr)
-    safe_for_invocation = (
-        report["canary_safe"] if args.canary_key else report["submit_safe"]
-    )
+    safe_for_invocation = report["canary_safe"] if args.canary_key else report["submit_safe"]
     return 0 if safe_for_invocation else 2
 
 

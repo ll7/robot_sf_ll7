@@ -9,10 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
-SCRIPT = (
-    Path(__file__).resolve().parents[2] / "scripts/tools/slurm_campaign_preflight.py"
-)
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts/tools/slurm_campaign_preflight.py"
 SPEC = importlib.util.spec_from_file_location("slurm_campaign_preflight", SCRIPT)
 assert SPEC and SPEC.loader
 preflight = importlib.util.module_from_spec(SPEC)
@@ -58,6 +55,8 @@ def run_preflight(payload: dict, manifest_path: Path, **kwargs: object) -> dict:
 
 
 class CampaignPreflightTests(unittest.TestCase):
+    """Exercise safe full-campaign and canary admission boundaries."""
+
     def test_canary_passes_without_scheduler_calls(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -113,12 +112,8 @@ class CampaignPreflightTests(unittest.TestCase):
             payload["cells"][1]["ok"] = False
             report = run_preflight(payload, root / "manifest.json")
         self.assertFalse(report["submit_safe"])
-        self.assertTrue(
-            any("paired campaign cell" in item for item in report["blockers"])
-        )
-        self.assertTrue(
-            any("missing status proof" in item for item in report["blockers"])
-        )
+        self.assertTrue(any("paired campaign cell" in item for item in report["blockers"]))
+        self.assertTrue(any("missing status proof" in item for item in report["blockers"]))
 
     def test_placeholder_and_commit_mismatch_block(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -178,9 +173,7 @@ class CampaignPreflightTests(unittest.TestCase):
                 root / "manifest.json",
             )
         self.assertFalse(report["submit_safe"])
-        self.assertTrue(
-            any("packet config does not exist" in item for item in report["blockers"])
-        )
+        self.assertTrue(any("packet config does not exist" in item for item in report["blockers"]))
 
     def test_full_commit_oids_are_required(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -194,9 +187,7 @@ class CampaignPreflightTests(unittest.TestCase):
                 actual_public_commit="a" * 8,
             )
         self.assertFalse(report["submit_safe"])
-        self.assertIn(
-            "expected public commit is missing or invalid", report["blockers"]
-        )
+        self.assertIn("expected public commit is missing or invalid", report["blockers"])
         self.assertIn("actual public commit is missing or invalid", report["blockers"])
 
     def test_manifest_commit_is_not_an_actual_commit_proof(self) -> None:
@@ -204,13 +195,9 @@ class CampaignPreflightTests(unittest.TestCase):
             root = Path(directory)
             config = root / "config.json"
             config.write_text("{}\n", encoding="utf-8")
-            report = preflight.preflight(
-                manifest(config), manifest_path=root / "manifest.json"
-            )
+            report = preflight.preflight(manifest(config), manifest_path=root / "manifest.json")
         self.assertFalse(report["submit_safe"])
-        self.assertTrue(
-            any("must be supplied explicitly" in item for item in report["blockers"])
-        )
+        self.assertTrue(any("must be supplied explicitly" in item for item in report["blockers"]))
 
     def test_cells_cannot_share_output_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -248,9 +235,7 @@ class CampaignPreflightTests(unittest.TestCase):
             payload["cells"][0]["output_root"] = str(output)
             report = run_preflight(payload, root / "manifest.json")
         self.assertFalse(report["submit_safe"])
-        self.assertTrue(
-            any("cells[0].output_root" in item for item in report["blockers"])
-        )
+        self.assertTrue(any("cells[0].output_root" in item for item in report["blockers"]))
 
     def test_full_coverage_rejects_malformed_cell(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -95,18 +95,26 @@ def rasterize_line_segment(
         # Endpoint outside grid bounds after clipping (should not happen but defend anyway)
         return False
 
-    # Bresenham's line algorithm
-    cells = _bresenham_line(row0, col0, row1, col1)
+    # Bresenham's line algorithm (vectorized)
+    rows, cols = _bresenham_line(row0, col0, row1, col1)
 
-    # Set occupancy for all cells on the line
-    for row, col in cells:
-        if 0 <= row < config.grid_height and 0 <= col < config.grid_width:
-            grid_array[row, col] = max(grid_array[row, col], value)
+    # Set occupancy for all cells on the line, skipping cells outside the grid
+    valid = (rows >= 0) & (rows < config.grid_height) & (cols >= 0) & (cols < config.grid_width)
+    if np.any(valid):
+        rows_valid = rows[valid]
+        cols_valid = cols[valid]
+        grid_array[rows_valid, cols_valid] = np.maximum(grid_array[rows_valid, cols_valid], value)
     return True
 
 
-def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> list[tuple[int, int]]:
-    """Bresenham's line algorithm for discrete line rasterization.
+def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> tuple[np.ndarray, np.ndarray]:
+    """Vectorized Bresenham's line algorithm for discrete line rasterization.
+
+    Produces exactly the cell sequence of the classic all-octant integer
+    Bresenham walk (error term ``err = dx - dy``; step along the dominant axis
+    every iteration, step along the minor axis when ``2 * err < dx``
+    respectively ``2 * err > -dy``), but computes all cells with NumPy instead
+    of a per-cell Python loop (issue #6460).
 
     Args:
         row0: Starting row index.
@@ -115,36 +123,31 @@ def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> list[tuple[in
         col1: Ending column index.
 
     Returns:
-        List of (row, col) tuples along the line
+        Tuple of ``(rows, cols)`` integer arrays along the line.
 
     References:
         https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
     """
-    cells = []
-
     dx = abs(col1 - col0)
     dy = abs(row1 - row0)
     sx = 1 if col0 < col1 else -1
     sy = 1 if row0 < row1 else -1
-    err = dx - dy
 
-    row, col = row0, col0
+    if dx == 0 and dy == 0:
+        return np.array([row0], dtype=np.int64), np.array([col0], dtype=np.int64)
 
-    while True:
-        cells.append((row, col))
+    if dx >= dy:
+        # Column-dominant: one column step per iteration.
+        steps = np.arange(dx + 1, dtype=np.int64)
+        cols = col0 + sx * steps
+        rows = row0 + sy * ((2 * steps * dy + dx - 1) // (2 * dx))
+    else:
+        # Row-dominant: one row step per iteration.
+        steps = np.arange(dy + 1, dtype=np.int64)
+        rows = row0 + sy * steps
+        cols = col0 + sx * ((2 * steps * dx + dy - 1) // (2 * dy))
 
-        if row == row1 and col == col1:
-            break
-
-        e2 = 2 * err
-        if e2 > -dy:
-            err -= dy
-            col += sx
-        if e2 < dx:
-            err += dx
-            row += sy
-
-    return cells
+    return rows, cols
 
 
 def _clip_line_to_rect(

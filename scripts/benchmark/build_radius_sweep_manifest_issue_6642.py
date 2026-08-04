@@ -104,6 +104,8 @@ def _resolve_arm(
     validate_arm_campaign_payload(
         _load_yaml(arm_config_path), arm_key=arm_key, radius_m=radius_m, baseline=baseline
     )
+    if cfg.radius_sweep is None:
+        raise ValueError(f"{arm_key} arm campaign config must declare radius_sweep metadata")
 
     if cfg.horizon is None or cfg.dt is None:
         raise ValueError(f"{arm_key} arm campaign config must declare both horizon and dt")
@@ -156,6 +158,12 @@ def _resolve_arm(
         arm_key=arm_key,
         campaign_config=_repo_relative(arm_config_path),
         release_tag=str(cfg.release_tag),
+        runtime_binding_status=cfg.radius_sweep.runtime_binding_status,
+        binding_contract_version=cfg.radius_sweep.binding_contract_version,
+        gate1_canary_issue=cfg.radius_sweep.gate1_canary_issue,
+        gate1_receipt_sha256=cfg.radius_sweep.gate1_receipt_sha256,
+        gate1_source_commit=cfg.radius_sweep.gate1_source_commit,
+        runtime_binding_note=cfg.radius_sweep.runtime_binding_note,
     )
     return factors, identity
 

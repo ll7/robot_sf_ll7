@@ -295,3 +295,18 @@ def test_markdown_output_argument_writes_marked_packet(tmp_path: Path) -> None:
     text = output.read_text(encoding="utf-8")
     assert text.splitlines()[0] == "<!-- AI-GENERATED (robot_sf#3798) - NEEDS-REVIEW -->"
     assert "# Job 13175 S20/S30 Evidence-Gap Packet" in text
+
+
+def test_json_output_argument_writes_marked_json(tmp_path: Path) -> None:
+    """The --output --json path routes through the shared marked JSON writer."""
+    root = _write_complete_artifact_root(tmp_path / "13175")
+    output = tmp_path / "packet.json"
+
+    exit_code = extractor.main(
+        ["--artifact-root", str(root), "--job-id", "13175", "--json", "--output", str(output)]
+    )
+
+    assert exit_code == 0
+    loaded = json.loads(output.read_text(encoding="utf-8"))
+    assert loaded["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert loaded["schema_version"] == "s20-s30-evidence-gap-packet.v1"

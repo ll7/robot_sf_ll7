@@ -14,7 +14,7 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 6156
+latest_reconciliation_issue: 6695
 latest_reviewed_date: 2026-08-03
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
@@ -74,21 +74,21 @@ decision_summary: >-
   hash_without_artifact_path finding remains explicitly baselined below. This reconciliation
   changes provenance bookkeeping only; the bundle remains diagnostic-only and both reported
   analyses remain not_identifiable.
-  Package B addendum (issue #6412 / PR #6733): the visualization-only compact re-export package
-  adds three receipt files with eighteen findings. The compact manifest deliberately uses paths
-  relative to its exported package, while the registry linter resolves paths from the repository
-  root; its two figure/output receipts hash disposable or external artifacts that are not copied
-  into Git. The package README and receipts explicitly preserve this boundary and do not claim
-  release evidence. No safe in-place rewrite can recover the external artifacts or change the
-  package-relative schema without a reviewed producer/consumer migration, so these findings are
-  recorded as targeted baseline debt rather than hidden by a global exclusion.
-  Merge-base reconciliation addendum (PR #6739): immediately before this refresh, current main
-  carried 397 findings across 86 files. The historical prior_baseline_commit remains the
-  repository ratchet anchor at 9fa96c01bf1c8152459f5fa8c481e938fb1e6725; its intermediate 38
-  findings across 13 paths are already covered by the existing reviewed_files entries. The only
-  new merge-base delta in this refresh is eighteen findings across the three Issue #6412 receipt
-  files, all explicitly dispositioned above. This preserves the historical anchor while making
-  the current-main comparison auditable.
+  Main-repair addendum (issue #6695): PR #6733 merged the issue #6412 visualization-only
+  re-export compact package under issue_6412_real_reexport_package/ without refreshing the
+  ratchet baseline, reddening main fast-feedback CI on the clean-main drift guard. The three
+  new files introduce 18 findings across codes already in the strict-CI exclusion policy
+  (1 artifact_hash_mismatch, 11 uncommitted_artifact_missing_location,
+  6 hash_without_artifact_path); the strict gate keeps zero active findings. The package is a
+  compact visualization-only export (schema issue_6412_compact_evidence.v1,
+  raw_and_normalized_traces_in_git: false, human_evidence_owner_review: pending) that
+  deliberately records hashes for raw/figure artifacts kept out of git, and its bare
+  package-relative paths resolve repo-root-relative under the generic linter, so its tracked
+  byte-matching sibling files do not bind. Schema-aware path binding or explicit location
+  markers are #6412 owner-review provenance backfill, not a safe rewrite inside a CI unbreak
+  repair, so all three files are dispositioned baseline below and the baseline grows from 397
+  findings across 86 files to 415 findings across 89 files. A future backfill that binds these
+  artifacts should refresh the baseline with --write-baseline to lock in the reduction.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -201,31 +201,35 @@ reviewed_files:
     codes: [artifact_hash_mismatch, uncommitted_artifact_missing_location]
     disposition: baseline
     reason: >-
-      Issue #6412 compact export receipt. Its file paths are intentionally relative to the
-      self-contained export directory, so the repository-root evidence linter cannot resolve
-      tracked siblings and reports one bundle-context hash mismatch plus eleven missing locations
-      for package-relative records. The export also declares raw and normalized traces outside
-      Git. Preserve the package contract and exact hashes; changing the schema or recovering the
-      disposable/external artifacts requires a reviewed producer/consumer migration, so this is
-      targeted provenance debt rather than a safe in-place repair.
+      Compact export of the issue #6412 visualization-only re-export package
+      (schema issue_6412_compact_evidence.v1, human_evidence_owner_review pending). Its declared
+      artifact paths are bare package-relative paths, which the generic linter resolves
+      repo-root-relative: README.md binds to the repository-root README (hash mismatch), and the
+      eleven remaining declarations (exclusions/*.json, expected_outcomes.json,
+      figure_artifacts.json, figure_qa.json, mapping_receipt.json, package_complete.json,
+      package_manifest.json, package_report.json, resolver_summary.json, source_pointer.json) do
+      not bind, although every one is a tracked sibling file whose bytes match the declared
+      SHA-256. Binding requires schema-aware path resolution or explicit location markers, which
+      is #6412 owner-review provenance backfill rather than a safe rewrite inside a CI unbreak
+      repair.
   - path: docs/context/evidence/issue_6412_real_reexport_package/figure_artifacts.json
     codes: [hash_without_artifact_path]
     disposition: baseline
     reason: >-
-      Issue #6412 figure receipt hashes generated PDF/PNG outputs while deliberately keeping those
-      binaries in disposable package storage rather than Git. The receipt is visualization-only
-      and carries no release claim; adding a durable artifact path requires external package
-      retention/owner action, so the four hashes remain explicitly baselined pending provenance
-      backfill.
+      Records sha256 for two figures' PDF and PNG outputs (four findings) that are deliberately
+      not committed: the package is visualization-only and declares
+      raw_and_normalized_traces_in_git false. Same hash_without_artifact_path pattern as the
+      legacy uncommitted/external artifact debt; committing or regenerating the figure artifacts
+      under bound paths is #6412 owner-review backfill.
   - path: docs/context/evidence/issue_6412_real_reexport_package/package_report.json
     codes: [hash_without_artifact_path]
     disposition: baseline
     reason: >-
-      Issue #6412 package report hashes the resolver and figure-QA receipts as compact package
-      provenance, while the source traces and figure binaries remain outside Git. Those two
-      checksums have no adjacent durable artifact path by design; the package remains
-      diagnostic-only and visualization-only, so this targeted legacy provenance gap is
-      baselined pending external retention and owner review.
+      The figure_qa/sha256 and resolver_summary/sha256 entries record checksums of the tracked
+      sibling files figure_qa.json and resolver_summary.json (bytes verified to match) but carry
+      no adjacent artifact-path key under the linter's meaning. Adding a binding path field would
+      edit a package schema whose human owner review is still pending, so the findings stay
+      explicitly baselined until the #6412 owner-review backfill.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

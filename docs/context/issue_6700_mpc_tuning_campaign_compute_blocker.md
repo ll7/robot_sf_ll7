@@ -37,10 +37,10 @@ that must pass before submission.
 3. **Prerequisite packet refreeze not on `main`.** The two-phase tuning/held-out config with a
    frozen scenario list hash, the SLURM submission script under `SLURM/`, and the canary config are
    prerequisites stated in #6700 ("Blocked on packet refreeze child … being merged"). None of these
-   exist on the current `main` (`HEAD d4666302b3ac03d204bf18d2ca7d9a594f7289f4`, Aug 2026). The
-   in-repo config `configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml`
-   (SHA-256 `ceca5c8d…ab513`) still encodes the earlier single-phase run on seeds [111,112,113], not
-   the frozen two-phase split.
+exist on the current `main` (`HEAD 95e9b4f0d224d54531a80f51769953f4bb02c76`, Aug 2026). The
+    in-repo config `configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml`
+    (SHA-256 `ceca5c8d…ab513`) still encodes the earlier single-phase run on seeds [111,112,113], not
+    the frozen two-phase split. Re-verified 2026-08-04 against refreshed `origin/main`.
 4. **No passed native canary evidence.** Issue #5579 records the prior single-phase local run as
    `blocked`/`diagnostic-only` (295 eligible / 101 excluded: 92 solver-failure + 9 fallback, all
    0.0 success). That is not a passing canary and does not discharge the gate.
@@ -58,7 +58,12 @@ dissertation claim is promoted or re-worded; any claim change is a separate auth
   candidate points, 40 target + 4 incumbent rows, 396 episode-row bound). This checks config shape
   only; it does not run episodes and does not imply the frozen two-phase contract.
 - `uv run pytest tests/benchmark/test_mpc_tuning_sensitivity_issue_5579.py -q` → 9 passed.
-- `git fetch origin main` confirms `HEAD == origin/main`; the branch carries no commits beyond `main`.
+- `uv run python scripts/tools/check_context_note_freshness.py` exits 0 (index/catalog consistency).
+- Re-validated 2026-08-04: `git merge origin/main` (47 commits ahead of the earlier base) applies
+  cleanly; the only branch changes remain this docs note plus its `docs/context/INDEX.md` /
+  `docs/context/catalog.yaml` registrations. `configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml`
+  is still hash `ceca5c8d…ab513` (single-phase) and no 5579/6700 canary or SLURM packet script exists
+  on refreshed `main`.
 
 The `--check` is the one validation in the task's validation list that is execution-free and
 exits 0. The remaining validation bullets (COMPLETED SLURM job with 6/6 canary rows, held-out rows

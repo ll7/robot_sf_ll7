@@ -85,8 +85,8 @@ radius_sweep:
   runtime_binding_status: bound_runtime
   binding_contract_version: radius_binding_canary.v1
   gate1_canary_issue: 6641
-  gate1_receipt_sha256: e35e189914ae3805422bd081112bb2720a90021bf3363b9281dc46749e52d0b1
-  gate1_source_commit: 25cf835fa7a283dae7d77fcb42194a73e4dcf5d0
+  gate1_receipt_sha256: aab4c1485f8bb01e5b0d9732ed88d6d4c47d4865ecfb996d14958917340961d8
+  gate1_source_commit: 2910980fa7c49b726c3007c1f93aba6ec0b54d8e
   runtime_binding_note: >-
     Runtime binding admitted after the Gate 1 #6641 receipt at the merged
     source commit. Production compute remains blocked until the separate Gate 2

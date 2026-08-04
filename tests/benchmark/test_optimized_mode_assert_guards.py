@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark import metrics as metrics_mod
+from robot_sf.benchmark.full_classic import encode as encode_mod
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_ASSERT_COUNTS = {
@@ -122,3 +123,14 @@ def test_converted_guards_survive_python_optimized_mode(
     for time_metric in (metrics_mod.time_to_goal_norm, metrics_mod.time_to_goal_norm_success_only):
         with pytest.raises(RuntimeError, match="successful episode has no recorded goal step"):
             time_metric(data, horizon=10)
+
+
+def test_encode_frames_reports_empty_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the user-visible failure result for an empty frame iterable."""
+    monkeypatch.setattr(encode_mod, "moviepy_ready", lambda: True)
+    monkeypatch.setattr(encode_mod, "ImageSequenceClip", object())
+
+    result = encode_mod.encode_frames([], tmp_path / "empty.mp4", sample_memory=False)
+
+    assert result.status == "failed"
+    assert result.note == "no-frames"

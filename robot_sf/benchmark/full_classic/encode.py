@@ -127,7 +127,7 @@ def _validate_first(first: np.ndarray | None) -> tuple[bool, str | None]:
     Returns:
         Tuple of (is_valid, error_note).
     """
-    if first is None:  # pragma: no cover
+    if first is None:
         return False, "no-frames"
     if first.dtype != np.uint8 or first.ndim != 3 or first.shape[2] != 3:
         return False, "invalid-frame-shape"

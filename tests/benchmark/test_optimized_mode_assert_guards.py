@@ -117,6 +117,15 @@ def test_converted_guards_survive_python_optimized_mode(
     )
     assert result.returncode == 0, result.stderr
 
+    # Exercise the encode guard in-process as well, so changed-line coverage sees
+    # the same failure path that the optimized subprocess proves remains active.
+    monkeypatch.setattr(encode_mod, "moviepy_ready", lambda: True)
+    monkeypatch.setattr(encode_mod, "ImageSequenceClip", object())
+    monkeypatch.setattr(encode_mod, "_iter_first", lambda _frames: (None, iter(())))
+    monkeypatch.setattr(encode_mod, "_validate_first", lambda _first: (True, None))
+    with pytest.raises(TypeError, match="successful frame validation produced no first frame"):
+        encode_mod.encode_frames([], tmp_path / "optimized-mode-inprocess.mp4", sample_memory=False)
+
     # Exercise both metric guards in-process as well, so changed-line coverage uses
     # the same test selected for the optimized-mode regression contract.
     data = metrics_mod.EpisodeData(

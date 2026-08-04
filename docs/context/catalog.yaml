@@ -178,7 +178,7 @@ entries:
   area: benchmark_evidence
 - path: docs/context/issue_6700_mpc_tuning_campaign_compute_blocker.md
   status: current
-  freshness: current
+  freshness: maintained
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/README.md
   status: evidence

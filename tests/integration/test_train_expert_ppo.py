@@ -2145,3 +2145,127 @@ def test_issue_6682_issue_739_variant_equivalence(rel_path: str) -> None:
 
     config = load_expert_training_config(config_path)
     assert config.policy_id
+
+
+_ISSUE_6683_BASELINE_PATH = Path("tests/integration/_baseline_issue_6683_resolved.json")
+_ISSUE_6683_MATRIX_PATH = "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml"
+
+# The eight PPO training configs that carried the deprecated, ignored
+# evaluation.frequency_episodes field on origin/main before issue #6683 removed
+# it, plus the candidate matrix that inherits feature_extractor_sweep_base.yaml.
+_ISSUE_6683_VARIANT_PATHS = [
+    "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml",
+    "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml",
+    _ISSUE_6683_MATRIX_PATH,
+    "configs/training/ppo/feature_extractor_sweep_base.yaml",
+    "configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+]
+
+# Lineages resolving through feature_extractor_sweep_base.yaml, which carried
+# frequency_episodes: 10 before issue #6683. Removal falls back to the loader
+# default 0 there — the single intentional resolved-value change, mirroring the
+# #6513 precedent (the field was always ignored in favor of step_schedule).
+_ISSUE_6683_SWEEP_BASE_LINEAGE = frozenset(
+    {
+        "configs/training/ppo/feature_extractor_sweep_base.yaml",
+        _ISSUE_6683_MATRIX_PATH,
+    }
+)
+
+_ISSUE_6683_EXPERT_VARIANT_PATHS = [
+    path for path in _ISSUE_6683_VARIANT_PATHS if path != _ISSUE_6683_MATRIX_PATH
+]
+
+
+def _issue_6683_prechange_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved-config baseline."""
+    baseline_path = _ISSUE_6683_BASELINE_PATH.resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-mapping.v1"
+    assert isinstance(baseline["source_revision"], str)
+    assert set(baseline["variants"]) == set(_ISSUE_6683_VARIANT_PATHS)
+    return baseline
+
+
+def _issue_6683_resolved_mapping(rel_path: str) -> dict:
+    """Resolve a variant mapping the way its consumer does.
+
+    Expert training configs load directly. The candidate matrix resolves through
+    its base_config pointer relative to the repository root, mirroring
+    scripts/training/fixed_feature_extractor_candidates.py.
+    """
+    if rel_path != _ISSUE_6683_MATRIX_PATH:
+        return _load_expert_training_config_mapping(Path(rel_path))
+    matrix = yaml.safe_load(Path(rel_path).read_text(encoding="utf-8"))
+    return _load_expert_training_config_mapping(Path(matrix["base_config"]))
+
+
+def test_issue_6683_baseline_records_removed_field_values() -> None:
+    """The frozen baseline records the removed values: seven 0s and two 10s."""
+    baseline = _issue_6683_prechange_baseline()
+    recorded = baseline["pre_change_frequency_episodes"]
+    assert set(recorded) == set(_ISSUE_6683_VARIANT_PATHS)
+    for rel_path in _ISSUE_6683_SWEEP_BASE_LINEAGE:
+        assert recorded[rel_path] == 10
+    for rel_path in set(_ISSUE_6683_VARIANT_PATHS) - _ISSUE_6683_SWEEP_BASE_LINEAGE:
+        assert recorded[rel_path] == 0
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6683_VARIANT_PATHS)
+def test_issue_6683_frequency_episodes_drop_preserves_resolution(rel_path: str) -> None:
+    """Resolved configs are identical except for the intentionally dropped field."""
+    expected_mapping = _issue_6683_prechange_baseline()["variants"][rel_path]
+
+    resolved = _issue_6683_resolved_mapping(rel_path)
+    # The deprecated field is gone from the config side in every lineage.
+    assert "frequency_episodes" not in resolved.get("evaluation", {})
+
+    assert _strip_frequency_episodes(resolved) == _strip_frequency_episodes(expected_mapping), (
+        f"Resolved config {rel_path} differs from the baseline beyond the "
+        f"dropped evaluation.frequency_episodes field."
+    )
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6683_EXPERT_VARIANT_PATHS)
+def test_issue_6683_expert_configs_keep_step_schedule_cadence(rel_path: str) -> None:
+    """All eight expert configs load with step_schedule as the cadence source."""
+    config = load_expert_training_config(Path(rel_path))
+    assert config.policy_id
+    assert config.evaluation.step_schedule
+    # The deprecated field resolves to the loader default everywhere now; for
+    # the sweep-base lineage that is the intentional ignored-field drop 10 -> 0.
+    assert config.evaluation.frequency_episodes == 0
+
+
+def test_issue_6683_candidate_matrix_lineage_keeps_runner_semantics() -> None:
+    """The inheriting matrix keeps its pointer, overrides, and rebuilt schedule."""
+    baseline = _issue_6683_prechange_baseline()
+    expected_overrides = baseline["matrix_overrides"][_ISSUE_6683_MATRIX_PATH]
+
+    matrix = yaml.safe_load(Path(_ISSUE_6683_MATRIX_PATH).read_text(encoding="utf-8"))
+    for key, value in expected_overrides.items():
+        assert matrix[key] == value
+
+    base_config = load_expert_training_config(Path(matrix["base_config"]))
+    assert base_config.evaluation.step_schedule
+    # Mirror the _configure_candidate EvaluationSchedule rebuild: cadence comes
+    # from the matrix eval_every and the deprecated field falls to default 0.
+    rebuilt = EvaluationSchedule(
+        frequency_episodes=base_config.evaluation.frequency_episodes,
+        evaluation_episodes=int(matrix["eval_episodes"]),
+        hold_out_scenarios=base_config.evaluation.hold_out_scenarios,
+        step_schedule=((None, int(matrix["eval_every"])),),
+        randomize_seeds=False,
+        scenario_config=base_config.evaluation.scenario_config,
+    )
+    assert rebuilt.frequency_episodes == 0
+    assert rebuilt.evaluation_episodes == 5
+    assert rebuilt.hold_out_scenarios == ()
+    assert rebuilt.step_schedule == ((None, 48000),)

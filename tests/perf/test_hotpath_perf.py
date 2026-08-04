@@ -32,6 +32,7 @@ from robot_sf.nav.occupancy_grid_rasterization import (
     _bresenham_line,
     rasterize_line_segment,
 )
+from robot_sf.render.sim_view import SimulationView
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -266,6 +267,50 @@ class TestPedestrianActionMatching:
         assert index_total < scan_total, (
             f"index lookup took {index_total:.6f}s vs scan {scan_total:.6f}s"
         )
+
+
+class TestDrawPedestriansRenderPath:
+    """Headless execution of the changed ``_draw_pedestrians`` path.
+
+    The session-level headless fixture forces the SDL dummy driver, so the
+    render path runs without a display in every lane.
+    """
+
+    @staticmethod
+    def _view() -> SimulationView:
+        return SimulationView(width=64, height=64, scaling=10.0)
+
+    @staticmethod
+    def _positions_and_actions(num_peds: int) -> tuple[np.ndarray, np.ndarray]:
+        rng = np.random.default_rng(num_peds)
+        positions = rng.uniform(0.5, 5.5, size=(num_peds, 2))
+        # One trailing ego action row, as produced for ego-pedestrian simulators.
+        actions = np.empty((num_peds + 1, 2, 2))
+        actions[:, 0, :] = np.vstack([positions, positions[-1:] + 0.1])
+        actions[:, 1, :] = actions[:, 0, :] + 0.2
+        return positions, actions
+
+    def test_draw_pedestrians_branches_headless(self) -> None:
+        """All index-matching branches render without error headlessly."""
+        view = self._view()
+        positions, actions = self._positions_and_actions(4)
+
+        view._draw_pedestrians(positions, actions)  # every ped has its action
+        view._draw_pedestrians(positions, actions[:2])  # trailing peds without
+        view._draw_pedestrians(positions, None)  # no actions at all
+        view._draw_pedestrians(positions, np.empty((0, 2, 2)))  # playback-style
+
+    def test_draw_pedestrians_frame_budget(self) -> None:
+        """Index-based drawing keeps per-frame work at pygame-draw cost."""
+        view = self._view()
+        positions, actions = self._positions_and_actions(50)
+
+        for _ in range(3):  # warmup (sprite caches, surface allocation)
+            view._draw_pedestrians(positions, actions)
+
+        frames = 30
+        total = _best_of_total(lambda: view._draw_pedestrians(positions, actions), frames, rounds=3)
+        assert total < frames * 0.025, f"50-ped frame draw took {total / frames * 1e3:.2f}ms"
 
 
 # ---------------------------------------------------------------------------

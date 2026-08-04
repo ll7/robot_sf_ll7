@@ -1008,6 +1008,12 @@ def test_cli_blocked_exits_nonzero(tmp_path: Path) -> None:
     assert exit_code == cli.EXIT_BLOCKED_PENDING_GATE2
     assert (tmp_path / "bundle" / "result.json").is_file()
 
+    provenance = json.loads((tmp_path / "bundle" / "analysis_provenance.json").read_text())[
+        "provenance"
+    ]
+    assert provenance["campaign_commit"] is None
+    assert len(provenance["analysis_commit"]) == 40
+
 
 def test_cli_verdict_exits_zero(tmp_path: Path) -> None:
     """A complete sweep summary produces a scientific verdict and exit code zero."""

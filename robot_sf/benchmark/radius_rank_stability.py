@@ -1649,7 +1649,7 @@ class EvidenceProvenance:
     config_path: str
     config_sha256: str | None
     command: str
-    campaign_commit: str
+    campaign_commit: str | None
     analysis_commit: str
     seed_roster: tuple[int, ...]
     radii_m: tuple[float, ...]
@@ -1688,7 +1688,7 @@ def build_evidence_provenance(
     *,
     config_path: str,
     command: str,
-    campaign_commit: str,
+    campaign_commit: str | None,
     analysis_commit: str | None = None,
     config_sha256: str | None = None,
     input_paths: Mapping[str, Path] | None = None,
@@ -1960,7 +1960,9 @@ def render_readme(report: RadiusSensitivityReport, provenance: EvidenceProvenanc
         "",
         "## Provenance",
         "",
-        f"- Campaign commit: `{provenance.campaign_commit}`",
+        f"- Campaign commit: `{provenance.campaign_commit}`"
+        if provenance.campaign_commit
+        else "- Campaign commit: `not available (Gate 2 pending)`",
         f"- Analysis commit: `{provenance.analysis_commit}`",
         f"- Config: `{provenance.config_path}`",
     ]

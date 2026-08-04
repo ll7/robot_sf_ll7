@@ -42,6 +42,10 @@ worktree under the lease’s external artifact directory. It records the exact a
 command, config path when supplied, and the blocked status. It is control-plane handoff evidence,
 not benchmark evidence and not a substitute for Gate 2 rows.
 
+Because no campaign has run, the blocked bundle leaves `campaign_commit` unavailable instead of
+substituting the analysis commit. A promoted bundle must carry a real campaign commit that matches
+all three Gate 2 arms and the checksum-covered provenance.
+
 ```bash
 uv run python scripts/benchmark/analyze_radius_rank_stability_issue_6643.py \
   --output-dir /home/luttkule/.local/state/ll7-factory/runs/ll7-lease-6643-6dfddeb98161/blocked-evidence-bundle \

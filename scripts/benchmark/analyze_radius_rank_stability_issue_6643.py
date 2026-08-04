@@ -94,7 +94,7 @@ def _write_bundle(
         report,
         config_path=args.config or "not supplied (blocked before Gate 2)",
         command=args.command or _default_command(),
-        campaign_commit=args.campaign_commit or declared_campaign_commit or current_git_sha(),
+        campaign_commit=args.campaign_commit or declared_campaign_commit,
         analysis_commit=current_git_sha(),
         config_sha256=config_sha256,
         input_paths=input_paths,

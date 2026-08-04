@@ -29,6 +29,8 @@ from robot_sf.benchmark.camera_ready._preflight import (
 _CONFIG_PATH = Path("radius-sweep-test.yaml")
 _GATE1_RECEIPT = "a" * 64
 _GATE1_COMMIT = "b" * 40
+_TRACKED_GATE1_RECEIPT = "e35e189914ae3805422bd081112bb2720a90021bf3363b9281dc46749e52d0b1"
+_TRACKED_GATE1_COMMIT = "25cf835fa7a283dae7d77fcb42194a73e4dcf5d0"
 
 
 def _minimal_campaign(*, radius_sweep: RadiusSweepConfig | None = None) -> CampaignConfig:
@@ -224,18 +226,22 @@ def test_preflight_and_manifest_expose_binding_contract() -> None:
         ("issue_6642_radius_sweep_arm_1p0m.yaml", "r1p0", 1.0),
     ],
 )
-def test_preparation_arm_configs_parse_as_distinct_pending_treatments(
+def test_admitted_arm_configs_parse_as_distinct_receipt_backed_treatments(
     config_name: str,
     arm_key: str,
     radius_m: float,
 ) -> None:
-    """The three preparation configs remain distinct and explicitly non-runnable."""
+    """The three admitted configs remain distinct and carry the same Gate 1 receipt."""
     cfg = load_campaign_config(Path("configs/benchmarks") / config_name)
 
     assert cfg.radius_sweep is not None
     assert cfg.radius_sweep.arm_key == arm_key
     assert cfg.radius_sweep.radius_m == radius_m
-    assert cfg.radius_sweep.runtime_binding_status == "pending_gate1_canary"
+    assert cfg.radius_sweep.runtime_binding_status == "bound_runtime"
+    assert cfg.radius_sweep.binding_contract_version == "radius_binding_canary.v1"
+    assert cfg.radius_sweep.gate1_canary_issue == 6641
+    assert cfg.radius_sweep.gate1_receipt_sha256 == _TRACKED_GATE1_RECEIPT
+    assert cfg.radius_sweep.gate1_source_commit == _TRACKED_GATE1_COMMIT
     assert cfg.radius_sweep.parent_issue == 6600
 
 

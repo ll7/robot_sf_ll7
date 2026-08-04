@@ -1,10 +1,10 @@
-"""Tests for the issue #6642 collision-envelope radius-sweep preparation manifest.
+"""Tests for the issue #6642 collision-envelope radius-sweep admission manifest.
 
-These tests cover the dry-run preparation manifest builder and checker only. They
-do not run any benchmark episodes or submit SLURM compute, and they assert the
-fail-closed contract: degraded/fallback/failed/missing rows are never evidence,
-production submission stays blocked while the Gate 1 binding canary (#6641) is
-pending, and all radius arms stay pinned to one immutable campaign commit.
+These tests cover the dry-run pre-submission manifest builder and checker only.
+They do not run any benchmark episodes or submit SLURM compute, and they assert
+the fail-closed contract: degraded/fallback/failed/missing rows are never
+evidence, receipt-backed Gate 1 state matches every arm, production submission
+stays blocked, and all radius arms stay pinned to one immutable campaign commit.
 """
 
 from __future__ import annotations
@@ -34,12 +34,15 @@ from robot_sf.benchmark.radius_sweep_manifest import (
     EXPECTED_SEED_SET,
     GATE1_CANARY_ISSUE,
     GATE1_STATUS_NOT_YET_PASSED,
+    GATE1_STATUS_PASSED,
     MANIFEST_STATUS,
     PRODUCTION_RADII,
     PRODUCTION_RADIUS_KEYS,
     RADIUS_SWEEP_MANIFEST_CHECK_SCHEMA,
     RADIUS_SWEEP_MANIFEST_SCHEMA,
     RELEASE_PLANNER_KEYS,
+    RUNTIME_BINDING_BOUND_RUNTIME,
+    RUNTIME_BINDING_CONTRACT_VERSION,
     RUNTIME_BINDING_PENDING_GATE1,
     ArmCampaignIdentity,
     FixedFactors,
@@ -68,6 +71,8 @@ _TEST_GIT_HEAD = "a" * 40
 
 _SEEDS = tuple(range(EXPECTED_SEED_RANGE[0], EXPECTED_SEED_RANGE[1] + 1))
 _SCENARIO_NAMES = EXPECTED_SCENARIO_NAMES
+_GATE1_RECEIPT = "e35e189914ae3805422bd081112bb2720a90021bf3363b9281dc46749e52d0b1"
+_GATE1_COMMIT = "25cf835fa7a283dae7d77fcb42194a73e4dcf5d0"
 
 
 def _fixed_factors(
@@ -104,12 +109,17 @@ def _manifest_config() -> dict[str, Any]:
 
 
 def _arm_identities() -> list[ArmCampaignIdentity]:
-    """Return contract-faithful arm campaign identities in radius order."""
+    """Return receipt-backed arm identities in radius order."""
     return [
         ArmCampaignIdentity(
             arm_key=arm_key,
             campaign_config=EXPECTED_ARM_CAMPAIGN_CONFIGS[arm_key],
             release_tag=EXPECTED_ARM_RELEASE_TAGS[arm_key],
+            runtime_binding_status=RUNTIME_BINDING_BOUND_RUNTIME,
+            binding_contract_version=RUNTIME_BINDING_CONTRACT_VERSION,
+            gate1_canary_issue=GATE1_CANARY_ISSUE,
+            gate1_receipt_sha256=_GATE1_RECEIPT,
+            gate1_source_commit=_GATE1_COMMIT,
         )
         for arm_key in PRODUCTION_RADIUS_KEYS
     ]
@@ -161,12 +171,16 @@ def test_build_enumerates_three_radius_arms_with_release_baseline() -> None:
     assert baseline_arms[0]["radius_m"] == BASELINE_RADIUS
 
 
-def test_build_stamps_pending_gate1_binding_on_every_arm() -> None:
-    """While Gate 1 is pending, no arm may claim a bound radius."""
+def test_build_stamps_receipt_backed_binding_on_every_arm() -> None:
+    """A passed Gate 1 state carries the same receipt-backed binding on every arm."""
     manifest = _build()
 
     for arm in manifest["arms"]:
-        assert arm["runtime_binding_status"] == RUNTIME_BINDING_PENDING_GATE1
+        assert arm["runtime_binding_status"] == RUNTIME_BINDING_BOUND_RUNTIME
+        assert arm["binding_contract_version"] == RUNTIME_BINDING_CONTRACT_VERSION
+        assert arm["gate1_canary_issue"] == GATE1_CANARY_ISSUE
+        assert arm["gate1_receipt_sha256"] == _GATE1_RECEIPT
+        assert arm["gate1_source_commit"] == _GATE1_COMMIT
         assert arm["planner_keys"] == list(RELEASE_PLANNER_KEYS)
         assert arm["planner_count"] == len(RELEASE_PLANNER_KEYS)
         assert arm["scenario_count"] == EXPECTED_SCENARIO_COUNT
@@ -175,12 +189,15 @@ def test_build_stamps_pending_gate1_binding_on_every_arm() -> None:
 
 
 def test_build_records_gate1_block_and_one_immutable_commit() -> None:
-    """The manifest pins one commit across arms and keeps production blocked."""
+    """The manifest records passed Gate 1 while keeping production blocked."""
     manifest = _build()
 
     gate = manifest["gate_preconditions"]
     assert gate["gate1_canary_issue"] == GATE1_CANARY_ISSUE
-    assert gate["gate1_canary_status"] == GATE1_STATUS_NOT_YET_PASSED
+    assert gate["gate1_canary_status"] == GATE1_STATUS_PASSED
+    assert gate["gate1_receipt_sha256"] == _GATE1_RECEIPT
+    assert gate["gate1_source_commit"] == _GATE1_COMMIT
+    assert gate["runtime_binding_contract_version"] == RUNTIME_BINDING_CONTRACT_VERSION
     assert gate["production_submission_authorized"] is False
     commit = manifest["immutable_campaign_commit"]
     assert commit["one_commit_across_all_arms"] is True
@@ -416,8 +433,8 @@ def test_check_rejects_non_mapping_payload() -> None:
         check_radius_sweep_manifest(None)  # type: ignore[arg-type]
 
 
-def test_check_fails_when_production_submission_authorized_while_gate1_pending() -> None:
-    """Authorizing production compute before Gate 1 passes violates the hard precondition."""
+def test_check_fails_when_production_submission_is_authorized() -> None:
+    """The manifest never authorizes production submission, even after Gate 1."""
     manifest = _build()
     manifest["gate_preconditions"]["production_submission_authorized"] = True
     check = check_radius_sweep_manifest(manifest)
@@ -426,7 +443,7 @@ def test_check_fails_when_production_submission_authorized_while_gate1_pending()
 
 
 def test_check_fails_when_gate1_status_is_unrecognized() -> None:
-    """An unknown Gate 1 status cannot bypass the preparation-only block."""
+    """An unknown Gate 1 status cannot bypass the admission contract."""
     manifest = _build()
     manifest["gate_preconditions"]["gate1_canary_status"] = "unknown"
     manifest["gate_preconditions"]["production_submission_authorized"] = True
@@ -438,13 +455,67 @@ def test_check_fails_when_gate1_status_is_unrecognized() -> None:
     assert any("production_submission_authorized" in v for v in check["violations"])
 
 
-def test_check_fails_when_arm_claims_bound_radius() -> None:
-    """An arm may not claim a bound radius while Gate 1 is pending."""
+def test_check_fails_when_arm_binding_status_is_unrecognized() -> None:
+    """An arm may not use an unrecognized runtime-binding status."""
     manifest = _build()
     manifest["arms"][0]["runtime_binding_status"] = "bound"
     check = check_radius_sweep_manifest(manifest)
     assert check["passes"] is False
     assert any("runtime_binding_status" in v for v in check["violations"])
+
+
+def test_check_accepts_pending_state_without_provenance() -> None:
+    """A preparation state remains valid when every arm is explicitly pending."""
+    manifest = _build()
+    manifest["gate_preconditions"]["gate1_canary_status"] = GATE1_STATUS_NOT_YET_PASSED
+    for field in (
+        "gate1_receipt_sha256",
+        "gate1_source_commit",
+        "runtime_binding_contract_version",
+    ):
+        manifest["gate_preconditions"].pop(field, None)
+    for arm in manifest["arms"]:
+        arm["runtime_binding_status"] = RUNTIME_BINDING_PENDING_GATE1
+        for field in (
+            "binding_contract_version",
+            "gate1_canary_issue",
+            "gate1_receipt_sha256",
+            "gate1_source_commit",
+        ):
+            arm.pop(field, None)
+
+    check = check_radius_sweep_manifest(manifest)
+
+    assert check["passes"] is True, check["violations"]
+
+
+def test_check_rejects_passed_gate_with_pending_arm() -> None:
+    """A passed Gate 1 state cannot coexist with an unadmitted arm."""
+    manifest = _build()
+    manifest["arms"][0]["runtime_binding_status"] = RUNTIME_BINDING_PENDING_GATE1
+    for field in (
+        "binding_contract_version",
+        "gate1_canary_issue",
+        "gate1_receipt_sha256",
+        "gate1_source_commit",
+    ):
+        manifest["arms"][0].pop(field, None)
+
+    check = check_radius_sweep_manifest(manifest)
+
+    assert check["passes"] is False
+    assert any("when Gate 1 is passed" in v for v in check["violations"])
+
+
+def test_check_rejects_gate_receipt_that_differs_from_an_arm() -> None:
+    """Every bound arm must use the exact receipt admitted by the gate block."""
+    manifest = _build()
+    manifest["gate_preconditions"]["gate1_receipt_sha256"] = "c" * 64
+
+    check = check_radius_sweep_manifest(manifest)
+
+    assert check["passes"] is False
+    assert any("gate1_receipt_sha256" in v for v in check["violations"])
 
 
 def test_check_fails_when_arm_campaign_config_drifts() -> None:
@@ -832,7 +903,7 @@ _ARM_PAYLOAD_CASES = (
 def test_tracked_arm_payloads_declare_their_exact_treatment(
     arm_key: str, config_relpath: str, radius_m: float, baseline: bool
 ) -> None:
-    """Every tracked arm config declares its own radius treatment, still pending Gate 1."""
+    """Every tracked arm config declares its own receipt-backed radius treatment."""
     payload = yaml.safe_load((REPO_ROOT / config_relpath).read_text(encoding="utf-8"))
 
     validate_arm_campaign_payload(payload, arm_key=arm_key, radius_m=radius_m, baseline=baseline)
@@ -847,6 +918,20 @@ def test_tracked_arm_payloads_declare_their_exact_treatment(
         (
             lambda payload: payload["radius_sweep"].update({"runtime_binding_status": "bound"}),
             "runtime_binding_status",
+        ),
+        (
+            lambda payload: payload["radius_sweep"].update(
+                {"binding_contract_version": "wrong.v1"}
+            ),
+            "binding_contract_version",
+        ),
+        (
+            lambda payload: payload["radius_sweep"].update({"gate1_receipt_sha256": "bad"}),
+            "gate1_receipt_sha256",
+        ),
+        (
+            lambda payload: payload["radius_sweep"].update({"gate1_source_commit": "bad"}),
+            "gate1_source_commit",
         ),
         (lambda payload: payload["radius_sweep"].update({"issue": 6600}), "issue must be"),
         (

@@ -1,12 +1,12 @@
-"""Preparation-only radius-sweep manifest builder for issue #6642 (Gate 2 of #6600).
+"""Pre-submission radius-sweep manifest builder for issue #6642 (Gate 2 of #6600).
 
 This module enumerates the planned collision-envelope radius sensitivity sweep
 (0.5 / 0.8 / 1.0 m) over the complete 14-planner release roster and the 48-cell
-``classic_interactions_francis2023`` matrix. It is strictly a dry-run preparation
-manifest: it does NOT submit, run, or authorize any production SLURM compute,
-does NOT bind a radius to runtime objects, and does NOT promote benchmark
-evidence. Production compute stays blocked until the Gate 1 binding-canary child
-(#6641) reports a passing verdict and a runtime radius-binding surface exists.
+``classic_interactions_francis2023`` matrix. It is strictly a dry-run
+pre-submission manifest: it does NOT submit, run, or authorize any production
+SLURM compute and does NOT promote benchmark evidence. It may carry an
+independently verified Gate 1 runtime-binding receipt, but production compute
+stays blocked until the remaining Gate 2 campaign gates pass.
 """
 
 from __future__ import annotations
@@ -146,13 +146,23 @@ EXPECTED_KINEMATICS = "differential_drive"
 EXPECTED_ROWS_PER_ARM = len(RELEASE_PLANNER_KEYS) * EXPECTED_SCENARIO_COUNT * len(EXPECTED_SEEDS)
 EXPECTED_TOTAL_ROWS = len(PRODUCTION_RADII) * EXPECTED_ROWS_PER_ARM
 
-# Runtime-binding and gate statuses. While the Gate 1 canary is pending, every arm
-# is "pending_gate1_canary": the declared radius is metadata only, not bound.
+# Runtime-binding and gate statuses. A pending arm is metadata only. A bound arm
+# must carry the exact Gate 1 receipt and source commit that admitted the runtime
+# binding. Neither status authorizes production compute.
 RUNTIME_BINDING_PENDING_GATE1 = "pending_gate1_canary"
+RUNTIME_BINDING_BOUND_RUNTIME = "bound_runtime"
+RUNTIME_BINDING_CONTRACT_VERSION = "radius_binding_canary.v1"
+RUNTIME_BINDING_STATUSES: tuple[str, ...] = (
+    RUNTIME_BINDING_PENDING_GATE1,
+    RUNTIME_BINDING_BOUND_RUNTIME,
+)
 GATE1_STATUS_NOT_YET_PASSED = "not_yet_passed"
+GATE1_STATUS_PASSED = "passed"
+GATE1_STATUSES: tuple[str, ...] = (GATE1_STATUS_NOT_YET_PASSED, GATE1_STATUS_PASSED)
 IMMUTABLE_COMMIT_POLICY = "pinned_at_launch_across_all_arms"
 ROW_IDENTITY_CONTRACT = "complete_row_identities_or_explicit_fail_closed_missingness_ledger"
 _GIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
+_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 # Evidence-exclusion row classes (never counted as evidence per #6600 stop rules).
 EVIDENCE_EXCLUSIONS: tuple[str, ...] = (
@@ -170,11 +180,11 @@ MANIFEST_CHECK_STATUS = "manifest_check_only"
 EVIDENCE_STATUS = "not_benchmark_evidence"
 
 CLAIM_BOUNDARY = (
-    "Preparation manifest only: declares the radius-sensitivity sweep treatment "
-    "and fixed factors for issue #6642 (Gate 2 of #6600). Not benchmark evidence, "
-    "not a realism result, not a sim-to-real result, and not a safety guarantee. "
-    "Production compute is blocked until the Gate 1 binding canary (#6641) passes "
-    "and a runtime radius-binding surface exists. Degraded, fallback, failed, "
+    "Pre-submission admission manifest only: declares the radius-sensitivity sweep "
+    "treatment and fixed factors for issue #6642 (Gate 2 of #6600). Not benchmark "
+    "evidence, not a realism result, not a sim-to-real result, and not a safety "
+    "guarantee. Gate 1 runtime binding is admitted, but production compute remains "
+    "blocked by the remaining Gate 2 campaign gates. Degraded, fallback, failed, "
     "missing, duplicate, and provenance-invalid rows are never counted as evidence."
 )
 
@@ -221,6 +231,12 @@ class ArmCampaignIdentity:
     arm_key: str
     campaign_config: str
     release_tag: str
+    runtime_binding_status: str = RUNTIME_BINDING_PENDING_GATE1
+    binding_contract_version: str | None = None
+    gate1_canary_issue: int | None = None
+    gate1_receipt_sha256: str | None = None
+    gate1_source_commit: str | None = None
+    runtime_binding_note: str | None = None
 
 
 def build_radius_sweep_manifest(
@@ -230,7 +246,7 @@ def build_radius_sweep_manifest(
     arm_identities: Sequence[ArmCampaignIdentity],
     options: ManifestOptions,
 ) -> dict[str, Any]:
-    """Build a deterministic preparation-only radius-sweep manifest.
+    """Build a deterministic pre-submission radius-sweep manifest.
 
     Args:
         manifest_config: Parsed ``issue-6642-radius-sweep-manifest.v1`` YAML mapping.
@@ -241,7 +257,7 @@ def build_radius_sweep_manifest(
         options: Stable manifest-build metadata (config path, git head).
 
     Returns:
-        JSON-serializable preparation manifest payload.
+        JSON-serializable pre-submission manifest payload.
     """
     if not options.dry_run:
         raise RadiusSweepManifestError(
@@ -310,7 +326,7 @@ def check_radius_sweep_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     _check_fixed_factors(manifest.get("fixed_factors"), violations)
     _check_immutable_commit(manifest.get("immutable_campaign_commit"), violations)
     _check_provenance_identity(manifest, violations)
-    _check_gate_preconditions(manifest.get("gate_preconditions"), violations)
+    _check_gate_preconditions(manifest.get("gate_preconditions"), manifest.get("arms"), violations)
     _check_missingness_policy(manifest.get("missingness_policy"), violations)
     _check_row_identity_ledger(manifest.get("row_identity_ledger_template"), violations)
 
@@ -490,15 +506,62 @@ def _validate_declared_fixed_factors(
         )
 
 
+def _runtime_binding_violations(metadata: Mapping[str, Any], *, label: str) -> list[str]:
+    """Return fail-closed violations for one runtime-binding metadata block."""
+    violations: list[str] = []
+    status = metadata.get("runtime_binding_status")
+    if status not in RUNTIME_BINDING_STATUSES:
+        violations.append(
+            f"{label}.runtime_binding_status must be one of {list(RUNTIME_BINDING_STATUSES)!r}, "
+            f"got {status!r}"
+        )
+        return violations
+
+    provenance_fields = (
+        "binding_contract_version",
+        "gate1_canary_issue",
+        "gate1_receipt_sha256",
+        "gate1_source_commit",
+    )
+    if status == RUNTIME_BINDING_PENDING_GATE1:
+        supplied = [field for field in provenance_fields if metadata.get(field) is not None]
+        if supplied:
+            violations.append(
+                f"{label} pending status cannot carry admitted Gate 1 provenance: {supplied!r}"
+            )
+        return violations
+
+    if metadata.get("binding_contract_version") != RUNTIME_BINDING_CONTRACT_VERSION:
+        violations.append(
+            f"{label}.binding_contract_version must be "
+            f"{RUNTIME_BINDING_CONTRACT_VERSION!r} for bound_runtime arms"
+        )
+    gate1_issue = metadata.get("gate1_canary_issue")
+    if isinstance(gate1_issue, bool) or gate1_issue != GATE1_CANARY_ISSUE:
+        violations.append(
+            f"{label}.gate1_canary_issue must be {GATE1_CANARY_ISSUE} for bound_runtime arms"
+        )
+    receipt = metadata.get("gate1_receipt_sha256")
+    if not isinstance(receipt, str) or _SHA256_PATTERN.fullmatch(receipt) is None:
+        violations.append(
+            f"{label}.gate1_receipt_sha256 must be a lowercase 64-character SHA-256 digest"
+        )
+    source_commit = metadata.get("gate1_source_commit")
+    if not isinstance(source_commit, str) or _GIT_SHA_PATTERN.fullmatch(source_commit) is None:
+        violations.append(
+            f"{label}.gate1_source_commit must be a lowercase 40-character commit hash"
+        )
+    return violations
+
+
 def validate_arm_campaign_payload(
     payload: Mapping[str, Any], *, arm_key: str, radius_m: float, baseline: bool
 ) -> None:
     """Fail closed when an arm campaign config's radius_sweep metadata drifts.
 
-    The ``radius_sweep`` block is preparation metadata that the camera-ready
-    loader ignores, so the sweep builder must prove it declares exactly the
-    intended treatment — and stays pending while Gate 1 has not passed — instead
-    of trusting a silently divergent declaration.
+    The ``radius_sweep`` block carries the declared treatment and, after Gate 1
+    admission, its receipt-backed runtime-binding provenance. The sweep builder
+    must validate both states instead of trusting a silently divergent declaration.
 
     Args:
         payload: Parsed arm campaign config mapping.
@@ -525,11 +588,7 @@ def validate_arm_campaign_payload(
         violations.append(f"radius_sweep.radius_m must be {radius_m!r}, got {declared_radius!r}")
     if raw.get("baseline_arm") is not baseline:
         violations.append(f"radius_sweep.baseline_arm must be {baseline}")
-    if raw.get("runtime_binding_status") != RUNTIME_BINDING_PENDING_GATE1:
-        violations.append(
-            "radius_sweep.runtime_binding_status must remain "
-            f"{RUNTIME_BINDING_PENDING_GATE1!r} while Gate 1 is pending"
-        )
+    violations.extend(_runtime_binding_violations(raw, label="radius_sweep"))
     if violations:
         raise RadiusSweepManifestError(
             f"arm campaign config radius_sweep metadata for {arm_key!r} violates the "
@@ -581,6 +640,21 @@ def _validate_arm_identities(
             raise RadiusSweepManifestError(
                 f"arm {arm_key!r} release_tag must be {expected_tag!r}, "
                 f"got {identity.release_tag!r}"
+            )
+        binding_violations = _runtime_binding_violations(
+            {
+                "runtime_binding_status": identity.runtime_binding_status,
+                "binding_contract_version": identity.binding_contract_version,
+                "gate1_canary_issue": identity.gate1_canary_issue,
+                "gate1_receipt_sha256": identity.gate1_receipt_sha256,
+                "gate1_source_commit": identity.gate1_source_commit,
+            },
+            label=f"arm {arm_key!r}",
+        )
+        if binding_violations:
+            raise RadiusSweepManifestError(
+                f"arm {arm_key!r} runtime-binding metadata violates the contract: "
+                + "; ".join(binding_violations)
             )
         validated.append(identity)
     return validated
@@ -692,17 +766,19 @@ def _arm_manifest(
         JSON-serializable radius-arm manifest mapping.
     """
     radius_m = float(radius_entry["radius_m"])
-    return {
+    manifest_arm = {
         "key": str(radius_entry["key"]),
         "radius_m": radius_m,
         "baseline": bool(radius_entry["baseline"]),
         "arm_campaign_config": identity.campaign_config,
         "release_tag": identity.release_tag,
-        "runtime_binding_status": RUNTIME_BINDING_PENDING_GATE1,
-        "runtime_binding_note": (
-            "Declared treatment metadata only. The radius is not yet bound to runtime "
-            "robot collision geometry; binding is the Gate 1 binding-canary (#6641) "
-            "deliverable. Production compute is blocked until Gate 1 passes."
+        "runtime_binding_status": identity.runtime_binding_status,
+        "runtime_binding_note": identity.runtime_binding_note
+        or (
+            "Runtime binding admitted after the Gate 1 receipt. Production compute "
+            "remains blocked until the separate Gate 2 campaign gates pass."
+            if identity.runtime_binding_status == RUNTIME_BINDING_BOUND_RUNTIME
+            else "Declared treatment metadata only. No runtime radius binding is admitted."
         ),
         "planner_keys": list(fixed_factors.planner_keys),
         "planner_count": len(fixed_factors.planner_keys),
@@ -714,6 +790,16 @@ def _arm_manifest(
             * len(fixed_factors.seeds)
         ),
     }
+    if identity.runtime_binding_status == RUNTIME_BINDING_BOUND_RUNTIME:
+        manifest_arm.update(
+            {
+                "binding_contract_version": identity.binding_contract_version,
+                "gate1_canary_issue": identity.gate1_canary_issue,
+                "gate1_receipt_sha256": identity.gate1_receipt_sha256,
+                "gate1_source_commit": identity.gate1_source_commit,
+            }
+        )
+    return manifest_arm
 
 
 def _fixed_factors_manifest(fixed_factors: FixedFactors) -> dict[str, Any]:
@@ -758,8 +844,8 @@ def _immutable_commit_manifest(
         "one_commit_across_all_arms": True,
         "note": (
             "All radius arms (0.5/0.8/1.0 m) must run at one immutable campaign "
-            "commit; production compute is blocked until Gate 1 passes, so no commit "
-            "is frozen as production evidence here."
+            "commit. Production compute remains blocked until the remaining Gate 2 "
+            "campaign gates pass, so no commit is frozen as production evidence here."
         ),
     }
 
@@ -772,7 +858,7 @@ def _gate_preconditions_manifest(manifest_config: Mapping[str, Any]) -> dict[str
     """
     raw = manifest_config.get("gate_preconditions")
     raw = raw if isinstance(raw, Mapping) else {}
-    return {
+    result = {
         "gate1_canary_issue": int(raw.get("gate1_canary_issue", GATE1_CANARY_ISSUE)),
         "gate1_canary_status": str(raw.get("gate1_canary_status", GATE1_STATUS_NOT_YET_PASSED)),
         "production_submission_authorized": bool(
@@ -786,6 +872,14 @@ def _gate_preconditions_manifest(manifest_config: Mapping[str, Any]) -> dict[str
             )
         ),
     }
+    for key in (
+        "gate1_receipt_sha256",
+        "gate1_source_commit",
+        "runtime_binding_contract_version",
+    ):
+        if raw.get(key) is not None:
+            result[key] = raw[key]
+    return result
 
 
 def _missingness_policy_manifest(manifest_config: Mapping[str, Any]) -> dict[str, Any]:
@@ -880,7 +974,7 @@ def _check_radii(radii: Any, violations: list[str]) -> None:
 
 
 def _check_arms(arms: Any, violations: list[str]) -> None:
-    """Assert each arm keeps its pending-binding status and full planner roster."""
+    """Assert each arm carries a valid binding state and the full planner roster."""
     if not isinstance(arms, list) or len(arms) != len(PRODUCTION_RADII):
         violations.append(f"arms must enumerate exactly {len(PRODUCTION_RADII)} radius arms")
         return
@@ -893,7 +987,7 @@ def _check_arms(arms: Any, violations: list[str]) -> None:
 
 
 def _check_arm_identity(arm: Mapping[str, Any], index: int, violations: list[str]) -> None:
-    """Assert one arm's radius identity, campaign config, and pending runtime status."""
+    """Assert one arm's radius identity and receipt-backed binding metadata."""
     expected_key = PRODUCTION_RADIUS_KEYS[index]
     arm_key = arm.get("key")
     if arm_key != expected_key:
@@ -909,11 +1003,12 @@ def _check_arm_identity(arm: Mapping[str, Any], index: int, violations: list[str
     expected_tag = EXPECTED_ARM_RELEASE_TAGS.get(expected_key)
     if arm.get("release_tag") != expected_tag:
         violations.append(f"arm {arm_key!r} release_tag must be {expected_tag!r}")
-    if arm.get("runtime_binding_status") != RUNTIME_BINDING_PENDING_GATE1:
-        violations.append(
-            f"arm {arm_key!r} runtime_binding_status must remain "
-            f"{RUNTIME_BINDING_PENDING_GATE1!r} while Gate 1 is pending"
+    violations.extend(
+        _runtime_binding_violations(
+            arm,
+            label=f"arm {arm_key!r}",
         )
+    )
 
 
 def _check_arm_roster_and_counts(arm: Mapping[str, Any], violations: list[str]) -> None:
@@ -1020,23 +1115,101 @@ def _check_provenance_identity(manifest: Mapping[str, Any], violations: list[str
         violations.append("manifest git_head must match immutable_campaign_commit.git_head")
 
 
-def _check_gate_preconditions(gate: Any, violations: list[str]) -> None:
-    """Assert production submission stays blocked while Gate 1 has not passed."""
+def _gate_binding_metadata(gate: Mapping[str, Any]) -> dict[str, Any]:
+    """Project gate-precondition fields into the arm-binding contract shape.
+
+    Returns:
+        Mapping with the field names expected by the runtime-binding validator.
+    """
+    return {
+        "runtime_binding_status": RUNTIME_BINDING_BOUND_RUNTIME,
+        "binding_contract_version": gate.get("runtime_binding_contract_version"),
+        "gate1_canary_issue": gate.get("gate1_canary_issue"),
+        "gate1_receipt_sha256": gate.get("gate1_receipt_sha256"),
+        "gate1_source_commit": gate.get("gate1_source_commit"),
+    }
+
+
+def _check_passed_gate_arms(gate: Mapping[str, Any], arms: Any, violations: list[str]) -> None:
+    """Require every arm to carry provenance matching a passed Gate 1 state."""
+    if not isinstance(arms, list):
+        return
+    gate_fields = {
+        "binding_contract_version": "runtime_binding_contract_version",
+        "gate1_canary_issue": "gate1_canary_issue",
+        "gate1_receipt_sha256": "gate1_receipt_sha256",
+        "gate1_source_commit": "gate1_source_commit",
+    }
+    for index, arm in enumerate(arms):
+        if not isinstance(arm, Mapping):
+            continue
+        if arm.get("runtime_binding_status") != RUNTIME_BINDING_BOUND_RUNTIME:
+            violations.append(
+                f"arm {index} runtime_binding_status must be "
+                f"{RUNTIME_BINDING_BOUND_RUNTIME!r} when Gate 1 is passed"
+            )
+            continue
+        for arm_field, gate_field in gate_fields.items():
+            if arm.get(arm_field) != gate.get(gate_field):
+                violations.append(
+                    f"arm {index} {arm_field} must match gate_preconditions.{gate_field}"
+                )
+
+
+def _check_pending_gate_arms(arms: Any, violations: list[str]) -> None:
+    """Require every arm to remain pending when Gate 1 has not passed."""
+    if not isinstance(arms, list):
+        return
+    for index, arm in enumerate(arms):
+        if (
+            isinstance(arm, Mapping)
+            and arm.get("runtime_binding_status") != RUNTIME_BINDING_PENDING_GATE1
+        ):
+            violations.append(
+                f"arm {index} runtime_binding_status must be "
+                f"{RUNTIME_BINDING_PENDING_GATE1!r} when Gate 1 is pending"
+            )
+
+
+def _check_gate_preconditions(gate: Any, arms: Any, violations: list[str]) -> None:
+    """Assert receipt-backed Gate 1 state and the continuing production block."""
     if not isinstance(gate, Mapping):
         violations.append("manifest must carry a gate_preconditions mapping")
         return
     if gate.get("gate1_canary_issue") != GATE1_CANARY_ISSUE:
         violations.append(f"gate_preconditions.gate1_canary_issue must be {GATE1_CANARY_ISSUE}")
-    # This preparation manifest has exactly one valid Gate 1 state. Reject
-    # unknown, passed, or otherwise malformed states instead of treating them as
-    # permission to proceed. Production submission MUST remain blocked.
-    if gate.get("gate1_canary_status") != GATE1_STATUS_NOT_YET_PASSED:
+    gate_status = gate.get("gate1_canary_status")
+    if gate_status not in GATE1_STATUSES:
         violations.append(
-            "gate_preconditions.gate1_canary_status must remain "
-            f"{GATE1_STATUS_NOT_YET_PASSED!r} for a preparation manifest"
+            "gate_preconditions.gate1_canary_status must be one of "
+            f"{list(GATE1_STATUSES)!r}, got {gate_status!r}"
         )
     if gate.get("production_submission_authorized") is not False:
-        violations.append("production_submission_authorized must be false while Gate 1 is pending")
+        violations.append("production_submission_authorized must remain false for this manifest")
+    if gate_status == GATE1_STATUS_PASSED:
+        violations.extend(
+            _runtime_binding_violations(
+                _gate_binding_metadata(gate),
+                label="gate_preconditions",
+            )
+        )
+        _check_passed_gate_arms(gate, arms, violations)
+    elif gate_status == GATE1_STATUS_NOT_YET_PASSED:
+        supplied = [
+            field
+            for field in (
+                "gate1_receipt_sha256",
+                "gate1_source_commit",
+                "runtime_binding_contract_version",
+            )
+            if gate.get(field) is not None
+        ]
+        if supplied:
+            violations.append(
+                "gate_preconditions pending status cannot carry admitted Gate 1 provenance: "
+                f"{supplied!r}"
+            )
+        _check_pending_gate_arms(arms, violations)
 
 
 def _check_missingness_policy(policy: Any, violations: list[str]) -> None:
@@ -1115,7 +1288,9 @@ __all__ = [
     "EXPECTED_SEED_SET",
     "EXPECTED_TOTAL_ROWS",
     "GATE1_CANARY_ISSUE",
+    "GATE1_STATUSES",
     "GATE1_STATUS_NOT_YET_PASSED",
+    "GATE1_STATUS_PASSED",
     "IMMUTABLE_COMMIT_POLICY",
     "ISSUE_6642",
     "MANIFEST_CHECK_STATUS",
@@ -1127,7 +1302,10 @@ __all__ = [
     "RADIUS_SWEEP_MANIFEST_SCHEMA",
     "RELEASE_PLANNER_KEYS",
     "ROW_IDENTITY_CONTRACT",
+    "RUNTIME_BINDING_BOUND_RUNTIME",
+    "RUNTIME_BINDING_CONTRACT_VERSION",
     "RUNTIME_BINDING_PENDING_GATE1",
+    "RUNTIME_BINDING_STATUSES",
     "ArmCampaignIdentity",
     "FixedFactors",
     "ManifestOptions",

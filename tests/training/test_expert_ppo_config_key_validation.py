@@ -219,7 +219,15 @@ def test_all_runtime_ppo_coercion_keys_are_accepted() -> None:
 
 
 def _canonical_expert_configs() -> tuple[Path, ...]:
-    """Find tracked configs intended for ExpertTrainingConfig or its recurrent extension."""
+    """Find tracked configs intended for ExpertTrainingConfig or its recurrent extension.
+
+    A tracked config is a canonical expert config when it is either a full
+    config on its own or an overlay whose base_config chain resolves to a
+    directly runnable leaf. A pure intermediate base (an overlay that other
+    tracked configs chain on, e.g. the issue_576_br06 predictive sub-base) is
+    not directly runnable; its shared keys are validated transitively through
+    the runnable variants that inherit them.
+    """
     required_keys = {
         "convergence",
         "evaluation",
@@ -227,15 +235,37 @@ def _canonical_expert_configs() -> tuple[Path, ...]:
         "scenario_config",
         "total_timesteps",
     }
+    tracked_paths = sorted(_CONFIG_ROOT.rglob("*.yaml"))
+    # Resolve base_config references exactly like train_ppo does so chained
+    # intermediate bases (configs used as a base by another tracked config)
+    # are identifiable across subdirectories.
+    base_reference_paths: set[Path] = set()
+    for config_path in tracked_paths:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, Mapping):
+            continue
+        base_raw = raw.get("base_config")
+        if not isinstance(base_raw, str):
+            continue
+        base_path = Path(base_raw)
+        if not base_path.is_absolute():
+            base_path = config_path.parent / base_path
+        base_reference_paths.add(base_path.resolve())
+
     selected: list[Path] = []
-    for config_path in sorted(_CONFIG_ROOT.rglob("*.yaml")):
+    for config_path in tracked_paths:
         raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if not isinstance(raw, Mapping):
             continue
         raw_keys = set(raw)
         is_full_config = required_keys <= raw_keys
         is_expert_overlay = "base_config" in raw_keys and "candidates" not in raw_keys
-        if is_full_config or is_expert_overlay:
+        is_intermediate_base = (
+            is_expert_overlay
+            and not is_full_config
+            and config_path.resolve() in base_reference_paths
+        )
+        if is_full_config or (is_expert_overlay and not is_intermediate_base):
             selected.append(config_path)
     return tuple(selected)
 
@@ -253,6 +283,28 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
             failures.append(f"{relative_path}: {type(exc).__name__}: {exc}")
 
     assert not failures, "\n".join(failures)
+
+
+def test_chained_intermediate_base_is_not_a_canonical_expert_config() -> None:
+    """Pure intermediate bases (overlays that variants chain on) must not be
+    required to load standalone, while every runnable leaf stays in the set.
+
+    Issue #6680 introduced the issue_576_br06 predictive sub-base as an
+    intermediate between the family base and the v5-v11 variants. It holds
+    only byte-identical shared keys (no policy_id / evaluation schedule, which
+    are explicit per variant), so it is not a directly runnable expert config.
+    Requiring it to load standalone would force duplicating per-variant keys
+    into the shared base; its keys are validated transitively through the
+    runnable predictive variants that inherit them.
+    """
+    config_paths = _canonical_expert_configs()
+    selected_relative = {str(p.relative_to(_REPO_ROOT)) for p in config_paths}
+
+    sub_base = _CONFIG_ROOT / "expert_ppo_issue_576_br06_predictive_sub_base.yaml"
+    assert str(sub_base.relative_to(_REPO_ROOT)) not in selected_relative
+    assert sub_base in _CONFIG_ROOT.rglob("expert_ppo_issue_576_br06_predictive_sub_base.yaml")
+    for variant in _CONFIG_ROOT.glob("expert_ppo_issue_576_br06_v*_predictive*.yaml"):
+        assert str(variant.relative_to(_REPO_ROOT)) in selected_relative
 
 
 def test_base_config_typo_survives_merge_and_is_rejected(tmp_path: Path) -> None:

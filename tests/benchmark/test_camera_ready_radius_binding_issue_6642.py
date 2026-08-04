@@ -29,7 +29,7 @@ from robot_sf.benchmark.camera_ready._preflight import (
 _CONFIG_PATH = Path("radius-sweep-test.yaml")
 _GATE1_RECEIPT = "a" * 64
 _GATE1_COMMIT = "b" * 40
-_TRACKED_GATE1_RECEIPT = "aab4c1485f8bb01e5b0d9732ed88d6d4c47d4865ecfb996d14958917340961d8"
+_TRACKED_GATE1_RECEIPT = "88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922"
 _TRACKED_GATE1_COMMIT = "2910980fa7c49b726c3007c1f93aba6ec0b54d8e"
 
 

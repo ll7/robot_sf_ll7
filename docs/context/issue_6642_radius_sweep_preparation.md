@@ -44,19 +44,28 @@ is submitted, no episodes are run, and the manifest's
 ## Deliverables
 
 - `configs/benchmarks/issue_6642_radius_sweep_manifest_v1.yaml` — declarative
-  preparation manifest: radii, fixed factors, one-commit policy, gate preconditions,
-  and the fail-closed missingness/evidence-exclusion policy.
-- `configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml` — the 1.0 m arm campaign
-  config (release baseline structure, pinned to the sweep's own issue-scoped release
-  tag so all arms share one commit). The preflight dry-run in this PR runs here.
+  preparation manifest: radii, one arm campaign config per radius, fixed factors,
+  one-commit policy, gate preconditions, and the fail-closed
+  missingness/evidence-exclusion policy.
+- `configs/benchmarks/issue_6642_radius_sweep_arm_0p5m.yaml`,
+  `configs/benchmarks/issue_6642_radius_sweep_arm_0p8m.yaml`, and
+  `configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml` — one campaign
+  config per radius arm. All three are structurally identical (release baseline
+  structure, pinned to the sweep's own issue-scoped release tag so all arms
+  share one commit); only the `radius_sweep` treatment metadata and the release
+  tag differ. The preflight dry-run in this PR runs against each arm config.
 - `robot_sf/benchmark/radius_sweep_manifest.py` — manifest builder and checker that
-  enforces the preparation boundary (3 radii; 14-key release roster in order; 48 cells;
+  enforces the preparation boundary (3 radii; one tracked campaign config and
+  issue-scoped release tag per arm; 14-key release roster in order; 48 cells;
   seeds 111-140; horizon 600; one commit; gate block; no degraded-as-evidence).
 - `scripts/benchmark/build_radius_sweep_manifest_issue_6642.py` — CLI that resolves
-  fixed factors from the arm config + scenario matrix and writes the manifest +
-  checker artifacts under `output/`.
+  fixed factors and campaign identity from every arm config + scenario matrix,
+  fails closed on any non-radius drift across arms or on a divergent
+  `radius_sweep` treatment declaration, and writes the manifest + checker
+  artifacts under `output/`.
 - `tests/benchmark/test_radius_sweep_manifest_issue_6642.py` — focused tests covering
-  the build and the fail-closed checker contract.
+  the build, the per-arm identity and treatment contracts, and the fail-closed
+  checker behavior (including isolated-tree drift negative controls).
 
 ## How to launch (post-Gate-1, by a separate authorized run)
 

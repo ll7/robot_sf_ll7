@@ -3,9 +3,11 @@
 
 This script is a dry-run preparation tool. It reads the tracked manifest config
 (``configs/benchmarks/issue_6642_radius_sweep_manifest_v1.yaml``), resolves the
-fixed factors from the 1.0 m arm campaign config and the scenario matrix, and
-writes a preparation-only manifest plus a checker summary. It does NOT submit,
-run, or authorize any production SLURM compute.
+fixed factors and campaign identity of every radius arm (0.5/0.8/1.0 m) from its
+own tracked arm campaign config plus the scenario matrix, fails closed on any
+non-radius drift across arms, and writes a preparation-only manifest plus a
+checker summary. It does NOT submit, run, or authorize any production SLURM
+compute.
 
 Exit codes preserve fail-closed semantics:
 - 0: manifest built and checker passes
@@ -63,36 +65,57 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _resolve_arm_fixed_factors(manifest_config: dict[str, Any], repo_root: Path):
-    """Resolve fixed factors from the arm campaign config and scenario matrix.
+def _resolve_arm(
+    manifest_config: dict[str, Any],
+    repo_root: Path,
+    *,
+    arm_key: str,
+    radius_m: float,
+    baseline: bool,
+) -> tuple[Any, Any]:
+    """Resolve one radius arm's fixed factors and campaign identity.
 
     Imports are lazy so this script's argparse/help path stays import-light.
+
+    Returns:
+        Tuple of ``(FixedFactors, ArmCampaignIdentity)`` for the arm.
     """
     from robot_sf.benchmark.camera_ready import load_campaign_config
     from robot_sf.benchmark.radius_sweep_manifest import (
+        ARM_CONFIG_KEYS,
         EXPECTED_DT,
         EXPECTED_HORIZON,
         EXPECTED_KINEMATICS,
+        ArmCampaignIdentity,
         FixedFactors,
+        validate_arm_campaign_payload,
+        validate_arm_fixed_factors,
     )
     from robot_sf.training.scenario_loader import load_scenarios
 
-    arm_config_path = repo_root / str(manifest_config["arm_campaign_config_1p0m"])
+    config_key = ARM_CONFIG_KEYS[arm_key]
+    declared = manifest_config.get(config_key)
+    if not isinstance(declared, str) or not declared.strip():
+        raise ValueError(f"Manifest config requires a non-empty {config_key!r}")
+    arm_config_path = repo_root / declared
     if not arm_config_path.is_file():
-        raise FileNotFoundError(f"1.0 m arm campaign config not found: {arm_config_path}")
+        raise FileNotFoundError(f"{arm_key} arm campaign config not found: {arm_config_path}")
     cfg = load_campaign_config(arm_config_path)
+    validate_arm_campaign_payload(
+        _load_yaml(arm_config_path), arm_key=arm_key, radius_m=radius_m, baseline=baseline
+    )
 
     if cfg.horizon is None or cfg.dt is None:
-        raise ValueError("1.0 m arm campaign config must declare both horizon and dt")
+        raise ValueError(f"{arm_key} arm campaign config must declare both horizon and dt")
     if tuple(cfg.kinematics_matrix) != (EXPECTED_KINEMATICS,):
         raise ValueError(
-            f"1.0 m arm kinematics_matrix must be [{EXPECTED_KINEMATICS!r}], "
+            f"{arm_key} arm kinematics_matrix must be [{EXPECTED_KINEMATICS!r}], "
             f"got {list(cfg.kinematics_matrix)!r}"
         )
     if cfg.horizon != EXPECTED_HORIZON:
-        raise ValueError(f"1.0 m arm horizon must be {EXPECTED_HORIZON}, got {cfg.horizon}")
+        raise ValueError(f"{arm_key} arm horizon must be {EXPECTED_HORIZON}, got {cfg.horizon}")
     if cfg.dt != EXPECTED_DT:
-        raise ValueError(f"1.0 m arm dt must be {EXPECTED_DT}, got {cfg.dt}")
+        raise ValueError(f"{arm_key} arm dt must be {EXPECTED_DT}, got {cfg.dt}")
 
     planner_keys = tuple(planner.key for planner in cfg.planners if planner.enabled)
 
@@ -116,7 +139,7 @@ def _resolve_arm_fixed_factors(manifest_config: dict[str, Any], repo_root: Path)
         raise ValueError(f"seed_set {seed_set_name!r} not found in {seed_sets_path}")
     seeds = tuple(int(seed) for seed in seed_sets[seed_set_name])
 
-    return FixedFactors(
+    factors = FixedFactors(
         scenario_matrix=_repo_relative(scenario_matrix_path),
         scenario_count=len(scenario_names),
         scenario_names=scenario_names,
@@ -128,6 +151,71 @@ def _resolve_arm_fixed_factors(manifest_config: dict[str, Any], repo_root: Path)
         kinematics=str(cfg.kinematics_matrix[0]),
         release_tag=str(cfg.release_tag),
     )
+    validate_arm_fixed_factors(factors, arm_key=arm_key)
+    identity = ArmCampaignIdentity(
+        arm_key=arm_key,
+        campaign_config=_repo_relative(arm_config_path),
+        release_tag=str(cfg.release_tag),
+    )
+    return factors, identity
+
+
+def _resolve_all_arms(manifest_config: dict[str, Any], repo_root: Path) -> tuple[Any, list[Any]]:
+    """Resolve and cross-validate all three radius arms.
+
+    The #6600/#6642 stop rule fixes every non-radius factor across arms, so any
+    drift between one arm's resolved factors and the baseline arm's factors fails
+    closed before any manifest is built.
+
+    Returns:
+        Tuple of the baseline (1.0 m) arm's fixed factors and the arm campaign
+        identities in radius order (0.5/0.8/1.0 m).
+    """
+    from dataclasses import replace
+
+    from robot_sf.benchmark.radius_sweep_manifest import (
+        BASELINE_RADIUS,
+        PRODUCTION_RADII,
+        PRODUCTION_RADIUS_KEYS,
+    )
+
+    resolved = [
+        _resolve_arm(
+            manifest_config,
+            repo_root,
+            arm_key=arm_key,
+            radius_m=radius_m,
+            baseline=radius_m == BASELINE_RADIUS,
+        )
+        for arm_key, radius_m in zip(PRODUCTION_RADIUS_KEYS, PRODUCTION_RADII, strict=True)
+    ]
+    baseline_factors = resolved[-1][0]
+    baseline_shared = replace(baseline_factors, release_tag="")
+    for arm_key, (factors, _identity) in zip(PRODUCTION_RADIUS_KEYS, resolved, strict=True):
+        if replace(factors, release_tag="") != baseline_shared:
+            raise ValueError(
+                f"non-radius fixed factors differ between arm {arm_key!r} and the "
+                "baseline arm; all non-radius factors must stay fixed across arms"
+            )
+    return baseline_factors, [identity for _factors, identity in resolved]
+
+
+def _resolve_arm_fixed_factors(manifest_config: dict[str, Any], repo_root: Path):
+    """Resolve fixed factors from the baseline 1.0 m arm campaign config.
+
+    Returns:
+        The baseline arm's ``FixedFactors``.
+    """
+    from robot_sf.benchmark.radius_sweep_manifest import BASELINE_RADIUS
+
+    factors, _identity = _resolve_arm(
+        manifest_config,
+        repo_root,
+        arm_key="r1p0",
+        radius_m=BASELINE_RADIUS,
+        baseline=True,
+    )
+    return factors
 
 
 def build_and_check(
@@ -152,14 +240,17 @@ def build_and_check(
     )
 
     manifest_config = _load_yaml(manifest_config_path)
-    fixed_factors = _resolve_arm_fixed_factors(manifest_config, repo_root)
+    fixed_factors, arm_identities = _resolve_all_arms(manifest_config, repo_root)
     options = ManifestOptions(
         config_path=_repo_relative(manifest_config_path),
         git_head=_git_head(repo_root),
     )
     try:
         manifest = build_radius_sweep_manifest(
-            manifest_config, fixed_factors=fixed_factors, options=options
+            manifest_config,
+            fixed_factors=fixed_factors,
+            arm_identities=arm_identities,
+            options=options,
         )
         check_summary = check_radius_sweep_manifest(manifest)
     except RadiusSweepManifestError as exc:

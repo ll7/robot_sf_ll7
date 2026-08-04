@@ -19,6 +19,11 @@
 # exact release baseline cannot be reused without a code-version confound, the
 # 1.0 m arm is rerun at the same immutable campaign commit as the 0.5 m and 0.8 m
 # arms; that rerun is what `arm_campaign_config_1p0m` pins below.
+#
+# Every radius arm has its own campaign config. All three are structurally
+# identical except for the radius treatment metadata and the issue-scoped release
+# tag; the manifest builder resolves all three and fails closed on any non-radius
+# drift across arms ("all non-radius factors fixed" stop rule of #6600/#6642).
 schema_version: issue-6642-radius-sweep-manifest.v1
 issue: 6642
 parent_issue: 6600
@@ -37,10 +42,14 @@ claim_boundary: >-
 # must match every non-radius factor declared here.
 release_baseline_config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml
 
-# The 1.0 m arm campaign config, pinned to the sweep's own immutable commit (a
-# rerun of the release structure rather than the frozen release tag, so all
-# three arms share one campaign commit). The preflight dry-run in this PR runs
-# against this config to prove the arm structure is camera-ready valid.
+# Arm campaign configs, one per radius, each pinned to the sweep's own immutable
+# commit (a rerun of the release structure rather than the frozen release tag, so
+# all three arms share one campaign commit). The 1.0 m arm is the matched release
+# comparator; the 0.5 m and 0.8 m arms are treatment arms. The preflight dry-run
+# in this PR runs against each arm config to prove the arm structure is
+# camera-ready valid.
+arm_campaign_config_0p5m: configs/benchmarks/issue_6642_radius_sweep_arm_0p5m.yaml
+arm_campaign_config_0p8m: configs/benchmarks/issue_6642_radius_sweep_arm_0p8m.yaml
 arm_campaign_config_1p0m: configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml
 
 # Radius treatment. Exactly three radii; exactly one baseline (1.0 m).

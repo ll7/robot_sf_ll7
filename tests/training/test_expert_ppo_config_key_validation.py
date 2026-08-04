@@ -236,6 +236,7 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
         "scenario_config",
         "total_timesteps",
     }
+    runnable_overlay_keys = {"env_factory_kwargs", "num_envs", "worker_mode"}
     tracked_paths = sorted(config_root.rglob("*.yaml"))
     # Resolve base_config references exactly like train_ppo does so chained
     # intermediate bases (configs used as a base by another tracked config)
@@ -261,9 +262,14 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
         raw_keys = set(raw)
         is_full_config = required_keys <= raw_keys
         is_expert_overlay = "base_config" in raw_keys and "candidates" not in raw_keys
+        # A runnable overlay has its own execution controls.  The predictive
+        # sub-base is independently loadable after #6748, but intentionally
+        # lacks those controls and remains an intermediate shared overlay.
+        is_runnable_expert_overlay = runnable_overlay_keys <= raw_keys
         is_intermediate_base = (
             is_expert_overlay
             and not is_full_config
+            and not is_runnable_expert_overlay
             and config_path.resolve() in base_reference_paths
         )
         if is_full_config or (is_expert_overlay and not is_intermediate_base):
@@ -273,7 +279,7 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
 
 def test_all_tracked_canonical_expert_configs_load() -> None:
     config_paths = _canonical_expert_configs()
-    assert len(config_paths) >= 130
+    assert len(config_paths) == 136
 
     failures: list[str] = []
     for config_path in config_paths:
@@ -301,6 +307,8 @@ def test_chained_intermediate_base_is_not_a_canonical_expert_leaf() -> None:
     sub_base = _CONFIG_ROOT / "expert_ppo_issue_576_br06_predictive_sub_base.yaml"
     assert str(sub_base.relative_to(_REPO_ROOT)) not in selected_relative
     assert sub_base in _CONFIG_ROOT.rglob("expert_ppo_issue_576_br06_predictive_sub_base.yaml")
+    v3 = _CONFIG_ROOT / "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
+    assert str(v3.relative_to(_REPO_ROOT)) in selected_relative
     train_ppo.load_expert_training_config(sub_base)
     for variant in _CONFIG_ROOT.rglob("expert_ppo_*_predictive*.yaml"):
         if variant == sub_base:

@@ -11,7 +11,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,7 @@ PLACEHOLDER_RE = re.compile(r"<[^<>\s][^<>]*>")
 BRACE_PLACEHOLDER_RE = re.compile(r"\{[^{}\s][^{}]*\}")
 PERCENT_PLACEHOLDER_RE = re.compile(r"%[A-Za-z][A-Za-z0-9_]*")
 GOOD_STATUS = {"native", "available", "ok"}
+FULL_COMMIT_RE = re.compile(r"[0-9a-fA-F]{40}")
 
 
 def _sha256(path: Path) -> str:
@@ -30,6 +33,43 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _anchored_path(value: str, anchor: Path) -> Path:
+    candidate = Path(value).expanduser()
+    if not candidate.is_absolute():
+        candidate = anchor / candidate
+    return candidate
+
+
+def _repository_head(repository: Path) -> str:
+    result = subprocess.run(
+        ["git", "-C", os.fspath(repository), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def _check_output_root(
+    value: str,
+    *,
+    label: str,
+    anchor: Path,
+    blockers: list[str],
+) -> Path:
+    candidate = _anchored_path(value, anchor)
+    normalized = candidate.resolve(strict=False)
+    if candidate.is_symlink():
+        blockers.append(f"{label} is a symlink and cannot be reserved: {candidate}")
+    elif candidate.exists() and not candidate.is_dir():
+        blockers.append(f"{label} is not a directory: {candidate}")
+    elif candidate.exists() and any(candidate.iterdir()):
+        blockers.append(f"{label} is not empty/reservable: {candidate}")
+    return normalized
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -104,6 +144,7 @@ def preflight(
     canary_key: str = "",
     expected_public_commit: str = "",
     actual_public_commit: str = "",
+    public_repo: Path | None = None,
     output_root: Path | None = None,
 ) -> dict[str, Any]:
     blockers: list[str] = []
@@ -116,20 +157,39 @@ def preflight(
         expected_public_commit
         or str(manifest.get("expected_public_commit", "") or "").strip()
     )
+    actual_source = "argument" if actual_public_commit else "manifest"
     actual = (
         actual_public_commit or str(manifest.get("public_commit", "") or "").strip()
     )
-    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", expected):
+    if public_repo is not None:
+        repository_actual = _repository_head(public_repo)
+        actual_source = "repository"
+        if not repository_actual:
+            blockers.append(
+                f"public repository HEAD could not be resolved: {public_repo}"
+            )
+        elif (
+            actual_public_commit
+            and actual_public_commit.lower() != repository_actual.lower()
+        ):
+            blockers.append(
+                "actual public commit does not match the supplied public repository HEAD"
+            )
+        actual = repository_actual
+    elif not actual_public_commit:
+        blockers.append(
+            "actual public commit must be supplied explicitly or bound with public_repo"
+        )
+    if not FULL_COMMIT_RE.fullmatch(expected):
         blockers.append("expected public commit is missing or invalid")
-    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", actual):
+    if not FULL_COMMIT_RE.fullmatch(actual):
         blockers.append("actual public commit is missing or invalid")
     if (
         expected
         and actual
-        and not (
-            expected.lower().startswith(actual.lower())
-            or actual.lower().startswith(expected.lower())
-        )
+        and FULL_COMMIT_RE.fullmatch(expected)
+        and FULL_COMMIT_RE.fullmatch(actual)
+        and expected.lower() != actual.lower()
     ):
         blockers.append(f"public commit mismatch: expected {expected}, actual {actual}")
 
@@ -138,10 +198,16 @@ def preflight(
         blockers.append("packet identity is missing")
         packet = {}
     config_value = str(packet.get("config", "") or "").strip()
-    config = Path(config_value) if config_value else None
+    config = (
+        _anchored_path(config_value, manifest_path.resolve().parent)
+        if config_value
+        else None
+    )
     if not config_value:
         blockers.append("packet.config is missing")
-    elif config.is_absolute() and not config.is_file():
+    elif config.is_symlink():
+        blockers.append(f"packet config must be a regular file: {config}")
+    elif not config.is_file():
         blockers.append(f"packet config does not exist: {config}")
     packet_hash = str(packet.get("sha256", "") or "").strip().lower()
     if not packet_hash:
@@ -160,32 +226,49 @@ def preflight(
     if not isinstance(cells, list) or not cells:
         blockers.append("campaign cells are missing")
         cells = []
+    malformed_indexes = [
+        index for index, cell in enumerate(cells) if not isinstance(cell, dict)
+    ]
+    for index in malformed_indexes:
+        blockers.append(f"cells[{index}] must be an object")
+    dict_cells = [
+        (index, cell) for index, cell in enumerate(cells) if isinstance(cell, dict)
+    ]
     keys: list[str] = []
     output_roots: dict[str, str] = {}
     selected = [
-        cell
-        for cell in cells
-        if isinstance(cell, dict)
-        and (not canary_key or str(cell.get("key", "")) == canary_key)
+        (index, cell)
+        for index, cell in dict_cells
+        if not canary_key or str(cell.get("key", "")) == canary_key
     ]
     if canary_key and not selected:
         blockers.append(f"canary key not found: {canary_key}")
-    for index, cell in enumerate(selected):
+    for index, cell in selected:
         key = _validate_cell(cell, f"cells[{index}]", blockers)
         if key in keys:
             blockers.append(f"duplicate campaign cell key: {key}")
         keys.append(key)
         output_root_value = str(cell.get("output_root", "") or "").strip()
-        if output_root_value and output_root_value in output_roots:
-            blockers.append(
-                f"campaign cells {output_roots[output_root_value]} and {key} share output_root {output_root_value}"
+        if output_root_value:
+            normalized_root = _check_output_root(
+                output_root_value,
+                label=f"cells[{index}].output_root",
+                anchor=manifest_path.resolve().parent,
+                blockers=blockers,
             )
-        elif output_root_value:
-            output_roots[output_root_value] = key
+            normalized_key = os.fspath(normalized_root)
+        else:
+            normalized_key = ""
+        if normalized_key and normalized_key in output_roots:
+            blockers.append(
+                f"campaign cells {output_roots[normalized_key]} and {key} share output_root {normalized_key}"
+            )
+        elif normalized_key:
+            output_roots[normalized_key] = key
 
     if not canary_key:
-        for cell in cells:
-            if isinstance(cell, dict) and str(cell.get("key", "")) not in keys:
+        for _index, cell in dict_cells:
+            if str(cell.get("key", "")) not in keys:
                 keys.append(str(cell.get("key", "")))
 
     paired = manifest.get("paired_keys", [])
@@ -212,16 +295,30 @@ def preflight(
         str(aggregate.get("artifact_contract", "") or "").strip()
     )
     if output_root is not None:
-        if output_root.is_symlink() or (
-            output_root.exists()
-            and (not output_root.is_dir() or any(output_root.iterdir()))
-        ):
-            blockers.append(f"output root is not empty/reservable: {output_root}")
+        normalized_output_root = _check_output_root(
+            os.fspath(output_root),
+            label="output root",
+            anchor=manifest_path.resolve().parent,
+            blockers=blockers,
+        )
+        normalized_output_key = os.fspath(normalized_output_root)
+        if normalized_output_key in output_roots:
+            blockers.append(
+                f"output root overlaps campaign cell {output_roots[normalized_output_key]}: {normalized_output_key}"
+            )
+
+    canary_safe = not blockers
+    full_campaign_safe = canary_safe and not canary_key
+    submit_safe = full_campaign_safe
 
     report = {
         "schema_version": SCHEMA_VERSION,
-        "status": "ready" if not blockers else "blocked",
-        "submit_safe": not blockers,
+        "status": (
+            "blocked" if blockers else "canary_ready" if canary_key else "ready"
+        ),
+        "submit_safe": submit_safe,
+        "canary_safe": canary_safe,
+        "full_campaign_safe": full_campaign_safe,
         "no_submit": True,
         "blockers": list(dict.fromkeys(blockers)),
         "remediation": [
@@ -236,13 +333,20 @@ def preflight(
             "campaign_id": campaign_id,
             "expected_public_commit": expected,
             "actual_public_commit": actual,
+            "actual_commit_source": actual_source,
             "packet_config": config_value,
+            "packet_config_resolved": str(config.resolve()) if config else "",
             "packet_sha256": packet_hash,
         },
         "canary_coverage": {
             "mode": "canary" if canary_key else "full-structure",
             "selected_key": canary_key,
             "validated_keys": keys,
+            "unvalidated_keys": [
+                str(cell.get("key", ""))
+                for _index, cell in dict_cells
+                if str(cell.get("key", "")) not in keys
+            ],
             "aggregate_validated": aggregate_validated,
         },
         "planner_keys": keys,
@@ -256,6 +360,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--canary-key", default="")
     parser.add_argument("--expected-public-commit", default="")
     parser.add_argument("--actual-public-commit", default="")
+    parser.add_argument(
+        "--public-repo",
+        type=Path,
+        help="bind actual_public_commit to git HEAD in this local repository",
+    )
     parser.add_argument("--output-root", type=Path)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -271,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
             canary_key=args.canary_key,
             expected_public_commit=args.expected_public_commit,
             actual_public_commit=args.actual_public_commit,
+            public_repo=args.public_repo,
             output_root=args.output_root,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -278,6 +388,8 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": SCHEMA_VERSION,
             "status": "input_error",
             "submit_safe": False,
+            "canary_safe": False,
+            "full_campaign_safe": False,
             "no_submit": True,
             "blockers": [str(exc)],
             "remediation": ["provide a readable JSON campaign manifest"],
@@ -293,11 +405,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, sort_keys=True))
     else:
         print(
-            f"campaign-preflight: status={report['status']} submit_safe={report['submit_safe']}"
+            f"campaign-preflight: status={report['status']} submit_safe={report['submit_safe']} canary_safe={report['canary_safe']}"
         )
         for blocker in report["blockers"]:
             print(f"blocker: {blocker}", file=sys.stderr)
-    return 0 if report["submit_safe"] else 2
+    safe_for_invocation = (
+        report["canary_safe"] if args.canary_key else report["submit_safe"]
+    )
+    return 0 if safe_for_invocation else 2
 
 
 if __name__ == "__main__":

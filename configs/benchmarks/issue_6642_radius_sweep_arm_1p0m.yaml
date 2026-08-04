@@ -7,15 +7,14 @@
 # own immutable campaign commit so all three radius arms (0.5/0.8/1.0 m) run at
 # one commit. The preflight dry-run in PR #6642 runs against this config.
 #
-# Claim boundary: PREPARATION ONLY. This config declares the 1.0 m arm structure
-# and is validated by the camera-ready preflight. It is NOT benchmark evidence on
-# its own. The radius treatment is declared in `radius_sweep` metadata below for
-# the sweep manifest builder; it is NOT bound to runtime robot collision geometry
-# yet. Runtime radius binding is the Gate 1 binding-canary deliverable (#6641):
-# production compute stays blocked until that canary passes and a binding surface
-# exists. The authoritative release robot radius is 1.0 m
-# (robot_sf/common/robot_defaults.py), so the 1.0 m arm equals the matched release
-# comparator and its preflight-dry-run is structurally identical to the baseline.
+# Claim boundary: GATE 2 PRE-SUBMISSION ADMISSION ONLY. This config declares the
+# 1.0 m arm structure and carries the admitted Gate 1 runtime-binding receipt.
+# It is NOT benchmark evidence on its own. The merged camera-ready loader binds
+# the declared radius to every loaded scenario; production submission still
+# requires the separate Gate 2 queue, input, row-accounting, and admission gates.
+# The authoritative release robot radius is 1.0 m
+# (robot_sf/common/robot_defaults.py), so this arm remains the matched release
+# comparator while running at the separate issue-scoped campaign commit.
 name: issue_6642_radius_sweep_arm_1p0m
 paper_facing: true
 paper_profile_version: paper-matrix-v1
@@ -75,23 +74,24 @@ release_tag: "issue-6642-radius-sweep-1p0m"
 doi: 10.5281/zenodo.<record-id>
 paper_interpretation_profile: baseline-ready-core
 
-# Radius-sweep manifest metadata. Consumed ONLY by the sweep manifest builder
-# (scripts/benchmark/build_radius_sweep_manifest_issue_6642.py) and ignored by
-# the camera-ready config loader. This block is forward-declared metadata, NOT a
-# runtime binding: until Gate 1 (#6641) passes and a binding surface is added,
-# setting radius_m here would NOT change simulator collision geometry. It is
-# present so the manifest builder can stamp the declared treatment per arm.
+# Radius-sweep treatment and runtime-binding metadata. The manifest builder and
+# camera-ready loader consume this block. The status and Gate 1 provenance below
+# admit the runtime binding; they do not admit production evidence.
 radius_sweep:
   issue: 6642
   parent_issue: 6600
   arm_key: r1p0
   radius_m: 1.0
   baseline_arm: true
-  runtime_binding_status: pending_gate1_canary
+  runtime_binding_status: bound_runtime
+  binding_contract_version: radius_binding_canary.v1
+  gate1_canary_issue: 6641
+  gate1_receipt_sha256: e35e189914ae3805422bd081112bb2720a90021bf3363b9281dc46749e52d0b1
+  gate1_source_commit: 25cf835fa7a283dae7d77fcb42194a73e4dcf5d0
   runtime_binding_note: >-
-    Declared treatment metadata only. The radius is not yet bound to runtime
-    robot collision geometry; binding is the Gate 1 binding-canary (#6641)
-    deliverable. Production compute is blocked until Gate 1 passes.
+    Runtime binding admitted after the Gate 1 #6641 receipt at the merged
+    source commit. Production compute remains blocked until the separate Gate 2
+    campaign admission gates pass.
 
 planners:
   # --- core 7 (identical stanzas to the canonical 0.0.3.post1 release campaign) ---

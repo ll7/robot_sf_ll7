@@ -29,8 +29,8 @@ from robot_sf.benchmark.camera_ready._preflight import (
 _CONFIG_PATH = Path("radius-sweep-test.yaml")
 _GATE1_RECEIPT = "a" * 64
 _GATE1_COMMIT = "b" * 40
-_TRACKED_GATE1_RECEIPT = "e35e189914ae3805422bd081112bb2720a90021bf3363b9281dc46749e52d0b1"
-_TRACKED_GATE1_COMMIT = "25cf835fa7a283dae7d77fcb42194a73e4dcf5d0"
+_TRACKED_GATE1_RECEIPT = "88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922"
+_TRACKED_GATE1_COMMIT = "2910980fa7c49b726c3007c1f93aba6ec0b54d8e"
 
 
 def _minimal_campaign(*, radius_sweep: RadiusSweepConfig | None = None) -> CampaignConfig:

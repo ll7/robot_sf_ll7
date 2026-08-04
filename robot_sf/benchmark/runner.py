@@ -328,7 +328,7 @@ def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
         return None
     try:
         diagnostics = diagnostics_fn()
-    except Exception:  # pragma: no cover - diagnostics must not break policy execution
+    except Exception:  # pragma: no cover  # noqa: BLE001 - diagnostics must not break execution
         return None
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
 
@@ -358,7 +358,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
         if callable(ensure_load):
             ensure_load()
         conn.send(("init_ok", _planner_foresight_diagnostics(planner)))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - child worker must send structured init errors
         try:
             conn.send(("init_error", (type(exc).__name__, str(exc))))
         except (BrokenPipeError, EOFError, OSError):
@@ -380,7 +380,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
             try:
                 action = planner.step(payload)
                 conn.send(("ok", (action, _planner_foresight_diagnostics(planner))))
-            except Exception as exc:  # pragma: no cover - defensive child-process path
+            except Exception as exc:  # pragma: no cover  # noqa: BLE001 - planner step isolation
                 conn.send(("error", (type(exc).__name__, str(exc))))
     finally:
         conn.close()
@@ -2329,9 +2329,9 @@ def _run_batch_sequential(  # noqa: C901, D417
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, True, None)
-                except Exception:  # pragma: no cover - progress best-effort
+                except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                     pass
-        except Exception as e:  # pragma: no cover - error path
+        except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises
             logger.exception(
                 "Benchmark batch job failed in serial execution: scenario_id={} seed={}",
                 sc.get("id", "unknown"),
@@ -2347,7 +2347,7 @@ def _run_batch_sequential(  # noqa: C901, D417
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, False, repr(e))
-                except Exception:  # pragma: no cover
+                except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                     pass
 
             # Circuit breaker logic
@@ -2431,9 +2431,9 @@ def _run_batch_parallel(  # noqa: C901
                 if progress_cb is not None:
                     try:
                         progress_cb(idx, total, sc, seed, True, None)
-                    except Exception:  # pragma: no cover
+                    except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                         pass
-            except Exception as e:  # pragma: no cover
+            except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises
                 logger.exception(
                     "Benchmark batch job failed in parallel execution: scenario_id={} seed={}",
                     sc.get("id", "unknown"),
@@ -2449,7 +2449,7 @@ def _run_batch_parallel(  # noqa: C901
                 if progress_cb is not None:
                     try:
                         progress_cb(idx, total, sc, seed, False, repr(e))
-                    except Exception:  # pragma: no cover
+                    except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                         pass
                 if fail_fast:
                     for f in future_to_job:

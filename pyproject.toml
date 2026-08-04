@@ -411,12 +411,9 @@ max-statements = 60
 "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py" = ["BLE001"]
 "scripts/analysis/compare_trace_vs_live_replay_issue_2790.py" = ["BLE001"]
 "scripts/analyze_feature_extractors.py" = ["BLE001"]
-"scripts/benchmark/build_horizon_timestep_ablation_report.py" = ["BLE001"]
-"scripts/benchmark/run_cv_forecast_eval.py" = ["BLE001"]
-"scripts/benchmark/run_forecast_baseline_comparison.py" = ["BLE001"]
-"scripts/benchmark/run_forecast_risk_coupling_gate.py" = ["BLE001"]
-"scripts/benchmark/run_observation_noise_envelope.py" = ["BLE001"]
-"scripts/benchmark/run_observation_noise_live_replay_issue_2777.py" = ["BLE001"]
+# Issue #6690: scripts/benchmark BLE001 per-file ignores removed; every remaining
+# broad handler in scripts/benchmark/ now carries a per-site inline rationale or
+# was narrowed (git provenance probes), following the #6514 pattern.
 "scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py" = ["PLR0913"]
 "robot_sf/benchmark/scenario_generation/persistence_gate.py" = ["PLR0913"]
 "scripts/benchmark_ped_policy_collisions.py" = ["BLE001"]
@@ -519,35 +516,22 @@ max-statements = 60
 # Existing broad benchmark exception handlers are ratcheted by
 # scripts/validation/check_broad_exceptions.py; keep BLE001 scoped current files.
 # Issue #4859: aggregate.py/metrics.py/visualization.py worst sites fixed; BLE001 removed.
-# Issue #4880 (commit 1): schema/contract/manifest/catalog group fully narrowed; BLE001
-# removed for ablation, artifact_catalog, freeze_manifest, imitation_manifest,
-# scenario_contract, scenario_schema, schema_reference, summary,
-# validation/trajectory_dataset, validation_utils.
-# helper_catalog.py keeps BLE001: its wrappers intentionally convert any failure to RuntimeError.
-"robot_sf/benchmark/camera_ready_campaign.py" = ["BLE001"]
-"robot_sf/benchmark/camera_ready/campaign.py" = ["BLE001"]
+# Issue #4880: schema/contract/manifest/catalog and runner/map/snqi/planner groups narrowed;
+# BLE001 removed there. The broad handlers left in cli.py, snqi/cli.py, doctor.py,
+# helper_catalog.py, map_runner*.py, runner.py, and camera_ready/campaign.py were kept broad
+# on purpose (CLI boundary / diagnostic / batch-isolation / policy handlers).
+# Issue #6690: those remaining robot_sf/benchmark handlers were individually reviewed and the
+# per-file BLE001 ignores converted to per-site inline rationales (or narrowed, for
+# snqi/compute.py's git provenance probe), following the #6514 pattern. Stale ignores for
+# camera_ready_campaign.py and failure_extractor.py (no broad handlers left) were removed.
 "robot_sf/benchmark/cli.py" = ["T201"]
 "robot_sf/benchmark/issue_5578_speed_tier_synthesis.py" = ["T201"]
 "robot_sf/examples_cli.py" = ["T201"]
-"robot_sf/benchmark/doctor.py" = ["BLE001"]
-"robot_sf/benchmark/failure_extractor.py" = ["BLE001"]
 "robot_sf/benchmark/full_classic/render_sim_view.py" = ["C901"]
 "robot_sf/benchmark/full_classic/visuals.py" = ["C901"]
-"robot_sf/benchmark/helper_catalog.py" = ["BLE001"]
-"robot_sf/benchmark/map_runner.py" = ["BLE001"]
-"robot_sf/benchmark/map_runner_batch_runner.py" = ["BLE001"]
-"robot_sf/benchmark/runner.py" = ["BLE001"]
-"robot_sf/benchmark/snqi/cli.py" = ["BLE001", "T201"]
-"robot_sf/benchmark/snqi/compute.py" = ["BLE001"]
-# Issue #4880 (commit 2): runner/map/snqi/planner group; BLE001 removed for
-# hazard_odd_coverage, orca_preflight, planner_inclusion, predictive_planner_config,
-# snqi/campaign_contract, snqi/weights_validation.
-# Kept broad on purpose (CLI boundary / diagnostic / batch-isolation / policy handlers):
-# cli.py, snqi/cli.py, doctor.py, helper_catalog.py, map_runner*.py, runner.py,
-# snqi/compute.py (latent capture_output+stderr ValueError masked by handler; see PR body).
+"robot_sf/benchmark/snqi/cli.py" = ["T201"]
 # Issue #4880 (commit 3): viz/figure/full_classic group; BLE001 removed for figure_qa,
 # plots, full_classic/{orchestrator,plots,render_sim_view(C901 kept),validation,visual_deps}.
-# camera_ready/campaign.py keeps BLE001: its full-benchmark-run handler is campaign fault isolation.
 # Issue #4880: cli.py is fully narrowed; BLE001 remains enabled as a ratchet.
 # Issue #4859: visualization.py worst sites fixed, BLE001 removed to enforce lint guard.
 "robot_sf/adversarial/**/*.py" = ["D417", "DOC201", "TC001", "TC003"]

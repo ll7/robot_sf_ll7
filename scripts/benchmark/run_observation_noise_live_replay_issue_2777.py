@@ -355,7 +355,7 @@ def _fixture_contract(matrix_path: Path) -> dict[str, Any]:
     except ValueError as exc:
         fixture_contract["blocker"] = str(exc)
         return fixture_contract
-    except Exception as exc:  # pragma: no cover - defensive fail-closed path
+    except Exception as exc:  # pragma: no cover  # noqa: BLE001 - fail-closed blocker path
         fixture_contract["blocker"] = (
             f"{_durable_ref(matrix_path)} could not be loaded as a scenario matrix: {exc}"
         )

@@ -215,7 +215,7 @@ def load_campaign_result_store(store_dir: Path) -> CampaignResultStore:
 
     try:
         episodes = read_parquet_frame(parquet_path)
-    except Exception as exc:
+    except Exception as exc:  # wrap external parquet reader errors into the store contract (#6690)
         raise CandidateTraceResolutionError(
             f"campaign result store episodes.parquet unreadable: {exc}"
         ) from exc

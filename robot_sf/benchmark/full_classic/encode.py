@@ -264,7 +264,7 @@ def encode_frames(
         return EncodeResult(path=out_path, status="failed", note=err)
 
     if first is None:
-        raise TypeError("successful frame validation produced no first frame")  # pragma: no cover
+        raise TypeError("successful frame validation produced no first frame")
     frame_list = _materialize_frames(first, chained)
     if not frame_list:
         stop_sampler()

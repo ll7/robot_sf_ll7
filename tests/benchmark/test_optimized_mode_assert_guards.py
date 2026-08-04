@@ -62,6 +62,7 @@ def test_converted_guards_survive_python_optimized_mode(
         import numpy as np
 
         from robot_sf.benchmark import figure_qa
+        from robot_sf.benchmark.full_classic import encode
         from robot_sf.benchmark.runner import _stack_or_zero
 
 
@@ -87,6 +88,16 @@ def test_converted_guards_survive_python_optimized_mode(
             ValueError,
             "Figure has 1 defect(s)",
             lambda: figure_qa.assert_clean(object()),
+        )
+
+        encode.moviepy_ready = lambda: True
+        encode.ImageSequenceClip = object
+        encode._iter_first = lambda _frames: (None, iter(()))
+        encode._validate_first = lambda _first: (True, None)
+        expect(
+            TypeError,
+            "successful frame validation produced no first frame",
+            lambda: encode.encode_frames([], Path(sys.argv[1]), sample_memory=False),
         )
 
         """

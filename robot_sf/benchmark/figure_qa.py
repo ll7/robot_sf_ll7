@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -581,6 +582,8 @@ _INTENTIONAL_TEXT_LINE_TEXT_GIDS = frozenset(
         "trace-scene-pedestrian-label",
         "trace-scene-time-label",
         "trace-scene-reference-label",
+        "trace-scene-key-frame-label",
+        "trace-scene-zone-label",
     }
 )
 _INTENTIONAL_TEXT_LINE_LINE_GIDS = frozenset({"trace-scene-label-leader"})
@@ -877,10 +880,11 @@ def _line_bbox_overlaps_text(
     if len(xdata) < 2:
         return False
 
-    transform = ax.transData
     for idx in range(len(xdata) - 1):
-        p0 = transform.transform((float(xdata[idx]), float(ydata[idx])))
-        p1 = transform.transform((float(xdata[idx + 1]), float(ydata[idx + 1])))
+        p0 = line.get_transform().transform((float(xdata[idx]), float(ydata[idx])))
+        p1 = line.get_transform().transform((float(xdata[idx + 1]), float(ydata[idx + 1])))
+        if not all(math.isfinite(float(value)) for value in (*p0, *p1)):
+            continue
         if _segment_intersects_bbox(p0, p1, text_bbox, tolerance):
             return True
     return False

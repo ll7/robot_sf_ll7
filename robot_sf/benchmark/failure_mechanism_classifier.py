@@ -908,12 +908,128 @@ def build_taxonomy_crosswalk(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Issue #6471: space-time feasibility episode annotation (diagnostic only)
+# ---------------------------------------------------------------------------
+#
+# A standalone diagnostic surface that records how a space-time feasibility
+# oracle verdict (robot_sf.planner.sipp_lattice) annotates one benchmark
+# episode. It is deliberately separate from the validated
+# ``failure_mechanism_classification.v1`` payload: it does NOT reclassify a
+# benchmark row's failure-mechanism record, and it never asserts scenario
+# infeasibility. ``not_proven_feasible`` is unknown until completeness and
+# grid-sensitivity are validated.
+
+SPACE_TIME_FEASIBILITY_ANNOTATION_SCHEMA_VERSION = "space_time_feasibility_episode_annotation.v1"
+SPACE_TIME_FEASIBILITY_ANNOTATION_SOURCE = "space_time_feasibility_oracle.v1"
+SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY = "diagnostic_only_not_benchmark_evidence"
+
+#: Episode annotations; these mirror robot_sf.planner.sipp_lattice labels.
+SPACE_TIME_EPISODE_SUCCEEDED = "episode_succeeded"
+SPACE_TIME_LOCAL_POLICY_FAILURE = "local_policy_failure"
+SPACE_TIME_NOT_PROVEN_FEASIBLE = "not_proven_feasible"
+_SPACE_TIME_EPISODE_ANNOTATIONS = frozenset(
+    {
+        SPACE_TIME_EPISODE_SUCCEEDED,
+        SPACE_TIME_LOCAL_POLICY_FAILURE,
+        SPACE_TIME_NOT_PROVEN_FEASIBLE,
+    }
+)
+_SPACE_TIME_ORACLE_VERDICTS = frozenset({"feasible", "not_proven_feasible"})
+
+
+def build_space_time_feasibility_annotation(
+    *,
+    scenario_id: str,
+    planner_id: str,
+    seed: str,
+    episode_succeeded: bool,
+    episode_annotation: str,
+    oracle_verdict: str,
+    witness_found: bool,
+) -> dict[str, Any]:
+    """Build a diagnostic-only episode annotation from a space-time oracle verdict.
+
+    This records how a space-time feasibility oracle verdict annotates one
+    benchmark episode. It does not modify or reclassify the benchmark row's
+    failure-mechanism record, and it never asserts scenario infeasibility:
+    ``not_proven_feasible`` is unknown until completeness and grid-sensitivity
+    are validated.
+
+    Args:
+        scenario_id: Scenario cell identifier.
+        planner_id: Benchmark planner identifier.
+        seed: Episode seed.
+        episode_succeeded: Whether the benchmark episode succeeded.
+        episode_annotation: One of ``episode_succeeded``, ``local_policy_failure``,
+            or ``not_proven_feasible`` (from the oracle's episode classifier).
+        oracle_verdict: Oracle verdict string (``feasible`` or
+            ``not_proven_feasible``).
+        witness_found: Whether the oracle returned a validated route witness.
+
+    Returns:
+        A ``space_time_feasibility_episode_annotation.v1`` diagnostic payload.
+
+    Raises:
+        FailureMechanismClassificationError: If ``episode_annotation`` is not a
+            supported space-time episode annotation.
+    """
+    if episode_annotation not in _SPACE_TIME_EPISODE_ANNOTATIONS:
+        raise FailureMechanismClassificationError(
+            f"unsupported space-time episode_annotation: {episode_annotation!r}"
+        )
+    episode_succeeded = bool(episode_succeeded)
+    witness_found = bool(witness_found)
+    oracle_verdict = str(oracle_verdict)
+    if oracle_verdict not in _SPACE_TIME_ORACLE_VERDICTS:
+        raise FailureMechanismClassificationError(
+            f"unsupported space-time oracle_verdict: {oracle_verdict!r}"
+        )
+    if witness_found != (oracle_verdict == "feasible"):
+        raise FailureMechanismClassificationError(
+            "witness_found must be true exactly for a feasible oracle verdict"
+        )
+    expected_annotation = (
+        SPACE_TIME_EPISODE_SUCCEEDED
+        if episode_succeeded
+        else (SPACE_TIME_LOCAL_POLICY_FAILURE if witness_found else SPACE_TIME_NOT_PROVEN_FEASIBLE)
+    )
+    if episode_annotation != expected_annotation:
+        raise FailureMechanismClassificationError(
+            "episode_annotation is inconsistent with episode_succeeded and the oracle witness"
+        )
+    return {
+        "schema_version": SPACE_TIME_FEASIBILITY_ANNOTATION_SCHEMA_VERSION,
+        "classification_source": SPACE_TIME_FEASIBILITY_ANNOTATION_SOURCE,
+        "claim_boundary": SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY,
+        "scenario_id": str(scenario_id),
+        "planner_id": str(planner_id),
+        "seed": str(seed),
+        "episode_succeeded": episode_succeeded,
+        "episode_annotation": episode_annotation,
+        "oracle_verdict": oracle_verdict,
+        "witness_found": witness_found,
+        "caveats": [
+            "Diagnostic only; does not reclassify the benchmark row failure mechanism.",
+            "not_proven_feasible is unknown, not scenario infeasibility, until completeness "
+            "and grid-sensitivity are validated.",
+            "Fallback/degraded oracle execution is excluded from evidence.",
+        ],
+    }
+
+
 __all__ = [
     "CLASSIFICATION_SOURCE",
     "FAILURE_MECHANISM_LABELS",
     "SCHEMA_VERSION",
+    "SPACE_TIME_EPISODE_SUCCEEDED",
+    "SPACE_TIME_FEASIBILITY_ANNOTATION_SCHEMA_VERSION",
+    "SPACE_TIME_FEASIBILITY_ANNOTATION_SOURCE",
+    "SPACE_TIME_LOCAL_POLICY_FAILURE",
+    "SPACE_TIME_NOT_PROVEN_FEASIBLE",
     "TAXONOMY_CROSSWALK_SCHEMA_VERSION",
     "FailureMechanismClassificationError",
+    "build_space_time_feasibility_annotation",
     "build_taxonomy_crosswalk",
     "classify_failure_mechanisms",
     "classify_failure_mechanisms_from_jsonl",

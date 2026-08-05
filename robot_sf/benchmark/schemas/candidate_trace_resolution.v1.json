@@ -95,6 +95,41 @@
         "trace_artifact_uri": {"type": ["string", "null"]},
         "trace_content_hash": {"type": ["string", "null"]},
         "trace_schema_version": {"type": ["string", "null"]},
+        "admission_status": {
+          "type": ["string", "null"],
+          "enum": ["admitted", "not_admitted", null]
+        },
+        "exclusion_reason": {"type": ["string", "null"]},
+        "release_outcome": {
+          "type": ["string", "null"],
+          "enum": ["success", "collision_event", "route_complete", "timeout_event", null]
+        },
+        "rerun_outcome": {
+          "type": ["string", "null"],
+          "enum": ["success", "collision_event", "route_complete", "timeout_event", null]
+        },
+        "raw_trace_sha256": {"type": ["string", "null"]},
+        "normalized_trace_sha256": {"type": ["string", "null"]},
+        "transformation_receipt_sha256": {"type": ["string", "null"]},
+        "transformation_schema_version": {"type": ["string", "null"]},
+        "source_provenance": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "arm": {"type": ["string", "null"]},
+            "campaign": {"type": ["string", "null"]},
+            "job_id": {"type": ["string", "null"]},
+            "execution_commit": {"type": ["string", "null"]},
+            "source_manifest_sha256": {"type": ["string", "null"]},
+            "source_episodes_sha256": {"type": ["string", "null"]},
+            "source_episode_id": {"type": ["string", "null"]},
+            "source_row_index": {"type": ["integer", "null"]},
+            "algorithm_config_hash": {"type": ["string", "null"]},
+            "row_config_hash": {"type": ["string", "null"]},
+            "run_summary_sha256": {"type": ["string", "null"]},
+            "preflight_sha256": {"type": ["string", "null"]}
+          }
+        },
         "resolution_status": {
           "enum": ["resolved", "trace-missing", "schema-mismatch", "provenance-incomplete"]
         },

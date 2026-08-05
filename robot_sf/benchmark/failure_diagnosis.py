@@ -1,8 +1,9 @@
 """Versioned, optional failure-diagnosis records (issue #6583, first-PR slice).
 
 This module adds a structured ``failure_diagnosis`` record that adapts existing
-deterministic failure evidence into a consistent diagnosis schema. It is an
-*optional diagnostic sidecar*: it does not modify the existing failure-mechanism
+deterministic failure evidence into a consistent diagnosis schema. It also provides
+fixture-level quality metrics against independently reviewed reference labels. It is
+an *optional diagnostic sidecar*: it does not modify the existing failure-mechanism
 classifier, taxonomy, or trace-predicate modules, and it introduces no parallel
 taxonomy.
 
@@ -51,11 +52,10 @@ and any otherwise unavailable mapping resolve to ``failure_type`` ``"unknown"`` 
 an explicit reason, mirroring
 :func:`robot_sf.benchmark.failure_mechanism_taxonomy.unknown_failure_mechanism_record`.
 
-Evidence tier: deterministic diagnostic only. This schema makes no benchmark
-ranking, causal-validity, or correction-quality claim. Learned/LLM diagnosis
-generation, correction-usefulness scoring, and campaign-level diagnosis-quality
-evaluation are explicitly out of scope (successor work) and are not implemented
-here.
+Evidence tier: deterministic diagnostic only. This schema and its fixture-level
+comparison make no benchmark ranking, causal-validity, correction-quality, or
+campaign-ranking claim. Learned/LLM diagnosis generation, correction-usefulness
+scoring, and campaign-level diagnosis-quality claims remain out of scope.
 """
 
 from __future__ import annotations
@@ -83,6 +83,12 @@ if TYPE_CHECKING:
 FAILURE_DIAGNOSIS_SCHEMA_VERSION = "failure_diagnosis.v1"
 #: Provenance source string for the deterministic adapter.
 DIAGNOSIS_SOURCE = "failure_diagnosis.deterministic.v1"
+#: Schema version for independently reviewed reference-label fixtures.
+FAILURE_DIAGNOSIS_REFERENCE_SCHEMA_VERSION = "failure_diagnosis_reference.v1"
+#: Schema version for fixture-level diagnosis-quality reports.
+FAILURE_DIAGNOSIS_QUALITY_SCHEMA_VERSION = "failure_diagnosis_quality.v1"
+#: Provenance source for the deterministic comparison metrics.
+DIAGNOSIS_QUALITY_SOURCE = "failure_diagnosis_quality.deterministic.v1"
 
 #: Allowed failure levels (from the issue #6583 proposal schema).
 FAILURE_LEVELS = (
@@ -172,9 +178,36 @@ _PAYLOAD_NON_CLAIM_CAVEAT = (
 )
 _OUT_OF_SCOPE_CAVEAT = (
     "Learned/LLM diagnosis generation, correction-usefulness scoring, and "
-    "campaign-level diagnosis-quality evaluation are out of scope for this schema "
-    "version."
+    "campaign-level diagnosis-quality claims are out of scope for this schema version."
 )
+
+#: Detection labels retained by reference fixtures and quality reports.
+DIAGNOSIS_DETECTION_LABELS = ("detected", "not_detected", "unknown", "unavailable")
+#: Labels that can enter a detection confusion matrix.
+_KNOWN_DETECTION_LABELS = frozenset({"detected", "not_detected"})
+#: Reference and candidate statuses that cannot contribute to an accuracy denominator.
+_EXCLUDED_QUALITY_STATUSES = frozenset(
+    {
+        "invalid",
+        "unavailable",
+        "not_available",
+        "unknown",
+        "unreviewed",
+        "fallback",
+        "degraded",
+        "failed",
+        "partial_failure",
+        "partial-failure",
+        "provenance_incomplete",
+        "incomplete",
+    }
+)
+#: Statuses accepted as a complete reference review/adjudication.
+_REVIEWED_STATUSES = frozenset({"reviewed"})
+_ADJUDICATED_STATUSES = frozenset({"adjudicated", "adjudicated_by_reviewer"})
+_COMPLETE_PROVENANCE_STATUSES = frozenset({"complete", "verified"})
+#: Severity labels eligible for exact-match and macro-F1 metrics.
+_KNOWN_DIAGNOSIS_SEVERITIES = frozenset(DIAGNOSIS_SEVERITIES) - {"unknown"}
 
 #: Required top-level fields on every diagnosis record.
 _REQUIRED_RECORD_FIELDS = (
@@ -905,6 +938,375 @@ def validate_failure_diagnosis_payload(payload: Mapping[str, Any]) -> dict[str, 
     return normalized
 
 
+def validate_failure_diagnosis_reference_fixture(
+    fixture: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate and normalize a reviewed reference-label fixture.
+
+    A reference fixture is deliberately a separate, versioned input to the quality
+    evaluator.  Its labels are not derived from a diagnosis record.  The review and
+    provenance metadata are retained in the normalized result so the evaluator can
+    exclude unreviewed or provenance-incomplete rows without silently treating them
+    as negative labels.
+
+    The accepted shape is::
+
+        {
+            "schema_version": "failure_diagnosis_reference.v1",
+            "fixture_id": "...",
+            "fixture_version": 1,
+            "review": {
+                "status": "reviewed",
+                "reviewer": "...",
+                "adjudication_status": "adjudicated",
+                "independent_of_automated_diagnosis": True,
+            },
+            "provenance": {"status": "complete", "source_trace_uri": "..."},
+            "records": [
+                {
+                    "case_id": "...",
+                    "detected": True,
+                    "onset_interval_s": [1.0, 1.5],
+                    "failure_type": "collision",
+                    "severity": "critical",
+                    "source_trace": {"predicate_id": "collision"},
+                }
+            ],
+        }
+
+    ``review_status``, ``reviewer``, ``adjudication_status``, and
+    ``provenance_status`` may also be supplied directly on the fixture or a record
+    for compact JSON fixtures.  Missing metadata is normalized to an unavailable or
+    incomplete status and is therefore never eligible for an accuracy denominator.
+
+    Args:
+        fixture: Mapping containing the independently authored reference labels.
+
+    Returns:
+        A normalized reference fixture.
+
+    Raises:
+        FailureDiagnosisError: If the fixture envelope or case identifiers are
+            malformed.
+    """
+    if not isinstance(fixture, Mapping):
+        raise FailureDiagnosisError("reference fixture must be a mapping")
+    if fixture.get("schema_version") != FAILURE_DIAGNOSIS_REFERENCE_SCHEMA_VERSION:
+        raise FailureDiagnosisError(
+            "reference fixture schema_version must be "
+            f"{FAILURE_DIAGNOSIS_REFERENCE_SCHEMA_VERSION!r}"
+        )
+    fixture_id = _non_empty_text(fixture.get("fixture_id"))
+    if fixture_id is None:
+        raise FailureDiagnosisError("reference fixture fixture_id must be a non-empty string")
+    fixture_version = fixture.get("fixture_version")
+    if not isinstance(fixture_version, int) or isinstance(fixture_version, bool):
+        raise FailureDiagnosisError("reference fixture fixture_version must be an integer")
+    raw_records = fixture.get("records")
+    if not isinstance(raw_records, list):
+        raise FailureDiagnosisError("reference fixture records must be a list")
+
+    review = _reference_review_metadata(fixture.get("review"), fixture)
+    provenance = _reference_provenance_metadata(fixture.get("provenance"), fixture)
+    records: list[dict[str, Any]] = []
+    seen_case_ids: set[str] = set()
+    for index, raw_record in enumerate(raw_records):
+        if not isinstance(raw_record, Mapping):
+            raise FailureDiagnosisError(f"reference fixture records[{index}] must be a mapping")
+        record = _normalize_reference_record(raw_record, review=review, provenance=provenance)
+        case_id = record["case_id"]
+        if case_id in seen_case_ids:
+            raise FailureDiagnosisError(f"reference fixture case_id is duplicated: {case_id!r}")
+        seen_case_ids.add(case_id)
+        records.append(record)
+
+    return {
+        "schema_version": FAILURE_DIAGNOSIS_REFERENCE_SCHEMA_VERSION,
+        "fixture_id": fixture_id,
+        "fixture_version": fixture_version,
+        "review": review,
+        "provenance": provenance,
+        "records": records,
+    }
+
+
+def evaluate_failure_diagnosis_quality(  # noqa: C901, PLR0912, PLR0915
+    diagnosis_records: Mapping[str, Any] | Iterable[Any],
+    reference_fixture: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Evaluate deterministic diagnoses against reviewed reference labels.
+
+    This is a fixture-level diagnostic metric, not a campaign ranker.  Cases are
+    paired by ``case_id`` (``sample_id``, ``episode_id``, or ``record_id`` are
+    accepted aliases).  A mapping from case id to diagnosis is also accepted, which
+    lets callers pair the existing ``failure_diagnosis.v1`` records without changing
+    that schema.
+
+    Detection uses confusion counts and agreement.  Onset uses interval
+    intersection-over-union (IoU) and absolute interval-midpoint error in seconds.
+    Failure type and severity use exact-match rate and macro-F1 over the labels that
+    are known on both sides.  Every metric has its own denominator and exclusion
+    reasons.  Unknown and unavailable labels remain visible in ``case_comparisons``
+    and never become a forced class.
+
+    Args:
+        diagnosis_records: Existing diagnosis records, a ``failure_diagnosis.v1``
+            payload, a sequence with case identifiers, or a case-id mapping.
+        reference_fixture: Independently authored and versioned reference fixture.
+
+    Returns:
+        A versioned quality report with per-case exclusions and four metric groups.
+
+    Raises:
+        FailureDiagnosisError: If the reference envelope or diagnosis pairing is
+            structurally malformed.
+    """
+    reference = validate_failure_diagnosis_reference_fixture(reference_fixture)
+    candidates = _normalize_diagnosis_inputs(
+        diagnosis_records,
+        reference_case_ids=[row["case_id"] for row in reference["records"]],
+    )
+
+    detection_confusion = {
+        "true_positive": 0,
+        "true_negative": 0,
+        "false_positive": 0,
+        "false_negative": 0,
+    }
+    detection_denominator = 0
+    onset_overlaps: list[float] = []
+    onset_midpoint_errors: list[float] = []
+    type_pairs: list[tuple[str, str]] = []
+    severity_pairs: list[tuple[str, str]] = []
+    excluded_case_ids: dict[str, set[str]] = {
+        "detection": set(),
+        "onset": set(),
+        "failure_type": set(),
+        "severity": set(),
+    }
+    excluded_reasons: dict[str, dict[str, int]] = {
+        "detection": {},
+        "onset": {},
+        "failure_type": {},
+        "severity": {},
+    }
+    case_comparisons: list[dict[str, Any]] = []
+
+    for reference_record in reference["records"]:
+        case_id = reference_record["case_id"]
+        candidate = candidates.get(case_id)
+        candidate_record = candidate or _unavailable_candidate(case_id)
+        reference_reasons = _reference_exclusion_reasons(reference, reference_record)
+        candidate_reasons = list(candidate_record["exclusion_reasons"])
+        base_reasons = _unique_strings([*reference_reasons, *candidate_reasons])
+        reference_detection = reference_record["detected"]
+        candidate_detection = candidate_record["detected"]
+
+        detection_reasons = list(base_reasons)
+        if reference_detection not in _KNOWN_DETECTION_LABELS:
+            detection_reasons.append(f"reference_detection:{reference_detection}")
+        if candidate_detection not in _KNOWN_DETECTION_LABELS:
+            detection_reasons.append(f"diagnosis_detection:{candidate_detection}")
+        detection_reasons = _unique_strings(detection_reasons)
+        detection_included = not detection_reasons
+        if detection_included:
+            detection_denominator += 1
+            _increment_detection_confusion(
+                detection_confusion,
+                reference_detection == "detected",
+                candidate_detection == "detected",
+            )
+        else:
+            _mark_metric_excluded(
+                excluded_case_ids,
+                excluded_reasons,
+                "detection",
+                case_id,
+                detection_reasons,
+            )
+
+        detected_pair = reference_detection == "detected" and candidate_detection == "detected"
+        onset_reasons = list(base_reasons)
+        if not detected_pair:
+            onset_reasons.append("requires_both_records_to_detect_failure")
+        reference_interval = reference_record["onset_interval_s"]
+        candidate_interval = candidate_record["onset_interval_s"]
+        reference_interval_values = _finite_interval(reference_interval)
+        candidate_interval_values = _finite_interval(candidate_interval)
+        if reference_interval_values is None:
+            onset_reasons.append(f"reference_onset:{reference_record['onset_status']}")
+        if candidate_interval_values is None:
+            onset_reasons.append(f"diagnosis_onset:{candidate_record['onset_status']}")
+        onset_reasons = _unique_strings(onset_reasons)
+        onset_included = not onset_reasons
+        if onset_included:
+            onset_overlaps.append(
+                _interval_intersection_over_union(
+                    reference_interval_values, candidate_interval_values
+                )
+            )
+            onset_midpoint_errors.append(
+                abs(
+                    _interval_midpoint(reference_interval_values)
+                    - _interval_midpoint(candidate_interval_values)
+                )
+            )
+        else:
+            _mark_metric_excluded(
+                excluded_case_ids,
+                excluded_reasons,
+                "onset",
+                case_id,
+                onset_reasons,
+            )
+
+        type_reasons = list(base_reasons)
+        reference_type = reference_record["failure_type"]
+        candidate_type = candidate_record["failure_type"]
+        if not detected_pair:
+            type_reasons.append("requires_both_records_to_detect_failure")
+        if not _known_failure_type(reference_type):
+            type_reasons.append(f"reference_failure_type:{reference_type}")
+        if not _known_failure_type(candidate_type):
+            type_reasons.append(f"diagnosis_failure_type:{candidate_type}")
+        type_reasons = _unique_strings(type_reasons)
+        type_included = not type_reasons
+        if type_included:
+            type_pairs.append((reference_type, candidate_type))
+        else:
+            _mark_metric_excluded(
+                excluded_case_ids,
+                excluded_reasons,
+                "failure_type",
+                case_id,
+                type_reasons,
+            )
+
+        severity_reasons = list(base_reasons)
+        reference_severity = reference_record["severity"]
+        candidate_severity = candidate_record["severity"]
+        if not detected_pair:
+            severity_reasons.append("requires_both_records_to_detect_failure")
+        if reference_severity not in _KNOWN_DIAGNOSIS_SEVERITIES:
+            severity_reasons.append(f"reference_severity:{reference_severity}")
+        if candidate_severity not in _KNOWN_DIAGNOSIS_SEVERITIES:
+            severity_reasons.append(f"diagnosis_severity:{candidate_severity}")
+        severity_reasons = _unique_strings(severity_reasons)
+        severity_included = not severity_reasons
+        if severity_included:
+            severity_pairs.append((reference_severity, candidate_severity))
+        else:
+            _mark_metric_excluded(
+                excluded_case_ids,
+                excluded_reasons,
+                "severity",
+                case_id,
+                severity_reasons,
+            )
+
+        case_comparisons.append(
+            {
+                "case_id": case_id,
+                "reference": _reference_comparison_view(reference_record),
+                "diagnosis": _candidate_comparison_view(candidate_record),
+                "metrics": {
+                    "detection": _metric_case_result(detection_included, detection_reasons),
+                    "onset": _metric_case_result(onset_included, onset_reasons),
+                    "failure_type": _metric_case_result(type_included, type_reasons),
+                    "severity": _metric_case_result(severity_included, severity_reasons),
+                },
+            }
+        )
+
+    metrics = {
+        "detection": {
+            "confusion_counts": detection_confusion,
+            "counts": detection_confusion,
+            "agreement": _ratio(
+                detection_confusion["true_positive"] + detection_confusion["true_negative"],
+                detection_denominator,
+            ),
+            "denominator": detection_denominator,
+            "excluded_count": len(excluded_case_ids["detection"]),
+            "excluded_reasons": excluded_reasons["detection"],
+        },
+        "onset": {
+            "mean_interval_overlap": _mean_or_none(onset_overlaps),
+            "mean_absolute_midpoint_error_s": _mean_or_none(onset_midpoint_errors),
+            "interval_overlap_mean": _mean_or_none(onset_overlaps),
+            "absolute_midpoint_error_s_mean": _mean_or_none(onset_midpoint_errors),
+            "denominator": len(onset_overlaps),
+            "excluded_count": len(excluded_case_ids["onset"]),
+            "excluded_reasons": excluded_reasons["onset"],
+        },
+        "failure_type": _classification_metric_summary(
+            type_pairs,
+            excluded_case_ids["failure_type"],
+            excluded_reasons["failure_type"],
+        ),
+        "severity": _classification_metric_summary(
+            severity_pairs,
+            excluded_case_ids["severity"],
+            excluded_reasons["severity"],
+        ),
+    }
+    unmatched_diagnosis_count = len(
+        set(candidates) - {row["case_id"] for row in reference["records"]}
+    )
+    caveats = [
+        "Fixture-level deterministic diagnostic metrics only; this report does not rank campaigns.",
+        "Reference labels must be independently reviewed, adjudicated, versioned, and provenance-complete.",
+        "Unknown, unavailable, invalid, unreviewed, fallback, degraded, and provenance-incomplete cases are excluded per metric and retained in case_comparisons.",
+        "No learned/LLM diagnosis generation, correction-usefulness scoring, or causal-validity claim is performed.",
+    ]
+    report = {
+        "schema_version": FAILURE_DIAGNOSIS_QUALITY_SCHEMA_VERSION,
+        "evaluation_source": DIAGNOSIS_QUALITY_SOURCE,
+        "reference_fixture": {
+            "fixture_id": reference["fixture_id"],
+            "fixture_version": reference["fixture_version"],
+            "schema_version": reference["schema_version"],
+        },
+        "case_count": len(reference["records"]),
+        "matched_case_count": len(
+            set(candidates) & {row["case_id"] for row in reference["records"]}
+        ),
+        "unmatched_diagnosis_count": unmatched_diagnosis_count,
+        "case_comparisons": case_comparisons,
+        "metrics": metrics,
+        "fixture_metrics": metrics,
+        "caveats": caveats,
+    }
+    # Direct metric keys keep the report convenient for small consumers while the
+    # nested ``metrics`` mapping remains the canonical versioned surface.
+    report.update(metrics)
+    return report
+
+
+def compare_failure_diagnosis_to_reference(
+    diagnosis_records: Mapping[str, Any] | Iterable[Any],
+    reference_fixture: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Alias for :func:`evaluate_failure_diagnosis_quality`.
+
+    Returns:
+        The versioned fixture-level quality report.
+    """
+    return evaluate_failure_diagnosis_quality(diagnosis_records, reference_fixture)
+
+
+def build_failure_diagnosis_quality_report(
+    diagnosis_records: Mapping[str, Any] | Iterable[Any],
+    reference_fixture: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build a fixture-level report without adding campaign or ranking semantics.
+
+    Returns:
+        The versioned fixture-level quality report.
+    """
+    return evaluate_failure_diagnosis_quality(diagnosis_records, reference_fixture)
+
+
 def _require_payload_metadata(payload: Mapping[str, Any]) -> list[Any]:
     """Return payload records after validating the versioned payload metadata.
 
@@ -1300,22 +1702,672 @@ def _contains_invalid_json_marker(value: Any) -> bool:
     return False
 
 
+def _non_empty_text(value: Any) -> str | None:
+    """Return stripped text, or ``None`` when a metadata value is absent/empty."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalized_status(value: Any, *, default: str = "unavailable") -> str:
+    """Normalize a status token without converting it into an eligible label.
+
+    Returns:
+        A normalized status token or the supplied default.
+    """
+    text = _non_empty_text(value)
+    if text is None:
+        return default
+    return text.lower().replace(" ", "_").replace("-", "_")
+
+
+def _metadata_value(
+    primary: Mapping[str, Any],
+    primary_names: Sequence[str],
+    fallback: Mapping[str, Any],
+    fallback_names: Sequence[str],
+    default: Any = None,
+) -> Any:
+    """Read the first present value from nested metadata and its compact fallback.
+
+    Returns:
+        The first present metadata value, or ``default``.
+    """
+    for name in primary_names:
+        if name in primary:
+            return primary[name]
+    for name in fallback_names:
+        if name in fallback:
+            return fallback[name]
+    return default
+
+
+def _reference_review_metadata(raw: Any, fallback: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize review metadata while preserving ineligible states.
+
+    Returns:
+        Canonical review status, reviewer, adjudication, and independence fields.
+    """
+    primary = raw if isinstance(raw, Mapping) else {}
+    independent = _metadata_value(
+        primary,
+        (
+            "independent_of_automated_diagnosis",
+            "independently_created",
+            "independent",
+        ),
+        fallback,
+        (
+            "independent_of_automated_diagnosis",
+            "independently_created",
+            "independent",
+        ),
+        False,
+    )
+    return {
+        "status": _normalized_status(
+            _metadata_value(
+                primary, ("status", "review_status"), fallback, ("review_status", "status")
+            )
+        ),
+        "reviewer": _non_empty_text(
+            _metadata_value(
+                primary, ("reviewer", "reviewed_by"), fallback, ("reviewer", "reviewed_by")
+            )
+        ),
+        "adjudication_status": _normalized_status(
+            _metadata_value(
+                primary,
+                ("adjudication_status", "adjudication"),
+                fallback,
+                ("adjudication_status", "adjudication"),
+            )
+        ),
+        "independent_of_automated_diagnosis": independent is True,
+    }
+
+
+def _reference_provenance_metadata(raw: Any, fallback: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize source-trace provenance metadata for a reference fixture.
+
+    Returns:
+        Canonical provenance status, URI, and source-trace pointer fields.
+    """
+    primary = raw if isinstance(raw, Mapping) else {}
+    source_trace = _metadata_value(
+        primary,
+        ("source_trace", "source_trace_pointer", "source_predicate"),
+        fallback,
+        ("source_trace", "source_trace_pointer", "source_predicate"),
+        {},
+    )
+    if not isinstance(source_trace, Mapping):
+        source_trace = {}
+    source_trace_uri = _non_empty_text(
+        _metadata_value(
+            primary,
+            ("source_trace_uri", "trace_uri"),
+            fallback,
+            ("source_trace_uri", "trace_uri"),
+        )
+    )
+    status = _normalized_status(
+        _metadata_value(
+            primary,
+            ("status", "provenance_status"),
+            fallback,
+            ("provenance_status", "status"),
+            "incomplete",
+        ),
+        default="incomplete",
+    )
+    if status in _COMPLETE_PROVENANCE_STATUSES and not source_trace and source_trace_uri is None:
+        status = "incomplete"
+    return {
+        "status": status,
+        "source_trace_uri": source_trace_uri,
+        "source_trace": dict(source_trace),
+    }
+
+
+def _case_identifier(record: Mapping[str, Any]) -> str | None:
+    """Return the stable case identifier used to pair diagnoses and references."""
+    for field in ("case_id", "sample_id", "episode_id", "record_id"):
+        value = _non_empty_text(record.get(field))
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_reference_record(
+    record: Mapping[str, Any],
+    *,
+    review: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Normalize one independently authored reference label row.
+
+    Returns:
+        A canonical reference label row with review and provenance metadata.
+    """
+    case_id = _case_identifier(record)
+    if case_id is None:
+        raise FailureDiagnosisError("reference fixture records must have a non-empty case_id")
+    review_fallback = {
+        "review_status": review["status"],
+        "reviewer": review["reviewer"],
+        "adjudication_status": review["adjudication_status"],
+        "independent_of_automated_diagnosis": review["independent_of_automated_diagnosis"],
+    }
+    provenance_fallback = {
+        "provenance_status": provenance["status"],
+        "source_trace_uri": provenance["source_trace_uri"],
+        "source_trace": provenance["source_trace"],
+    }
+    row_review_fallback = {
+        **review_fallback,
+        **{
+            field: record[field]
+            for field in (
+                "review_status",
+                "reviewer",
+                "reviewed_by",
+                "adjudication_status",
+                "adjudication",
+                "independent_of_automated_diagnosis",
+                "independently_created",
+                "independent",
+            )
+            if field in record
+        },
+    }
+    row_provenance_fallback = {
+        **provenance_fallback,
+        **{
+            field: record[field]
+            for field in (
+                "provenance_status",
+                "source_trace_uri",
+                "trace_uri",
+                "source_trace",
+                "source_trace_pointer",
+                "source_predicate",
+            )
+            if field in record
+        },
+    }
+    row_review = _reference_review_metadata(record.get("review"), row_review_fallback)
+    row_provenance = _reference_provenance_metadata(
+        record.get("provenance"), row_provenance_fallback
+    )
+    source_trace = record.get("source_trace", record.get("source_trace_pointer"))
+    if source_trace is None:
+        source_trace = record.get("source_predicate", row_provenance["source_trace"])
+    if not isinstance(source_trace, Mapping):
+        source_trace = {}
+    source_trace = dict(source_trace)
+    if row_provenance["status"] in _COMPLETE_PROVENANCE_STATUSES and not source_trace:
+        row_provenance["status"] = "incomplete"
+
+    if "detected" in record:
+        detection_value = record["detected"]
+    elif "detection" in record:
+        detection_value = record["detection"]
+    else:
+        detection_value = record.get("failure_present")
+    onset_value = record.get("onset_interval_s", record.get("onset_interval"))
+    onset_interval, onset_status = _normalize_quality_interval(onset_value)
+    return {
+        "case_id": case_id,
+        "detected": _normalize_detection_label(detection_value),
+        "onset_interval_s": onset_interval,
+        "onset_status": _normalized_status(record.get("onset_status"), default=onset_status),
+        "failure_type": _normalize_quality_label(record.get("failure_type", record.get("type"))),
+        "severity": _normalize_quality_label(record.get("severity")),
+        "record_status": _normalized_status(
+            record.get("record_status", record.get("status")), default="available"
+        ),
+        "review_status": row_review["status"],
+        "reviewer": row_review["reviewer"],
+        "adjudication_status": row_review["adjudication_status"],
+        "independent_of_automated_diagnosis": row_review["independent_of_automated_diagnosis"],
+        "provenance_status": row_provenance["status"],
+        "source_trace_uri": row_provenance["source_trace_uri"],
+        "source_trace": source_trace,
+    }
+
+
+def _normalize_quality_label(value: Any) -> str:
+    """Normalize a reference/candidate class label without inventing a class.
+
+    Returns:
+        A lowercase label, ``unknown``-like values unchanged, or ``unavailable``.
+    """
+    if value is None:
+        return "unavailable"
+    if not isinstance(value, str):
+        return "invalid"
+    normalized = value.strip().lower()
+    return normalized or "unavailable"
+
+
+def _normalize_detection_label(value: Any) -> str:
+    """Normalize booleans and explicit detection labels, preserving unknown states.
+
+    Returns:
+        A detection label or an explicit unavailable/invalid state.
+    """
+    if isinstance(value, bool):
+        return "detected" if value else "not_detected"
+    if value is None:
+        return "unavailable"
+    if not isinstance(value, str):
+        return "invalid"
+    normalized = value.strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "true": "detected",
+        "false": "not_detected",
+        "yes": "detected",
+        "no": "not_detected",
+        "present": "detected",
+        "absent": "not_detected",
+        "not_detected": "not_detected",
+    }
+    return aliases.get(normalized, normalized or "unavailable")
+
+
+def _normalize_quality_interval(value: Any) -> tuple[list[float | None], str]:
+    """Normalize an onset interval and label malformed/missing values explicitly.
+
+    Returns:
+        A two-element interval and its availability status.
+    """
+    if value is None:
+        return [None, None], "unavailable"
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return [None, None], "invalid"
+    normalized = [_finite_or_none(endpoint) for endpoint in value]
+    if any(
+        endpoint is not None and normalized_value is None
+        for endpoint, normalized_value in zip(value, normalized, strict=True)
+    ):
+        return [None, None], "invalid"
+    if normalized[0] is None or normalized[1] is None:
+        return normalized, "unknown"
+    if normalized[1] < normalized[0]:
+        return [None, None], "invalid"
+    return normalized, "available"
+
+
+def _normalize_diagnosis_inputs(  # noqa: C901
+    diagnoses: Mapping[str, Any] | Iterable[Any],
+    *,
+    reference_case_ids: Sequence[str] = (),
+) -> dict[str, dict[str, Any]]:
+    """Normalize diagnosis inputs into case-id keyed, fail-closed semantic rows.
+
+    Returns:
+        A mapping from case id to normalized diagnosis rows.
+    """
+    items: list[tuple[str | None, Any]] = []
+    if isinstance(diagnoses, Mapping):
+        if isinstance(diagnoses.get("records"), list):
+            items = [(None, record) for record in diagnoses["records"]]
+        else:
+            items = [(str(case_id), record) for case_id, record in diagnoses.items()]
+    elif isinstance(diagnoses, Iterable) and not isinstance(diagnoses, (str, bytes)):
+        items = [(None, record) for record in diagnoses]
+    else:
+        raise FailureDiagnosisError("diagnosis_records must be a mapping or iterable")
+
+    normalized: dict[str, dict[str, Any]] = {}
+    for index, (provided_case_id, record) in enumerate(items):
+        if isinstance(record, FailureDiagnosisRecord):
+            raw_record: Mapping[str, Any] = record.to_dict()
+        elif isinstance(record, Mapping):
+            raw_record = record
+        elif record is None and provided_case_id is not None:
+            raw_record = {}
+        else:
+            raise FailureDiagnosisError(f"diagnosis record {index} must be a mapping or None")
+        case_id = provided_case_id or _case_identifier(raw_record)
+        if case_id is None and index < len(reference_case_ids):
+            case_id = reference_case_ids[index]
+        if case_id is None:
+            raise FailureDiagnosisError(
+                "diagnosis records must have case_id when they are not supplied as a case-id mapping"
+            )
+        if case_id in normalized:
+            raise FailureDiagnosisError(f"diagnosis case_id is duplicated: {case_id!r}")
+        normalized[case_id] = _normalize_candidate_record(
+            raw_record if record is not None else None
+        )
+    return normalized
+
+
+def _normalize_candidate_record(  # noqa: C901, PLR0912
+    record: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Normalize one diagnosis record and return its metric-eligibility state.
+
+    Returns:
+        A semantic row with availability and metric exclusion reasons.
+    """
+    if record is None:
+        return _unavailable_candidate("")
+    raw = dict(record)
+    exclusion_reasons: list[str] = []
+    for field in ("status", "record_status", "availability_status", "execution_status"):
+        if field in raw:
+            status = _normalized_status(raw[field])
+            if status in _EXCLUDED_QUALITY_STATUSES:
+                exclusion_reasons.append(f"diagnosis_{field}:{status}")
+    algorithm_metadata = raw.get("algorithm_metadata")
+    if isinstance(algorithm_metadata, Mapping) and "status" in algorithm_metadata:
+        status = _normalized_status(algorithm_metadata["status"])
+        if status in _EXCLUDED_QUALITY_STATUSES:
+            exclusion_reasons.append(f"diagnosis_algorithm_status:{status}")
+    if "review_status" in raw:
+        review_status = _normalized_status(raw["review_status"])
+        if review_status not in _REVIEWED_STATUSES:
+            exclusion_reasons.append(f"diagnosis_review_status:{review_status}")
+    if "provenance_status" in raw:
+        provenance_status = _normalized_status(raw["provenance_status"])
+        if provenance_status not in _COMPLETE_PROVENANCE_STATUSES:
+            exclusion_reasons.append(f"diagnosis_provenance_status:{provenance_status}")
+    if "validity_status" in raw and raw["validity_status"] != _VALID_VALIDITY_STATUS:
+        exclusion_reasons.append(
+            f"diagnosis_validity_status:{_normalized_status(raw['validity_status'])}"
+        )
+    if "diagnosis_source" in raw and raw["diagnosis_source"] != DIAGNOSIS_SOURCE:
+        exclusion_reasons.append("unsupported_diagnosis_source")
+    if "detection_method" in raw and raw["detection_method"] != DETECTION_METHOD_PREDICATE:
+        exclusion_reasons.append("unsupported_diagnosis_method")
+    if "diagnosis_schema_version" in raw:
+        try:
+            raw = validate_failure_diagnosis_record(raw)
+        except FailureDiagnosisError:
+            exclusion_reasons.append("invalid_diagnosis_record")
+
+    if "detected" in raw:
+        detection_value = raw["detected"]
+    elif "detection" in raw:
+        detection_value = raw["detection"]
+    elif "failure_present" in raw:
+        detection_value = raw["failure_present"]
+    elif "failure_type" in raw:
+        # A valid diagnosis row represents an observed diagnosis, including an
+        # explicit unknown type. Missing rows are represented separately below.
+        detection_value = "detected"
+    else:
+        detection_value = "unavailable"
+    onset_value = raw.get("onset_interval_s", raw.get("onset_interval"))
+    onset_interval, onset_status = _normalize_quality_interval(onset_value)
+    available = not exclusion_reasons
+    return {
+        "available": available,
+        "exclusion_reasons": _unique_strings(exclusion_reasons),
+        "detected": _normalize_detection_label(detection_value) if available else "unavailable",
+        "onset_interval_s": onset_interval,
+        "onset_status": onset_status,
+        "failure_type": _normalize_quality_label(raw.get("failure_type")),
+        "severity": _normalize_quality_label(raw.get("severity")),
+        "record": raw,
+    }
+
+
+def _unavailable_candidate(case_id: str) -> dict[str, Any]:
+    """Build the visible comparison row for a missing diagnosis.
+
+    Returns:
+        An unavailable candidate row that cannot enter any denominator.
+    """
+    return {
+        "available": False,
+        "exclusion_reasons": ["diagnosis_missing" if case_id else "diagnosis_unavailable"],
+        "detected": "unavailable",
+        "onset_interval_s": [None, None],
+        "onset_status": "unavailable",
+        "failure_type": "unavailable",
+        "severity": "unavailable",
+        "record": None,
+    }
+
+
+def _reference_exclusion_reasons(
+    fixture: Mapping[str, Any], record: Mapping[str, Any]
+) -> list[str]:
+    """Return reasons a reference row cannot enter any metric denominator."""
+    reasons: list[str] = []
+    review = fixture["review"]
+    provenance = fixture["provenance"]
+    if (
+        review["status"] not in _REVIEWED_STATUSES
+        or record["review_status"] not in _REVIEWED_STATUSES
+    ):
+        reasons.append("reference_unreviewed")
+    if (
+        review["adjudication_status"] not in _ADJUDICATED_STATUSES
+        or record["adjudication_status"] not in _ADJUDICATED_STATUSES
+    ):
+        reasons.append("reference_unadjudicated")
+    if review["reviewer"] is None or record["reviewer"] is None:
+        reasons.append("reference_reviewer_missing")
+    if (
+        not review["independent_of_automated_diagnosis"]
+        or not record["independent_of_automated_diagnosis"]
+    ):
+        reasons.append("reference_not_independent_of_automated_diagnosis")
+    if (
+        provenance["status"] not in _COMPLETE_PROVENANCE_STATUSES
+        or record["provenance_status"] not in _COMPLETE_PROVENANCE_STATUSES
+    ):
+        reasons.append("reference_provenance_incomplete")
+    if record["record_status"] in _EXCLUDED_QUALITY_STATUSES:
+        reasons.append(f"reference_record_status:{record['record_status']}")
+    return _unique_strings(reasons)
+
+
+def _finite_interval(value: Any) -> tuple[float, float] | None:
+    """Return a finite non-reversed interval suitable for onset metrics."""
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    start = _finite_or_none(value[0])
+    end = _finite_or_none(value[1])
+    if start is None or end is None or end < start:
+        return None
+    return start, end
+
+
+def _interval_intersection_over_union(
+    first: tuple[float, float], second: tuple[float, float]
+) -> float:
+    """Return onset-interval IoU, treating equal point intervals as a perfect match."""
+    intersection = max(0.0, min(first[1], second[1]) - max(first[0], second[0]))
+    union = max(first[1], second[1]) - min(first[0], second[0])
+    if union > 0.0:
+        return intersection / union
+    return 1.0 if first == second else 0.0
+
+
+def _interval_midpoint(interval: tuple[float, float]) -> float:
+    """Return the midpoint of a validated onset interval."""
+    return (interval[0] + interval[1]) / 2.0
+
+
+def _known_failure_type(value: Any) -> bool:
+    """Return whether a failure type is eligible for class comparison."""
+    return isinstance(value, str) and value in (ALLOWED_FAILURE_TYPES - {"unknown", "unavailable"})
+
+
+def _unique_strings(values: Iterable[Any]) -> list[str]:
+    """Deduplicate exclusion reasons while preserving their first-seen order.
+
+    Returns:
+        Ordered unique string values.
+    """
+    unique: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value)
+        if text not in seen:
+            seen.add(text)
+            unique.append(text)
+    return unique
+
+
+def _mark_metric_excluded(
+    excluded_case_ids: dict[str, set[str]],
+    excluded_reasons: dict[str, dict[str, int]],
+    metric: str,
+    case_id: str,
+    reasons: Sequence[str],
+) -> None:
+    """Record a metric-specific exclusion once per case and reason."""
+    excluded_case_ids[metric].add(case_id)
+    for reason in reasons:
+        excluded_reasons[metric][reason] = excluded_reasons[metric].get(reason, 0) + 1
+
+
+def _increment_detection_confusion(
+    counts: dict[str, int], reference_detected: bool, diagnosis_detected: bool
+) -> None:
+    """Increment one binary detection confusion cell."""
+    if reference_detected and diagnosis_detected:
+        counts["true_positive"] += 1
+    elif not reference_detected and not diagnosis_detected:
+        counts["true_negative"] += 1
+    elif not reference_detected and diagnosis_detected:
+        counts["false_positive"] += 1
+    else:
+        counts["false_negative"] += 1
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    """Return a ratio or ``None`` when no eligible cases exist."""
+    return numerator / denominator if denominator else None
+
+
+def _mean_or_none(values: Sequence[float]) -> float | None:
+    """Return a mean or ``None`` for an empty metric denominator."""
+    return sum(values) / len(values) if values else None
+
+
+def _classification_metric_summary(
+    pairs: Sequence[tuple[str, str]],
+    excluded_case_ids: set[str],
+    excluded_reasons: Mapping[str, int],
+) -> dict[str, Any]:
+    """Build exact-match and macro-F1 metrics for eligible class pairs.
+
+    Returns:
+        A classification metric summary with per-class counts and scores.
+    """
+    exact_match_count = sum(reference == diagnosis for reference, diagnosis in pairs)
+    labels = sorted({label for pair in pairs for label in pair})
+    per_class: dict[str, dict[str, Any]] = {}
+    f1_values: list[float] = []
+    for label in labels:
+        true_positive = sum(
+            reference == label and diagnosis == label for reference, diagnosis in pairs
+        )
+        false_positive = sum(
+            reference != label and diagnosis == label for reference, diagnosis in pairs
+        )
+        false_negative = sum(
+            reference == label and diagnosis != label for reference, diagnosis in pairs
+        )
+        support = true_positive + false_negative
+        precision = _ratio(true_positive, true_positive + false_positive)
+        recall = _ratio(true_positive, support)
+        if precision is None or recall is None or precision + recall == 0.0:
+            f1 = 0.0
+        else:
+            f1 = 2.0 * precision * recall / (precision + recall)
+        f1_values.append(f1)
+        per_class[label] = {
+            "true_positive": true_positive,
+            "false_positive": false_positive,
+            "false_negative": false_negative,
+            "support": support,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+        }
+    macro_f1 = _mean_or_none(f1_values)
+    exact_match_rate = _ratio(exact_match_count, len(pairs))
+    return {
+        "exact_match": exact_match_rate,
+        "exact_match_rate": exact_match_rate,
+        "exact_match_count": exact_match_count,
+        "macro_f1": macro_f1,
+        "per_class": per_class,
+        "denominator": len(pairs),
+        "excluded_count": len(excluded_case_ids),
+        "excluded_reasons": dict(excluded_reasons),
+    }
+
+
+def _reference_comparison_view(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the reference values and eligibility metadata for a case report."""
+    return {
+        "detected": record["detected"],
+        "onset_interval_s": list(record["onset_interval_s"]),
+        "failure_type": record["failure_type"],
+        "severity": record["severity"],
+        "review_status": record["review_status"],
+        "adjudication_status": record["adjudication_status"],
+        "provenance_status": record["provenance_status"],
+        "source_trace_uri": record["source_trace_uri"],
+        "source_trace": dict(record["source_trace"]),
+    }
+
+
+def _candidate_comparison_view(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Return diagnosis values and eligibility metadata for a case report."""
+    return {
+        "available": bool(record["available"]),
+        "detected": record["detected"],
+        "onset_interval_s": list(record["onset_interval_s"]),
+        "failure_type": record["failure_type"],
+        "severity": record["severity"],
+        "exclusion_reasons": list(record["exclusion_reasons"]),
+    }
+
+
+def _metric_case_result(included: bool, reasons: Sequence[str]) -> dict[str, Any]:
+    """Return a stable per-case metric inclusion record."""
+    return {
+        "status": "included" if included else "excluded",
+        "excluded_reasons": list(reasons),
+    }
+
+
 __all__ = [
     "ALLOWED_FAILURE_TYPES",
     "CORRECTION_STATUSES",
     "DEFAULT_CORRECTION_STATUS",
     "DETECTION_METHODS",
     "DETECTION_METHOD_PREDICATE",
+    "DIAGNOSIS_DETECTION_LABELS",
+    "DIAGNOSIS_QUALITY_SOURCE",
     "DIAGNOSIS_SEVERITIES",
     "DIAGNOSIS_SOURCE",
+    "FAILURE_DIAGNOSIS_QUALITY_SCHEMA_VERSION",
+    "FAILURE_DIAGNOSIS_REFERENCE_SCHEMA_VERSION",
     "FAILURE_DIAGNOSIS_SCHEMA_VERSION",
     "FAILURE_LEVELS",
     "FailureDiagnosisError",
     "FailureDiagnosisRecord",
     "build_failure_diagnosis_payload",
+    "build_failure_diagnosis_quality_report",
+    "compare_failure_diagnosis_to_reference",
     "diagnose_from_trace_failure_predicate",
     "diagnose_from_trace_failure_predicates",
+    "evaluate_failure_diagnosis_quality",
     "unknown_failure_diagnosis_record",
     "validate_failure_diagnosis_payload",
     "validate_failure_diagnosis_record",
+    "validate_failure_diagnosis_reference_fixture",
 ]

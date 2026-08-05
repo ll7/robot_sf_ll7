@@ -1,0 +1,5 @@
+{
+  "expected_reason_code": "checksum_mismatch",
+  "schema_version": "robot_sf_ecosystem_negative_fixture.v1",
+  "variant_id": "checksum_mismatch"
+}

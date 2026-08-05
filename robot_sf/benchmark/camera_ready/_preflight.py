@@ -14,7 +14,9 @@ from robot_sf.benchmark.camera_ready._artifacts import (
     _write_matrix_summary_artifacts,
 )
 from robot_sf.benchmark.camera_ready._config import (
+    _assert_radius_sweep_preflight_ready,
     _load_campaign_scenarios,
+    _radius_binding_metadata,
     _resolved_seed_inventory,
     _scenario_horizon_summary,
 )
@@ -245,6 +247,7 @@ def _build_preflight_validate_payload(  # noqa: PLR0913
         "campaign_id": campaign_id,
         "generated_at_utc": created_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
+        "radius_binding": _radius_binding_metadata(cfg.radius_sweep),
         "scenario_count": len(scenarios),
         "scenario_candidates": {
             "requested": list(cfg.scenario_candidates.names),
@@ -354,6 +357,7 @@ def _build_preflight_preview_payload(
         "schema_version": "benchmark-preflight-preview-scenarios.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": created_at_utc,
+        "radius_binding": _radius_binding_metadata(cfg.radius_sweep),
         "scenario_count": len(scenarios),
         "preview_limit": preview_limit,
         "scenario_candidates": list(cfg.scenario_candidates.names),
@@ -921,6 +925,7 @@ def _build_manifest_context_block(
         "started_at_utc": created_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": metadata["scenario_hash"],
+        "radius_binding": _radius_binding_metadata(cfg.radius_sweep),
         "scenario_candidates": list(cfg.scenario_candidates.names),
         "scenario_amv_overrides": {
             scenario_name: dict(values)
@@ -1183,6 +1188,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     if build_route_clearance_warnings is None:
         build_route_clearance_warnings = _build_route_clearance_warnings
     validate_campaign_config(cfg)
+    _assert_radius_sweep_preflight_ready(cfg.radius_sweep)
     ckpt_report, campaign_id, campaign_root, reports_dir, preflight_dir = (
         _validate_and_setup_campaign(
             cfg,

@@ -6,25 +6,26 @@ issue: 5355
 title: "research: 2x2 factorial campaign - prediction on/off x constraint-handling on/off"
 schema: robot_sf.issue_state.v1
 
-# --- Closure audit (2026-07-12), reconciled 2026-07-13 by #5483 ---------------
+# --- Closure audit (2026-07-12), reconciled 2026-08-03 -------------------------
 # The issue's own CPU-implementable acceptance criteria are all met; the campaign
 # result (the issue's raison d'etre) does not exist yet, so the issue stays OPEN.
 # Verdict is machine-checkable via
 # robot_sf.benchmark.prediction_mpc_factorial_preregistration.assess_campaign_readiness().
-# Reconciliation (#5483): #5353 is closed in the tracker and its dependency status
-# is now marked resolved in the factorial config + evidence registry, leaving #5351
-# as the single remaining open dependency blocker (the campaign-execution gate).
+# Reconciliation (2026-08-03): #5353 and #5351 are closed in the tracker. The
+# deterministic #5351 report and checksum-pinned successor rows are present, but
+# its claim gate remains blocked_review_pending until human review.
 closure_audit:
   date: 2026-07-12
-  reconciled: 2026-07-13
+  reconciled: 2026-08-03
   decision: keep_open
   reason: >
     Design, preregistration, arm implementation, intervention-fidelity, and
     provenance criteria are complete and landed. The #5353 capability-matrix
-    dependency is resolved (tracker closed; config + registry reconciled via
-    #5483). Campaign execution remains (GPU/ops queue) and the #5351 hierarchical
-    paired-analysis dependency is still open. Not closeable until analysis and
-    the campaign run complete.
+    dependency and the #5351 hierarchical paired-analysis dependency are resolved
+    as implementation inputs. The #5351 deterministic report remains
+    human-review-gated for claim promotion. Campaign execution remains on the
+    GPU/ops queue, and no benchmark or manuscript claim is promoted by this state
+    packet.
   criteria:
     - criterion: "2x2 factorial design on one matched base planner (option 1, prediction-MPC)"
       status: met
@@ -50,9 +51,9 @@ closure_audit:
     - criterion: "Executable CLI gate for ops at the submission boundary (exit-code + report artifact)"
       status: met
       evidence: "scripts/validation/check_issue_5355_factorial_campaign_readiness.py; tests/validation/test_check_issue_5355_factorial_campaign_readiness.py"
-    - criterion: "Hierarchical paired analysis machinery available"
-      status: blocked
-      evidence: "tracked separately in #5351 (still open)"
+    - criterion: "Hierarchical paired analysis machinery and report available"
+      status: met
+      evidence: "docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/hierarchical_paired_release_analysis_report.json; claim_gate=blocked_review_pending"
     - criterion: "Capability-matrix fairness gating available"
       status: met
       evidence: "resolved via #5483; #5353 closed in tracker; config + registry reconciled"
@@ -62,17 +63,17 @@ closure_audit:
 
 remaining_gate:
   blockers_remaining:
-    - "#5351 hierarchical paired analysis (open) — sole remaining dependency blocker"
+    - "#5351 deterministic report claim gate remains human-review-pending; no claim promotion is automatic"
     - "campaign execution on the ops/GPU queue (not authorized in CPU lanes)"
   blockers_resolved:
     - "#5353 capability-matrix fairness contract (resolved via #5483)"
+    - "#5351 hierarchical paired analysis inputs and report (resolved; review gate retained)"
   blockers_new: []
   blockers_intentional:
     - "campaign RUN deferred to compute queue by design (issue sequencing)"
   next_empirical_action: >
-    Once #5351 lands, flip its status in
-    configs/research/prediction_mpc_factorial_v1.yaml dependencies to resolved,
-    run the CLI gate
+    Run the CLI gate
     (uv run python scripts/validation/check_issue_5355_factorial_campaign_readiness.py)
-    and confirm it exits 0 (ready) on the exact submitted config, then submit the
-    factorial campaign through the ops queue.
+    and confirm it exits 0 (ready) on the exact submitted config. Then obtain the
+    separate human review for the #5351 report before any claim admission, and
+    submit the factorial campaign through the ops queue only with a fresh packet.

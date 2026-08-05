@@ -15,7 +15,10 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
+    ANALYSIS_DELIVERED_REVIEW_PENDING,
+    BLOCKED_INVALID_ANALYSIS_ARTIFACT,
     BLOCKED_MISSING_SUCCESSOR_ROWS,
+    DEFAULT_ANALYSIS_REPORT_RELATIVE_PATH,
     INPUTS_READY_ANALYSIS_NOT_RUN,
     HierarchicalPairedReleaseInputError,
     evaluate_hierarchical_paired_release_inputs,
@@ -49,24 +52,24 @@ def _blocked_manifest() -> dict[str, object]:
     return manifest
 
 
-def test_checked_in_manifest_reports_inputs_ready_when_rows_present() -> None:
-    """The checked-in 0.0.3.post1 manifest and successor rows report inputs ready."""
+def test_checked_in_manifest_reports_analysis_delivery_with_review_gate() -> None:
+    """The checked-in manifest reports the delivered analysis without promotion."""
 
     report = evaluate_hierarchical_paired_release_inputs(_manifest(), repo_root=_REPO_ROOT)
 
-    assert report["status"] == INPUTS_READY_ANALYSIS_NOT_RUN
+    assert report["status"] == ANALYSIS_DELIVERED_REVIEW_PENDING
     assert report["evidence_status"] == "not_benchmark_evidence"
-    assert report["claim_gate"] == {
-        "status": "blocked_analysis_not_run",
-        "reason": "inputs are present but the hierarchical paired analysis has not run",
-    }
+    assert report["claim_gate"]["status"] == "blocked_review_pending"
+    assert "human review" in report["claim_gate"]["reason"]
+    assert report["analysis_artifact"]["status"] == ANALYSIS_DELIVERED_REVIEW_PENDING
+    assert report["analysis_artifact"]["sha256"]
     assert report["semantics"] == {
         "benchmark_metrics_changed": False,
-        "analysis_executed": False,
+        "analysis_executed": True,
         "claim_promotion": "none",
     }
     assert {row["status"] for row in report["protocol_conformance"]} == {
-        "declared_pending_analysis"
+        "delivered_analysis_pending_human_review"
     }
 
 
@@ -121,6 +124,48 @@ def test_present_durable_successor_rows_only_make_inputs_ready(tmp_path: Path) -
     assert {row["status"] for row in report["protocol_conformance"]} == {
         "declared_pending_analysis"
     }
+
+
+def test_invalid_tracked_analysis_artifact_fails_closed(tmp_path: Path) -> None:
+    """A malformed claim-gate report cannot make the input surface look delivered."""
+
+    manifest = _manifest()
+    successor_release = manifest["successor_release"]
+    assert isinstance(successor_release, dict)
+    rows_path = tmp_path / "docs/context/evidence/release_successor/rows.jsonl"
+    rows_path.parent.mkdir(parents=True, exist_ok=True)
+    rows_path.write_text('{"schema_version":"EpisodeEventLedger.v2"}\n', encoding="utf-8")
+    successor_release.update(
+        {
+            "release_tag": "v2.0.0",
+            "commit": "e" * 40,
+            "typed_ledger_rows": rows_path.relative_to(tmp_path).as_posix(),
+            "typed_ledger_rows_sha256": hashlib.sha256(rows_path.read_bytes()).hexdigest(),
+        }
+    )
+    report_path = tmp_path / DEFAULT_ANALYSIS_REPORT_RELATIVE_PATH
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "issue": 5351,
+                "analysis_executed": True,
+                "evidence_status": "not_benchmark_evidence",
+                "claim_gate": {"status": "blocked_analysis_not_run"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = evaluate_hierarchical_paired_release_inputs(manifest, repo_root=tmp_path)
+
+    assert report["status"] == BLOCKED_INVALID_ANALYSIS_ARTIFACT
+    assert report["blocking_prerequisites"] == [
+        {
+            "field": "analysis_artifact",
+            "reason": "analysis report must retain claim_gate.status=blocked_review_pending",
+        }
+    ]
 
 
 def test_output_or_parent_escaping_row_paths_fail_closed() -> None:

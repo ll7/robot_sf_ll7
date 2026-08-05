@@ -51,6 +51,7 @@ import json
 import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -661,55 +662,17 @@ def _default_run_batch() -> Callable[..., dict[str, Any]]:
     return run_batch
 
 
-def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
-    plan: DenseComparisonRunPlan,
-    *,
-    authorization: str | None = None,
-    repo_root: str | Path = ".",
-    schema_path: str | Path = EPISODE_SCHEMA_PATH,
-    run_batch_fn: Callable[..., dict[str, Any]] | None = None,
-    now_fn: Callable[[], datetime] | None = None,
-) -> DenseExecutionManifest:
-    """Run the three-arm dense comparison locally, gated on the exact authorization ID.
-
-    The executor reuses the canonical benchmark runner (:func:`robot_sf.benchmark.runner.
-    run_batch`) once per resolved arm, in packet order, each pinned to the shared scenario
-    manifest and that arm's distinct algorithm config, and writes the planned per-arm JSONL.
-    It is deliberately local-only: it knows nothing about ``sbatch``, SSH, tmux, queue tooling,
-    or private ops.
-
-    Fail-closed order (nothing is written until every gate passes):
-
-    1. The plan must be fully resolved (``plan_ready_campaign_gated``); a blocked plan raises.
-    2. ``authorization`` must equal :data:`REQUIRED_AUTHORIZATION_ID` exactly. A missing/empty
-       value, a boolean, or any other string raises before a single output file is created.
-    3. A prior manifest must match content-bound provenance. Existing output without an owning
-       manifest fails closed, while an atomic ``in_progress`` manifest checkpoints each arm.
-
-    Args:
-        plan: A resolved run plan from :func:`build_run_plan`.
-        authorization: The exact public authorization ID; anything else fails closed.
-        repo_root: Directory repo-relative plan paths resolve against.
-        schema_path: Episode-record schema the runner validates rows against.
-        run_batch_fn: Injection seam for tests; defaults to the canonical ``run_batch``.
-        now_fn: Injection seam for timestamps; defaults to UTC ``datetime.now``.
-
-    Returns:
-        The execution manifest (also written to ``output_dir/execution_manifest.json``).
+def _check_execution_gates(plan: DenseComparisonRunPlan, authorization: str | None) -> None:
+    """Fail closed unless the plan is fully resolved and authorization is exact.
 
     Raises:
         DenseComparisonExecutionGatedError: if the plan is not ready or authorization is wrong.
-        DenseComparisonProvenanceMismatchError: if a prior manifest has incompatible provenance.
     """
-    # Gate 1: never execute a plan that did not fully resolve.
     if not plan.is_executable_in_principle:
         raise DenseComparisonExecutionGatedError(
             "issue #4142 dense DPCBF comparison cannot execute: the run plan is not fully "
             f"resolved (status {plan.status!r}). Resolve all packet inputs first."
         )
-
-    # Gate 2: authorization. Checked before ANY filesystem write so a wrong/absent ID never
-    # creates output files. A boolean, env var, TTY, or bare --execute flag is insufficient.
     if authorization != REQUIRED_AUTHORIZATION_ID:
         raise DenseComparisonExecutionGatedError(
             "issue #4142 dense DPCBF comparison execution is authorization-gated: pass the "
@@ -718,19 +681,16 @@ def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
             "is insufficient; no output files are created."
         )
 
-    root = Path(repo_root).resolve()
-    output_dir_abs = _abs_under_root(root, plan.output_dir).resolve()
-    manifest_path = output_dir_abs / EXECUTION_MANIFEST_FILENAME
-    schema_abs = _abs_under_root(root, str(schema_path)).resolve()
 
-    git_sha, git_dirty = _git_provenance(root)
-    if git_dirty and git_sha != "unknown":
-        raise DenseComparisonProvenanceMismatchError(
-            f"refusing execution from dirty git worktree {root}; commit effective inputs first"
-        )
+def _build_effective_arguments(
+    root: Path, schema_path: str | Path, inputs: DenseExecutionInputs
+) -> dict[str, Any]:
+    """Build the effective-arguments dict recorded in the execution manifest.
 
-    inputs = plan.execution_inputs
-    effective_arguments = {
+    Returns:
+        The effective-arguments mapping.
+    """
+    return {
         "authorization_id": REQUIRED_AUTHORIZATION_ID,
         "repo_root": str(root),
         "schema_path": str(schema_path),
@@ -742,17 +702,19 @@ def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
         "video_enabled": inputs.video_enabled,
         "resume": inputs.resume,
     }
-    input_hashes = _effective_input_hashes(root, plan, schema_abs)
-    provenance_key = _provenance_key(
-        plan,
-        git_sha,
-        git_dirty=git_dirty,
-        schema_path=schema_abs,
-        input_hashes=input_hashes,
-        effective_arguments=effective_arguments,
-    )
 
-    prior: dict[str, Any] | None = None
+
+def _validate_prior_manifest(
+    manifest_path: Path, output_dir_abs: Path, provenance_key: str
+) -> dict[str, Any] | None:
+    """Read and validate a prior execution manifest, or fail closed on orphaned output.
+
+    Returns:
+        The prior manifest dict, or ``None`` when no prior manifest exists.
+
+    Raises:
+        DenseComparisonProvenanceMismatchError: on unreadable/mismatched manifest or orphans.
+    """
     if manifest_path.is_file():
         try:
             prior = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -773,7 +735,8 @@ def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
             raise DenseComparisonProvenanceMismatchError(
                 f"existing execution manifest {manifest_path} has an invalid status"
             )
-    elif output_dir_abs.exists():
+        return prior
+    if output_dir_abs.exists():
         try:
             orphaned = tuple(output_dir_abs.iterdir())
         except OSError as exc:
@@ -786,18 +749,17 @@ def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
                 f"existing output {output_dir_abs} has no execution manifest; refusing to "
                 f"claim ownership of orphaned files ({names})"
             )
+    return None
 
-    clock = now_fn or (lambda: datetime.now(UTC))
-    run_batch = run_batch_fn or _default_run_batch()
 
-    output_dir_abs.mkdir(parents=True, exist_ok=True)
-    started_at = clock().isoformat()
+def _validate_prior_arm_checkpoints(
+    plan: DenseComparisonRunPlan, prior_arms: dict[str, Any], root: Path
+) -> None:
+    """Fail closed if a completed arm's artifact no longer matches its checkpoint hash.
 
-    prior_arms = {
-        arm.get("arm_key"): arm
-        for arm in (prior or {}).get("arms", [])
-        if isinstance(arm, dict) and isinstance(arm.get("arm_key"), str)
-    }
+    Raises:
+        DenseComparisonProvenanceMismatchError: on missing or mismatched artifact hashes.
+    """
     for job in plan.arms:
         arm = prior_arms.get(job.arm_key, {})
         expected_hash = arm.get("artifact_sha256")
@@ -814,7 +776,16 @@ def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
                     f"completed arm {job.arm_key} artifact no longer matches its checkpoint"
                 )
 
-    results = [
+
+def _initial_arm_results(
+    plan: DenseComparisonRunPlan, prior_arms: dict[str, Any]
+) -> list[ArmExecutionResult]:
+    """Build the initial pending results, carrying forward prior artifact hashes.
+
+    Returns:
+        Per-arm pending results with prior artifact hashes preserved.
+    """
+    return [
         ArmExecutionResult(
             arm_key=job.arm_key,
             algorithm=job.algorithm,
@@ -829,35 +800,72 @@ def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
         for job in plan.arms
     ]
 
-    def save_checkpoint(
-        arms: tuple[ArmExecutionResult, ...],
-        *,
-        ended_at: str = "",
-        status: str = "in_progress",
-    ) -> DenseExecutionManifest:
-        """Persist one atomic execution checkpoint and return its snapshot.
 
-        Returns:
-            The checkpoint snapshot written to disk.
-        """
-        manifest = _build_manifest(
-            plan,
-            authorization_id=REQUIRED_AUTHORIZATION_ID,
-            git_sha=git_sha,
-            git_dirty=git_dirty,
-            provenance_key=provenance_key,
-            input_hashes=input_hashes,
-            effective_arguments=effective_arguments,
-            started_at=started_at,
-            ended_at=ended_at,
-            status=status,
-            arms=arms,
-        )
-        _write_manifest_atomic(manifest_path, manifest)
-        return manifest
+def _parse_prior_arms(prior: dict[str, Any] | None) -> dict[str, Any]:
+    """Extract the per-arm checkpoint map from a prior manifest.
 
-    save_checkpoint(tuple(results))
+    Returns:
+        Mapping of arm key to prior arm checkpoint dict.
+    """
+    return {
+        arm.get("arm_key"): arm
+        for arm in (prior or {}).get("arms", [])
+        if isinstance(arm, dict) and isinstance(arm.get("arm_key"), str)
+    }
 
+
+def _save_checkpoint(  # noqa: PLR0913
+    manifest_path: Path,
+    plan: DenseComparisonRunPlan,
+    arms: tuple[ArmExecutionResult, ...],
+    *,
+    git_sha: str,
+    git_dirty: bool,
+    provenance_key: str,
+    input_hashes: dict[str, str],
+    effective_arguments: dict[str, Any],
+    started_at: str,
+    ended_at: str = "",
+    status: str = "in_progress",
+) -> DenseExecutionManifest:
+    """Persist one atomic execution checkpoint and return its snapshot.
+
+    Returns:
+        The checkpoint manifest written to disk.
+    """
+    manifest = _build_manifest(
+        plan,
+        authorization_id=REQUIRED_AUTHORIZATION_ID,
+        git_sha=git_sha,
+        git_dirty=git_dirty,
+        provenance_key=provenance_key,
+        input_hashes=input_hashes,
+        effective_arguments=effective_arguments,
+        started_at=started_at,
+        ended_at=ended_at,
+        status=status,
+        arms=arms,
+    )
+    _write_manifest_atomic(manifest_path, manifest)
+    return manifest
+
+
+def _run_arms_and_finalize(  # noqa: PLR0913
+    plan: DenseComparisonRunPlan,
+    results: list[ArmExecutionResult],
+    prior_arms: dict[str, Any],
+    root: Path,
+    schema_abs: Path,
+    inputs: DenseExecutionInputs,
+    run_batch: Callable[..., dict[str, Any]],
+    clock: Callable[[], datetime],
+    checkpoint_fn: Callable[..., DenseExecutionManifest],
+) -> DenseExecutionManifest:
+    """Execute each arm in packet order, checkpoint after each, and finalize.
+
+    Returns:
+        The final execution manifest.
+    """
     scenario_abs = _abs_under_root(root, str(plan.scenario_manifest))
     for index, job in enumerate(plan.arms):
         out_abs = _abs_under_root(root, job.output_jsonl)
@@ -874,15 +882,93 @@ def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
             inputs=inputs,
             expected_jobs=expected_jobs,
         )
-        save_checkpoint(tuple(results))
+        checkpoint_fn(tuple(results))
 
     ended_at = clock().isoformat()
     all_ok = len(results) == len(REQUIRED_ARMS) and all(
         r.status in {"executed", "resumed_complete"} and r.failed_jobs == 0 for r in results
     )
     status = "complete" if all_ok else "results_incomplete"
+    return checkpoint_fn(tuple(results), ended_at=ended_at, status=status)
 
-    return save_checkpoint(tuple(results), ended_at=ended_at, status=status)
+
+def execute_run_plan(
+    plan: DenseComparisonRunPlan,
+    *,
+    authorization: str | None = None,
+    repo_root: str | Path = ".",
+    schema_path: str | Path = EPISODE_SCHEMA_PATH,
+    run_batch_fn: Callable[..., dict[str, Any]] | None = None,
+    now_fn: Callable[[], datetime] | None = None,
+) -> DenseExecutionManifest:
+    """Run the three-arm dense comparison locally, gated on the exact authorization ID.
+
+    Reuses the canonical benchmark runner once per resolved arm, in packet order.
+    Fail-closed: plan must be ready, authorization must be exact, prior manifest
+    provenance must match. Nothing is written until every gate passes.
+
+    Returns:
+        The execution manifest (also written to ``output_dir/execution_manifest.json``).
+    """
+    _check_execution_gates(plan, authorization)
+
+    root = Path(repo_root).resolve()
+    output_dir_abs = _abs_under_root(root, plan.output_dir).resolve()
+    manifest_path = output_dir_abs / EXECUTION_MANIFEST_FILENAME
+    schema_abs = _abs_under_root(root, str(schema_path)).resolve()
+
+    git_sha, git_dirty = _git_provenance(root)
+    if git_dirty and git_sha != "unknown":
+        raise DenseComparisonProvenanceMismatchError(
+            f"refusing execution from dirty git worktree {root}; commit effective inputs first"
+        )
+
+    inputs = plan.execution_inputs
+    effective_arguments = _build_effective_arguments(root, schema_path, inputs)
+    input_hashes = _effective_input_hashes(root, plan, schema_abs)
+    provenance_key = _provenance_key(
+        plan,
+        git_sha,
+        git_dirty=git_dirty,
+        schema_path=schema_abs,
+        input_hashes=input_hashes,
+        effective_arguments=effective_arguments,
+    )
+    prior = _validate_prior_manifest(manifest_path, output_dir_abs, provenance_key)
+
+    clock = now_fn or (lambda: datetime.now(UTC))
+    run_batch = run_batch_fn or _default_run_batch()
+    output_dir_abs.mkdir(parents=True, exist_ok=True)
+    started_at = clock().isoformat()
+
+    prior_arms = _parse_prior_arms(prior)
+    _validate_prior_arm_checkpoints(plan, prior_arms, root)
+    results = _initial_arm_results(plan, prior_arms)
+
+    checkpoint_fn = partial(
+        _save_checkpoint,
+        manifest_path,
+        plan,
+        git_sha=git_sha,
+        git_dirty=git_dirty,
+        provenance_key=provenance_key,
+        input_hashes=input_hashes,
+        effective_arguments=effective_arguments,
+        started_at=started_at,
+    )
+    checkpoint_fn(tuple(results))
+
+    return _run_arms_and_finalize(
+        plan,
+        results,
+        prior_arms,
+        root,
+        schema_abs,
+        inputs,
+        run_batch,
+        clock,
+        checkpoint_fn,
+    )
 
 
 def _execute_arm(

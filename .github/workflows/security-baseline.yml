@@ -31,6 +31,10 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          # Ruff does not execute the headless runtime, so avoid an unrelated apt
+          # dependency and keep this advisory scan independent of runner repositories.
+          install-system-packages: "false"
 
       - name: Run Ruff security rules advisory baseline
         id: ruff_security

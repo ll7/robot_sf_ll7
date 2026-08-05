@@ -686,7 +686,7 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
         max_severity: ``"error"`` (default) or ``"warn"``.
 
     Raises:
-        AssertionError: When at least one defect meets the severity threshold.
+        ValueError: When at least one defect meets the severity threshold.
     """
     severity_order = {_SEVERITY_WARN: 0, _SEVERITY_ERROR: 1}
     threshold = severity_order.get(max_severity, 1)
@@ -699,9 +699,10 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
     )
     failing = [d for d in defects if severity_order.get(d.severity, 1) >= threshold]
     summary = "; ".join(f"[{d.defect_type}] {d.message}" for d in failing)
-    assert not failing, (
-        f"Figure has {len(failing)} defect(s) at severity >= {max_severity}: {summary}"
-    )
+    if failing:
+        raise ValueError(
+            f"Figure has {len(failing)} defect(s) at severity >= {max_severity}: {summary}"
+        )
 
 
 # ---------------------------------------------------------------------------

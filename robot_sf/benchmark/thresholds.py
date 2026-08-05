@@ -100,7 +100,8 @@ def build_metric_parameters(
         threshold_profile.update(profile)
     if passing_clearance_contract is not None:
         contract = resolve_passing_clearance_contract(passing_clearance_contract)
-        assert contract is not None
+        if contract is None:  # pragma: no cover
+            raise RuntimeError("passing clearance contract was not resolved")  # pragma: no cover
         threshold_profile["passing_clearance_contract"] = contract.to_dict()
         threshold_profile["passing_clearance_contract_hash"] = contract.profile_hash
     return {
@@ -177,7 +178,8 @@ def validate_threshold_parameter_consistency(records: list[dict[str, Any]]) -> d
                 ),
             )
 
-    assert reference_profile is not None
+    if reference_profile is None:  # pragma: no cover
+        raise RuntimeError("threshold profile reference was not selected")  # pragma: no cover
     return {
         "threshold_profile": reference_profile,
         "threshold_signature": threshold_profile_signature(reference_profile),

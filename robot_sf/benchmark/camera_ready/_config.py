@@ -11,6 +11,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,13 +20,18 @@ import yaml
 from robot_sf.benchmark.camera_ready._config_types import (
     _AMV_DIMENSIONS,
     _CHECKPOINT_PROVENANCE_ENFORCEMENT,
+    _RADIUS_BINDING_STATUSES,
     _TUNING_EFFORT_ENFORCEMENT,
     _TUNING_SOURCES,
     DEFAULT_SEED_SETS_PATH,
+    RADIUS_BINDING_CONTRACT_VERSION,
+    RADIUS_BINDING_STATUS_BOUND_RUNTIME,
+    RADIUS_BINDING_STATUS_PENDING_GATE1,
     TUNING_SOURCE_DECLARED,
     AmvProfileConfig,
     CampaignConfig,
     PlannerSpec,
+    RadiusSweepConfig,
     ScenarioCandidateSelection,
     SeedPolicy,
     SnqiContractConfig,
@@ -56,6 +62,101 @@ _PAPER_KINEMATICS_BY_PROFILE = {
 }
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error", "enforce"}
+
+
+class RadiusSweepBindingPreflightError(RuntimeError):
+    """Raised when a radius-sweep arm is not bound to runtime geometry."""
+
+
+def _validate_radius_sweep_config(  # noqa: C901
+    cfg: RadiusSweepConfig,
+    *,
+    source: str,
+) -> None:
+    """Validate the issue #6642 radius-binding contract."""
+    if cfg.issue != 6642 or cfg.parent_issue != 6600:
+        raise ValueError(
+            f"{source} must identify issue 6642 with parent issue 6600; "
+            f"got issue={cfg.issue!r}, parent_issue={cfg.parent_issue!r}"
+        )
+    if not re.fullmatch(r"r\d+p\d+", cfg.arm_key):
+        raise ValueError(f"{source}.arm_key must match r<major>p<minor>, got {cfg.arm_key!r}")
+    if not math.isfinite(cfg.radius_m) or cfg.radius_m <= 0.0:
+        raise ValueError(f"{source}.radius_m must be a positive finite number")
+    if not isinstance(cfg.baseline_arm, bool):
+        raise TypeError(f"{source}.baseline_arm must be a boolean")
+    if cfg.runtime_binding_status not in _RADIUS_BINDING_STATUSES:
+        known = ", ".join(_RADIUS_BINDING_STATUSES)
+        raise ValueError(
+            f"Unsupported {source}.runtime_binding_status "
+            f"{cfg.runtime_binding_status!r}; expected one of: {known}"
+        )
+    if cfg.runtime_binding_status != RADIUS_BINDING_STATUS_BOUND_RUNTIME:
+        return
+    if cfg.binding_contract_version != RADIUS_BINDING_CONTRACT_VERSION:
+        raise ValueError(
+            f"{source}.binding_contract_version must be "
+            f"{RADIUS_BINDING_CONTRACT_VERSION!r} for bound_runtime arms"
+        )
+    if cfg.gate1_canary_issue != 6641:
+        raise ValueError(f"{source}.gate1_canary_issue must be 6641 for bound_runtime arms")
+    if not isinstance(cfg.gate1_receipt_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", cfg.gate1_receipt_sha256
+    ):
+        raise ValueError(
+            f"{source}.gate1_receipt_sha256 must be a lowercase 64-character SHA-256 digest"
+        )
+    if not isinstance(cfg.gate1_source_commit, str) or not re.fullmatch(
+        r"[0-9a-f]{40}", cfg.gate1_source_commit
+    ):
+        raise ValueError(
+            f"{source}.gate1_source_commit must be a lowercase 40-character commit hash"
+        )
+
+
+def _radius_binding_metadata(
+    radius_sweep: RadiusSweepConfig | None,
+) -> dict[str, Any] | None:
+    """Return the JSON-serializable radius-binding provenance block."""
+    if radius_sweep is None:
+        return None
+    return {
+        "issue": radius_sweep.issue,
+        "parent_issue": radius_sweep.parent_issue,
+        "arm_key": radius_sweep.arm_key,
+        "radius_m": float(radius_sweep.radius_m),
+        "baseline_arm": radius_sweep.baseline_arm,
+        "status": radius_sweep.runtime_binding_status,
+        "source": "radius_sweep.radius_m",
+        "contract_version": radius_sweep.binding_contract_version,
+        "runtime_binding_status": radius_sweep.runtime_binding_status,
+        "binding_contract_version": radius_sweep.binding_contract_version,
+        "gate1_canary_issue": radius_sweep.gate1_canary_issue,
+        "gate1_receipt_sha256": radius_sweep.gate1_receipt_sha256,
+        "gate1_source_commit": radius_sweep.gate1_source_commit,
+        "runtime_binding_note": radius_sweep.runtime_binding_note,
+    }
+
+
+def _assert_radius_sweep_preflight_ready(
+    radius_sweep: RadiusSweepConfig | None,
+) -> None:
+    """Reject radius arms that are not explicitly admitted for runtime use."""
+    if radius_sweep is None:
+        return
+    _validate_radius_sweep_config(radius_sweep, source="radius_sweep")
+    if radius_sweep.runtime_binding_status == RADIUS_BINDING_STATUS_PENDING_GATE1:
+        raise RadiusSweepBindingPreflightError(
+            "Radius-sweep arm "
+            f"{radius_sweep.arm_key!r} remains "
+            f"{RADIUS_BINDING_STATUS_PENDING_GATE1}; no episodes may execute. "
+            "Run and admit the Gate 1 binding canary before using a production arm."
+        )
+    if radius_sweep.runtime_binding_status != RADIUS_BINDING_STATUS_BOUND_RUNTIME:
+        raise RadiusSweepBindingPreflightError(
+            "Radius-sweep arm has no admitted runtime binding: "
+            f"{radius_sweep.runtime_binding_status!r}"
+        )
 
 
 def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
@@ -577,8 +678,51 @@ def _apply_scenario_amv_overrides(
     return patched_scenarios
 
 
+def _apply_radius_sweep_binding(
+    scenarios: list[dict[str, Any]],
+    radius_sweep: RadiusSweepConfig | None,
+) -> list[dict[str, Any]]:
+    """Bind an admitted radius treatment to every scenario's robot config.
+
+    The pending preparation status raises before any scenario is returned. A
+    bound arm receives a deep-copied ``robot_config.radius`` and an explicit
+    metadata block; all unrelated scenario fields remain unchanged.
+
+    Returns:
+        Scenario copies with the admitted radius binding, or the original list
+        when no radius block is configured.
+    """
+    if radius_sweep is None:
+        return scenarios
+    _assert_radius_sweep_preflight_ready(radius_sweep)
+
+    binding_metadata = _radius_binding_metadata(radius_sweep)
+    assert binding_metadata is not None  # validated non-None input above
+    patched_scenarios: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        patched = deepcopy(scenario)
+        robot_config_raw = patched.get("robot_config")
+        if robot_config_raw is None:
+            robot_config: dict[str, Any] = {}
+        elif isinstance(robot_config_raw, Mapping):
+            robot_config = dict(robot_config_raw)
+        else:
+            raise RadiusSweepBindingPreflightError(
+                "Cannot bind radius sweep: scenario robot_config is not a mapping"
+            )
+        robot_config["radius"] = float(radius_sweep.radius_m)
+        patched["robot_config"] = robot_config
+
+        metadata_raw = patched.get("metadata")
+        metadata = dict(metadata_raw) if isinstance(metadata_raw, Mapping) else {}
+        metadata["radius_binding"] = dict(binding_metadata)
+        patched["metadata"] = metadata
+        patched_scenarios.append(patched)
+    return patched_scenarios
+
+
 def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
-    """Load campaign scenarios and apply optional seed override.
+    """Load campaign scenarios, seed overrides, and radius treatment binding.
 
     Returns:
         Scenario list consumable by benchmark runners.
@@ -628,15 +772,14 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
         schedule_path=cfg.scenario_horizons_path,
     )
     seeds_override = _resolve_seed_override(cfg.seed_policy)
-    if seeds_override is None:
-        return scenario_dicts
-
-    seeded: list[dict[str, Any]] = []
-    for scenario in scenario_dicts:
-        patched = dict(scenario)
-        patched["seeds"] = list(seeds_override)
-        seeded.append(patched)
-    return seeded
+    if seeds_override is not None:
+        seeded: list[dict[str, Any]] = []
+        for scenario in scenario_dicts:
+            patched = dict(scenario)
+            patched["seeds"] = list(seeds_override)
+            seeded.append(patched)
+        scenario_dicts = seeded
+    return _apply_radius_sweep_binding(scenario_dicts, cfg.radius_sweep)
 
 
 def _resolved_seed_inventory(scenarios: list[dict[str, Any]]) -> list[int]:
@@ -704,6 +847,8 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError(
                 "scenario_amv_overrides entries must include at least one AMV taxonomy dimension"
             )
+    if cfg.radius_sweep is not None:
+        _validate_radius_sweep_config(cfg.radius_sweep, source="CampaignConfig.radius_sweep")
     if cfg.synthetic_actuation_profile is not None:
         if cfg.synthetic_actuation_profile.claim_scope == SYNTHETIC_ACTUATION_CLAIM_SCOPE:
             validate_synthetic_actuation_profile(cfg.synthetic_actuation_profile)
@@ -827,25 +972,18 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError("paper_facing=true requires comparability_mapping path")
 
 
-def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, PLR0915
-    """Load and validate a camera-ready benchmark campaign YAML config.
+def _resolve_scenario_matrix_path(payload: dict[str, Any], *, config_path: Path) -> Path:
+    """Resolve the campaign scenario-matrix path, failing closed when unset.
 
     Returns:
-        Parsed campaign configuration dataclass.
+        Resolved scenario-matrix path.
     """
     # Imported lazily to avoid an import cycle: ``_run_state`` imports ``_sanitize_name``
     # from this module at import time, so a top-level import here would be circular.
     from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415 - cycle break
-        _resolve_observation_noise,
         _resolve_path,
     )
 
-    config_path = path.resolve()
-    payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    if not isinstance(payload, dict):
-        raise ValueError(f"Campaign config must be a mapping: {config_path}")
-
-    name = str(payload.get("name") or config_path.stem)
     matrix_raw = payload.get("scenario_matrix")
     if not isinstance(matrix_raw, str) or not matrix_raw.strip():
         raise ValueError("Campaign config requires a non-empty 'scenario_matrix' string")
@@ -854,8 +992,19 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         raise FileNotFoundError(
             f"Could not resolve scenario_matrix '{matrix_raw}' from config '{config_path}'.",
         )
+    return scenario_matrix_path
 
-    planners_raw = payload.get("planners")
+
+def _parse_planner_specs(planners_raw: Any, *, base_dir: Path) -> list[PlannerSpec]:
+    """Parse and validate the campaign ``planners`` list.
+
+    Returns:
+        Parsed planner specifications.
+    """
+    from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415 - cycle break
+        _resolve_path,
+    )
+
     if not isinstance(planners_raw, list) or not planners_raw:
         raise ValueError("Campaign config requires a non-empty 'planners' list")
 
@@ -886,9 +1035,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                     label="Planner entry 'human_model_source'",
                 ),
                 benchmark_profile=str(entry.get("benchmark_profile", "baseline-safe")),
-                algo_config_path=_resolve_path(
-                    entry.get("algo_config"), base_dir=config_path.parent
-                ),
+                algo_config_path=_resolve_path(entry.get("algo_config"), base_dir=base_dir),
                 socnav_missing_prereq_policy=str(
                     entry.get("socnav_missing_prereq_policy", "fail-fast"),
                 ),
@@ -921,6 +1068,18 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                 safety_wrapper=_parse_safety_wrapper(entry.get("safety_wrapper"), planner_key=key),
             ),
         )
+    return planner_specs
+
+
+def _build_seed_policy(payload: dict[str, Any], *, base_dir: Path) -> SeedPolicy:
+    """Parse the campaign ``seed_policy`` block into a ``SeedPolicy``.
+
+    Returns:
+        Resolved seed policy with the default seed-sets path applied.
+    """
+    from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415 - cycle break
+        _resolve_path,
+    )
 
     seed_policy_raw = (
         payload.get("seed_policy") if isinstance(payload.get("seed_policy"), dict) else {}
@@ -930,26 +1089,48 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
     seeds = seed_policy_raw.get("seeds") if isinstance(seed_policy_raw.get("seeds"), list) else []
     seed_sets_path_raw = seed_policy_raw.get("seed_sets_path")
     seed_sets_path = (
-        _resolve_path(str(seed_sets_path_raw), base_dir=config_path.parent)
+        _resolve_path(str(seed_sets_path_raw), base_dir=base_dir)
         if isinstance(seed_sets_path_raw, str) and seed_sets_path_raw.strip()
         else None
     )
     if seed_sets_path is None:
         seed_sets_path = (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
+    return SeedPolicy(
+        mode=mode,
+        seed_set=str(seed_set) if seed_set is not None else None,
+        seeds=tuple(int(seed) for seed in seeds),
+        seed_sets_path=seed_sets_path,
+    )
 
-    snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=config_path.parent)
-    snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=config_path.parent)
+
+def _resolve_campaign_paths(
+    payload: dict[str, Any],
+    *,
+    base_dir: Path,
+) -> tuple[Path | None, Path | None, Path | None, Path | None, Path | None]:
+    """Resolve optional campaign-level sidecar paths relative to the config directory.
+
+    Returns:
+        Tuple of ``(snqi_weights, snqi_baseline, scenario_horizons,
+        route_clearance_certifications, comparability_mapping)`` paths.
+    """
+    from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415 - cycle break
+        _resolve_path,
+    )
+
+    snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=base_dir)
+    snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=base_dir)
     scenario_horizons = _resolve_path(
         payload.get("scenario_horizons"),
-        base_dir=config_path.parent,
+        base_dir=base_dir,
     )
     route_clearance_certifications_path = _resolve_path(
         payload.get("route_clearance_certifications"),
-        base_dir=config_path.parent,
+        base_dir=base_dir,
     )
     comparability_mapping_path = _resolve_path(
         payload.get("comparability_mapping"),
-        base_dir=config_path.parent,
+        base_dir=base_dir,
     )
     if comparability_mapping_path is None:
         default_mapping_path = (
@@ -957,11 +1138,38 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         ).resolve()
         if default_mapping_path.exists():
             comparability_mapping_path = default_mapping_path
-
-    amv_raw = payload.get("amv_profile") if isinstance(payload.get("amv_profile"), dict) else {}
-    snqi_contract_raw = (
-        payload.get("snqi_contract") if isinstance(payload.get("snqi_contract"), dict) else {}
+    return (
+        snqi_weights,
+        snqi_baseline,
+        scenario_horizons,
+        route_clearance_certifications_path,
+        comparability_mapping_path,
     )
+
+
+def _resolve_campaign_observation_noise(
+    payload: dict[str, Any],
+    *,
+    base_dir: Path,
+) -> dict[str, Any] | None:
+    """Resolve the campaign observation-noise profile relative to the config directory.
+
+    Returns:
+        Resolved observation-noise mapping, or ``None`` when unset.
+    """
+    from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415 - cycle break
+        _resolve_observation_noise,
+    )
+
+    return _resolve_observation_noise(payload.get("observation_noise"), base_dir=base_dir)
+
+
+def _parse_amv_required_dimensions(amv_raw: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    """Parse and validate ``amv_profile.required_dimensions``.
+
+    Returns:
+        Mapping from each AMV dimension to its normalized required-value tuple.
+    """
     required_raw = (
         amv_raw.get("required_dimensions")
         if isinstance(amv_raw.get("required_dimensions"), dict)
@@ -983,6 +1191,15 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         else:
             normalized = ()
         required_dimensions[dimension] = normalized
+    return required_dimensions
+
+
+def _parse_scenario_candidates(payload: dict[str, Any]) -> tuple[str, ...]:
+    """Parse the optional ``scenario_candidates`` selector.
+
+    Returns:
+        Tuple of requested scenario candidate names (empty when unset).
+    """
     scenario_candidates_raw = payload.get("scenario_candidates", [])
     if isinstance(scenario_candidates_raw, (str, int, float)):
         scenario_candidates = (str(scenario_candidates_raw).strip(),)
@@ -996,70 +1213,288 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         raise TypeError("scenario_candidates must be a scalar name or list of scalar names")
     else:
         scenario_candidates = ()
+    return scenario_candidates
+
+
+def _parse_scenario_amv_overrides(  # noqa: C901
+    payload: dict[str, Any],
+) -> dict[str, dict[str, str]]:
+    """Parse and validate the optional ``scenario_amv_overrides`` mapping.
+
+    Returns:
+        Mapping from scenario name to AMV-dimension taxonomy overrides.
+    """
     scenario_amv_overrides_raw = payload.get("scenario_amv_overrides")
     if scenario_amv_overrides_raw is None:
-        scenario_amv_overrides: dict[str, dict[str, str]] = {}
-    elif not isinstance(scenario_amv_overrides_raw, dict):
+        return {}
+    if not isinstance(scenario_amv_overrides_raw, dict):
         raise TypeError(
             "scenario_amv_overrides must be a mapping of scenario names to AMV mappings"
         )
-    else:
-        scenario_amv_overrides = {}
-        for raw_scenario_name, raw_taxonomy in scenario_amv_overrides_raw.items():
-            scenario_name = str(raw_scenario_name).strip()
-            if not scenario_name:
-                raise ValueError("scenario_amv_overrides keys must be non-empty scenario names")
-            if not isinstance(raw_taxonomy, dict):
-                raise TypeError(
-                    "scenario_amv_overrides entries must be mappings keyed by AMV dimension"
-                )
-            taxonomy: dict[str, str] = {}
-            for raw_dimension, raw_value in raw_taxonomy.items():
-                dimension = str(raw_dimension).strip()
-                if dimension not in _AMV_DIMENSIONS:
-                    known = ", ".join(_AMV_DIMENSIONS)
-                    raise ValueError(
-                        f"Unsupported scenario_amv_overrides dimension '{dimension}'. "
-                        f"Expected: {known}"
-                    )
-                if raw_value is None:
-                    raise ValueError(
-                        "scenario_amv_overrides values must be non-empty strings when provided"
-                    )
-                value = str(raw_value).strip()
-                if not value:
-                    raise ValueError(
-                        "scenario_amv_overrides values must be non-empty strings when provided"
-                    )
-                taxonomy[dimension] = value
-            if not taxonomy:
+    scenario_amv_overrides: dict[str, dict[str, str]] = {}
+    for raw_scenario_name, raw_taxonomy in scenario_amv_overrides_raw.items():
+        scenario_name = str(raw_scenario_name).strip()
+        if not scenario_name:
+            raise ValueError("scenario_amv_overrides keys must be non-empty scenario names")
+        if not isinstance(raw_taxonomy, dict):
+            raise TypeError(
+                "scenario_amv_overrides entries must be mappings keyed by AMV dimension"
+            )
+        taxonomy: dict[str, str] = {}
+        for raw_dimension, raw_value in raw_taxonomy.items():
+            dimension = str(raw_dimension).strip()
+            if dimension not in _AMV_DIMENSIONS:
+                known = ", ".join(_AMV_DIMENSIONS)
                 raise ValueError(
-                    "scenario_amv_overrides entries must include at least one AMV taxonomy dimension"
+                    f"Unsupported scenario_amv_overrides dimension '{dimension}'. Expected: {known}"
                 )
-            scenario_amv_overrides[scenario_name] = taxonomy
-    synthetic_actuation_raw = payload.get("synthetic_actuation_profile")
-    if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
-        raise TypeError("synthetic_actuation_profile must be a mapping when provided")
-    if synthetic_actuation_raw is not None:
-        validate_actuation_profile_claim_boundary(synthetic_actuation_raw)
-    latency_stress_raw = payload.get("latency_stress_profile")
-    kinematics_matrix = _normalize_kinematics_matrix(
-        payload.get("kinematics_matrix", ["differential_drive"])
+            if raw_value is None:
+                raise ValueError(
+                    "scenario_amv_overrides values must be non-empty strings when provided"
+                )
+            value = str(raw_value).strip()
+            if not value:
+                raise ValueError(
+                    "scenario_amv_overrides values must be non-empty strings when provided"
+                )
+            taxonomy[dimension] = value
+        if not taxonomy:
+            raise ValueError(
+                "scenario_amv_overrides entries must include at least one AMV taxonomy dimension"
+            )
+        scenario_amv_overrides[scenario_name] = taxonomy
+    return scenario_amv_overrides
+
+
+def _parse_radius_sweep(  # noqa: C901
+    raw: Any,
+    *,
+    config_path: Path,
+) -> RadiusSweepConfig | None:
+    """Parse the optional issue #6642 radius-binding block.
+
+    Returns:
+        Typed radius-binding configuration, or ``None`` when the block is absent.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise TypeError(f"radius_sweep must be a mapping: {config_path}")
+
+    def _required_int(key: str) -> int:
+        value = raw.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"radius_sweep.{key} must be an integer: {config_path}")
+        return value
+
+    def _optional_int(key: str) -> int | None:
+        value = raw.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"radius_sweep.{key} must be an integer when provided: {config_path}")
+        return value
+
+    arm_key = raw.get("arm_key")
+    if not isinstance(arm_key, str) or not arm_key.strip():
+        raise TypeError(f"radius_sweep.arm_key must be a non-empty string: {config_path}")
+    radius_raw = raw.get("radius_m")
+    try:
+        radius_m = float(radius_raw)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"radius_sweep.radius_m must be numeric: {config_path}") from exc
+    baseline_arm = raw.get("baseline_arm")
+    if not isinstance(baseline_arm, bool):
+        raise TypeError(f"radius_sweep.baseline_arm must be a boolean: {config_path}")
+    status = raw.get("runtime_binding_status")
+    if not isinstance(status, str) or not status.strip():
+        raise TypeError(
+            f"radius_sweep.runtime_binding_status must be a non-empty string: {config_path}"
+        )
+    contract_version = raw.get("binding_contract_version")
+    if contract_version is not None and not isinstance(contract_version, str):
+        raise TypeError(
+            f"radius_sweep.binding_contract_version must be a string when provided: {config_path}"
+        )
+    receipt_sha = raw.get("gate1_receipt_sha256")
+    if receipt_sha is not None and not isinstance(receipt_sha, str):
+        raise TypeError(
+            f"radius_sweep.gate1_receipt_sha256 must be a string when provided: {config_path}"
+        )
+    source_commit = raw.get("gate1_source_commit")
+    if source_commit is not None and not isinstance(source_commit, str):
+        raise TypeError(
+            f"radius_sweep.gate1_source_commit must be a string when provided: {config_path}"
+        )
+    note = raw.get("runtime_binding_note")
+    if note is not None and not isinstance(note, str):
+        raise TypeError(
+            f"radius_sweep.runtime_binding_note must be a string when provided: {config_path}"
+        )
+
+    parsed = RadiusSweepConfig(
+        issue=_required_int("issue"),
+        parent_issue=_required_int("parent_issue"),
+        arm_key=arm_key.strip(),
+        radius_m=radius_m,
+        baseline_arm=baseline_arm,
+        runtime_binding_status=status.strip(),
+        binding_contract_version=(
+            contract_version.strip() if isinstance(contract_version, str) else None
+        ),
+        gate1_canary_issue=_optional_int("gate1_canary_issue"),
+        gate1_receipt_sha256=(receipt_sha.strip() if isinstance(receipt_sha, str) else None),
+        gate1_source_commit=(source_commit.strip() if isinstance(source_commit, str) else None),
+        runtime_binding_note=note.strip() if isinstance(note, str) else None,
+    )
+    _validate_radius_sweep_config(parsed, source=f"radius_sweep in {config_path}")
+    return parsed
+
+
+@dataclass(frozen=True)
+class _ParsedCampaignConfig:
+    """Parsed campaign components carried from parsing into final assembly.
+
+    ``load_campaign_config`` populates these via focused helpers (preserving the
+    historical validation order) and ``_assemble_campaign_config`` projects them,
+    plus flat scalar defaults read from the raw payload, into ``CampaignConfig``.
+    """
+
+    name: str
+    scenario_matrix_path: Path
+    planner_specs: tuple[PlannerSpec, ...]
+    seed_policy: SeedPolicy
+    snqi_weights_path: Path | None
+    snqi_baseline_path: Path | None
+    scenario_horizons_path: Path | None
+    route_clearance_certifications_path: Path | None
+    comparability_mapping_path: Path | None
+    amv_raw: dict[str, Any]
+    snqi_contract_raw: dict[str, Any]
+    required_dimensions: dict[str, tuple[str, ...]]
+    scenario_candidates: tuple[str, ...]
+    scenario_amv_overrides: dict[str, dict[str, str]]
+    radius_sweep: RadiusSweepConfig | None
+    synthetic_actuation_raw: dict[str, Any] | None
+    kinematics_matrix: tuple[str, ...]
+
+
+def _build_amv_profile_config(
+    amv_raw: dict[str, Any],
+    required_dimensions: dict[str, tuple[str, ...]],
+) -> AmvProfileConfig:
+    """Build the ``AmvProfileConfig`` from the raw ``amv_profile`` block.
+
+    Returns:
+        Constructed AMV profile configuration.
+    """
+    return AmvProfileConfig(
+        name=str(amv_raw.get("name", "amv-paper-v1")).strip() or "amv-paper-v1",
+        contract_version=str(amv_raw.get("contract_version", "1")).strip() or "1",
+        coverage_enforcement=(
+            str(amv_raw.get("coverage_enforcement", "warn")).strip().lower() or "warn"
+        ),
+        required_dimensions=required_dimensions,
     )
 
-    cfg = CampaignConfig(
-        name=name,
-        scenario_matrix_path=scenario_matrix_path,
-        planners=tuple(planner_specs),
-        scenario_candidates=ScenarioCandidateSelection(names=scenario_candidates),
-        scenario_amv_overrides=scenario_amv_overrides,
-        scenario_horizons_path=scenario_horizons,
-        seed_policy=SeedPolicy(
-            mode=mode,
-            seed_set=str(seed_set) if seed_set is not None else None,
-            seeds=tuple(int(seed) for seed in seeds),
-            seed_sets_path=seed_sets_path,
+
+def _build_synthetic_actuation_profile(
+    synthetic_actuation_raw: dict[str, Any] | None,
+) -> SyntheticActuationProfile | None:
+    """Build the optional ``SyntheticActuationProfile`` from its raw block.
+
+    Returns:
+        Constructed synthetic-actuation profile, or ``None`` when unset.
+    """
+    if synthetic_actuation_raw is None:
+        return None
+    return SyntheticActuationProfile(
+        name=str(synthetic_actuation_raw.get("name", "")).strip(),
+        profile_version=(str(synthetic_actuation_raw.get("profile_version", "v0")).strip() or "v0"),
+        claim_scope=(
+            str(synthetic_actuation_raw.get("claim_scope", "synthetic-only")).strip()
+            or "synthetic-only"
         ),
+        claim_boundary=str(synthetic_actuation_raw.get("claim_boundary", "")).strip(),
+        max_linear_accel_m_s2=float(synthetic_actuation_raw.get("max_linear_accel_m_s2", 0.0)),
+        max_linear_decel_m_s2=float(synthetic_actuation_raw.get("max_linear_decel_m_s2", 0.0)),
+        max_yaw_rate_rad_s=float(synthetic_actuation_raw.get("max_yaw_rate_rad_s", 0.0)),
+        max_angular_accel_rad_s2=float(
+            synthetic_actuation_raw.get("max_angular_accel_rad_s2", 0.0)
+        ),
+        latency_mode=(
+            str(synthetic_actuation_raw.get("latency_mode", "zero-step-delay")).strip().lower()
+        ),
+        update_mode=(
+            str(synthetic_actuation_raw.get("update_mode", "10hz-matched")).strip().lower()
+        ),
+        variability_distribution=_optional_synthetic_actuation_profile_mapping(
+            synthetic_actuation_raw,
+            "variability_distribution",
+        ),
+        variability_sample=_optional_synthetic_actuation_profile_mapping(
+            synthetic_actuation_raw,
+            "variability_sample",
+        ),
+        provenance=_optional_synthetic_actuation_profile_mapping(
+            synthetic_actuation_raw,
+            "provenance",
+        ),
+    )
+
+
+def _build_snqi_contract_config(snqi_contract_raw: dict[str, Any]) -> SnqiContractConfig:
+    """Build the ``SnqiContractConfig`` from the raw ``snqi_contract`` block.
+
+    Returns:
+        Constructed SNQI contract configuration.
+    """
+    return SnqiContractConfig(
+        enabled=bool(snqi_contract_raw.get("enabled", True)),
+        enforcement=(str(snqi_contract_raw.get("enforcement", "warn")).strip().lower() or "warn"),
+        rank_alignment_warn_threshold=float(
+            snqi_contract_raw.get("rank_alignment_warn_threshold", 0.5)
+        ),
+        rank_alignment_fail_threshold=float(
+            snqi_contract_raw.get("rank_alignment_fail_threshold", 0.3)
+        ),
+        outcome_separation_warn_threshold=float(
+            snqi_contract_raw.get("outcome_separation_warn_threshold", 0.05)
+        ),
+        outcome_separation_fail_threshold=float(
+            snqi_contract_raw.get("outcome_separation_fail_threshold", 0.0)
+        ),
+        max_component_dominance_warn_threshold=float(
+            snqi_contract_raw.get("max_component_dominance_warn_threshold", 0.24)
+        ),
+        max_component_dominance_fail_threshold=float(
+            snqi_contract_raw.get("max_component_dominance_fail_threshold", 0.27)
+        ),
+        calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
+        calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
+    )
+
+
+def _assemble_campaign_config(
+    parsed: _ParsedCampaignConfig,
+    *,
+    payload: dict[str, Any],
+    config_path: Path,
+) -> CampaignConfig:
+    """Assemble the final ``CampaignConfig`` from parsed components and scalar defaults.
+
+    Returns:
+        Fully constructed campaign configuration dataclass.
+    """
+    return CampaignConfig(
+        name=parsed.name,
+        scenario_matrix_path=parsed.scenario_matrix_path,
+        planners=parsed.planner_specs,
+        scenario_candidates=ScenarioCandidateSelection(names=parsed.scenario_candidates),
+        scenario_amv_overrides=parsed.scenario_amv_overrides,
+        radius_sweep=parsed.radius_sweep,
+        scenario_horizons_path=parsed.scenario_horizons_path,
+        seed_policy=parsed.seed_policy,
         workers=int(payload.get("workers", 1)),
         horizon=(int(payload["horizon"]) if payload.get("horizon") is not None else None),
         dt=(float(payload["dt"]) if payload.get("dt") is not None else None),
@@ -1070,8 +1505,8 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         bootstrap_samples=int(payload.get("bootstrap_samples", 400)),
         bootstrap_confidence=float(payload.get("bootstrap_confidence", 0.95)),
         bootstrap_seed=int(payload.get("bootstrap_seed", 123)),
-        snqi_weights_path=snqi_weights,
-        snqi_baseline_path=snqi_baseline,
+        snqi_weights_path=parsed.snqi_weights_path,
+        snqi_baseline_path=parsed.snqi_baseline_path,
         stop_on_failure=bool(payload.get("stop_on_failure", False)),
         export_publication_bundle=bool(payload.get("export_publication_bundle", True)),
         include_videos_in_publication=bool(payload.get("include_videos_in_publication", False)),
@@ -1083,7 +1518,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             payload.get("paper_interpretation_profile", "baseline-ready-core")
         ),
         preview_scenario_limit=int(payload.get("preview_scenario_limit", 100)),
-        kinematics_matrix=kinematics_matrix,
+        kinematics_matrix=parsed.kinematics_matrix,
         holonomic_command_mode=str(payload.get("holonomic_command_mode", "vx_vy")).strip(),
         arm_isolation=_normalize_arm_isolation(payload.get("arm_isolation", "in_process")),
         observation_mode=_normalize_observation_mode(
@@ -1096,92 +1531,15 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             if payload.get("paper_profile_version") is not None
             else None
         ),
-        amv_profile=AmvProfileConfig(
-            name=str(amv_raw.get("name", "amv-paper-v1")).strip() or "amv-paper-v1",
-            contract_version=str(amv_raw.get("contract_version", "1")).strip() or "1",
-            coverage_enforcement=(
-                str(amv_raw.get("coverage_enforcement", "warn")).strip().lower() or "warn"
-            ),
-            required_dimensions=required_dimensions,
+        amv_profile=_build_amv_profile_config(parsed.amv_raw, parsed.required_dimensions),
+        synthetic_actuation_profile=_build_synthetic_actuation_profile(
+            parsed.synthetic_actuation_raw
         ),
-        synthetic_actuation_profile=(
-            SyntheticActuationProfile(
-                name=str(synthetic_actuation_raw.get("name", "")).strip(),
-                profile_version=(
-                    str(synthetic_actuation_raw.get("profile_version", "v0")).strip() or "v0"
-                ),
-                claim_scope=(
-                    str(synthetic_actuation_raw.get("claim_scope", "synthetic-only")).strip()
-                    or "synthetic-only"
-                ),
-                claim_boundary=str(synthetic_actuation_raw.get("claim_boundary", "")).strip(),
-                max_linear_accel_m_s2=float(
-                    synthetic_actuation_raw.get("max_linear_accel_m_s2", 0.0)
-                ),
-                max_linear_decel_m_s2=float(
-                    synthetic_actuation_raw.get("max_linear_decel_m_s2", 0.0)
-                ),
-                max_yaw_rate_rad_s=float(synthetic_actuation_raw.get("max_yaw_rate_rad_s", 0.0)),
-                max_angular_accel_rad_s2=float(
-                    synthetic_actuation_raw.get("max_angular_accel_rad_s2", 0.0)
-                ),
-                latency_mode=(
-                    str(synthetic_actuation_raw.get("latency_mode", "zero-step-delay"))
-                    .strip()
-                    .lower()
-                ),
-                update_mode=(
-                    str(synthetic_actuation_raw.get("update_mode", "10hz-matched")).strip().lower()
-                ),
-                variability_distribution=_optional_synthetic_actuation_profile_mapping(
-                    synthetic_actuation_raw,
-                    "variability_distribution",
-                ),
-                variability_sample=_optional_synthetic_actuation_profile_mapping(
-                    synthetic_actuation_raw,
-                    "variability_sample",
-                ),
-                provenance=_optional_synthetic_actuation_profile_mapping(
-                    synthetic_actuation_raw,
-                    "provenance",
-                ),
-            )
-            if synthetic_actuation_raw is not None
-            else None
-        ),
-        latency_stress_profile=load_latency_stress_profile(latency_stress_raw),
-        comparability_mapping_path=comparability_mapping_path,
-        route_clearance_certifications_path=route_clearance_certifications_path,
-        snqi_contract=SnqiContractConfig(
-            enabled=bool(snqi_contract_raw.get("enabled", True)),
-            enforcement=(
-                str(snqi_contract_raw.get("enforcement", "warn")).strip().lower() or "warn"
-            ),
-            rank_alignment_warn_threshold=float(
-                snqi_contract_raw.get("rank_alignment_warn_threshold", 0.5)
-            ),
-            rank_alignment_fail_threshold=float(
-                snqi_contract_raw.get("rank_alignment_fail_threshold", 0.3)
-            ),
-            outcome_separation_warn_threshold=float(
-                snqi_contract_raw.get("outcome_separation_warn_threshold", 0.05)
-            ),
-            outcome_separation_fail_threshold=float(
-                snqi_contract_raw.get("outcome_separation_fail_threshold", 0.0)
-            ),
-            max_component_dominance_warn_threshold=float(
-                snqi_contract_raw.get("max_component_dominance_warn_threshold", 0.24)
-            ),
-            max_component_dominance_fail_threshold=float(
-                snqi_contract_raw.get("max_component_dominance_fail_threshold", 0.27)
-            ),
-            calibration_seed=int(snqi_contract_raw.get("calibration_seed", 123)),
-            calibration_trials=int(snqi_contract_raw.get("calibration_trials", 3000)),
-        ),
-        observation_noise=_resolve_observation_noise(
-            payload.get("observation_noise"),
-            base_dir=config_path.parent,
-        ),
+        latency_stress_profile=load_latency_stress_profile(payload.get("latency_stress_profile")),
+        comparability_mapping_path=parsed.comparability_mapping_path,
+        route_clearance_certifications_path=parsed.route_clearance_certifications_path,
+        snqi_contract=_build_snqi_contract_config(parsed.snqi_contract_raw),
+        observation_noise=_resolve_campaign_observation_noise(payload, base_dir=config_path.parent),
         tuning_effort_enforcement=(
             str(payload.get("tuning_effort_enforcement", "off")).strip().lower() or "off"
         ),
@@ -1192,5 +1550,66 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
             payload.get("safety_wrapper"), planner_key="<campaign>"
         ),
     )
+
+
+def load_campaign_config(path: Path) -> CampaignConfig:
+    """Load and validate a camera-ready benchmark campaign YAML config.
+
+    Returns:
+        Parsed campaign configuration dataclass.
+    """
+    config_path = path.resolve()
+    payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"Campaign config must be a mapping: {config_path}")
+
+    base_dir = config_path.parent
+    name = str(payload.get("name") or config_path.stem)
+    scenario_matrix_path = _resolve_scenario_matrix_path(payload, config_path=config_path)
+    planner_specs = tuple(_parse_planner_specs(payload.get("planners"), base_dir=base_dir))
+    seed_policy = _build_seed_policy(payload, base_dir=base_dir)
+    (
+        snqi_weights_path,
+        snqi_baseline_path,
+        scenario_horizons_path,
+        route_clearance_certifications_path,
+        comparability_mapping_path,
+    ) = _resolve_campaign_paths(payload, base_dir=base_dir)
+    amv_raw = payload.get("amv_profile") if isinstance(payload.get("amv_profile"), dict) else {}
+    snqi_contract_raw = (
+        payload.get("snqi_contract") if isinstance(payload.get("snqi_contract"), dict) else {}
+    )
+    required_dimensions = _parse_amv_required_dimensions(amv_raw)
+    scenario_candidates = _parse_scenario_candidates(payload)
+    scenario_amv_overrides = _parse_scenario_amv_overrides(payload)
+    radius_sweep = _parse_radius_sweep(payload.get("radius_sweep"), config_path=config_path)
+    synthetic_actuation_raw = payload.get("synthetic_actuation_profile")
+    if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
+        raise TypeError("synthetic_actuation_profile must be a mapping when provided")
+    if synthetic_actuation_raw is not None:
+        validate_actuation_profile_claim_boundary(synthetic_actuation_raw)
+    kinematics_matrix = _normalize_kinematics_matrix(
+        payload.get("kinematics_matrix", ["differential_drive"])
+    )
+    parsed = _ParsedCampaignConfig(
+        name=name,
+        scenario_matrix_path=scenario_matrix_path,
+        planner_specs=planner_specs,
+        seed_policy=seed_policy,
+        snqi_weights_path=snqi_weights_path,
+        snqi_baseline_path=snqi_baseline_path,
+        scenario_horizons_path=scenario_horizons_path,
+        route_clearance_certifications_path=route_clearance_certifications_path,
+        comparability_mapping_path=comparability_mapping_path,
+        amv_raw=amv_raw,
+        snqi_contract_raw=snqi_contract_raw,
+        required_dimensions=required_dimensions,
+        scenario_candidates=scenario_candidates,
+        scenario_amv_overrides=scenario_amv_overrides,
+        radius_sweep=radius_sweep,
+        synthetic_actuation_raw=synthetic_actuation_raw,
+        kinematics_matrix=kinematics_matrix,
+    )
+    cfg = _assemble_campaign_config(parsed, payload=payload, config_path=config_path)
     _validate_campaign_config(cfg)
     return cfg

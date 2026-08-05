@@ -1446,7 +1446,7 @@ def _get_certified_route_waypoints(
     try:
         config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
         certificate = _default_certifier(scenario, scenario_path)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - config or certifier errors mean no waypoints
         return []
 
     for route_cert in certificate.route_certificates or []:
@@ -1500,7 +1500,7 @@ def _replan_astar_path(
     planner = ClassicGlobalPlanner(map_def, planner_config)
     try:
         path, _info = planner.plan(start, goal, algorithm="a_star", allow_inflation_fallback=False)
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - A* planner surface is unknown; degrade to no path
         return []
 
     if not path:
@@ -1587,7 +1587,7 @@ def planned_path_clearance_verdict(
         }
     try:
         config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - robot-config errors fail closed
         return {**fallback, "blocker": f"robot_config_error: {exc}"}
 
     map_def, start, goal, route_blocker = _resolve_scenario_map_and_route(config, scenario)
@@ -1612,7 +1612,7 @@ def planned_path_clearance_verdict(
             obstacle_union,
             robot_radius,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - clearance errors fail closed
         return {**fallback, "blocker": f"clearance_measurement_error: {exc}"}
     if min_vertex_clearance is None or min_path_clearance is None:
         return {**fallback, "blocker": "clearance_measurement_is_non_finite"}
@@ -1652,47 +1652,18 @@ def _measure_planned_path_clearance(
     return measure_planned_path_clearance(path, obstacle_union, robot_radius)
 
 
-def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
+def _validate_blind_corner_manifest(
     manifest_path: Path,
-    *,
-    envelope_radii_m: tuple[float, ...] = (1.0, 0.5),
-    episode_runner: EpisodeRunner | None = None,
-    certifier: Callable[[Mapping[str, Any], Path], ScenarioCertificate] | None = None,
-) -> dict[str, Any]:
-    """Build the issue #5596 blind-corner zero-success diagnostic report.
-
-    Runs three analyses to discriminate the competing explanations for why
-    ``francis2023_blind_corner`` stays zero-success for the scripted traversal:
-
-    1. **Oracle lane**: planner-free goal script at each envelope radius (existing
-       ``run_envelope_sensitivity_sweep``).
-    2. **Route-follow intervention lane**: a ``route_follow`` runner that drives the
-       certifier's A* path waypoint-to-waypoint, isolating route geometry from
-       controller strategy.
-    3. **Clearance comparison**: straight-line goal beeline vs certified-route
-       obstacle clearance for each radius.
-
-    The mechanism classification distinguishes whether the zero-success is caused by:
-    explanation #1 (scripted controller incomplete), #2 (route geometry or config),
-    or #3 (scenario/map runtime interpretation drift).
-
-    Args:
-        manifest_path: Path to the scenario manifest YAML containing the blind-corner
-            scenario cell.
-        envelope_radii_m: Envelope radii to probe. Must have the nominal radius first
-            (largest) and at least one reduced radius.
-        episode_runner: Optional injected episode runner. Defaults to the canonical
-            actor-free map episode rollout.
-        certifier: Optional injected route certifier. Defaults to ``certify_scenario``.
+    envelope_radii_m: tuple[float, ...],
+) -> tuple[tuple[float, ...], dict[str, Any]]:
+    """Validate inputs and load the blind-corner scenario from the manifest.
 
     Returns:
-        Versioned diagnostic report with oracle verdict, route-follow intervention,
-        clearance comparison, and mechanism classification.
+        Tuple of (validated radii, blind-corner scenario dict).
 
     Raises:
         FileNotFoundError: When the manifest path does not exist.
-        ValueError: When the blind-corner scenario is missing from the manifest or
-            envelope radii are not ordered nominal-first.
+        ValueError: When the blind-corner scenario is missing or radii are invalid.
     """
     if not manifest_path.exists():
         raise FileNotFoundError(f"Scenario manifest file not found: {manifest_path}")
@@ -1714,31 +1685,20 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
             f"Scenario '{ISSUE_5596_BLIND_CORNER_SCENARIO_ID}' missing from manifest "
             f"{manifest_path}"
         )
+    return radii, blind_corner
 
-    config = FeasibilityOracleConfig(
-        scenario_path=manifest_path,
-        envelope_radii_m=radii,
-    )
-    runner = episode_runner or _default_actor_free_runner(config)
-    certify = certifier or _default_certifier
-    route_runner = (
-        episode_runner if episode_runner is not None else make_route_follow_episode_runner(config)
-    )
 
-    nominal_radius = radii[0]
-    seed = _scenario_rollout_seed(blind_corner, override=None)
+def _run_route_follow_intervention(
+    blind_corner: dict[str, Any],
+    radii: tuple[float, ...],
+    route_runner: EpisodeRunner,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Run the route-follow intervention lane at each envelope radius.
 
-    # 1. Oracle verdict (existing feasibility sweep).
-    envelope_verdict = run_envelope_sensitivity_sweep(
-        blind_corner,
-        config=config,
-        episode_runner=runner,
-        certifier=certify,
-    )
-    oracle_dict = envelope_sensitivity_verdict_to_dict(envelope_verdict)
-    oracle_dict["issue"] = "5596"
-
-    # 2. Route-follow intervention.
+    Returns:
+        List of per-radius route-follow result dicts.
+    """
     route_follow_results: list[dict[str, Any]] = []
     for radius in radii:
         env_scenario = make_envelope_scenario(blind_corner, envelope_radius_m=radius)
@@ -1782,7 +1742,7 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
                     "claim_boundary": record.get("claim_boundary") or DIAGNOSTIC_CLAIM_BOUNDARY,
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - route-follow errors block that radius
             route_follow_results.append(
                 {
                     "envelope_radius_m": radius,
@@ -1792,17 +1752,20 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
                     "status": "blocked",
                 }
             )
+    return route_follow_results
 
-    route_follow_nominal = route_follow_results[0]
-    route_follow_verdict = {
-        "issue": "5596",
-        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
-        "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
-        "nominal_radius_m": nominal_radius,
-        "results": route_follow_results,
-    }
 
-    # 3. Straight-line vs certified-route clearance.
+def _run_clearance_comparison(
+    blind_corner: dict[str, Any],
+    radii: tuple[float, ...],
+    manifest_path: Path,
+    certify: Callable[[Mapping[str, Any], Path], ScenarioCertificate],
+) -> list[dict[str, Any]]:
+    """Run straight-line vs certified-route clearance comparison at each radius.
+
+    Returns:
+        List of per-radius clearance comparison dicts.
+    """
     clearance_comparison: list[dict[str, Any]] = []
     for radius in radii:
         env_scenario = make_envelope_scenario(blind_corner, envelope_radius_m=radius)
@@ -1825,7 +1788,7 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
                     "inflated_collision_free_path": inflated_path,
                 }
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - certify errors block that radius
             clearance_comparison.append(
                 {
                     "envelope_radius_m": radius,
@@ -1836,11 +1799,19 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
                     "blocker": str(exc),
                 }
             )
+    return clearance_comparison
 
-    # 4. Corrected planner-path clearance check (issue #5596 finding #3).
-    # The certifier reports inflated_collision_free_path=True but only clears the
-    # authored route line; this re-validates the planned A* path vertices against the
-    # obstacle union using the robot envelope and flags clipped corners.
+
+def _run_planned_path_clearance_checks(
+    blind_corner: dict[str, Any],
+    radii: tuple[float, ...],
+    manifest_path: Path,
+) -> list[dict[str, Any]]:
+    """Run corrected planner-path clearance checks at each envelope radius.
+
+    Returns:
+        List of per-radius planned-path clearance verdict dicts.
+    """
     planned_path_clearance: list[dict[str, Any]] = []
     for radius in radii:
         try:
@@ -1851,7 +1822,7 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
             )
             verdict = {**verdict, "envelope_radius_m": float(radius)}
             planned_path_clearance.append(verdict)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - clearance verdict errors block that radius
             planned_path_clearance.append(
                 {
                     "envelope_radius_m": float(radius),
@@ -1863,8 +1834,19 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
                     "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
                 }
             )
+    return planned_path_clearance
 
-    # 5. Mechanism classification.
+
+def _classify_blind_corner_mechanism(
+    oracle_dict: dict[str, Any],
+    route_follow_nominal: dict[str, Any],
+    planned_path_clearance: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Classify the failure mechanism from oracle, route-follow, and clearance evidence.
+
+    Returns:
+        Mechanism classification dict with explanation flags and supported explanation.
+    """
     oracle_nominal = oracle_dict["nominal_verdict"]
     oracle_nominal_feasible = oracle_nominal.get("feasible") is True
     route_follow_feasible = route_follow_nominal.get("feasible")
@@ -1893,7 +1875,7 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
     else:
         supported = "nominal_oracle_feasible_no_anomaly"
 
-    mechanism = {
+    return {
         "explanation_1_scripted_controller_incomplete": explanation_1,
         "explanation_2_route_geometry_or_config_cause": explanation_2,
         "explanation_3_scenario_runtime_drift": None,  # Not established in this diagnostic.
@@ -1906,6 +1888,58 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
     }
 
+
+def build_issue_5596_blind_corner_diagnostic(
+    manifest_path: Path,
+    *,
+    envelope_radii_m: tuple[float, ...] = (1.0, 0.5),
+    episode_runner: EpisodeRunner | None = None,
+    certifier: Callable[[Mapping[str, Any], Path], ScenarioCertificate] | None = None,
+) -> dict[str, Any]:
+    """Build the issue #5596 blind-corner zero-success diagnostic report.
+
+    Orchestrates the oracle sweep, route-follow intervention, clearance comparison,
+    corrected planner-path clearance check, and mechanism classification into one
+    versioned diagnostic payload. See :func:`_run_route_follow_intervention`,
+    :func:`_run_clearance_comparison`, :func:`_run_planned_path_clearance_checks`,
+    and :func:`_classify_blind_corner_mechanism` for per-lane details.
+
+    Args:
+        manifest_path: Scenario manifest YAML containing the blind-corner cell.
+        envelope_radii_m: Nominal-first envelope radii (at least two).
+        episode_runner: Optional injected episode runner.
+        certifier: Optional injected route certifier.
+
+    Returns:
+        Versioned diagnostic report with oracle verdict, route-follow intervention,
+        clearance comparison, and mechanism classification.
+
+    Raises:
+        FileNotFoundError: When the manifest path does not exist.
+        ValueError: When the blind-corner scenario is missing or radii are invalid.
+    """
+    radii, blind_corner = _validate_blind_corner_manifest(manifest_path, envelope_radii_m)
+    config = FeasibilityOracleConfig(scenario_path=manifest_path, envelope_radii_m=radii)
+    runner = episode_runner or _default_actor_free_runner(config)
+    certify = certifier or _default_certifier
+    route_runner = (
+        episode_runner if episode_runner is not None else make_route_follow_episode_runner(config)
+    )
+    seed = _scenario_rollout_seed(blind_corner, override=None)
+
+    envelope_verdict = run_envelope_sensitivity_sweep(
+        blind_corner, config=config, episode_runner=runner, certifier=certify
+    )
+    oracle_dict = envelope_sensitivity_verdict_to_dict(envelope_verdict)
+    oracle_dict["issue"] = "5596"
+
+    route_follow_results = _run_route_follow_intervention(blind_corner, radii, route_runner, seed)
+    clearance_comparison = _run_clearance_comparison(blind_corner, radii, manifest_path, certify)
+    planned_path_clearance = _run_planned_path_clearance_checks(blind_corner, radii, manifest_path)
+    mechanism = _classify_blind_corner_mechanism(
+        oracle_dict, route_follow_results[0], planned_path_clearance
+    )
+
     return {
         "schema_version": ISSUE_5596_DIAGNOSTIC_SCHEMA,
         "review_marker": ISSUE_5596_REVIEW_MARKER,
@@ -1917,7 +1951,13 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
         "envelope_radii_m": list(radii),
         "rollout_seed": seed,
         "oracle_verdict": oracle_dict,
-        "route_follow_intervention_verdict": route_follow_verdict,
+        "route_follow_intervention_verdict": {
+            "issue": "5596",
+            "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+            "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
+            "nominal_radius_m": radii[0],
+            "results": route_follow_results,
+        },
         "straight_line_vs_route_clearance": clearance_comparison,
         "planned_path_clearance_verdict": planned_path_clearance,
         "mechanism": mechanism,

@@ -202,7 +202,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
                     "load_error": None,
                 }
             )
-        except Exception as exc:
+        except Exception as exc:  # broad catch: load surface unknown; fall back or fail
             self._load_error = exc
             self._checkpoint_provenance.update(
                 {

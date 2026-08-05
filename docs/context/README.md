@@ -93,6 +93,9 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Issue #6469 benchmark module reorganization plan (ghost `util`/`utils` confirmation and proposed
+  benchmark domain subdirectories; planning only):
+  [issue_6469_benchmark_reorganization_plan.md](issue_6469_benchmark_reorganization_plan.md)
 * Collision causality, online risk, and Chapter 7 scenario discovery:
   [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
@@ -119,6 +122,14 @@ knowledge, not every transient iteration detail.
   [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md)
 * Issue #5579 MPC tuning-budget sensitivity packet:
   [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md)
+* Issue #6640 Gate 0 radius-sensitivity post-hoc feasibility audit:
+  [radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md)
+* Issue #6641 Gate 1 runtime radius-binding canary:
+  [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md)
+* Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600):
+  [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
+* Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600):
+  [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 
@@ -236,6 +247,9 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
   [issue_4360_adversarial_dispatchable_inventory.md](issue_4360_adversarial_dispatchable_inventory.md)
   records current adversarial pedestrian hooks, repeatable seeds/configs, runner assumptions,
   and runbook boundary for the dispatchable half only.
+* Issue #4360 reactive residual-adversary design:
+  [issue_4360_reactive_adversary_design.md](issue_4360_reactive_adversary_design.md)
+  records the capability-only bounded residual-control contract and deferred adversary slices.
 * Issue #3014 Evidence Catalog Backlog 2026-06-19:
   [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
   records the current uncovered evidence-bundle count and split strategy for catalog cleanup.

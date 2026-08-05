@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import jsonschema
 import pytest
@@ -19,6 +20,7 @@ from robot_sf.nav.obstacle import Obstacle
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.scenario_certification import certificate_to_dict, certify_map_definition
+from robot_sf.scenario_certification import v1 as scenario_certification_v1
 from robot_sf.scenario_certification.v1 import (
     DYNAMICALLY_OVERCONSTRAINED,
     GEOMETRICALLY_INFEASIBLE,
@@ -132,6 +134,16 @@ def test_certificate_schema_validates_emitted_valid_certificate() -> None:
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     jsonschema.validate(certificate_to_dict(certificate), schema)
     assert certificate.classification == VALID
+
+
+def test_valid_route_runs_geometry_guard_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Preserve the original single-pass geometry guard across later certification stages."""
+
+    geometry_guard = Mock(wraps=scenario_certification_v1._require_route_geometry)
+    monkeypatch.setattr(scenario_certification_v1, "_require_route_geometry", geometry_guard)
+
+    assert _classify(_map([(2.0, 2.0), (10.0, 2.0)])) == VALID
+    geometry_guard.assert_called_once()
 
 
 def test_invalid_route_fails_closed_when_start_is_outside_map() -> None:

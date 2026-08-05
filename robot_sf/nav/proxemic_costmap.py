@@ -6,11 +6,15 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from robot_sf.benchmark.passing_clearance import resolve_passing_clearance_contract
 from robot_sf.common.validation import _require_finite_non_negative
+
+if TYPE_CHECKING:
+    from robot_sf.benchmark.passing_clearance import PassingClearanceContract
 
 DecayFunction = Literal["linear", "gaussian"]
 
@@ -27,6 +31,7 @@ class ProxemicCostmapConfig:
     velocity_elongation_factor: float = 0.0
     max_cost: float = 10.0
     decay_function: DecayFunction = "linear"
+    passing_clearance_contract: PassingClearanceContract | Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Fail closed on malformed proxemic-layer configuration."""
@@ -40,12 +45,36 @@ class ProxemicCostmapConfig:
         _require_finite_non_negative("max_cost", self.max_cost)
         if self.decay_function not in {"linear", "gaussian"}:
             raise ValueError("decay_function must be one of: linear, gaussian")
+        resolve_passing_clearance_contract(self.passing_clearance_contract)
+
+    def effective_center_distance_radii(self) -> tuple[float, float]:
+        """Return personal/social center-distance radii for this config.
+
+        Returns:
+            Personal and social radii measured from the pedestrian center.
+        """
+        contract = resolve_passing_clearance_contract(self.passing_clearance_contract)
+        if contract is None:
+            return float(self.personal_radius), float(self.social_radius)
+        if contract.minimum_clearance_m is None or contract.desired_clearance_m is None:
+            raise ValueError(
+                "passing-clearance contract requires minimum and desired clearance for proxemic zones"
+            )
+        return (
+            contract.center_distance_from_surface_clearance(contract.minimum_clearance_m),
+            contract.center_distance_from_surface_clearance(contract.desired_clearance_m),
+        )
 
 
 def config_hash(config: ProxemicCostmapConfig | Mapping[str, Any] | None) -> str:
     """Return a stable short hash for proxemic-layer provenance metadata."""
     resolved = build_proxemic_costmap_config(config)
-    payload = json.dumps(asdict(resolved), sort_keys=True, separators=(",", ":"))
+    payload_mapping = asdict(resolved)
+    contract = resolve_passing_clearance_contract(resolved.passing_clearance_contract)
+    payload_mapping["passing_clearance_contract"] = (
+        contract.to_dict() if contract is not None else None
+    )
+    payload = json.dumps(payload_mapping, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
@@ -94,13 +123,14 @@ def proxemic_cost_at_points(
         return np.zeros(points.shape[0], dtype=float)
 
     ped_vel = _as_velocity_array(pedestrian_velocities, ped_pos.shape[0])
+    personal_radius, social_radius = cfg.effective_center_distance_radii()
     costs = np.zeros(points.shape[0], dtype=float)
     for position, velocity in zip(ped_pos, ped_vel, strict=True):
         distance = _elongated_distance(points - position[None, :], velocity, cfg)
-        if cfg.social_radius > 0.0 and cfg.social_weight > 0.0:
-            costs += cfg.social_weight * _decay(distance, cfg.social_radius, cfg.decay_function)
-        if cfg.personal_radius > 0.0 and cfg.personal_weight > 0.0:
-            costs += cfg.personal_weight * _decay(distance, cfg.personal_radius, cfg.decay_function)
+        if social_radius > 0.0 and cfg.social_weight > 0.0:
+            costs += cfg.social_weight * _decay(distance, social_radius, cfg.decay_function)
+        if personal_radius > 0.0 and cfg.personal_weight > 0.0:
+            costs += cfg.personal_weight * _decay(distance, personal_radius, cfg.decay_function)
     return np.minimum(costs, cfg.max_cost)
 
 

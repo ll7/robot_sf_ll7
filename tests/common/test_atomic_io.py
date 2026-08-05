@@ -67,3 +67,37 @@ def test_closes_temp_fd_when_fdopen_fails(tmp_path: Path, monkeypatch: pytest.Mo
         os.fstat(captured_fd)
     assert not target.exists()
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ValueError("bad mode"), RuntimeError("unexpected fdopen failure")],
+    ids=["value-error", "unexpected-error"],
+)
+def test_closes_temp_fd_when_fdopen_raises_non_os_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
+):
+    """Any non-OSError from os.fdopen propagates after the raw fd is closed.
+
+    ``os.fdopen`` documents ``OSError`` (bad fd) and ``ValueError`` (incompatible
+    mode/arg combination) as its realistic failure types; the narrowed handler
+    (issue #6459) must still preserve cleanup when an unexpected error propagates.
+    """
+    target = tmp_path / "data.json"
+    captured_fd: int | None = None
+
+    def fail_fdopen(fd: int, *args: object, **kwargs: object):
+        nonlocal captured_fd
+        captured_fd = fd
+        raise error
+
+    monkeypatch.setattr(os, "fdopen", fail_fdopen)
+
+    with pytest.raises(type(error), match=str(error)):
+        atomic_write_json(target, {"v": 1})
+
+    assert captured_fd is not None
+    with pytest.raises(OSError):
+        os.fstat(captured_fd)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []

@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-19
+updated_at: 2026-07-28
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,14 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md
   status: evidence
   freshness: evidence
@@ -4724,6 +4732,10 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
+- path: docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6192_predictive_foresight_fallback_audit.md
   status: evidence
   freshness: evidence
@@ -4765,6 +4777,22 @@ entries:
   freshness: evidence
   area: release_evidence
 - path: docs/context/evidence/issue_6481_social_compliance_preflight_receipt.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_preregistration.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6412_real_reexport_package
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

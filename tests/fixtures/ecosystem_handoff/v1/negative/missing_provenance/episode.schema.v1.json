@@ -1,0 +1,113 @@
+{
+  "$id": "https://robot-sf.dev/ecosystem-handoff/episode.schema.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "evidence_admissible": {
+      "const": false
+    },
+    "evidence_status": {
+      "const": "diagnostic_only"
+    },
+    "integrity": {
+      "type": "object"
+    },
+    "metrics": {
+      "properties": {
+        "collisions": {
+          "type": "number"
+        },
+        "goal_distance": {
+          "type": "number"
+        },
+        "path_length": {
+          "type": "number"
+        },
+        "steps": {
+          "type": "number"
+        },
+        "success": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "success",
+        "steps",
+        "collisions",
+        "path_length",
+        "goal_distance"
+      ],
+      "type": "object"
+    },
+    "outcome": {
+      "type": "object"
+    },
+    "result_provenance": {
+      "properties": {
+        "episode_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "repo_commit": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scenario_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "repo_commit",
+        "episode_id",
+        "scenario_id",
+        "seed"
+      ],
+      "type": "object"
+    },
+    "row_status": {
+      "enum": [
+        "native",
+        "fallback",
+        "degraded"
+      ]
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "termination_reason": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "version": {
+      "const": "v1"
+    }
+  },
+  "required": [
+    "version",
+    "episode_id",
+    "scenario_id",
+    "seed",
+    "metrics",
+    "termination_reason",
+    "outcome",
+    "integrity",
+    "evidence_status",
+    "evidence_admissible",
+    "row_status",
+    "result_provenance"
+  ],
+  "title": "Robot SF ecosystem handoff episode (v1)",
+  "type": "object"
+}

@@ -248,17 +248,18 @@ def rasterize_circle(
     # The helper function handles bounds checking and clipping internally,
     # correctly detecting overlap even when circle center is outside grid
     try:
-        affected_cells = get_affected_cells(
+        row_indices, col_indices = get_affected_cells(
             center[0], center[1], radius, config, grid_origin_x, grid_origin_y
         )
     except ValueError as e:
         logger.debug(f"Circle {circle} does not intersect grid: {e}")
         return
 
-    # Set occupancy for all affected cells
-    for row, col in affected_cells:
-        if 0 <= row < config.grid_height and 0 <= col < config.grid_width:
-            grid_array[row, col] = max(grid_array[row, col], value)
+    # Set occupancy for all affected cells using vectorized indexing
+    if len(row_indices) > 0:
+        grid_array[row_indices, col_indices] = np.maximum(
+            grid_array[row_indices, col_indices], value
+        )
 
 
 def rasterize_obstacles(
@@ -350,6 +351,63 @@ def rasterize_pedestrians(
             logger.warning(f"Failed to rasterize pedestrian {pedestrian}: {e}")
 
     logger.debug(f"Rasterized {count}/{len(pedestrians)} pedestrians")
+    return count
+
+
+def rasterize_pedestrians_array(
+    positions: np.ndarray,
+    radii: np.ndarray,
+    grid_array: np.ndarray,
+    config: GridConfig,
+    grid_origin_x: float = 0.0,
+    grid_origin_y: float = 0.0,
+    value: float = 1.0,
+) -> int:
+    """Rasterize pedestrian circles from NumPy arrays without list materialization.
+
+    Accepts position and radius arrays directly so callers (e.g. ``RobotEnv``)
+    can skip the per-step ``[(tuple(pos), r) for ...]`` list comprehension
+    (issue #6493).
+
+    Args:
+        positions: Pedestrian center positions with shape ``(N, 2)``.
+        radii: Pedestrian radii with shape ``(N,)``.
+        grid_array: 2D grid array to modify ``[H, W]``.
+        config: Grid configuration.
+        grid_origin_x: Grid origin X in world frame.
+        grid_origin_y: Grid origin Y in world frame.
+        value: Occupancy value to set (default: 1.0).
+
+    Returns:
+        Number of pedestrians successfully rasterized.
+    """
+    if not isinstance(positions, np.ndarray) or not isinstance(radii, np.ndarray):
+        raise TypeError("positions and radii must be NumPy arrays")
+    if positions.ndim != 2 or positions.shape[1] != 2:
+        raise ValueError(f"positions must have shape (N, 2), got {positions.shape}")
+    if radii.ndim != 1 or radii.shape[0] != positions.shape[0]:
+        raise ValueError(
+            "radii must have shape (N,) matching positions, "
+            f"got {radii.shape} for {positions.shape}"
+        )
+
+    count = 0
+    num_peds = positions.shape[0]
+    for i in range(num_peds):
+        try:
+            rasterize_circle_fast(
+                ((float(positions[i, 0]), float(positions[i, 1])), float(radii[i])),
+                grid_array,
+                config,
+                grid_origin_x,
+                grid_origin_y,
+                value,
+            )
+            count += 1
+        except (ValueError, IndexError, TypeError) as e:
+            logger.warning("Failed to rasterize pedestrian {}: {}", i, e)
+
+    logger.debug("Rasterized {}/{} pedestrians", count, num_peds)
     return count
 
 

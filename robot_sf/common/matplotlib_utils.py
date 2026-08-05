@@ -63,7 +63,7 @@ def _try_set_backend(backend: str, verbose: bool) -> bool:
         if verbose:
             logger.debug(f"Backend {backend} not available")
         return False
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 - backend errors mean unavailable
         if verbose:
             logger.debug(f"Failed to set backend {backend}: {e}")
         return False

@@ -85,28 +85,15 @@ def _gate_claim_text(gate: GateSpec) -> str:
     )
 
 
-def build_release_assurance_case(
-    manifest: BenchmarkReleaseManifest,
-    *,
-    gate_spec_path: Path | None = None,
-    release_gate_report_path: Path | None = None,
-    generated_at_utc: str | None = None,
-    repo_root: Path | None = None,
-) -> dict[str, Any]:
-    """Build a release-bundle claim -> argument -> evidence payload.
-
-    Args:
-        manifest: Parsed release manifest.
-        gate_spec_path: Optional release-gate spec to expose as claim layer.
-        release_gate_report_path: Optional report proving gate evaluations.
-        generated_at_utc: Stable timestamp override for reproducible examples.
-        repo_root: Repository root used to format evidence paths.
+def _collect_manifest_evidence(
+    manifest: BenchmarkReleaseManifest, root: Path
+) -> list[dict[str, Any]]:
+    """Collect evidence leaves for core manifest-referenced files.
 
     Returns:
-        JSON-serializable release assurance case.
+        List of evidence leaf payloads for manifest-referenced files.
     """
 
-    root = (repo_root or get_repository_root()).resolve()
     evidence: list[dict[str, Any]] = [
         _evidence_leaf(
             evidence_id="E_release_manifest",
@@ -168,9 +155,21 @@ def build_release_assurance_case(
                 expected_sha256=manifest.snqi_baseline_sha256,
             )
         )
+    return evidence
 
-    gate_claim_ids: list[str] = []
-    gate_argument_ids: list[str] = []
+
+def _collect_gate_evidence(
+    gate_spec_path: Path | None,
+    release_gate_report_path: Path | None,
+    root: Path,
+) -> tuple[list[dict[str, Any]], list[GateSpec]]:
+    """Collect gate-spec and gate-report evidence leaves, loading gate specs.
+
+    Returns:
+        Tuple of gate evidence leaves and loaded gate specifications.
+    """
+
+    evidence: list[dict[str, Any]] = []
     gate_specs: list[GateSpec] = []
     if gate_spec_path is not None:
         gate_specs = load_release_gate_spec(gate_spec_path)
@@ -193,8 +192,17 @@ def build_release_assurance_case(
                 manifest_field="release_gate_report",
             )
         )
+    return evidence, gate_specs
 
-    arguments: list[dict[str, Any]] = [
+
+def _build_base_arguments(manifest: BenchmarkReleaseManifest) -> list[dict[str, Any]]:
+    """Build the two base manifest-integrity and context arguments.
+
+    Returns:
+        List of base argument payloads.
+    """
+
+    return [
         {
             "id": "A_release_manifest_integrity",
             "claim_id": "C_release_bundle_manifest",
@@ -225,38 +233,61 @@ def build_release_assurance_case(
         },
     ]
 
-    if gate_specs:
-        for gate in gate_specs:
-            claim_id = f"C_gate_{gate.gate_id}"
-            argument_id = f"A_gate_{gate.gate_id}"
-            gate_claim_ids.append(claim_id)
-            gate_argument_ids.append(argument_id)
-            evidence_ids = ["E_release_gate_spec"]
-            if release_gate_report_path is not None:
-                evidence_ids.append("E_release_gate_report")
-            arguments.append(
-                {
-                    "id": argument_id,
-                    "claim_id": claim_id,
-                    "strategy": "threshold_gate_specification",
-                    "text": (
-                        "Gate claim is derived directly from the gate spec threshold, "
-                        "metric, category, requirement flag, and scope."
-                    ),
-                    "evidence_ids": evidence_ids,
-                    "gate": {
-                        "gate_id": gate.gate_id,
-                        "metric": gate.metric,
-                        "threshold": gate.threshold,
-                        "direction": gate.direction,
-                        "category": gate.category,
-                        "required": gate.required,
-                        "scope": dict(gate.scope or {}),
-                    },
-                }
-            )
 
-    claims = [
+def _build_gate_arguments(
+    gate_specs: list[GateSpec], release_gate_report_path: Path | None
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    """Build per-gate arguments and collect gate claim/argument IDs.
+
+    Returns:
+        Tuple of gate argument payloads, gate claim IDs, and gate argument IDs.
+    """
+
+    arguments: list[dict[str, Any]] = []
+    gate_claim_ids: list[str] = []
+    gate_argument_ids: list[str] = []
+    for gate in gate_specs:
+        claim_id = f"C_gate_{gate.gate_id}"
+        argument_id = f"A_gate_{gate.gate_id}"
+        gate_claim_ids.append(claim_id)
+        gate_argument_ids.append(argument_id)
+        evidence_ids = ["E_release_gate_spec"]
+        if release_gate_report_path is not None:
+            evidence_ids.append("E_release_gate_report")
+        arguments.append(
+            {
+                "id": argument_id,
+                "claim_id": claim_id,
+                "strategy": "threshold_gate_specification",
+                "text": (
+                    "Gate claim is derived directly from the gate spec threshold, "
+                    "metric, category, requirement flag, and scope."
+                ),
+                "evidence_ids": evidence_ids,
+                "gate": {
+                    "gate_id": gate.gate_id,
+                    "metric": gate.metric,
+                    "threshold": gate.threshold,
+                    "direction": gate.direction,
+                    "category": gate.category,
+                    "required": gate.required,
+                    "scope": dict(gate.scope or {}),
+                },
+            }
+        )
+    return arguments, gate_claim_ids, gate_argument_ids
+
+
+def _build_all_claims(
+    manifest: BenchmarkReleaseManifest, gate_specs: list[GateSpec]
+) -> list[dict[str, Any]]:
+    """Build base and gate claims for the assurance case.
+
+    Returns:
+        List of claim payloads including base and gate claims.
+    """
+
+    claims: list[dict[str, Any]] = [
         {
             "id": "C_release_bundle_manifest",
             "text": (
@@ -282,6 +313,44 @@ def build_release_assurance_case(
         }
         for gate in gate_specs
     )
+    return claims
+
+
+def build_release_assurance_case(
+    manifest: BenchmarkReleaseManifest,
+    *,
+    gate_spec_path: Path | None = None,
+    release_gate_report_path: Path | None = None,
+    generated_at_utc: str | None = None,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Build a release-bundle claim -> argument -> evidence payload.
+
+    Args:
+        manifest: Parsed release manifest.
+        gate_spec_path: Optional release-gate spec to expose as claim layer.
+        release_gate_report_path: Optional report proving gate evaluations.
+        generated_at_utc: Stable timestamp override for reproducible examples.
+        repo_root: Repository root used to format evidence paths.
+
+    Returns:
+        JSON-serializable release assurance case.
+    """
+
+    root = (repo_root or get_repository_root()).resolve()
+    evidence = _collect_manifest_evidence(manifest, root)
+    gate_evidence, gate_specs = _collect_gate_evidence(
+        gate_spec_path, release_gate_report_path, root
+    )
+    evidence.extend(gate_evidence)
+
+    arguments = _build_base_arguments(manifest)
+    gate_arguments, gate_claim_ids, gate_argument_ids = _build_gate_arguments(
+        gate_specs, release_gate_report_path
+    )
+    arguments.extend(gate_arguments)
+
+    claims = _build_all_claims(manifest, gate_specs)
 
     return {
         "schema_version": RELEASE_ASSURANCE_CASE_SCHEMA_VERSION,

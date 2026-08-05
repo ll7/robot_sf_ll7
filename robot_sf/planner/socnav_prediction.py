@@ -26,6 +26,8 @@ SocNavPlannerConfig = _socnav.SocNavPlannerConfig
 SocNavPlannerPolicy = _socnav.SocNavPlannerPolicy
 PredictiveTrajectoryModel = _socnav.PredictiveTrajectoryModel
 
+_DEFAULT_FORECAST_VARIANT_RISK_DISTANCE_M = 3.0
+
 
 class PredictionPlannerAdapter(SamplingPlannerAdapter):
     """Predictive local planner with deterministic sampled-rollout search.
@@ -101,7 +103,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 ),
                 dt_s=float(getattr(self.config, "forecast_variant_dt_s", 0.1)),
                 risk_distance_m=float(
-                    getattr(self.config, "forecast_variant_risk_distance_m", 3.0)
+                    getattr(
+                        self.config,
+                        "forecast_variant_risk_distance_m",
+                        _DEFAULT_FORECAST_VARIANT_RISK_DISTANCE_M,
+                    )
                 ),
             )
             logger.info(
@@ -313,7 +319,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         checkpoint_sha256 = self._compute_checkpoint_sha256()
         try:
             self._model = self._build_model()
-        except Exception as exc:
+        except Exception as exc:  # broad catch: load surface unknown; fall back or fail
             self._record_foresight_load_failure(exc, checkpoint_sha256)
             if self._allow_fallback:
                 self._load_error = exc

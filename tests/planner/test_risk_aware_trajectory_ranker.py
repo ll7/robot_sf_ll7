@@ -29,7 +29,9 @@ from robot_sf.planner.risk_aware_trajectory_ranker import (
     RANKER_SCHEMA_VERSION,
     PrimitiveGeneratorConfig,
     RankingWeights,
+    RBFGeneratorConfig,
     generate_primitive_candidates,
+    generate_rbf_candidates,
     rank_trajectories,
 )
 from robot_sf.research.collision_risk import (
@@ -134,6 +136,57 @@ def test_primitive_generator_rejects_invalid_horizon() -> None:
         )
     with pytest.raises(ValueError):
         PrimitiveGeneratorConfig(cruise_speed_mps=math.inf)
+
+
+def test_rbf_generator_shapes_finiteness_and_action_ids() -> None:
+    """RBF candidates satisfy the shared finite waypoint contract."""
+    config = RBFGeneratorConfig(cruise_speed_mps=1.0)
+    candidates = generate_rbf_candidates(
+        [0.0, 0.0], [2.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S, config=config
+    )
+
+    assert len(candidates) >= 3
+    action_ids = [candidate.action_id for candidate in candidates]
+    assert len(action_ids) == len(set(action_ids))
+    assert all(candidate.representation == "rbf" for candidate in candidates)
+    for candidate in candidates:
+        waypoints = candidate.as_array(horizon_steps=HORIZON_STEPS)
+        assert waypoints.shape == (HORIZON_STEPS + 1, 2)
+        assert np.all(np.isfinite(waypoints))
+        sampled_speeds = np.linalg.norm(np.diff(waypoints, axis=0), axis=1) / DT_S
+        assert float(np.max(sampled_speeds)) <= config.cruise_speed_mps + 1.0e-12
+
+
+def test_rbf_generator_is_deterministic_and_rejects_short_budgets() -> None:
+    """RBF proposals are repeatable and fail closed below the minimum budget."""
+    first = generate_rbf_candidates([0.5, -0.3], [3.0, 1.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S)
+    second = generate_rbf_candidates(
+        [0.5, -0.3], [3.0, 1.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+    assert [c.action_id for c in first] == [c.action_id for c in second]
+    for left, right in zip(first, second, strict=True):
+        assert np.array_equal(left.waypoints, right.waypoints)
+
+    config = RBFGeneratorConfig(lateral_offsets_m=(0.0,), include_brake_primitive=False)
+    with pytest.raises(ValueError, match="at least three"):
+        generate_rbf_candidates(
+            [0.0, 0.0], [2.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S, config=config
+        )
+
+
+def test_rbf_candidates_use_the_existing_ranker_gate_and_risk_schema() -> None:
+    """RBF candidates are ranked through the same gates and provenance schema."""
+    candidates = generate_rbf_candidates(
+        [0.0, 0.0], [2.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+    records = rank_trajectories(candidates, [_ped(1, 1.0, 0.7)], risk_config=_risk_config())
+
+    assert len(records) == len(candidates)
+    assert {record.action_id for record in records} == {
+        candidate.action_id for candidate in candidates
+    }
+    assert all(record.provenance.action_representation == "rbf" for record in records)
+    assert all(record.claim_boundary == RANKER_CLAIM_BOUNDARY for record in records)
 
 
 # ---------------------------------------------------------------------------

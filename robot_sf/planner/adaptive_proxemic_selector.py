@@ -16,6 +16,7 @@ from robot_sf.planner.hybrid_rule_local_planner import (
 )
 
 _PROFILE_ORDER = ("conservative", "neutral", "open")
+_DEFAULT_HIGH_DENSITY_COUNT = 3
 _DEFAULT_PROFILE_BASE: dict[str, Any] = {
     "allow_testing_algorithms": True,
     "planner_variant": "hybrid_rule_v3_teb_like_rollout",
@@ -156,7 +157,7 @@ def _selector_settings(raw: dict[str, Any]) -> dict[str, Any]:
         "density_radius_m": float(settings.get("density_radius_m", 2.0)),
         "close_human_distance_m": float(settings.get("close_human_distance_m", 0.8)),
         "neutral_human_distance_m": float(settings.get("neutral_human_distance_m", 1.6)),
-        "high_density_count": int(settings.get("high_density_count", 3)),
+        "high_density_count": int(settings.get("high_density_count", _DEFAULT_HIGH_DENSITY_COUNT)),
         "moderate_density_count": int(settings.get("moderate_density_count", 2)),
         "constrained_width_m": float(settings.get("constrained_width_m", 1.0)),
         "low_progress_3s_m": float(settings.get("low_progress_3s_m", 0.05)),

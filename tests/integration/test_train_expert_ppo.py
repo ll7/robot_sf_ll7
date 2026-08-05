@@ -739,8 +739,28 @@ def test_load_expert_training_config_merges_base_config(tmp_path) -> None:
 
 # Issue #6490: the issue_576_br06 PPO family was migrated to inherit shared
 # settings from a single base config. The constants below pin that contract.
+# Issue #6680: predictive variants (v5-v10) and the issue-708 from-scratch
+# run (v11) now additionally chain through a predictive sub-base that holds
+# the byte-identical shared predictive keys.
 _ISSUE_576_BR06_FAMILY_DIR = Path("configs/training/ppo")
 _ISSUE_576_BR06_BASE_NAME = "expert_ppo_issue_576_br06_base.yaml"
+_ISSUE_576_BR06_PREDICTIVE_SUB_BASE_NAME = "expert_ppo_issue_576_br06_predictive_sub_base.yaml"
+# Set of variants whose base_config points at the predictive sub-base rather
+# than directly at the family base (two-level chain).
+_ISSUE_576_BR06_PREDICTIVE_VARIANTS = frozenset(
+    {
+        "expert_ppo_issue_576_br06_v5_predictive_foresight.yaml",
+        "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml",
+        "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml",
+        "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml",
+        "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml",
+        "expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml",
+        "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml",
+        "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml",
+        "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml",
+        "expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml",
+    }
+)
 _ISSUE_576_BR06_VARIANTS = [
     "expert_ppo_issue_576_br06_v2_15m_all_maps.yaml",
     "expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml",
@@ -757,6 +777,7 @@ _ISSUE_576_BR06_VARIANTS = [
     "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml",
     "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml",
     "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml",
+    "expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml",
 ]
 # The five variants that previously carried the deprecated
 # evaluation.frequency_episodes field (ignored by train_ppo.py in favor of
@@ -779,50 +800,69 @@ _ISSUE_576_BR06_DROPPED_FREQUENCY_EPISODES = {
 #     import _load_expert_training_config_mapping as L;b=pathlib.Path('configs/training/ppo'); \
 #     d={p.name:L(b/p) for p in sorted(b.glob('expert_ppo_issue_576_br06_v*.yaml'))}; \
 #     print(base64.b64encode(zlib.compress(json.dumps(d,sort_keys=True,separators=(',',':')).encode(),9)).decode())"
+# Frozen pre-inheritance resolved-config baseline. It is the canonical JSON
+# (sorted keys, compact separators) of `_load_expert_training_config_mapping`
+# for every variant on origin/main BEFORE the base_config refactor (plus v11
+# added in issue #6680 using post-migration resolved values; the v2–v10 slice
+# is byte-identical to the original baseline), compressed with zlib and
+# base64-encoded so the regression oracle stays self-contained. Regenerate
+# against a clean post-migration checkout with:
+#   uv run python -c "import json,zlib,base64,hashlib,pathlib; \
+#     from scripts.training.train_ppo import _load_expert_training_config_mapping as L; \
+#     b=pathlib.Path('configs/training/ppo'); \
+#     d={p.name:L(b/p) for p in sorted(b.glob('expert_ppo_issue_576_br06_v*.yaml'))}; \
+#     v11=b/'expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml'; \
+#     d[v11.name]=L(v11); \
+#     blob=json.dumps(d,sort_keys=True,separators=(',',':')).encode(); \
+#     print(hashlib.sha256(blob).hexdigest()); \
+#     print(base64.b64encode(zlib.compress(blob,9)).decode())"
 _ISSUE_576_BR06_PRECHANGE_BASELINE_B64 = (
-    "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"
+    "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"
+    "BX7p/+IVSu+6wfD6f4Fj+Bg="
 )
 _ISSUE_576_BR06_PRECHANGE_BASELINE_SHA256 = (
-    "a4a235f03e3eda8301d5194c9f201f713b1aa139020060c67b6ba508b88d4d7f"
+    "5d51cc77d1a4b7946bc8de53e7fd8c4eedcf3c39d3e53be692c5163379fbb719"
 )
 
 # Per-variant family-specific overrides (captured from origin/main). Documents
@@ -1100,6 +1140,26 @@ _ISSUE_576_BR06_EXPECTED_OVERRIDES = {
             "randomized",
         ],
     ),
+    "expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml": (
+        "ppo_expert_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch",
+        "auto_throughput",
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        None,  # from-scratch run: no resume_model_id
+        "issue-708-ppo-from-scratch",
+        [
+            "issue-708",
+            "ppo",
+            "from-scratch",
+            "predictive-foresight",
+            "success-priority-reward",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
 }
 
 
@@ -1183,19 +1243,39 @@ def test_issue_576_br06_family_overrides_remain_explicit(variant: str) -> None:
 
 
 def test_issue_576_br06_base_inheritance_and_frequency_episodes_drop() -> None:
-    """Every variant inherits the base and no longer carries the deprecated field."""
+    """Every variant inherits the base (directly or via predictive sub-base) and
+    no longer carries the deprecated evaluation.frequency_episodes field.
+
+    Issue #6680: predictive variants (v5-v10 and v11) now chain through
+    expert_ppo_issue_576_br06_predictive_sub_base.yaml which itself inherits
+    from expert_ppo_issue_576_br06_base.yaml. Non-predictive variants still
+    inherit the family base directly.
+    """
     base_path = (_ISSUE_576_BR06_FAMILY_DIR / _ISSUE_576_BR06_BASE_NAME).resolve()
     base_text = base_path.read_text(encoding="utf-8")
     base_yaml = yaml.safe_load(base_text)
-    # The base holds shared settings and must not self-inherit or carry the
-    # deprecated field.
+    # The family base must not self-inherit or carry the deprecated field.
     assert "base_config" not in base_yaml
     assert "frequency_episodes" not in base_yaml.get("evaluation", {})
+
+    sub_base_path = (
+        _ISSUE_576_BR06_FAMILY_DIR / _ISSUE_576_BR06_PREDICTIVE_SUB_BASE_NAME
+    ).resolve()
+    sub_base_yaml = yaml.safe_load(sub_base_path.read_text(encoding="utf-8"))
+    # The predictive sub-base must chain on the family base (one level up) and
+    # must not carry the deprecated field.
+    assert sub_base_yaml.get("base_config") == _ISSUE_576_BR06_BASE_NAME
+    assert "frequency_episodes" not in sub_base_yaml.get("evaluation", {})
 
     for variant in _ISSUE_576_BR06_VARIANTS:
         variant_path = (_ISSUE_576_BR06_FAMILY_DIR / variant).resolve()
         variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
-        assert variant_yaml["base_config"] == _ISSUE_576_BR06_BASE_NAME
+        # Predictive variants chain through the sub-base; non-predictive
+        # variants still inherit the family base directly.
+        if variant in _ISSUE_576_BR06_PREDICTIVE_VARIANTS:
+            assert variant_yaml["base_config"] == _ISSUE_576_BR06_PREDICTIVE_SUB_BASE_NAME
+        else:
+            assert variant_yaml["base_config"] == _ISSUE_576_BR06_BASE_NAME
         # The deprecated field is dropped everywhere (it was only ever present
         # in the five variants listed below, and ignored in favor of step_schedule).
         assert "frequency_episodes" not in variant_yaml.get("evaluation", {})
@@ -1239,16 +1319,7 @@ def test_load_expert_training_config_base_config_cycle_raises_value_error(
 
 
 def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> None:
-    """A missing/nonexistent base_config must fail closed.
-
-    The resolver raises FileNotFoundError (an OSError) for a missing base_config;
-    a cycle raises ValueError (covered above). Issue #6490 expected a ValueError
-    here as well, but the byte-frozen resolver in scripts/training/train_ppo.py
-    surfaces missing-base as FileNotFoundError. The run still fails closed
-    (no silent wrong values), so this asserts the actual fail-closed behavior;
-    narrowing missing-base to ValueError is tracked as a follow-up because
-    scripts/training/train_ppo.py is out of scope for this refactor.
-    """
+    """A missing/nonexistent base_config must fail closed with a ValueError."""
     scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
     config_path = tmp_path / "missing_base.yaml"
     config_path.write_text(
@@ -1262,7 +1333,7 @@ def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> Non
         ),
         encoding="utf-8",
     )
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ValueError, match="does not exist"):
         _load_expert_training_config_mapping(config_path)
 
 
@@ -1916,3 +1987,152 @@ def test_issue_2557_base_config_inheritance_equivalence() -> None:
             f"Resolved config {config_path.name} differs from the baseline at "
             f"{baseline['source_revision']}."
         )
+
+
+def test_issue_6679_single_factor_base_config_inheritance_equivalence() -> None:
+    """All 18 single_factor ablation variants must match pre-refactor resolved fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    single_factor_dir = Path("configs/training/ppo/ablations/single_factor")
+    variant_paths = [
+        path
+        for path in sorted(single_factor_dir.glob("*.yaml"))
+        if not path.name.endswith("_base.yaml")
+    ]
+    assert len(variant_paths) == 18
+    assert {path.name for path in variant_paths} == set(fingerprints)
+
+    for config_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(config_path)
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[config_path.name], (
+            f"Resolved config {config_path.name} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )
+
+
+_SINGLE_FACTOR_VARIANTS = [
+    "asymmetric_critic_only_10m_env22_seed123.yaml",
+    "asymmetric_critic_only_10m_env22_seed1337.yaml",
+    "asymmetric_critic_only_10m_env22_seed231.yaml",
+    "asymmetric_critic_only_1m_env22_seed123.yaml",
+    "asymmetric_critic_only_1m_env22_seed1337.yaml",
+    "asymmetric_critic_only_1m_env22_seed231.yaml",
+    "attention_only_10m_env22_seed123.yaml",
+    "attention_only_10m_env22_seed1337.yaml",
+    "attention_only_10m_env22_seed231.yaml",
+    "attention_only_1m_env22_seed123.yaml",
+    "attention_only_1m_env22_seed1337.yaml",
+    "attention_only_1m_env22_seed231.yaml",
+    "reward_curriculum_only_10m_env22_seed123.yaml",
+    "reward_curriculum_only_10m_env22_seed1337.yaml",
+    "reward_curriculum_only_10m_env22_seed231.yaml",
+    "reward_curriculum_only_1m_env22_seed123.yaml",
+    "reward_curriculum_only_1m_env22_seed1337.yaml",
+    "reward_curriculum_only_1m_env22_seed231.yaml",
+]
+
+
+@pytest.mark.parametrize("variant", _SINGLE_FACTOR_VARIANTS)
+def test_issue_6679_single_factor_variant_equivalence(variant: str) -> None:
+    """Parametrized equivalence test covering every migrated single_factor ablation variant."""
+    baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    expected_fingerprint = baseline["variants"][variant]
+
+    config_path = Path("configs/training/ppo/ablations/single_factor") / variant
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+
+    assert actual_fingerprint == expected_fingerprint, (
+        f"Variant {variant} resolved fingerprint {actual_fingerprint} "
+        f"does not match baseline {expected_fingerprint}"
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.policy_id
+    assert len(config.seeds) == 1
+
+
+_ISSUE_739_BASE_NAME = "expert_ppo_issue_739_base.yaml"
+
+_ISSUE_739_VARIANT_PATHS = [
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_baseline.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_grid_goal.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_selective.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_core.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_tuned.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_opt_scale.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_sampling.yaml",
+    "configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml",
+]
+
+
+def test_issue_6682_issue_739_base_config_inheritance_equivalence() -> None:
+    """All issue-739 family variants must match their pre-refactor resolved fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_6682_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    ablate_dir = Path("configs/training/ppo/ablations")
+    stage_variant_paths = sorted(ablate_dir.glob("expert_ppo_issue_739_stage*.yaml"))
+    assert len(stage_variant_paths) == 7
+    variant_paths = [str(path) for path in stage_variant_paths]
+    variant_paths.append("configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml")
+    assert set(variant_paths) == set(fingerprints)
+
+    base_path = ablate_dir / _ISSUE_739_BASE_NAME
+    assert base_path.exists()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert "base_config" not in base_yaml
+
+    for rel_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(Path(rel_path))
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[rel_path], (
+            f"Resolved config {rel_path} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_739_VARIANT_PATHS)
+def test_issue_6682_issue_739_variant_equivalence(rel_path: str) -> None:
+    """Parametrized equivalence test covering every migrated issue-739 family variant."""
+    baseline_path = Path("tests/integration/_baseline_issue_6682_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    expected_fingerprint = baseline["variants"][rel_path]
+
+    config_path = Path(rel_path)
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+
+    assert actual_fingerprint == expected_fingerprint, (
+        f"Variant {rel_path} resolved fingerprint {actual_fingerprint} "
+        f"does not match baseline {expected_fingerprint}"
+    )
+
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    base_path = (config_path.parent / raw["base_config"]).resolve()
+    assert base_path.name == _ISSUE_739_BASE_NAME
+    assert base_path.exists()
+
+    config = load_expert_training_config(config_path)
+    assert config.policy_id

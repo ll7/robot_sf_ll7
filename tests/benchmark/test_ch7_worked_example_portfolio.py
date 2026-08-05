@@ -1,5 +1,7 @@
 """Tests for the Chapter 7 worked-example portfolio contract (issue #6789)."""
 
+# evidence-writer-exempt: this test writes only a temporary malformed YAML input fixture
+
 from __future__ import annotations
 
 import hashlib

@@ -2135,6 +2135,8 @@ def test_issue_791_best_ckpt_inheriting_leader_guard_unchanged() -> None:
     assert (
         _issue_791_fingerprint(path) == baseline["non_migrated_guards"][_ISSUE_791_BEST_CKPT_GUARD]
     )
+
+
 def test_issue_6679_single_factor_base_config_inheritance_equivalence() -> None:
     """All 18 single_factor ablation variants must match pre-refactor resolved fingerprints."""
     baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()

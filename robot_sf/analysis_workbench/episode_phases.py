@@ -36,11 +36,29 @@ def summarize_stall(
         for start, end in runs
         if _run_duration(frames, start, end) >= stall_min_duration_s
     ]
-    duration = sum(_run_duration(frames, start, end) for start, end in qualifying_runs)
     missing_speed_count = sum(1 for frame in frames if speed_getter(frame) is None)
+    missing_speed_blocks_duration = missing_speed_count > 0 and bool(runs)
+    duration = (
+        None
+        if missing_speed_blocks_duration
+        else sum(_run_duration(frames, start, end) for start, end in qualifying_runs)
+    )
+    onset = (
+        None
+        if missing_speed_blocks_duration
+        else first_sustained_stall_frame(
+            frames,
+            speed_getter=speed_getter,
+            stall_speed_threshold_mps=stall_speed_threshold_mps,
+            stall_min_duration_s=stall_min_duration_s,
+        )
+    )
     return {
         "profile_version": PHASE_PROFILE_VERSION,
-        "status": "available",
+        "status": "unavailable" if missing_speed_blocks_duration else "available",
+        "reason": "missing_speed_within_candidate_stall"
+        if missing_speed_blocks_duration
+        else "coverage_complete",
         "stall_min_duration_s": stall_min_duration_s,
         "sustained_stall_duration_s": duration,
         "speed_coverage": {
@@ -48,18 +66,7 @@ def summarize_stall(
             "available_frame_count": len(frames) - missing_speed_count,
             "missing_frame_count": missing_speed_count,
         },
-        "sustained_stall_onset_step": (
-            int(onset["step"])
-            if (
-                onset := first_sustained_stall_frame(
-                    frames,
-                    speed_getter=speed_getter,
-                    stall_speed_threshold_mps=stall_speed_threshold_mps,
-                    stall_min_duration_s=stall_min_duration_s,
-                )
-            )
-            else None
-        ),
+        "sustained_stall_onset_step": int(onset["step"]) if onset is not None else None,
     }
 
 

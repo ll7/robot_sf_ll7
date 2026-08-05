@@ -19,15 +19,14 @@ change canonical benchmark metrics, SNQI, planner behavior, or figure admission.
 ```bash
 uv run python scripts/analysis/build_worked_example_process_trace.py \
   --input tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
-  --pair-comparison-grain matched_realization_pair \
   --route-id fixture-route \
   --route-provenance-id fixture-route.v1 \
-  --route-registry-checksum 0000000000000000000000000000000000000000000000000000000000000000 \
+  --route-registry-checksum 36f22d682d4df40aa1dbc9f0a548e940a633814e72c0c780bfd1c404ce118bdf \
   --route-start 0 0 \
   --route-end 2 0 \
   --conflict-zone-id fixture-zone \
   --conflict-provenance-id fixture-zone.v1 \
-  --conflict-registry-checksum 1111111111111111111111111111111111111111111111111111111111111111 \
+  --conflict-registry-checksum 3b9765014ad30f57a74a8e585e708cccdcadaba03024c3e96cab0ef524f5a097 \
   --conflict-center 1 0 \
   --conflict-radius-m 0.25 \
   --out output/worked_example_process_trace_fixture.json
@@ -38,6 +37,9 @@ and interval to canonical near-miss encounter output. The report must validate a
 canonical `near_miss_encounter.v1` schema and its provenance `input_checksums` must include
 the SHA-256 of the input trace file.
 
+Add `--pair-input path/to/other_trace.json --pair-comparison-grain ...` when building pair
+compatibility; the comparison grain is required whenever a pair input is present.
+
 Route and conflict projections are available only when the caller provides world-frame,
 provenance- and checksum-bound finite geometry. Missing actor intervals, velocities, radii,
 route/zone registry evidence, exact collision telemetry, or source-coordinate support are
@@ -45,10 +47,10 @@ reported as unavailable or not observed instead of zero-filled.
 
 Pair compatibility requires an explicit comparison grain:
 
-- `matched_planner_pair`: same planner, required initial-state equality, and equal
-  map/horizon/config metadata.
-- `matched_realization_pair`: same seed, required initial-state equality, and equal
-  map/horizon/config metadata.
+- `matched_planner_pair`: different planners on the same seed/realization, required
+  initial-state equality, and equal map/horizon/config metadata.
+- `matched_realization_pair`: the same planner on different seeds/realizations; start/spawn
+  may differ and `shared_prefix=false` is allowed, with equal map/horizon/config metadata.
 
 Event alignment selects the first available anchor from the declared fallback order and writes
 `anchor_time_s` plus per-frame `tau_s = t - anchor_time_s`. Trace end is a boundary fallback,

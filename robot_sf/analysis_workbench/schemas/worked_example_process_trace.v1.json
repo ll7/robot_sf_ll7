@@ -110,6 +110,7 @@
           "step",
           "time_s",
           "source_coordinates",
+          "encounter_interval",
           "world",
           "route",
           "conflict",
@@ -123,6 +124,15 @@
           "step": {"type": "integer"},
           "time_s": {"type": "number"},
           "source_coordinates": {"type": "object"},
+          "encounter_interval": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason"],
+            "properties": {
+              "status": {"enum": ["in_interval", "outside_interval"]},
+              "reason": {"type": "string"}
+            }
+          },
           "world": {"type": "object"},
           "route": {"type": "object"},
           "conflict": {"type": "object"},
@@ -219,6 +229,7 @@
               "first_material_turn_response",
               "conflict_zone_entry",
               "exact_collision_event",
+              "first_safety_predicate_breach",
               "proxy_overlap_event",
               "sustained_stall_onset",
               "recovery_onset",
@@ -234,6 +245,8 @@
           "zone_id": {"type": ["string", "null"]},
           "reason": {"type": "string"},
           "collision_observed": {"type": "boolean"},
+          "partner_actor_id": {"type": ["string", "null"]},
+          "partner_actor_type": {"type": ["string", "null"]},
           "source_fields": {"type": "array", "items": {"type": "string"}},
           "event_relative_time": {
             "type": "object",

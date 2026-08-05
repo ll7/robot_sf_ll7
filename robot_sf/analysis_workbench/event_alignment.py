@@ -88,7 +88,11 @@ def build_pair_compatibility_record(
         "initial_robot_separation_m": initial.get("robot_position_delta_m"),
         "max_initial_actor_separation_m": initial.get("max_actor_position_delta_m"),
     }
-    compatible = bool(provenance["compatible"] and initial.get("equivalent"))
+    requires_initial_equivalence = comparison_grain == "matched_planner_pair"
+    compatible = bool(
+        provenance["compatible"]
+        and (not requires_initial_equivalence or initial.get("equivalent") is True)
+    )
     common_event_anchors = _common_event_anchors(left_events, right_events) if compatible else []
     shared_prefix_status = (
         compatible
@@ -119,19 +123,21 @@ def build_pair_compatibility_record(
 
 
 def _comparison_grain(comparison_grain: str | None) -> dict[str, Any]:
+    required_gate_fields = [
+        "scenario_id",
+        "coordinate_frame",
+        "units",
+        "map_id",
+        "horizon",
+        "config_digest",
+    ]
+    if comparison_grain == "matched_planner_pair":
+        required_gate_fields.append("initial_state")
     return {
         "grain_id": comparison_grain or "undeclared",
         "left_role": "primary_trace",
         "right_role": "comparison_trace",
-        "required_gate_fields": [
-            "scenario_id",
-            "coordinate_frame",
-            "units",
-            "map_id",
-            "horizon",
-            "config_digest",
-            "initial_state",
-        ],
+        "required_gate_fields": required_gate_fields,
         "planner_seed_rule": _planner_seed_rule(comparison_grain),
         "divergence_quantity": "per-frame difference curves require shared_prefix true",
         "anchor_alignment": "deterministic_common_event_identity",
@@ -140,9 +146,9 @@ def _comparison_grain(comparison_grain: str | None) -> dict[str, Any]:
 
 def _planner_seed_rule(comparison_grain: str | None) -> str:
     if comparison_grain == "matched_planner_pair":
-        return "planner_id_equal_required_seed_reported"
+        return "planner_id_different_seed_equal_initial_state_equal_required"
     if comparison_grain == "matched_realization_pair":
-        return "seed_equal_required_planner_reported"
+        return "planner_id_equal_seed_different_start_spawn_may_differ"
     return "unsupported_grain"
 
 
@@ -173,6 +179,8 @@ def _provenance_gate(
         "units_equal": left.units == right.units,
         "seed_equal": left.source.seed == right.source.seed,
         "planner_id_equal": left.source.planner_id == right.source.planner_id,
+        "planner_id_different": left.source.planner_id != right.source.planner_id,
+        "seed_different": left.source.seed != right.source.seed,
         "map_id_present": availability["map_id"]["status"] == "available",
         "horizon_present": availability["horizon"]["status"] == "available",
         "config_digest_present": availability["config_digest"]["status"] == "available",
@@ -181,9 +189,9 @@ def _provenance_gate(
         "config_digest_equal": _required_equal(*required_meta["config_digest"]),
     }
     if comparison_grain == "matched_planner_pair":
-        grain_specific = checks["planner_id_equal"]
+        grain_specific = checks["planner_id_different"] and checks["seed_equal"]
     elif comparison_grain == "matched_realization_pair":
-        grain_specific = checks["seed_equal"]
+        grain_specific = checks["planner_id_equal"] and checks["seed_different"]
     else:
         grain_specific = False
     return {

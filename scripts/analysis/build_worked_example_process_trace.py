@@ -29,7 +29,6 @@ def main() -> int:
     parser.add_argument(
         "--pair-comparison-grain",
         choices=("matched_planner_pair", "matched_realization_pair"),
-        default="matched_realization_pair",
         help="Declared comparison grain for --pair-input compatibility gates.",
     )
     parser.add_argument(
@@ -54,6 +53,8 @@ def main() -> int:
     parser.add_argument("--conflict-center", nargs=2, type=float, metavar=("X", "Y"))
     parser.add_argument("--conflict-radius-m", type=float)
     args = parser.parse_args()
+    if args.pair_input is not None and args.pair_comparison_grain is None:
+        parser.error("--pair-comparison-grain is required when --pair-input is provided")
 
     route = None
     if (

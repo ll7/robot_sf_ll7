@@ -52,7 +52,7 @@ NEAR_MISS_ENCOUNTER_SCHEMA_FILE = (
 EVENT_PROFILE_VERSION = "worked_example_event_detectors.v1"
 THRESHOLD_PROFILE_VERSION = "worked_example_threshold_profile.diagnostic.v1"
 CANONICAL_ENCOUNTER_SCHEMA_VERSION = "near_miss_encounter.v1"
-DEFAULT_PAIR_COMPARISON_GRAIN = "matched_realization_pair"
+SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +214,15 @@ def _validate_event_anchor_hierarchy(  # noqa: C901
     frames: object,
 ) -> list[str]:
     errors: list[str] = []
+    expected_fallback_order = [
+        "exact_collision_event",
+        "minimum_clearance",
+        "first_safety_predicate_breach",
+        "sustained_stall_onset",
+        "trace_end_boundary",
+    ]
+    if hierarchy.get("fallback_order") != expected_fallback_order:
+        errors.append("/event_anchor_hierarchy/fallback_order: unexpected fallback order")
     if hierarchy.get("status") == "available":
         selected = hierarchy.get("selected_anchor")
         if not isinstance(selected, Mapping):
@@ -258,7 +267,10 @@ def _validate_pair_semantics(pair: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     grain = pair.get("comparison_grain")
     grain_id = grain.get("grain_id") if isinstance(grain, Mapping) else None
-    if grain_id not in {"matched_planner_pair", "matched_realization_pair"}:
+    if pair.get("status") != "unavailable" and grain_id not in {
+        "matched_planner_pair",
+        "matched_realization_pair",
+    }:
         errors.append("/pair_compatibility/comparison_grain/grain_id: invalid or undeclared grain")
     provenance = pair.get("provenance_gate")
     initial = pair.get("initial_state_equivalence")
@@ -267,7 +279,9 @@ def _validate_pair_semantics(pair: Mapping[str, Any]) -> list[str]:
             errors.append(
                 "/pair_compatibility/provenance_gate/compatible: required for available pair"
             )
-        if not (isinstance(initial, Mapping) and initial.get("equivalent") is True):
+        if grain_id == "matched_planner_pair" and not (
+            isinstance(initial, Mapping) and initial.get("equivalent") is True
+        ):
             errors.append("/pair_compatibility/initial_state_equivalence/equivalent: required")
     if isinstance(provenance, Mapping):
         checks = provenance.get("checks")
@@ -357,7 +371,7 @@ def build_worked_example_process_trace(
     focal_actor_id: str | None = None,
     pair_input_path: Path | None = None,
     encounter_report_path: Path | None = None,
-    pair_comparison_grain: str = DEFAULT_PAIR_COMPARISON_GRAIN,
+    pair_comparison_grain: str | None = None,
 ) -> dict[str, Any]:
     """Build a renderer-neutral process trace from one admitted trace export.
 
@@ -396,7 +410,7 @@ def build_worked_example_process_trace_from_export(
     pair_trace: SimulationTraceExport | None = None,
     encounter_report: Mapping[str, Any] | None = None,
     encounter_report_input_checksum: str | None = None,
-    pair_comparison_grain: str = DEFAULT_PAIR_COMPARISON_GRAIN,
+    pair_comparison_grain: str | None = None,
 ) -> dict[str, Any]:
     """Build a schema-valid process trace from a typed trace export.
 
@@ -414,6 +428,7 @@ def build_worked_example_process_trace_from_export(
     conflict_availability = _conflict_availability(conflict_zone)
     relative_availability = _relative_availability(focal)
     world_availability = _world_availability(trace)
+    pair_focal = _resolve_focal_actor(pair_trace) if pair_trace is not None else None
     frames = [
         _process_frame(
             frame,
@@ -428,11 +443,12 @@ def build_worked_example_process_trace_from_export(
     ]
     focal = dict(focal)
     focal["actor_contiguity"] = _actor_contiguity(
-        frames,
+        _diagnostic_frames(frames),
         focal.get("actor_id"),
         declared=focal.get("declared_encounter"),
     )
-    events = _event_anchors(trace, frames=frames, focal_actor_id=focal.get("actor_id"))
+    event_frames = _diagnostic_frames(frames)
+    events = _event_anchors(trace, frames=event_frames, focal_actor_id=focal.get("actor_id"))
     event_anchor_hierarchy = _event_anchor_hierarchy(events)
     frames = _frames_with_event_alignment(frames, event_anchor_hierarchy)
     pair = (
@@ -440,22 +456,22 @@ def build_worked_example_process_trace_from_export(
             trace,
             pair_trace,
             left_events=events,
-            comparison_grain=pair_comparison_grain,
+            comparison_grain=pair_comparison_grain or "undeclared",
             right_events=_event_anchors(
                 pair_trace,
                 frames=[
                     _process_frame(
                         frame,
                         frame_index=index,
-                        focal_actor_id=_resolve_focal_actor(pair_trace).get("actor_id"),
-                        focal_encounter=_resolve_focal_actor(pair_trace),
+                        focal_actor_id=pair_focal.get("actor_id") if pair_focal else None,
+                        focal_encounter=pair_focal or {},
                         route=route,
                         conflict_zone=conflict_zone,
                         source_coordinate_frame=pair_trace.coordinate_frame,
                     )
                     for index, frame in enumerate(pair_trace.frames)
                 ],
-                focal_actor_id=_resolve_focal_actor(pair_trace).get("actor_id"),
+                focal_actor_id=pair_focal.get("actor_id") if pair_focal else None,
             ),
         )
         if pair_trace is not None
@@ -487,7 +503,7 @@ def build_worked_example_process_trace_from_export(
         },
         "frames": frames,
         "diagnostics": _diagnostics(
-            frames,
+            event_frames,
             route_available=route_availability["status"] == "available",
         ),
         "event_anchors": events,
@@ -572,10 +588,20 @@ def _route_availability(route: RouteSpec | None) -> dict[str, Any]:
         return {"status": "unavailable", "reason": "registered_route_provenance_unavailable"}
     if not route.registry_checksum:
         return {"status": "unavailable", "reason": "registered_route_checksum_unavailable"}
+    if SHA256_HEX_RE.fullmatch(str(route.registry_checksum)) is None:
+        return {"status": "unavailable", "reason": "registered_route_checksum_invalid"}
     if _vector2(route.start) is None or _vector2(route.end) is None:
         return {"status": "unavailable", "reason": "registered_route_invalid_geometry"}
     if _distance(route.start, route.end) <= 1e-12:
         return {"status": "unavailable", "reason": "registered_route_degenerate"}
+    geometry = {"type": "line_segment", "start": list(route.start), "end": list(route.end)}
+    geometry_checksum = _geometry_checksum(geometry)
+    if route.registry_checksum != geometry_checksum:
+        return {
+            "status": "unavailable",
+            "reason": "registered_route_checksum_geometry_mismatch",
+            "geometry_checksum": geometry_checksum,
+        }
     return {
         "status": "available",
         "reason": "registered_straight_route",
@@ -583,11 +609,7 @@ def _route_availability(route: RouteSpec | None) -> dict[str, Any]:
         "provenance_id": route.provenance_id,
         "registry_checksum": route.registry_checksum,
         "coordinate_frame": "world",
-        "geometry": {
-            "type": "line_segment",
-            "start": list(route.start),
-            "end": list(route.end),
-        },
+        "geometry": geometry,
     }
 
 
@@ -604,10 +626,27 @@ def _conflict_availability(conflict_zone: ConflictZoneSpec | None) -> dict[str, 
             "status": "unavailable",
             "reason": "registered_conflict_zone_checksum_unavailable",
         }
+    if SHA256_HEX_RE.fullmatch(str(conflict_zone.registry_checksum)) is None:
+        return {
+            "status": "unavailable",
+            "reason": "registered_conflict_zone_checksum_invalid",
+        }
     if _vector2(conflict_zone.center) is None:
         return {"status": "unavailable", "reason": "registered_conflict_zone_invalid"}
     if not math.isfinite(conflict_zone.radius_m) or conflict_zone.radius_m < 0:
         return {"status": "unavailable", "reason": "registered_conflict_zone_invalid"}
+    geometry = {
+        "type": "circle",
+        "center": list(conflict_zone.center),
+        "radius_m": conflict_zone.radius_m,
+    }
+    geometry_checksum = _geometry_checksum(geometry)
+    if conflict_zone.registry_checksum != geometry_checksum:
+        return {
+            "status": "unavailable",
+            "reason": "registered_conflict_zone_checksum_geometry_mismatch",
+            "geometry_checksum": geometry_checksum,
+        }
     return {
         "status": "available",
         "reason": "registered_circular_conflict_zone",
@@ -615,12 +654,12 @@ def _conflict_availability(conflict_zone: ConflictZoneSpec | None) -> dict[str, 
         "provenance_id": conflict_zone.provenance_id,
         "registry_checksum": conflict_zone.registry_checksum,
         "coordinate_frame": "world",
-        "geometry": {
-            "type": "circle",
-            "center": list(conflict_zone.center),
-            "radius_m": conflict_zone.radius_m,
-        },
+        "geometry": geometry,
     }
+
+
+def _geometry_checksum(geometry: Mapping[str, Any]) -> str:
+    return _json_sha256_digest(geometry)
 
 
 def _world_availability(trace: SimulationTraceExport) -> dict[str, Any]:
@@ -848,7 +887,27 @@ def _encounter_report_checksum_status(
             "status": "unavailable",
             "reason": "canonical_encounter_input_checksums_unavailable",
         }
-    checksum_values = {str(value) for value in input_checksums.values()}
+    checksums: dict[str, str] = {}
+    for name, checksum in sorted(input_checksums.items()):
+        name_text = str(name).strip()
+        checksum_text = str(checksum).strip()
+        if not name_text or SHA256_HEX_RE.fullmatch(checksum_text) is None:
+            return {
+                "status": "unavailable",
+                "reason": "canonical_encounter_input_checksum_invalid",
+            }
+        checksums[name_text] = checksum_text
+    declared_digest = (
+        provenance.get("input_checksum_digest") if isinstance(provenance, Mapping) else None
+    )
+    expected_digest = _json_sha256_digest(checksums)
+    if declared_digest != expected_digest:
+        return {
+            "status": "unavailable",
+            "reason": "canonical_encounter_input_checksum_digest_mismatch",
+            "expected_input_checksum_digest": expected_digest,
+        }
+    checksum_values = set(checksums.values())
     if expected_input_checksum not in checksum_values:
         return {
             "status": "unavailable",
@@ -859,7 +918,13 @@ def _encounter_report_checksum_status(
         "status": "available",
         "reason": "canonical_encounter_input_checksum_matched",
         "input_checksum": expected_input_checksum,
+        "input_checksum_digest": expected_digest,
     }
+
+
+def _json_sha256_digest(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _process_frame(
@@ -875,11 +940,8 @@ def _process_frame(
     robot_pos = _vector2(frame.robot.get("position"))
     robot_vel = _vector2(frame.robot.get("velocity"))
     nearest = _nearest_actor(frame, robot_pos=robot_pos)
-    focal = (
-        _pedestrian_by_id(frame, focal_actor_id)
-        if _frame_in_focal_encounter(frame, focal_encounter)
-        else None
-    )
+    in_focal_interval = _frame_in_focal_encounter(frame, focal_encounter)
+    focal = _pedestrian_by_id(frame, focal_actor_id) if in_focal_interval else None
     focal_state = _relative_state(frame, focal=focal, robot_pos=robot_pos, robot_vel=robot_vel)
     return {
         "frame_index": frame_index,
@@ -889,6 +951,12 @@ def _process_frame(
             "coordinate_frame": source_coordinate_frame,
             "robot": _world_actor(frame.robot),
             "focal_actor": _world_actor(focal) if focal is not None else None,
+        },
+        "encounter_interval": {
+            "status": "in_interval" if in_focal_interval else "outside_interval",
+            "reason": "canonical_encounter_interval"
+            if _has_canonical_encounter_interval(focal_encounter)
+            else "trace_wide_interval",
         },
         "world": {
             "status": "available"
@@ -917,6 +985,23 @@ def _frame_in_focal_encounter(
     if not isinstance(record, Mapping):
         return True
     return float(record["start_time_s"]) <= float(frame.time_s) <= float(record["end_time_s"])
+
+
+def _has_canonical_encounter_interval(focal_encounter: Mapping[str, Any]) -> bool:
+    declared = focal_encounter.get("declared_encounter")
+    record = focal_encounter.get("canonical_record")
+    if record is None and isinstance(declared, Mapping):
+        record = declared.get("canonical_record")
+    return isinstance(record, Mapping)
+
+
+def _diagnostic_frames(frames: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    interval_frames = [
+        frame
+        for frame in frames
+        if frame.get("encounter_interval", {}).get("status") != "outside_interval"
+    ]
+    return interval_frames or list(frames)
 
 
 def _world_actor(actor: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -1108,13 +1193,33 @@ def _command_state(frame: SimulationTraceFrame) -> dict[str, Any]:
     selected = frame.planner.get("selected_action")
     if not isinstance(selected, Mapping):
         return {"status": "unavailable", "reason": "selected_action_unavailable"}
+    commanded = _finite_mapping(selected)
+    if commanded is None:
+        return {"status": "unavailable", "reason": "selected_action_nonfinite"}
     executed = frame.planner.get("executed_action")
+    executed_payload = _finite_mapping(executed) if isinstance(executed, Mapping) else None
     return {
         "status": "available",
-        "commanded": dict(selected),
-        "executed": dict(executed) if isinstance(executed, Mapping) else None,
-        "executed_status": "available" if isinstance(executed, Mapping) else "unavailable",
+        "commanded": commanded,
+        "executed": executed_payload,
+        "executed_status": "available" if executed_payload is not None else "unavailable",
     }
+
+
+def _finite_mapping(value: Mapping[str, Any]) -> dict[str, Any] | None:
+    result: dict[str, Any] = {}
+    for key, item in value.items():
+        if isinstance(item, bool):
+            result[str(key)] = item
+        elif isinstance(item, int | float):
+            if not math.isfinite(float(item)):
+                return None
+            result[str(key)] = float(item)
+        elif isinstance(item, str) or item is None:
+            result[str(key)] = item
+        else:
+            return None
+    return result
 
 
 def _diagnostics(frames: Sequence[Mapping[str, Any]], *, route_available: bool) -> dict[str, Any]:
@@ -1202,6 +1307,7 @@ def _coverage_summary(frames: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "frame_count": total,
         "relative_interaction": {
             "status": "complete" if interval_missing == 0 else "partial",
+            "frame_count": total,
             "available_frame_count": len(relative_available),
             "missing_frame_count": interval_missing,
             "reason": "coverage_complete"
@@ -1210,6 +1316,7 @@ def _coverage_summary(frames: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         },
         "proxy_surface_clearance": {
             "status": "complete" if complete else "partial",
+            "frame_count": total,
             "available_frame_count": len(clearance_available),
             "missing_frame_count": total - len(clearance_available),
             "missing_radius_frame_count": radius_missing,
@@ -1312,6 +1419,14 @@ def _event_anchors(
         ),
         _collision_event_anchor(trace, frames=frames, focal_actor_id=focal_actor_id),
         _event_from_condition(
+            "first_safety_predicate_breach",
+            _first_safety_predicate_breach_frame(frames),
+            actor_id=focal_actor_id,
+            source_fields=["relative_interaction.proxy_surface_clearance_m"],
+            absent_status="not_observed" if _has_proxy_clearance_signal(frames) else "unavailable",
+            zone_id=None,
+        ),
+        _event_from_condition(
             "proxy_overlap_event",
             _first_proxy_overlap_frame(frames),
             actor_id=focal_actor_id,
@@ -1412,13 +1527,9 @@ def _event_relative_time(time_s: float, anchor_time_s: float) -> dict[str, Any]:
 def _event_anchor_hierarchy(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     fallback_order = [
         "exact_collision_event",
-        "proxy_overlap_event",
         "minimum_clearance",
-        "conflict_zone_entry",
-        "first_material_deceleration",
-        "first_material_turn_response",
+        "first_safety_predicate_breach",
         "sustained_stall_onset",
-        "recovery_onset",
         "trace_end_boundary",
     ]
     available = {
@@ -1431,7 +1542,7 @@ def _event_anchor_hierarchy(events: Sequence[Mapping[str, Any]]) -> dict[str, An
             "event_id": str(available[event_type]["event_id"]),
             "time_s": float(available[event_type]["time_s"]),
             "selection_role": "first_safety_predicate_breach"
-            if event_type == "proxy_overlap_event"
+            if event_type == "first_safety_predicate_breach"
             else "fallback_anchor",
         }
         for rank, event_type in enumerate(fallback_order)
@@ -1591,10 +1702,13 @@ def _collision_event_anchor(
             absent_status="unavailable",
             zone_id=None,
         )
-        event["time_s"] = float(state["collision_time_s"])
+        event["time_s"] = float(state["collision_time"])
+        event["actor_id"] = state.get("actor_id")
+        event["partner_actor_id"] = state.get("partner_actor_id")
+        event["partner_actor_type"] = state.get("partner_actor_type")
         event["event_relative_time"] = _event_relative_time(
-            float(state["collision_time_s"]),
-            float(state["collision_time_s"]),
+            float(state["collision_time"]),
+            float(state["collision_time"]),
         )
         return event
     event = _event_from_condition(
@@ -1619,7 +1733,7 @@ def _collision_anchor_state(
     for trace_frame in trace.frames:
         signal = _canonical_collision_signal(trace_frame.planner)
         boolean_observed = boolean_observed or signal["observed"]
-        collision_time = signal.get("collision_time_s")
+        collision_time = signal.get("collision_time")
         if isinstance(collision_time, int | float) and math.isfinite(float(collision_time)):
             frame = _frame_at_or_after_time(frames, float(collision_time))
             if frame is not None:
@@ -1627,17 +1741,20 @@ def _collision_anchor_state(
                     "status": "available",
                     "observed": True,
                     "frame": frame,
-                    "collision_time_s": float(collision_time),
+                    "collision_time": float(collision_time),
+                    "actor_id": signal.get("actor_id"),
+                    "partner_actor_id": signal.get("partner_actor_id"),
+                    "partner_actor_type": signal.get("partner_actor_type"),
                 }
     return {"status": "unavailable", "observed": boolean_observed}
 
 
 def _frame_at_or_after_time(
     frames: Sequence[Mapping[str, Any]],
-    collision_time_s: float,
+    collision_time: float,
 ) -> Mapping[str, Any] | None:
     return next(
-        (frame for frame in frames if float(frame["time_s"]) >= collision_time_s),
+        (frame for frame in frames if float(frame["time_s"]) >= collision_time),
         frames[-1] if frames else None,
     )
 
@@ -1648,12 +1765,17 @@ def _first_collision_frame(
 ) -> Mapping[str, Any] | None:
     for trace_frame, process_frame in zip(trace.frames, frames, strict=False):
         signal = _canonical_collision_signal(trace_frame.planner)
-        if signal.get("collision_time_s") is not None:
+        if signal.get("collision_time") is not None:
             return process_frame
     return None
 
 
 def _canonical_collision_signal(planner: Mapping[str, Any]) -> dict[str, Any]:
+    ledger_signal = _ledger_collision_signal(planner.get("event_ledger"))
+    if ledger_signal.get("collision_time") is not None or ledger_signal.get("source") == (
+        "invalid_collision_event_record_shape"
+    ):
+        return ledger_signal
     outcome = planner.get("outcome")
     if isinstance(outcome, Mapping):
         collision = outcome.get("collision_event")
@@ -1663,23 +1785,54 @@ def _canonical_collision_signal(planner: Mapping[str, Any]) -> dict[str, Any]:
             pass
         else:
             return {"observed": False, "source": "invalid_outcome_collision_shape"}
-    ledger = planner.get("event_ledger")
-    if isinstance(ledger, Mapping) and ledger.get("schema_version") == "EpisodeEventLedger.v2":
-        records = ledger.get("collision_events")
-        if isinstance(records, Sequence) and not isinstance(records, str | bytes):
-            for record in records:
-                if not isinstance(record, Mapping):
-                    continue
-                collision_time = record.get("collision_time_s", record.get("time_s"))
-                if isinstance(collision_time, int | float) and math.isfinite(float(collision_time)):
-                    return {
-                        "observed": True,
-                        "source": "event_ledger.collision_events",
-                        "collision_time_s": float(collision_time),
-                    }
-            if records:
-                return {"observed": True, "source": "event_ledger.collision_events"}
+    if ledger_signal["observed"]:
+        return ledger_signal
     return {"observed": False, "source": "no_canonical_collision_signal"}
+
+
+def _ledger_collision_signal(ledger: object) -> dict[str, Any]:
+    if not (
+        isinstance(ledger, Mapping) and ledger.get("schema_version") == "EpisodeEventLedger.v2"
+    ):
+        return {"observed": False, "source": "event_ledger_unavailable"}
+    records = ledger.get("collision_events")
+    if not (isinstance(records, Sequence) and not isinstance(records, str | bytes)):
+        return {"observed": False, "source": "event_ledger_collision_events_unavailable"}
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        if "collision_time_s" in record or "time_s" in record:
+            return {"observed": False, "source": "invalid_collision_event_record_shape"}
+        collision_time = record.get("collision_time")
+        if isinstance(collision_time, int | float) and math.isfinite(float(collision_time)):
+            return {
+                "observed": True,
+                "source": "event_ledger.collision_events",
+                "collision_time": float(collision_time),
+                "actor_id": _collision_record_actor_id(record),
+                "partner_actor_id": _collision_record_partner_id(record),
+                "partner_actor_type": _collision_record_partner_type(record),
+            }
+    return {"observed": bool(records), "source": "event_ledger.collision_events"}
+
+
+def _collision_record_actor_id(record: Mapping[str, Any]) -> str | None:
+    actor_id = record.get("actor_id") or record.get("focal_actor_id") or record.get("robot_id")
+    return str(actor_id) if actor_id is not None else None
+
+
+def _collision_record_partner_id(record: Mapping[str, Any]) -> str | None:
+    partner_id = (
+        record.get("partner_actor_id")
+        or record.get("other_actor_id")
+        or record.get("pedestrian_id")
+    )
+    return str(partner_id) if partner_id is not None else None
+
+
+def _collision_record_partner_type(record: Mapping[str, Any]) -> str | None:
+    partner_type = record.get("partner_actor_type") or record.get("other_actor_type")
+    return str(partner_type) if partner_type is not None else None
 
 
 def _first_proxy_overlap_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
@@ -1691,6 +1844,23 @@ def _first_proxy_overlap_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[s
                 frame["relative_interaction"].get("proxy_surface_clearance_m"), int | float
             )
             and frame["relative_interaction"]["proxy_surface_clearance_m"] <= 0
+        ),
+        None,
+    )
+
+
+def _first_safety_predicate_breach_frame(
+    frames: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any] | None:
+    threshold = _profiles()["threshold_profile"]["proxy_surface_clearance_threshold_m"]
+    return next(
+        (
+            frame
+            for frame in frames
+            if isinstance(
+                frame["relative_interaction"].get("proxy_surface_clearance_m"), int | float
+            )
+            and frame["relative_interaction"]["proxy_surface_clearance_m"] < threshold
         ),
         None,
     )

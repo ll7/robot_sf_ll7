@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -49,8 +50,20 @@ def test_process_trace_coordinate_frames_explicit_available_and_unavailable() ->
 
     available = build_worked_example_process_trace_from_export(
         trace,
-        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0), "route-fixture.v1", "0" * 64),
-        conflict_zone=ConflictZoneSpec("door", (1.0, 0.0), 0.25, "zone-fixture.v1", "1" * 64),
+        route=RouteSpec(
+            "r-main",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-fixture.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
+        conflict_zone=ConflictZoneSpec(
+            "door",
+            (1.0, 0.0),
+            0.25,
+            "zone-fixture.v1",
+            _zone_checksum((1.0, 0.0), 0.25),
+        ),
     )
 
     validate_worked_example_process_trace(available)
@@ -123,6 +136,7 @@ def test_process_trace_event_anchors_are_versioned_and_profiled() -> None:
     assert events["first_material_deceleration"]["step"] == 1
     assert events["first_material_turn_response"]["step"] == 2
     assert events["conflict_zone_entry"]["status"] == "unavailable"
+    assert events["first_safety_predicate_breach"]["status"] == "available"
     assert "terminal_event" not in events
     assert events["trace_end_boundary"]["status"] == "available"
     assert events["trace_end_boundary"]["event_relative_time"]["status"] == "available"
@@ -132,8 +146,8 @@ def test_process_trace_event_anchors_are_versioned_and_profiled() -> None:
     }
     assert payload["event_anchor_hierarchy"]["selected_anchor"]["event_type"] in {
         "exact_collision_event",
-        "proxy_overlap_event",
         "minimum_clearance",
+        "first_safety_predicate_breach",
     }
     assert payload["frames"][0]["event_alignment"]["status"] == "available"
     assert payload["frames"][0]["event_alignment"]["tau_s"] == pytest.approx(
@@ -156,7 +170,7 @@ def test_pair_compatibility_rejects_divergence_without_shared_prefix() -> None:
     payload = build_worked_example_process_trace_from_export(
         left,
         pair_trace=right,
-        pair_comparison_grain="matched_planner_pair",
+        pair_comparison_grain="matched_realization_pair",
     )
     pair = payload["pair_compatibility"]
 
@@ -198,7 +212,7 @@ def test_pair_compatibility_matched_start_common_anchors_without_duration_normal
     payload = build_worked_example_process_trace_from_export(
         left,
         pair_trace=right,
-        pair_comparison_grain="matched_planner_pair",
+        pair_comparison_grain="matched_realization_pair",
     )
     pair = payload["pair_compatibility"]
 
@@ -216,18 +230,19 @@ def test_pair_grain_fail_closed_requires_declared_relationship_and_metadata() ->
     left = simulation_trace_export_from_dict(_trace_payload(planner_id="planner-a", seed=7))
     right = simulation_trace_export_from_dict(_trace_payload(planner_id="planner-b", seed=7))
 
-    realization = build_worked_example_process_trace_from_export(
+    planner_pair = build_worked_example_process_trace_from_export(
         left,
         pair_trace=right,
-        pair_comparison_grain="matched_realization_pair",
+        pair_comparison_grain="matched_planner_pair",
     )["pair_compatibility"]
-    assert realization["status"] == "available"
-    assert realization["provenance_gate"]["checks"]["seed_equal"] is True
+    assert planner_pair["status"] == "available"
+    assert planner_pair["provenance_gate"]["checks"]["seed_equal"] is True
+    assert planner_pair["provenance_gate"]["checks"]["planner_id_different"] is True
 
     wrong_grain = build_worked_example_process_trace_from_export(
         left,
         pair_trace=right,
-        pair_comparison_grain="matched_planner_pair",
+        pair_comparison_grain="matched_realization_pair",
     )["pair_compatibility"]
     assert wrong_grain["status"] == "incompatible"
     assert wrong_grain["provenance_gate"]["checks"]["planner_id_equal"] is False
@@ -237,7 +252,7 @@ def test_pair_grain_fail_closed_requires_declared_relationship_and_metadata() ->
     pair = build_worked_example_process_trace_from_export(
         missing_meta,
         pair_trace=missing_meta,
-        pair_comparison_grain="matched_realization_pair",
+        pair_comparison_grain="matched_planner_pair",
     )["pair_compatibility"]
     assert pair["status"] == "incompatible"
     assert pair["provenance_gate"]["checks"]["map_id_present"] is False
@@ -258,7 +273,7 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         "--route-provenance-id",
         "fixture-route.v1",
         "--route-registry-checksum",
-        "0" * 64,
+        _route_checksum((0.0, 0.0), (2.0, 0.0)),
         "--route-start",
         "0",
         "0",
@@ -270,7 +285,7 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         "--conflict-provenance-id",
         "fixture-zone.v1",
         "--conflict-registry-checksum",
-        "1" * 64,
+        _zone_checksum((1.0, 0.0), 0.25),
         "--conflict-center",
         "1",
         "0",
@@ -291,6 +306,30 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
 
     assert first.read_bytes() == second.read_bytes()
     validate_worked_example_process_trace(json.loads(first.read_text(encoding="utf-8")))
+
+
+def test_process_trace_cli_requires_pair_grain_for_pair_input(tmp_path: Path) -> None:
+    """Pair inputs must declare their comparison grain explicitly."""
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(CLI_PATH),
+            "--input",
+            str(TRACE_FIXTURE_PATH),
+            "--pair-input",
+            str(TRACE_FIXTURE_PATH),
+            "--out",
+            str(tmp_path / "out.json"),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "--pair-comparison-grain is required" in result.stderr
 
 
 def test_process_trace_rejects_mismatched_requested_actor() -> None:
@@ -358,14 +397,15 @@ def test_pair_compatibility_allows_sensitivity_anchors_without_divergence() -> N
     payload = build_worked_example_process_trace_from_export(
         left,
         pair_trace=right,
-        pair_comparison_grain="matched_planner_pair",
+        pair_comparison_grain="matched_realization_pair",
     )
     pair = payload["pair_compatibility"]
 
-    assert pair["status"] == "incompatible"
+    assert pair["status"] == "available"
     assert pair["initial_state_equivalence"]["equivalent"] is False
-    assert pair["divergence_interpretation"]["reason"] == (
-        "grain_provenance_or_initial_state_incompatible"
+    assert pair["shared_prefix"]["shared_prefix"] is False
+    assert (
+        pair["divergence_interpretation"]["reason"] == "no_shared_prefix_reject_divergence_output"
     )
 
 
@@ -407,8 +447,9 @@ def test_process_trace_binds_canonical_near_miss_encounter_interval() -> None:
         "available",
         "unavailable",
     ]
-    assert payload["diagnostics"]["coverage"]["relative_interaction"]["status"] == "partial"
-    assert payload["diagnostics"]["threshold_exposure"]["duration_s"] is None
+    assert payload["diagnostics"]["coverage"]["relative_interaction"]["status"] == "complete"
+    assert payload["diagnostics"]["coverage"]["relative_interaction"]["frame_count"] == 2
+    assert payload["diagnostics"]["threshold_exposure"]["duration_s"] == pytest.approx(0.0)
 
 
 def test_unrelated_canonical_encounter_checksum_abstains() -> None:
@@ -425,6 +466,23 @@ def test_unrelated_canonical_encounter_checksum_abstains() -> None:
     focal = payload["encounters"]["focal"]
     assert focal["status"] == "unavailable"
     assert focal["reason"] == "canonical_encounter_input_checksum_mismatch"
+
+
+def test_stale_canonical_encounter_checksum_digest_abstains() -> None:
+    """Canonical encounter reports must not accept stale checksum digests."""
+
+    report = _encounter_report()
+    report["provenance"]["input_checksum_digest"] = "1" * 64
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        encounter_report=report,
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    focal = payload["encounters"]["focal"]
+    assert focal["status"] == "unavailable"
+    assert focal["reason"] == "canonical_encounter_input_checksum_digest_mismatch"
 
 
 def test_canonical_collision_shapes_and_timing_are_respected() -> None:
@@ -450,6 +508,8 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     ]
     assert typed_event["status"] == "available"
     assert typed_event["time_s"] == pytest.approx(0.15)
+    assert typed_event["partner_actor_id"] == "ped-a"
+    assert typed_event["partner_actor_type"] == "pedestrian"
 
     invented_payload = _trace_payload(collision_mode="invented_events")
     invented = build_worked_example_process_trace_from_export(
@@ -460,6 +520,15 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     ]
     assert invented_event["status"] == "unavailable"
     assert invented_event["reason"] == "required_signal_unavailable"
+
+    legacy_payload = _trace_payload(collision_mode="legacy_collision_time_s")
+    legacy = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(legacy_payload)
+    )
+    legacy_event = {event["event_type"]: event for event in legacy["event_anchors"]}[
+        "exact_collision_event"
+    ]
+    assert legacy_event["status"] == "unavailable"
 
 
 def test_partial_radius_and_nonfinite_heading_fail_closed() -> None:
@@ -484,6 +553,65 @@ def test_partial_radius_and_nonfinite_heading_fail_closed() -> None:
     }
 
 
+def test_threshold_breach_uses_declared_diagnostic_threshold() -> None:
+    """Safety-predicate breach should trigger below 0.4 m, before proxy overlap."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    events = {event["event_type"]: event for event in payload["event_anchors"]}
+
+    assert events["first_safety_predicate_breach"]["status"] == "available"
+    assert events["proxy_overlap_event"]["status"] == "not_observed"
+    assert payload["event_anchor_hierarchy"]["fallback_order"] == [
+        "exact_collision_event",
+        "minimum_clearance",
+        "first_safety_predicate_breach",
+        "sustained_stall_onset",
+        "trace_end_boundary",
+    ]
+
+
+def test_nonfinite_command_and_missing_stall_speed_fail_closed() -> None:
+    """NaN commands and missing speed should propagate as unavailable, not numeric evidence."""
+
+    bad_command = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(nan_command_step=1))
+    )
+    assert bad_command["frames"][1]["commands"] == {
+        "status": "unavailable",
+        "reason": "selected_action_nonfinite",
+    }
+
+    missing_speed = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(stall_pattern=[0.0, 0.0, 0.0, 1.0], missing_velocity_step=1)
+        )
+    )
+    stall = missing_speed["diagnostics"]["stall"]
+    assert stall["status"] == "unavailable"
+    assert stall["sustained_stall_duration_s"] is None
+    assert stall["sustained_stall_onset_step"] is None
+
+
+def test_registry_checksum_must_bind_geometry() -> None:
+    """Registry checksums must be SHA-256 hex and match the declared geometry."""
+
+    invalid = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0), "route-fixture.v1", "bad"),
+    )
+    assert invalid["coordinate_frames"]["route"]["reason"] == "registered_route_checksum_invalid"
+
+    mismatched = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0), "route-fixture.v1", "0" * 64),
+    )
+    assert mismatched["coordinate_frames"]["route"]["reason"] == (
+        "registered_route_checksum_geometry_mismatch"
+    )
+
+
 def test_stall_duration_requires_qualifying_contiguous_run() -> None:
     """Separated one-frame stalls should not accumulate into sustained stall duration."""
 
@@ -492,7 +620,13 @@ def test_stall_duration_requires_qualifying_contiguous_run() -> None:
 
     result = build_worked_example_process_trace_from_export(
         trace,
-        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0), "route-fixture.v1", "0" * 64),
+        route=RouteSpec(
+            "r-main",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-fixture.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
     )
 
     stall = result["diagnostics"]["stall"]
@@ -515,7 +649,7 @@ def test_semantic_validator_rejects_available_event_without_coordinates() -> Non
         validate_worked_example_process_trace(payload)
 
 
-def _trace_payload(  # noqa: PLR0913
+def _trace_payload(  # noqa: C901, PLR0913
     *,
     trace_id: str = "process-trace-fixture",
     seed: int = 113,
@@ -532,6 +666,8 @@ def _trace_payload(  # noqa: PLR0913
     missing_actor_radius_step: int | None = None,
     nonfinite_heading_step: int | None = None,
     stall_pattern: list[float] | None = None,
+    nan_command_step: int | None = None,
+    missing_velocity_step: int | None = None,
 ) -> dict[str, object]:
     robot_vel = [0.0, 0.0] if static_relative_velocity else [1.0, 0.0]
     ped_vel = [0.0, 0.0]
@@ -576,6 +712,8 @@ def _trace_payload(  # noqa: PLR0913
             "encounter": encounter,
             "event": "step",
         }
+        if nan_command_step == step:
+            planner["selected_action"] = {"linear_velocity": float("nan"), "angular_velocity": 0.0}
         if include_run_config:
             planner["run_config"] = {
                 "map_id": "fixture-map",
@@ -587,21 +725,36 @@ def _trace_payload(  # noqa: PLR0913
         if collision_mode == "ledger_typed" and step == 1:
             planner["event_ledger"] = {
                 "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [
+                    {
+                        "collision_time": 0.15,
+                        "actor_id": "robot",
+                        "partner_actor_id": "ped-a",
+                        "partner_actor_type": "pedestrian",
+                    }
+                ],
+            }
+        if collision_mode == "legacy_collision_time_s" and step == 1:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
                 "collision_events": [{"collision_time_s": 0.15}],
             }
         if collision_mode == "invented_events" and step == 1:
             planner["event_ledger"] = {"events": [{"event_type": "collision", "time_s": 0.15}]}
         velocity = [float(stall_pattern[step]), 0.0] if stall_pattern is not None else robot_vel
+        robot = {
+            "position": position,
+            "heading": float("nan") if nonfinite_heading_step == step else 0.0,
+            "velocity": velocity,
+            "radius": 0.25,
+        }
+        if missing_velocity_step == step:
+            robot["velocity"] = [float("nan"), 0.0]
         frames.append(
             {
                 "step": step,
                 "time_s": step * 0.1,
-                "robot": {
-                    "position": position,
-                    "heading": float("nan") if nonfinite_heading_step == step else 0.0,
-                    "velocity": velocity,
-                    "radius": 0.25,
-                },
+                "robot": robot,
                 "pedestrians": peds,
                 "planner": planner,
             }
@@ -683,6 +836,23 @@ def _encounter_report(*, start_time_s: float = 0.0, end_time_s: float = 0.3) -> 
             "release_id": "unit-test",
             "bundle_id": "unit-test",
             "input_checksums": {"trace": "0" * 64},
-            "input_checksum_digest": "1" * 64,
+            "input_checksum_digest": _input_checksum_digest({"trace": "0" * 64}),
         },
     }
+
+
+def _route_checksum(start: tuple[float, float], end: tuple[float, float]) -> str:
+    return _json_digest({"type": "line_segment", "start": list(start), "end": list(end)})
+
+
+def _zone_checksum(center: tuple[float, float], radius_m: float) -> str:
+    return _json_digest({"type": "circle", "center": list(center), "radius_m": radius_m})
+
+
+def _input_checksum_digest(checksums: dict[str, str]) -> str:
+    return _json_digest(checksums)
+
+
+def _json_digest(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()

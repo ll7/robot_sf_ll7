@@ -163,7 +163,7 @@ GATE1_CANARY_SURFACES = frozenset(
         "simulator_collision_geometry",
         "obstacle_pedestrian_contact_logic",
         "feasibility_oracle",
-        "metric_metadata",
+        "metric_metadata_and_output_rows",
         "planner_inputs",
     }
 )

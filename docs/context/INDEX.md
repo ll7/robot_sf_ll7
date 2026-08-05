@@ -1,5 +1,14 @@
 # Context Retrieval Index
 
+Issue #6644 oracle-first narrow-doorway geometry-family preflight for the #6600
+collision-envelope campaign: versioned manifest
+(`issue_6644_narrow_doorway_geometry_family.v1`) over a 15-cell
+`gap_width_m` x `constriction_depth_m` matrix around the authored 2.0 m opening, margin derived
+as `gap_width_m - 2 * envelope_radius_m`, planner-free envelope-sensitivity oracle runs before
+any planner path, planner lanes stay `not_run` until a separately approved issue-owned campaign
+packet, diagnostic within-simulator geometry evidence only:
+[issue_6644_narrow_doorway_geometry_family.md](issue_6644_narrow_doorway_geometry_family.md).
+
 Issue #6641 Gate 1 runtime radius-binding canary for the #6600 collision-envelope campaign:
 prove a declared `robot_config.radius` propagates consistently to simulator collision geometry,
 obstacle/pedestrian contact logic, feasibility/oracle, metric metadata and output rows, and
@@ -7,10 +16,12 @@ planner inputs, with a fail-closed machine-readable go/no-go verdict per binding
 (`radius_binding_canary.v1`):
 [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
 
-Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600): dry-run manifest
-pinning the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the 48-cell
-classic_interactions_francis2023 matrix at one immutable campaign commit; preparation only, not
-benchmark evidence, production compute blocked until the Gate 1 binding canary (#6641) passes:
+Issue #6642 collision-envelope radius sweep admission (Gate 2 of #6600): manifest and three
+arm configs pin the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the
+48-cell classic_interactions_francis2023 matrix at one immutable campaign commit, with
+fail-closed cross-arm non-radius consistency checks. Gate 1 runtime binding is admitted;
+the configs are still not benchmark evidence and production compute remains blocked by
+the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
 
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and

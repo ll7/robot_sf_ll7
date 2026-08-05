@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6412_real_reexport_package/mapping_receipt.json",
+  "artifact_sha256": "e786114f3c34ffdb720333b359e1a7e37845f68a0a65cdd0cd17563cead61ec8",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

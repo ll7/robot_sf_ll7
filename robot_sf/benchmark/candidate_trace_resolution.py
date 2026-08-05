@@ -78,6 +78,12 @@ ISSUE_5756_REQUEST_COUNT = 90
 ISSUE_5756_REQUEST_MANIFEST_SHA256 = (
     "320190fd489797efeb194711d75f41d19f23eeef56107408270e62624b0e49e8"
 )
+ISSUE_5756_NOT_ADMITTED_TUPLES = frozenset(
+    {
+        ("classic_doorway_medium", "ppo", 128),
+        ("classic_doorway_medium", "ppo", 130),
+    }
+)
 ISSUE_5756_PINNED_PROVENANCE = {
     "release_tag": "0.0.3",
     "release_bundle_sha256": ("3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"),
@@ -773,7 +779,7 @@ def load_episode_requests(  # noqa: C901
     )
 
 
-def load_episode_mapping(  # noqa: C901, PLR0912
+def load_episode_mapping(  # noqa: C901, PLR0912, PLR0915
     path: Path,
     *,
     expected_count: int | None = ISSUE_5756_REQUEST_COUNT,
@@ -858,6 +864,28 @@ def load_episode_mapping(  # noqa: C901, PLR0912
         if rerun_outcome is None:
             raise CandidateTraceResolutionError(
                 f"episode mapping row {index} has no canonical rerun outcome"
+            )
+        admission_status = _coerce_optional_text(raw_row.get("admission_status"))
+        if admission_status is not None and admission_status not in {"admitted", "not_admitted"}:
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} has invalid admission_status"
+            )
+        exclusion_reason = raw_row.get("exclusion_reason")
+        if exclusion_reason is not None and not isinstance(exclusion_reason, str):
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} has a non-text exclusion_reason"
+            )
+        if admission_status == "not_admitted" and not str(exclusion_reason or "").strip():
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} marks a row not_admitted without a reason"
+            )
+        if (
+            admission_status == "not_admitted"
+            and exclusion_reason == "outcome_mismatch"
+            and expected_release_outcome == rerun_outcome
+        ):
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} marks an outcome mismatch with equal outcomes"
             )
         assert episode_id is not None
         assert release_episode_id is not None
@@ -1013,6 +1041,29 @@ def _build_request_base_row(
     }
 
 
+def _mapping_resolution_fields(mapped: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy explicit admission and transformation metadata into a resolution row.
+
+    Returns:
+        The optional metadata fields present in the mapping row.
+    """
+    fields: dict[str, Any] = {}
+    for key in (
+        "admission_status",
+        "exclusion_reason",
+        "release_outcome",
+        "rerun_outcome",
+        "raw_trace_sha256",
+        "normalized_trace_sha256",
+        "transformation_receipt_sha256",
+        "transformation_schema_version",
+        "source_provenance",
+    ):
+        if key in mapped:
+            fields[key] = mapped[key]
+    return fields
+
+
 def _resolve_single_episode_request(
     request: Mapping[str, Any],
     episode_mapping: EpisodeMappingReceipt,
@@ -1064,7 +1115,33 @@ def _resolve_single_episode_request(
             f"request={request_expected_outcome},mapping={expected_outcome}"
         )
         return base, "provenance-incomplete"
-    if observed_outcome != expected_outcome:
+    not_admitted = mapped.get("admission_status") == "not_admitted"
+    if observed_outcome != expected_outcome or not_admitted:
+        if not_admitted:
+            episode_id = str(mapped["episode_id"])
+            row = {
+                **base,
+                "episode_id": episode_id,
+                "artifact_uri": str(mapped["trace_artifact_uri"]),
+                **_mapping_resolution_fields(mapped),
+            }
+            trace_fields, trace_status = _validate_request_trace_artifact(
+                mapped, scenario_id, planner, seed, episode_id
+            )
+            row.update(trace_fields)
+            row["resolution_status"] = (
+                "provenance-incomplete" if trace_status == "resolved" else trace_status
+            )
+            row["reason_code"] = (
+                str(mapped.get("exclusion_reason") or "not_admitted").strip()
+                if observed_outcome == expected_outcome
+                else f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
+            )
+            if trace_status != "resolved":
+                row["reason_code"] += ";" + str(
+                    trace_fields.get("reason_code", "trace_validation_failed")
+                )
+            return row, row["resolution_status"]
         base["reason_code"] = (
             f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
         )
@@ -1072,7 +1149,12 @@ def _resolve_single_episode_request(
 
     episode_id = str(mapped["episode_id"])
     trace_uri = str(mapped["trace_artifact_uri"])
-    row = {**base, "episode_id": episode_id, "artifact_uri": trace_uri}
+    row = {
+        **base,
+        "episode_id": episode_id,
+        "artifact_uri": trace_uri,
+        **_mapping_resolution_fields(mapped),
+    }
     trace_fields, status = _validate_request_trace_artifact(
         mapped, scenario_id, planner, seed, episode_id
     )
@@ -1263,6 +1345,7 @@ def json_pointer(path: Sequence[str | int]) -> str:
 __all__ = [
     "CANDIDATE_SCHEMA_VERSION",
     "ISSUE_5756_MAPPING_SCHEMA_VERSION",
+    "ISSUE_5756_NOT_ADMITTED_TUPLES",
     "ISSUE_5756_PINNED_PROVENANCE",
     "ISSUE_5756_REQUEST_COUNT",
     "ISSUE_5756_REQUEST_MANIFEST_SHA256",

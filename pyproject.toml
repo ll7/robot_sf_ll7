@@ -78,15 +78,12 @@ rllib = [
 progress = [
     "tqdm>=4.70.0",
 ]
-analysis = [
-    "seaborn>=0.13.2",
-]
 analytics = [
     "duckdb>=1.5.5",
     "pyarrow>=25.0.0",
 ]
 browser = [
-    "playwright>=1.61.0",
+    "playwright>=1.62.0",
 ]
 sacadrl = [
     "tensorflow>=2.15.0",
@@ -109,7 +106,7 @@ criticality = [
     "cma>=3.3.0",
 ]
 all = [
-    "robot_sf[viz,maps,benchmark,training,gpu,recurrent,progress,analysis,analytics,browser,sacadrl,orca,socnav,criticality]",
+    "robot_sf[viz,maps,benchmark,training,gpu,recurrent,progress,analytics,browser,sacadrl,orca,socnav,criticality]",
 ]
 
 [build-system]
@@ -200,7 +197,7 @@ exclude = [
 allow-direct-references = true
 
 [tool.ruff]
-required-version = "==0.16.0"
+required-version = "==0.16.1"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -687,7 +684,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
     "scalene>=2.3.0",
-    "ruff==0.16.0",
+    "ruff==0.16.1",
     "pre-commit>=4.6.1",
     "setuptools>=83.0.0",
     "pylint>=4.0.6",

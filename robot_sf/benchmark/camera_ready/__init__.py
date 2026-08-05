@@ -8,13 +8,17 @@ Most orchestration/IO/computation moved into package while
 ``camera_ready_campaign.py`` preserves legacy import monkeypatch surfaces.
 """
 
-from robot_sf.benchmark.camera_ready._config import load_campaign_config
+from robot_sf.benchmark.camera_ready._config import (
+    RadiusSweepBindingPreflightError,
+    load_campaign_config,
+)
 from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS as _AMV_DIMENSIONS
 from robot_sf.benchmark.camera_ready._config_types import (
     DEFAULT_SEED_SETS_PATH,
     AmvProfileConfig,
     CampaignConfig,
     PlannerSpec,
+    RadiusSweepConfig,
     ScenarioCandidateSelection,
     SeedPolicy,
     SnqiContractConfig,
@@ -26,6 +30,8 @@ __all__ = [
     "AmvProfileConfig",
     "CampaignConfig",
     "PlannerSpec",
+    "RadiusSweepBindingPreflightError",
+    "RadiusSweepConfig",
     "ScenarioCandidateSelection",
     "SeedPolicy",
     "SnqiContractConfig",

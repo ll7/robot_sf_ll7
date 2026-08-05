@@ -1,24 +1,28 @@
 # Radius-sensitivity sweep preparation manifest for issue #6642 (Gate 2 of #6600).
 #
-# Plain-language summary: this file declares the *preparation* contract for the
+# Plain-language summary: this file declares the *pre-submission admission* contract for the
 # collision-envelope radius sensitivity sweep (0.5 / 0.8 / 1.0 m) over the
 # 14-planner release roster and the 48-cell classic_interactions_francis2023
 # matrix at one immutable campaign commit. It does NOT submit, run, or authorize
-# any production SLURM compute, and it does NOT bind a radius to runtime objects.
+# any production SLURM compute. The arm configs carry an admitted runtime binding
+# backed by the Gate 1 receipt below, but this manifest is not campaign evidence.
 #
 # Claim boundary: PREPARATION MANIFEST ONLY. This file is not benchmark evidence,
 # not a realism result, not a sim-to-real result, and not a safety guarantee.
-# Production compute stays blocked until the Gate 1 binding-canary child (#6641)
-# reports a passing verdict and a runtime radius-binding surface exists so each
-# arm's declared radius propagates to simulator collision geometry, contact
-# logic, feasibility/oracle calculations, metric metadata, and planner inputs.
-# Until then every arm's runtime_binding_status is "pending_gate1_canary".
+# Production compute stays blocked until the remaining Gate 2 campaign gates pass:
+# one immutable launch commit, expected-row accounting, queue/capacity and input
+# checksums, private ledger entry, smallest valid preflight, and explicit admission.
 #
 # The release baseline (0.0.3.post1) uses the authoritative default robot radius
 # of 1.0 m, so the 1.0 m arm is the matched release comparator. Per #6600, if the
 # exact release baseline cannot be reused without a code-version confound, the
 # 1.0 m arm is rerun at the same immutable campaign commit as the 0.5 m and 0.8 m
 # arms; that rerun is what `arm_campaign_config_1p0m` pins below.
+#
+# Every radius arm has its own campaign config. All three are structurally
+# identical except for the radius treatment metadata and the issue-scoped release
+# tag; the manifest builder resolves all three and fails closed on any non-radius
+# drift across arms ("all non-radius factors fixed" stop rule of #6600/#6642).
 schema_version: issue-6642-radius-sweep-manifest.v1
 issue: 6642
 parent_issue: 6600
@@ -26,21 +30,25 @@ title: >-
   Collision-envelope radius sweep preparation (0.5/0.8/1.0 m) over 14 planners x
   48 classic_interactions_francis2023 cells x paper_eval_s30 seeds 111-140
 claim_boundary: >-
-  Preparation manifest only: declares the radius-sensitivity sweep treatment and
-  fixed factors for issue #6642 (Gate 2 of #6600). Not benchmark evidence, not a
-  realism result, not a sim-to-real result, and not a safety guarantee. Production
-  compute is blocked until the Gate 1 binding canary (#6641) passes and a runtime
-  radius-binding surface exists. Degraded, fallback, failed, missing, duplicate,
-  and provenance-invalid rows are never counted as evidence.
+  Pre-submission admission manifest only: declares the radius-sensitivity sweep
+  treatment and fixed factors for issue #6642 (Gate 2 of #6600). Not benchmark
+  evidence, not a realism result, not a sim-to-real result, and not a safety
+  guarantee. Gate 1 runtime binding is admitted, but production compute remains
+  blocked by the remaining Gate 2 campaign gates. Degraded, fallback, failed,
+  missing, duplicate, and provenance-invalid rows are never counted as evidence.
 
 # Canonical release comparator: the frozen 0.0.3.post1 baseline. The sweep arms
 # must match every non-radius factor declared here.
 release_baseline_config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml
 
-# The 1.0 m arm campaign config, pinned to the sweep's own immutable commit (a
-# rerun of the release structure rather than the frozen release tag, so all
-# three arms share one campaign commit). The preflight dry-run in this PR runs
-# against this config to prove the arm structure is camera-ready valid.
+# Arm campaign configs, one per radius, each pinned to the sweep's own immutable
+# commit (a rerun of the release structure rather than the frozen release tag, so
+# all three arms share one campaign commit). The 1.0 m arm is the matched release
+# comparator; the 0.5 m and 0.8 m arms are treatment arms. The preflight dry-run
+# in this PR runs against each arm config to prove the arm structure is
+# camera-ready valid.
+arm_campaign_config_0p5m: configs/benchmarks/issue_6642_radius_sweep_arm_0p5m.yaml
+arm_campaign_config_0p8m: configs/benchmarks/issue_6642_radius_sweep_arm_0p8m.yaml
 arm_campaign_config_1p0m: configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml
 
 # Radius treatment. Exactly three radii; exactly one baseline (1.0 m).
@@ -69,8 +77,8 @@ fixed_factors:
   expected_planner_count: 14
 
 # All arms must run at one immutable campaign commit. The builder records the
-# current `git rev-parse HEAD` at launch; production compute is blocked until
-# Gate 1 passes, so no commit is frozen as production evidence in this PR.
+# current `git rev-parse HEAD` at launch; no commit is frozen as production
+# evidence by this admission config.
 immutable_campaign_commit:
   policy: pinned_at_launch_across_all_arms
   git_head: pending_launch
@@ -79,16 +87,17 @@ immutable_campaign_commit:
 # until Gate 1 (#6641) reports a passing verdict.
 gate_preconditions:
   gate1_canary_issue: 6641
-  gate1_canary_status: not_yet_passed
+  gate1_canary_status: passed
+  gate1_receipt_sha256: 88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922
+  gate1_source_commit: 2910980fa7c49b726c3007c1f93aba6ec0b54d8e
+  runtime_binding_contract_version: radius_binding_canary.v1
   production_submission_authorized: false
   unblock_condition: >-
-    The Gate 1 binding-canary child #6641 reports a passing verdict AND a runtime
-    radius-binding surface is present in the camera-ready campaign config so each
-    arm's declared radius propagates consistently to simulator collision
-    geometry, obstacle and pedestrian contact logic, feasibility/oracle
-    calculations, metric metadata and output rows, and planner inputs that
-    consume the radius. Any inconsistent or silently ignored binding stops the
-    campaign with a fail-closed no-go verdict.
+    Pin one immutable campaign commit across all arms, verify the expected
+    60,480-row grid, queue/capacity, immutable inputs/checksums, private ledger
+    entry, smallest valid preflight, and explicit production campaign admission.
+    Any inconsistent or silently ignored binding still stops the campaign with
+    a fail-closed no-go verdict.
 
 # Row accounting contract: degraded/fallback/failed/missing/duplicate/provenance-
 # invalid rows are never evidence; production output must carry complete row

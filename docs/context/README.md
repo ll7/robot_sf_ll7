@@ -1157,6 +1157,10 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
 
 ## Benchmark Run Notes
 
+* [Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration](issue_6095_s10_discriminability_calibration.md)
+  records the fail-closed, portable preflight for the frozen two-planner S10 (ten-seed) campaign. It is a
+  configuration/provenance packet only; full SLURM execution remains required before any benchmark
+  or discriminability claim.
 * [Issue #1434 Stress/Uncertainty Coverage Schema v1](issue_1434_stress_uncertainty_coverage_schema.md)
   defines the `stress_uncertainty_coverage.v1` field contract, statistical summary tiers,
   scenario-parameter and failure-mode coverage axes, interpretation boundaries, and fail-closed

@@ -289,3 +289,28 @@ reviewed_baseline_increases:
       ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
       this checkout-dependent historical provenance finding explicitly; do not rewrite the
       artifact or producer SHA in this baseline reconciliation.
+  # Added 2026-08-05: the S10 metadata-only preflight packet (merged via #6106) references its
+  # producing commit d791c08f, which is a real ll7 worktree commit that is unreachable from main
+  # because main uses squash merges (a `merge -s ours` ancestor recorded on the #6106 branch does
+  # not survive the squash). Same legacy-debt class as the entries above; the packet is metadata-
+  # only (not benchmark evidence) and its configs exist at the referenced commit.
+  - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/preview_scenarios.json
+    codes: [dangling_commit, config_missing_at_commit]
+    disposition: baseline
+    reason: >-
+      The S10 nominal metadata-only preflight packet records producing commit d791c08f (a real
+      worktree commit present in the object store but unreachable from main's squash-merged
+      history). The referenced config exists at d791c08f and the packet is metadata-only
+      (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
+      class as the other dangling_commit entries; recorded here rather than rewriting the
+      producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.
+  - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/preflight/preview_scenarios.json
+    codes: [dangling_commit, config_missing_at_commit]
+    disposition: baseline
+    reason: >-
+      The S10 stress metadata-only preflight packet records producing commit d791c08f (a real
+      worktree commit present in the object store but unreachable from main's squash-merged
+      history). The referenced config exists at d791c08f and the packet is metadata-only
+      (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
+      class as the other dangling_commit entries; recorded here rather than rewriting the
+      producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.

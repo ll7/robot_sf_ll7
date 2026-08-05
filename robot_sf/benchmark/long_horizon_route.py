@@ -302,7 +302,8 @@ def _count(record: Mapping[str, Any], metric_name: str) -> float:
         The non-negative event count.
     """
     value = _numeric_from_aliases(record, _COUNT_ALIASES[metric_name], default=0.0)
-    assert value is not None
+    if value is None:  # pragma: no cover
+        raise ValueError(f"{metric_name} count could not be resolved")  # pragma: no cover
     if value < 0:
         raise LongHorizonRouteError(f"{metric_name} count must not be negative")
     return value

@@ -49,7 +49,13 @@ metric so this diagnostic stays consistent with the repository's TTC definition:
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -67,6 +73,13 @@ from robot_sf.errors import RobotSfError
 # default so the surface can be inspected. Callers should pass an explicit
 # ``t_thr`` once a calibrated value is chosen.
 DIAGNOSTIC_TTC_THRESHOLD_S: float = 2.0
+
+# Additive encounter aggregation. This is deliberately separate from the
+# existing timestep diagnostic above; changing this constant must not change
+# any legacy ``near_miss_ttc__*`` output.
+NEAR_MISS_ENCOUNTER_SCHEMA_VERSION = "near_miss_encounter.v1"
+NEAR_MISS_ENCOUNTER_PROFILE_SCHEMA_VERSION = "NearMissEncounterProfile.v1"
+_ENCOUNTER_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 # Minimum relative speed (m/s) treated as "moving" when projecting closing speed
 # / computing TTC. Matches the epsilon used by ``time_to_collision_min``.
@@ -88,6 +101,761 @@ class NearMissTtcInputError(RobotSfError, RuntimeError):
         """Store the actionable message plus the structured readiness report."""
         super().__init__(message)
         self.readiness = readiness
+
+
+class NearMissEncounterInputError(RobotSfError, ValueError):
+    """Raised when encounter aggregation cannot establish an auditable trace."""
+
+
+@dataclass(frozen=True)
+class NearMissEncounterProfile:
+    """Explicit, versioned thresholds and continuity rule for encounters.
+
+    A profile is required by :func:`build_near_miss_encounter_report`. The
+    function never supplies a threshold default because a threshold choice is
+    a scientific decision outside this diagnostic surface.
+    """
+
+    profile_id: str
+    qualification_rule: str
+    continuity_gap_s: float
+    distance_threshold_m: float | None = None
+    ttc_threshold_s: float | None = None
+
+    def __post_init__(self) -> None:
+        """Validate the explicit profile contract."""
+        profile_id = str(self.profile_id).strip()
+        if not profile_id:
+            raise NearMissEncounterInputError("profile_id must be non-empty")
+        allowed_rules = {"distance", "ttc", "distance_or_ttc"}
+        if self.qualification_rule not in allowed_rules:
+            raise NearMissEncounterInputError(
+                "qualification_rule must be one of distance, ttc, distance_or_ttc"
+            )
+        if self.distance_threshold_m is None and self.ttc_threshold_s is None:
+            raise NearMissEncounterInputError(
+                "profile must declare distance_threshold_m or ttc_threshold_s"
+            )
+        if self.qualification_rule == "distance" and self.distance_threshold_m is None:
+            raise NearMissEncounterInputError(
+                "distance qualification requires distance_threshold_m"
+            )
+        if self.qualification_rule == "ttc" and self.ttc_threshold_s is None:
+            raise NearMissEncounterInputError("ttc qualification requires ttc_threshold_s")
+        _require_positive_finite(self.continuity_gap_s, "continuity_gap_s")
+        if self.distance_threshold_m is not None:
+            _require_positive_finite(self.distance_threshold_m, "distance_threshold_m")
+        if self.ttc_threshold_s is not None:
+            _require_positive_finite(self.ttc_threshold_s, "ttc_threshold_s")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the profile as a JSON-safe mapping."""
+        return {
+            "schema_version": NEAR_MISS_ENCOUNTER_PROFILE_SCHEMA_VERSION,
+            "profile_id": self.profile_id.strip(),
+            "qualification_rule": self.qualification_rule,
+            "continuity_gap_s": float(self.continuity_gap_s),
+            "distance_threshold_m": (
+                float(self.distance_threshold_m) if self.distance_threshold_m is not None else None
+            ),
+            "ttc_threshold_s": (
+                float(self.ttc_threshold_s) if self.ttc_threshold_s is not None else None
+            ),
+            "units": {"distance": "m", "time": "s", "speed": "m/s"},
+        }
+
+
+@dataclass(frozen=True)
+class NearMissEncounterSample:
+    """One actor trace sample used by the additive encounter aggregator.
+
+    ``clearance_m``, ``ttc_s``, ``closing_speed_mps``, and ``pet_s`` are
+    optional because existing traces do not always provide every diagnostic
+    field. Missing optional values are retained as ``None`` with an explicit
+    missingness entry in the report. ``actor_id`` and ``timestamp_s`` are
+    mandatory for deterministic segmentation.
+    """
+
+    actor_id: str
+    timestamp_s: float
+    clearance_m: float | None = None
+    ttc_s: float | None = None
+    closing_speed_mps: float | None = None
+    pet_s: float | None = None
+    contact: bool | None = None
+    exposure_valid: bool = True
+    dt_s: float | None = None
+    unavailable_fields: tuple[str, ...] = field(default_factory=tuple)
+
+
+def build_near_miss_encounter_report(
+    samples: Sequence[NearMissEncounterSample | Mapping[str, object]],
+    *,
+    profile: NearMissEncounterProfile,
+    source_commit: str,
+    release_id: str,
+    bundle_id: str,
+    input_checksums: Mapping[str, str],
+) -> dict[str, object]:
+    """Build deterministic, diagnostic-only encounter records.
+
+    Samples are grouped by actor and segmented using the caller-declared
+    profile. A contact sample terminates the current encounter and is not
+    silently converted into a near-miss sample. Missing optional metrics are
+    retained as ``None`` and listed in ``missingness``.
+
+    The function does not call or modify the canonical timestep metrics. It
+    also does not infer a threshold, merge across actors, or fill missing
+    velocity/TTC/PET values.
+
+    Raises:
+        NearMissEncounterInputError: If actor identity, timestamps, or
+            provenance cannot be validated, or if duplicate actor timestamps
+            make the ordering ambiguous.
+
+    Returns:
+        A JSON-safe diagnostic report with encounters, denominator, exclusions,
+        missingness, and provenance.
+    """
+    if not isinstance(profile, NearMissEncounterProfile):
+        raise NearMissEncounterInputError("profile must be NearMissEncounterProfile.v1")
+    provenance = _normalise_encounter_provenance(
+        source_commit=source_commit,
+        release_id=release_id,
+        bundle_id=bundle_id,
+        input_checksums=input_checksums,
+    )
+    if not samples:
+        raise NearMissEncounterInputError("at least one encounter sample is required")
+
+    normalized = [
+        _normalise_encounter_sample(value, index=index) for index, value in enumerate(samples)
+    ]
+    grouped: dict[str, list[NearMissEncounterSample]] = {}
+    for sample in normalized:
+        grouped.setdefault(sample.actor_id, []).append(sample)
+    ordered_by_actor = {
+        actor_id: _order_actor_samples(actor_id, actor_samples)
+        for actor_id, actor_samples in sorted(grouped.items())
+    }
+
+    encounters: list[dict[str, object]] = []
+    exclusions: list[dict[str, object]] = []
+    missingness: Counter[str] = Counter()
+    qualifying_sample_count = 0
+    valid_exposure_duration_s = 0.0
+    for actor_id, actor_samples in ordered_by_actor.items():
+        valid_exposure_duration_s += _valid_exposure_duration(
+            actor_samples, continuity_gap_s=profile.continuity_gap_s
+        )
+        actor_encounters, actor_exclusions, actor_missingness, actor_qualifying = (
+            _segment_actor_encounters(
+                actor_id,
+                actor_samples,
+                profile=profile,
+                encounter_offset=len([item for item in encounters if item["actor_id"] == actor_id]),
+            )
+        )
+        encounters.extend(actor_encounters)
+        exclusions.extend(actor_exclusions)
+        missingness.update(actor_missingness)
+        qualifying_sample_count += actor_qualifying
+
+    required_exclusions = sum(
+        1 for item in exclusions if item["reason"] == "missing_qualification_fields"
+    )
+    status = (
+        "complete"
+        if encounters
+        else "unavailable"
+        if required_exclusions
+        else "no-qualifying-samples"
+    )
+    exclusion_counts = Counter(str(item["reason"]) for item in exclusions)
+    return {
+        "schema_version": NEAR_MISS_ENCOUNTER_SCHEMA_VERSION,
+        "status": status,
+        "evidence_status": "diagnostic-only",
+        "claim_boundary": (
+            "Temporal grouping of already-qualified trace samples. This is not a calibrated "
+            "near-miss risk measure, independent safety event, collision probability, or "
+            "real-world safety evidence."
+        ),
+        "profile": profile.to_dict(),
+        "units": {
+            "time": "s",
+            "distance": "m",
+            "speed": "m/s",
+            "encounter_duration": "s",
+            "valid_exposure_duration": "s",
+        },
+        "denominator": {
+            "sample_unit": "trace_sample",
+            "encounter_unit": "encounter",
+            "input_sample_count": len(normalized),
+            "actor_count": len(ordered_by_actor),
+            "qualifying_sample_count": qualifying_sample_count,
+            "encounter_count": len(encounters),
+            "valid_exposure_duration_s": valid_exposure_duration_s,
+        },
+        "encounters": encounters,
+        "exclusions": sorted(
+            exclusions,
+            key=lambda item: (
+                str(item["actor_id"]),
+                float(item["timestamp_s"]),
+                int(item["source_index"]),
+            ),
+        ),
+        "missingness": {
+            "field_counts": dict(sorted(missingness.items())),
+            "sample_exclusion_counts": dict(sorted(exclusion_counts.items())),
+        },
+        "provenance": provenance,
+    }
+
+
+def write_near_miss_encounter_report(
+    report: Mapping[str, object],
+    path: str,
+) -> str:
+    """Write a deterministic encounter report JSON file and return its path.
+
+    Returns:
+        The string path written.
+    """
+    target = str(path)
+    with open(target, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2, sort_keys=True, allow_nan=False)
+        handle.write("\n")
+    return target
+
+
+def _normalise_encounter_sample(
+    value: NearMissEncounterSample | Mapping[str, object],
+    *,
+    index: int,
+) -> NearMissEncounterSample:
+    """Normalize one public sample input and retain unavailable fields.
+
+    Returns:
+        A normalized sample with explicit unavailable-field names.
+    """
+    if isinstance(value, NearMissEncounterSample):
+        raw: Mapping[str, object] = {
+            "actor_id": value.actor_id,
+            "timestamp_s": value.timestamp_s,
+            "clearance_m": value.clearance_m,
+            "ttc_s": value.ttc_s,
+            "closing_speed_mps": value.closing_speed_mps,
+            "pet_s": value.pet_s,
+            "contact": value.contact,
+            "exposure_valid": value.exposure_valid,
+            "dt_s": value.dt_s,
+        }
+        inherited_unavailable = set(value.unavailable_fields)
+    elif isinstance(value, Mapping):
+        raw = value
+        inherited_unavailable = set()
+    else:
+        raise NearMissEncounterInputError(f"sample[{index}] must be a mapping")
+
+    actor_id = _required_sample_text(raw.get("actor_id"), f"sample[{index}].actor_id")
+    timestamp_s = _required_sample_float(raw.get("timestamp_s"), f"sample[{index}].timestamp_s")
+    unavailable = inherited_unavailable
+    clearance_m = _optional_sample_float(
+        raw.get("clearance_m"), "clearance_m", unavailable, nonnegative=True
+    )
+    ttc_s = _optional_sample_float(raw.get("ttc_s"), "ttc_s", unavailable, nonnegative=True)
+    closing_speed_mps = _optional_sample_float(
+        raw.get("closing_speed_mps"), "closing_speed_mps", unavailable, nonnegative=True
+    )
+    pet_s = _optional_sample_float(raw.get("pet_s"), "pet_s", unavailable, nonnegative=True)
+    contact = _optional_sample_bool(raw.get("contact"), "contact", unavailable)
+    exposure_valid = _sample_exposure_valid(raw.get("exposure_valid", True), unavailable)
+    dt_s = _optional_sample_float(raw.get("dt_s"), "dt_s", unavailable, nonnegative=False)
+    if raw.get("dt_s") is not None and dt_s is None:
+        exposure_valid = False
+    if dt_s is not None and dt_s <= 0.0:
+        unavailable.add("dt_s")
+        dt_s = None
+        exposure_valid = False
+
+    return NearMissEncounterSample(
+        actor_id=actor_id,
+        timestamp_s=timestamp_s,
+        clearance_m=clearance_m,
+        ttc_s=ttc_s,
+        closing_speed_mps=closing_speed_mps,
+        pet_s=pet_s,
+        contact=contact,
+        exposure_valid=exposure_valid,
+        dt_s=dt_s,
+        unavailable_fields=tuple(sorted(unavailable)),
+    )
+
+
+def _order_actor_samples(
+    actor_id: str,
+    samples: Sequence[NearMissEncounterSample],
+) -> list[NearMissEncounterSample]:
+    """Sort an actor trace by time and reject ambiguous timestamps.
+
+    Returns:
+        Strictly time-ordered actor samples.
+    """
+    ordered = sorted(samples, key=lambda sample: sample.timestamp_s)
+    previous: float | None = None
+    for sample in ordered:
+        if previous is not None and sample.timestamp_s <= previous:
+            raise NearMissEncounterInputError(
+                f"actor {actor_id!r} has duplicate or non-increasing timestamps"
+            )
+        previous = sample.timestamp_s
+    return ordered
+
+
+def _valid_exposure_duration(
+    samples: Sequence[NearMissEncounterSample],
+    *,
+    continuity_gap_s: float,
+) -> float:
+    """Sum observed valid trace intervals without crossing continuity gaps.
+
+    Returns:
+        The observed duration in seconds.
+    """
+    duration = 0.0
+    for previous, current in pairwise(samples):
+        delta = current.timestamp_s - previous.timestamp_s
+        if previous.exposure_valid and current.exposure_valid and 0.0 < delta <= continuity_gap_s:
+            duration += delta
+    return duration
+
+
+def _segment_actor_encounters(
+    actor_id: str,
+    samples: Sequence[NearMissEncounterSample],
+    *,
+    profile: NearMissEncounterProfile,
+    encounter_offset: int,
+) -> tuple[list[dict[str, object]], list[dict[str, object]], Counter[str], int]:
+    """Segment one ordered actor trace into encounters.
+
+    Returns:
+        Encounters, explicit sample exclusions, missingness counts, and the
+        number of qualifying samples.
+    """
+    encounters: list[dict[str, object]] = []
+    exclusions: list[dict[str, object]] = []
+    missingness: Counter[str] = Counter()
+    active: dict[str, object] | None = None
+    qualifying_count = 0
+    encounter_index = encounter_offset
+
+    for source_index, sample in enumerate(samples):
+        missingness.update(sample.unavailable_fields)
+        active = _close_on_gap(active, sample, profile=profile, encounters=encounters)
+        active, encounter_index, added_qualifying = _process_actor_sample(
+            actor_id,
+            sample,
+            source_index=source_index,
+            profile=profile,
+            encounter_index=encounter_index,
+            active=active,
+            encounters=encounters,
+            exclusions=exclusions,
+        )
+        qualifying_count += added_qualifying
+
+    if active is not None:
+        encounters.append(_finish_encounter(active, termination_reason="trace_end"))
+    return encounters, exclusions, missingness, qualifying_count
+
+
+def _close_on_gap(
+    active: dict[str, object] | None,
+    sample: NearMissEncounterSample,
+    *,
+    profile: NearMissEncounterProfile,
+    encounters: list[dict[str, object]],
+) -> dict[str, object] | None:
+    """Close an active encounter when the continuity gap is exceeded.
+
+    Returns:
+        The unchanged active state, or ``None`` after a gap closure.
+    """
+    if (
+        active is not None
+        and sample.timestamp_s - float(active["last_timestamp_s"]) > profile.continuity_gap_s
+    ):
+        encounters.append(_finish_encounter(active, termination_reason="gap"))
+        return None
+    return active
+
+
+def _process_actor_sample(
+    actor_id: str,
+    sample: NearMissEncounterSample,
+    *,
+    source_index: int,
+    profile: NearMissEncounterProfile,
+    encounter_index: int,
+    active: dict[str, object] | None,
+    encounters: list[dict[str, object]],
+    exclusions: list[dict[str, object]],
+) -> tuple[dict[str, object] | None, int, int]:
+    """Process one sample and return updated state and qualifying count.
+
+    Returns:
+        Updated active encounter, next encounter index, and either zero or one
+        qualifying sample added by this call.
+    """
+    if not sample.exposure_valid:
+        if active is not None:
+            encounters.append(_finish_encounter(active, termination_reason="invalid_exposure"))
+        _append_sample_exclusion(
+            exclusions,
+            sample,
+            source_index=source_index,
+            reason="invalid_exposure",
+        )
+        return None, encounter_index, 0
+    if sample.contact is True:
+        if active is not None:
+            encounters.append(
+                _finish_encounter(
+                    active,
+                    termination_reason="contact",
+                    contact_time_s=sample.timestamp_s,
+                )
+            )
+        else:
+            _append_sample_exclusion(
+                exclusions,
+                sample,
+                source_index=source_index,
+                reason="contact_without_active_encounter",
+            )
+        return None, encounter_index, 0
+
+    qualifies, reason = _sample_qualifies(sample, profile)
+    if not qualifies:
+        if active is not None:
+            encounters.append(
+                _finish_encounter(active, termination_reason=reason or "non_qualifying")
+            )
+        if reason == "missing_qualification_fields":
+            _append_sample_exclusion(
+                exclusions,
+                sample,
+                source_index=source_index,
+                reason=reason,
+            )
+        return None, encounter_index, 0
+
+    if active is None:
+        encounter_index += 1
+        active = _start_encounter(
+            actor_id,
+            encounter_index,
+            sample,
+            source_index=source_index,
+        )
+        return active, encounter_index, 1
+    delta = sample.timestamp_s - float(active["last_timestamp_s"])
+    if not 0.0 < delta <= profile.continuity_gap_s:
+        encounters.append(_finish_encounter(active, termination_reason="gap"))
+        encounter_index += 1
+        active = _start_encounter(
+            actor_id,
+            encounter_index,
+            sample,
+            source_index=source_index,
+        )
+        return active, encounter_index, 1
+    _extend_encounter(active, sample, delta=delta, source_index=source_index)
+    return active, encounter_index, 1
+
+
+def _sample_qualifies(
+    sample: NearMissEncounterSample,
+    profile: NearMissEncounterProfile,
+) -> tuple[bool, str | None]:
+    """Apply only the explicitly selected profile rule to one sample.
+
+    Returns:
+        A qualification flag and an explicit exclusion reason when it does not
+        qualify.
+    """
+    checks: list[bool] = []
+    required_missing = 0
+    if profile.qualification_rule in {"distance", "distance_or_ttc"}:
+        if profile.distance_threshold_m is None:
+            pass
+        elif sample.clearance_m is None:
+            required_missing += 1
+        else:
+            checks.append(sample.clearance_m < profile.distance_threshold_m)
+    if profile.qualification_rule in {"ttc", "distance_or_ttc"}:
+        if profile.ttc_threshold_s is None:
+            pass
+        elif sample.ttc_s is None:
+            required_missing += 1
+        else:
+            checks.append(sample.ttc_s < profile.ttc_threshold_s)
+    if any(checks):
+        return True, None
+    if not checks or required_missing == len(checks) + required_missing:
+        return False, "missing_qualification_fields"
+    return False, "non_qualifying"
+
+
+def _start_encounter(
+    actor_id: str,
+    encounter_index: int,
+    sample: NearMissEncounterSample,
+    *,
+    source_index: int,
+) -> dict[str, object]:
+    """Initialize internal encounter state from one qualifying sample.
+
+    Returns:
+        Mutable internal state for the active encounter.
+    """
+    return {
+        "schema_version": NEAR_MISS_ENCOUNTER_SCHEMA_VERSION,
+        "encounter_id": f"{actor_id}:encounter-{encounter_index:04d}",
+        "actor_id": actor_id,
+        "profile_id": None,
+        "samples": [sample],
+        "source_indices": [source_index],
+        "start_time_s": sample.timestamp_s,
+        "last_timestamp_s": sample.timestamp_s,
+        "valid_exposure_duration_s": 0.0,
+        "unavailable_fields": set(sample.unavailable_fields),
+        "contact_observation_unavailable": sample.contact is None,
+    }
+
+
+def _extend_encounter(
+    active: dict[str, object],
+    sample: NearMissEncounterSample,
+    *,
+    delta: float,
+    source_index: int,
+) -> None:
+    """Add one contiguous qualifying sample to internal state."""
+    active["samples"].append(sample)
+    active["source_indices"].append(source_index)
+    active["last_timestamp_s"] = sample.timestamp_s
+    active["valid_exposure_duration_s"] += delta
+    active["unavailable_fields"].update(sample.unavailable_fields)
+    active["contact_observation_unavailable"] = bool(
+        active["contact_observation_unavailable"] or sample.contact is None
+    )
+
+
+def _finish_encounter(
+    active: dict[str, object],
+    *,
+    termination_reason: str,
+    contact_time_s: float | None = None,
+) -> dict[str, object]:
+    """Convert internal encounter state into a JSON-safe record.
+
+    Returns:
+        A versioned encounter record.
+    """
+    samples = active["samples"]
+    start_time_s = float(active["start_time_s"])
+    end_time_s = float(active["last_timestamp_s"])
+    clearances = [sample.clearance_m for sample in samples if sample.clearance_m is not None]
+    ttcs = [sample.ttc_s for sample in samples if sample.ttc_s is not None]
+    closing_speeds = [
+        sample.closing_speed_mps for sample in samples if sample.closing_speed_mps is not None
+    ]
+    pets = [sample.pet_s for sample in samples if sample.pet_s is not None]
+    contact_terminated = termination_reason == "contact"
+    contact_status = (
+        "observed"
+        if contact_terminated
+        else "unavailable"
+        if active["contact_observation_unavailable"]
+        else "not-observed"
+    )
+    return {
+        "schema_version": NEAR_MISS_ENCOUNTER_SCHEMA_VERSION,
+        "encounter_id": active["encounter_id"],
+        "actor_id": active["actor_id"],
+        "start_time_s": start_time_s,
+        "end_time_s": end_time_s,
+        "duration_s": end_time_s - start_time_s,
+        "minimum_clearance_m": min(clearances) if clearances else None,
+        "minimum_ttc_s": min(ttcs) if ttcs else None,
+        "maximum_closing_speed_mps": max(closing_speeds) if closing_speeds else None,
+        "minimum_pet_s": min(pets) if pets else None,
+        "sample_count": len(samples),
+        "valid_exposure_duration_s": float(active["valid_exposure_duration_s"]),
+        "termination_reason": termination_reason,
+        "contact_terminated": contact_terminated,
+        "contact_status": contact_status,
+        "contact_time_s": contact_time_s,
+        "unavailable_fields": sorted(active["unavailable_fields"]),
+        "evidence_status": "diagnostic-only",
+    }
+
+
+def _append_sample_exclusion(
+    exclusions: list[dict[str, object]],
+    sample: NearMissEncounterSample,
+    *,
+    source_index: int,
+    reason: str,
+) -> None:
+    """Append one deterministic, explicit sample exclusion."""
+    exclusions.append(
+        {
+            "actor_id": sample.actor_id,
+            "timestamp_s": sample.timestamp_s,
+            "source_index": source_index,
+            "reason": reason,
+            "unavailable_fields": list(sample.unavailable_fields),
+        }
+    )
+
+
+def _normalise_encounter_provenance(
+    *,
+    source_commit: str,
+    release_id: str,
+    bundle_id: str,
+    input_checksums: Mapping[str, str],
+) -> dict[str, object]:
+    """Validate and normalize provenance required by the report.
+
+    Returns:
+        A normalized provenance mapping with an input-checksum digest.
+    """
+    identities = {
+        "source_commit": source_commit,
+        "release_id": release_id,
+        "bundle_id": bundle_id,
+    }
+    normalized: dict[str, object] = {}
+    for field_name, value in identities.items():
+        text = str(value).strip()
+        if not text:
+            raise NearMissEncounterInputError(f"{field_name} must be non-empty")
+        normalized[field_name] = text
+    if not input_checksums:
+        raise NearMissEncounterInputError("input_checksums must not be empty")
+    checksums: dict[str, str] = {}
+    for name, checksum in sorted(input_checksums.items()):
+        name_text = str(name).strip()
+        checksum_text = str(checksum).strip()
+        if not name_text or _ENCOUNTER_SHA256_RE.fullmatch(checksum_text) is None:
+            raise NearMissEncounterInputError(f"invalid input checksum for {name!r}")
+        checksums[name_text] = checksum_text
+    normalized["input_checksums"] = checksums
+    normalized["input_checksum_digest"] = _encounter_json_digest(checksums)
+    return normalized
+
+
+def _required_sample_text(value: object, field_name: str) -> str:
+    """Require a non-empty sample identity field.
+
+    Returns:
+        The stripped identity text.
+    """
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        raise NearMissEncounterInputError(f"{field_name} must be non-empty")
+    return text
+
+
+def _required_sample_float(value: object, field_name: str) -> float:
+    """Require a finite sample timestamp.
+
+    Returns:
+        The finite timestamp value.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise NearMissEncounterInputError(f"{field_name} must be finite") from exc
+    if not np.isfinite(number):
+        raise NearMissEncounterInputError(f"{field_name} must be finite")
+    return number
+
+
+def _optional_sample_float(
+    value: object,
+    field_name: str,
+    unavailable: set[str],
+    *,
+    nonnegative: bool,
+) -> float | None:
+    """Parse an optional finite measurement, recording unavailable values.
+
+    Returns:
+        The finite measurement, or ``None`` when unavailable.
+    """
+    if value is None:
+        unavailable.add(field_name)
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        unavailable.add(field_name)
+        return None
+    if not np.isfinite(number) or (nonnegative and number < 0.0):
+        unavailable.add(field_name)
+        return None
+    return number
+
+
+def _optional_sample_bool(value: object, field_name: str, unavailable: set[str]) -> bool | None:
+    """Parse an optional boolean observation.
+
+    Returns:
+        The boolean observation, or ``None`` when unavailable.
+    """
+    if value is None:
+        unavailable.add(field_name)
+        return None
+    if not isinstance(value, bool):
+        unavailable.add(field_name)
+        return None
+    return value
+
+
+def _sample_exposure_valid(value: object, unavailable: set[str]) -> bool:
+    """Parse the exposure validity flag without treating invalid data as valid.
+
+    Returns:
+        ``True`` only for an explicit valid flag.
+    """
+    if isinstance(value, bool):
+        return value
+    unavailable.add("exposure_valid")
+    return False
+
+
+def _require_positive_finite(value: float, field_name: str) -> None:
+    """Require a finite positive profile quantity."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise NearMissEncounterInputError(f"{field_name} must be finite and positive") from exc
+    if not np.isfinite(number) or number <= 0.0:
+        raise NearMissEncounterInputError(f"{field_name} must be finite and positive")
+
+
+def _encounter_json_digest(value: object) -> str:
+    """Return a deterministic SHA-256 digest for JSON-safe provenance data."""
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -566,11 +1334,18 @@ def _json_safe_value(value: object) -> object:
 
 __all__ = [
     "DIAGNOSTIC_TTC_THRESHOLD_S",
+    "NEAR_MISS_ENCOUNTER_PROFILE_SCHEMA_VERSION",
+    "NEAR_MISS_ENCOUNTER_SCHEMA_VERSION",
+    "NearMissEncounterInputError",
+    "NearMissEncounterProfile",
+    "NearMissEncounterSample",
     "NearMissTtcDecisionPacket",
     "NearMissTtcInputError",
     "NearMissTtcReadiness",
+    "build_near_miss_encounter_report",
     "build_ttc_near_miss_decision_packet",
     "compute_ttc_near_miss_diagnostic",
     "near_miss_ttc_input_readiness",
     "render_ttc_near_miss_decision_packet_markdown",
+    "write_near_miss_encounter_report",
 ]

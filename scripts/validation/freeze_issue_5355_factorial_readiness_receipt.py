@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Freeze the issue #5355 factorial readiness receipt (CPU-only, no-submit).
 
-Per the issue #5355 audit disposition, after the #5776 hierarchical paired-release
-input gate lands on a green ``main`` this script freezes the factorial readiness
+Per the issue #5355 audit disposition, this script freezes the factorial readiness
 state: it runs the fail-closed campaign-readiness gate and the #5776 input-gate
 evaluation, then writes a single deterministic receipt JSON into the evidence
-directory. The receipt records achieved progress (input contract delivered) without
-fabricating unavailable analysis data or authorizing any GPU/Slurm submission.
+directory. The receipt records the delivered input and analysis artifacts while
+retaining the human claim-review gate and authorizing no GPU/Slurm submission.
 
 The receipt is the cheap-lane-achievable artifact; the authorized factorial
 campaign RUN (compute) remains downstream work and is never performed here.
@@ -19,7 +18,9 @@ import sys
 from pathlib import Path
 
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
+    ANALYSIS_DELIVERED_REVIEW_PENDING,
     BLOCKED_MISSING_SUCCESSOR_ROWS,
+    INPUTS_READY_ANALYSIS_NOT_RUN,
     evaluate_hierarchical_paired_release_inputs,
     load_hierarchical_paired_release_input_manifest,
 )
@@ -105,13 +106,27 @@ def freeze_receipt(
             for name, criterion in readiness.get("criteria", {}).items()
         },
         "hierarchical_input_gate": input_gate,
-        "input_gate_consistent_with_audit": (
-            input_gate.get("status") == BLOCKED_MISSING_SUCCESSOR_ROWS
-        ),
+        "input_gate_consistent_with_audit": input_gate.get("status")
+        in {
+            BLOCKED_MISSING_SUCCESSOR_ROWS,
+            INPUTS_READY_ANALYSIS_NOT_RUN,
+            ANALYSIS_DELIVERED_REVIEW_PENDING,
+        },
         "successor_slice_required": {
             "issue": 4364,
-            "reason": "typed-ledger successor-release rows required before #5351 analysis runs",
+            "status": (
+                "delivered"
+                if input_gate.get("status") == ANALYSIS_DELIVERED_REVIEW_PENDING
+                else "required"
+            ),
+            "reason": (
+                "typed-ledger successor-release rows delivered; #5351 report remains "
+                "human-review-gated"
+                if input_gate.get("status") == ANALYSIS_DELIVERED_REVIEW_PENDING
+                else "typed-ledger successor-release rows required before #5351 analysis runs"
+            ),
         },
+        "analysis_claim_gate": dict(input_gate.get("claim_gate", {})),
         "campaign_run_status": "not_run",
     }
 

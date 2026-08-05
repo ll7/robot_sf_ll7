@@ -184,6 +184,22 @@ def test_request_resolution_fails_closed(
     assert row["reason_code"].startswith(reason)
 
 
+def test_not_admitted_equal_outcomes_cannot_resolve_as_admitted(tmp_path: Path) -> None:
+    """An explicit exclusion stays provenance-incomplete even when outcomes agree."""
+    request_manifest = _load_test_requests(tmp_path / "requests.json", _request_manifest())
+    mapping = _load_test_mapping(
+        tmp_path / "mapping.json",
+        [_mapping_row(admission_status="not_admitted", exclusion_reason="provenance_gap")],
+        request_sha256=request_manifest.content_sha256,
+    )
+    result = resolve_episode_requests(request_manifest, mapping)
+    row = result["rows"][0]
+    assert row["resolution_status"] == "provenance-incomplete"
+    assert row["reason_code"] == "provenance_gap"
+    assert result["summary"]["n_resolved"] == 0
+    assert result["summary"]["n_provenance_incomplete"] == 1
+
+
 def test_duplicate_request_tuple_is_rejected(tmp_path: Path) -> None:
     """The 90-request contract cannot silently resolve a duplicate tuple twice."""
     payload = _request_manifest()

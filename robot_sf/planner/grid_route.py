@@ -23,6 +23,8 @@ from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 _DEFAULT_GRID_RESOLUTION = 0.2
 _DEFAULT_MAX_ANGULAR_SPEED = 1.2
+_DEFAULT_WAYPOINT_LOOKAHEAD_CELLS = 5
+_DEFAULT_CLEARANCE_SEARCH_CELLS = 5
 _MIN_RESOLUTION = 1e-6
 _ROBOT_RADIUS_MARGIN_CELLS = 1
 
@@ -45,11 +47,11 @@ class GridRoutePlannerConfig:
     goal_tolerance: float = 0.25
     heading_gain: float = 1.8
     turn_in_place_angle: float = 0.8
-    waypoint_lookahead_cells: int = 5
+    waypoint_lookahead_cells: int = _DEFAULT_WAYPOINT_LOOKAHEAD_CELLS
     waypoint_reached_distance: float = 0.3
     obstacle_threshold: float = 0.5
     obstacle_inflation_cells: int = 1
-    clearance_search_cells: int = 5
+    clearance_search_cells: int = _DEFAULT_CLEARANCE_SEARCH_CELLS
     stop_distance: float = 0.25
     progress_weight: float = 1.0
     heading_weight: float = 1.0
@@ -820,11 +822,15 @@ def build_grid_route_config(cfg: dict[str, Any] | None) -> GridRoutePlannerConfi
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
         heading_gain=float(cfg.get("heading_gain", 1.8)),
         turn_in_place_angle=float(cfg.get("turn_in_place_angle", 0.8)),
-        waypoint_lookahead_cells=int(cfg.get("waypoint_lookahead_cells", 5)),
+        waypoint_lookahead_cells=int(
+            cfg.get("waypoint_lookahead_cells", _DEFAULT_WAYPOINT_LOOKAHEAD_CELLS)
+        ),
         waypoint_reached_distance=float(cfg.get("waypoint_reached_distance", 0.3)),
         obstacle_threshold=float(cfg.get("obstacle_threshold", 0.5)),
         obstacle_inflation_cells=int(cfg.get("obstacle_inflation_cells", 1)),
-        clearance_search_cells=int(cfg.get("clearance_search_cells", 5)),
+        clearance_search_cells=int(
+            cfg.get("clearance_search_cells", _DEFAULT_CLEARANCE_SEARCH_CELLS)
+        ),
         stop_distance=float(cfg.get("stop_distance", 0.25)),
         progress_weight=float(cfg.get("progress_weight", 1.0)),
         heading_weight=float(cfg.get("heading_weight", 1.0)),

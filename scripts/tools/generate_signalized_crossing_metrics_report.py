@@ -16,7 +16,6 @@ beyond the report-row contract.  No claim-matrix updates are produced.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,6 +26,7 @@ from robot_sf.benchmark.signal_metrics import (
     render_report_rows_markdown,
     signal_metrics_report_rows,
 )
+from robot_sf.evidence.writers import write_json, write_text
 
 _EVIDENCE_DIR = Path("docs/context/evidence/issue_2753_signalized_crossing_metrics")
 
@@ -239,7 +239,7 @@ def generate(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary_path = output_dir / "summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2) + "\n")
+    write_json(summary_path, summary)
 
     report_path = output_dir / "report.md"
     report_md = (
@@ -249,10 +249,10 @@ def generate(output_dir: Path) -> None:
         "## Report Table\n\n"
         f"{markdown}\n"
     )
-    report_path.write_text(report_md)
+    write_text(report_path, report_md, issue_ref="robot_sf#2753")
 
     readme_path = output_dir / "README.md"
-    readme_path.write_text(_build_readme())
+    write_text(readme_path, _build_readme(), issue_ref="robot_sf#2753")
 
 
 def main(argv: list[str] | None = None) -> int:

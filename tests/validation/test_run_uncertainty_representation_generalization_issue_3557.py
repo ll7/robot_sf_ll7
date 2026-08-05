@@ -80,17 +80,20 @@ def test_write_report_artifacts(tmp_path) -> None:
 
     summary = json.loads((tmp_path / "summary.json").read_text())
     assert summary["schema_version"] == SCHEMA_VERSION
+    assert summary["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert summary["claim_boundary"] == CLAIM_BOUNDARY
     assert summary["campaign_promotion_state"]["new_blockers"] == []
     assert "full benchmark campaign" in summary["campaign_promotion_state"]["next_empirical_action"]
-    assert (
-        (tmp_path / "per_representation_decisions.csv")
-        .read_text()
-        .startswith("representation,harness_decision")
-    )
+    csv_lines = (tmp_path / "per_representation_decisions.csv").read_text().splitlines()
+    assert csv_lines[0] == "# AI-GENERATED NEEDS-REVIEW"
+    assert csv_lines[1].startswith("representation,harness_decision")
     readme = (tmp_path / "README.md").read_text()
+    assert readme.splitlines()[0] == "<!-- AI-GENERATED (robot_sf#3557) - NEEDS-REVIEW -->"
     assert "Issue #3557" in readme
     assert "not a full benchmark campaign" in readme
     integration_report = (tmp_path / "integration_report.md").read_text()
+    assert (
+        integration_report.splitlines()[0] == "<!-- AI-GENERATED (robot_sf#3557) - NEEDS-REVIEW -->"
+    )
     assert "Remaining Blockers" in integration_report
     assert "No full benchmark campaign" in integration_report

@@ -7,15 +7,20 @@ import json
 import subprocess
 import sys
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from robot_sf.analysis_workbench import interaction_coordinates as coordinates
 from robot_sf.analysis_workbench.interaction_coordinates import (
     WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_VERSION,
     ConflictZoneSpec,
     RouteSpec,
+    build_worked_example_process_trace,
     build_worked_example_process_trace_from_export,
+    load_registered_conflict_zone_spec,
+    load_registered_route_spec,
     validate_worked_example_process_trace,
 )
 from robot_sf.analysis_workbench.simulation_trace_export import simulation_trace_export_from_dict
@@ -29,6 +34,17 @@ TRACE_FIXTURE_PATH = (
     / "analysis_workbench"
     / "simulation_trace_export_v1"
     / "minimal_trace.json"
+)
+GEOMETRY_REGISTRY_FIXTURE_PATH = (
+    REPO_ROOT
+    / "tests"
+    / "fixtures"
+    / "analysis_workbench"
+    / "process_trace_geometry_registry_v1"
+    / "fixture_registry.json"
+)
+GEOMETRY_REGISTRY_ARTIFACT_REF = (
+    "tests/fixtures/analysis_workbench/process_trace_geometry_registry_v1/fixture_registry.json"
 )
 
 
@@ -51,20 +67,8 @@ def test_process_trace_coordinate_frames_explicit_available_and_unavailable() ->
 
     available = build_worked_example_process_trace_from_export(
         trace,
-        route=RouteSpec(
-            "r-main",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-fixture.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
-        conflict_zone=ConflictZoneSpec(
-            "door",
-            (1.0, 0.0),
-            0.25,
-            "zone-fixture.v1",
-            _zone_checksum((1.0, 0.0), 0.25),
-        ),
+        route=_registered_route("r-main"),
+        conflict_zone=_registered_conflict_zone("door"),
     )
 
     validate_worked_example_process_trace(available)
@@ -205,6 +209,12 @@ def test_pair_compatibility_matched_start_common_anchors_without_duration_normal
                 "selected_action": {"linear_velocity": 0.5, "angular_velocity": 0.0},
                 "encounter": {"actor_id": "ped-a", "encounter_id": "ped-a:encounter-0001"},
                 "event": "step",
+                "run_config": {
+                    "map_id": "fixture-map",
+                    "horizon": 4,
+                    "config_digest": "a" * 64,
+                    "time_step_s": 0.1,
+                },
             },
         }
     )
@@ -285,29 +295,12 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         str(CLI_PATH),
         "--input",
         str(TRACE_FIXTURE_PATH),
-        "--route-id",
+        "--geometry-registry",
+        str(GEOMETRY_REGISTRY_FIXTURE_PATH),
+        "--route-entry-id",
         "fixture-route",
-        "--route-provenance-id",
-        "fixture-route.v1",
-        "--route-registry-checksum",
-        _route_checksum((0.0, 0.0), (2.0, 0.0)),
-        "--route-start",
-        "0",
-        "0",
-        "--route-end",
-        "2",
-        "0",
-        "--conflict-zone-id",
+        "--conflict-zone-entry-id",
         "fixture-zone",
-        "--conflict-provenance-id",
-        "fixture-zone.v1",
-        "--conflict-registry-checksum",
-        _zone_checksum((1.0, 0.0), 0.25),
-        "--conflict-center",
-        "1",
-        "0",
-        "--conflict-radius-m",
-        "0.25",
         "--out",
     ]
 
@@ -374,6 +367,30 @@ def test_process_trace_preserves_robot_frame_without_world_claim() -> None:
     assert payload["coordinate_frames"]["world"]["status"] == "unavailable"
     assert payload["frames"][0]["world"]["status"] == "unavailable"
     assert payload["frames"][0]["source_coordinates"]["coordinate_frame"] == "robot"
+
+
+def test_robot_frame_route_and_conflict_contracts_are_explicitly_unavailable() -> None:
+    """Valid world geometry cannot make robot-frame source coordinates projectable."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(coordinate_frame="robot")),
+        route=_registered_route("route-b"),
+        conflict_zone=_registered_conflict_zone("zone-b"),
+    )
+
+    assert payload["coordinate_frames"]["route"] == {
+        "status": "unavailable",
+        "reason": "source_coordinate_frame_not_world",
+        "source_coordinate_frame": "robot",
+    }
+    assert payload["coordinate_frames"]["conflict"] == {
+        "status": "unavailable",
+        "reason": "source_coordinate_frame_not_world",
+        "source_coordinate_frame": "robot",
+    }
+    assert {frame["route"]["status"] for frame in payload["frames"]} == {"unavailable"}
+    assert {frame["conflict"]["status"] for frame in payload["frames"]} == {"unavailable"}
+    validate_worked_example_process_trace(payload)
 
 
 def test_invalid_conflict_zone_is_unavailable_everywhere() -> None:
@@ -469,6 +486,53 @@ def test_process_trace_binds_canonical_near_miss_encounter_interval() -> None:
     assert payload["diagnostics"]["threshold_exposure"]["duration_s"] == pytest.approx(0.0)
 
 
+def test_canonical_encounter_selector_searches_all_report_encounters() -> None:
+    """Actor and encounter selectors must not be constrained by the earliest report record."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload(actor_switch=True))
+    report = _encounter_report(start_time_s=0.0, end_time_s=0.1)
+    second = deepcopy(report["encounters"][0])
+    second.update(
+        {
+            "encounter_id": "ped-b:encounter-0002",
+            "actor_id": "ped-b",
+            "start_time_s": 0.2,
+            "end_time_s": 0.3,
+            "duration_s": 0.1,
+            "valid_exposure_duration_s": 0.1,
+        }
+    )
+    report["encounters"].append(second)
+    report["denominator"].update(
+        {
+            "actor_count": 2,
+            "encounter_count": 2,
+            "valid_exposure_duration_s": 0.2,
+        }
+    )
+
+    by_actor = build_worked_example_process_trace_from_export(
+        trace,
+        focal_actor_id="ped-b",
+        encounter_report=report,
+        encounter_report_input_checksum="0" * 64,
+    )
+    by_encounter = build_worked_example_process_trace_from_export(
+        trace,
+        focal_encounter_id="ped-b:encounter-0002",
+        encounter_report=report,
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    for payload in (by_actor, by_encounter):
+        focal = payload["encounters"]["focal"]
+        assert focal["status"] == "available"
+        assert focal["actor_id"] == "ped-b"
+        assert focal["encounter_id"] == "ped-b:encounter-0002"
+        assert focal["declared_encounter"]["canonical_record"]["actor_id"] == "ped-b"
+        validate_worked_example_process_trace(payload)
+
+
 def test_unrelated_canonical_encounter_checksum_abstains() -> None:
     """Canonical encounter reports must bind to the input trace checksum."""
 
@@ -527,6 +591,12 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     assert typed_event["time_s"] == pytest.approx(0.15)
     assert typed_event["collision_partner_id"] == "ped-a"
     assert typed_event["collision_partner_type"] == "pedestrian"
+    assert typed_event["actor_id"] == "ped-a"
+    assert typed_event["focal_binding"] == {
+        "status": "available",
+        "reason": "collision_partner_matches_focal_actor",
+        "actor_id": "ped-a",
+    }
 
     non_focal_payload = _trace_payload(collision_mode="ledger_ped_b")
     non_focal = build_worked_example_process_trace_from_export(
@@ -535,8 +605,14 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     non_focal_event = {event["event_type"]: event for event in non_focal["event_anchors"]}[
         "exact_collision_event"
     ]
-    assert non_focal_event["status"] == "unavailable"
-    assert non_focal_event["reason"] == "collision_not_bound_to_focal_encounter"
+    assert non_focal_event["status"] == "available"
+    assert non_focal_event["actor_id"] is None
+    assert non_focal_event["collision_partner_id"] == "ped-b"
+    assert non_focal_event["collision_partner_type"] == "pedestrian"
+    assert non_focal_event["focal_binding"] == {
+        "status": "unavailable",
+        "reason": "collision_partner_not_focal_actor",
+    }
 
     static_payload = _trace_payload(collision_mode="static_geometry_collision")
     static = build_worked_example_process_trace_from_export(
@@ -545,8 +621,15 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     static_event = {event["event_type"]: event for event in static["event_anchors"]}[
         "exact_collision_event"
     ]
-    assert static_event["status"] == "unavailable"
-    assert static_event["reason"] == "collision_not_bound_to_focal_encounter"
+    assert static_event["status"] == "available"
+    assert static_event["time_s"] == pytest.approx(0.15)
+    assert static_event["actor_id"] is None
+    assert static_event["collision_partner_id"] is None
+    assert static_event["collision_partner_type"] == "static_geometry"
+    assert static_event["focal_binding"] == {
+        "status": "unavailable",
+        "reason": "collision_partner_not_focal_actor",
+    }
 
     invented_payload = _trace_payload(collision_mode="invented_events")
     invented = build_worked_example_process_trace_from_export(
@@ -584,7 +667,7 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
         "exact_collision_event"
     ]
     assert outside_event["status"] == "unavailable"
-    assert outside_event["reason"] == "collision_time_outside_encounter_interval"
+    assert outside_event["reason"] == "collision_time_outside_trace_sample_bounds"
 
     zero_sample_interval = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_typed")),
@@ -593,12 +676,81 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     )
     zero_events = {event["event_type"]: event for event in zero_sample_interval["event_anchors"]}
     assert zero_sample_interval["diagnostics"]["coverage"]["frame_count"] == 0
-    assert zero_events["exact_collision_event"]["status"] == "unavailable"
-    assert (
-        zero_events["exact_collision_event"]["reason"]
-        == "collision_time_outside_encounter_interval"
+    assert zero_events["exact_collision_event"]["status"] == "available"
+    assert zero_events["exact_collision_event"]["actor_id"] is None
+    assert zero_events["exact_collision_event"]["focal_binding"] == {
+        "status": "unavailable",
+        "reason": "collision_time_outside_encounter_interval",
+    }
+    assert zero_sample_interval["event_anchor_hierarchy"]["selected_anchor"]["event_type"] == (
+        "exact_collision_event"
     )
-    assert zero_sample_interval["event_anchor_hierarchy"]["status"] == "unavailable"
+
+
+def test_pair_collision_identity_includes_truthful_episode_partner() -> None:
+    """Common exact-collision anchors require the same canonical partner identity."""
+
+    left_payload = _trace_payload(
+        trace_id="collision-left",
+        planner_id="planner-a",
+        seed=7,
+        collision_mode="static_geometry_collision",
+    )
+    right_payload = _trace_payload(
+        trace_id="collision-right",
+        planner_id="planner-b",
+        seed=7,
+        collision_mode="static_geometry_collision",
+    )
+    matching = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(left_payload),
+        pair_trace=simulation_trace_export_from_dict(right_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )["pair_compatibility"]
+    common_collision = next(
+        anchor
+        for anchor in matching["valid_common_event_anchors"]
+        if anchor["event_type"] == "exact_collision_event"
+    )
+    assert common_collision["collision_partner_type"] == "static_geometry"
+    assert common_collision["collision_partner_id"] is None
+
+    right_payload["frames"][1]["planner"]["event_ledger"]["collision_events"][0][
+        "collision_partner_type"
+    ] = "boundary"
+    mismatched = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(left_payload),
+        pair_trace=simulation_trace_export_from_dict(right_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )["pair_compatibility"]
+    assert not any(
+        anchor["event_type"] == "exact_collision_event"
+        for anchor in mismatched["valid_common_event_anchors"]
+    )
+
+
+def test_pair_receipt_replay_uses_registered_route_and_conflict_geometry() -> None:
+    """Right-event replay must use the same registered coordinate contracts as construction."""
+
+    left_payload = _trace_payload(trace_id="geometry-pair-left", planner_id="planner-a", seed=7)
+    right_payload = _trace_payload(trace_id="geometry-pair-right", planner_id="planner-b", seed=7)
+    left_payload["frames"][-1]["robot"]["position"] = [1.0, 0.0]
+    right_payload["frames"][-1]["robot"]["position"] = [1.0, 0.0]
+    left = simulation_trace_export_from_dict(left_payload)
+    right = simulation_trace_export_from_dict(right_payload)
+    payload = build_worked_example_process_trace_from_export(
+        left,
+        route=_registered_route("r-main"),
+        conflict_zone=_registered_conflict_zone("door"),
+        pair_trace=right,
+        pair_comparison_grain="matched_planner_pair",
+    )
+
+    assert any(
+        event["event_type"] == "conflict_zone_entry"
+        for event in payload["pair_compatibility"]["right_event_anchors"]
+    )
+    validate_worked_example_process_trace(payload)
 
 
 def test_terminal_event_has_no_timed_contract() -> None:
@@ -724,6 +876,267 @@ def test_registry_checksum_must_bind_geometry() -> None:
     )
 
 
+def test_external_geometry_registry_receipts_fail_closed(tmp_path: Path) -> None:
+    """Raw-file, unique-entry, and replayed receipt bindings must be external evidence."""
+
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_bytes(GEOMETRY_REGISTRY_FIXTURE_PATH.read_bytes())
+    route = load_registered_route_spec(registry_path, "route-b")
+    conflict = load_registered_conflict_zone_spec(registry_path, "zone-b")
+    trace = simulation_trace_export_from_dict(_trace_payload())
+
+    available = build_worked_example_process_trace_from_export(
+        trace, route=route, conflict_zone=conflict
+    )
+    route_receipt = available["coordinate_frames"]["route"]["registry"]
+    assert route_receipt["artifact_ref"] == GEOMETRY_REGISTRY_ARTIFACT_REF
+    assert str(tmp_path) not in json.dumps(available, sort_keys=True)
+    assert route_receipt["coordinate_frame"] == "world"
+    assert route_receipt["geometry_kind"] == "line_segment"
+    assert route_receipt["resolved_geometry"] == available["coordinate_frames"]["route"]["geometry"]
+    assert route_receipt["upstream_binding"] == {
+        "kind": "fixture_only",
+        "fixture_id": "issue-6790-route-b",
+    }
+
+    forged = deepcopy(available)
+    forged["coordinate_frames"]["route"]["registry"]["content_sha256"] = "f" * 64
+    for frame in forged["frames"]:
+        frame["route"]["registry"]["content_sha256"] = "f" * 64
+    with pytest.raises(Exception, match="external geometry registry receipt"):
+        validate_worked_example_process_trace(forged)
+
+    downgraded = deepcopy(available)
+    downgraded["coordinate_frames"]["route"]["status"] = "unavailable"
+    downgraded["coordinate_frames"]["route"]["reason"] = "registered_route_unavailable"
+    for frame in downgraded["frames"]:
+        frame["route"] = {"status": "unavailable", "reason": "registered_route_unavailable"}
+    _rebuild_dependent_process_views(downgraded, trace)
+    with pytest.raises(Exception, match="external geometry registry receipt"):
+        validate_worked_example_process_trace(downgraded)
+
+    registry_path.unlink()
+    with pytest.raises(Exception, match="external geometry registry receipt"):
+        validate_worked_example_process_trace(
+            available,
+            geometry_registry_paths={GEOMETRY_REGISTRY_ARTIFACT_REF: registry_path},
+        )
+    registry_path.write_bytes(GEOMETRY_REGISTRY_FIXTURE_PATH.read_bytes())
+    registry_path.write_text(registry_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    tampered = build_worked_example_process_trace_from_export(
+        trace, route=route, conflict_zone=conflict
+    )
+    assert tampered["coordinate_frames"]["route"]["reason"] == (
+        "registered_route_registry_content_mismatch"
+    )
+    assert tampered["coordinate_frames"]["conflict"]["reason"] == (
+        "registered_conflict_zone_registry_content_mismatch"
+    )
+
+
+def test_geometry_registry_receipts_are_checkout_portable(tmp_path: Path) -> None:
+    """Stable receipts stay identical while replay resolves each checkout-local artifact."""
+
+    portable_registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    canonical_binding = {
+        "kind": "canonical_source",
+        "source_artifact_ref": "maps/registry.yaml",
+        "source_content_sha256": "1" * 64,
+        "selector": {"map_id": "fixture-map", "spawn_id": 1, "goal_id": 2},
+    }
+    next(entry for entry in portable_registry["routes"] if entry["entry_id"] == "fixture-route")[
+        "upstream_binding"
+    ] = canonical_binding
+    next(
+        entry
+        for entry in portable_registry["conflict_zones"]
+        if entry["entry_id"] == "fixture-zone"
+    )["upstream_binding"] = {
+        **canonical_binding,
+        "selector": {"map_id": "fixture-map", "zone_id": "fixture-zone"},
+    }
+    registry_bytes = (json.dumps(portable_registry, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    payloads: list[dict[str, object]] = []
+    registries: list[Path] = []
+    for checkout_name in ("checkout-a", "checkout-b"):
+        checkout = tmp_path / checkout_name
+        trace_path = checkout / "inputs" / "trace.json"
+        registry_path = checkout / "geometry" / "registry.json"
+        trace_path.parent.mkdir(parents=True)
+        registry_path.parent.mkdir(parents=True)
+        trace_path.write_bytes(TRACE_FIXTURE_PATH.read_bytes())
+        registry_path.write_bytes(registry_bytes)
+        registries.append(registry_path)
+        payload = build_worked_example_process_trace(
+            trace_path,
+            route=load_registered_route_spec(registry_path, "fixture-route"),
+            conflict_zone=load_registered_conflict_zone_spec(registry_path, "fixture-zone"),
+        )
+        validate_worked_example_process_trace(
+            payload,
+            geometry_registry_paths={GEOMETRY_REGISTRY_ARTIFACT_REF: registry_path},
+        )
+        payloads.append(payload)
+
+    assert payloads[0] == payloads[1]
+    assert _json_digest(payloads[0]) == _json_digest(payloads[1])
+    assert payloads[0]["coordinate_frames"]["route"]["registry"]["upstream_binding"] == (
+        canonical_binding
+    )
+    serialized = json.dumps(payloads[0], sort_keys=True)
+    assert str(tmp_path / "checkout-a") not in serialized
+    assert str(tmp_path / "checkout-b") not in serialized
+
+    for registry_path, payload in zip(registries, payloads, strict=True):
+        pristine = registry_path.read_bytes()
+        registry_path.write_bytes(pristine + b"\n")
+        with pytest.raises(Exception, match="external geometry registry receipt"):
+            validate_worked_example_process_trace(
+                payload,
+                geometry_registry_paths={GEOMETRY_REGISTRY_ARTIFACT_REF: registry_path},
+            )
+        registry_path.write_bytes(pristine)
+        validate_worked_example_process_trace(
+            payload,
+            geometry_registry_paths={GEOMETRY_REGISTRY_ARTIFACT_REF: registry_path},
+        )
+
+
+@pytest.mark.parametrize(
+    "source_artifact_ref",
+    [
+        "/tmp/maps/registry.yaml",
+        "file:///tmp/maps/registry.yaml",
+        "maps\\registry.yaml",
+        "~/maps/registry.yaml",
+        "maps/../registry.yaml",
+        "maps/./registry.yaml",
+    ],
+)
+def test_canonical_upstream_binding_rejects_machine_local_or_unstable_references(
+    tmp_path: Path,
+    source_artifact_ref: str,
+) -> None:
+    """Canonical source bindings must not reintroduce checkout-local path identity."""
+
+    registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    registry["routes"][0]["upstream_binding"] = {
+        "kind": "canonical_source",
+        "source_artifact_ref": source_artifact_ref,
+        "source_content_sha256": "2" * 64,
+        "selector": {"map_id": "fixture-map", "spawn_id": 1, "goal_id": 2},
+    }
+    registry_path = tmp_path / "invalid-upstream-ref.json"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    with pytest.raises(Exception, match="invalid process-trace geometry registry envelope"):
+        load_registered_route_spec(registry_path, "r-main")
+
+
+def test_geometry_registry_missing_and_duplicate_entries_fail_closed(tmp_path: Path) -> None:
+    """An entry ID must resolve exactly once in the bound raw registry artifact."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+    route = _registered_route("route-b")
+    missing = build_worked_example_process_trace_from_export(
+        trace, route=replace(route, registry_entry_id="missing-route")
+    )
+    assert missing["coordinate_frames"]["route"]["reason"] == (
+        "registered_route_registry_entry_missing"
+    )
+    conflict = _registered_conflict_zone("zone-b")
+    missing_conflict = build_worked_example_process_trace_from_export(
+        trace, conflict_zone=replace(conflict, registry_entry_id="missing-zone")
+    )
+    assert missing_conflict["coordinate_frames"]["conflict"]["reason"] == (
+        "registered_conflict_zone_registry_entry_missing"
+    )
+
+    registry_payload = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    duplicate = deepcopy(registry_payload["routes"][1])
+    registry_payload["routes"].append(duplicate)
+    duplicate_path = tmp_path / "duplicate.json"
+    duplicate_path.write_text(
+        json.dumps(registry_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    duplicate_route = replace(
+        route,
+        registry_path=str(duplicate_path.resolve()),
+        registry_content_sha256=hashlib.sha256(duplicate_path.read_bytes()).hexdigest(),
+    )
+    result = build_worked_example_process_trace_from_export(trace, route=duplicate_route)
+    assert result["coordinate_frames"]["route"]["reason"] == (
+        "registered_route_registry_entry_ambiguous"
+    )
+
+    non_world_payload = deepcopy(registry_payload)
+    non_world_payload["routes"].pop()
+    non_world_payload["coordinate_frame"] = "robot"
+    non_world_path = tmp_path / "non-world.json"
+    non_world_path.write_text(json.dumps(non_world_payload), encoding="utf-8")
+    with pytest.raises(Exception, match="invalid process-trace geometry registry envelope"):
+        load_registered_route_spec(non_world_path, "route-b")
+
+
+@pytest.mark.parametrize("entry_id", ["point-owner", "polygon-owner"])
+def test_non_circular_conflict_owner_geometry_is_explicitly_unavailable(entry_id: str) -> None:
+    """Known point/polygon owner geometry must abstain until its projection is versioned."""
+
+    result = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        conflict_zone=_registered_conflict_zone(entry_id),
+    )
+
+    assert result["coordinate_frames"]["conflict"] == {
+        "status": "unavailable",
+        "reason": f"registered_conflict_zone_{entry_id.removesuffix('-owner')}_projection_unavailable",
+    }
+
+
+def test_registered_polyline_projection_and_ambiguity_contract() -> None:
+    """Ordered polylines use cumulative arclength and abstain on ties or branching geometry."""
+
+    trace_payload = _trace_payload()
+    positions = [[0.2, 0.0], [0.8, 0.0], [1.0, 0.4], [1.0, 1.0]]
+    for frame, position in zip(trace_payload["frames"], positions, strict=True):
+        frame["robot"]["position"] = position
+    polyline = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload),
+        route=_registered_route("polyline-turn"),
+    )
+    assert polyline["coordinate_frames"]["route"]["geometry"] == {
+        "type": "polyline",
+        "points": [[0.0, 0.0], [1.0, 0.0], [1.0, 2.0]],
+    }
+    assert polyline["frames"][2]["route"]["s_m"] == pytest.approx(1.4)
+    assert polyline["frames"][2]["route"]["n_m"] == pytest.approx(0.0)
+    assert polyline["frames"][2]["route"]["progress_rate_mps"] == pytest.approx(0.0)
+    validate_worked_example_process_trace(polyline)
+
+    for entry_id in ("branching", "self-intersecting"):
+        rejected = build_worked_example_process_trace_from_export(
+            simulation_trace_export_from_dict(_trace_payload()),
+            route=_registered_route(entry_id),
+        )
+        assert rejected["coordinate_frames"]["route"]["reason"] == (
+            "registered_route_branching_or_ambiguous_geometry"
+        )
+
+    ambiguous_payload = _trace_payload()
+    for frame in ambiguous_payload["frames"]:
+        frame["robot"]["position"] = [1.0, 1.0]
+    ambiguous = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(ambiguous_payload),
+        route=_registered_route("ambiguous-u"),
+    )
+    assert {frame["route"]["reason"] for frame in ambiguous["frames"]} == {
+        "ambiguous_route_projection"
+    }
+    validate_worked_example_process_trace(ambiguous)
+
+
 def test_stall_duration_requires_qualifying_contiguous_run() -> None:
     """Separated one-frame stalls should not accumulate into sustained stall duration."""
 
@@ -732,13 +1145,7 @@ def test_stall_duration_requires_qualifying_contiguous_run() -> None:
 
     result = build_worked_example_process_trace_from_export(
         trace,
-        route=RouteSpec(
-            "r-main",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-fixture.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
+        route=_registered_route("r-main"),
     )
 
     stall = result["diagnostics"]["stall"]
@@ -785,13 +1192,7 @@ def test_reversal_counts_require_complete_heading_and_route_velocity() -> None:
 
     missing_route_velocity = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload(missing_velocity_step=1)),
-        route=RouteSpec(
-            "r-main",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-fixture.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
+        route=_registered_route("r-main"),
     )
     assert missing_route_velocity["diagnostics"]["reversal_counts"]["status"] == "unavailable"
     assert missing_route_velocity["diagnostics"]["reversal_counts"]["reason"] == (
@@ -826,13 +1227,7 @@ def test_route_frames_project_only_selected_focal_actor() -> None:
 
     payload = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload(actor_switch=True)),
-        route=RouteSpec(
-            "r-main",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-fixture.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
+        route=_registered_route("r-main"),
     )
     route = payload["frames"][0]["route"]
 
@@ -922,20 +1317,8 @@ def test_semantic_validator_rejects_coherently_moved_event_and_frame_records() -
 
     payload = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload(turn_and_decelerate=True)),
-        route=RouteSpec(
-            "r-main",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-fixture.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
-        conflict_zone=ConflictZoneSpec(
-            "door",
-            (1.0, 0.0),
-            0.25,
-            "zone-fixture.v1",
-            _zone_checksum((1.0, 0.0), 0.25),
-        ),
+        route=_registered_route("r-main"),
+        conflict_zone=_registered_conflict_zone("door"),
     )
 
     moved = deepcopy(payload)
@@ -988,20 +1371,8 @@ def test_top_level_route_and_conflict_contracts_bind_frame_geometry() -> None:
 
     payload = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload()),
-        route=RouteSpec(
-            "route-b",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-b.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
-        conflict_zone=ConflictZoneSpec(
-            "zone-b",
-            (1.0, 0.0),
-            0.25,
-            "zone-b.v1",
-            _zone_checksum((1.0, 0.0), 0.25),
-        ),
+        route=_registered_route("route-b"),
+        conflict_zone=_registered_conflict_zone("zone-b"),
     )
 
     route_forged = deepcopy(payload)
@@ -1036,20 +1407,8 @@ def test_availability_contracts_reject_bidirectional_status_forgery() -> None:
 
     payload = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload()),
-        route=RouteSpec(
-            "route-b",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-b.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
-        conflict_zone=ConflictZoneSpec(
-            "zone-b",
-            (1.0, 0.0),
-            0.25,
-            "zone-b.v1",
-            _zone_checksum((1.0, 0.0), 0.25),
-        ),
+        route=_registered_route("route-b"),
+        conflict_zone=_registered_conflict_zone("zone-b"),
     )
 
     route_top_unavailable = deepcopy(payload)
@@ -1075,6 +1434,63 @@ def test_availability_contracts_reject_bidirectional_status_forgery() -> None:
     }
     with pytest.raises(Exception, match="/coordinate_frames/relative_interaction/status"):
         validate_worked_example_process_trace(relative_top_unavailable)
+
+
+def test_frame_availability_replays_source_content_after_dependent_views_rebuild() -> None:
+    """Allowlisted reasons cannot downgrade source-available coordinate projections."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+    payload = build_worked_example_process_trace_from_export(
+        trace,
+        route=_registered_route("route-b"),
+        conflict_zone=_registered_conflict_zone("zone-b"),
+    )
+
+    for frame_key, reason in (
+        ("world", "missing_robot_position"),
+        ("route", "missing_robot_position"),
+        ("conflict", "missing_robot_position"),
+        ("relative_interaction", "missing_or_nonfinite_robot_heading"),
+    ):
+        forged = deepcopy(payload)
+        forged["frames"][1][frame_key] = {"status": "unavailable", "reason": reason}
+        if frame_key == "world":
+            forged["frames"][1][frame_key].update(
+                {
+                    "robot": deepcopy(payload["frames"][1]["world"]["robot"]),
+                    "focal_actor": deepcopy(payload["frames"][1]["world"]["focal_actor"]),
+                }
+            )
+        _rebuild_dependent_process_views(forged, trace)
+
+        with pytest.raises(Exception, match=rf"/frames/1/{frame_key}/status"):
+            validate_worked_example_process_trace(forged)
+
+
+def test_frame_availability_replay_preserves_canonical_missing_and_outside_frames() -> None:
+    """Source missingness and canonical encounter bounds still produce valid unavailability."""
+
+    trace_payload = _trace_payload(nonfinite_heading_step=1)
+    trace_payload["frames"][2]["robot"]["position"] = [float("nan"), 0.0]
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload),
+        route=_registered_route("route-b"),
+        conflict_zone=_registered_conflict_zone("zone-b"),
+        encounter_report=_encounter_report(start_time_s=0.1, end_time_s=0.2),
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    assert payload["frames"][0]["encounter_interval"]["status"] == "outside_interval"
+    assert payload["frames"][0]["relative_interaction"]["status"] == "unavailable"
+    assert payload["frames"][1]["relative_interaction"] == {
+        "status": "unavailable",
+        "reason": "missing_or_nonfinite_robot_heading",
+    }
+    assert payload["frames"][2]["world"]["status"] == "unavailable"
+    assert payload["frames"][2]["route"]["status"] == "unavailable"
+    assert payload["frames"][2]["conflict"]["status"] == "unavailable"
+    assert payload["frames"][2]["relative_interaction"]["status"] == "unavailable"
+    validate_worked_example_process_trace(payload)
 
 
 def test_focal_actor_identity_binds_to_source_coordinates() -> None:
@@ -1195,6 +1611,95 @@ def test_pair_receipts_resolve_right_events_and_bind_content_sha() -> None:
     )
     with pytest.raises(Exception, match="/pair_compatibility/valid_common_event_anchors/0"):
         validate_worked_example_process_trace(forged_right_anchor)
+
+
+def test_pair_compatibility_replays_status_provenance_and_seed_checks() -> None:
+    """Coherent summary flips cannot make a seed-mismatched planner pair compatible."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-left", planner_id="planner-a", seed=7)
+        ),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-right", planner_id="planner-b", seed=8)
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    pair = payload["pair_compatibility"]
+    assert pair["status"] == "incompatible"
+    assert pair["provenance_gate"]["compatible"] is False
+
+    forged = deepcopy(payload)
+    forged_pair = forged["pair_compatibility"]
+    forged_pair["status"] = "available"
+    forged_pair["provenance_gate"]["compatible"] = True
+    forged_pair["provenance_gate"]["checks"]["seed_equal"] = True
+    forged_pair["provenance_gate"]["checks"]["seed_different"] = False
+
+    with pytest.raises(Exception, match="/pair_compatibility/status"):
+        validate_worked_example_process_trace(forged)
+
+
+def test_pair_compatibility_replays_shared_prefix_and_divergence_eligibility() -> None:
+    """An incompatible pair cannot forge a shared prefix to enable divergence output."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-left", planner_id="planner-a", seed=7)
+        ),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(
+                trace_id="pair-right",
+                planner_id="planner-b",
+                seed=8,
+                diverge_after_start=True,
+            )
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    pair = payload["pair_compatibility"]
+    assert pair["status"] == "incompatible"
+    assert pair["shared_prefix"]["shared_prefix"] is False
+
+    forged = deepcopy(payload)
+    forged["pair_compatibility"]["shared_prefix"]["shared_prefix"] = True
+    forged["pair_compatibility"]["divergence_interpretation"] = {
+        "allowed": True,
+        "reason": "shared_prefix_available",
+    }
+    with pytest.raises(Exception, match="/pair_compatibility/shared_prefix/shared_prefix"):
+        validate_worked_example_process_trace(forged)
+
+
+def test_matched_planner_pair_requires_equal_replayed_time_step_contracts() -> None:
+    """Different declared time steps make an otherwise matched planner pair incompatible."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(
+                trace_id="pair-left",
+                planner_id="planner-a",
+                seed=7,
+                time_step_s=0.1,
+            )
+        ),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(
+                trace_id="pair-right",
+                planner_id="planner-b",
+                seed=7,
+                time_step_s=0.2,
+            )
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    pair = payload["pair_compatibility"]
+
+    assert pair["status"] == "incompatible"
+    assert pair["provenance_gate"]["checks"]["time_step_s_equal"] is False
+    assert pair["provenance_gate"]["time_step_contracts"]["left"]["time_step_s"] == 0.1
+    assert pair["provenance_gate"]["time_step_contracts"]["right"]["time_step_s"] == 0.2
+    validate_worked_example_process_trace(payload)
 
 
 def test_source_and_pair_hashes_recompute_from_canonical_content_receipts() -> None:
@@ -1407,6 +1912,24 @@ def test_run_config_contract_scans_all_frames_and_rejects_bool_or_inconsistent_t
     }
 
 
+def test_run_config_contract_rejects_declared_time_step_that_disagrees_with_samples() -> None:
+    """The declared step is preserved but cannot override sampled step/time increments."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(time_step_s=0.2))
+    )
+
+    assert payload["source_trace"]["run_config_contract"] == {
+        "status": "unavailable",
+        "reason": "run_config_time_step_trace_mismatch",
+        "time_step_s": 0.2,
+        "observed_time_step_s": 0.1,
+        "config_digest": "a" * 64,
+        "source": "planner.run_config",
+    }
+    validate_worked_example_process_trace(payload)
+
+
 def test_run_config_contract_replays_from_embedded_source_content() -> None:
     """Run-config status/time/reason cannot be changed independently from source content."""
 
@@ -1463,20 +1986,8 @@ def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection
     )
     route_payload = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_typed")),
-        route=RouteSpec(
-            "r-main",
-            (0.0, 0.0),
-            (10.0, 0.0),
-            "route-fixture.v1",
-            _route_checksum((0.0, 0.0), (10.0, 0.0)),
-        ),
-        conflict_zone=ConflictZoneSpec(
-            "door",
-            (1.0, 0.0),
-            0.25,
-            "zone-fixture.v1",
-            _zone_checksum((1.0, 0.0), 0.25),
-        ),
+        route=_registered_route("r-main"),
+        conflict_zone=_registered_conflict_zone("door"),
     )
 
     probes: list[tuple[str, list[object], object]] = [
@@ -1667,6 +2178,36 @@ def test_matched_planner_empty_actor_realizations_remain_compatible() -> None:
     assert pair["initial_state_equivalence"]["max_actor_position_delta_m"] is None
 
 
+def test_matched_realization_nonfinite_heading_cannot_enable_divergence() -> None:
+    """Comparison missingness must fail shared-prefix eligibility closed."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(
+                trace_id="pair-left",
+                planner_id="ppo",
+                seed=7,
+                nonfinite_heading_step=1,
+            )
+        ),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(
+                trace_id="pair-right",
+                planner_id="ppo",
+                seed=8,
+                nonfinite_heading_step=1,
+            )
+        ),
+        pair_comparison_grain="matched_realization_pair",
+    )
+    pair = payload["pair_compatibility"]
+
+    assert pair["shared_prefix"]["shared_prefix"] is False
+    assert pair["shared_prefix"]["reason"] == "missing_robot_heading"
+    assert pair["divergence_interpretation"]["allowed"] is False
+    validate_worked_example_process_trace(payload)
+
+
 def _set_path(payload: dict[str, object], path: list[object], value: object) -> None:
     cursor: object = payload
     for key in path[:-1]:
@@ -1676,6 +2217,37 @@ def _set_path(payload: dict[str, object], path: list[object], value: object) -> 
         cursor[last] = value  # type: ignore[index]
     else:
         cursor[last] = value  # type: ignore[index]
+
+
+def _rebuild_dependent_process_views(
+    payload: dict[str, object],
+    trace: object,
+) -> None:
+    """Rebuild every mutable frame-derived view used by semantic validation."""
+
+    focal = payload["encounters"]["focal"]  # type: ignore[index]
+    frames = payload["frames"]  # type: ignore[assignment]
+    event_frames = coordinates._diagnostic_frames(frames)  # type: ignore[arg-type]
+    events = coordinates._event_anchors(
+        trace,
+        frames=event_frames,
+        episode_frames=frames,
+        focal_actor_id=focal.get("actor_id"),
+        focal_interval=coordinates._focal_interval_bounds(focal),
+    )
+    hierarchy = coordinates._event_anchor_hierarchy(events)
+    payload["frames"] = coordinates._frames_with_event_alignment(frames, hierarchy)  # type: ignore[arg-type]
+    payload["event_anchors"] = events
+    payload["event_anchor_hierarchy"] = hierarchy
+    payload["diagnostics"] = coordinates._diagnostics(
+        event_frames,
+        route_available=any(frame["route"].get("status") == "available" for frame in event_frames),
+    )
+    focal["actor_contiguity"] = coordinates._actor_contiguity(
+        event_frames,
+        focal.get("actor_id"),
+        declared=focal.get("declared_encounter"),
+    )
 
 
 def _canonical_trace_checksum(payload: dict[str, object]) -> str:
@@ -2026,6 +2598,14 @@ def _encounter_report(*, start_time_s: float = 0.0, end_time_s: float = 0.3) -> 
 
 def _route_checksum(start: tuple[float, float], end: tuple[float, float]) -> str:
     return _json_digest({"type": "line_segment", "start": list(start), "end": list(end)})
+
+
+def _registered_route(entry_id: str) -> RouteSpec:
+    return load_registered_route_spec(GEOMETRY_REGISTRY_FIXTURE_PATH, entry_id)
+
+
+def _registered_conflict_zone(entry_id: str) -> ConflictZoneSpec:
+    return load_registered_conflict_zone_spec(GEOMETRY_REGISTRY_FIXTURE_PATH, entry_id)
 
 
 def _zone_checksum(center: tuple[float, float], radius_m: float) -> str:

@@ -26,6 +26,7 @@ from robot_sf.analysis_workbench.episode_phases import (
 )
 from robot_sf.analysis_workbench.event_alignment import (
     build_pair_compatibility_record,
+    build_trace_run_config_contract,
     unavailable_pair_compatibility,
 )
 from robot_sf.analysis_workbench.safety_surrogates import (
@@ -50,9 +51,13 @@ WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_FILE = (
 NEAR_MISS_ENCOUNTER_SCHEMA_FILE = (
     Path(__file__).parents[1] / "benchmark" / "schemas" / "near_miss_encounter.v1.json"
 )
+GEOMETRY_REGISTRY_SCHEMA_FILE = (
+    Path(__file__).with_name("schemas") / "process_trace_geometry_registry.v1.json"
+)
 EVENT_PROFILE_VERSION = "worked_example_event_detectors.v1"
 THRESHOLD_PROFILE_VERSION = "worked_example_threshold_profile.diagnostic.v1"
 CANONICAL_ENCOUNTER_SCHEMA_VERSION = "near_miss_encounter.v1"
+GEOMETRY_REGISTRY_SCHEMA_VERSION = "process_trace_geometry_registry.v1"
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 COLLISION_PARTNER_TYPES = frozenset({"pedestrian", "static_geometry", "boundary", "goal_artifact"})
 EXPECTED_EVENT_TYPES = [
@@ -71,24 +76,36 @@ EXPECTED_EVENT_TYPES = [
 
 @dataclass(frozen=True, slots=True)
 class RouteSpec:
-    """Registered straight route used for route-frame diagnostics."""
+    """Route geometry resolved from a versioned external registry entry."""
 
     route_id: str
     start: tuple[float, float]
     end: tuple[float, float]
     provenance_id: str | None = None
     registry_checksum: str | None = None
+    geometry: Mapping[str, Any] | None = None
+    registry_artifact_ref: str | None = None
+    registry_path: str | None = None
+    registry_content_sha256: str | None = None
+    registry_entry_id: str | None = None
+    registry_entry_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ConflictZoneSpec:
-    """Registered circular conflict zone used for conflict-frame diagnostics."""
+    """Conflict zone resolved from a versioned external registry entry."""
 
     zone_id: str
     center: tuple[float, float]
     radius_m: float
     provenance_id: str | None = None
     registry_checksum: str | None = None
+    geometry: Mapping[str, Any] | None = None
+    registry_artifact_ref: str | None = None
+    registry_path: str | None = None
+    registry_content_sha256: str | None = None
+    registry_entry_id: str | None = None
+    registry_entry_sha256: str | None = None
 
 
 class WorkedExampleProcessTraceValidationError(RobotSfError, ValueError):
@@ -125,12 +142,29 @@ def load_near_miss_encounter_schema() -> dict[str, Any]:
     return json.loads(NEAR_MISS_ENCOUNTER_SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=1)
+def load_process_trace_geometry_registry_schema() -> dict[str, Any]:
+    """Load the analysis-workbench-owned external geometry-registry schema.
+
+    Returns:
+        Parsed JSON Schema document.
+    """
+
+    return json.loads(GEOMETRY_REGISTRY_SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
 def validate_worked_example_process_trace(
     payload: Mapping[str, Any],
     *,
     source: str | Path | None = None,
+    geometry_registry_paths: Mapping[str, str | Path] | None = None,
 ) -> None:
-    """Validate a process trace payload against its versioned schema."""
+    """Validate a process trace payload against its versioned schema.
+
+    ``geometry_registry_paths`` resolves stable registry artifact references to
+    machine-local files. Absolute paths are deliberately validation context,
+    never part of the public process-trace payload.
+    """
 
     validator = Draft202012Validator(load_worked_example_process_trace_schema())
     errors = [
@@ -140,15 +174,28 @@ def validate_worked_example_process_trace(
             key=lambda err: list(err.absolute_path),
         )
     ]
-    errors.extend(_semantic_validation_errors(payload))
+    errors.extend(
+        _semantic_validation_errors(
+            payload,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+    )
     if errors:
         raise WorkedExampleProcessTraceValidationError(errors, source=source)
 
 
 def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
     payload: Mapping[str, Any],
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
 ) -> list[str]:
     errors: list[str] = []
+    source_trace = payload.get("source_trace")
+    focal = (
+        payload.get("encounters", {}).get("focal")
+        if isinstance(payload.get("encounters"), Mapping)
+        else None
+    )
     frames = payload.get("frames")
     if isinstance(frames, list):
         for index, frame in enumerate(frames):
@@ -172,17 +219,22 @@ def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
                             f"/frames/{index}/relative_interaction/{key}: expected finite number"
                         )
         errors.extend(
-            _validate_coordinate_frame_contracts(payload.get("coordinate_frames"), frames)
+            _validate_coordinate_frame_contracts(
+                payload.get("coordinate_frames"),
+                frames,
+                source_trace=source_trace,
+                focal=focal,
+                geometry_registry_paths=geometry_registry_paths,
+            )
         )
-        errors.extend(_validate_frame_replays(frames))
-    source_trace = payload.get("source_trace")
+        errors.extend(
+            _validate_frame_replays(
+                frames,
+                geometry_registry_paths=geometry_registry_paths,
+            )
+        )
     if isinstance(source_trace, Mapping):
         errors.extend(_validate_source_trace_semantics(source_trace))
-    focal = (
-        payload.get("encounters", {}).get("focal")
-        if isinstance(payload.get("encounters"), Mapping)
-        else None
-    )
     if isinstance(source_trace, Mapping) and isinstance(frames, list):
         errors.extend(_validate_source_contract_frame_replays(source_trace, frames, focal))
     events = payload.get("event_anchors")
@@ -233,7 +285,16 @@ def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
     if isinstance(pair, Mapping):
         if pair.get("status") not in {"available", "unavailable", "incompatible"}:
             errors.append("/pair_compatibility/status: invalid status")
-        errors.extend(_validate_pair_semantics(pair, events, source_trace))
+        errors.extend(
+            _validate_pair_semantics(
+                pair,
+                events,
+                source_trace,
+                coordinate_frames=payload.get("coordinate_frames"),
+                focal=focal,
+                geometry_registry_paths=geometry_registry_paths,
+            )
+        )
         divergence = pair.get("divergence_interpretation")
         if isinstance(divergence, Mapping) and divergence.get("allowed") is True:
             shared_prefix = pair.get("shared_prefix")
@@ -277,13 +338,6 @@ def _validate_frame_record(frame: Mapping[str, Any], index: int) -> list[str]:
             nullable=False,
         )
     )
-    source_robot = (
-        frame.get("source_coordinates", {}).get("robot")
-        if isinstance(frame.get("source_coordinates"), Mapping)
-        else None
-    )
-    if isinstance(source_robot, Mapping) and source_robot.get("position") == []:
-        errors.append(f"/frames/{index}/source_coordinates/robot/position: required")
     errors.extend(
         _validate_actor_state(
             frame.get("source_coordinates", {}).get("focal_actor")
@@ -395,6 +449,10 @@ def _validate_source_actor_state(value: object, path: str) -> list[str]:
 def _validate_coordinate_frame_contracts(  # noqa: C901
     coordinate_frames: object,
     frames: Sequence[object],
+    *,
+    source_trace: object,
+    focal: object,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
 ) -> list[str]:
     if not isinstance(coordinate_frames, Mapping):
         return []
@@ -420,14 +478,6 @@ def _validate_coordinate_frame_contracts(  # noqa: C901
                 errors.append(
                     f"/coordinate_frames/{key}/status: unavailable contract cannot have available frames"
                 )
-            if (
-                contract_status == "available"
-                and record_status == "unavailable"
-                and not _frame_unavailable_allowed_by_contract(key, record)
-            ):
-                errors.append(
-                    f"/frames/{index}/{key}/status: unavailable frame must match coordinate contract"
-                )
         route = frame.get("route")
         if (
             isinstance(route_contract, Mapping)
@@ -435,7 +485,7 @@ def _validate_coordinate_frame_contracts(  # noqa: C901
             and isinstance(route, Mapping)
             and route.get("status") == "available"
         ):
-            for key in ("route_id", "provenance_id", "registry_checksum", "geometry"):
+            for key in ("route_id", "provenance_id", "registry_checksum", "registry", "geometry"):
                 if route.get(key) != route_contract.get(key):
                     errors.append(
                         f"/frames/{index}/route/{key}: must match coordinate_frames.route"
@@ -447,31 +497,126 @@ def _validate_coordinate_frame_contracts(  # noqa: C901
             and isinstance(conflict, Mapping)
             and conflict.get("status") == "available"
         ):
-            for key in ("zone_id", "provenance_id", "registry_checksum", "geometry"):
+            for key in ("zone_id", "provenance_id", "registry_checksum", "registry", "geometry"):
                 if conflict.get(key) != conflict_contract.get(key):
                     errors.append(
                         f"/frames/{index}/conflict/{key}: must match coordinate_frames.conflict"
                     )
+    errors.extend(
+        _validate_registry_contract_replays(
+            route_contract,
+            conflict_contract,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+    )
+    errors.extend(
+        _validate_frame_availability_replays(
+            coordinate_frames,
+            frames,
+            source_trace=source_trace,
+            focal=focal,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+    )
     return errors
 
 
-def _frame_unavailable_allowed_by_contract(key: str, record: Mapping[str, Any]) -> bool:
-    reason = record.get("reason")
-    return (key, reason) in {
-        ("world", "missing_robot_position"),
-        ("route", "missing_robot_position"),
-        ("conflict", "missing_robot_position"),
-        ("relative_interaction", "focal_actor_missing_at_step"),
-        ("relative_interaction", "outside_focal_encounter_interval"),
-        ("relative_interaction", "focal_actor_not_in_frame"),
-        ("relative_interaction", "missing_or_nonfinite_robot_heading"),
-        ("relative_interaction", "missing_focal_actor_position"),
-        ("relative_interaction", "missing_position"),
-        ("relative_interaction", "missing_robot_position"),
-    }
+def _validate_registry_contract_replays(
+    route_contract: object,
+    conflict_contract: object,
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> list[str]:
+    errors: list[str] = []
+    if isinstance(route_contract, Mapping) and "registry" in route_contract:
+        route = _route_spec_from_frame(
+            route_contract,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+        expected = _route_availability(route) if route is not None else None
+        if expected is None or route_contract != expected:
+            errors.append(
+                "/coordinate_frames/route: must replay external geometry registry receipt"
+            )
+    if isinstance(conflict_contract, Mapping) and "registry" in conflict_contract:
+        conflict = _conflict_spec_from_frame(
+            conflict_contract,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+        expected = _conflict_availability(conflict) if conflict is not None else None
+        if expected is None or conflict_contract != expected:
+            errors.append(
+                "/coordinate_frames/conflict: must replay external geometry registry receipt"
+            )
+    return errors
 
 
-def _validate_frame_replays(frames: Sequence[object]) -> list[str]:
+def _validate_frame_availability_replays(
+    coordinate_frames: Mapping[str, Any],
+    frames: Sequence[object],
+    *,
+    source_trace: object,
+    focal: object,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> list[str]:
+    """Replay coordinate availability from canonical source and registered contracts.
+
+    Returns:
+        Semantic validation errors for non-replayable frame availability.
+    """
+
+    trace = _trace_from_source_contract(source_trace)
+    if trace is None:
+        return []
+    focal_record = focal if isinstance(focal, Mapping) else {}
+    route_contract = coordinate_frames.get("route")
+    route = (
+        _route_spec_from_frame(
+            route_contract,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+        if isinstance(route_contract, Mapping) and route_contract.get("status") == "available"
+        else None
+    )
+    conflict_contract = coordinate_frames.get("conflict")
+    conflict_zone = (
+        _conflict_spec_from_frame(
+            conflict_contract,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+        if isinstance(conflict_contract, Mapping) and conflict_contract.get("status") == "available"
+        else None
+    )
+    errors: list[str] = []
+    for index, (source_frame, frame) in enumerate(zip(trace.frames, frames, strict=False)):
+        if not isinstance(frame, Mapping):
+            continue
+        expected = _process_frame(
+            source_frame,
+            frame_index=index,
+            focal_actor_id=focal_record.get("actor_id"),
+            focal_encounter=focal_record,
+            route=route,
+            conflict_zone=conflict_zone,
+            source_coordinate_frame=trace.coordinate_frame,
+        )
+        for key in ("world", "route", "conflict", "relative_interaction"):
+            actual_record = frame.get(key)
+            expected_record = expected[key]
+            if not isinstance(actual_record, Mapping):
+                continue
+            if actual_record.get("status") != expected_record.get("status"):
+                errors.append(
+                    f"/frames/{index}/{key}/status: must replay source content and coordinate contract"
+                )
+    return errors
+
+
+def _validate_frame_replays(
+    frames: Sequence[object],
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> list[str]:
     errors: list[str] = []
     for index, frame in enumerate(frames):
         if not isinstance(frame, Mapping):
@@ -486,9 +631,26 @@ def _validate_frame_replays(frames: Sequence[object]) -> list[str]:
         focal_actor = _source_focal_actor_for_replay(frame, focal)
         errors.extend(_validate_world_replay(frame, index, source, robot, focal))
         errors.extend(
-            _validate_route_replay(frame, index, source, robot_pos, robot_vel, focal_actor)
+            _validate_route_replay(
+                frame,
+                index,
+                source,
+                robot_pos,
+                robot_vel,
+                focal_actor,
+                geometry_registry_paths=geometry_registry_paths,
+            )
         )
-        errors.extend(_validate_conflict_replay(frame, index, source, robot_pos, focal_actor))
+        errors.extend(
+            _validate_conflict_replay(
+                frame,
+                index,
+                source,
+                robot_pos,
+                focal_actor,
+                geometry_registry_paths=geometry_registry_paths,
+            )
+        )
         errors.extend(
             _validate_relative_replay(frame, index, source, robot_pos, robot_vel, focal_actor)
         )
@@ -539,11 +701,16 @@ def _validate_route_replay(
     robot_pos: tuple[float, float] | None,
     robot_vel: tuple[float, float] | None,
     focal_actor: Mapping[str, Any] | None,
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
 ) -> list[str]:
     route_record = frame.get("route")
     if not isinstance(route_record, Mapping) or route_record.get("status") != "available":
         return []
-    route = _route_spec_from_frame(route_record)
+    route = _route_spec_from_frame(
+        route_record,
+        geometry_registry_paths=geometry_registry_paths,
+    )
     if route is None:
         return [f"/frames/{index}/route: cannot replay route geometry"]
     expected = _route_frame(
@@ -568,20 +735,37 @@ def _validate_route_replay(
     return errors
 
 
-def _route_spec_from_frame(route_record: Mapping[str, Any]) -> RouteSpec | None:
+def _route_spec_from_frame(
+    route_record: Mapping[str, Any],
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> RouteSpec | None:
     geometry = route_record.get("geometry")
-    if not isinstance(geometry, Mapping):
+    registry = route_record.get("registry")
+    if not isinstance(geometry, Mapping) or not isinstance(registry, Mapping):
         return None
-    start = _vector2(geometry.get("start"))
-    end = _vector2(geometry.get("end"))
-    if start is None or end is None:
+    points = _route_geometry_points(geometry)
+    if len(points) < 2:
         return None
+    artifact_ref = registry.get("artifact_ref")
+    if not isinstance(artifact_ref, str):
+        return None
+    registry_path = _resolve_geometry_registry_path(
+        artifact_ref,
+        geometry_registry_paths=geometry_registry_paths,
+    )
     return RouteSpec(
         str(route_record.get("route_id")),
-        start,
-        end,
+        points[0],
+        points[-1],
         str(route_record.get("provenance_id")),
         str(route_record.get("registry_checksum")),
+        geometry=dict(geometry),
+        registry_artifact_ref=artifact_ref,
+        registry_path=str(registry_path) if registry_path is not None else None,
+        registry_content_sha256=str(registry.get("content_sha256")),
+        registry_entry_id=str(registry.get("entry_id")),
+        registry_entry_sha256=str(registry.get("entry_sha256")),
     )
 
 
@@ -591,11 +775,16 @@ def _validate_conflict_replay(
     source: Mapping[str, Any],
     robot_pos: tuple[float, float] | None,
     focal_actor: Mapping[str, Any] | None,
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
 ) -> list[str]:
     conflict_record = frame.get("conflict")
     if not isinstance(conflict_record, Mapping) or conflict_record.get("status") != "available":
         return []
-    conflict = _conflict_spec_from_frame(conflict_record)
+    conflict = _conflict_spec_from_frame(
+        conflict_record,
+        geometry_registry_paths=geometry_registry_paths,
+    )
     if conflict is None:
         return [f"/frames/{index}/conflict: cannot replay conflict geometry"]
     expected = _conflict_frame(
@@ -615,20 +804,38 @@ def _validate_conflict_replay(
     return errors
 
 
-def _conflict_spec_from_frame(conflict_record: Mapping[str, Any]) -> ConflictZoneSpec | None:
+def _conflict_spec_from_frame(
+    conflict_record: Mapping[str, Any],
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> ConflictZoneSpec | None:
     geometry = conflict_record.get("geometry")
-    if not isinstance(geometry, Mapping):
+    registry = conflict_record.get("registry")
+    if not isinstance(geometry, Mapping) or not isinstance(registry, Mapping):
         return None
     center = _vector2(geometry.get("center"))
     radius = geometry.get("radius_m")
     if center is None or not _finite_json_number(radius):
         return None
+    artifact_ref = registry.get("artifact_ref")
+    if not isinstance(artifact_ref, str):
+        return None
+    registry_path = _resolve_geometry_registry_path(
+        artifact_ref,
+        geometry_registry_paths=geometry_registry_paths,
+    )
     return ConflictZoneSpec(
         str(conflict_record.get("zone_id")),
         center,
         float(radius),
         str(conflict_record.get("provenance_id")),
         str(conflict_record.get("registry_checksum")),
+        geometry=dict(geometry),
+        registry_artifact_ref=artifact_ref,
+        registry_path=str(registry_path) if registry_path is not None else None,
+        registry_content_sha256=str(registry.get("content_sha256")),
+        registry_entry_id=str(registry.get("entry_id")),
+        registry_entry_sha256=str(registry.get("entry_sha256")),
     )
 
 
@@ -667,19 +874,36 @@ def _validate_relative_replay(
 
 
 def _validate_global_minimum_actor_replay(frame: Mapping[str, Any], index: int) -> list[str]:
-    expected_nearest = _nearest_source_actor(frame)
-    expected = (
-        {
-            "status": "available",
-            "actor_id": expected_nearest["actor_id"],
-            "center_distance_m": expected_nearest["center_distance_m"],
-        }
-        if expected_nearest is not None
-        else {"status": "unavailable", "reason": "no_pedestrians_in_frame"}
-    )
+    expected = _global_minimum_actor_from_source(frame)
     if frame.get("global_minimum_actor") != expected:
         return [f"/frames/{index}/global_minimum_actor: must replay source actor inventory"]
     return []
+
+
+def _global_minimum_actor_from_source(frame: Mapping[str, Any]) -> dict[str, Any]:
+    source = frame.get("source_coordinates")
+    robot = source.get("robot") if isinstance(source, Mapping) else None
+    robot_pos = _vector2(robot.get("position")) if isinstance(robot, Mapping) else None
+    if robot_pos is None:
+        return {"status": "unavailable", "reason": "missing_robot_position"}
+    actors = source.get("contextual_actors") if isinstance(source, Mapping) else None
+    if not isinstance(actors, list) or not actors:
+        return {"status": "unavailable", "reason": "no_pedestrians_in_frame"}
+    candidates: list[tuple[float, str]] = []
+    for actor in actors:
+        if not isinstance(actor, Mapping) or not isinstance(actor.get("actor_id"), str):
+            continue
+        actor_pos = _vector2(actor.get("position"))
+        if actor_pos is not None:
+            candidates.append((_distance(robot_pos, actor_pos), str(actor["actor_id"])))
+    if not candidates:
+        return {"status": "unavailable", "reason": "missing_pedestrian_position"}
+    center_distance, actor_id = min(candidates, key=lambda item: (item[0], item[1]))
+    return {
+        "status": "available",
+        "actor_id": actor_id,
+        "center_distance_m": center_distance,
+    }
 
 
 def _replay_frame_robot(source: Mapping[str, Any]) -> SimulationTraceFrame:
@@ -698,6 +922,7 @@ def _validate_route_record(value: object, path: str) -> list[str]:  # noqa: C901
             "route_id",
             "provenance_id",
             "registry_checksum",
+            "registry",
             "geometry",
             "s_m",
             "n_m",
@@ -756,6 +981,7 @@ def _validate_conflict_record(value: object, path: str) -> list[str]:
             "zone_id",
             "provenance_id",
             "registry_checksum",
+            "registry",
             "geometry",
             "robot_signed_distance_to_zone_m",
             "focal_actor_signed_distance_to_zone_m",
@@ -857,7 +1083,7 @@ def _validate_relative_record(value: object, path: str) -> list[str]:  # noqa: C
     return errors
 
 
-def _validate_geometry(value: object, path: str) -> list[str]:
+def _validate_geometry(value: object, path: str) -> list[str]:  # noqa: C901
     if not isinstance(value, Mapping):
         return [f"{path}: expected object"]
     geometry_type = value.get("type")
@@ -871,6 +1097,19 @@ def _validate_geometry(value: object, path: str) -> list[str]:
         for key in ("start", "end"):
             if not _finite_vector2(value.get(key)):
                 errors.append(f"{path}/{key}: expected finite 2-vector")
+        return errors
+    if geometry_type == "polyline":
+        errors = _require_keys(
+            value,
+            path,
+            required={"type", "points"},
+            allowed={"type", "points"},
+        )
+        points = value.get("points")
+        if not isinstance(points, list) or len(points) < 2:
+            errors.append(f"{path}/points: expected at least two finite 2-vectors")
+        elif any(not _finite_vector2(point) for point in points):
+            errors.append(f"{path}/points: expected finite 2-vectors")
         return errors
     if geometry_type == "circle":
         errors = _require_keys(
@@ -1006,7 +1245,14 @@ def _validate_source_trace_semantics(source_trace: Mapping[str, Any]) -> list[st
             required={"status", "reason"}
             if _status(run_config) == "unavailable"
             else {"status", "time_step_s", "config_digest", "source"},
-            allowed={"status", "reason", "time_step_s", "config_digest", "source"},
+            allowed={
+                "status",
+                "reason",
+                "time_step_s",
+                "observed_time_step_s",
+                "config_digest",
+                "source",
+            },
         )
     )
     if isinstance(run_config, Mapping) and run_config.get("status") == "available":
@@ -1568,6 +1814,7 @@ def _validate_event_replays(
         expected = _event_anchors(
             trace,
             frames=event_frames,
+            episode_frames=process_frames,
             focal_actor_id=focal_actor_id,
             focal_interval=focal_interval,
         )
@@ -1701,7 +1948,11 @@ def _validate_event_record_semantics(
     event_type = event.get("event_type")
     status = event.get("status")
     if status == "available":
-        if focal_actor_id is not None and event.get("actor_id") != str(focal_actor_id):
+        if (
+            event_type != "exact_collision_event"
+            and focal_actor_id is not None
+            and event.get("actor_id") != str(focal_actor_id)
+        ):
             errors.append(f"{path}/actor_id: must match focal actor")
         step = event.get("step")
         frame = frame_by_step.get(step)
@@ -1723,13 +1974,35 @@ def _validate_event_record_semantics(
     return errors
 
 
-def _validate_collision_event_semantics(event: Mapping[str, Any], path: str) -> list[str]:
+def _validate_collision_event_semantics(  # noqa: C901
+    event: Mapping[str, Any], path: str
+) -> list[str]:
     errors: list[str] = []
     if event.get("status") == "available":
-        if event.get("collision_partner_type") != "pedestrian":
-            errors.append(f"{path}/collision_partner_type: focal collision must be pedestrian")
-        if event.get("collision_partner_id") != event.get("actor_id"):
-            errors.append(f"{path}/collision_partner_id: must match focal actor")
+        partner_type = event.get("collision_partner_type")
+        partner_id = event.get("collision_partner_id")
+        binding = event.get("focal_binding")
+        if partner_type not in COLLISION_PARTNER_TYPES:
+            errors.append(f"{path}/collision_partner_type: invalid canonical partner type")
+        if not isinstance(binding, Mapping):
+            errors.append(f"{path}/focal_binding: required for exact collision")
+        elif binding.get("status") == "available":
+            actor_id = binding.get("actor_id")
+            if not isinstance(actor_id, str):
+                errors.append(f"{path}/focal_binding/actor_id: required when available")
+            if event.get("actor_id") != actor_id:
+                errors.append(f"{path}/actor_id: must match available focal binding")
+            if partner_type != "pedestrian" or partner_id != actor_id:
+                errors.append(f"{path}/collision_partner_id: must match available focal binding")
+        elif binding.get("status") == "unavailable":
+            if event.get("actor_id") is not None:
+                errors.append(
+                    f"{path}/actor_id: unbound episode collision must not claim focal actor"
+                )
+            if not isinstance(binding.get("reason"), str):
+                errors.append(f"{path}/focal_binding/reason: required when unavailable")
+        else:
+            errors.append(f"{path}/focal_binding/status: invalid status")
         if not _finite_json_number(event.get("time_s")):
             errors.append(f"{path}/time_s: expected finite collision time")
     else:
@@ -1760,6 +2033,10 @@ def _validate_pair_semantics(  # noqa: C901, PLR0912
     pair: Mapping[str, Any],
     events: object,
     source_trace: object,
+    *,
+    coordinate_frames: object,
+    focal: object,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
 ) -> list[str]:
     errors: list[str] = []
     grain = pair.get("comparison_grain")
@@ -1812,18 +2089,165 @@ def _validate_pair_semantics(  # noqa: C901, PLR0912
                 )
         checks = provenance.get("checks")
         if isinstance(checks, Mapping):
-            required = ["map_id_present", "horizon_present"]
+            required = ["map_id_present", "horizon_present", "time_step_s_present"]
             if pair.get("comparison_grain", {}).get("grain_id") == "matched_realization_pair":
                 required.append("config_digest_present")
             for key in required:
                 if pair.get("status") == "available" and checks.get(key) is not True:
                     errors.append(f"/pair_compatibility/provenance_gate/checks/{key}: required")
-    errors.extend(_validate_right_event_receipts(pair))
+    errors.extend(
+        _validate_right_event_receipts(
+            pair,
+            coordinate_frames=coordinate_frames,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+    )
     errors.extend(_validate_common_event_anchor_semantics(pair, events))
+    errors.extend(
+        _validate_pair_replay(
+            pair,
+            source_trace=source_trace,
+            coordinate_frames=coordinate_frames,
+            focal=focal,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+    )
     return errors
 
 
-def _validate_right_event_receipts(pair: Mapping[str, Any]) -> list[str]:  # noqa: C901
+def _validate_pair_replay(
+    pair: Mapping[str, Any],
+    *,
+    source_trace: object,
+    coordinate_frames: object,
+    focal: object,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> list[str]:
+    """Replay every compatibility-bearing field from the two embedded traces.
+
+    Returns:
+        Semantic errors for compatibility fields that do not replay.
+    """
+
+    left = _trace_from_source_contract(source_trace)
+    right = _trace_from_source_contract(pair.get("right_source_trace"))
+    grain = pair.get("comparison_grain")
+    grain_id = grain.get("grain_id") if isinstance(grain, Mapping) else None
+    if left is None or right is None or not isinstance(grain_id, str):
+        return []
+    route, conflict_zone = _registered_coordinate_specs(
+        coordinate_frames,
+        geometry_registry_paths=geometry_registry_paths,
+    )
+    left_focal = focal if isinstance(focal, Mapping) else _resolve_focal_actor(left)
+    right_focal = _resolve_focal_actor(right)
+    expected = build_pair_compatibility_record(
+        left,
+        right,
+        left_events=_replayed_trace_events(left, left_focal, route, conflict_zone),
+        right_events=_replayed_trace_events(right, right_focal, route, conflict_zone),
+        comparison_grain=grain_id,
+    )
+    errors: list[str] = []
+    for key in (
+        "profile_version",
+        "status",
+        "comparison_grain",
+        "provenance_gate",
+        "right_source_trace",
+        "initial_state_equivalence",
+        "route_spawn_separation",
+        "shared_prefix",
+        "valid_common_event_anchors",
+        "right_event_anchors",
+        "duration_normalization",
+        "divergence_interpretation",
+    ):
+        errors.extend(
+            _replay_mismatch_errors(
+                pair.get(key),
+                expected.get(key),
+                f"/pair_compatibility/{key}",
+            )
+        )
+    return errors
+
+
+def _registered_coordinate_specs(
+    coordinate_frames: object,
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> tuple[RouteSpec | None, ConflictZoneSpec | None]:
+    if not isinstance(coordinate_frames, Mapping):
+        return None, None
+    route_contract = coordinate_frames.get("route")
+    route = (
+        _route_spec_from_frame(
+            route_contract,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+        if isinstance(route_contract, Mapping) and route_contract.get("status") == "available"
+        else None
+    )
+    conflict_contract = coordinate_frames.get("conflict")
+    conflict_zone = (
+        _conflict_spec_from_frame(
+            conflict_contract,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+        if isinstance(conflict_contract, Mapping) and conflict_contract.get("status") == "available"
+        else None
+    )
+    return route, conflict_zone
+
+
+def _replayed_trace_events(
+    trace: SimulationTraceExport,
+    focal: Mapping[str, Any],
+    route: RouteSpec | None,
+    conflict_zone: ConflictZoneSpec | None,
+) -> list[dict[str, Any]]:
+    frames = [
+        _process_frame(
+            frame,
+            frame_index=index,
+            focal_actor_id=focal.get("actor_id"),
+            focal_encounter=focal,
+            route=route,
+            conflict_zone=conflict_zone,
+            source_coordinate_frame=trace.coordinate_frame,
+        )
+        for index, frame in enumerate(trace.frames)
+    ]
+    return _event_anchors(
+        trace,
+        frames=_diagnostic_frames(frames),
+        episode_frames=frames,
+        focal_actor_id=focal.get("actor_id"),
+        focal_interval=_focal_interval_bounds(focal),
+    )
+
+
+def _replay_mismatch_errors(actual: object, expected: object, path: str) -> list[str]:
+    if isinstance(actual, Mapping) and isinstance(expected, Mapping):
+        errors: list[str] = []
+        for key in sorted(set(actual) | set(expected)):
+            if key not in actual or key not in expected:
+                errors.append(f"{path}/{key}: must replay embedded source content")
+                continue
+            errors.extend(_replay_mismatch_errors(actual[key], expected[key], f"{path}/{key}"))
+        return errors
+    if actual != expected:
+        return [f"{path}: must replay embedded source content"]
+    return []
+
+
+def _validate_right_event_receipts(  # noqa: C901
+    pair: Mapping[str, Any],
+    *,
+    coordinate_frames: object,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> list[str]:
     receipts = pair.get("right_event_anchors")
     if not isinstance(receipts, list):
         return []
@@ -1857,13 +2281,26 @@ def _validate_right_event_receipts(pair: Mapping[str, Any]) -> list[str]:  # noq
         eligibility = receipt.get("visual_anchor_eligibility")
         if not (isinstance(eligibility, Mapping) and eligibility.get("eligible") is True):
             errors.append(f"{path}/visual_anchor_eligibility: available receipt must be eligible")
-    expected = _right_event_receipts_from_source(pair)
+    route, conflict_zone = _registered_coordinate_specs(
+        coordinate_frames,
+        geometry_registry_paths=geometry_registry_paths,
+    )
+    expected = _right_event_receipts_from_source(
+        pair,
+        route=route,
+        conflict_zone=conflict_zone,
+    )
     if expected is not None and receipts != expected:
         errors.append("/pair_compatibility/right_event_anchors: must replay right source content")
     return errors
 
 
-def _right_event_receipts_from_source(pair: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+def _right_event_receipts_from_source(
+    pair: Mapping[str, Any],
+    *,
+    route: RouteSpec | None,
+    conflict_zone: ConflictZoneSpec | None,
+) -> list[dict[str, Any]] | None:
     right_source = pair.get("right_source_trace")
     if not isinstance(right_source, Mapping) or right_source.get("status") != "available":
         return None
@@ -1877,8 +2314,8 @@ def _right_event_receipts_from_source(pair: Mapping[str, Any]) -> list[dict[str,
             frame_index=index,
             focal_actor_id=focal.get("actor_id"),
             focal_encounter=focal,
-            route=None,
-            conflict_zone=None,
+            route=route,
+            conflict_zone=conflict_zone,
             source_coordinate_frame=trace.coordinate_frame,
         )
         for index, frame in enumerate(trace.frames)
@@ -1886,6 +2323,7 @@ def _right_event_receipts_from_source(pair: Mapping[str, Any]) -> list[dict[str,
     events = _event_anchors(
         trace,
         frames=_diagnostic_frames(frames),
+        episode_frames=frames,
         focal_actor_id=focal.get("actor_id"),
         focal_interval=_focal_interval_bounds(focal),
     )
@@ -1897,22 +2335,24 @@ def _event_receipts_for_validation(events: Sequence[Mapping[str, Any]]) -> list[
     for event in events:
         if event.get("status") != "available":
             continue
-        receipts.append(
-            {
-                "event_id": event["event_id"],
-                "event_type": str(event["event_type"]),
-                "detector_profile_version": str(event["detector_profile_version"]),
-                "time_s": float(event["time_s"]),
-                "step": int(event["step"]),
-                "confidence": str(event["confidence"]),
-                "actor_id": event.get("actor_id"),
-                "zone_id": event.get("zone_id"),
-                "source_fields": [str(field) for field in event.get("source_fields", [])],
-                "status": "available",
-                "event_relative_time": dict(event["event_relative_time"]),
-                "visual_anchor_eligibility": dict(event["visual_anchor_eligibility"]),
-            }
-        )
+        receipt = {
+            "event_id": event["event_id"],
+            "event_type": str(event["event_type"]),
+            "detector_profile_version": str(event["detector_profile_version"]),
+            "time_s": float(event["time_s"]),
+            "step": int(event["step"]),
+            "confidence": str(event["confidence"]),
+            "actor_id": event.get("actor_id"),
+            "zone_id": event.get("zone_id"),
+            "source_fields": [str(field) for field in event.get("source_fields", [])],
+            "status": "available",
+            "event_relative_time": dict(event["event_relative_time"]),
+            "visual_anchor_eligibility": dict(event["visual_anchor_eligibility"]),
+        }
+        if event.get("event_type") == "exact_collision_event":
+            receipt["collision_partner_type"] = event.get("collision_partner_type")
+            receipt["collision_partner_id"] = event.get("collision_partner_id")
+        receipts.append(receipt)
     return sorted(receipts, key=lambda item: str(item["event_id"]))
 
 
@@ -1948,6 +2388,8 @@ def _validate_common_event_anchor_semantics(pair: Mapping[str, Any], events: obj
             anchor.get("actor_id"),
             anchor.get("zone_id"),
             tuple(str(field) for field in anchor.get("source_fields", [])),
+            anchor.get("collision_partner_type"),
+            anchor.get("collision_partner_id"),
         )
         if anchor_identity != identity:
             errors.append(f"{path}: identity must match resolved left event")
@@ -1963,13 +2405,15 @@ def _validate_common_event_anchor_semantics(pair: Mapping[str, Any], events: obj
 
 def _process_event_identity(
     event: Mapping[str, Any],
-) -> tuple[str, str, object, object, tuple[str, ...]]:
+) -> tuple[str, str, object, object, tuple[str, ...], object, object]:
     return (
         str(event.get("event_type")),
         str(event.get("detector_profile_version")),
         event.get("actor_id"),
         event.get("zone_id"),
         tuple(str(field) for field in event.get("source_fields", [])),
+        event.get("collision_partner_type"),
+        event.get("collision_partner_id"),
     )
 
 
@@ -2056,12 +2500,223 @@ def load_near_miss_encounter_report(path: Path) -> dict[str, Any]:
     return dict(payload)
 
 
+def load_registered_route_spec(path: Path, entry_id: str) -> RouteSpec:
+    """Resolve one route from a versioned external process-trace geometry registry.
+
+    Returns:
+        Route specification bound to the raw registry artifact and unique entry.
+    """
+
+    payload, content_sha256, resolved_path = _load_geometry_registry(path)
+    entry = _unique_registry_entry(payload, "routes", entry_id, source=resolved_path)
+    geometry = entry.get("geometry")
+    if not isinstance(geometry, Mapping):
+        geometry = {}
+    points = _route_geometry_points(geometry)
+    start = points[0] if points else (math.nan, math.nan)
+    end = points[-1] if points else (math.nan, math.nan)
+    return RouteSpec(
+        route_id=str(entry.get("route_id", "")),
+        start=start,
+        end=end,
+        provenance_id=str(payload["registry_id"]),
+        registry_checksum=_geometry_checksum(geometry),
+        geometry=dict(geometry),
+        registry_artifact_ref=str(payload["artifact_ref"]),
+        registry_path=str(resolved_path),
+        registry_content_sha256=content_sha256,
+        registry_entry_id=entry_id,
+        registry_entry_sha256=_json_sha256_digest(entry),
+    )
+
+
+def load_registered_conflict_zone_spec(path: Path, entry_id: str) -> ConflictZoneSpec:
+    """Resolve one conflict zone from a versioned external process-trace geometry registry.
+
+    Returns:
+        Conflict-zone specification bound to the raw registry artifact and unique entry.
+    """
+
+    payload, content_sha256, resolved_path = _load_geometry_registry(path)
+    entry = _unique_registry_entry(payload, "conflict_zones", entry_id, source=resolved_path)
+    geometry = entry.get("geometry")
+    geometry_record = geometry if isinstance(geometry, Mapping) else {}
+    center = _vector2(geometry_record.get("center")) or (math.nan, math.nan)
+    radius = geometry_record.get("radius_m")
+    radius_m = float(radius) if _finite_json_number(radius) else math.nan
+    return ConflictZoneSpec(
+        zone_id=str(entry.get("zone_id", "")),
+        center=center,
+        radius_m=radius_m,
+        provenance_id=str(payload["registry_id"]),
+        registry_checksum=_geometry_checksum(geometry_record),
+        geometry=dict(geometry_record),
+        registry_artifact_ref=str(payload["artifact_ref"]),
+        registry_path=str(resolved_path),
+        registry_content_sha256=content_sha256,
+        registry_entry_id=entry_id,
+        registry_entry_sha256=_json_sha256_digest(entry),
+    )
+
+
+def _load_geometry_registry(path: Path) -> tuple[dict[str, Any], str, Path]:
+    resolved = path.resolve()
+    try:
+        raw = resolved.read_bytes()
+        payload = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise WorkedExampleProcessTraceValidationError(
+            ["expected readable process_trace_geometry_registry.v1 JSON"], source=resolved
+        ) from exc
+    if not isinstance(payload, Mapping):
+        raise WorkedExampleProcessTraceValidationError(
+            ["expected process-trace geometry registry mapping"], source=resolved
+        )
+    required = {
+        "schema_version",
+        "registry_id",
+        "artifact_ref",
+        "coordinate_frame",
+        "routes",
+        "conflict_zones",
+    }
+    if set(payload) != required:
+        raise WorkedExampleProcessTraceValidationError(
+            ["geometry registry must contain only the canonical top-level fields"], source=resolved
+        )
+    if (
+        payload.get("schema_version") != GEOMETRY_REGISTRY_SCHEMA_VERSION
+        or not isinstance(payload.get("registry_id"), str)
+        or not payload.get("registry_id")
+        or not _stable_geometry_registry_artifact_ref(payload.get("artifact_ref"))
+        or not _registry_upstream_bindings_are_portable(payload)
+        or payload.get("coordinate_frame") != "world"
+        or not isinstance(payload.get("routes"), list)
+        or not isinstance(payload.get("conflict_zones"), list)
+    ):
+        raise WorkedExampleProcessTraceValidationError(
+            ["invalid process-trace geometry registry envelope"], source=resolved
+        )
+    validator = Draft202012Validator(load_process_trace_geometry_registry_schema())
+    errors = [
+        f"{json_pointer(error.absolute_path)}: {error.message}"
+        for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
+    ]
+    if errors:
+        raise WorkedExampleProcessTraceValidationError(errors, source=resolved)
+    return dict(payload), hashlib.sha256(raw).hexdigest(), resolved
+
+
+def _stable_geometry_registry_artifact_ref(value: object) -> bool:
+    """Return whether a registry reference is portable public identity."""
+
+    if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    if "\\" in value or "~" in value:
+        return False
+    uri_match = re.fullmatch(r"([a-z][a-z0-9+.-]*):\S+", value)
+    if uri_match is not None:
+        uri_segments = [
+            segment for segment in value.split(":", maxsplit=1)[1].split("/") if segment
+        ]
+        return uri_match.group(1) != "file" and all(
+            segment not in {".", ".."} for segment in uri_segments
+        )
+    path = Path(value)
+    return not path.is_absolute() and all(
+        segment not in {"", ".", ".."} for segment in value.split("/")
+    )
+
+
+def _registry_upstream_bindings_are_portable(payload: Mapping[str, Any]) -> bool:
+    """Return whether canonical upstream bindings contain only stable references."""
+
+    for collection in ("routes", "conflict_zones"):
+        entries = payload.get(collection)
+        if not isinstance(entries, list):
+            return False
+        for entry in entries:
+            binding = entry.get("upstream_binding") if isinstance(entry, Mapping) else None
+            if not isinstance(binding, Mapping):
+                return False
+            if binding.get(
+                "kind"
+            ) == "canonical_source" and not _stable_geometry_registry_artifact_ref(
+                binding.get("source_artifact_ref")
+            ):
+                return False
+    return True
+
+
+def _resolve_geometry_registry_path(
+    artifact_ref: str,
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> Path | None:
+    """Resolve portable identity into local validation context without emitting it.
+
+    Returns:
+        Machine-local path, or ``None`` when the reference has no resolver.
+    """
+
+    if geometry_registry_paths is not None and artifact_ref in geometry_registry_paths:
+        return Path(geometry_registry_paths[artifact_ref]).resolve()
+    if not _stable_geometry_registry_artifact_ref(artifact_ref) or re.match(
+        r"^[a-z][a-z0-9+.-]*:", artifact_ref
+    ):
+        return None
+    return (Path.cwd() / artifact_ref).resolve()
+
+
+def _geometry_registry_paths_for_specs(
+    route: RouteSpec | None,
+    conflict_zone: ConflictZoneSpec | None,
+) -> dict[str, Path]:
+    """Collect private local registry paths for semantic replay.
+
+    Returns:
+        Mapping from stable public identity to machine-local path.
+    """
+
+    paths: dict[str, Path] = {}
+    for spec in (route, conflict_zone):
+        if spec is None or not spec.registry_artifact_ref or not spec.registry_path:
+            continue
+        paths.setdefault(spec.registry_artifact_ref, Path(spec.registry_path).resolve())
+    return paths
+
+
+def _unique_registry_entry(
+    payload: Mapping[str, Any],
+    collection: str,
+    entry_id: str,
+    *,
+    source: Path,
+) -> dict[str, Any]:
+    entries = payload.get(collection)
+    matches = (
+        [
+            entry
+            for entry in entries
+            if isinstance(entry, Mapping) and entry.get("entry_id") == entry_id
+        ]
+        if isinstance(entries, list)
+        else []
+    )
+    if len(matches) != 1:
+        raise WorkedExampleProcessTraceValidationError(
+            [f"/{collection}: entry_id {entry_id!r} must resolve exactly once"], source=source
+        )
+    return dict(matches[0])
+
+
 def build_worked_example_process_trace(
     input_path: Path,
     *,
     route: RouteSpec | None = None,
     conflict_zone: ConflictZoneSpec | None = None,
     focal_actor_id: str | None = None,
+    focal_encounter_id: str | None = None,
     pair_input_path: Path | None = None,
     encounter_report_path: Path | None = None,
     pair_comparison_grain: str | None = None,
@@ -2085,21 +2740,27 @@ def build_worked_example_process_trace(
         route=route,
         conflict_zone=conflict_zone,
         focal_actor_id=focal_actor_id,
+        focal_encounter_id=focal_encounter_id,
         pair_trace=pair_trace,
         encounter_report=encounter_report,
         encounter_report_input_checksum=input_checksum if encounter_report is not None else None,
         pair_comparison_grain=pair_comparison_grain,
     )
-    validate_worked_example_process_trace(payload, source=input_path)
+    validate_worked_example_process_trace(
+        payload,
+        source=input_path,
+        geometry_registry_paths=_geometry_registry_paths_for_specs(route, conflict_zone),
+    )
     return payload
 
 
-def build_worked_example_process_trace_from_export(
+def build_worked_example_process_trace_from_export(  # noqa: PLR0913
     trace: SimulationTraceExport,
     *,
     route: RouteSpec | None = None,
     conflict_zone: ConflictZoneSpec | None = None,
     focal_actor_id: str | None = None,
+    focal_encounter_id: str | None = None,
     pair_trace: SimulationTraceExport | None = None,
     encounter_report: Mapping[str, Any] | None = None,
     encounter_report_input_checksum: str | None = None,
@@ -2114,11 +2775,18 @@ def build_worked_example_process_trace_from_export(
     focal = _resolve_focal_actor(
         trace,
         requested_actor_id=focal_actor_id,
+        requested_encounter_id=focal_encounter_id,
         encounter_report=encounter_report,
         encounter_report_input_checksum=encounter_report_input_checksum,
     )
-    route_availability = _route_availability(route)
-    conflict_availability = _conflict_availability(conflict_zone)
+    route_availability = _route_availability(
+        route,
+        source_coordinate_frame=trace.coordinate_frame,
+    )
+    conflict_availability = _conflict_availability(
+        conflict_zone,
+        source_coordinate_frame=trace.coordinate_frame,
+    )
     relative_availability = _relative_availability(focal)
     world_availability = _world_availability(trace)
     pair_focal = _resolve_focal_actor(pair_trace) if pair_trace is not None else None
@@ -2144,6 +2812,7 @@ def build_worked_example_process_trace_from_export(
     events = _event_anchors(
         trace,
         frames=event_frames,
+        episode_frames=frames,
         focal_actor_id=focal.get("actor_id"),
         focal_interval=_focal_interval_bounds(focal),
     )
@@ -2155,22 +2824,11 @@ def build_worked_example_process_trace_from_export(
             pair_trace,
             left_events=events,
             comparison_grain=pair_comparison_grain or "undeclared",
-            right_events=_event_anchors(
+            right_events=_replayed_trace_events(
                 pair_trace,
-                frames=[
-                    _process_frame(
-                        frame,
-                        frame_index=index,
-                        focal_actor_id=pair_focal.get("actor_id") if pair_focal else None,
-                        focal_encounter=pair_focal or {},
-                        route=route,
-                        conflict_zone=conflict_zone,
-                        source_coordinate_frame=pair_trace.coordinate_frame,
-                    )
-                    for index, frame in enumerate(pair_trace.frames)
-                ],
-                focal_actor_id=pair_focal.get("actor_id") if pair_focal else None,
-                focal_interval=_focal_interval_bounds(pair_focal or {}),
+                pair_focal or {},
+                route,
+                conflict_zone,
             ),
         )
         if pair_trace is not None
@@ -2203,13 +2861,18 @@ def build_worked_example_process_trace_from_export(
         "frames": frames,
         "diagnostics": _diagnostics(
             event_frames,
-            route_available=route_availability["status"] == "available",
+            route_available=any(
+                frame["route"].get("status") == "available" for frame in event_frames
+            ),
         ),
         "event_anchors": events,
         "event_anchor_hierarchy": event_anchor_hierarchy,
         "pair_compatibility": pair,
     }
-    validate_worked_example_process_trace(payload)
+    validate_worked_example_process_trace(
+        payload,
+        geometry_registry_paths=_geometry_registry_paths_for_specs(route, conflict_zone),
+    )
     return payload
 
 
@@ -2302,31 +2965,7 @@ def _strict_json_value(value: Any) -> Any:
 
 
 def _run_config_contract(trace: SimulationTraceExport) -> dict[str, Any]:
-    run_configs = [frame.planner.get("run_config") for frame in trace.frames]
-    if not run_configs:
-        return {"status": "unavailable", "reason": "run_config_unavailable"}
-    if any(not isinstance(run_config, Mapping) for run_config in run_configs):
-        return {"status": "unavailable", "reason": "run_config_unavailable"}
-    time_steps = [run_config.get("time_step_s") for run_config in run_configs]
-    if any(
-        isinstance(time_step, bool)
-        or not (_finite_json_number(time_step) and float(time_step) > 0.0)
-        for time_step in time_steps
-    ):
-        return {"status": "unavailable", "reason": "run_config_time_step_unavailable"}
-    if len({float(time_step) for time_step in time_steps}) != 1:
-        return {"status": "unavailable", "reason": "run_config_time_step_inconsistent"}
-    digests = [run_config.get("config_digest") for run_config in run_configs]
-    if any(not (isinstance(digest, str) and SHA256_HEX_RE.fullmatch(digest)) for digest in digests):
-        return {"status": "unavailable", "reason": "run_config_digest_unavailable"}
-    if len(set(digests)) != 1:
-        return {"status": "unavailable", "reason": "run_config_digest_inconsistent"}
-    return {
-        "status": "available",
-        "time_step_s": float(time_steps[0]),
-        "config_digest": str(digests[0]),
-        "source": "planner.run_config",
-    }
+    return build_trace_run_config_contract(trace)
 
 
 def _profiles() -> dict[str, Any]:
@@ -2356,20 +2995,29 @@ def _profiles() -> dict[str, Any]:
     }
 
 
-def _route_availability(route: RouteSpec | None) -> dict[str, Any]:
+def _route_availability(
+    route: RouteSpec | None,
+    *,
+    source_coordinate_frame: str = "world",
+) -> dict[str, Any]:
     if route is None:
         return {"status": "unavailable", "reason": "registered_route_unavailable"}
+    if source_coordinate_frame != "world":
+        return {
+            "status": "unavailable",
+            "reason": "source_coordinate_frame_not_world",
+            "source_coordinate_frame": source_coordinate_frame,
+        }
     if not route.provenance_id:
         return {"status": "unavailable", "reason": "registered_route_provenance_unavailable"}
     if not route.registry_checksum:
         return {"status": "unavailable", "reason": "registered_route_checksum_unavailable"}
     if SHA256_HEX_RE.fullmatch(str(route.registry_checksum)) is None:
         return {"status": "unavailable", "reason": "registered_route_checksum_invalid"}
-    if _vector2(route.start) is None or _vector2(route.end) is None:
-        return {"status": "unavailable", "reason": "registered_route_invalid_geometry"}
-    if _distance(route.start, route.end) <= 1e-12:
-        return {"status": "unavailable", "reason": "registered_route_degenerate"}
-    geometry = {"type": "line_segment", "start": list(route.start), "end": list(route.end)}
+    geometry = _route_spec_geometry(route)
+    geometry_reason = _route_geometry_unavailable_reason(geometry)
+    if geometry_reason is not None:
+        return {"status": "unavailable", "reason": geometry_reason}
     geometry_checksum = _geometry_checksum(geometry)
     if route.registry_checksum != geometry_checksum:
         return {
@@ -2377,20 +3025,48 @@ def _route_availability(route: RouteSpec | None) -> dict[str, Any]:
             "reason": "registered_route_checksum_geometry_mismatch",
             "geometry_checksum": geometry_checksum,
         }
+    registry = _registry_binding(
+        path=route.registry_path,
+        artifact_ref=route.registry_artifact_ref,
+        content_sha256=route.registry_content_sha256,
+        entry_id=route.registry_entry_id,
+        entry_sha256=route.registry_entry_sha256,
+        collection="routes",
+        identity_key="route_id",
+        identity_value=route.route_id,
+        provenance_id=route.provenance_id,
+        geometry=geometry,
+        reason_prefix="registered_route",
+    )
+    if registry.get("status") != "available":
+        return {"status": "unavailable", "reason": str(registry["reason"])}
     return {
         "status": "available",
-        "reason": "registered_straight_route",
+        "reason": "registered_polyline_route"
+        if geometry.get("type") == "polyline"
+        else "registered_straight_route",
         "route_id": route.route_id,
         "provenance_id": route.provenance_id,
         "registry_checksum": route.registry_checksum,
+        "registry": registry["receipt"],
         "coordinate_frame": "world",
         "geometry": geometry,
     }
 
 
-def _conflict_availability(conflict_zone: ConflictZoneSpec | None) -> dict[str, Any]:
+def _conflict_availability(
+    conflict_zone: ConflictZoneSpec | None,
+    *,
+    source_coordinate_frame: str = "world",
+) -> dict[str, Any]:
     if conflict_zone is None:
         return {"status": "unavailable", "reason": "registered_conflict_zone_unavailable"}
+    if source_coordinate_frame != "world":
+        return {
+            "status": "unavailable",
+            "reason": "source_coordinate_frame_not_world",
+            "source_coordinate_frame": source_coordinate_frame,
+        }
     if not conflict_zone.provenance_id:
         return {
             "status": "unavailable",
@@ -2406,15 +3082,10 @@ def _conflict_availability(conflict_zone: ConflictZoneSpec | None) -> dict[str, 
             "status": "unavailable",
             "reason": "registered_conflict_zone_checksum_invalid",
         }
-    if _vector2(conflict_zone.center) is None:
+    geometry = _conflict_spec_geometry(conflict_zone)
+    geometry_kind = geometry.get("type")
+    if not _conflict_geometry_matches_spec(conflict_zone, geometry):
         return {"status": "unavailable", "reason": "registered_conflict_zone_invalid"}
-    if not math.isfinite(conflict_zone.radius_m) or conflict_zone.radius_m < 0:
-        return {"status": "unavailable", "reason": "registered_conflict_zone_invalid"}
-    geometry = {
-        "type": "circle",
-        "center": list(conflict_zone.center),
-        "radius_m": conflict_zone.radius_m,
-    }
     geometry_checksum = _geometry_checksum(geometry)
     if conflict_zone.registry_checksum != geometry_checksum:
         return {
@@ -2422,12 +3093,33 @@ def _conflict_availability(conflict_zone: ConflictZoneSpec | None) -> dict[str, 
             "reason": "registered_conflict_zone_checksum_geometry_mismatch",
             "geometry_checksum": geometry_checksum,
         }
+    registry = _registry_binding(
+        path=conflict_zone.registry_path,
+        artifact_ref=conflict_zone.registry_artifact_ref,
+        content_sha256=conflict_zone.registry_content_sha256,
+        entry_id=conflict_zone.registry_entry_id,
+        entry_sha256=conflict_zone.registry_entry_sha256,
+        collection="conflict_zones",
+        identity_key="zone_id",
+        identity_value=conflict_zone.zone_id,
+        provenance_id=conflict_zone.provenance_id,
+        geometry=geometry,
+        reason_prefix="registered_conflict_zone",
+    )
+    if registry.get("status") != "available":
+        return {"status": "unavailable", "reason": str(registry["reason"])}
+    if geometry_kind in {"point", "polygon"}:
+        return {
+            "status": "unavailable",
+            "reason": f"registered_conflict_zone_{geometry_kind}_projection_unavailable",
+        }
     return {
         "status": "available",
         "reason": "registered_circular_conflict_zone",
         "zone_id": conflict_zone.zone_id,
         "provenance_id": conflict_zone.provenance_id,
         "registry_checksum": conflict_zone.registry_checksum,
+        "registry": registry["receipt"],
         "coordinate_frame": "world",
         "geometry": geometry,
     }
@@ -2435,6 +3127,215 @@ def _conflict_availability(conflict_zone: ConflictZoneSpec | None) -> dict[str, 
 
 def _geometry_checksum(geometry: Mapping[str, Any]) -> str:
     return _json_sha256_digest(geometry)
+
+
+def _route_spec_geometry(route: RouteSpec) -> dict[str, Any]:
+    if isinstance(route.geometry, Mapping):
+        return {str(key): _strict_json_value(value) for key, value in route.geometry.items()}
+    return {"type": "line_segment", "start": list(route.start), "end": list(route.end)}
+
+
+def _conflict_spec_geometry(conflict_zone: ConflictZoneSpec) -> dict[str, Any]:
+    if isinstance(conflict_zone.geometry, Mapping):
+        return {
+            str(key): _strict_json_value(value) for key, value in conflict_zone.geometry.items()
+        }
+    return {
+        "type": "circle",
+        "center": list(conflict_zone.center),
+        "radius_m": conflict_zone.radius_m,
+    }
+
+
+def _conflict_geometry_matches_spec(
+    conflict_zone: ConflictZoneSpec,
+    geometry: Mapping[str, Any],
+) -> bool:
+    geometry_kind = geometry.get("type")
+    if geometry_kind in {"point", "polygon"}:
+        return True
+    center = _vector2(geometry.get("center"))
+    radius = geometry.get("radius_m")
+    return bool(
+        geometry_kind == "circle"
+        and center is not None
+        and _finite_json_number(radius)
+        and float(radius) >= 0.0
+        and center == _vector2(conflict_zone.center)
+        and float(radius) == conflict_zone.radius_m
+    )
+
+
+def _route_geometry_points(geometry: Mapping[str, Any]) -> list[tuple[float, float]]:
+    if geometry.get("type") == "line_segment":
+        start = _vector2(geometry.get("start"))
+        end = _vector2(geometry.get("end"))
+        return [start, end] if start is not None and end is not None else []
+    if geometry.get("type") != "polyline":
+        return []
+    points = geometry.get("points")
+    if not isinstance(points, Sequence) or isinstance(points, str | bytes):
+        return []
+    parsed = [_vector2(point) for point in points]
+    return [point for point in parsed if point is not None] if all(parsed) else []
+
+
+def _route_geometry_unavailable_reason(geometry: Mapping[str, Any]) -> str | None:
+    if geometry.get("type") not in {"line_segment", "polyline"}:
+        return "registered_route_branching_or_ambiguous_geometry"
+    points = _route_geometry_points(geometry)
+    raw_points = geometry.get("points")
+    if geometry.get("type") == "line_segment":
+        expected_count = 2
+    elif not isinstance(raw_points, Sequence) or isinstance(raw_points, str | bytes):
+        return "registered_route_invalid_geometry"
+    else:
+        expected_count = len(raw_points)
+    if len(points) < 2 or len(points) != expected_count:
+        return "registered_route_invalid_geometry"
+    if any(_distance(left, right) <= 1e-12 for left, right in pairwise(points)):
+        return "registered_route_degenerate"
+    if _polyline_has_nonlocal_intersection(points):
+        return "registered_route_branching_or_ambiguous_geometry"
+    return None
+
+
+def _polyline_has_nonlocal_intersection(points: Sequence[tuple[float, float]]) -> bool:
+    for left_index, (left_start, left_end) in enumerate(pairwise(points)):
+        for right_index, (right_start, right_end) in enumerate(pairwise(points)):
+            if right_index <= left_index + 1:
+                continue
+            if _segments_intersect(left_start, left_end, right_start, right_end):
+                return True
+    return False
+
+
+def _segments_intersect(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    c: tuple[float, float],
+    d: tuple[float, float],
+) -> bool:
+    def orientation(
+        first: tuple[float, float],
+        second: tuple[float, float],
+        third: tuple[float, float],
+    ) -> float:
+        return _cross(
+            (second[0] - first[0], second[1] - first[1]),
+            (third[0] - first[0], third[1] - first[1]),
+        )
+
+    values = (
+        orientation(a, b, c),
+        orientation(a, b, d),
+        orientation(c, d, a),
+        orientation(c, d, b),
+    )
+    if values[0] * values[1] < 0.0 and values[2] * values[3] < 0.0:
+        return True
+
+    def on_segment(
+        first: tuple[float, float],
+        second: tuple[float, float],
+        point: tuple[float, float],
+    ) -> bool:
+        return (
+            min(first[0], second[0]) - 1e-12 <= point[0] <= max(first[0], second[0]) + 1e-12
+            and min(first[1], second[1]) - 1e-12 <= point[1] <= max(first[1], second[1]) + 1e-12
+        )
+
+    return any(
+        abs(orientation_value) <= 1e-12 and on_segment(first, second, point)
+        for orientation_value, first, second, point in (
+            (values[0], a, b, c),
+            (values[1], a, b, d),
+            (values[2], c, d, a),
+            (values[3], c, d, b),
+        )
+    )
+
+
+def _registry_binding(  # noqa: C901, PLR0913
+    *,
+    path: str | None,
+    artifact_ref: str | None,
+    content_sha256: str | None,
+    entry_id: str | None,
+    entry_sha256: str | None,
+    collection: str,
+    identity_key: str,
+    identity_value: str,
+    provenance_id: str | None,
+    geometry: Mapping[str, Any],
+    reason_prefix: str,
+) -> dict[str, Any]:
+    if not all((path, artifact_ref, content_sha256, entry_id, entry_sha256)):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_artifact_unavailable"}
+    if not _stable_geometry_registry_artifact_ref(artifact_ref):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_receipt_invalid"}
+    if (
+        SHA256_HEX_RE.fullmatch(str(content_sha256)) is None
+        or SHA256_HEX_RE.fullmatch(str(entry_sha256)) is None
+    ):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_receipt_invalid"}
+    resolved = Path(str(path)).resolve()
+    try:
+        raw = resolved.read_bytes()
+    except OSError:
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_artifact_missing"}
+    if hashlib.sha256(raw).hexdigest() != content_sha256:
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_content_mismatch"}
+    try:
+        payload = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_invalid"}
+    if not isinstance(payload, Mapping) or (
+        payload.get("schema_version") != GEOMETRY_REGISTRY_SCHEMA_VERSION
+        or payload.get("coordinate_frame") != "world"
+        or payload.get("registry_id") != provenance_id
+        or payload.get("artifact_ref") != artifact_ref
+        or not _registry_upstream_bindings_are_portable(payload)
+    ):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_invalid"}
+    if not Draft202012Validator(load_process_trace_geometry_registry_schema()).is_valid(payload):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_invalid"}
+    entries = payload.get(collection)
+    matches = (
+        [
+            entry
+            for entry in entries
+            if isinstance(entry, Mapping) and entry.get("entry_id") == entry_id
+        ]
+        if isinstance(entries, list)
+        else []
+    )
+    if not matches:
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_entry_missing"}
+    if len(matches) != 1:
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_entry_ambiguous"}
+    entry = matches[0]
+    if (
+        _json_sha256_digest(entry) != entry_sha256
+        or entry.get(identity_key) != identity_value
+        or entry.get("geometry") != geometry
+    ):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_registry_entry_mismatch"}
+    return {
+        "status": "available",
+        "receipt": {
+            "schema_version": GEOMETRY_REGISTRY_SCHEMA_VERSION,
+            "registry_id": str(payload["registry_id"]),
+            "artifact_ref": artifact_ref,
+            "content_sha256": str(content_sha256),
+            "entry_id": str(entry_id),
+            "entry_sha256": str(entry_sha256),
+            "coordinate_frame": "world",
+            "geometry_kind": str(geometry.get("type")),
+            "resolved_geometry": dict(geometry),
+            "upstream_binding": dict(entry["upstream_binding"]),
+        },
+    }
 
 
 def _world_availability(trace: SimulationTraceExport) -> dict[str, Any]:
@@ -2462,15 +3363,18 @@ def _relative_availability(focal: Mapping[str, Any]) -> dict[str, Any]:
     return {"status": "unavailable", "reason": str(focal.get("reason", "no_focal_actor"))}
 
 
-def _resolve_focal_actor(
+def _resolve_focal_actor(  # noqa: C901
     trace: SimulationTraceExport,
     *,
     requested_actor_id: str | None = None,
+    requested_encounter_id: str | None = None,
     encounter_report: Mapping[str, Any] | None = None,
     encounter_report_input_checksum: str | None = None,
 ) -> dict[str, Any]:
     declared = _declared_encounter(
         trace,
+        requested_actor_id=requested_actor_id,
+        requested_encounter_id=requested_encounter_id,
         encounter_report=encounter_report,
         encounter_report_input_checksum=encounter_report_input_checksum,
     )
@@ -2488,6 +3392,15 @@ def _resolve_focal_actor(
             if "id" in pedestrian
         }
     )
+    if requested_encounter_id:
+        requested_encounter = str(requested_encounter_id)
+        if declared.get("encounter_id") != requested_encounter:
+            return {
+                "status": "unavailable",
+                "reason": "requested_focal_encounter_missing",
+                "requested_encounter_id": requested_encounter,
+                "declared_encounter": declared,
+            }
     if requested_actor_id:
         requested = str(requested_actor_id)
         if requested not in actor_ids:
@@ -2542,6 +3455,8 @@ def _resolve_focal_actor(
 def _declared_encounter(
     trace: SimulationTraceExport,
     *,
+    requested_actor_id: str | None = None,
+    requested_encounter_id: str | None = None,
     encounter_report: Mapping[str, Any] | None = None,
     encounter_report_input_checksum: str | None = None,
 ) -> dict[str, Any]:
@@ -2550,6 +3465,8 @@ def _declared_encounter(
             trace,
             encounter_report,
             expected_input_checksum=encounter_report_input_checksum,
+            requested_actor_id=requested_actor_id,
+            requested_encounter_id=requested_encounter_id,
         )
     for frame in trace.frames:
         for key in ("focal_encounter", "encounter"):
@@ -2583,6 +3500,8 @@ def _select_canonical_encounter(
     encounter_report: Mapping[str, Any],
     *,
     expected_input_checksum: str | None,
+    requested_actor_id: str | None,
+    requested_encounter_id: str | None,
 ) -> dict[str, Any]:
     checksum_status = _encounter_report_checksum_status(
         encounter_report,
@@ -2626,10 +3545,37 @@ def _select_canonical_encounter(
             "reason": "canonical_encounter_actor_missing_from_trace",
             "schema_version": CANONICAL_ENCOUNTER_SCHEMA_VERSION,
         }
+    if requested_actor_id is not None:
+        requested_actor = str(requested_actor_id)
+        candidates = [
+            encounter for encounter in candidates if str(encounter["actor_id"]) == requested_actor
+        ]
+        if not candidates:
+            return {
+                "status": "unavailable",
+                "reason": "requested_focal_actor_has_no_canonical_encounter",
+                "schema_version": CANONICAL_ENCOUNTER_SCHEMA_VERSION,
+                "requested_actor_id": requested_actor,
+            }
+    if requested_encounter_id is not None:
+        requested_encounter = str(requested_encounter_id)
+        candidates = [
+            encounter
+            for encounter in candidates
+            if str(encounter["encounter_id"]) == requested_encounter
+        ]
+        if not candidates:
+            return {
+                "status": "unavailable",
+                "reason": "requested_focal_encounter_missing",
+                "schema_version": CANONICAL_ENCOUNTER_SCHEMA_VERSION,
+                "requested_encounter_id": requested_encounter,
+            }
     selected = min(
         candidates,
         key=lambda encounter: (
             float(encounter["start_time_s"]),
+            float(encounter["end_time_s"]),
             str(encounter["actor_id"]),
             str(encounter["encounter_id"]),
         ),
@@ -2851,15 +3797,11 @@ def _route_frame(
         return route_availability
     if robot_pos is None:
         return {"status": "unavailable", "reason": "missing_robot_position"}
-    axis = (route.end[0] - route.start[0], route.end[1] - route.start[1])
-    length = _norm(axis)
-    if length <= 1e-12:
-        return {"status": "unavailable", "reason": "registered_route_degenerate"}
-    unit = (axis[0] / length, axis[1] / length)
-    rel = (robot_pos[0] - route.start[0], robot_pos[1] - route.start[1])
-    s_m = _dot(rel, unit)
-    n_m = _cross(unit, rel)
-    progress_rate = _dot(robot_vel, unit) if robot_vel is not None else None
+    geometry = route_availability["geometry"]
+    robot_projection = _project_onto_route(robot_pos, geometry)
+    if robot_projection is None:
+        return {"status": "unavailable", "reason": "ambiguous_route_projection"}
+    progress_rate = _dot(robot_vel, robot_projection["unit"]) if robot_vel is not None else None
     focal_pos = _vector2(focal.get("position")) if focal is not None else None
     focal_vel = _vector2(focal.get("velocity")) if focal is not None else None
     if focal_pos is None:
@@ -2871,30 +3813,74 @@ def _route_frame(
             "focal_actor_progress_rate_mps": None,
         }
     else:
-        focal_rel = (focal_pos[0] - route.start[0], focal_pos[1] - route.start[1])
-        focal_payload = {
-            "focal_actor_status": "available",
-            "focal_actor_s_m": _dot(focal_rel, unit),
-            "focal_actor_n_m": _cross(unit, focal_rel),
-            "focal_actor_progress_rate_mps": _dot(focal_vel, unit)
-            if focal_vel is not None
-            else None,
-        }
+        focal_projection = _project_onto_route(focal_pos, geometry)
+        if focal_projection is None:
+            focal_payload = {
+                "focal_actor_status": "unavailable",
+                "focal_actor_reason": "ambiguous_route_projection",
+                "focal_actor_s_m": None,
+                "focal_actor_n_m": None,
+                "focal_actor_progress_rate_mps": None,
+            }
+        else:
+            focal_payload = {
+                "focal_actor_status": "available",
+                "focal_actor_s_m": focal_projection["s_m"],
+                "focal_actor_n_m": focal_projection["n_m"],
+                "focal_actor_progress_rate_mps": _dot(focal_vel, focal_projection["unit"])
+                if focal_vel is not None
+                else None,
+            }
     return {
         "status": "available",
         "route_id": route.route_id,
         "provenance_id": route.provenance_id,
         "registry_checksum": route.registry_checksum,
-        "geometry": {
-            "type": "line_segment",
-            "start": list(route.start),
-            "end": list(route.end),
-        },
-        "s_m": s_m,
-        "n_m": n_m,
+        "registry": route_availability["registry"],
+        "geometry": geometry,
+        "s_m": robot_projection["s_m"],
+        "n_m": robot_projection["n_m"],
         "progress_rate_mps": progress_rate,
         **focal_payload,
     }
+
+
+def _project_onto_route(
+    point: tuple[float, float], geometry: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    points = _route_geometry_points(geometry)
+    candidates: list[dict[str, Any]] = []
+    cumulative = 0.0
+    for index, (start, end) in enumerate(pairwise(points)):
+        axis = (end[0] - start[0], end[1] - start[1])
+        length = _norm(axis)
+        unit = (axis[0] / length, axis[1] / length)
+        relative = (point[0] - start[0], point[1] - start[1])
+        along = min(max(_dot(relative, unit), 0.0), length)
+        projected = (start[0] + along * unit[0], start[1] + along * unit[1])
+        residual = (point[0] - projected[0], point[1] - projected[1])
+        candidates.append(
+            {
+                "index": index,
+                "distance": _norm(residual),
+                "s_m": cumulative + along,
+                "n_m": _cross(unit, residual),
+                "unit": unit,
+                "projected": projected,
+            }
+        )
+        cumulative += length
+    if not candidates:
+        return None
+    minimum = min(float(candidate["distance"]) for candidate in candidates)
+    closest = [
+        candidate
+        for candidate in candidates
+        if math.isclose(float(candidate["distance"]), minimum, rel_tol=1e-9, abs_tol=1e-12)
+    ]
+    if len(closest) != 1:
+        return None
+    return closest[0]
 
 
 def _conflict_frame(
@@ -2923,6 +3909,7 @@ def _conflict_frame(
         "zone_id": conflict_zone.zone_id,
         "provenance_id": conflict_zone.provenance_id,
         "registry_checksum": conflict_zone.registry_checksum,
+        "registry": conflict_availability["registry"],
         "geometry": {
             "type": "circle",
             "center": list(conflict_zone.center),
@@ -3302,6 +4289,7 @@ def _event_anchors(
     trace: SimulationTraceExport,
     *,
     frames: Sequence[Mapping[str, Any]],
+    episode_frames: Sequence[Mapping[str, Any]] | None = None,
     focal_actor_id: object,
     focal_interval: tuple[float, float] | None = None,
 ) -> list[dict[str, Any]]:
@@ -3340,7 +4328,7 @@ def _event_anchors(
         ),
         _collision_event_anchor(
             trace,
-            frames=frames,
+            frames=episode_frames if episode_frames is not None else frames,
             focal_actor_id=focal_actor_id,
             focal_interval=focal_interval,
         ),
@@ -3671,10 +4659,13 @@ def _collision_event_anchor(
         focal_interval=focal_interval,
     )
     if state["status"] == "available":
+        focal_binding = state["focal_binding"]
         event = _event_from_condition(
             "exact_collision_event",
             state["frame"],
-            actor_id=focal_actor_id,
+            actor_id=focal_binding.get("actor_id")
+            if focal_binding.get("status") == "available"
+            else None,
             source_fields=["planner.event_ledger.collision_events"],
             absent_status="unavailable",
             zone_id=None,
@@ -3682,6 +4673,7 @@ def _collision_event_anchor(
         event["time_s"] = float(state["collision_time"])
         event["collision_partner_id"] = state.get("collision_partner_id")
         event["collision_partner_type"] = state.get("collision_partner_type")
+        event["focal_binding"] = focal_binding
         event["event_relative_time"] = _event_relative_time(
             float(state["collision_time"]),
             float(state["collision_time"]),
@@ -3726,7 +4718,8 @@ def _collision_anchor_state(  # noqa: C901
 ) -> dict[str, Any]:
     boolean_observed = False
     saw_unbound = False
-    saw_focal_outside = False
+    first_unbound: dict[str, Any] | None = None
+    first_focal_outside: dict[str, Any] | None = None
     trace_bounds = _trace_time_bounds(trace)
     for trace_frame in trace.frames:
         signals = _canonical_collision_signals(trace_frame.planner)
@@ -3744,14 +4737,7 @@ def _collision_anchor_state(  # noqa: C901
             ):
                 continue
             collision_time_float = float(collision_time)
-            if not _collision_binds_focal(signal, focal_actor_id):
-                saw_unbound = True
-                continue
-            if focal_interval is not None and not (
-                focal_interval[0] <= collision_time_float <= focal_interval[1]
-            ):
-                saw_focal_outside = True
-                continue
+            binds_focal = _collision_binds_focal(signal, focal_actor_id)
             if trace_bounds is not None and not (
                 trace_bounds[0] <= collision_time_float <= trace_bounds[1]
             ):
@@ -3760,7 +4746,45 @@ def _collision_anchor_state(  # noqa: C901
                     "observed": True,
                     "reason": "collision_time_outside_trace_sample_bounds",
                 }
-            frame = _frame_for_collision_time(frames, collision_time_float)
+            frame = next(
+                (frame for frame in frames if frame.get("step") == trace_frame.step),
+                _frame_for_collision_time(frames, collision_time_float),
+            )
+            if (
+                binds_focal
+                and focal_interval is not None
+                and not (focal_interval[0] <= collision_time_float <= focal_interval[1])
+            ):
+                if frame is not None and first_focal_outside is None:
+                    first_focal_outside = {
+                        "status": "available",
+                        "observed": True,
+                        "frame": frame,
+                        "collision_time": collision_time_float,
+                        "collision_partner_id": signal.get("collision_partner_id"),
+                        "collision_partner_type": signal.get("collision_partner_type"),
+                        "focal_binding": {
+                            "status": "unavailable",
+                            "reason": "collision_time_outside_encounter_interval",
+                        },
+                    }
+                continue
+            if not binds_focal:
+                saw_unbound = True
+                if frame is not None and first_unbound is None:
+                    first_unbound = {
+                        "status": "available",
+                        "observed": True,
+                        "frame": frame,
+                        "collision_time": collision_time_float,
+                        "collision_partner_id": signal.get("collision_partner_id"),
+                        "collision_partner_type": signal.get("collision_partner_type"),
+                        "focal_binding": {
+                            "status": "unavailable",
+                            "reason": "collision_partner_not_focal_actor",
+                        },
+                    }
+                continue
             if frame is not None:
                 return {
                     "status": "available",
@@ -3769,18 +4793,21 @@ def _collision_anchor_state(  # noqa: C901
                     "collision_time": collision_time_float,
                     "collision_partner_id": signal.get("collision_partner_id"),
                     "collision_partner_type": signal.get("collision_partner_type"),
+                    "focal_binding": {
+                        "status": "available",
+                        "reason": "collision_partner_matches_focal_actor",
+                        "actor_id": str(focal_actor_id),
+                    },
                 }
             return {
                 "status": "unavailable",
                 "observed": True,
                 "reason": "collision_frame_unavailable",
             }
-    if saw_focal_outside:
-        return {
-            "status": "unavailable",
-            "observed": True,
-            "reason": "collision_time_outside_encounter_interval",
-        }
+    if first_focal_outside is not None:
+        return first_focal_outside
+    if first_unbound is not None:
+        return first_unbound
     if saw_unbound:
         return {
             "status": "unavailable",

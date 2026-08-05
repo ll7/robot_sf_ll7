@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 
 PAIR_COMPATIBILITY_PROFILE_VERSION = "pair_compatibility.deterministic.v1"
 PAIR_COMPARISON_GRAINS = frozenset({"matched_planner_pair", "matched_realization_pair"})
+SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def unavailable_pair_compatibility(
@@ -150,6 +152,7 @@ def _comparison_grain(comparison_grain: str | None) -> dict[str, Any]:
         "units",
         "map_id",
         "horizon",
+        "time_step_s",
     ]
     if comparison_grain == "matched_planner_pair":
         required_gate_fields.append("initial_state")
@@ -180,10 +183,16 @@ def _provenance_gate(
     *,
     comparison_grain: str,
 ) -> dict[str, Any]:
+    left_time_step_contract = build_trace_run_config_contract(left)
+    right_time_step_contract = build_trace_run_config_contract(right)
     required_meta = {
         "map_id": (_meta(left, "map_id"), _meta(right, "map_id")),
         "horizon": (_meta(left, "horizon"), _meta(right, "horizon")),
         "config_digest": (_meta(left, "config_digest"), _meta(right, "config_digest")),
+        "time_step_s": (
+            left_time_step_contract.get("time_step_s"),
+            right_time_step_contract.get("time_step_s"),
+        ),
     }
     availability = {
         key: {
@@ -206,9 +215,18 @@ def _provenance_gate(
         "map_id_present": availability["map_id"]["status"] == "available",
         "horizon_present": availability["horizon"]["status"] == "available",
         "config_digest_present": availability["config_digest"]["status"] == "available",
+        "time_step_s_present": bool(
+            left_time_step_contract.get("status") == "available"
+            and right_time_step_contract.get("status") == "available"
+        ),
         "map_id_equal": _required_equal(*required_meta["map_id"]),
         "horizon_equal": _required_equal(*required_meta["horizon"]),
         "config_digest_equal": _required_equal(*required_meta["config_digest"]),
+        "time_step_s_equal": bool(
+            left_time_step_contract.get("status") == "available"
+            and right_time_step_contract.get("status") == "available"
+            and _required_equal(*required_meta["time_step_s"])
+        ),
     }
     if comparison_grain == "matched_planner_pair":
         grain_specific = checks["planner_id_different"] and checks["seed_equal"]
@@ -227,11 +245,16 @@ def _provenance_gate(
             and checks["units_equal"]
             and checks["map_id_equal"]
             and checks["horizon_equal"]
+            and checks["time_step_s_equal"]
             and config_compatible
             and grain_specific
         ),
         "checks": checks,
         "availability": availability,
+        "time_step_contracts": {
+            "left": left_time_step_contract,
+            "right": right_time_step_contract,
+        },
         "comparison_grain": comparison_grain,
         "left_trace_id": left.trace_id,
         "right_trace_id": right.trace_id,
@@ -253,16 +276,20 @@ def _initial_equivalence(
     right_pos = _vector2(right_robot.get("position"))
     left_vel = _vector2(left_robot.get("velocity"))
     right_vel = _vector2(right_robot.get("velocity"))
+    left_heading = _finite_float(left_robot.get("heading"))
+    right_heading = _finite_float(right_robot.get("heading"))
     left_actors = _actor_state(left.frames[0].pedestrians)
     right_actors = _actor_state(right.frames[0].pedestrians)
     if left_pos is None or right_pos is None or left_vel is None or right_vel is None:
         return {"status": "unavailable", "reason": "missing_initial_robot_pose_or_velocity"}
+    if left_heading is None or right_heading is None:
+        return {"status": "unavailable", "reason": "missing_initial_robot_heading"}
     if left_actors is None or right_actors is None:
         return {"status": "unavailable", "reason": "missing_initial_actor_state"}
     heading_delta = abs(
         _wrapped_angle_delta(
-            float(left_robot.get("heading", 0.0)),
-            float(right_robot.get("heading", 0.0)),
+            left_heading,
+            right_heading,
         )
     )
     position_delta = _distance(left_pos, right_pos)
@@ -376,12 +403,16 @@ def _full_state_equal(  # noqa: C901
     right_pos = _vector2(right_robot.get("position"))
     left_vel = _vector2(left_robot.get("velocity"))
     right_vel = _vector2(right_robot.get("velocity"))
+    left_heading = _finite_float(left_robot.get("heading"))
+    right_heading = _finite_float(right_robot.get("heading"))
     left_actors = _actor_state(left_frame.pedestrians)
     right_actors = _actor_state(right_frame.pedestrians)
     if left_pos is None or right_pos is None or left_vel is None or right_vel is None:
         return False, "missing_robot_state"
     if left_actors is None or right_actors is None:
         return False, "missing_actor_state"
+    if left_heading is None or right_heading is None:
+        return False, "missing_robot_heading"
     if _distance(left_pos, right_pos) > position_tolerance_m:
         return False, "robot_position_diverged"
     if _distance(left_vel, right_vel) > position_tolerance_m:
@@ -389,8 +420,8 @@ def _full_state_equal(  # noqa: C901
     if (
         abs(
             _wrapped_angle_delta(
-                float(left_robot.get("heading", 0.0)),
-                float(right_robot.get("heading", 0.0)),
+                left_heading,
+                right_heading,
             )
         )
         > heading_tolerance_rad
@@ -472,14 +503,95 @@ def _required_equal(left: object, right: object) -> bool:
 
 
 def _meta(trace: SimulationTraceExport, key: str) -> object:
+    values: list[object] = []
     for frame in trace.frames:
         value = frame.planner.get(key)
-        if value is not None:
-            return value
-        run_config = frame.planner.get("run_config")
-        if isinstance(run_config, dict) and key in run_config:
-            return run_config[key]
-    return None
+        if value is None:
+            run_config = frame.planner.get("run_config")
+            value = run_config.get(key) if isinstance(run_config, dict) else None
+        if value is None:
+            return None
+        values.append(value)
+    if not values or any(value != values[0] for value in values[1:]):
+        return None
+    return values[0]
+
+
+def build_trace_run_config_contract(trace: SimulationTraceExport) -> dict[str, Any]:
+    """Replay the declared run configuration against every source frame and sample interval.
+
+    Returns:
+        Available declared/observed time-step receipt, or a fail-closed reason.
+    """
+
+    run_configs = [frame.planner.get("run_config") for frame in trace.frames]
+    if not run_configs or any(not isinstance(run_config, dict) for run_config in run_configs):
+        return {"status": "unavailable", "reason": "run_config_unavailable"}
+    time_steps = [run_config.get("time_step_s") for run_config in run_configs]
+    if any(
+        isinstance(time_step, bool) or not (_finite_number(time_step) and float(time_step) > 0.0)
+        for time_step in time_steps
+    ):
+        return {"status": "unavailable", "reason": "run_config_time_step_unavailable"}
+    if len({float(time_step) for time_step in time_steps}) != 1:
+        return {"status": "unavailable", "reason": "run_config_time_step_inconsistent"}
+    digests = [run_config.get("config_digest") for run_config in run_configs]
+    if any(not (isinstance(digest, str) and SHA256_HEX_RE.fullmatch(digest)) for digest in digests):
+        return {"status": "unavailable", "reason": "run_config_digest_unavailable"}
+    if len(set(digests)) != 1:
+        return {"status": "unavailable", "reason": "run_config_digest_inconsistent"}
+    declared_time_step = float(time_steps[0])
+    configured = {
+        "time_step_s": declared_time_step,
+        "config_digest": str(digests[0]),
+        "source": "planner.run_config",
+    }
+    observed_time_step, observed_consistent = _observed_trace_time_step(trace)
+    if not observed_consistent:
+        return {
+            "status": "unavailable",
+            "reason": "source_time_step_inconsistent",
+            **configured,
+        }
+    if observed_time_step is not None and not math.isclose(
+        declared_time_step,
+        observed_time_step,
+        rel_tol=1e-9,
+        abs_tol=1e-12,
+    ):
+        return {
+            "status": "unavailable",
+            "reason": "run_config_time_step_trace_mismatch",
+            **configured,
+            "observed_time_step_s": observed_time_step,
+        }
+    return {"status": "available", **configured}
+
+
+def _observed_trace_time_step(
+    trace: SimulationTraceExport,
+) -> tuple[float | None, bool]:
+    if len(trace.frames) < 2:
+        return None, True
+    observed: list[float] = []
+    for left, right in zip(trace.frames, trace.frames[1:], strict=False):
+        step_delta = right.step - left.step
+        time_delta = float(right.time_s) - float(left.time_s)
+        if step_delta <= 0 or not math.isfinite(time_delta) or time_delta <= 0.0:
+            return None, False
+        observed.append(time_delta / step_delta)
+    first = observed[0]
+    return first, all(
+        math.isclose(value, first, rel_tol=1e-9, abs_tol=1e-12) for value in observed[1:]
+    )
+
+
+def _finite_number(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _finite_float(value: object) -> float | None:
+    return float(value) if _finite_number(value) else None
 
 
 def _trace_content_sha256(trace: SimulationTraceExport) -> str:
@@ -551,18 +663,20 @@ def _common_event_anchors(
         right = right_by_identity.get(identity)
         if right is None:
             continue
-        matches.append(
-            {
-                "event_type": identity[0],
-                "detector_profile_version": identity[1],
-                "actor_id": identity[2],
-                "zone_id": identity[3],
-                "source_fields": list(identity[4]),
-                "status": "available",
-                "left_event_id": left["event_id"],
-                "right_event_id": right["event_id"],
-            }
-        )
+        match = {
+            "event_type": identity[0],
+            "detector_profile_version": identity[1],
+            "actor_id": identity[2],
+            "zone_id": identity[3],
+            "source_fields": list(identity[4]),
+            "status": "available",
+            "left_event_id": left["event_id"],
+            "right_event_id": right["event_id"],
+        }
+        if identity[0] == "exact_collision_event":
+            match["collision_partner_type"] = identity[5]
+            match["collision_partner_id"] = identity[6]
+        matches.append(match)
     return sorted(
         matches,
         key=lambda item: (
@@ -580,30 +694,36 @@ def _event_receipts(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
         if event.get("status") != "available":
             continue
         identity = _event_identity(event)
-        receipts.append(
-            {
-                "event_id": event["event_id"],
-                "event_type": identity[0],
-                "detector_profile_version": identity[1],
-                "time_s": float(event["time_s"]),
-                "step": int(event["step"]),
-                "confidence": str(event["confidence"]),
-                "actor_id": identity[2],
-                "zone_id": identity[3],
-                "source_fields": list(identity[4]),
-                "status": "available",
-                "event_relative_time": dict(event["event_relative_time"]),
-                "visual_anchor_eligibility": dict(event["visual_anchor_eligibility"]),
-            }
-        )
+        receipt = {
+            "event_id": event["event_id"],
+            "event_type": identity[0],
+            "detector_profile_version": identity[1],
+            "time_s": float(event["time_s"]),
+            "step": int(event["step"]),
+            "confidence": str(event["confidence"]),
+            "actor_id": identity[2],
+            "zone_id": identity[3],
+            "source_fields": list(identity[4]),
+            "status": "available",
+            "event_relative_time": dict(event["event_relative_time"]),
+            "visual_anchor_eligibility": dict(event["visual_anchor_eligibility"]),
+        }
+        if identity[0] == "exact_collision_event":
+            receipt["collision_partner_type"] = identity[5]
+            receipt["collision_partner_id"] = identity[6]
+        receipts.append(receipt)
     return sorted(receipts, key=lambda item: str(item["event_id"]))
 
 
-def _event_identity(event: Mapping[str, Any]) -> tuple[str, str, object, object, tuple[str, ...]]:
+def _event_identity(
+    event: Mapping[str, Any],
+) -> tuple[str, str, object, object, tuple[str, ...], object, object]:
     return (
         str(event.get("event_type")),
         str(event.get("detector_profile_version")),
         event.get("actor_id"),
         event.get("zone_id"),
         tuple(str(field) for field in event.get("source_fields", [])),
+        event.get("collision_partner_type"),
+        event.get("collision_partner_id"),
     )

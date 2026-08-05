@@ -52,7 +52,11 @@
               "required": ["status", "reason"],
               "properties": {
                 "status": {"const": "unavailable"},
-                "reason": {"type": "string"}
+                "reason": {"type": "string"},
+                "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+                "observed_time_step_s": {"type": "number", "exclusiveMinimum": 0},
+                "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "source": {"const": "planner.run_config"}
               }
             },
             {
@@ -282,6 +286,16 @@
           "collision_observed": {"type": "boolean"},
           "collision_partner_id": {"type": ["string", "null"]},
           "collision_partner_type": {"type": ["string", "null"]},
+          "focal_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason"],
+            "properties": {
+              "status": {"enum": ["available", "unavailable"]},
+              "reason": {"type": "string"},
+              "actor_id": {"type": "string"}
+            }
+          },
           "source_fields": {"type": "array", "items": {"type": "string"}},
           "event_relative_time": {
             "type": "object",
@@ -497,6 +511,87 @@
         "end": {"$ref": "#/$defs/vector2"}
       }
     },
+    "polyline_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "points"],
+      "properties": {
+        "type": {"const": "polyline"},
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/vector2"}
+        }
+      }
+    },
+    "route_geometry": {
+      "oneOf": [
+        {"$ref": "#/$defs/line_segment_geometry"},
+        {"$ref": "#/$defs/polyline_geometry"}
+      ]
+    },
+    "geometry_fixture_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "fixture_id"],
+      "properties": {
+        "kind": {"const": "fixture_only"},
+        "fixture_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "geometry_canonical_source_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source_artifact_ref", "source_content_sha256", "selector"],
+      "properties": {
+        "kind": {"const": "canonical_source"},
+        "source_artifact_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable repo-relative reference or non-file logical URI."
+        },
+        "source_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selector": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": ["string", "number", "boolean"]}
+        }
+      }
+    },
+    "geometry_upstream_binding": {
+      "oneOf": [
+        {"$ref": "#/$defs/geometry_fixture_binding"},
+        {"$ref": "#/$defs/geometry_canonical_source_binding"}
+      ]
+    },
+    "geometry_registry_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "registry_id",
+        "artifact_ref",
+        "content_sha256",
+        "entry_id",
+        "entry_sha256",
+        "coordinate_frame",
+        "geometry_kind",
+        "resolved_geometry",
+        "upstream_binding"
+      ],
+      "properties": {
+        "schema_version": {"const": "process_trace_geometry_registry.v1"},
+        "registry_id": {"type": "string", "minLength": 1},
+        "artifact_ref": {"type": "string", "minLength": 1},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "entry_id": {"type": "string", "minLength": 1},
+        "entry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "coordinate_frame": {"const": "world"},
+        "geometry_kind": {"enum": ["line_segment", "polyline", "circle"]},
+        "resolved_geometry": {"type": "object"},
+        "upstream_binding": {"$ref": "#/$defs/geometry_upstream_binding"}
+      }
+    },
     "circle_geometry": {
       "type": "object",
       "additionalProperties": false,
@@ -534,6 +629,7 @@
             "route_id",
             "provenance_id",
             "registry_checksum",
+            "registry",
             "geometry",
             "s_m",
             "n_m",
@@ -548,7 +644,8 @@
             "route_id": {"type": "string"},
             "provenance_id": {"type": "string"},
             "registry_checksum": {"type": "string"},
-            "geometry": {"$ref": "#/$defs/line_segment_geometry"},
+            "registry": {"$ref": "#/$defs/geometry_registry_receipt"},
+            "geometry": {"$ref": "#/$defs/route_geometry"},
             "source_coordinate_frame": {"type": "string"},
             "geometry_checksum": {"type": "string"},
             "s_m": {"type": "number"},
@@ -584,6 +681,7 @@
             "zone_id",
             "provenance_id",
             "registry_checksum",
+            "registry",
             "geometry",
             "robot_signed_distance_to_zone_m",
             "focal_actor_signed_distance_to_zone_m",
@@ -594,6 +692,7 @@
             "zone_id": {"type": "string"},
             "provenance_id": {"type": "string"},
             "registry_checksum": {"type": "string"},
+            "registry": {"$ref": "#/$defs/geometry_registry_receipt"},
             "geometry": {"$ref": "#/$defs/circle_geometry"},
             "source_coordinate_frame": {"type": "string"},
             "geometry_checksum": {"type": "string"},
@@ -793,6 +892,8 @@
         "detector_profile_version": {"type": "string"},
         "actor_id": {"type": ["string", "null"]},
         "zone_id": {"type": ["string", "null"]},
+        "collision_partner_type": {"type": ["string", "null"]},
+        "collision_partner_id": {"type": ["string", "null"]},
         "source_fields": {"type": "array", "items": {"type": "string"}},
         "status": {"const": "available"},
         "left_event_id": {"type": "string"},
@@ -873,6 +974,8 @@
         "confidence": {"type": "string"},
         "actor_id": {"type": ["string", "null"]},
         "zone_id": {"type": ["string", "null"]},
+        "collision_partner_type": {"type": ["string", "null"]},
+        "collision_partner_id": {"type": ["string", "null"]},
         "source_fields": {"type": "array", "items": {"type": "string"}},
         "status": {"const": "available"},
         "event_relative_time": {"type": "object"},

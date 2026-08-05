@@ -1,12 +1,16 @@
 """Analysis-workbench contracts and helpers."""
 
 from robot_sf.analysis_workbench.interaction_coordinates import (
+    GEOMETRY_REGISTRY_SCHEMA_VERSION,
     WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_VERSION,
     ConflictZoneSpec,
     RouteSpec,
     WorkedExampleProcessTraceValidationError,
     build_worked_example_process_trace,
     build_worked_example_process_trace_from_export,
+    load_process_trace_geometry_registry_schema,
+    load_registered_conflict_zone_spec,
+    load_registered_route_spec,
     load_worked_example_process_trace_schema,
     validate_worked_example_process_trace,
     write_worked_example_process_trace,
@@ -66,6 +70,7 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
 
 __all__ = [
     "CONTRACT_EVIDENCE_BOUNDARY",
+    "GEOMETRY_REGISTRY_SCHEMA_VERSION",
     "REAL_TRACE_SOURCE_DISCOVERY_SCHEMA_VERSION",
     "REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_VERSION",
     "SIMULATION_TIMELINE_SCHEMA_FILE",
@@ -101,8 +106,11 @@ __all__ = [
     "check_real_trace_source_discovery",
     "check_real_trace_validation_contract",
     "extract_trace_failure_predicates",
+    "load_process_trace_geometry_registry_schema",
     "load_real_trace_source_discovery",
     "load_real_trace_validation_contract",
+    "load_registered_conflict_zone_spec",
+    "load_registered_route_spec",
     "load_simulation_timeline_schema",
     "load_simulation_trace_export",
     "load_trace_annotation_set",

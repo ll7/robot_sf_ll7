@@ -1,0 +1,92 @@
+{
+  "schema_version": "process_trace_geometry_registry.v1",
+  "registry_id": "analysis-workbench-test-geometry.v1",
+  "artifact_ref": "tests/fixtures/analysis_workbench/process_trace_geometry_registry_v1/fixture_registry.json",
+  "coordinate_frame": "world",
+  "routes": [
+    {
+      "entry_id": "r-main",
+      "route_id": "r-main",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-r-main"},
+      "geometry": {"type": "line_segment", "start": [0.0, 0.0], "end": [10.0, 0.0]}
+    },
+    {
+      "entry_id": "route-b",
+      "route_id": "route-b",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-route-b"},
+      "geometry": {"type": "line_segment", "start": [0.0, 0.0], "end": [10.0, 0.0]}
+    },
+    {
+      "entry_id": "fixture-route",
+      "route_id": "fixture-route",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-cli-route"},
+      "geometry": {"type": "line_segment", "start": [0.0, 0.0], "end": [2.0, 0.0]}
+    },
+    {
+      "entry_id": "polyline-turn",
+      "route_id": "polyline-turn",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-polyline-turn"},
+      "geometry": {"type": "polyline", "points": [[0.0, 0.0], [1.0, 0.0], [1.0, 2.0]]}
+    },
+    {
+      "entry_id": "self-intersecting",
+      "route_id": "self-intersecting",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-self-intersection"},
+      "geometry": {"type": "polyline", "points": [[0.0, 0.0], [2.0, 2.0], [0.0, 2.0], [2.0, 0.0]]}
+    },
+    {
+      "entry_id": "ambiguous-u",
+      "route_id": "ambiguous-u",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-ambiguous-u"},
+      "geometry": {"type": "polyline", "points": [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]]}
+    },
+    {
+      "entry_id": "branching",
+      "route_id": "branching",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-branching"},
+      "geometry": {
+        "type": "route_graph",
+        "segments": [
+          {"type": "line_segment", "start": [0.0, 0.0], "end": [1.0, 0.0]},
+          {"type": "line_segment", "start": [1.0, 0.0], "end": [2.0, 1.0]},
+          {"type": "line_segment", "start": [1.0, 0.0], "end": [2.0, -1.0]}
+        ]
+      }
+    }
+  ],
+  "conflict_zones": [
+    {
+      "entry_id": "door",
+      "zone_id": "door",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-door"},
+      "geometry": {"type": "circle", "center": [1.0, 0.0], "radius_m": 0.25}
+    },
+    {
+      "entry_id": "zone-b",
+      "zone_id": "zone-b",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-zone-b"},
+      "geometry": {"type": "circle", "center": [1.0, 0.0], "radius_m": 0.25}
+    },
+    {
+      "entry_id": "fixture-zone",
+      "zone_id": "fixture-zone",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-cli-zone"},
+      "geometry": {"type": "circle", "center": [1.0, 0.0], "radius_m": 0.25}
+    },
+    {
+      "entry_id": "point-owner",
+      "zone_id": "point-owner",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-point-owner"},
+      "geometry": {"type": "point", "position": [1.0, 0.0]}
+    },
+    {
+      "entry_id": "polygon-owner",
+      "zone_id": "polygon-owner",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-polygon-owner"},
+      "geometry": {
+        "type": "polygon",
+        "points": [[0.75, -0.25], [1.25, -0.25], [1.25, 0.25], [0.75, 0.25]]
+      }
+    }
+  ]
+}

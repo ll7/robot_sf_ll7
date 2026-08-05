@@ -7,6 +7,7 @@ change canonical benchmark metrics, SNQI, planner behavior, or figure admission.
 ## Public Surfaces
 
 - Schema: `robot_sf/analysis_workbench/schemas/worked_example_process_trace.v1.json`
+- Geometry-registry schema: `robot_sf/analysis_workbench/schemas/process_trace_geometry_registry.v1.json`
 - Builder and coordinate orchestration: `robot_sf/analysis_workbench/interaction_coordinates.py`
 - Pair compatibility: `robot_sf/analysis_workbench/event_alignment.py`
 - Stall/reversal phase summaries: `robot_sf/analysis_workbench/episode_phases.py`
@@ -19,16 +20,9 @@ change canonical benchmark metrics, SNQI, planner behavior, or figure admission.
 ```bash
 uv run python scripts/analysis/build_worked_example_process_trace.py \
   --input tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
-  --route-id fixture-route \
-  --route-provenance-id fixture-route.v1 \
-  --route-registry-checksum 36f22d682d4df40aa1dbc9f0a548e940a633814e72c0c780bfd1c404ce118bdf \
-  --route-start 0 0 \
-  --route-end 2 0 \
-  --conflict-zone-id fixture-zone \
-  --conflict-provenance-id fixture-zone.v1 \
-  --conflict-registry-checksum 3b9765014ad30f57a74a8e585e708cccdcadaba03024c3e96cab0ef524f5a097 \
-  --conflict-center 1 0 \
-  --conflict-radius-m 0.25 \
+  --geometry-registry tests/fixtures/analysis_workbench/process_trace_geometry_registry_v1/fixture_registry.json \
+  --route-entry-id fixture-route \
+  --conflict-zone-entry-id fixture-zone \
   --out output/worked_example_process_trace_fixture.json
 ```
 
@@ -36,18 +30,40 @@ Add `--encounter-report path/to/near_miss_encounter.v1.json` when binding the fo
 and interval to canonical near-miss encounter output. The report must validate against the
 canonical `near_miss_encounter.v1` schema and its provenance `input_checksums` must include
 the SHA-256 of the input trace file.
+Use `--focal-actor-id` to select an actor across every canonical report encounter, or
+`--focal-encounter-id` to select one unique encounter directly. When both are present they must
+resolve to the same canonical record.
 
 Add `--pair-input path/to/other_trace.json --pair-comparison-grain ...` when building pair
 compatibility; the comparison grain is required whenever a pair input is present.
 
-Route and conflict projections are available only when the caller provides world-frame,
-provenance- and checksum-bound finite geometry. Missing actor intervals, velocities, radii,
-route/zone registry evidence, exact collision telemetry, or source-coordinate support are
-reported as unavailable or not observed instead of zero-filled.
+The analysis workbench owns `process_trace_geometry_registry.v1` as an adapter and receipt format,
+not as a second production map-authoring source. Production registry entries must derive from or
+explicitly bind the hash-pinned owner artifact and its native selector. Routes should preserve
+available `map_id`, `spawn_id`, `goal_id`, and SVG/`GlobalRoute` identity; conflict zones should
+preserve their scenario/map zone identity. Entries that do not have such an owner, including this
+contract fixture, must say `kind: fixture_only` and must not imply that an arbitrary `route_id` is
+canonical.
 
-Exact collision anchors require a canonical ledger collision bound to the selected focal
-encounter actor. Static-geometry collisions and collisions with non-focal pedestrians remain
-unavailable as focal exact anchors because the ledger record does not identify the focal actor.
+Route and conflict projections are available only after the builder loads a unique entry from an
+actual world-frame registry JSON file. Output receipts bind a stable repo-relative or logical
+`artifact_ref` (never an absolute checkout path), raw file SHA-256, registry and entry IDs,
+canonical entry SHA-256, upstream binding, coordinate frame, geometry kind, and resolved
+coordinates. Semantic validation resolves that reference through local validator context, reopens
+the file, and replays the entry instead of trusting caller geometry or emitted receipt strings.
+This keeps identical bytes content-identical across checkout roots while still failing closed for
+missing, moved, tampered, duplicate, non-world, or ambiguous evidence.
+
+Ordered route polylines use cumulative arclength and nearest-segment projection; equal-distance
+ties abstain as ambiguous. `route_graph` is schema-recognized only so branched authoring inputs can
+fail closed explicitly; it is not projectable. Conflict projection currently supports circles
+only. Point or polygon zone owners remain explicitly unavailable until a versioned projection
+contract is added. The CLI intentionally has no direct geometry/checksum arguments.
+
+Canonical timed ledger collisions remain episode-level exact-collision anchors for pedestrian and
+static-geometry partners. Partner type and ID remain truthful, while `actor_id` is null unless a
+separate `focal_binding` record proves that the pedestrian partner matches the selected focal
+encounter.
 
 Pair compatibility requires an explicit comparison grain:
 

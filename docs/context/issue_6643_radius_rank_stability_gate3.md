@@ -88,4 +88,4 @@ dissertation claim from issue closure.
    missingness/degradation ledger that the analyzer can classify as invalid evidence.
 3. The Gate 1 receipt, config checksum, campaign commit, and summary provenance match.
 4. Rerun the scientific command, review the durable bundle, and post the one verdict plus
-   #3207 propagation comment.
+   the Issue #3207 propagation comment.

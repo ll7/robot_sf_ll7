@@ -372,11 +372,9 @@
     },
     {
       "aggregation": {
-        "evidence_classification": "excluded",
-        "exclusion_reasons": [
-          "canonical_preflight_failed"
-        ],
-        "native_aggregation_eligible": false
+        "evidence_classification": "native_candidate",
+        "exclusion_reasons": [],
+        "native_aggregation_eligible": true
       },
       "canonical_preflight_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_ppo.yaml --output-root output/benchmarks/issue_5273_s20_preflight --campaign-id issue-5273-s20-preflight-ppo --skip-publication-bundle --mode preflight --checkpoint-preflight-mode metadata_only",
       "config_path": "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20/paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_ppo.yaml",
@@ -386,13 +384,102 @@
         "status": "planned_not_executed",
         "submission_authorization": "not_granted"
       },
-      "expected_row_identity": null,
+      "expected_row_identity": {
+        "expected_row_count": 960,
+        "horizon": "h500",
+        "identity_fields": [
+          "planner_key",
+          "scenario_id",
+          "seed",
+          "kinematics"
+        ],
+        "kinematics": [
+          "differential_drive"
+        ],
+        "resolved_seeds": [
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130
+        ],
+        "row_identity_sha256": "3beb0fe3efce42c9033ebacdbefcafbceb3590bbbbe0c941bb7d1ee8cc365b12",
+        "scenario_count": 48,
+        "scenario_horizons": "configs/policy_search/scenario_horizons_h500.yaml",
+        "scenario_ids": [
+          "classic_bottleneck_low",
+          "classic_bottleneck_medium",
+          "classic_bottleneck_high",
+          "classic_realworld_double_bottleneck_high",
+          "classic_station_platform_medium",
+          "classic_cross_trap_low",
+          "classic_cross_trap_medium",
+          "classic_cross_trap_high",
+          "classic_doorway_low",
+          "classic_doorway_medium",
+          "classic_doorway_high",
+          "classic_group_crossing_low",
+          "classic_group_crossing_medium",
+          "classic_group_crossing_high",
+          "classic_head_on_corridor_low",
+          "classic_head_on_corridor_medium",
+          "classic_merging_low",
+          "classic_merging_medium",
+          "classic_overtaking_low",
+          "classic_overtaking_medium",
+          "classic_t_intersection_low",
+          "classic_t_intersection_medium",
+          "classic_urban_crossing_medium",
+          "francis2023_frontal_approach",
+          "francis2023_pedestrian_obstruction",
+          "francis2023_pedestrian_overtaking",
+          "francis2023_robot_overtaking",
+          "francis2023_down_path",
+          "francis2023_intersection_no_gesture",
+          "francis2023_blind_corner",
+          "francis2023_narrow_hallway",
+          "francis2023_narrow_doorway",
+          "francis2023_entering_room",
+          "francis2023_exiting_room",
+          "francis2023_entering_elevator",
+          "francis2023_exiting_elevator",
+          "francis2023_intersection_wait",
+          "francis2023_intersection_proceed",
+          "francis2023_following_human",
+          "francis2023_leading_human",
+          "francis2023_accompanying_peer",
+          "francis2023_join_group",
+          "francis2023_leave_group",
+          "francis2023_crowd_navigation",
+          "francis2023_parallel_traffic",
+          "francis2023_perpendicular_traffic",
+          "francis2023_circular_crossing",
+          "francis2023_robot_crowding"
+        ],
+        "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+        "seed_set": "paper_eval_s20"
+      },
       "fallback_settings": [],
       "planner_key": "ppo",
       "preflight": {
-        "error": "Campaign policy-dependency preflight failed for 1 import(s):\n  - arm 'ppo' (algo='ppo') requires 'stable_baselines3': ModuleNotFoundError: No module named 'stable_baselines3'\nInstall the camera-ready policy dependencies in this same interpreter with:\n  uv sync --all-extras\nAborting before starting the benchmark campaign.",
-        "error_type": "CampaignPolicyDependencyPreflightError",
-        "status": "blocked"
+        "error": null,
+        "error_type": null,
+        "status": "passed"
       }
     },
     {
@@ -965,11 +1052,6 @@
   ],
   "blockers": [
     {
-      "arm": "ppo",
-      "code": "canonical_preflight_failed",
-      "detail": "CampaignPolicyDependencyPreflightError: Campaign policy-dependency preflight failed for 1 import(s):\n  - arm 'ppo' (algo='ppo') requires 'stable_baselines3': ModuleNotFoundError: No module named 'stable_baselines3'\nInstall the camera-ready policy dependencies in this same interpreter with:\n  uv sync --all-extras\nAborting before starting the benchmark campaign."
-    },
-    {
       "arm": "orca",
       "code": "fallback_enabled",
       "detail": "fallback/degraded policy is configured; arm is diagnostic-only and excluded from the native aggregate"
@@ -982,8 +1064,8 @@
   ],
   "claim_boundary": "Preparation and preflight provenance only. No Slurm job, benchmark campaign, planner execution, checkpoint staging, or scientific result is claimed.",
   "execution_authorization": "not_granted",
-  "expected_row_count": 7680,
-  "expected_row_count_complete": false,
+  "expected_row_count": 8640,
+  "expected_row_count_complete": true,
   "horizon": "h500",
   "issue": 5273,
   "kinematics": [
@@ -991,7 +1073,7 @@
   ],
   "parent_issue": 5273,
   "production_execution_performed": false,
-  "repository_commit": "4564127b2396ddbb9eefc5dd833dfc1e219cd5ec",
+  "repository_commit": "f68c0b2c50135ab40646c904ef8473db634b9bfe",
   "resolved_seeds": [
     111,
     112,

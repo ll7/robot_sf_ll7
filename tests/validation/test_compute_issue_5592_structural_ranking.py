@@ -287,6 +287,21 @@ def _identical_dyadic_rows(planner_keys: list[str]) -> list[dict[str, str]]:
     ]
 
 
+def _identical_decimal_rows(planner_keys: list[str]) -> list[dict[str, str]]:
+    """Build mathematically identical decimal rows with unequal class sizes."""
+    return [
+        {
+            "planner_key": planner,
+            "success_rate": "0.1",
+            "collision_event_rate": "0.2",
+            "near_miss_event_rate": "0.3",
+            "timeout_rate": "0.4",
+            "snqi_mean": "0.5",
+        }
+        for planner in planner_keys
+    ]
+
+
 def test_exact_equal_score_tuples_share_rank(tmp_path: Path) -> None:
     """Exact-equal score tuples must share a rank, never become a strict ordering.
 
@@ -341,8 +356,69 @@ def test_all_classes_tied_share_rank_one() -> None:
     assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
 
 
-def test_agreement_builder_fails_closed_on_tied_ranking(tmp_path: Path) -> None:
-    """The agreement builder must not consume shared ranks as a strict ordering."""
+def test_decimal_equal_score_tuples_remain_tied() -> None:
+    """Decimal values must not become false rank differences from binary float means."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_decimal_rows(sorted(planner_to_class))
+
+    ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+    assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
+
+
+def test_rejects_incomplete_snqi_coverage() -> None:
+    """Partial optional SNQI coverage must not become an imputed ranking value."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows = [
+        row for row in rows if row["planner_key"] not in PLANNERS_BY_CLASS["learned_policy"]
+    ] + [
+        {
+            "planner_key": planner,
+            "success_rate": "0.75",
+            "collision_event_rate": "0.25",
+            "near_miss_event_rate": "0.125",
+            "timeout_rate": "0.0625",
+        }
+        for planner in PLANNERS_BY_CLASS["learned_policy"]
+    ]
+
+    with pytest.raises(metric.RankingMetricError, match="incomplete snqi_mean coverage"):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+
+def test_rejects_nested_invalid_execution_metadata() -> None:
+    """Nested failed or fallback metadata must not bypass flat eligibility checks."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["algorithm_metadata"] = {
+        "status": "error",
+        "availability_status": "failed",
+        "planner_kinematics": {"execution_mode": "fallback"},
+    }
+
+    with pytest.raises(metric.RankingMetricError, match="algorithm_metadata.status"):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+
+def test_accepts_complete_native_execution_metadata() -> None:
+    """Valid native metadata remains eligible when the aggregate carries it."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    for row in rows:
+        row["algorithm_metadata"] = {
+            "status": "ok",
+            "availability_status": "available",
+            "planner_kinematics": {"execution_mode": "native"},
+        }
+
+    ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+    assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
+
+
+def test_agreement_builder_emits_non_identifiable_tied_ranking(tmp_path: Path) -> None:
+    """The agreement builder must persist shared ranks as non-identifiable output."""
     from scripts.validation import build_issue_5592_cross_matrix_agreement as builder
 
     planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
@@ -354,14 +430,19 @@ def test_agreement_builder_fails_closed_on_tied_ranking(tmp_path: Path) -> None:
         ),
         output_path=tied_ranking,
     )
-    with pytest.raises(builder.BuildError, match="tie_not_identifiable"):
-        builder.build_packet(
-            packet_path=PACKET,
-            reference_ranking_path=tied_ranking,
-            candidate_ranking_path=tied_ranking,
-            output_dir=tmp_path / "out",
-            generated_at="2026-07-23T00:00:00+00:00",
-        )
+    summary = builder.build_packet(
+        packet_path=PACKET,
+        reference_ranking_path=tied_ranking,
+        candidate_ranking_path=tied_ranking,
+        output_dir=tmp_path / "out",
+        generated_at="2026-07-23T00:00:00+00:00",
+    )
+
+    assert summary["status"] == "tie_not_identifiable"
+    assert summary["reference_ranking_status"] == "tie_not_identifiable"
+    assert summary["candidate_ranking_status"] == "tie_not_identifiable"
+    lines = (tmp_path / "out" / builder.PRIMARY_OUTPUT).read_text(encoding="utf-8").splitlines()
+    assert all("tie_not_identifiable" in line for line in lines[1:])
 
 
 def test_fixture_rejects_unknown_success_override() -> None:
@@ -387,6 +468,23 @@ def test_rejects_nonfinite_or_malformed_metric_cells(
     rows = _rows_with_success({})
     rows[0][field] = value
     with pytest.raises(metric.RankingMetricError, match="invalid or non-finite"):
+        metric.build_ranking_for_matrix(
+            packet_path=PACKET,
+            episode_rows_path=_write_rows(tmp_path, "rows.csv", rows),
+            output_path=tmp_path / "out.csv",
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("success_rate", "1.01"), ("collision_event_rate", "-0.01")],
+)
+def test_rejects_rate_outside_unit_interval(tmp_path: Path, field: str, value: str) -> None:
+    """Named rates outside [0, 1] must fail closed instead of entering the ranking."""
+    rows = _rows_with_success({})
+    rows[0][field] = value
+
+    with pytest.raises(metric.RankingMetricError, match=r"must be in \[0, 1\]"):
         metric.build_ranking_for_matrix(
             packet_path=PACKET,
             episode_rows_path=_write_rows(tmp_path, "rows.csv", rows),

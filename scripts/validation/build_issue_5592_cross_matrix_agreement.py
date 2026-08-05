@@ -10,8 +10,9 @@ the two matrices into a single ranking.
 The structural ranking for each matrix is supplied as an input artifact (the
 output of the future paired campaign run). When a matrix's ranking is absent the
 builder fails closed and emits ``blocked_missing_matrix`` rows rather than
-inventing a ranking; this keeps the generator honest under the cheap-lane
-constraint that no campaign is run here.
+inventing a ranking; when a supplied ranking contains shared ranks it emits
+``tie_not_identifiable`` rows rather than losing the diagnostic. This keeps the
+generator honest under the cheap-lane constraint that no campaign is run here.
 """
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ ALLOWED_AGREEMENT_STATUSES = {
     "disagreement",
     "blocked_missing_matrix",
     "blocked_incomparable_roster",
+    "tie_not_identifiable",
 }
 PRIMARY_OUTPUT = "cross_matrix_agreement.csv"
 INTEGRATION_REPORT = "integration_report.md"
@@ -69,6 +71,19 @@ RANKING_INPUT_COLUMNS = frozenset({"structural_class", "rank", ROSTER_SIGNATURE_
 
 class BuildError(ValueError):
     """Raised when issue #5592 inputs or the pre-registration are malformed."""
+
+
+class TieNotIdentifiableError(BuildError):
+    """Raised internally when a ranking input contains a shared performance rank."""
+
+    def __init__(self, path: Path, tied_ranks: Sequence[int]) -> None:
+        """Record the input path and shared ranks for durable diagnostic handling."""
+        self.path = path
+        self.tied_ranks = tuple(tied_ranks)
+        super().__init__(
+            f"ranking input {path} contains shared (tied) rank(s) {list(tied_ranks)}: "
+            "tie_not_identifiable; no strict ordering can be inferred"
+        )
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -167,16 +182,24 @@ def _read_ranking_csv(path: Path, *, expected_roster_signature: str) -> dict[str
     return ranking
 
 
+def _read_optional_ranking(
+    path: Path | None, *, expected_roster_signature: str
+) -> tuple[dict[str, int] | None, str | None]:
+    """Read a ranking input, preserving a tied ranking as a diagnostic status."""
+    if path is None or not path.is_file():
+        return None, None
+    try:
+        return _read_ranking_csv(path, expected_roster_signature=expected_roster_signature), None
+    except TieNotIdentifiableError:
+        return None, "tie_not_identifiable"
+
+
 def _reject_tied_or_incomplete_ranks(path: Path, ranking: Mapping[str, int]) -> None:
     """Fail closed on shared (tied) ranks or any non-``1..4`` rank permutation."""
     rank_values = list(ranking.values())
     if len(set(rank_values)) != len(rank_values):
         tied_ranks = sorted(rank for rank in set(rank_values) if rank_values.count(rank) > 1)
-        raise BuildError(
-            f"ranking input {path} contains shared (tied) rank(s) {tied_ranks}: "
-            "tie_not_identifiable; the agreement builder requires a strict 1..4 ordering "
-            "and fails closed rather than inventing a tie-break"
-        )
+        raise TieNotIdentifiableError(path, tied_ranks)
     if set(rank_values) != EXPECTED_RANKS:
         raise BuildError(f"ranking input {path} must contain a unique rank permutation 1..4")
 
@@ -247,9 +270,26 @@ def _classify_agreement(
     structural_class: str,
     reference_rank: int | None,
     candidate_rank: int | None,
+    *,
+    reference_issue: str | None = None,
+    candidate_issue: str | None = None,
 ) -> tuple[str, str]:
     """Return (agreement_status, caveat) for one structural class comparison."""
-    if reference_rank is None or candidate_rank is None:
+    if reference_issue or candidate_issue:
+        tied_matrices = [
+            matrix
+            for matrix, issue in (
+                ("reference", reference_issue),
+                ("candidate", candidate_issue),
+            )
+            if issue == "tie_not_identifiable"
+        ]
+        status = "tie_not_identifiable"
+        caveat = (
+            f"shared rank in {', '.join(tied_matrices)} matrix; structural-class ordering is "
+            "not identifiable and no cross-matrix conclusion is permitted"
+        )
+    elif reference_rank is None or candidate_rank is None:
         status = "blocked_missing_matrix"
         caveat = "one or both matrices lack a structural-class rank; no generalization conclusion"
     elif reference_rank == candidate_rank:
@@ -270,13 +310,22 @@ def _assert_allowed_status(status: str, structural_class: str) -> None:
 def _build_rows(
     reference_ranking: Mapping[str, int] | None,
     candidate_ranking: Mapping[str, int] | None,
+    *,
+    reference_issue: str | None = None,
+    candidate_issue: str | None = None,
 ) -> list[dict[str, Any]]:
     """Build the cross-matrix agreement rows from two structural-class rankings."""
     rows: list[dict[str, Any]] = []
     for klass in STRUCTURAL_CLASS_ORDER:
         reference_rank = reference_ranking.get(klass) if reference_ranking else None
         candidate_rank = candidate_ranking.get(klass) if candidate_ranking else None
-        status, caveat = _classify_agreement(klass, reference_rank, candidate_rank)
+        status, caveat = _classify_agreement(
+            klass,
+            reference_rank,
+            candidate_rank,
+            reference_issue=reference_issue,
+            candidate_issue=candidate_issue,
+        )
         rank_delta = ""
         if candidate_rank is not None and reference_rank is not None:
             rank_delta = candidate_rank - reference_rank
@@ -332,12 +381,13 @@ matrices are never merged into one ranking.
 Each supplied ranking CSV must include `structural_class`, `rank`, and a
 `roster_signature` matching the preregistered 12-planner roster. Ranks must be a complete
 `1..4` permutation; malformed or incomparable inputs fail closed. Rankings that carry shared
-(tied) ranks from exact-equal score tuples fail closed as `tie_not_identifiable` rather than
-inventing a tie-break.
+(tied) ranks from exact-equal score tuples are emitted as `tie_not_identifiable` rather than
+being treated as a missing matrix or given an invented tie-break.
 
 `cross_matrix_agreement.csv` is the primary output. Each row carries the candidate
 (atomic-topology) rank, the reference (classic_interactions) rank, the rank delta, and an
-explicit agreement_status (`agreement`, `disagreement`, or a `blocked_*` status). Disagreement
+explicit agreement_status (`agreement`, `disagreement`, `tie_not_identifiable`, or a
+`blocked_*` status). Disagreement
 rows are always emitted when both matrices are present; they are not hidden in a merge.
 
 `integration_report.md` is the consolidation handoff. It records the frozen contract,
@@ -397,9 +447,12 @@ def _write_integration_report(
         missing.append("reference (`classic_interactions`) structural ranking CSV")
     if not candidate_present:
         missing.append("candidate (`atomic_topology`) structural ranking CSV")
+    blockers = list(missing)
+    if status == "tie_not_identifiable":
+        blockers.append("tie_not_identifiable ranking input (ordering is not identifiable)")
     remaining = (
-        "- " + "; ".join(missing) + " (campaign input; no ranking is inferred)."
-        if missing
+        "- " + "; ".join(blockers) + " (no cross-matrix conclusion is inferred)."
+        if blockers
         else "- None for the artifact builder; both ranking inputs are present and comparable."
     )
     empirical_action = next_action or (
@@ -477,23 +530,46 @@ def build_packet(
     reference_present = reference_ranking_path is not None and reference_ranking_path.is_file()
     candidate_present = candidate_ranking_path is not None and candidate_ranking_path.is_file()
 
-    reference_ranking = (
-        _read_ranking_csv(reference_ranking_path, expected_roster_signature=roster_signature)
-        if reference_present
-        else None
+    reference_ranking, reference_issue = _read_optional_ranking(
+        reference_ranking_path,
+        expected_roster_signature=roster_signature,
     )
-    candidate_ranking = (
-        _read_ranking_csv(candidate_ranking_path, expected_roster_signature=roster_signature)
-        if candidate_present
-        else None
+    candidate_ranking, candidate_issue = _read_optional_ranking(
+        candidate_ranking_path,
+        expected_roster_signature=roster_signature,
     )
 
-    rows = _build_rows(reference_ranking, candidate_ranking)
+    rows = _build_rows(
+        reference_ranking,
+        candidate_ranking,
+        reference_issue=reference_issue,
+        candidate_issue=candidate_issue,
+    )
 
     missing = not (reference_present and candidate_present)
-    status = "blocked_missing_matrix" if missing else "ready"
+    tie_not_identifiable = reference_issue is not None or candidate_issue is not None
+    status = (
+        "tie_not_identifiable"
+        if tie_not_identifiable
+        else "blocked_missing_matrix"
+        if missing
+        else "ready"
+    )
     next_action = None
-    if missing:
+    if tie_not_identifiable:
+        tied_matrices = [
+            matrix
+            for matrix, issue in (
+                ("reference (classic_interactions)", reference_issue),
+                ("candidate (atomic_topology)", candidate_issue),
+            )
+            if issue == "tie_not_identifiable"
+        ]
+        next_action = (
+            "Do not interpret cross-matrix agreement: resolve the non-identifiable shared rank "
+            f"in {', '.join(tied_matrices)} through the pre-registered tie policy."
+        )
+    elif missing:
         missing_matrices = []
         if not reference_present:
             missing_matrices.append("reference (classic_interactions)")
@@ -529,6 +605,10 @@ def build_packet(
         "preregistration": _public_path(packet_path),
         "reference_ranking_present": reference_present,
         "candidate_ranking_present": candidate_present,
+        "reference_ranking_status": reference_issue
+        or ("present" if reference_present else "missing"),
+        "candidate_ranking_status": candidate_issue
+        or ("present" if candidate_present else "missing"),
         "structural_classes": list(STRUCTURAL_CLASS_ORDER),
         "agreement_statuses": sorted(agreement_statuses),
         "disagreement_row_count": len(disagreement_rows),

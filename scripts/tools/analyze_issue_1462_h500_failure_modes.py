@@ -69,10 +69,7 @@ def _load_csv(path: Path) -> list[dict[str, str]]:
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     """Write dictionaries to a CSV file through the shared evidence writer."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not rows:
-        write_text(path, "", issue_ref="robot_sf#1462")
-        return
-    write_csv(path, rows)
+    write_csv(path, rows, allow_empty=True)
 
 
 def _write_json(path: Path, payload: Any) -> None:

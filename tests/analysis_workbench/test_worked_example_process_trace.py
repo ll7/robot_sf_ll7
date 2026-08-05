@@ -983,6 +983,116 @@ def test_semantic_validator_rejects_coherently_moved_event_and_frame_records() -
             validate_worked_example_process_trace(forged)
 
 
+def test_top_level_route_and_conflict_contracts_bind_frame_geometry() -> None:
+    """Top-level route/conflict declarations must match every available frame record."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=RouteSpec(
+            "route-b",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-b.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
+        conflict_zone=ConflictZoneSpec(
+            "zone-b",
+            (1.0, 0.0),
+            0.25,
+            "zone-b.v1",
+            _zone_checksum((1.0, 0.0), 0.25),
+        ),
+    )
+
+    route_forged = deepcopy(payload)
+    route_forged["coordinate_frames"]["route"] = {
+        "status": "available",
+        "reason": "registered_straight_route",
+        "route_id": "route-a",
+        "provenance_id": "route-a.v1",
+        "registry_checksum": _route_checksum((0.0, 0.0), (5.0, 0.0)),
+        "coordinate_frame": "world",
+        "geometry": {"type": "line_segment", "start": [0.0, 0.0], "end": [5.0, 0.0]},
+    }
+    with pytest.raises(Exception, match="/frames/0/route/route_id"):
+        validate_worked_example_process_trace(route_forged)
+
+    conflict_forged = deepcopy(payload)
+    conflict_forged["coordinate_frames"]["conflict"] = {
+        "status": "available",
+        "reason": "registered_circular_conflict_zone",
+        "zone_id": "zone-a",
+        "provenance_id": "zone-a.v1",
+        "registry_checksum": _zone_checksum((2.0, 0.0), 0.25),
+        "coordinate_frame": "world",
+        "geometry": {"type": "circle", "center": [2.0, 0.0], "radius_m": 0.25},
+    }
+    with pytest.raises(Exception, match="/frames/0/conflict/zone_id"):
+        validate_worked_example_process_trace(conflict_forged)
+
+
+def test_focal_actor_identity_binds_to_source_coordinates() -> None:
+    """Coordinated focal/event/relative renames must not override source actor identity."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_typed")),
+        encounter_report=_encounter_report(start_time_s=0.1, end_time_s=0.2),
+        encounter_report_input_checksum="0" * 64,
+    )
+    assert payload["frames"][1]["source_coordinates"]["focal_actor_id"] == "ped-a"
+
+    forged = deepcopy(payload)
+    forged["encounters"]["focal"]["actor_id"] = "ghost"
+    forged["encounters"]["focal"]["declared_encounter"]["actor_id"] = "ghost"
+    forged["encounters"]["focal"]["declared_encounter"]["canonical_record"]["actor_id"] = "ghost"
+    for frame in forged["frames"]:
+        relative = frame["relative_interaction"]
+        if relative["status"] == "available":
+            relative["actor_id"] = "ghost"
+    for event in forged["event_anchors"]:
+        if event.get("actor_id") == "ped-a":
+            event["actor_id"] = "ghost"
+        if event.get("collision_partner_id") == "ped-a":
+            event["collision_partner_id"] = "ghost"
+
+    with pytest.raises(Exception, match="/frames/1/relative_interaction/actor_id"):
+        validate_worked_example_process_trace(forged)
+
+
+def test_global_minimum_and_switches_replay_from_source_actor_inventory() -> None:
+    """Global minima cannot be replaced by an invented self-consistent actor series."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(actor_switch=True))
+    )
+    assert payload["frames"][0]["source_coordinates"]["contextual_actors"][0]["actor_id"] == "ped-a"
+
+    forged = deepcopy(payload)
+    for index, frame in enumerate(forged["frames"]):
+        frame["global_minimum_actor"] = {
+            "status": "available",
+            "actor_id": "ghost",
+            "center_distance_m": 0.01 + index,
+        }
+    forged["encounters"]["global_minimum_over_all_actors"] = {
+        "status": "available",
+        "reason": "nearest_actor_by_center_distance",
+        "series": [
+            {
+                "step": frame["step"],
+                "time_s": frame["time_s"],
+                "actor_id": "ghost",
+                "center_distance_m": frame["global_minimum_actor"]["center_distance_m"],
+            }
+            for frame in forged["frames"]
+        ],
+    }
+    forged["encounters"]["actor_switch_events"] = []
+
+    with pytest.raises(Exception, match="/frames/0/global_minimum_actor"):
+        validate_worked_example_process_trace(forged)
+
+
 def test_pair_receipts_resolve_right_events_and_bind_content_sha() -> None:
     """Pair common anchors and content hashes should bind to real left/right receipts."""
 
@@ -1011,6 +1121,130 @@ def test_pair_receipts_resolve_right_events_and_bind_content_sha() -> None:
     )
     with pytest.raises(Exception, match="/pair_compatibility/valid_common_event_anchors/0"):
         validate_worked_example_process_trace(forged_right_anchor)
+
+
+def test_source_and_pair_hashes_recompute_from_canonical_content_receipts() -> None:
+    """Coherent hash rewrites should fail against embedded canonical trace contracts."""
+
+    left_payload = _trace_payload(trace_id="pair-left", planner_id="planner-a", seed=7)
+    right_payload = _trace_payload(trace_id="pair-right", planner_id="planner-b", seed=7)
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(left_payload),
+        pair_trace=simulation_trace_export_from_dict(right_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )
+
+    assert payload["source_trace"]["content_contract"] == _canonical_trace_contract(left_payload)
+    assert payload["pair_compatibility"]["right_source_trace"]["content_contract"] == (
+        _canonical_trace_contract(right_payload)
+    )
+
+    forged_left = deepcopy(payload)
+    forged_left["source_trace"]["content_sha256"] = "0" * 64
+    forged_left["pair_compatibility"]["provenance_gate"]["left_content_sha256"] = "0" * 64
+    with pytest.raises(Exception, match="/source_trace/content_sha256"):
+        validate_worked_example_process_trace(forged_left)
+
+    forged_right = deepcopy(payload)
+    forged_right["pair_compatibility"]["right_source_trace"]["content_sha256"] = "0" * 64
+    forged_right["pair_compatibility"]["provenance_gate"]["right_content_sha256"] = "0" * 64
+    with pytest.raises(Exception, match="/pair_compatibility/right_source_trace/content_sha256"):
+        validate_worked_example_process_trace(forged_right)
+
+
+def test_common_anchors_require_derived_right_receipt_ids() -> None:
+    """Right receipt IDs cannot be internally renamed with matching common anchors."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-left", planner_id="planner-a", seed=7)
+        ),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-right", planner_id="planner-b", seed=7)
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    assert payload["pair_compatibility"]["valid_common_event_anchors"]
+
+    forged = deepcopy(payload)
+    first_anchor = forged["pair_compatibility"]["valid_common_event_anchors"][0]
+    old_right_id = first_anchor["right_event_id"]
+    new_right_id = f"renamed-{old_right_id}"
+    first_anchor["right_event_id"] = new_right_id
+    for receipt in forged["pair_compatibility"]["right_event_anchors"]:
+        if receipt["event_id"] == old_right_id:
+            receipt["event_id"] = new_right_id
+            break
+
+    with pytest.raises(Exception, match="/pair_compatibility/right_event_anchors"):
+        validate_worked_example_process_trace(forged)
+
+
+def test_exact_collision_event_replay_rejects_coherent_hierarchy_and_status_forgery() -> None:
+    """Exact collision anchors must replay even when dependent hierarchy/frame fields are aligned."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_typed")),
+        encounter_report=_encounter_report(start_time_s=0.1, end_time_s=0.2),
+        encounter_report_input_checksum="0" * 64,
+    )
+    collision = payload["event_anchors"][4]
+    assert collision["event_type"] == "exact_collision_event"
+    assert collision["status"] == "available"
+
+    forged = deepcopy(payload)
+    forged_collision = forged["event_anchors"][4]
+    forged_collision["time_s"] = 0.2
+    forged_collision["event_relative_time"] = {
+        "status": "available",
+        "anchor_time_s": 0.2,
+        "tau_s": 0.0,
+    }
+    forged["event_anchor_hierarchy"]["available_anchors"][0]["time_s"] = 0.2
+    forged["event_anchor_hierarchy"]["selected_anchor"]["time_s"] = 0.2
+    forged["event_anchor_hierarchy"]["anchor_time_s"] = 0.2
+    for frame in forged["frames"]:
+        frame["event_alignment"]["anchor_time_s"] = 0.2
+        frame["event_alignment"]["tau_s"] = frame["time_s"] - 0.2
+    with pytest.raises(Exception, match="/event_anchors/4"):
+        validate_worked_example_process_trace(forged)
+
+    unavailable = deepcopy(payload)
+    unavailable["event_anchors"][4] = {
+        "event_id": "exact_collision_event-unavailable",
+        "event_type": "exact_collision_event",
+        "detector_profile_version": "worked_example_event_detectors.v1",
+        "status": "unavailable",
+        "confidence": "not_available",
+        "actor_id": "ped-a",
+        "zone_id": None,
+        "reason": "attacker_selected_reason",
+        "source_fields": [
+            "planner.outcome.collision_event",
+            "planner.event_ledger.collision_events",
+        ],
+        "event_relative_time": {
+            "status": "unavailable",
+            "reason": "event_unavailable",
+        },
+        "visual_anchor_eligibility": {
+            "eligible": False,
+            "reason": "event_unavailable",
+        },
+    }
+    with pytest.raises(Exception, match="/event_anchors/4"):
+        validate_worked_example_process_trace(unavailable)
+
+    promoted = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    promoted["event_anchors"][4] = {
+        **collision,
+        "time_s": promoted["frames"][1]["time_s"],
+        "step": promoted["frames"][1]["step"],
+    }
+    with pytest.raises(Exception, match="/event_anchors/4"):
+        validate_worked_example_process_trace(promoted)
 
 
 def test_collision_time_must_be_within_declared_and_sampled_bounds() -> None:
@@ -1054,6 +1288,14 @@ def test_run_config_contract_scans_all_frames_and_rejects_bool_or_inconsistent_t
     assert inconsistent["source_trace"]["run_config_contract"] == {
         "status": "unavailable",
         "reason": "run_config_time_step_inconsistent",
+    }
+
+    missing_later_run_config = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(missing_later_run_config=True))
+    )
+    assert missing_later_run_config["source_trace"]["run_config_contract"] == {
+        "status": "unavailable",
+        "reason": "run_config_unavailable",
     }
 
 
@@ -1295,7 +1537,14 @@ def _set_path(payload: dict[str, object], path: list[object], value: object) -> 
 
 
 def _canonical_trace_checksum(payload: dict[str, object]) -> str:
-    contract = {
+    contract = _canonical_trace_contract(payload)
+    return hashlib.sha256(
+        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _canonical_trace_contract(payload: dict[str, object]) -> dict[str, object]:
+    return {
         "schema_version": payload["schema_version"],
         "trace_id": payload["trace_id"],
         "source": payload["source"],
@@ -1313,9 +1562,6 @@ def _canonical_trace_checksum(payload: dict[str, object]) -> str:
             for frame in payload["frames"]  # type: ignore[index]
         ],
     }
-    return hashlib.sha256(
-        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
 
 
 def _trace_payload(  # noqa: C901, PLR0912, PLR0913
@@ -1335,6 +1581,7 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
     time_step_s: object = 0.1,
     missing_later_time_step: bool = False,
     inconsistent_time_step: bool = False,
+    missing_later_run_config: bool = False,
     collision_mode: str | None = None,
     missing_actor_radius_step: int | None = None,
     nonfinite_heading_step: int | None = None,
@@ -1401,7 +1648,7 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
         }
         if nan_command_step == step:
             planner["selected_action"] = {"linear_velocity": float("nan"), "angular_velocity": 0.0}
-        if include_run_config:
+        if include_run_config and not (missing_later_run_config and step > 0):
             planner["run_config"] = {
                 "map_id": "fixture-map",
                 "horizon": 4,

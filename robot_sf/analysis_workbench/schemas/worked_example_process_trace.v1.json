@@ -33,6 +33,7 @@
         "coordinate_frame",
         "units",
         "content_sha256",
+        "content_contract",
         "run_config_contract",
         "source"
       ],
@@ -42,6 +43,7 @@
         "coordinate_frame": {"type": "string", "minLength": 1},
         "units": {"type": "object"},
         "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "content_contract": {"type": "object"},
         "run_config_contract": {
           "oneOf": [
             {
@@ -453,11 +455,25 @@
     "source_coordinates_frame": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["coordinate_frame", "robot", "focal_actor"],
+      "required": ["coordinate_frame", "robot", "focal_actor_id", "focal_actor", "contextual_actors"],
       "properties": {
         "coordinate_frame": {"type": "string", "minLength": 1},
         "robot": {"$ref": "#/$defs/actor_state"},
-        "focal_actor": {"anyOf": [{"$ref": "#/$defs/actor_state"}, {"type": "null"}]}
+        "focal_actor_id": {"type": ["string", "null"]},
+        "focal_actor": {"anyOf": [{"$ref": "#/$defs/actor_state"}, {"type": "null"}]},
+        "contextual_actors": {"type": "array", "items": {"$ref": "#/$defs/source_actor_state"}}
+      }
+    },
+    "source_actor_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_id", "position", "heading", "velocity", "radius_m"],
+      "properties": {
+        "actor_id": {"type": "string"},
+        "position": {"$ref": "#/$defs/vector2_or_empty"},
+        "heading": {"type": ["number", "null"]},
+        "velocity": {"$ref": "#/$defs/vector2_or_empty"},
+        "radius_m": {"type": ["number", "null"]}
       }
     },
     "world_frame": {
@@ -797,11 +813,36 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "trace_id", "content_sha256"],
+          "required": [
+            "status",
+            "schema_version",
+            "trace_id",
+            "coordinate_frame",
+            "units",
+            "content_sha256",
+            "content_contract",
+            "source"
+          ],
           "properties": {
             "status": {"const": "available"},
+            "schema_version": {"const": "simulation_trace_export.v1"},
             "trace_id": {"type": "string"},
-            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            "coordinate_frame": {"type": "string", "minLength": 1},
+            "units": {"type": "object"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "content_contract": {"type": "object"},
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["scenario_id", "seed", "planner_id", "episode_id", "generated_by"],
+              "properties": {
+                "scenario_id": {"type": "string"},
+                "seed": {"type": "integer"},
+                "planner_id": {"type": "string"},
+                "episode_id": {"type": "string"},
+                "generated_by": {"type": "string"}
+              }
+            }
           }
         }
       ]
@@ -813,19 +854,29 @@
         "event_id",
         "event_type",
         "detector_profile_version",
+        "time_s",
+        "step",
+        "confidence",
         "actor_id",
         "zone_id",
         "source_fields",
-        "status"
+        "status",
+        "event_relative_time",
+        "visual_anchor_eligibility"
       ],
       "properties": {
         "event_id": {"type": "string"},
         "event_type": {"type": "string"},
         "detector_profile_version": {"type": "string"},
+        "time_s": {"type": "number"},
+        "step": {"type": "integer"},
+        "confidence": {"type": "string"},
         "actor_id": {"type": ["string", "null"]},
         "zone_id": {"type": ["string", "null"]},
         "source_fields": {"type": "array", "items": {"type": "string"}},
-        "status": {"const": "available"}
+        "status": {"const": "available"},
+        "event_relative_time": {"type": "object"},
+        "visual_anchor_eligibility": {"type": "object"}
       }
     },
     "availability": {

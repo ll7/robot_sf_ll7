@@ -110,8 +110,19 @@ def build_pair_compatibility_record(
         "provenance_gate": provenance,
         "right_source_trace": {
             "status": "available",
+            "schema_version": "simulation_trace_export.v1",
             "trace_id": right.trace_id,
+            "coordinate_frame": right.coordinate_frame,
+            "units": right.units,
             "content_sha256": _trace_content_sha256(right),
+            "content_contract": _trace_content_contract(right),
+            "source": {
+                "scenario_id": right.source.scenario_id,
+                "seed": right.source.seed,
+                "planner_id": right.source.planner_id,
+                "episode_id": right.source.episode_id,
+                "generated_by": right.source.generated_by,
+            },
         },
         "initial_state_equivalence": initial,
         "route_spawn_separation": route_spawn,
@@ -472,32 +483,34 @@ def _meta(trace: SimulationTraceExport, key: str) -> object:
 
 
 def _trace_content_sha256(trace: SimulationTraceExport) -> str:
-    return _json_sha256_digest(
-        {
-            "schema_version": "simulation_trace_export.v1",
-            "trace_id": trace.trace_id,
-            "source": {
-                "scenario_id": trace.source.scenario_id,
-                "seed": trace.source.seed,
-                "planner_id": trace.source.planner_id,
-                "episode_id": trace.source.episode_id,
-                "generated_by": trace.source.generated_by,
-            },
-            "evidence_boundary": trace.evidence_boundary,
-            "coordinate_frame": trace.coordinate_frame,
-            "units": trace.units,
-            "frames": [
-                {
-                    "step": frame.step,
-                    "time_s": frame.time_s,
-                    "robot": frame.robot,
-                    "pedestrians": list(frame.pedestrians),
-                    "planner": frame.planner,
-                }
-                for frame in trace.frames
-            ],
-        }
-    )
+    return _json_sha256_digest(_trace_content_contract(trace))
+
+
+def _trace_content_contract(trace: SimulationTraceExport) -> dict[str, Any]:
+    return {
+        "schema_version": "simulation_trace_export.v1",
+        "trace_id": trace.trace_id,
+        "source": {
+            "scenario_id": trace.source.scenario_id,
+            "seed": trace.source.seed,
+            "planner_id": trace.source.planner_id,
+            "episode_id": trace.source.episode_id,
+            "generated_by": trace.source.generated_by,
+        },
+        "evidence_boundary": trace.evidence_boundary,
+        "coordinate_frame": trace.coordinate_frame,
+        "units": trace.units,
+        "frames": [
+            {
+                "step": frame.step,
+                "time_s": frame.time_s,
+                "robot": frame.robot,
+                "pedestrians": list(frame.pedestrians),
+                "planner": frame.planner,
+            }
+            for frame in trace.frames
+        ],
+    }
 
 
 def _json_sha256_digest(value: object) -> str:
@@ -556,10 +569,15 @@ def _event_receipts(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
                 "event_id": event["event_id"],
                 "event_type": identity[0],
                 "detector_profile_version": identity[1],
+                "time_s": float(event["time_s"]),
+                "step": int(event["step"]),
+                "confidence": str(event["confidence"]),
                 "actor_id": identity[2],
                 "zone_id": identity[3],
                 "source_fields": list(identity[4]),
                 "status": "available",
+                "event_relative_time": dict(event["event_relative_time"]),
+                "visual_anchor_eligibility": dict(event["visual_anchor_eligibility"]),
             }
         )
     return sorted(receipts, key=lambda item: str(item["event_id"]))

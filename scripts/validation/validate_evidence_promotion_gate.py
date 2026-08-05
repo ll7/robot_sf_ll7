@@ -19,6 +19,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json
+
 TEXT_SUFFIXES = {".csv", ".json", ".jsonl", ".md", ".txt", ".yaml", ".yml"}
 
 
@@ -554,7 +556,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = json.dumps(output, indent=2, sort_keys=True) + "\n"
         if args.output_json:
             args.output_json.parent.mkdir(parents=True, exist_ok=True)
-            args.output_json.write_text(payload, encoding="utf-8")
+            write_json(args.output_json, output)
         print(payload, end="")
         return 0 if result.transition_valid else 1
 
@@ -575,7 +577,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = json.dumps(output, indent=2, sort_keys=True) + "\n"
         if args.output_json:
             args.output_json.parent.mkdir(parents=True, exist_ok=True)
-            args.output_json.write_text(payload, encoding="utf-8")
+            write_json(args.output_json, output)
         print(payload, end="")
         return 0 if result.transition_valid else 1
 
@@ -583,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
     payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output_json:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        args.output_json.write_text(payload, encoding="utf-8")
+        write_json(args.output_json, result)
     print(payload, end="")
     return 0 if result["validation_summary"]["failed"] == 0 else 1
 

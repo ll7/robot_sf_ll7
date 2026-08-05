@@ -528,6 +528,16 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     assert typed_event["collision_partner_id"] == "ped-a"
     assert typed_event["collision_partner_type"] == "pedestrian"
 
+    non_focal_payload = _trace_payload(collision_mode="ledger_ped_b")
+    non_focal = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(non_focal_payload)
+    )
+    non_focal_event = {event["event_type"]: event for event in non_focal["event_anchors"]}[
+        "exact_collision_event"
+    ]
+    assert non_focal_event["status"] == "unavailable"
+    assert non_focal_event["reason"] == "collision_not_bound_to_focal_encounter"
+
     static_payload = _trace_payload(collision_mode="static_geometry_collision")
     static = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(static_payload)
@@ -535,9 +545,8 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     static_event = {event["event_type"]: event for event in static["event_anchors"]}[
         "exact_collision_event"
     ]
-    assert static_event["status"] == "available"
-    assert static_event["collision_partner_type"] == "static_geometry"
-    assert static_event["collision_partner_id"] is None
+    assert static_event["status"] == "unavailable"
+    assert static_event["reason"] == "collision_not_bound_to_focal_encounter"
 
     invented_payload = _trace_payload(collision_mode="invented_events")
     invented = build_worked_example_process_trace_from_export(
@@ -576,6 +585,20 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     ]
     assert outside_event["status"] == "unavailable"
     assert outside_event["reason"] == "collision_time_outside_encounter_interval"
+
+    zero_sample_interval = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_typed")),
+        encounter_report=_encounter_report(start_time_s=10.0, end_time_s=11.0),
+        encounter_report_input_checksum="0" * 64,
+    )
+    zero_events = {event["event_type"]: event for event in zero_sample_interval["event_anchors"]}
+    assert zero_sample_interval["diagnostics"]["coverage"]["frame_count"] == 0
+    assert zero_events["exact_collision_event"]["status"] == "unavailable"
+    assert (
+        zero_events["exact_collision_event"]["reason"]
+        == "collision_time_outside_encounter_interval"
+    )
+    assert zero_sample_interval["event_anchor_hierarchy"]["status"] == "unavailable"
 
 
 def test_terminal_event_has_no_timed_contract() -> None:
@@ -779,9 +802,49 @@ def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection
             {"status": "available", "actor_id": "ped-a"},
         ),
         (
+            "/frames/0/relative_interaction/closest_approach",
+            ["frames", 0, "relative_interaction", "closest_approach"],
+            {"status": "available", "time_to_closest_approach_s": "banana"},
+        ),
+        (
+            "/frames/0/relative_interaction/actor_id",
+            ["frames", 0, "relative_interaction", "actor_id"],
+            "ped-b",
+        ),
+        (
+            "/frames/0/relative_interaction/proxy_surface_clearance_m",
+            ["frames", 0, "relative_interaction", "proxy_surface_clearance_m"],
+            None,
+        ),
+        (
+            "/frames/0/relative_interaction/proxy_surface_clearance_m",
+            ["frames", 0, "relative_interaction", "proxy_surface_clearance_status"],
+            "unavailable",
+        ),
+        (
+            "/frames/0/route/geometry_checksum",
+            ["frames", 0, "route", "geometry", "start"],
+            [99.0, 0.0],
+        ),
+        (
+            "/frames/0/conflict/geometry_checksum",
+            ["frames", 0, "conflict", "geometry", "center"],
+            [99.0, 0.0],
+        ),
+        (
             "/frames/0/commands",
             ["frames", 0, "commands"],
             {"status": "available", "commanded": "banana"},
+        ),
+        (
+            "/frames/0/commands/executed",
+            ["frames", 0, "commands"],
+            {
+                "status": "available",
+                "commanded": {"linear_velocity": 1.0},
+                "executed": {"linear_velocity": ["banana"]},
+                "executed_status": "available",
+            },
         ),
         (
             "/diagnostics/route_progress",
@@ -789,6 +852,15 @@ def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection
             {"status": "available", "start_s_m": "banana", "end_s_m": 1.0, "delta_s_m": 1.0},
         ),
         ("/diagnostics/stall", ["diagnostics", "stall"], {"status": "available"}),
+        (
+            "/diagnostics/stall/status",
+            ["diagnostics", "stall"],
+            {
+                **route_payload["diagnostics"]["stall"],
+                "status": "unavailable",
+                "sustained_stall_duration_s": 1.0,
+            },
+        ),
         (
             "/diagnostics/reversal_counts",
             ["diagnostics", "reversal_counts"],
@@ -801,9 +873,23 @@ def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection
         ),
         ("/diagnostics/coverage", ["diagnostics", "coverage"], {"frame_count": 0}),
         (
+            "/diagnostics/coverage/relative_interaction/missing_frame_count",
+            ["diagnostics", "coverage", "relative_interaction", "missing_frame_count"],
+            99,
+        ),
+        (
             "/diagnostics/threshold_exposure/duration_s",
             ["diagnostics", "threshold_exposure", "duration_s"],
             "banana",
+        ),
+        (
+            "/diagnostics/threshold_exposure/status",
+            ["diagnostics", "threshold_exposure"],
+            {
+                **route_payload["diagnostics"]["threshold_exposure"],
+                "status": "unavailable",
+                "duration_s": 1.0,
+            },
         ),
         (
             "/encounters/global_minimum_over_all_actors/series/0",
@@ -836,6 +922,22 @@ def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection
         validate_worked_example_process_trace(payload)
 
     payload = deepcopy(base_payload)
+    payload["frames"][0]["event_alignment"]["anchor_event_id"] = "forged-anchor"
+    with pytest.raises(Exception, match="/frames/0/event_alignment/anchor_event_id"):
+        validate_worked_example_process_trace(payload)
+
+    payload = deepcopy(base_payload)
+    payload["frames"][0]["event_alignment"]["anchor_event_type"] = "minimum_clearance"
+    with pytest.raises(Exception, match="/frames/0/event_alignment/anchor_event_type"):
+        validate_worked_example_process_trace(payload)
+
+    payload = deepcopy(base_payload)
+    payload["frames"][0]["event_alignment"]["anchor_time_s"] = 123.0
+    payload["frames"][0]["event_alignment"]["tau_s"] = payload["frames"][0]["time_s"] - 123.0
+    with pytest.raises(Exception, match="/frames/0/event_alignment/anchor_time_s"):
+        validate_worked_example_process_trace(payload)
+
+    payload = deepcopy(base_payload)
     wrong_anchor = payload["event_anchor_hierarchy"]["available_anchors"][-1]
     payload["event_anchor_hierarchy"]["selected_anchor"] = wrong_anchor
     payload["event_anchor_hierarchy"]["anchor_time_s"] = wrong_anchor["time_s"]
@@ -847,6 +949,28 @@ def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection
             frame["event_alignment"]["tau_s"] = frame["time_s"] - wrong_anchor["time_s"]
     with pytest.raises(Exception, match="/event_anchor_hierarchy/selected_anchor"):
         validate_worked_example_process_trace(payload)
+
+
+def test_matched_planner_empty_actor_realizations_remain_compatible() -> None:
+    """Empty actor sets are equal state, not actor divergence."""
+
+    left = simulation_trace_export_from_dict(
+        _trace_payload(no_pedestrians=True, planner_id="planner-a", seed=7)
+    )
+    right = simulation_trace_export_from_dict(
+        _trace_payload(no_pedestrians=True, planner_id="planner-b", seed=7, config_digest="b" * 64)
+    )
+
+    pair = build_worked_example_process_trace_from_export(
+        left,
+        pair_trace=right,
+        pair_comparison_grain="matched_planner_pair",
+    )["pair_compatibility"]
+
+    assert pair["status"] == "available"
+    assert pair["initial_state_equivalence"]["equivalent"] is True
+    assert pair["initial_state_equivalence"]["actor_id_sets_equal"] is True
+    assert pair["initial_state_equivalence"]["max_actor_position_delta_m"] is None
 
 
 def _set_path(payload: dict[str, object], path: list[object], value: object) -> None:
@@ -880,6 +1004,7 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
     stall_pattern: list[float] | None = None,
     nan_command_step: int | None = None,
     missing_velocity_step: int | None = None,
+    no_pedestrians: bool = False,
 ) -> dict[str, object]:
     robot_vel = [0.0, 0.0] if static_relative_velocity else [1.0, 0.0]
     ped_vel = [0.0, 0.0]
@@ -909,12 +1034,21 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
         }
         if missing_actor_radius_step == step:
             actor.pop("radius")
-        peds = [actor]
+        peds = [] if no_pedestrians else [actor]
         if actor_switch:
             peds.append(
                 {
                     "id": "ped-b",
                     "position": [3.0 if step < 2 else 0.45, 0.0],
+                    "velocity": [0.0, 0.0],
+                    "radius": 0.25,
+                }
+            )
+        if collision_mode == "ledger_ped_b":
+            peds.append(
+                {
+                    "id": "ped-b",
+                    "position": [0.45, 0.0],
                     "velocity": [0.0, 0.0],
                     "radius": 0.25,
                 }
@@ -945,6 +1079,20 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
                     {
                         "collision_partner_type": "pedestrian",
                         "collision_partner_id": "ped-a",
+                        "collision_time": 0.15,
+                        "relative_speed_at_contact": 1.0,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
+                    }
+                ],
+            }
+        if collision_mode == "ledger_ped_b" and step == 1:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [
+                    {
+                        "collision_partner_type": "pedestrian",
+                        "collision_partner_id": "ped-b",
                         "collision_time": 0.15,
                         "relative_speed_at_contact": 1.0,
                         "clearance_series_source": "simulator.contact",

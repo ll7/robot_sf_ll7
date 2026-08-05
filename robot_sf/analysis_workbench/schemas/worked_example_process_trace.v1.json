@@ -195,7 +195,7 @@
           "additionalProperties": false,
           "required": ["frame_count", "relative_interaction", "proxy_surface_clearance"],
           "properties": {
-            "frame_count": {"type": "integer", "minimum": 1},
+            "frame_count": {"type": "integer", "minimum": 0},
             "relative_interaction": {"$ref": "#/$defs/coverage_record"},
             "proxy_surface_clearance": {"$ref": "#/$defs/coverage_record"}
           }

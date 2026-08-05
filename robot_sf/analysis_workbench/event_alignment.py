@@ -264,21 +264,22 @@ def _initial_equivalence(
         (delta for delta in actor_radius_deltas.values() if delta is not None),
         default=None,
     )
+    actor_positions_equivalent = not actor_position_deltas or (
+        max_actor_position_delta is not None and max_actor_position_delta <= position_tolerance_m
+    )
+    actor_velocities_equivalent = not actor_velocity_deltas or (
+        max_actor_velocity_delta is not None and max_actor_velocity_delta <= position_tolerance_m
+    )
+    actor_radii_equivalent = not actor_radius_deltas or max_actor_radius_delta == 0.0
     equivalent = (
         position_delta <= position_tolerance_m
         and velocity_delta <= position_tolerance_m
         and heading_delta <= heading_tolerance_rad
         and robot_radius_delta == 0.0
         and actor_ids_equal
-        and (
-            max_actor_position_delta is not None
-            and max_actor_position_delta <= position_tolerance_m
-        )
-        and (
-            max_actor_velocity_delta is not None
-            and max_actor_velocity_delta <= position_tolerance_m
-        )
-        and max_actor_radius_delta == 0.0
+        and actor_positions_equivalent
+        and actor_velocities_equivalent
+        and actor_radii_equivalent
     )
     return {
         "status": "available",

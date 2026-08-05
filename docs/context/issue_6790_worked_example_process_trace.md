@@ -45,6 +45,10 @@ provenance- and checksum-bound finite geometry. Missing actor intervals, velocit
 route/zone registry evidence, exact collision telemetry, or source-coordinate support are
 reported as unavailable or not observed instead of zero-filled.
 
+Exact collision anchors require a canonical ledger collision bound to the selected focal
+encounter actor. Static-geometry collisions and collisions with non-focal pedestrians remain
+unavailable as focal exact anchors because the ledger record does not identify the focal actor.
+
 Pair compatibility requires an explicit comparison grain:
 
 - `matched_planner_pair`: different planners on the same seed/realization, required

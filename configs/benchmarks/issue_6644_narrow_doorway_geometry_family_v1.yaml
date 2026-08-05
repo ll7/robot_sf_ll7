@@ -1,0 +1,61 @@
+schema_version: robot_sf.issue_6644_narrow_doorway_geometry_family.v1
+issue: 6644
+family_id: francis2023_narrow_doorway_geometry_v1
+claim_boundary: diagnostic within-simulator geometry evidence only; not physical-footprint validation, realism evidence, sim-to-real evidence, deployment safety, frozen-release evidence, or a general planner ranking
+
+base_scenario:
+  scenario_id: francis2023_narrow_doorway
+  scenario_path: configs/scenarios/single/francis2023_narrow_doorway.yaml
+  map_path: maps/svg_maps/francis2023/francis2023_narrow_doorway.svg
+
+geometry:
+  units: m
+  gap_width_m:
+    - 0.8
+    - 1.9
+    - 2.0
+    - 2.1
+    - 2.2
+  constriction_depth_m:
+    - 0.25
+    - 1.0
+    - 2.0
+  baseline:
+    gap_width_m: 2.0
+    constriction_depth_m: 1.0
+  route_y_m: 5.0
+  route_waypoints:
+    - [7.0, 5.0]
+    - [25.5, 5.0]
+  map_bounds_m: [0.0, 30.0, 0.0, 10.0]
+
+envelope:
+  nominal_radius_m: 1.0
+  reduced_probe_radius_m: 0.5
+  source: robot_sf.common.robot_defaults.DEFAULT_ROBOT_RADIUS; frozen width/radius semantics audited by issue #6645
+
+oracle:
+  algorithm: goal
+  seed: 225
+  horizon_steps: 400
+  run_before_planners: true
+  classification_contract:
+    negative_margin: infeasible_by_construction
+    zero_margin: boundary_tangent
+    positive_margin: geometrically_feasible_candidate
+
+planner_protocol:
+  roster:
+    - goal
+    - social_force
+    - orca
+  seeds: [225, 226, 227]
+  horizon_steps: 400
+  execution_status: not_started
+  fallback_policy: record_unavailable_or_degraded; never silently coerce a cell into valid planner evidence
+
+execution:
+  production_campaign_authorized: false
+  slurm_submission_authorized: false
+  evidence_admission: not_started
+  baseline_map_must_remain_unchanged: true

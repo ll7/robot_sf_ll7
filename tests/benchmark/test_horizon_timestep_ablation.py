@@ -286,3 +286,34 @@ def test_artifact_size_bytes_for_existing_file() -> None:
     size = _artifact_size_bytes(TRACE_CANDIDATES[0]["path"])
     assert isinstance(size, int)
     assert size > 0
+
+
+def test_git_head_realistic_failures_keep_empty_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing git binary or a timeout still degrades provenance to '' (#6690)."""
+
+    def _spawn_failure(*args: object, **kwargs: object) -> str:
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(_mod.subprocess, "run", _spawn_failure)
+    assert _mod._git_head() == ""
+
+    def _timeout(*args: object, **kwargs: object) -> str:
+        raise _mod.subprocess.TimeoutExpired(cmd="git", timeout=5)
+
+    monkeypatch.setattr(_mod.subprocess, "run", _timeout)
+    assert _mod._git_head() == ""
+
+
+def test_git_head_programmer_error_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ValueError is outside the narrowed spawn/timeout boundary and must surface (#6690)."""
+
+    def _programmer_error(*args: object, **kwargs: object) -> str:
+        raise ValueError("invalid subprocess arguments")
+
+    monkeypatch.setattr(_mod.subprocess, "run", _programmer_error)
+    with pytest.raises(ValueError, match="invalid subprocess arguments"):
+        _mod._git_head()

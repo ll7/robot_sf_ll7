@@ -14,6 +14,7 @@ import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.planner.constants import (
+    DEFAULT_STREAM_GAP_COMMIT_HOLD_STEPS,
     DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M,
     DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED,
     DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED,
@@ -45,7 +46,7 @@ class StreamGapPlannerConfig:
     creep_speed: float = 0.12
     approach_speed: float = 0.35
     commit_speed: float = 0.95
-    commit_hold_steps: int = 6
+    commit_hold_steps: int = DEFAULT_STREAM_GAP_COMMIT_HOLD_STEPS
 
     uncertainty_gating_enabled: bool = False
     uncertainty_min_existence_probability: float = 0.5
@@ -541,7 +542,7 @@ def build_stream_gap_config(cfg: dict[str, Any] | None) -> StreamGapPlannerConfi
         creep_speed=float(cfg.get("creep_speed", 0.12)),
         approach_speed=float(cfg.get("approach_speed", 0.35)),
         commit_speed=float(cfg.get("commit_speed", 0.95)),
-        commit_hold_steps=int(cfg.get("commit_hold_steps", 6)),
+        commit_hold_steps=int(cfg.get("commit_hold_steps", DEFAULT_STREAM_GAP_COMMIT_HOLD_STEPS)),
         uncertainty_gating_enabled=bool(cfg.get("uncertainty_gating_enabled", False)),
         uncertainty_min_existence_probability=float(
             cfg.get("uncertainty_min_existence_probability", 0.5)

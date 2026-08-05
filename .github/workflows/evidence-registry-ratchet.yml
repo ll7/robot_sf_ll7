@@ -26,6 +26,7 @@ on:
       - "docs/context/evidence/evidence_registry_dispositions.yaml"
       - "docs/context/evidence/evidence_registry_strict_ci_policy.yaml"
       - "tests/dev/test_evidence_registry_ratchet.py"
+      - "tests/dev/test_evidence_registry_ratchet_workflow.py"
       - ".github/workflows/evidence-registry-ratchet.yml"
   schedule:
     - cron: "17 5 * * 3"
@@ -52,10 +53,15 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
 
+      # `set -o pipefail` keeps the `| tee` log capture from masking the ratchet's
+      # non-zero exit code: without it this step reported success while the log showed
+      # FAILED (issue #6740: PR #6733's baseline drift reached main unblocked). The
+      # follow-up steps run via `if: always()`, so a failure here still uploads the log.
       - name: Run evidence-registry ratchet
         id: ratchet
         run: |
           mkdir -p output/evidence
+          set -o pipefail
           uv run python scripts/dev/evidence_registry_ratchet.py --check 2>&1 | tee output/evidence/ratchet.log
 
       - name: Summarize ratchet outcome

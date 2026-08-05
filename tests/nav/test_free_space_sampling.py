@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from shapely.geometry import Point, Polygon
+from shapely.prepared import prep
 
 from robot_sf.nav.free_space_sampling import sample_free_points_in_bounds
 
@@ -46,6 +47,19 @@ def test_points_reject_obstacles() -> None:
     obstacle = Polygon([(2.0, 2.0), (2.0, 8.0), (8.0, 8.0), (8.0, 2.0)])
     rng = np.random.default_rng(123)
     result = sample_free_points_in_bounds(BOUNDS, 10, obstacle_polygons=[obstacle], rng=rng)
+    for x, y in result:
+        assert not obstacle.contains(Point(x, y))
+
+
+def test_points_reject_prepared_obstacles() -> None:
+    """Prepared obstacles remain a supported input to free-space sampling."""
+    obstacle = Polygon([(2.0, 2.0), (2.0, 8.0), (8.0, 8.0), (8.0, 2.0)])
+    result = sample_free_points_in_bounds(
+        BOUNDS,
+        10,
+        obstacle_polygons=[prep(obstacle)],
+        rng=np.random.default_rng(42),
+    )
     for x, y in result:
         assert not obstacle.contains(Point(x, y))
 

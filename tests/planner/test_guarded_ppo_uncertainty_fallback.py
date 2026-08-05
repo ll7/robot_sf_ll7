@@ -135,6 +135,9 @@ def test_uncertainty_fallback_disabled_preserves_existing_guarded_ppo_behavior()
         ("uncertainty_conformal_radius_m", -0.1),
         ("uncertainty_slow_down_speed_m_s", -0.1),
         ("uncertainty_min_ttc_threshold_s", -0.1),
+        ("uncertainty_buffer_intrusion_threshold", float("nan")),
+        ("uncertainty_collision_probability_threshold", float("inf")),
+        ("uncertainty_min_ttc_threshold_s", float("nan")),
     ],
 )
 def test_uncertainty_fallback_config_validation(field: str, value: object) -> None:

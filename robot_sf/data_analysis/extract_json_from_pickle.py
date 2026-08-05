@@ -10,14 +10,13 @@ This module performs the following:
 
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from loguru import logger
 
-from robot_sf.data_analysis.extract_obj_from_pickle import ensure_dir_exists
+from robot_sf.data_analysis.pickle_utils import ensure_dir_exists, extract_timestamp
 from robot_sf.data_analysis.plot_dataset import (
     plot_all_npc_ped_positions,
     plot_all_npc_ped_velocities,
@@ -254,20 +253,6 @@ def get_latest_recording_file() -> Path:
     return Path("recordings", filename)
 
 
-def extract_timestamp(filename: str) -> str:
-    """
-    Extract the timestamp from a filename.
-
-    Args:
-        filename (str): The filename from which to extract the timestamp.
-
-    Returns:
-        str: The extracted timestamp or 'unknown' if no timestamp is found.
-    """
-    match = re.search(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", filename)
-    return match.group() if match else "unknown"
-
-
 def plot_all_data_json(
     filename: str,
     unique_id: str | None = None,
@@ -408,10 +393,6 @@ def show_from_json(filename: str, unique_id: str) -> None:
 if __name__ == "__main__":
     # Example usage
     from pathlib import Path
-
-    from robot_sf.data_analysis.extract_json_from_pickle import (
-        extract_timestamp,  # type: ignore[attr-defined]
-    )
 
     # Ensure the plots directory exists
     PLOTS_DIR = "robot_sf/data_analysis/plots"

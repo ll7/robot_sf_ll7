@@ -11,6 +11,7 @@ Usage::
         --output-dir docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13
 """
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse
@@ -97,7 +98,12 @@ def _git_head() -> str:
             check=False,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
+        # Narrowed from `except Exception` (#6690): OSError covers git-binary /
+        # spawn failures and SubprocessError covers the timeout=5 contract
+        # (TimeoutExpired; CalledProcessError is impossible with check=False).
+        # Programmer errors such as ValueError must propagate instead of
+        # silently dropping provenance.
         return ""
 
 

@@ -172,7 +172,211 @@ def _unavailable_fields(entry: Mapping[str, Any], fields: list[tuple[str, ...]])
     return missing
 
 
-def extract_descriptors(  # noqa: C901, PLR0912, PLR0915
+def _extract_criticality_descriptor(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract criticality/severity descriptor from an archive entry.
+
+    Returns:
+        Dict with min_clearance_m, ttc_min_s, collision_count,
+        near_miss_count, severity_score, and optional unavailable_fields.
+    """
+    # Try catalog entry format: entry["criticality"]["source_metrics"]["min_clearance_m"]
+    # Try candidate format: entry["metrics_summary"]["severity"]["*"]
+    min_clearance = _safe_float(entry, "criticality", "source_metrics", "min_clearance_m")
+    if min_clearance is None:
+        min_clearance = _safe_float(entry, "metrics_summary", "severity", "min_clearance_m")
+
+    ttc_min = _safe_float(entry, "metrics_summary", "severity", "ttc_min_s")
+    collision_count = _safe_int(entry, "metrics_summary", "severity", "collision_count")
+    near_miss_count = _safe_int(entry, "metrics_summary", "severity", "near_miss_count")
+
+    # Compute a severity score from available fields
+    severity_score: float | None = None
+    scores: list[float] = []
+    if min_clearance is not None:
+        # Lower clearance = higher severity; invert and bound
+        scores.append(max(0.0, 1.0 - min_clearance / 5.0))
+    if ttc_min is not None and ttc_min > 0:
+        scores.append(max(0.0, 1.0 - ttc_min / 10.0))
+    if collision_count is not None and collision_count > 0:
+        scores.append(min(1.0, collision_count / 10.0))
+    if near_miss_count is not None and near_miss_count > 0:
+        scores.append(min(1.0, near_miss_count / 10.0))
+    if scores:
+        severity_score = sum(scores) / len(scores)
+
+    crit_unavail = _unavailable_fields(
+        entry,
+        [
+            ("criticality", "source_metrics", "min_clearance_m"),
+            ("metrics_summary", "severity", "ttc_min_s"),
+            ("metrics_summary", "severity", "collision_count"),
+            ("metrics_summary", "severity", "near_miss_count"),
+        ],
+    )
+
+    criticality: dict[str, Any] = {
+        "min_clearance_m": min_clearance,
+        "ttc_min_s": ttc_min,
+        "collision_count": collision_count,
+        "near_miss_count": near_miss_count,
+        "severity_score": severity_score,
+    }
+    if crit_unavail:
+        criticality["unavailable_fields"] = crit_unavail
+    return criticality
+
+
+def _extract_replay_persistence_descriptor(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract replay/persistence descriptor from an archive entry.
+
+    Returns:
+        Dict with status, exact_replay_pass, event_reproduced,
+        perturbation_persistent, and optional unavailable_fields.
+    """
+    replay_status = _safe_str(entry, "replay", "status") or "not_evaluated"
+    exact_replay_pass: bool | None = None
+    event_reproduced: bool | None = None
+    perturbation_persistent: bool | None = None
+
+    persist_unavail = _unavailable_fields(
+        entry,
+        [
+            ("replay", "status"),
+        ],
+    )
+
+    replay_persistence: dict[str, Any] = {
+        "status": replay_status,
+        "exact_replay_pass": exact_replay_pass,
+        "event_reproduced": event_reproduced,
+        "perturbation_persistent": perturbation_persistent,
+    }
+    if persist_unavail:
+        replay_persistence["unavailable_fields"] = persist_unavail
+    return replay_persistence
+
+
+def _extract_topology_descriptor(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract topology descriptor from an archive entry.
+
+    Returns:
+        Dict with map_family, map_type, geometry_label, and optional
+        unavailable_fields.
+    """
+    map_family = _safe_str(entry, "source_episode", "source_map") or "unknown"
+
+    # Try to get a topology label
+    map_type = "unknown"
+    geometry_label = "unknown"
+    if map_family != "unknown":
+        geometry_label = map_family
+
+    topo_unavail = _unavailable_fields(
+        entry,
+        [
+            ("source_episode", "source_map"),
+        ],
+    )
+
+    topology: dict[str, Any] = {
+        "map_family": map_family,
+        "map_type": map_type,
+        "geometry_label": geometry_label,
+    }
+    if topo_unavail:
+        topology["unavailable_fields"] = topo_unavail
+    return topology
+
+
+def _extract_actor_interaction_descriptor(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract actor interaction descriptor from an archive entry.
+
+    Returns:
+        Dict with pedestrian_count, interaction_class, complexity_score,
+        and optional unavailable_fields.
+    """
+    ped_count = _safe_int(entry, "segment", "trace_frames", "0", "pedestrians")
+    if ped_count is None:
+        # Try from source metric
+        ped_count = _safe_int(entry, "metrics_summary", "diversity", "unique_scenario_families")
+
+    interaction_class = "unknown"
+    if ped_count is not None:
+        if ped_count == 0:
+            interaction_class = "no_pedestrians"
+        elif ped_count <= 2:
+            interaction_class = "sparse"
+        elif ped_count <= 5:
+            interaction_class = "moderate"
+        else:
+            interaction_class = "dense"
+
+    complexity_score: float | None = None
+    if ped_count is not None:
+        complexity_score = min(1.0, ped_count / 20.0)
+
+    interact_unavail = _unavailable_fields(
+        entry,
+        [
+            ("segment", "trace_frames"),
+        ],
+    )
+
+    actor_interaction: dict[str, Any] = {
+        "pedestrian_count": ped_count,
+        "interaction_class": interaction_class,
+        "complexity_score": complexity_score,
+    }
+    if interact_unavail:
+        actor_interaction["unavailable_fields"] = interact_unavail
+    return actor_interaction
+
+
+def _extract_mechanism_signature_descriptor(
+    entry: Mapping[str, Any], interaction_class: str
+) -> dict[str, Any]:
+    """Extract mechanism/failure signature descriptor from an archive entry.
+
+    Parameters
+    ----------
+    entry : Mapping
+        The archive entry.
+    interaction_class : str
+        Pre-computed interaction class from the actor interaction descriptor.
+
+    Returns:
+        Dict with critical_signal, failure_mode, mechanism_label, and
+        optional unavailable_fields.
+    """
+    critical_signal = _safe_str(entry, "criticality", "signal") or "unknown"
+    failure_mode = "unknown"
+    mechanism_label = "unknown"
+
+    if critical_signal == "min_clearance":
+        failure_mode = "proximity_critical"
+        mechanism_label = f"close_approach_{interaction_class}"
+    elif critical_signal == "collision":
+        failure_mode = "collision"
+        mechanism_label = f"collision_{interaction_class}"
+
+    mech_unavail = _unavailable_fields(
+        entry,
+        [
+            ("criticality", "signal"),
+        ],
+    )
+
+    mechanism_signature: dict[str, Any] = {
+        "critical_signal": critical_signal,
+        "failure_mode": failure_mode,
+        "mechanism_label": mechanism_label,
+    }
+    if mech_unavail:
+        mechanism_signature["unavailable_fields"] = mech_unavail
+    return mechanism_signature
+
+
+def extract_descriptors(
     entries: Sequence[Mapping[str, Any]],
     provenance: Literal[
         "generated_scenario_candidate.v1",
@@ -206,160 +410,13 @@ def extract_descriptors(  # noqa: C901, PLR0912, PLR0915
         entry_json = json.dumps(entry, sort_keys=True, default=str)
         entry_hash = hashlib.sha256(entry_json.encode()).hexdigest()
 
-        # --- Criticality ---
-        # Try catalog entry format: entry["criticality"]["source_metrics"]["min_clearance_m"]
-        # Try candidate format: entry["metrics_summary"]["severity"]["*"]
-        min_clearance = _safe_float(entry, "criticality", "source_metrics", "min_clearance_m")
-        if min_clearance is None:
-            min_clearance = _safe_float(entry, "metrics_summary", "severity", "min_clearance_m")
-
-        ttc_min = _safe_float(entry, "metrics_summary", "severity", "ttc_min_s")
-        collision_count = _safe_int(entry, "metrics_summary", "severity", "collision_count")
-        near_miss_count = _safe_int(entry, "metrics_summary", "severity", "near_miss_count")
-
-        # Compute a severity score from available fields
-        severity_score: float | None = None
-        scores: list[float] = []
-        if min_clearance is not None:
-            # Lower clearance = higher severity; invert and bound
-            scores.append(max(0.0, 1.0 - min_clearance / 5.0))
-        if ttc_min is not None and ttc_min > 0:
-            scores.append(max(0.0, 1.0 - ttc_min / 10.0))
-        if collision_count is not None and collision_count > 0:
-            scores.append(min(1.0, collision_count / 10.0))
-        if near_miss_count is not None and near_miss_count > 0:
-            scores.append(min(1.0, near_miss_count / 10.0))
-        if scores:
-            severity_score = sum(scores) / len(scores)
-
-        crit_unavail = _unavailable_fields(
-            entry,
-            [
-                ("criticality", "source_metrics", "min_clearance_m"),
-                ("metrics_summary", "severity", "ttc_min_s"),
-                ("metrics_summary", "severity", "collision_count"),
-                ("metrics_summary", "severity", "near_miss_count"),
-            ],
+        criticality = _extract_criticality_descriptor(entry)
+        replay_persistence = _extract_replay_persistence_descriptor(entry)
+        topology = _extract_topology_descriptor(entry)
+        actor_interaction = _extract_actor_interaction_descriptor(entry)
+        mechanism_signature = _extract_mechanism_signature_descriptor(
+            entry, actor_interaction["interaction_class"]
         )
-
-        criticality: dict[str, Any] = {
-            "min_clearance_m": min_clearance,
-            "ttc_min_s": ttc_min,
-            "collision_count": collision_count,
-            "near_miss_count": near_miss_count,
-            "severity_score": severity_score,
-        }
-        if crit_unavail:
-            criticality["unavailable_fields"] = crit_unavail
-
-        # --- Replay/Persistence ---
-        replay_status = _safe_str(entry, "replay", "status") or "not_evaluated"
-        exact_replay_pass: bool | None = None
-        event_reproduced: bool | None = None
-        perturbation_persistent: bool | None = None
-
-        persist_unavail = _unavailable_fields(
-            entry,
-            [
-                ("replay", "status"),
-            ],
-        )
-
-        replay_persistence: dict[str, Any] = {
-            "status": replay_status,
-            "exact_replay_pass": exact_replay_pass,
-            "event_reproduced": event_reproduced,
-            "perturbation_persistent": perturbation_persistent,
-        }
-        if persist_unavail:
-            replay_persistence["unavailable_fields"] = persist_unavail
-
-        # --- Topology ---
-        map_family = _safe_str(entry, "source_episode", "source_map") or "unknown"
-
-        # Try to get a topology label
-        map_type = "unknown"
-        geometry_label = "unknown"
-        if map_family != "unknown":
-            geometry_label = map_family
-
-        topo_unavail = _unavailable_fields(
-            entry,
-            [
-                ("source_episode", "source_map"),
-            ],
-        )
-
-        topology: dict[str, Any] = {
-            "map_family": map_family,
-            "map_type": map_type,
-            "geometry_label": geometry_label,
-        }
-        if topo_unavail:
-            topology["unavailable_fields"] = topo_unavail
-
-        # --- Actor Interaction ---
-        ped_count = _safe_int(entry, "segment", "trace_frames", "0", "pedestrians")
-        if ped_count is None:
-            # Try from source metric
-            ped_count = _safe_int(entry, "metrics_summary", "diversity", "unique_scenario_families")
-
-        interaction_class = "unknown"
-        if ped_count is not None:
-            if ped_count == 0:
-                interaction_class = "no_pedestrians"
-            elif ped_count <= 2:
-                interaction_class = "sparse"
-            elif ped_count <= 5:
-                interaction_class = "moderate"
-            else:
-                interaction_class = "dense"
-
-        complexity_score: float | None = None
-        if ped_count is not None:
-            complexity_score = min(1.0, ped_count / 20.0)
-
-        interact_unavail = _unavailable_fields(
-            entry,
-            [
-                ("segment", "trace_frames"),
-            ],
-        )
-
-        actor_interaction: dict[str, Any] = {
-            "pedestrian_count": ped_count,
-            "interaction_class": interaction_class,
-            "complexity_score": complexity_score,
-        }
-        if interact_unavail:
-            actor_interaction["unavailable_fields"] = interact_unavail
-
-        # --- Mechanism / Failure Signature ---
-        critical_signal = _safe_str(entry, "criticality", "signal") or "unknown"
-        failure_mode = "unknown"
-        mechanism_label = "unknown"
-
-        if critical_signal == "min_clearance":
-            failure_mode = "proximity_critical"
-            mechanism_label = f"close_approach_{interaction_class}"
-        elif critical_signal == "collision":
-            failure_mode = "collision"
-            mechanism_label = f"collision_{interaction_class}"
-
-        mech_unavail = _unavailable_fields(
-            entry,
-            [
-                ("criticality", "signal"),
-            ],
-        )
-
-        mechanism_signature: dict[str, Any] = {
-            "critical_signal": critical_signal,
-            "failure_mode": failure_mode,
-            "mechanism_label": mechanism_label,
-        }
-        if mech_unavail:
-            mechanism_signature["unavailable_fields"] = mech_unavail
 
         records.append(
             {
@@ -1041,7 +1098,7 @@ def validate_selection_manifest(manifest: dict[str, Any]) -> None:
             raise PortfolioSelectionError(f"Schema validation failed: {formatted}")
     except PortfolioSelectionError:
         raise
-    except Exception as exc:
+    except Exception as exc:  # jsonschema failures wrap into the documented error (#6690)
         raise PortfolioSelectionError(f"Validation error: {exc}") from exc
 
 

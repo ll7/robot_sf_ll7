@@ -15,11 +15,16 @@ import pytest
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.near_miss_ttc import (
     DIAGNOSTIC_TTC_THRESHOLD_S,
+    NEAR_MISS_ENCOUNTER_SCHEMA_VERSION,
+    NearMissEncounterInputError,
+    NearMissEncounterProfile,
     NearMissTtcInputError,
+    build_near_miss_encounter_report,
     build_ttc_near_miss_decision_packet,
     compute_ttc_near_miss_diagnostic,
     near_miss_ttc_input_readiness,
     render_ttc_near_miss_decision_packet_markdown,
+    write_near_miss_encounter_report,
 )
 
 
@@ -385,3 +390,182 @@ def test_decision_packet_json_safe_dict_handles_numpy_scalars():
     assert payload["diagnostic"]["numpy_float"] == 1.25
     assert payload["diagnostic"]["numpy_int"] == 3
     assert payload["diagnostic"]["bool_flag"] is True
+
+
+# --- Issue #6709 additive encounter surface ----------------------------------
+
+
+_ENCOUNTER_CHECKSUMS = {"trace.jsonl": "b" * 64}
+
+
+def _encounter_profile(**overrides):
+    """Build an explicit test profile without introducing a production default."""
+    values = {
+        "profile_id": "test-distance-v1",
+        "qualification_rule": "distance",
+        "continuity_gap_s": 1.1,
+        "distance_threshold_m": 1.5,
+    }
+    values.update(overrides)
+    return NearMissEncounterProfile(**values)
+
+
+def _encounter_report(samples, *, profile=None):
+    """Build a deterministic encounter report for the synthetic trace."""
+    return build_near_miss_encounter_report(
+        samples,
+        profile=profile or _encounter_profile(),
+        source_commit="commit-6709",
+        release_id="release-test",
+        bundle_id="bundle-test",
+        input_checksums=_ENCOUNTER_CHECKSUMS,
+    )
+
+
+def test_encounters_merge_contiguous_samples_and_stop_at_contact():
+    """Contiguous actor samples merge and contact ends the active encounter."""
+    report = _encounter_report(
+        [
+            {
+                "actor_id": "ped-1",
+                "timestamp_s": 0.0,
+                "clearance_m": 1.0,
+                "ttc_s": 0.8,
+                "closing_speed_mps": 1.2,
+                "pet_s": 0.6,
+                "contact": False,
+            },
+            {
+                "actor_id": "ped-1",
+                "timestamp_s": 1.0,
+                "clearance_m": 0.9,
+                "ttc_s": 0.5,
+                "closing_speed_mps": 1.5,
+                "pet_s": 0.4,
+                "contact": False,
+            },
+            {
+                "actor_id": "ped-1",
+                "timestamp_s": 2.0,
+                "clearance_m": 0.0,
+                "contact": True,
+            },
+            {
+                "actor_id": "ped-1",
+                "timestamp_s": 3.0,
+                "clearance_m": 1.0,
+                "contact": False,
+            },
+        ]
+    )
+
+    assert report["schema_version"] == NEAR_MISS_ENCOUNTER_SCHEMA_VERSION
+    assert report["status"] == "complete"
+    assert report["denominator"]["encounter_count"] == 2
+    first, second = report["encounters"]
+    assert first["encounter_id"] == "ped-1:encounter-0001"
+    assert first["sample_count"] == 2
+    assert first["duration_s"] == pytest.approx(1.0)
+    assert first["valid_exposure_duration_s"] == pytest.approx(1.0)
+    assert first["minimum_clearance_m"] == pytest.approx(0.9)
+    assert first["minimum_ttc_s"] == pytest.approx(0.5)
+    assert first["maximum_closing_speed_mps"] == pytest.approx(1.5)
+    assert first["minimum_pet_s"] == pytest.approx(0.4)
+    assert first["termination_reason"] == "contact"
+    assert first["contact_terminated"] is True
+    assert first["contact_time_s"] == pytest.approx(2.0)
+    assert second["encounter_id"] == "ped-1:encounter-0002"
+
+
+def test_encounters_are_per_actor_and_gap_starts_new_encounter():
+    """Actor identity and continuity gaps control segmentation independently."""
+    report = _encounter_report(
+        [
+            {"actor_id": "ped-a", "timestamp_s": 0.0, "clearance_m": 1.0, "contact": False},
+            {"actor_id": "ped-a", "timestamp_s": 1.0, "clearance_m": 1.0, "contact": False},
+            {"actor_id": "ped-a", "timestamp_s": 3.0, "clearance_m": 1.0, "contact": False},
+            {"actor_id": "ped-b", "timestamp_s": 0.0, "clearance_m": 1.0, "contact": False},
+        ]
+    )
+
+    assert report["denominator"]["actor_count"] == 2
+    assert report["denominator"]["encounter_count"] == 3
+    assert [item["actor_id"] for item in report["encounters"]] == ["ped-a", "ped-a", "ped-b"]
+    assert report["encounters"][0]["termination_reason"] == "gap"
+
+
+def test_missing_optional_metrics_are_unavailable_not_zero_filled():
+    """Missing TTC, velocity, PET, and contact remain explicit unavailable fields."""
+    report = _encounter_report([{"actor_id": "ped-a", "timestamp_s": 0.0, "clearance_m": 1.0}])
+    encounter = report["encounters"][0]
+
+    assert encounter["minimum_ttc_s"] is None
+    assert encounter["maximum_closing_speed_mps"] is None
+    assert encounter["minimum_pet_s"] is None
+    assert encounter["contact_status"] == "unavailable"
+    assert {"ttc_s", "closing_speed_mps", "pet_s", "contact"}.issubset(
+        set(encounter["unavailable_fields"])
+    )
+    assert report["missingness"]["field_counts"]["ttc_s"] == 1
+
+
+def test_invalid_dt_excludes_sample_instead_of_reporting_valid_exposure():
+    """An invalid supplied dt is fail-closed and cannot create an encounter."""
+    report = _encounter_report(
+        [
+            {
+                "actor_id": "ped-a",
+                "timestamp_s": 0.0,
+                "dt_s": 0.0,
+                "clearance_m": 1.0,
+            }
+        ]
+    )
+
+    assert report["status"] == "no-qualifying-samples"
+    assert report["denominator"]["encounter_count"] == 0
+    assert report["exclusions"][0]["reason"] == "invalid_exposure"
+    assert report["exclusions"][0]["unavailable_fields"]
+
+
+def test_missing_profile_qualification_field_is_unavailable():
+    """A missing field required by the explicit profile cannot become zero evidence."""
+    report = _encounter_report(
+        [{"actor_id": "ped-a", "timestamp_s": 0.0, "ttc_s": 0.5}],
+        profile=_encounter_profile(qualification_rule="distance"),
+    )
+
+    assert report["status"] == "unavailable"
+    assert report["denominator"]["encounter_count"] == 0
+    assert report["exclusions"][0]["reason"] == "missing_qualification_fields"
+
+
+def test_duplicate_actor_timestamps_fail_closed():
+    """Ambiguous timestamp order cannot silently define a temporal encounter."""
+    with pytest.raises(NearMissEncounterInputError, match="duplicate or non-increasing"):
+        _encounter_report(
+            [
+                {"actor_id": "ped-a", "timestamp_s": 0.0, "clearance_m": 1.0},
+                {"actor_id": "ped-a", "timestamp_s": 0.0, "clearance_m": 1.0},
+            ]
+        )
+
+
+def test_encounter_report_json_generation_is_deterministic(tmp_path):
+    """Repeated report writes are byte-identical and strict JSON safe."""
+    report = _encounter_report(
+        [
+            {
+                "actor_id": "ped-a",
+                "timestamp_s": 0.0,
+                "clearance_m": 1.0,
+                "ttc_s": 0.5,
+                "contact": False,
+            }
+        ]
+    )
+    first = write_near_miss_encounter_report(report, str(tmp_path / "first.json"))
+    second = write_near_miss_encounter_report(report, str(tmp_path / "second.json"))
+
+    assert open(first, encoding="utf-8").read() == open(second, encoding="utf-8").read()
+    json.dumps(report, allow_nan=False)

@@ -386,7 +386,7 @@ def _evaluate_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
             score_s=score_s,
         )
 
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 - per-candidate fail-closed isolation (#6690)
         runtime_s = time.perf_counter() - start_time
         return CandidateResult(
             candidate_id=candidate_id,

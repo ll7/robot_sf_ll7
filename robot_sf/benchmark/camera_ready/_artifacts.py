@@ -50,14 +50,14 @@ def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write campaign summary table in CSV format."""
+    """Write campaign summary table in CSV format with LF line endings."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
         path.write_text("", encoding="utf-8")
         return
     fieldnames = list(rows[0].keys())
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow({key: _sanitize_csv_cell(value) for key, value in row.items()})

@@ -16,19 +16,21 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
+    ANALYSIS_DELIVERED_REVIEW_PENDING,
     BLOCKED_MISSING_SUCCESSOR_ROWS,
     evaluate_hierarchical_paired_release_inputs,
     load_hierarchical_paired_release_input_manifest,
 )
+from robot_sf.evidence.writers import write_json as write_evidence_json
 from robot_sf.planner.prediction_mpc import (
     PredictionMPCPlannerAdapter,
     build_prediction_mpc_config,
 )
 
 # The issue #5351 analysis input-gate delivered by #5776: a tracked manifest plus
-# the checker module that evaluates it. The factorial readiness gate verifies this
-# input contract is present, then separately checks whether the successor-release
-# rows the analysis consumes actually exist (they do not until #4364 publishes them).
+# the checker module that evaluates it. The factorial readiness gate verifies the
+# input contract, the durable successor-release rows, and (when present) the
+# deterministic analysis report. The report remains human-review-gated.
 DEFAULT_HIERARCHICAL_INPUT_MANIFEST_RELATIVE_PATH = (
     "configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml"
 )
@@ -193,7 +195,9 @@ def validate_arm_configs(config_path: str | Path) -> dict[str, Any]:
     results: dict[str, Any] = {}
     for arm in config.get("factorial_arms", []):
         key = str(arm.get("key", ""))
-        algo_config_path = Path(arm.get("algo_config", ""))
+        algo_config_path = _resolve_existing_path(
+            str(arm.get("algo_config", "")), config_path=Path(config_path)
+        )
         if not algo_config_path.exists():
             results[key] = {"valid": False, "error": f"algo_config not found: {algo_config_path}"}
             continue
@@ -241,7 +245,7 @@ def write_preregistration_plan(plan: Mapping[str, Any], output_dir: str | Path) 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "issue_5355_prediction_mpc_factorial_preregistration_plan.json"
-    path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_evidence_json(path, dict(plan))
     return path
 
 
@@ -282,12 +286,13 @@ def dependency_blockers(dependencies: Any) -> list[str]:
     return blockers
 
 
-# Canonical issue-state truth for the #5355 factorial dependencies. This is the
-# reconciliation source of truth from #5483: #5353 (matched-capability fairness
-# contract, delivered by #5370) is resolved. #5351 remains an open blocker until
-# the required hierarchical analysis input exists. Any dependency entry declaring
-# #5353 with a non-resolved status is drifted and must fail the gate.
-RECONCILED_CLOSED_DEPENDENCY_ISSUES = frozenset({5353})
+# Canonical issue-state truth for the #5355 factorial dependencies. The matched-
+# capability contract (#5353) and hierarchical paired analysis (#5351) are closed
+# in the tracker. The latter remains human-review-gated for claim promotion, but
+# its checksum-pinned analysis artifact is no longer a campaign-input blocker.
+# Any dependency entry declaring either issue with a non-resolved status is drifted
+# and must fail the gate.
+RECONCILED_CLOSED_DEPENDENCY_ISSUES = frozenset({5351, 5353})
 
 
 def _coerce_optional_issue_id(value: Any) -> int | None:
@@ -365,8 +370,8 @@ def _record_hierarchical_input_gate_criterion(
 ) -> None:
     """Record the issue #5351 analysis input-gate reconciliation criterion.
 
-    The #5776 input-gate deliverable is verified present; the still-missing #4364
-    successor-release rows keep this criterion fail-closed.
+    The #5776 input-gate deliverable and successor-release rows are verified
+    present. The report may still be claim-gated for human review.
 
     Args:
         record: The gate's ``_record(name, ok, detail)`` callback.
@@ -383,6 +388,13 @@ def _record_hierarchical_input_gate_criterion(
             "hierarchical_input_gate_reconciled",
             False,
             f"{gate['detail']}; successor-release rows absent (blocker: #4364)",
+        )
+    elif gate["input_gate_status"] == ANALYSIS_DELIVERED_REVIEW_PENDING:
+        record(
+            "hierarchical_input_gate_reconciled",
+            True,
+            f"{gate['detail']}; successor-release rows and analysis report present; "
+            "claim promotion remains human-review-gated",
         )
     else:
         record(
@@ -504,14 +516,13 @@ def assess_hierarchical_input_gate(
     The hierarchical paired analysis (#5351) is downstream of the #4364 successor
     release. PR #5776 landed the *input contract* for that analysis — a tracked
     manifest plus the fail-closed checker that evaluates it. This function verifies
-    that input-gate deliverable is present and importable, and captures the frozen
-    input-gate evaluation so the #5355 readiness receipt records achieved progress
-    without fabricating unavailable analysis data.
+    that input-gate deliverable is present and importable, and captures the input-
+    gate and tracked analysis state so the #5355 readiness receipt records achieved
+    progress without promoting the human-review-gated result.
 
     The gate passes when the #5776 manifest and checker are present and evaluate the
-    input contract deterministically. It intentionally does **not** pass on the
-    missing successor-release rows: those remain the #5351 analysis blocker, and are
-    surfaced separately by :data:`HIERARCHICAL_INPUT_GATE_BLOCKER` when absent.
+    input contract deterministically. A delivered analysis report remains blocked
+    for human claim review.
 
     Returns:
         Reconciliation report: ``input_gate_delivered`` bool, the ``input_gate_status``
@@ -533,8 +544,8 @@ def assess_hierarchical_input_gate(
         "input_gate_delivered": False,
         "input_gate_status": "unknown",
         "claim_boundary": (
-            "Input-contract reconciliation only; no hierarchical analysis has run and no "
-            "benchmark, release, paper, or dissertation claim is supported."
+            "Input-contract and analysis-state reconciliation only; no benchmark, release, "
+            "paper, or dissertation claim is supported."
         ),
         "detail": "",
     }

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 #
-# Guarded PR branch updater with a lease-protected local fallback.
+# Guarded PR branch updater with deleted-source-ref restore and a
+# lease-protected local fallback.
 #
 # This is the safe gate helper referenced in docs/dev_guide.md.  The installed
 # GitHub CLI in some gate environments does not support `gh pr update-branch`
@@ -11,6 +12,14 @@
 # force-with-lease push.  Every mutating step is guarded by the caller-recorded
 # expected head SHA and a PR-gate worktree lease so the operation cannot
 # silently retarget a different commit or be reaped mid-flight.
+#
+# When the PR source branch has been deleted on the remote, update-branch fails
+# with "Could not resolve head ref" (issue #6689).  After the metadata read and
+# the expected-head guard pass, this script detects the missing
+# refs/heads/<head-ref> and restores it with a plain (non-force) push of the
+# immutable PR head SHA, which was already verified equal to the expected head;
+# the restore is reported in the JSON result and the normal update paths run
+# afterwards.  Cross-fork PRs with a deleted head branch fail closed instead.
 #
 # Usage:
 #     scripts/dev/update_pr_branch_safely.sh <pr> \
@@ -41,10 +50,13 @@ BASE_REF_OVERRIDE=""
 BASE_REF=""
 LIVE_HEAD=""
 HEAD_REF=""
+HEAD_REPO_FULL=""
+BASE_REPO_FULL=""
 REMOTE="origin"
 LOCAL_FALLBACK=1
 DRY_RUN=0
 GATE_WORKTREE_PATH=""
+SOURCE_REF_RESTORED=0
 
 usage() {
   echo "Usage: $0 <pr> --expected-head-sha <sha> [--repo OWNER/REPO] [options]" >&2
@@ -56,7 +68,10 @@ print_help() {
 Usage: scripts/dev/update_pr_branch_safely.sh <pr> \
     --expected-head-sha <sha> [--repo OWNER/REPO] [options]
 
-Guarded PR branch updater with a lease-protected local fallback.
+Guarded PR branch updater with deleted-source-ref restore and a
+lease-protected local fallback. A deleted PR source branch is restored
+with a plain (non-force) push of the immutable PR head SHA before the
+update path runs; cross-fork PRs with a deleted head branch fail closed.
 
 Options:
     --pr <n>                  PR number (positional also accepted)
@@ -152,11 +167,11 @@ PR="${PR:-$POS_PR}"
 emit_result() {
   # $1 status, $2 updated(bool), $3 error(string), $4 method(string)
   local status="$1" updated="$2" error="${3:-}" method="${4:-}"
-  python3 - "$status" "$PR" "$REPO" "$EXPECTED" "$LIVE_HEAD" "$BASE_REF" "$REMOTE" "$method" "$updated" "$error" <<'PY'
+  python3 - "$status" "$PR" "$REPO" "$EXPECTED" "$LIVE_HEAD" "$BASE_REF" "$REMOTE" "$method" "$updated" "$error" "$SOURCE_REF_RESTORED" <<'PY'
 import json
 import sys
 
-status, pr, repo, expected, live, base, remote, method, updated, error = sys.argv[1:]
+status, pr, repo, expected, live, base, remote, method, updated, error, restored = sys.argv[1:]
 print(
     json.dumps(
         {
@@ -169,6 +184,7 @@ print(
             "remote": remote,
             "method": method,
             "updated": updated == "true",
+            "source_ref_restored": restored == "1",
             "error": error or None,
         },
         separators=(",", ":"),
@@ -203,7 +219,7 @@ fi
 
 set +e
 META_OUTPUT="$(gh api "repos/${REPO}/pulls/${PR}" \
-  --jq '[.head.sha, .head.ref, .base.ref] | @tsv' 2>/dev/null)"
+  --jq '[.head.sha, .head.ref, .base.ref, (.head.repo.full_name // ""), (.base.repo.full_name // "")] | @tsv' 2>/dev/null)"
 META_RC=$?
 set -e
 
@@ -212,7 +228,7 @@ if [[ $META_RC -ne 0 ]] || [[ -z "$META_OUTPUT" ]]; then
   exit 2
 fi
 
-IFS=$'\t' read -r LIVE_HEAD HEAD_REF BASE_REF_RESOLVED <<< "$META_OUTPUT"
+IFS=$'\t' read -r LIVE_HEAD HEAD_REF BASE_REF_RESOLVED HEAD_REPO_FULL BASE_REPO_FULL <<< "$META_OUTPUT"
 if [[ -z "$LIVE_HEAD" || -z "$HEAD_REF" || -z "$BASE_REF_RESOLVED" ]]; then
   emit_result "error" "false" "PR metadata is missing head or base ref" ""
   exit 2
@@ -235,6 +251,76 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     "$REMOTE" >&2
   emit_result "dry_run" "false" "" "gh_rest_update_branch"
   exit 0
+fi
+
+# --- restore a deleted PR source ref (issue #6689) ----------------------------
+# A deleted head branch makes update-branch fail with "Could not resolve head
+# ref". The exact-head guard above already proved that the immutable PR head
+# SHA equals the expected head, so a plain (non-force) push of that SHA can
+# only create the absent ref; it can never overwrite or retarget an existing
+# branch. If the ref reappears concurrently, re-detect it and continue with
+# the normal update path instead of pushing. A probe failure is treated as
+# "ref present" so environments without a usable git keep the historical path.
+set +e
+PRE_RESTORE_SHA="$(git ls-remote --heads "$REMOTE" "$HEAD_REF" 2>/dev/null | awk '{print $1}' | head -n1)"
+PRE_RESTORE_RC=$?
+set -e
+if [[ $PRE_RESTORE_RC -eq 0 ]] && [[ -z "$PRE_RESTORE_SHA" ]]; then
+  if [[ "$HEAD_REF" == "$BASE_REF" ]]; then
+    emit_result "source_ref_restore_failed" "false" \
+      "refusing to restore the base branch itself (${HEAD_REF})" "source_ref_restore"
+    exit 2
+  fi
+  if [[ -z "$HEAD_REPO_FULL" ]]; then
+    emit_result "source_ref_restore_failed" "false" \
+      "PR head repository is unknown or deleted; cannot restore refs/heads/${HEAD_REF} through ${REMOTE}" "source_ref_restore"
+    exit 2
+  fi
+  BASE_REPO_COMPARE="${BASE_REPO_FULL:-$REPO}"
+  if [[ "$HEAD_REPO_FULL" != "$BASE_REPO_COMPARE" ]]; then
+    emit_result "source_ref_restore_failed" "false" \
+      "cross-fork PR: head ref lives in ${HEAD_REPO_FULL}, cannot restore through ${REMOTE} (${BASE_REPO_COMPARE})" "source_ref_restore"
+    exit 2
+  fi
+  echo "info: PR source ref refs/heads/${HEAD_REF} is missing on ${REMOTE}; restoring it at immutable PR head ${EXPECTED}" >&2
+  set +e
+  git fetch "$REMOTE" "$EXPECTED" >/dev/null 2>&1
+  RESTORE_FETCH_RC=$?
+  set -e
+  if [[ $RESTORE_FETCH_RC -ne 0 ]]; then
+    emit_result "source_ref_restore_failed" "false" \
+      "could not fetch immutable PR head SHA ${EXPECTED} from ${REMOTE}; refusing to restore refs/heads/${HEAD_REF}" "source_ref_restore"
+    exit 2
+  fi
+  FETCHED_RESTORE_SHA="$(git rev-parse FETCH_HEAD 2>/dev/null || true)"
+  if [[ "$FETCHED_RESTORE_SHA" != "$EXPECTED" ]]; then
+    emit_result "source_ref_restore_failed" "false" \
+      "fetched FETCH_HEAD (${FETCHED_RESTORE_SHA:-empty}) differs from immutable PR head ${EXPECTED}; refusing to restore" "source_ref_restore"
+    exit 2
+  fi
+  set +e
+  git push "$REMOTE" "${EXPECTED}:refs/heads/${HEAD_REF}" >/dev/null 2>&1
+  RESTORE_PUSH_RC=$?
+  set -e
+  if [[ $RESTORE_PUSH_RC -ne 0 ]]; then
+    RECHECK_SHA="$(git ls-remote --heads "$REMOTE" "$HEAD_REF" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
+    if [[ -n "$RECHECK_SHA" ]]; then
+      echo "info: refs/heads/${HEAD_REF} reappeared concurrently at ${RECHECK_SHA}; continuing with the normal update path" >&2
+    else
+      emit_result "source_ref_restore_failed" "false" \
+        "plain push restore of refs/heads/${HEAD_REF} was rejected and the ref is still missing" "source_ref_restore"
+      exit 2
+    fi
+  else
+    RESTORED_SHA="$(git ls-remote --heads "$REMOTE" "refs/heads/${HEAD_REF}" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
+    if [[ "$RESTORED_SHA" != "$EXPECTED" ]]; then
+      emit_result "source_ref_restore_failed" "false" \
+        "post-restore verification failed: remote refs/heads/${HEAD_REF} is ${RESTORED_SHA:-empty}, expected ${EXPECTED}" "source_ref_restore"
+      exit 2
+    fi
+    SOURCE_REF_RESTORED=1
+    echo "info: restored refs/heads/${HEAD_REF} at ${EXPECTED}" >&2
+  fi
 fi
 
 # --- attempt the supported remote branch-update path --------------------------

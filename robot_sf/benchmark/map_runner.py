@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
@@ -257,6 +258,12 @@ from robot_sf.planner.nmpc_social import (
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
+)
+from robot_sf.planner.protocol import (
+    DIAGNOSTICS_UNAVAILABLE_KEY,
+    DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+    PLANNER_TYPE_KEY,
+    normalize_planner_diagnostics,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
 from robot_sf.planner.safety_barrier import (  # noqa: F401
@@ -861,7 +868,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
             "status": "ok",
             "learned_policy_contract": learned_contract,
         }
-    except Exception as exc:
+    except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)
         if not _is_socnav_algorithm(algo):
             raise
         message = (
@@ -891,7 +898,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
                     "policy": policy,
                     "learned_policy_contract": learned_contract,
                 }
-            except Exception as fallback_exc:
+            except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)
                 raise RuntimeError(
                     f"{message} Fallback attempt also failed: {fallback_exc}",
                 ) from fallback_exc
@@ -2198,14 +2205,28 @@ def _build_common_adapter_policy(  # noqa: C901
         def _planner_stats() -> dict[str, Any]:
             """Expose generic adapter diagnostics for episode metadata.
 
+            Propagated through the canonical #6492 ``normalize_planner_diagnostics``
+            so the SocNav-family adapter arm shares one fail-closed diagnostics
+            schema (string ``planner_type``) with the runner native-command arm;
+            every counter the adapter already carries is preserved unchanged.
+
             Returns:
                 dict[str, Any]: Adapter diagnostic payload.
             """
             diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
-            runtime = dict(diagnostics) if isinstance(diagnostics, dict) else {}
             foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
-            if isinstance(foresight, dict):
-                runtime.update(foresight)
+            runtime = normalize_planner_diagnostics(
+                diagnostics, fallback_planner_type=type(adapter).__name__
+            )
+            if isinstance(foresight, Mapping):
+                for key, value in foresight.items():
+                    if key in {
+                        PLANNER_TYPE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+                    }:
+                        continue
+                    runtime[key] = value
             return runtime
 
         _policy._planner_stats = _planner_stats

@@ -12,10 +12,10 @@ dissertation claim on its own.
 The engine is pure and deterministic given a seeded RNG.  It is designed to run
 over the typed-ledger successor rows produced by the #4364 release cut
 (``EpisodeEventLedger.v2`` rows).  Until those rows exist it fail-closes: the
-runner refuses placeholder/empty input and, even when real rows are supplied,
-the emitted claim gate stays ``blocked_analysis_not_run`` until the analysis is
-actually executed and reviewed.  Synthetic-fixture unit tests prove the
-estimators compute the intended values; they are not benchmark evidence.
+runner refuses placeholder/empty input.  When real rows are supplied, the emitted
+claim gate stays ``blocked_review_pending`` until a human reviews the deterministic
+report.  Synthetic-fixture unit tests prove the estimators compute the intended
+values; they are not benchmark evidence.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from robot_sf.benchmark.event_ledger import (
 )
 from robot_sf.benchmark.finite_checks import require_finite_scalar
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
+    ANALYSIS_DELIVERED_REVIEW_PENDING,
     INPUTS_READY_ANALYSIS_NOT_RUN,
     evaluate_hierarchical_paired_release_inputs,
     validate_hierarchical_paired_release_input_manifest,
@@ -857,7 +858,8 @@ def _require_ready_successor_release_inputs(
 
     input_report = evaluate_hierarchical_paired_release_inputs(manifest, repo_root=repo_root)
     if (
-        input_report["status"] != INPUTS_READY_ANALYSIS_NOT_RUN
+        input_report["status"]
+        not in {INPUTS_READY_ANALYSIS_NOT_RUN, ANALYSIS_DELIVERED_REVIEW_PENDING}
         or input_report["blocking_prerequisites"]
     ):
         raise HierarchicalPairedReleaseAnalysisError(

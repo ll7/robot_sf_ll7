@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schemas/robot_sf_ecosystem_revision_envelope.v1.json",
+  "title": "Robot SF ecosystem contract revision envelope v1",
+  "description": "Digest-bound revision provenance for one Robot SF ecosystem contract instance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer_id",
+    "repository_url",
+    "source_commit",
+    "release_status",
+    "contract",
+    "lock",
+    "generator"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "robot_sf_ecosystem_revision_envelope.v1"
+    },
+    "producer_id": {
+      "const": "robot_sf"
+    },
+    "repository_url": {
+      "const": "https://github.com/ll7/robot_sf_ll7"
+    },
+    "source_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "release_status": {
+      "enum": ["unreleased", "tagged", "released"]
+    },
+    "release_tag": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract": {
+      "$ref": "#/$defs/digest_bound_file"
+    },
+    "lock": {
+      "$ref": "#/$defs/digest_bound_file"
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "version", "canonicalization_profile"],
+      "properties": {
+        "path": {
+          "const": "scripts/tools/build_robot_sf_ecosystem_contract.py"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "canonicalization_profile": {
+          "const": "RFC8785"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "release_status": {"enum": ["tagged", "released"]}
+        }
+      },
+      "then": {
+        "required": ["release_tag"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "release_status": {"const": "unreleased"}
+        }
+      },
+      "then": {
+        "not": {"required": ["release_tag"]}
+      }
+    }
+  ],
+  "$defs": {
+    "digest_bound_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*\\\\)(?!\\.{1,2}(?:/|$))(?!.*\\/(?:\\.{1,2})(?:/|$))(?!.*//)(?!.*\\/$).+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

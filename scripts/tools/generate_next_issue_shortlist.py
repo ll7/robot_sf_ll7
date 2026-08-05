@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 
 def _load_json(path: Path) -> dict[str, Any] | None:
     """Load JSON file; return None if missing (degradation, not error)."""
@@ -577,13 +579,10 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     json_out = out_dir / "summary.json"
-    json_out.write_text(
-        json.dumps(json_report, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(json_out, json_report)
 
     md_out = out_dir / "README.md"
-    md_out.write_text(md_text, encoding="utf-8")
+    write_text(md_out, md_text, issue_ref="robot_sf#2811")
 
     print(f"JSON shortlist written to {json_out}")
     print(f"Markdown shortlist written to {md_out}")

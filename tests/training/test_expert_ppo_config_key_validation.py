@@ -298,10 +298,11 @@ def test_chained_intermediate_base_is_not_a_canonical_expert_leaf() -> None:
     """Intermediate bases stay out of the leaf gate, while runnable leaves stay in it.
 
     Issue #6680 introduced the issue_576_br06 predictive sub-base as an
-    intermediate between the family base and the v5-v11 variants. It holds
-    shared keys that are covered transitively through its runnable predictive
-    variants. It is independently loadable after #6748, but it is still not a
-    leaf because those variants inherit from it.
+    intermediate between the family base and the v5-v11 variants. Issue #6691
+    likewise made the issue_791 all-scenarios leader an intermediate for the
+    best-checkpoint config. Both hold shared keys covered transitively through
+    their runnable descendants and are independently loadable, but neither is
+    a canonical leaf.
     """
     config_paths = _canonical_expert_configs()
     selected_relative = {str(p.relative_to(_REPO_ROOT)) for p in config_paths}

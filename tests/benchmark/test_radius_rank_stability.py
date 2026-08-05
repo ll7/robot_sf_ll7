@@ -181,7 +181,7 @@ def _write_gate1_receipt(path: Path, *, go: bool = True) -> None:
         "simulator_collision_geometry",
         "obstacle_pedestrian_contact_logic",
         "feasibility_oracle",
-        "metric_metadata",
+        "metric_metadata_and_output_rows",
         "planner_inputs",
     )
     path.write_text(
@@ -270,6 +270,32 @@ def test_metric_identifiable_requires_variance() -> None:
 
     varied = {"a": {"m": 0.5}, "b": {"m": 0.9}}
     assert _metric_identifiable(varied, "m") == (True, None)
+
+
+# --- Gate 1 canary surface vocabulary -------------------------------------
+
+
+def test_gate1_canary_surface_vocabulary_matches_real_emitter() -> None:
+    """The Gate 3 checker must accept the surface names the Gate 1 canary emits.
+
+    The merged Gate 1 canary (robot_sf/benchmark/radius_binding_canary.py,
+    SURFACE_METRIC_METADATA) emits ``metric_metadata_and_output_rows``, not the
+    shortened ``metric_metadata``. A mismatch here silently rejects a real passing
+    receipt at promotion time, so the expected set is locked to the emitter name.
+    """
+    from robot_sf.benchmark.radius_rank_stability import GATE1_CANARY_SURFACES
+
+    assert "metric_metadata_and_output_rows" in GATE1_CANARY_SURFACES
+    assert "metric_metadata" not in GATE1_CANARY_SURFACES
+
+
+def test_real_gate1_receipt_shape_passes_checker(tmp_path: Path) -> None:
+    """A schema-valid Gate 1 report with the emitter surface names is accepted."""
+    from robot_sf.benchmark.radius_rank_stability import _gate1_canary_receipt_is_passing
+
+    receipt_path = tmp_path / "canary.json"
+    _write_gate1_receipt(receipt_path)
+    assert _gate1_canary_receipt_is_passing(receipt_path) is True
 
 
 # --- missingness ledger ----------------------------------------------------

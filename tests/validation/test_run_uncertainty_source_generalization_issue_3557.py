@@ -62,13 +62,13 @@ def test_write_report_artifacts(tmp_path) -> None:
 
     summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert summary["schema_version"] == SCHEMA_VERSION
+    assert summary["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert "source_reports" not in summary
-    assert (
-        (tmp_path / "per_source_decisions.csv")
-        .read_text(encoding="utf-8")
-        .startswith("source,condition_builder")
-    )
+    csv_lines = (tmp_path / "per_source_decisions.csv").read_text(encoding="utf-8").splitlines()
+    assert csv_lines[0] == "# AI-GENERATED NEEDS-REVIEW"
+    assert csv_lines[1].startswith("source,condition_builder")
     readme = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert readme.splitlines()[0] == "<!-- AI-GENERATED (robot_sf#3557) - NEEDS-REVIEW -->"
     assert CLAIM_BOUNDARY in readme
     assert "not a full benchmark campaign" in readme
 

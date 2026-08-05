@@ -390,8 +390,15 @@ prevents merging a PR whose CI ran against a stale main:
   provide `gh pr update-branch`, use the guarded repository helper after recording the current
   head SHA. The drop-in `scripts/dev/update_pr_branch_safely.sh <number> --expected-head-sha <sha>`
   tries `gh`/`gh api` update-branch first and falls back to a lease-protected local rebase/push when
-  that path is unavailable (issue #5775). The older REST-only `scripts/dev/update_pr_branch.py` is
-  kept for environments where the REST `update-branch` endpoint works.
+  that path is unavailable (issue #5775). If the PR source branch was deleted on the remote, the
+  helper detects the missing `refs/heads/<head-ref>` after the expected-head guard passes and
+  restores it with a plain (non-force) push of the immutable PR head SHA, which it already verified
+  equal to `--expected-head-sha`; the restore is reported in the JSON result (`source_ref_restored`,
+  additive `source_ref_restore_failed` / `source_ref_restore` values) and the normal update path
+  runs afterwards. Cross-fork PRs with a deleted head branch and unreachable immutable head SHAs
+  fail closed with a machine-readable error instead of attempting a restore (issue #6689). The
+  older REST-only `scripts/dev/update_pr_branch.py` is kept for environments where the REST
+  `update-branch` endpoint works.
 
 **Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
 PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule

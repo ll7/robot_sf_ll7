@@ -20,6 +20,8 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 
+_DEFAULT_GUARD_ROLLOUT_STEPS = 6
+
 
 class _CommandPlanner(Protocol):
     """Protocol for local planners that emit benchmark unicycle commands."""
@@ -33,7 +35,7 @@ class GuardedPPOConfig:
     """Configuration for the PPO safety guard."""
 
     rollout_dt: float = 0.2
-    rollout_steps: int = 6
+    rollout_steps: int = _DEFAULT_GUARD_ROLLOUT_STEPS
     goal_tolerance: float = 0.25
     near_field_distance: float = 2.0
     hard_ped_clearance: float = 0.58
@@ -1077,7 +1079,7 @@ def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:
         return GuardedPPOConfig()
     return GuardedPPOConfig(
         rollout_dt=float(cfg.get("guard_rollout_dt", 0.2)),
-        rollout_steps=int(cfg.get("guard_rollout_steps", 6)),
+        rollout_steps=int(cfg.get("guard_rollout_steps", _DEFAULT_GUARD_ROLLOUT_STEPS)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
         near_field_distance=float(cfg.get("guard_near_field_distance", 2.0)),
         hard_ped_clearance=float(cfg.get("guard_hard_ped_clearance", 0.58)),

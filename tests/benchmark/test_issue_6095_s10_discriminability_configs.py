@@ -1,0 +1,315 @@
+"""Contract tests for issue #6095 S10 ORCA/PPO discriminability calibration configs."""
+
+from __future__ import annotations
+
+import hashlib
+from copy import deepcopy
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+import robot_sf.benchmark.camera_ready._preflight as preflight_module
+from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
+from robot_sf.benchmark.camera_ready._preflight import (
+    _build_preflight_preview_payload,
+    _campaign_config_provenance,
+    _scenario_matrix_hash,
+)
+from robot_sf.benchmark.camera_ready_campaign import _load_campaign_scenarios, load_campaign_config
+
+ROOT = Path(__file__).resolve().parents[2]
+NOMINAL = ROOT / "configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml"
+STRESS = ROOT / "configs/benchmarks/issue_6095_stress_discriminability_v1.yaml"
+PPO_ALGO = ROOT / "configs/baselines/ppo_15m_grid_socnav.yaml"
+ROUTE_CLEARANCE_CERTIFICATIONS = ROOT / "configs/benchmarks/route_clearance_certifications_v1.yaml"
+S10_SEEDS = [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _planner_keys(config: dict[str, Any]) -> list[str]:
+    return [str(planner["key"]) for planner in config["planners"]]
+
+
+def _planner_algos(config: dict[str, Any]) -> list[str]:
+    return [str(planner["algo"]) for planner in config["planners"]]
+
+
+def _resolved_seed_inventory(config_path: Path) -> list[int]:
+    cfg = load_campaign_config(config_path)
+    return sorted(
+        {int(seed) for scenario in _load_campaign_scenarios(cfg) for seed in scenario["seeds"]}
+    )
+
+
+def _execution_matrix_row_count(
+    cfg: CampaignConfig,
+    scenarios: list[dict[str, Any]],
+) -> int:
+    """Return planned scenario-seed-planner rows from the resolved execution matrix."""
+    seed_row_count = sum(len(scenario["seeds"]) for scenario in scenarios)
+    enabled_planner_count = sum(1 for planner in cfg.planners if planner.enabled)
+    return seed_row_count * enabled_planner_count
+
+
+class TestIssue6095NominalConfig:
+    """Contract checks for the nominal discriminability config."""
+
+    def test_planners_are_orca_and_ppo_only(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        assert _planner_keys(cfg) == ["orca", "ppo"]
+        assert _planner_algos(cfg) == ["orca", "ppo"]
+
+    def test_ppo_has_existing_algo_config(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        ppo = next(p for p in cfg["planners"] if p["key"] == "ppo")
+        algo_path = ROOT / str(ppo["algo_config"])
+        assert algo_path.is_file(), f"PPO algo_config not found: {algo_path}"
+        assert algo_path.samefile(PPO_ALGO)
+
+    def test_seed_policy_is_paper_eval_s10(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        assert cfg["seed_policy"]["mode"] == "seed-set"
+        assert cfg["seed_policy"]["seed_set"] == "paper_eval_s10"
+
+    def test_resolved_seeds_match_s10(self) -> None:
+        assert _resolved_seed_inventory(NOMINAL) == S10_SEEDS
+
+    def test_horizon_dt_kinematics(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        assert cfg["horizon"] == 100
+        assert cfg["dt"] == 0.1
+        assert cfg["kinematics_matrix"] == ["differential_drive"]
+
+    def test_paper_facing_is_false(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        assert cfg["paper_facing"] is False
+
+    def test_stop_on_failure_is_false(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        assert cfg["stop_on_failure"] is False
+
+    def test_route_clearance_and_orca_prerequisites_are_fail_closed(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        assert cfg["route_clearance_certifications"] == (
+            "configs/benchmarks/route_clearance_certifications_v1.yaml"
+        )
+        assert ROUTE_CLEARANCE_CERTIFICATIONS.is_file()
+        orca = next(planner for planner in cfg["planners"] if planner["key"] == "orca")
+        assert orca["socnav_missing_prereq_policy"] == "fail-fast"
+
+    def test_scenario_count(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        matrix_path = ROOT / str(cfg["scenario_matrix"])
+        matrix = _load_yaml(matrix_path)
+        select = matrix.get("select_scenarios", [])
+        assert len(select) == 4
+
+
+class TestIssue6095StressConfig:
+    """Contract checks for the stress discriminability config."""
+
+    def test_planners_are_orca_and_ppo_only(self) -> None:
+        cfg = _load_yaml(STRESS)
+        assert _planner_keys(cfg) == ["orca", "ppo"]
+        assert _planner_algos(cfg) == ["orca", "ppo"]
+
+    def test_ppo_has_existing_algo_config(self) -> None:
+        cfg = _load_yaml(STRESS)
+        ppo = next(p for p in cfg["planners"] if p["key"] == "ppo")
+        algo_path = ROOT / str(ppo["algo_config"])
+        assert algo_path.is_file(), f"PPO algo_config not found: {algo_path}"
+        assert algo_path.samefile(PPO_ALGO)
+
+    def test_seed_policy_is_paper_eval_s10(self) -> None:
+        cfg = _load_yaml(STRESS)
+        assert cfg["seed_policy"]["mode"] == "seed-set"
+        assert cfg["seed_policy"]["seed_set"] == "paper_eval_s10"
+
+    def test_resolved_seeds_match_s10(self) -> None:
+        assert _resolved_seed_inventory(STRESS) == S10_SEEDS
+
+    def test_horizon_dt_kinematics(self) -> None:
+        cfg = _load_yaml(STRESS)
+        assert cfg["horizon"] == 100
+        assert cfg["dt"] == 0.1
+        assert cfg["kinematics_matrix"] == ["differential_drive"]
+
+    def test_paper_facing_is_false(self) -> None:
+        cfg = _load_yaml(STRESS)
+        assert cfg["paper_facing"] is False
+
+    def test_stop_on_failure_is_false(self) -> None:
+        cfg = _load_yaml(STRESS)
+        assert cfg["stop_on_failure"] is False
+
+    def test_route_clearance_and_orca_prerequisites_are_fail_closed(self) -> None:
+        cfg = _load_yaml(STRESS)
+        assert cfg["route_clearance_certifications"] == (
+            "configs/benchmarks/route_clearance_certifications_v1.yaml"
+        )
+        assert ROUTE_CLEARANCE_CERTIFICATIONS.is_file()
+        orca = next(planner for planner in cfg["planners"] if planner["key"] == "orca")
+        assert orca["socnav_missing_prereq_policy"] == "fail-fast"
+
+    def test_stress_scenario_count(self) -> None:
+        cfg = _load_yaml(STRESS)
+        matrix_path = ROOT / str(cfg["scenario_matrix"])
+        matrix = _load_yaml(matrix_path)
+        includes = matrix.get("includes", [])
+        assert len(includes) >= 2
+
+
+class TestIssue6095CrossConfig:
+    """Cross-config contract checks."""
+
+    def test_both_configs_share_same_seed_policy(self) -> None:
+        nominal = _load_yaml(NOMINAL)
+        stress = _load_yaml(STRESS)
+        assert nominal["seed_policy"] == stress["seed_policy"]
+
+    def test_both_configs_share_same_planner_rows(self) -> None:
+        nominal = _load_yaml(NOMINAL)
+        stress = _load_yaml(STRESS)
+        assert nominal["planners"] == stress["planners"]
+
+    def test_both_configs_share_horizon_dt_kinematics(self) -> None:
+        nominal = _load_yaml(NOMINAL)
+        stress = _load_yaml(STRESS)
+        assert nominal["horizon"] == stress["horizon"] == 100
+        assert nominal["dt"] == stress["dt"] == 0.1
+        assert nominal["kinematics_matrix"] == stress["kinematics_matrix"]
+
+    def test_expected_row_count_nominal(self) -> None:
+        cfg = load_campaign_config(NOMINAL)
+        scenarios = _load_campaign_scenarios(cfg)
+        assert len(scenarios) == 4
+        assert sum(len(scenario["seeds"]) for scenario in scenarios) == 40
+        assert sum(1 for planner in cfg.planners if planner.enabled) == 2
+        assert _execution_matrix_row_count(cfg, scenarios) == 80
+
+    def test_expected_row_count_stress(self) -> None:
+        cfg = load_campaign_config(STRESS)
+        scenarios = _load_campaign_scenarios(cfg)
+        assert len(scenarios) == 48
+        assert sum(len(scenario["seeds"]) for scenario in scenarios) == 480
+        assert sum(1 for planner in cfg.planners if planner.enabled) == 2
+        assert _execution_matrix_row_count(cfg, scenarios) == 960
+
+    def test_execution_row_count_uses_resolved_seed_rows_and_enabled_planners(self) -> None:
+        cfg = load_campaign_config(NOMINAL)
+        single_planner_cfg = replace(
+            cfg,
+            planners=(
+                replace(cfg.planners[0], enabled=True),
+                replace(cfg.planners[1], enabled=False),
+            ),
+        )
+        assert (
+            _execution_matrix_row_count(
+                single_planner_cfg,
+                [{"seeds": [111]}, {"seeds": [112, 113]}],
+            )
+            == 3
+        )
+
+    def test_different_scenario_matrices(self) -> None:
+        nominal = _load_yaml(NOMINAL)
+        stress = _load_yaml(STRESS)
+        assert nominal["scenario_matrix"] != stress["scenario_matrix"]
+
+    def test_nominal_preview_keeps_route_override_provenance_portable(self) -> None:
+        cfg = load_campaign_config(NOMINAL)
+        preview = _build_preflight_preview_payload(
+            cfg,
+            campaign_id="issue_6095_test",
+            created_at_utc="2026-07-25T00:00:00Z",
+            scenarios=_load_campaign_scenarios(cfg),
+            route_clearance_warnings=[],
+            route_clearance_warning_summary={
+                "warning_count": 0,
+                "certified_warning_count": 0,
+                "unresolved_warning_count": 0,
+                "status_counts": {},
+                "unresolved_scenarios": [],
+            },
+        )
+        route_override = next(
+            scenario["route_overrides_file"]
+            for scenario in preview["scenarios"]
+            if "route_overrides_file" in scenario
+        )
+        assert preview["config_path"] == NOMINAL.relative_to(ROOT).as_posix()
+        assert preview["config_sha256"] == hashlib.sha256(NOMINAL.read_bytes()).hexdigest()
+        assert route_override == "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml"
+        assert not Path(route_override).is_absolute()
+
+    def test_nominal_scenario_hash_is_portable_across_worktree_roots(
+        self,
+        tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
+        """Resolved route-override paths must not change the nominal matrix identity."""
+        scenarios = _load_campaign_scenarios(load_campaign_config(NOMINAL))
+        alternate_worktree = tmp_path / "alternate-worktree"
+        alternate_scenarios = deepcopy(scenarios)
+
+        route_override = next(
+            scenario["route_overrides_file"]
+            for scenario in scenarios
+            if "route_overrides_file" in scenario
+        )
+        assert Path(route_override).is_absolute()
+        alternate_route_override = (
+            alternate_worktree / Path(route_override).relative_to(ROOT)
+        ).as_posix()
+        next(scenario for scenario in alternate_scenarios if "route_overrides_file" in scenario)[
+            "route_overrides_file"
+        ] = alternate_route_override
+
+        def _relative_to_owning_worktree(path: Path) -> str:
+            resolved = path.resolve()
+            for worktree_root in (ROOT, alternate_worktree):
+                try:
+                    return resolved.relative_to(worktree_root.resolve()).as_posix()
+                except ValueError:
+                    continue
+            return resolved.as_posix()
+
+        monkeypatch.setattr(preflight_module, "_repo_relative", _relative_to_owning_worktree)
+
+        assert _scenario_matrix_hash(scenarios) == _scenario_matrix_hash(alternate_scenarios)
+
+    def test_preflight_uses_config_checksum_snapshotted_at_load(
+        self,
+        tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
+        source_config = tmp_path / "campaign.yaml"
+        scenario_matrix = load_campaign_config(NOMINAL).scenario_matrix_path
+        source_config.write_text(
+            "name: source-config-snapshot\n"
+            f"scenario_matrix: {scenario_matrix}\n"
+            "planners:\n"
+            "  - key: snapshot-orca\n"
+            "    algo: orca\n",
+            encoding="utf-8",
+        )
+        source_bytes = source_config.read_bytes()
+        cfg = load_campaign_config(source_config)
+
+        source_config.write_text("name: mutated-after-load\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "robot_sf.benchmark.camera_ready._preflight._repo_relative",
+            lambda _path: "configs/benchmarks/snapshot.yaml",
+        )
+
+        assert cfg.source_config_sha256 == hashlib.sha256(source_bytes).hexdigest()
+        assert _campaign_config_provenance(cfg) == {
+            "config_path": "configs/benchmarks/snapshot.yaml",
+            "config_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        }

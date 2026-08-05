@@ -102,6 +102,7 @@ def test_checked_in_declarations_verify_and_report(tmp_path: Path) -> None:
     assert exit_code == 0
     report = json.loads(json_path.read_text(encoding="utf-8"))
     assert report["overall_status"] == "pass"
+    assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert report["status_counts"] == {
         "match": 10,
         "mismatch": 0,
@@ -109,6 +110,10 @@ def test_checked_in_declarations_verify_and_report(tmp_path: Path) -> None:
         "blocked": 0,
     }
     text = report_path.read_text(encoding="utf-8")
+    # The pinned provenance marker is preserved byte-for-byte by the shared writer.
+    assert (
+        text.splitlines()[0] == "<!-- AI-GENERATED (robot_sf#4366, 2026-07-04) - NEEDS-REVIEW -->"
+    )
     assert "AI-GENERATED" in text
     assert "heatmap_per_family_means_source" in text
     assert "issue_4366_heatmap_per_family_means_source_locator.yaml" in text

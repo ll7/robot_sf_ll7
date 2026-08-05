@@ -218,8 +218,17 @@ def test_all_runtime_ppo_coercion_keys_are_accepted() -> None:
     _validate(data)
 
 
-def _canonical_expert_configs() -> tuple[Path, ...]:
-    """Find tracked configs intended for ExpertTrainingConfig or its recurrent extension."""
+def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, ...]:
+    """Find tracked configs intended for ExpertTrainingConfig or its recurrent extension.
+
+    A tracked config is canonical when it is a full config on its own or an
+    expert overlay that no other tracked config uses as a base. An incomplete
+    referenced overlay is an intermediate node rather than a runnable leaf;
+    its shared keys are validated transitively through the runnable variants
+    that inherit them. A referenced overlay may still be independently
+    loadable (as with the predictive sub-base after #6748), but it is not a
+    leaf and remains covered through its descendants.
+    """
     required_keys = {
         "convergence",
         "evaluation",
@@ -227,22 +236,50 @@ def _canonical_expert_configs() -> tuple[Path, ...]:
         "scenario_config",
         "total_timesteps",
     }
+    runnable_overlay_keys = {"env_factory_kwargs", "num_envs", "worker_mode"}
+    tracked_paths = sorted(config_root.rglob("*.yaml"))
+    # Resolve base_config references exactly like train_ppo does so chained
+    # intermediate bases (configs used as a base by another tracked config)
+    # are identifiable across subdirectories.
+    base_reference_paths: set[Path] = set()
+    for config_path in tracked_paths:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, Mapping):
+            continue
+        base_raw = raw.get("base_config")
+        if not isinstance(base_raw, str):
+            continue
+        base_path = Path(base_raw)
+        if not base_path.is_absolute():
+            base_path = config_path.parent / base_path
+        base_reference_paths.add(base_path.resolve())
+
     selected: list[Path] = []
-    for config_path in sorted(_CONFIG_ROOT.rglob("*.yaml")):
+    for config_path in tracked_paths:
         raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if not isinstance(raw, Mapping):
             continue
         raw_keys = set(raw)
         is_full_config = required_keys <= raw_keys
         is_expert_overlay = "base_config" in raw_keys and "candidates" not in raw_keys
-        if is_full_config or is_expert_overlay:
+        # A runnable overlay has its own execution controls.  The predictive
+        # sub-base is independently loadable after #6748, but intentionally
+        # lacks those controls and remains an intermediate shared overlay.
+        is_runnable_expert_overlay = runnable_overlay_keys <= raw_keys
+        is_intermediate_base = (
+            is_expert_overlay
+            and not is_full_config
+            and not is_runnable_expert_overlay
+            and config_path.resolve() in base_reference_paths
+        )
+        if is_full_config or (is_expert_overlay and not is_intermediate_base):
             selected.append(config_path)
     return tuple(selected)
 
 
 def test_all_tracked_canonical_expert_configs_load() -> None:
     config_paths = _canonical_expert_configs()
-    assert len(config_paths) >= 130
+    assert len(config_paths) == 136
 
     failures: list[str] = []
     for config_path in config_paths:
@@ -253,6 +290,72 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
             failures.append(f"{relative_path}: {type(exc).__name__}: {exc}")
 
     assert not failures, "\n".join(failures)
+
+
+def test_chained_intermediate_base_is_not_a_canonical_expert_leaf() -> None:
+    """Intermediate bases stay out of the leaf gate, while runnable leaves stay in it.
+
+    Issue #6680 introduced the issue_576_br06 predictive sub-base as an
+    intermediate between the family base and the v5-v11 variants. It holds
+    shared keys that are covered transitively through its runnable predictive
+    variants. It is independently loadable after #6748, but it is still not a
+    leaf because those variants inherit from it.
+    """
+    config_paths = _canonical_expert_configs()
+    selected_relative = {str(p.relative_to(_REPO_ROOT)) for p in config_paths}
+
+    sub_base = _CONFIG_ROOT / "expert_ppo_issue_576_br06_predictive_sub_base.yaml"
+    assert str(sub_base.relative_to(_REPO_ROOT)) not in selected_relative
+    assert sub_base in _CONFIG_ROOT.rglob("expert_ppo_issue_576_br06_predictive_sub_base.yaml")
+    v3 = _CONFIG_ROOT / "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
+    assert str(v3.relative_to(_REPO_ROOT)) in selected_relative
+    train_ppo.load_expert_training_config(sub_base)
+    for variant in _CONFIG_ROOT.rglob("expert_ppo_*_predictive*.yaml"):
+        if variant == sub_base:
+            continue
+        assert str(variant.relative_to(_REPO_ROOT)) in selected_relative
+
+
+def test_incomplete_intermediate_base_is_excluded_but_leaf_is_selected(
+    tmp_path: Path,
+) -> None:
+    """Keep a non-runnable referenced overlay from re-entering the load gate."""
+    config_root = tmp_path / "ppo"
+    config_root.mkdir()
+    (config_root / "base.yaml").write_text(
+        yaml.safe_dump({"scenario_config": "scenarios.yaml"}),
+        encoding="utf-8",
+    )
+    intermediate = config_root / "intermediate.yaml"
+    intermediate.write_text(
+        yaml.safe_dump({"base_config": "base.yaml", "tracking": {"enabled": True}}),
+        encoding="utf-8",
+    )
+    leaf = config_root / "leaf.yaml"
+    leaf.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": "intermediate.yaml",
+                "policy_id": "leaf",
+                "total_timesteps": 1,
+                "convergence": {
+                    "success_rate": 0.9,
+                    "collision_rate": 0.05,
+                    "plateau_window": 10,
+                },
+                "evaluation": {
+                    "evaluation_episodes": 1,
+                    "step_schedule": [{"every_steps": 1}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    selected = set(_canonical_expert_configs(config_root))
+
+    assert intermediate not in selected
+    assert leaf in selected
 
 
 def test_base_config_typo_survives_merge_and_is_rejected(tmp_path: Path) -> None:

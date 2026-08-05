@@ -1799,9 +1799,8 @@ class TestSpaceTimeFeasibilityOracle:
             discretization=_discretization_stub(),
         )
         assert not result.feasible
-        payload = space_time_feasibility_result_to_dict(result)
-        assert payload["witness_found"] is False
-        assert payload["witness_valid"] is False
+        with pytest.raises(ValueError, match="replay-validated witness"):
+            space_time_feasibility_result_to_dict(result)
 
     def test_payload_suppresses_contradictory_witness_metadata(self) -> None:
         result = SpaceTimeFeasibilityResult(

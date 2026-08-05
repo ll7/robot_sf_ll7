@@ -2637,6 +2637,10 @@ def _validate_space_time_payload_contract(
         or result.verdict not in _SPACE_TIME_FEASIBILITY_VERDICTS
     ):
         raise ValueError(f"unsupported space-time feasibility verdict: {result.verdict!r}")
+    if result.verdict == FEASIBILITY_FEASIBLE and not result.feasible:
+        raise ValueError(
+            "feasible space-time verdict requires a non-empty replay-validated witness"
+        )
     if result.claim_boundary != SPACE_TIME_FEASIBILITY_CLAIM_BOUNDARY:
         raise ValueError(
             "space-time feasibility claim_boundary must remain "

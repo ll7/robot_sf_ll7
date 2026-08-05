@@ -279,7 +279,9 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
 
 def test_all_tracked_canonical_expert_configs_load() -> None:
     config_paths = _canonical_expert_configs()
-    assert len(config_paths) == 136
+    # The issue-791 leader became a shared intermediate base in #6691, so the
+    # runnable-leaf inventory is one smaller without dropping a config file.
+    assert len(config_paths) == 135
 
     failures: list[str] = []
     for config_path in config_paths:
@@ -296,10 +298,11 @@ def test_chained_intermediate_base_is_not_a_canonical_expert_leaf() -> None:
     """Intermediate bases stay out of the leaf gate, while runnable leaves stay in it.
 
     Issue #6680 introduced the issue_576_br06 predictive sub-base as an
-    intermediate between the family base and the v5-v11 variants. It holds
-    shared keys that are covered transitively through its runnable predictive
-    variants. It is independently loadable after #6748, but it is still not a
-    leaf because those variants inherit from it.
+    intermediate between the family base and the v5-v11 variants. Issue #6691
+    likewise made the issue_791 all-scenarios leader an intermediate for the
+    best-checkpoint config. Both hold shared keys covered transitively through
+    their runnable descendants and are independently loadable, but neither is
+    a canonical leaf.
     """
     config_paths = _canonical_expert_configs()
     selected_relative = {str(p.relative_to(_REPO_ROOT)) for p in config_paths}
@@ -307,6 +310,10 @@ def test_chained_intermediate_base_is_not_a_canonical_expert_leaf() -> None:
     sub_base = _CONFIG_ROOT / "expert_ppo_issue_576_br06_predictive_sub_base.yaml"
     assert str(sub_base.relative_to(_REPO_ROOT)) not in selected_relative
     assert sub_base in _CONFIG_ROOT.rglob("expert_ppo_issue_576_br06_predictive_sub_base.yaml")
+    issue_791_leader = (
+        _CONFIG_ROOT / "ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml"
+    )
+    assert str(issue_791_leader.relative_to(_REPO_ROOT)) not in selected_relative
     v3 = _CONFIG_ROOT / "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
     assert str(v3.relative_to(_REPO_ROOT)) in selected_relative
     train_ppo.load_expert_training_config(sub_base)

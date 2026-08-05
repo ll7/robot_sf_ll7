@@ -98,7 +98,10 @@ def __getattr__(name: str) -> Any:
         except ImportError:  # pragma: no cover - optional dependency
             value = Any if name == "PredictiveTrajectoryModel" else None
         else:
-            value = getattr(module, name)
+            try:
+                value = getattr(module, name)
+            except ImportError:  # pragma: no cover - optional torch dependency
+                value = Any if name == "PredictiveTrajectoryModel" else None
         globals()[name] = value
         return value
 

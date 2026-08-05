@@ -194,6 +194,42 @@ def test_quality_metrics_exclude_unreviewed_and_degraded_rows_without_forcing_la
     assert by_case["no_failure_case"]["reference"]["detected"] == "not_detected"
 
 
+@pytest.mark.parametrize(
+    ("record_kind", "status", "excluded_reason"),
+    (
+        ("diagnosis", "invalid", "diagnosis_status:invalid"),
+        ("diagnosis", "fallback", "diagnosis_status:fallback"),
+        ("reference", "invalid", "reference_record_status:invalid"),
+        ("reference", "fallback", "reference_record_status:fallback"),
+    ),
+)
+def test_quality_invalid_and_fallback_statuses_exclude_all_metric_denominators(
+    record_kind: str, status: str, excluded_reason: str
+) -> None:
+    """Invalid and fallback candidate/reference rows cannot become quality evidence."""
+    fixture = _reference_fixture()
+    candidates = _quality_candidates()
+    baseline = evaluate_failure_diagnosis_quality(candidates, fixture)
+    case_id = "collision_case"
+
+    if record_kind == "diagnosis":
+        candidates[case_id]["status"] = status
+    else:
+        fixture["records"][0]["status"] = status
+
+    report = evaluate_failure_diagnosis_quality(candidates, fixture)
+    by_case = {row["case_id"]: row for row in report["case_comparisons"]}
+    for metric_name in _QUALITY_METRICS:
+        metric = report[metric_name]
+        baseline_metric = baseline[metric_name]
+        assert metric["denominator"] == baseline_metric["denominator"] - 1
+        assert metric["excluded_count"] == baseline_metric["excluded_count"] + 1
+        assert metric["excluded_reasons"][excluded_reason] == 1
+        comparison = by_case[case_id]["metrics"][metric_name]
+        assert comparison["status"] == "excluded"
+        assert excluded_reason in comparison["excluded_reasons"]
+
+
 def test_quality_macro_f1_penalizes_known_type_confusion() -> None:
     """Macro-F1 uses only known, detected cases and penalizes a wrong class."""
     candidates = _quality_candidates()

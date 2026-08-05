@@ -625,7 +625,9 @@ class TestVerificationScript:
         }
 
         assert expected_source_paths <= entry_paths
-        source_path = "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+        source_path = (
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+        )
         historical_source = subprocess.run(
             [
                 "git",

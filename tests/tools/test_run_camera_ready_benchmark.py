@@ -425,6 +425,47 @@ class TestOrcaRvo2PreflightCli:
             exit_code = orca_preflight_cli.main(["--config", str(config_path)])
         assert exit_code == 1
 
+    def test_cli_json_reports_actionable_rvo2_blocker(self, tmp_path: Path, capsys) -> None:
+        """JSON mode exposes the dependency blocker to queue-promotion tooling."""
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, algo="orca", key="orca_nominal")
+        with _rvo2_missing():
+            exit_code = orca_preflight_cli.main(["--config", str(config_path), "--json"])
+
+        assert exit_code == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["schema_version"] == "orca-rvo2-preflight.v1"
+        assert payload["status"] == "blocked"
+        assert payload["submit_safe"] is False
+        assert payload["no_submit"] is True
+        assert payload["blockers"] == ["rvo2_unavailable"]
+        assert payload["planner_keys"] == ["orca_nominal"]
+        assert "uv sync --extra orca" in payload["remediation"]
+
+    def test_cli_json_reports_ready_without_orca_dependency(self, tmp_path: Path, capsys) -> None:
+        """JSON mode reports a passing gate without implying that it submits."""
+        config_path = tmp_path / "config.yaml"
+        _write_config(config_path, algo="ppo")
+        exit_code = orca_preflight_cli.main(["--config", str(config_path), "--json"])
+
+        assert exit_code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["status"] == "ready"
+        assert payload["submit_safe"] is True
+        assert payload["no_submit"] is True
+        assert payload["blockers"] == []
+
+    def test_cli_json_reports_missing_config(self, tmp_path: Path, capsys) -> None:
+        """JSON mode makes a missing config actionable without a traceback."""
+        config_path = tmp_path / "nonexistent.yaml"
+        exit_code = orca_preflight_cli.main(["--config", str(config_path), "--json"])
+
+        assert exit_code == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["status"] == "blocked"
+        assert payload["blockers"] == ["config_not_found"]
+        assert payload["submit_safe"] is False
+
     def test_cli_passes_when_rvo2_available(self, tmp_path: Path) -> None:
         """CLI returns exit code 0 when ORCA config has rvo2 importable."""
         config_path = tmp_path / "config.yaml"

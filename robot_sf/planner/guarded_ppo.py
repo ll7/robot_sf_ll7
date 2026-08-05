@@ -60,31 +60,89 @@ class GuardedPPOConfig:
     uncertainty_slow_down_speed_m_s: float = 0.2
 
     def __post_init__(self) -> None:
-        """Validate uncertainty fallback thresholds when configured."""
+        """Validate guard parameters fail-closed at construction time."""
         if self.uncertainty_fallback_mode not in {"stop", "slow_down", "fallback"}:
             raise ValueError("uncertainty_fallback_mode must be stop, slow_down, or fallback")
-        for name, value in {
-            "uncertainty_buffer_intrusion_threshold": self.uncertainty_buffer_intrusion_threshold,
-            "uncertainty_collision_probability_threshold": (
-                self.uncertainty_collision_probability_threshold
-            ),
-        }.items():
-            if not 0.0 <= float(value) <= 1.0:
-                raise ValueError(f"{name} must be in [0.0, 1.0]")
-        if float(self.uncertainty_base_radius_m) <= 0.0:
-            raise ValueError("uncertainty_base_radius_m must be positive")
+        self._validate_finiteness()
+        self._validate_positive()
+        self._validate_non_negative()
+        self._validate_unit_interval()
 
-        for name, value in {
-            "uncertainty_conformal_radius_m": self.uncertainty_conformal_radius_m,
-            "uncertainty_slow_down_speed_m_s": self.uncertainty_slow_down_speed_m_s,
-        }.items():
-            if float(value) < 0.0:
+    def _validate_finiteness(self) -> None:
+        """Reject non-finite values for every numeric guard field."""
+        for name in (
+            "rollout_dt",
+            "rollout_steps",
+            "goal_tolerance",
+            "near_field_distance",
+            "hard_ped_clearance",
+            "first_step_ped_clearance",
+            "hard_obstacle_clearance",
+            "min_ttc",
+            "obstacle_threshold",
+            "obstacle_search_cells",
+            "prior_blend_weight",
+            "prior_progress_margin",
+            "prior_residual_max_linear_delta",
+            "prior_residual_max_angular_delta",
+            "uncertainty_base_radius_m",
+            "uncertainty_conformal_radius_m",
+            "uncertainty_buffer_intrusion_threshold",
+            "uncertainty_collision_probability_threshold",
+            "uncertainty_slow_down_speed_m_s",
+        ):
+            if not np.isfinite(float(getattr(self, name))):
+                raise ValueError(f"{name} must be finite")
+        if self.uncertainty_min_ttc_threshold_s is not None and not np.isfinite(
+            float(self.uncertainty_min_ttc_threshold_s)
+        ):
+            raise ValueError("uncertainty_min_ttc_threshold_s must be finite")
+
+    def _validate_positive(self) -> None:
+        """Reject non-positive timestep, count, and base-radius guard fields."""
+        for name in (
+            "rollout_dt",
+            "rollout_steps",
+            "obstacle_search_cells",
+            "uncertainty_base_radius_m",
+        ):
+            if float(getattr(self, name)) <= 0.0:
+                raise ValueError(f"{name} must be positive")
+
+    def _validate_non_negative(self) -> None:
+        """Reject negative distance, clearance, margin, delta, speed, and TTC fields."""
+        for name in (
+            "goal_tolerance",
+            "near_field_distance",
+            "hard_ped_clearance",
+            "first_step_ped_clearance",
+            "hard_obstacle_clearance",
+            "min_ttc",
+            "prior_progress_margin",
+            "prior_residual_max_linear_delta",
+            "prior_residual_max_angular_delta",
+            "uncertainty_conformal_radius_m",
+            "uncertainty_slow_down_speed_m_s",
+        ):
+            if float(getattr(self, name)) < 0.0:
                 raise ValueError(f"{name} must be non-negative")
         if (
             self.uncertainty_min_ttc_threshold_s is not None
             and float(self.uncertainty_min_ttc_threshold_s) < 0.0
         ):
             raise ValueError("uncertainty_min_ttc_threshold_s must be non-negative")
+
+    def _validate_unit_interval(self) -> None:
+        """Reject probability and blend-weight guard fields outside [0.0, 1.0]."""
+        for name in (
+            "obstacle_threshold",
+            "prior_blend_weight",
+            "uncertainty_buffer_intrusion_threshold",
+            "uncertainty_collision_probability_threshold",
+        ):
+            value = float(getattr(self, name))
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be in [0.0, 1.0]")
 
 
 class GuardedPPOAdapter(OccupancyAwarePlannerMixin):

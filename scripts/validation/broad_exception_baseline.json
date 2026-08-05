@@ -91,6 +91,7 @@
       "scripts/training/train_sac_sb3.py": 2,
       "scripts/validate_snqi_scripts.py": 2,
       "scripts/validation/check_docstring_todos.py": 1,
+      "scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py": 1,
       "scripts/validation/extended_osm_validation.py": 12,
       "scripts/validation/performance_smoke_test.py": 2,
       "scripts/validation/playback_trajectory.py": 1,
@@ -106,7 +107,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 181
+    "total": 182
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -1459,6 +1460,15 @@
       "lineno": 108,
       "path": "scripts/validation/check_docstring_todos.py",
       "source": "except Exception:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_run_gate",
+      "fingerprint": "4b508d8c20d795c4",
+      "handler": "Exception",
+      "lineno": 1139,
+      "path": "scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - evidence collection must record any gate failure."
     },
     {
       "col_offset": 4,

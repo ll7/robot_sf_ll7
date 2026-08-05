@@ -28,6 +28,7 @@ from robot_sf.benchmark.failure_diagnosis import (
     FAILURE_LEVELS,
     FailureDiagnosisError,
     build_failure_diagnosis_payload,
+    build_failure_diagnosis_quality_report,
     compare_failure_diagnosis_to_reference,
     diagnose_from_trace_failure_predicate,
     diagnose_from_trace_failure_predicates,
@@ -45,6 +46,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
 
 _VALID = "valid"
 _NOT_AVAILABLE = "not_available"
+_QUALITY_METRICS = ("detection", "onset", "failure_type", "severity")
 
 
 def _predicate(  # noqa: PLR0913
@@ -105,6 +107,23 @@ def _quality_candidates() -> dict[str, Any]:
     }
 
 
+def _assert_fixture_excluded_from_all_metrics(report: dict[str, Any], reason: str) -> None:
+    """Require one fixture-level exclusion to remove every metric denominator."""
+    for metric_name in _QUALITY_METRICS:
+        metric = report[metric_name]
+        assert metric["denominator"] == 0
+        assert metric["excluded_count"] == report["case_count"]
+        assert metric["excluded_reasons"][reason] == report["case_count"]
+
+
+def _assert_invalid_reference_fixture_rejected(fixture: dict[str, Any], *, match: str) -> None:
+    """Require malformed reference envelopes to fail at both public entry points."""
+    with pytest.raises(FailureDiagnosisError, match=match):
+        validate_failure_diagnosis_reference_fixture(fixture)
+    with pytest.raises(FailureDiagnosisError, match=match):
+        evaluate_failure_diagnosis_quality(_quality_candidates(), fixture)
+
+
 def test_reviewed_reference_fixture_is_versioned_and_provenance_complete() -> None:
     """The committed fixture keeps review and independent trace pointers explicit."""
     fixture = validate_failure_diagnosis_reference_fixture(_reference_fixture())
@@ -145,6 +164,8 @@ def test_quality_report_computes_detection_onset_type_and_severity_metrics() -> 
     assert report["severity"]["denominator"] == 4
     assert report["severity"]["exact_match"] == 1.0
     assert report["severity"]["macro_f1"] == 1.0
+    for metric_name in _QUALITY_METRICS:
+        assert report[metric_name]["excluded_reasons"]["reference_record_status:unavailable"] == 1
     assert report["case_comparisons"][-1]["metrics"]["detection"]["status"] == "excluded"
 
 
@@ -163,9 +184,50 @@ def test_quality_metrics_exclude_unreviewed_and_degraded_rows_without_forcing_la
     assert "reference_unreviewed" in report["detection"]["excluded_reasons"]
     assert "reference_provenance_incomplete" in report["detection"]["excluded_reasons"]
     assert "diagnosis_status:degraded" in report["detection"]["excluded_reasons"]
+    for metric_name in _QUALITY_METRICS:
+        reasons = report[metric_name]["excluded_reasons"]
+        assert reasons["reference_unreviewed"] == 1
+        assert reasons["reference_provenance_incomplete"] == 1
+        assert reasons["diagnosis_status:degraded"] == 2
     by_case = {row["case_id"]: row for row in report["case_comparisons"]}
     assert by_case["oscillation_case"]["reference"]["failure_type"] == "unknown"
     assert by_case["no_failure_case"]["reference"]["detected"] == "not_detected"
+
+
+@pytest.mark.parametrize(
+    ("record_kind", "status", "excluded_reason"),
+    (
+        ("diagnosis", "invalid", "diagnosis_status:invalid"),
+        ("diagnosis", "fallback", "diagnosis_status:fallback"),
+        ("reference", "invalid", "reference_record_status:invalid"),
+        ("reference", "fallback", "reference_record_status:fallback"),
+    ),
+)
+def test_quality_invalid_and_fallback_statuses_exclude_all_metric_denominators(
+    record_kind: str, status: str, excluded_reason: str
+) -> None:
+    """Invalid and fallback candidate/reference rows cannot become quality evidence."""
+    fixture = _reference_fixture()
+    candidates = _quality_candidates()
+    baseline = evaluate_failure_diagnosis_quality(candidates, fixture)
+    case_id = "collision_case"
+
+    if record_kind == "diagnosis":
+        candidates[case_id]["status"] = status
+    else:
+        fixture["records"][0]["status"] = status
+
+    report = evaluate_failure_diagnosis_quality(candidates, fixture)
+    by_case = {row["case_id"]: row for row in report["case_comparisons"]}
+    for metric_name in _QUALITY_METRICS:
+        metric = report[metric_name]
+        baseline_metric = baseline[metric_name]
+        assert metric["denominator"] == baseline_metric["denominator"] - 1
+        assert metric["excluded_count"] == baseline_metric["excluded_count"] + 1
+        assert metric["excluded_reasons"][excluded_reason] == 1
+        comparison = by_case[case_id]["metrics"][metric_name]
+        assert comparison["status"] == "excluded"
+        assert excluded_reason in comparison["excluded_reasons"]
 
 
 def test_quality_macro_f1_penalizes_known_type_confusion() -> None:
@@ -179,6 +241,164 @@ def test_quality_macro_f1_penalizes_known_type_confusion() -> None:
 
     assert report["failure_type"]["exact_match"] == pytest.approx(2.0 / 3.0)
     assert report["failure_type"]["macro_f1"] == pytest.approx(5.0 / 9.0)
+
+
+def test_quality_fixture_level_unreviewed_status_excludes_every_case() -> None:
+    """A fixture whose review is incomplete cannot produce accuracy evidence."""
+    fixture = _reference_fixture()
+    fixture["review"]["status"] = "unreviewed"
+
+    report = evaluate_failure_diagnosis_quality(_quality_candidates(), fixture)
+
+    assert report["case_count"] == 6
+    assert len(report["case_comparisons"]) == 6
+    _assert_fixture_excluded_from_all_metrics(report, "reference_unreviewed")
+    assert report["detection"]["agreement"] is None
+    assert report["detection"]["confusion_counts"] == {
+        "true_positive": 0,
+        "true_negative": 0,
+        "false_positive": 0,
+        "false_negative": 0,
+    }
+    assert report["onset"]["mean_interval_overlap"] is None
+    assert report["onset"]["mean_absolute_midpoint_error_s"] is None
+    assert report["failure_type"]["exact_match"] is None
+    assert report["failure_type"]["macro_f1"] is None
+    assert report["severity"]["exact_match"] is None
+    assert report["severity"]["macro_f1"] is None
+
+
+def test_quality_fixture_not_independent_of_diagnosis_is_excluded() -> None:
+    """Reference labels not created independently cannot enter a denominator."""
+    fixture = _reference_fixture()
+    fixture["review"]["independent_of_automated_diagnosis"] = False
+
+    report = evaluate_failure_diagnosis_quality(_quality_candidates(), fixture)
+
+    _assert_fixture_excluded_from_all_metrics(
+        report, "reference_not_independent_of_automated_diagnosis"
+    )
+
+
+def test_quality_fixture_missing_adjudication_or_reviewer_is_excluded() -> None:
+    """Reviewer and adjudication metadata are required before labels can be scored."""
+    fixture = _reference_fixture()
+    fixture["review"]["adjudication_status"] = "pending"
+    fixture["review"]["reviewer"] = None
+
+    report = evaluate_failure_diagnosis_quality(_quality_candidates(), fixture)
+
+    _assert_fixture_excluded_from_all_metrics(report, "reference_unadjudicated")
+    _assert_fixture_excluded_from_all_metrics(report, "reference_reviewer_missing")
+
+
+def test_quality_fixture_provenance_complete_requires_source_trace() -> None:
+    """A provenance block without a source trace is demoted and excluded."""
+    fixture = _reference_fixture()
+    fixture["provenance"] = {"status": "complete"}
+
+    report = evaluate_failure_diagnosis_quality(_quality_candidates(), fixture)
+
+    _assert_fixture_excluded_from_all_metrics(report, "reference_provenance_incomplete")
+
+
+def test_quality_missing_diagnosis_is_excluded_and_remains_visible() -> None:
+    """A reference case without any diagnosis stays visible but cannot be scored."""
+    candidates = _quality_candidates()
+    del candidates["collision_case"]
+
+    report = evaluate_failure_diagnosis_quality(candidates, _reference_fixture())
+
+    assert report["matched_case_count"] == 5
+    assert report["detection"]["denominator"] == 4
+    assert report["detection"]["confusion_counts"] == {
+        "true_positive": 3,
+        "true_negative": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+    }
+    assert report["onset"]["denominator"] == 3
+    assert report["failure_type"]["denominator"] == 2
+    assert report["severity"]["denominator"] == 3
+    for metric_name in _QUALITY_METRICS:
+        metric = report[metric_name]
+        assert metric["excluded_reasons"]["diagnosis_missing"] == 1
+    by_case = {row["case_id"]: row for row in report["case_comparisons"]}
+    comparison = by_case["collision_case"]
+    assert comparison["diagnosis"]["available"] is False
+    assert comparison["metrics"]["detection"]["status"] == "excluded"
+    assert "diagnosis_missing" in comparison["metrics"]["detection"]["excluded_reasons"]
+
+
+def test_quality_unmatched_diagnosis_cannot_enter_any_denominator() -> None:
+    """Diagnoses without a reviewed reference case are counted but never scored."""
+    candidates = _quality_candidates()
+    candidates["extra_unreviewed_case"] = diagnose_from_trace_failure_predicate(
+        _predicate("collision", severity="critical")
+    ).to_dict()
+
+    baseline = evaluate_failure_diagnosis_quality(_quality_candidates(), _reference_fixture())
+    report = evaluate_failure_diagnosis_quality(candidates, _reference_fixture())
+
+    assert report["unmatched_diagnosis_count"] == 1
+    assert report["matched_case_count"] == baseline["matched_case_count"]
+    assert report["metrics"] == baseline["metrics"]
+
+
+def test_reference_fixture_envelope_is_versioned_and_case_ids_are_unique() -> None:
+    """Malformed reference envelopes must fail closed before any metric exists."""
+    fixture = _reference_fixture()
+
+    wrong_schema = dict(fixture)
+    wrong_schema["schema_version"] = "failure_diagnosis_reference.v2"
+    _assert_invalid_reference_fixture_rejected(wrong_schema, match="schema_version must be")
+
+    bad_version = dict(fixture)
+    bad_version["fixture_version"] = True
+    _assert_invalid_reference_fixture_rejected(
+        bad_version, match="fixture_version must be an integer"
+    )
+
+    bad_id = dict(fixture)
+    bad_id["fixture_id"] = "   "
+    _assert_invalid_reference_fixture_rejected(bad_id, match="fixture_id")
+
+    duplicated = _reference_fixture()
+    duplicated["records"][1] = dict(duplicated["records"][0])
+    _assert_invalid_reference_fixture_rejected(duplicated, match="duplicated")
+
+
+def test_quality_report_pairs_payload_form_candidates_positionally() -> None:
+    """Payload-form diagnoses without case ids pair by reference record order."""
+    ordered = _quality_candidates()
+    payload_form = {
+        "records": [
+            ordered["collision_case"],
+            ordered["near_miss_case"],
+            ordered["low_progress_case"],
+            ordered["oscillation_case"],
+            ordered["no_failure_case"],
+            ordered["unavailable_case"],
+        ]
+    }
+
+    baseline = evaluate_failure_diagnosis_quality(_quality_candidates(), _reference_fixture())
+    report = evaluate_failure_diagnosis_quality(payload_form, _reference_fixture())
+
+    assert report == baseline
+
+
+def test_quality_report_is_deterministic_and_aliases_agree() -> None:
+    """The fixture-level report must be reproducible across all public entry points."""
+    candidates = _quality_candidates()
+    fixture = _reference_fixture()
+
+    first = evaluate_failure_diagnosis_quality(candidates, fixture)
+    second = evaluate_failure_diagnosis_quality(candidates, fixture)
+    assert first == second
+
+    assert compare_failure_diagnosis_to_reference(candidates, fixture) == first
+    assert build_failure_diagnosis_quality_report(candidates, fixture) == first
 
 
 def test_onset_interval_pinned_from_predicate_time_interval() -> None:

@@ -632,6 +632,15 @@ class TestVerificationScript:
             repo_root=ROOT,
         )
         assert report["overall_verdict"] == "pass"
+        frozen_source = next(
+            result
+            for result in report["verdicts"]["repository_entries"]
+            if result.get("path")
+            == "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+        )
+        assert frozen_source["match"] is True
+        assert frozen_source["source_commit"] == manifest["frozen_manifest_origin_main_commit"]
+        assert frozen_source["current_sha256"] != frozen_source["actual_sha256"]
 
     def test_release_0_0_5_preserves_frozen_candidate_contract(self) -> None:
         """The release cards must preserve the frozen membership and claim boundaries."""

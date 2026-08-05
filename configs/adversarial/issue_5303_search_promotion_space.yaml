@@ -1,0 +1,38 @@
+# Issue #5303 diagnostic-only search space.
+#
+# The continuous candidate bounds match crossing_ttc_space.yaml.  The wider
+# scenario-seed interval is intentional: the two frozen fit-family warm starts
+# carry scenario seeds 14821 and 14890, so the authoritative diagnostic must
+# treat those immutable candidates as members of the same declared space.
+schema_version: adversarial-search-space.v1
+description: >
+  Frozen issue #5303 TPE-vs-random diagnostic space. This is an issue-specific
+  projection of the canonical crossing/TTC space with a seed interval wide
+  enough for the selected certified fit-family warm starts.
+variables:
+  start_x:
+    min: 1.0
+    max: 3.0
+  start_y:
+    min: 2.0
+    max: 4.0
+  goal_x:
+    min: 7.0
+    max: 9.0
+  goal_y:
+    min: 2.0
+    max: 4.0
+  spawn_time_s:
+    min: 0.0
+    max: 2.0
+  pedestrian_speed_mps:
+    min: 0.8
+    max: 1.4
+  pedestrian_delay_s:
+    min: 0.0
+    max: 2.0
+  scenario_seed:
+    min: 100
+    max: 25000
+constraints:
+  min_start_goal_distance_m: 2.0

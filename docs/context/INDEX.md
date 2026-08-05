@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Issue #5303 step 2 frozen TPE-versus-random diagnostic preregistration (proposal/preflight only): the side-effect-free three-seed contract, hash manifest, and check command for `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`. The parent issue's 2026-07-28 domain ruling supersedes this design for promotion with a new six-seed preregistration; this historical packet remains an inconclusive-only diagnostic handoff and cannot authorize the #6145 campaign:
+[README.md](evidence/issue_5303_search_promotion_preregistration/README.md).
+
 Issue #6644 oracle-first narrow-doorway geometry-family preflight for the #6600
 collision-envelope campaign: versioned manifest
 (`issue_6644_narrow_doorway_geometry_family.v1`) over a 15-cell

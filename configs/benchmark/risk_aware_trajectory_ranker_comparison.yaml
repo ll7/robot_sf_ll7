@@ -1,0 +1,60 @@
+schema_version: "risk_aware_trajectory_ranker_comparison_config.v1"
+evidence_status: "smoke/diagnostic"
+seed: 6676
+fixture_path: "tests/benchmark/fixtures/risk_aware_trajectory_ranker_comparison_v1.yaml"
+candidate_budget: 4
+
+# The two arms share this estimator, ranking, and hard-gate configuration.
+risk_estimator:
+  horizon_steps: 20
+  dt_s: 0.1
+  n_samples: 256
+  velocity_std_m_s: 0.15
+  cross_actor_correlation: 0.0
+  robot_radius_m: 0.3
+  pedestrian_radius_m: 0.3
+  deadline_ms: 100.0
+  max_pedestrian_speed_m_s: 2.5
+  ci95_abstain_halfwidth: 0.2
+  min_samples_for_estimate: 64
+
+ranking_weights:
+  w_risk: 1.0
+  w_time: 0.0
+  w_jerk: 0.1
+  w_length: 0.05
+  w_clearance: 1.0
+  safe_clearance_m: 0.5
+
+verifier:
+  min_clearance_m: 0.25
+  warn_clearance_m: 0.5
+  min_ttc_s: 1.0
+  warn_ttc_s: 1.5
+  max_brake_deceleration_mps2: 2.5
+  max_heading_oscillation_count: 3
+  stale_prediction_max_age_s: 0.5
+
+actuator_limits:
+  max_accel_mps2: 1.0
+  max_decel_mps2: 1.5
+  max_yaw_rate_radps: 1.0
+  max_steering_rate_radps: 0.5
+  command_latency_s: 0.15
+  brake_latency_s: 0.2
+
+primitive_generator:
+  lateral_offsets_m: [-0.6, 0.0, 0.6]
+  cruise_speed_mps: 1.0
+  goal_reach_fraction: 1.0
+  include_brake_primitive: true
+  brake_displacement_m: 0.2
+
+rbf_generator:
+  lateral_offsets_m: [-0.6, 0.0, 0.6]
+  cruise_speed_mps: 1.0
+  goal_reach_fraction: 1.0
+  rbf_center_fraction: 0.65
+  rbf_width_fraction: 0.25
+  include_brake_primitive: true
+  brake_displacement_m: 0.2

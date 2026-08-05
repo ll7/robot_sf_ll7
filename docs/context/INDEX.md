@@ -16,10 +16,12 @@ planner inputs, with a fail-closed machine-readable go/no-go verdict per binding
 (`radius_binding_canary.v1`):
 [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
 
-Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600): dry-run manifest
-pinning the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the 48-cell
-classic_interactions_francis2023 matrix at one immutable campaign commit; preparation only, not
-benchmark evidence, production compute blocked until the Gate 1 binding canary (#6641) passes:
+Issue #6642 collision-envelope radius sweep admission (Gate 2 of #6600): manifest and three
+arm configs pin the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the
+48-cell classic_interactions_francis2023 matrix at one immutable campaign commit, with
+fail-closed cross-arm non-radius consistency checks. Gate 1 runtime binding is admitted;
+the configs are still not benchmark evidence and production compute remains blocked by
+the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
 
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
@@ -36,6 +38,10 @@ the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
+Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
+preflight configuration and its explicit no-result boundary:
+[issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).
+
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
 or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).
@@ -49,6 +55,11 @@ Issue #5792 one-command demo reproducibility and CPU UX smoke record:
 Issue #5579 MPC tuning-budget archaeology and completed bounded sensitivity diagnostic (two
 prediction-MPC arms, 20-point shared grid, fixed paired slice, and blocked fail-closed read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
+
+Issue #6700 SLURM compute run for the preregistered two-phase matched-budget MPC tuning-sensitivity
+campaign — blocked on this lane (not authorized to submit, no SLURM tooling, two-phase packet
+refreeze and passed native canary not yet on main); blocker and enabling gate:
+[issue_6700_mpc_tuning_campaign_compute_blocker.md](issue_6700_mpc_tuning_campaign_compute_blocker.md).
 
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7
 scenario discovery research program:

@@ -1,0 +1,41 @@
+schema_version: "risk_aware_trajectory_ranker_comparison_fixture.v1"
+split: "held_out"
+claim_boundary: "smoke/diagnostic only; fixture rows are not nominal benchmark evidence"
+
+cases:
+  - case_id: "clear_empty"
+    split: "held_out"
+    status: "valid"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians: []
+
+  - case_id: "distant_stationary_actor"
+    split: "held_out"
+    status: "valid"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians:
+      - id: 101
+        position: [4.0, 2.0]
+        velocity: [0.0, 0.0]
+
+  - case_id: "crossing_from_upper_side"
+    split: "held_out"
+    status: "valid"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians:
+      - id: 102
+        position: [1.0, 1.0]
+        velocity: [0.0, -0.5]
+
+  - case_id: "crossing_from_lower_side"
+    split: "held_out"
+    status: "valid"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians:
+      - id: 103
+        position: [1.0, -1.0]
+        velocity: [0.0, 0.5]

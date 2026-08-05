@@ -9,13 +9,13 @@ it is not a full benchmark campaign and does not promote paper-facing claims.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_csv, write_json, write_text
 from robot_sf.representation.uncertainty_source_generalization import (
     INCONCLUSIVE,
     NO_EFFECT,
@@ -149,13 +149,8 @@ def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: st
 
     compact = dict(report)
     compact.pop("source_reports", None)
-    summary_path.write_text(json.dumps(compact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-    fieldnames = list(report["per_source"][0].keys()) if report["per_source"] else []
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(report["per_source"])
+    write_json(summary_path, compact)
+    write_csv(csv_path, report["per_source"])
 
     rows = "\n".join(
         "| {source} | {condition_builder} | {source_decision} | "
@@ -163,46 +158,44 @@ def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: st
         "{min_separation_delta_dropped_minus_retained_m} |".format(**row)
         for row in report["per_source"]
     )
-    readme_path.write_text(
-        "\n".join(
-            [
-                "# Issue #3557 Uncertainty-Source Generalization",
-                "",
-                "Plain-language summary: this artifact runs the controlled #3471 "
-                "episode harness across registered ScenarioBelief uncertainty sources. "
-                "It records per-source oracle/retained/dropped aggregate decisions "
-                "without promoting the diagnostic result into benchmark evidence.",
-                "",
-                f"- Issue: #{ISSUE}",
-                f"- Schema: `{SCHEMA_VERSION}`",
-                f"- Evidence tier: `{report['evidence_tier']}`",
-                f"- Generalization verdict: `{report['generalization']}`",
-                f"- Seeds: `{report['seeds']}`",
-                f"- Command: `{command}`",
-                "",
-                "## Claim Boundary",
-                "",
-                CLAIM_BOUNDARY,
-                "",
-                "This is not a full benchmark campaign result. It does not use Slurm "
-                "or GPU resources and does not edit paper or dissertation claims.",
-                "",
-                "## Per-Source Decisions",
-                "",
-                "| Source | Condition builder | Decision | Unsafe-rate delta | "
-                "Min-separation delta (m) |",
-                "| --- | --- | --- | ---: | ---: |",
-                rows,
-                "",
-                "Detailed machine-readable outputs:",
-                "",
-                "- `summary.json`",
-                "- `per_source_decisions.csv`",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    readme = "\n".join(
+        [
+            "# Issue #3557 Uncertainty-Source Generalization",
+            "",
+            "Plain-language summary: this artifact runs the controlled #3471 "
+            "episode harness across registered ScenarioBelief uncertainty sources. "
+            "It records per-source oracle/retained/dropped aggregate decisions "
+            "without promoting the diagnostic result into benchmark evidence.",
+            "",
+            f"- Issue: #{ISSUE}",
+            f"- Schema: `{SCHEMA_VERSION}`",
+            f"- Evidence tier: `{report['evidence_tier']}`",
+            f"- Generalization verdict: `{report['generalization']}`",
+            f"- Seeds: `{report['seeds']}`",
+            f"- Command: `{command}`",
+            "",
+            "## Claim Boundary",
+            "",
+            CLAIM_BOUNDARY,
+            "",
+            "This is not a full benchmark campaign result. It does not use Slurm "
+            "or GPU resources and does not edit paper or dissertation claims.",
+            "",
+            "## Per-Source Decisions",
+            "",
+            "| Source | Condition builder | Decision | Unsafe-rate delta | "
+            "Min-separation delta (m) |",
+            "| --- | --- | --- | ---: | ---: |",
+            rows,
+            "",
+            "Detailed machine-readable outputs:",
+            "",
+            "- `summary.json`",
+            "- `per_source_decisions.csv`",
+            "",
+        ]
     )
+    write_text(readme_path, readme, issue_ref="robot_sf#3557")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

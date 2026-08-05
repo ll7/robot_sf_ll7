@@ -868,7 +868,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
             "status": "ok",
             "learned_policy_contract": learned_contract,
         }
-    except Exception as exc:
+    except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)
         if not _is_socnav_algorithm(algo):
             raise
         message = (
@@ -898,7 +898,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
                     "policy": policy,
                     "learned_policy_contract": learned_contract,
                 }
-            except Exception as fallback_exc:
+            except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)
                 raise RuntimeError(
                     f"{message} Fallback attempt also failed: {fallback_exc}",
                 ) from fallback_exc

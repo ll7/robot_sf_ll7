@@ -158,3 +158,6 @@ def dummy_factory(env_config: EnvSettings, map_def: MapDefinition, _peds: bool) 
         step_dt=getattr(sim_settings, "time_per_step_in_secs", 0.1),
         goal_proximity_threshold=getattr(sim_settings, "goal_radius", 1.0),
     )
+
+
+__all__ = ["DummySimulator", "dummy_factory"]

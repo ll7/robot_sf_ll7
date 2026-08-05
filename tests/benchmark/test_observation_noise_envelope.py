@@ -7,6 +7,8 @@ import json
 import pathlib
 import sys
 
+import pytest
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURE_PATH = (
     REPO_ROOT / "tests/fixtures/analysis_workbench/simulation_trace_export_v1/"
@@ -370,6 +372,39 @@ def test_script_is_importable() -> None:
     assert hasattr(mod, "main")
     assert hasattr(mod, "CONDITIONS")
     assert hasattr(mod, "evaluate_condition")
+
+
+def test_git_head_realistic_failures_keep_empty_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing git binary or a timeout still degrades provenance to '' (#6690)."""
+    mod = _load_script()
+
+    def _spawn_failure(*args: object, **kwargs: object) -> str:
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(mod.subprocess, "run", _spawn_failure)
+    assert mod._git_head() == ""
+
+    def _timeout(*args: object, **kwargs: object) -> str:
+        raise mod.subprocess.TimeoutExpired(cmd="git", timeout=5)
+
+    monkeypatch.setattr(mod.subprocess, "run", _timeout)
+    assert mod._git_head() == ""
+
+
+def test_git_head_programmer_error_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ValueError is outside the narrowed spawn/timeout boundary and must surface (#6690)."""
+    mod = _load_script()
+
+    def _programmer_error(*args: object, **kwargs: object) -> str:
+        raise ValueError("invalid subprocess arguments")
+
+    monkeypatch.setattr(mod.subprocess, "run", _programmer_error)
+    with pytest.raises(ValueError, match="invalid subprocess arguments"):
+        mod._git_head()
 
 
 def _load_fixture_for_test() -> dict:

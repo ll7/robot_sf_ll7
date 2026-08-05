@@ -123,7 +123,7 @@
           "frame_index": {"type": "integer"},
           "step": {"type": "integer"},
           "time_s": {"type": "number"},
-          "source_coordinates": {"type": "object"},
+          "source_coordinates": {"$ref": "#/$defs/source_coordinates_frame"},
           "encounter_interval": {
             "type": "object",
             "additionalProperties": false,
@@ -133,12 +133,12 @@
               "reason": {"type": "string"}
             }
           },
-          "world": {"type": "object"},
-          "route": {"type": "object"},
-          "conflict": {"type": "object"},
-          "relative_interaction": {"type": "object"},
-          "global_minimum_actor": {"type": "object"},
-          "commands": {"type": "object"},
+          "world": {"$ref": "#/$defs/world_frame"},
+          "route": {"$ref": "#/$defs/route_frame"},
+          "conflict": {"$ref": "#/$defs/conflict_frame"},
+          "relative_interaction": {"$ref": "#/$defs/relative_interaction"},
+          "global_minimum_actor": {"$ref": "#/$defs/global_minimum_actor"},
+          "commands": {"$ref": "#/$defs/commands_frame"},
           "event_alignment": {"$ref": "#/$defs/event_alignment"}
         }
       }
@@ -176,8 +176,8 @@
             "reason": {"type": "string"}
           }
         },
-        "route_progress": {"type": "object"},
-        "stall": {"type": "object"},
+        "route_progress": {"$ref": "#/$defs/route_progress"},
+        "stall": {"$ref": "#/$defs/stall_diagnostic"},
         "conflict_zone_occupancy": {
           "type": "object",
           "additionalProperties": false,
@@ -189,7 +189,7 @@
             "focal_actor_duration_s": {"type": ["number", "null"]}
           }
         },
-        "reversal_counts": {"type": "object"}
+        "reversal_counts": {"$ref": "#/$defs/reversal_counts"}
         ,"coverage": {
           "type": "object",
           "additionalProperties": false,
@@ -247,8 +247,6 @@
           "collision_observed": {"type": "boolean"},
           "collision_partner_id": {"type": ["string", "null"]},
           "collision_partner_type": {"type": ["string", "null"]},
-          "terminal_observed": {"type": "boolean"},
-          "terminal_reason": {"type": "string"},
           "source_fields": {"type": "array", "items": {"type": "string"}},
           "event_relative_time": {
             "type": "object",
@@ -352,7 +350,15 @@
       "required": ["rank", "event_type", "event_id", "time_s", "selection_role"],
       "properties": {
         "rank": {"type": "integer", "minimum": 0},
-        "event_type": {"type": "string"},
+        "event_type": {
+          "enum": [
+            "exact_collision_event",
+            "minimum_clearance",
+            "first_safety_predicate_breach",
+            "sustained_stall_onset",
+            "terminal_event"
+          ]
+        },
         "event_id": {"type": "string"},
         "time_s": {"type": "number"},
         "selection_role": {"enum": ["first_safety_predicate_breach", "fallback_anchor"]}
@@ -372,12 +378,322 @@
     "coverage_record": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["status", "available_frame_count", "missing_frame_count", "reason"],
+      "required": ["status", "available_frame_count", "missing_frame_count"],
       "properties": {
         "status": {"enum": ["complete", "partial"]},
         "available_frame_count": {"type": "integer", "minimum": 0},
         "missing_frame_count": {"type": "integer", "minimum": 0},
         "reason": {"type": "string"}
+      }
+    },
+    "actor_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "heading", "velocity", "radius_m"],
+      "properties": {
+        "position": {"$ref": "#/$defs/vector2_or_empty"},
+        "heading": {"type": ["number", "null"]},
+        "velocity": {"$ref": "#/$defs/vector2_or_empty"},
+        "radius_m": {"type": ["number", "null"]}
+      }
+    },
+    "vector2_or_empty": {
+      "type": "array",
+      "items": {"type": "number"},
+      "oneOf": [{"minItems": 0, "maxItems": 0}, {"minItems": 2, "maxItems": 2}]
+    },
+    "source_coordinates_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate_frame", "robot", "focal_actor"],
+      "properties": {
+        "coordinate_frame": {"type": "string", "minLength": 1},
+        "robot": {"$ref": "#/$defs/actor_state"},
+        "focal_actor": {"anyOf": [{"$ref": "#/$defs/actor_state"}, {"type": "null"}]}
+      }
+    },
+    "world_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "robot", "focal_actor"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "robot": {"$ref": "#/$defs/actor_state"},
+        "focal_actor": {"anyOf": [{"$ref": "#/$defs/actor_state"}, {"type": "null"}]}
+      }
+    },
+    "line_segment_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "start", "end"],
+      "properties": {
+        "type": {"const": "line_segment"},
+        "start": {"$ref": "#/$defs/vector2"},
+        "end": {"$ref": "#/$defs/vector2"}
+      }
+    },
+    "circle_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "center", "radius_m"],
+      "properties": {
+        "type": {"const": "circle"},
+        "center": {"$ref": "#/$defs/vector2"},
+        "radius_m": {"type": "number"}
+      }
+    },
+    "vector2": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "route_frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"},
+            "geometry_checksum": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "route_id",
+            "provenance_id",
+            "registry_checksum",
+            "geometry",
+            "s_m",
+            "n_m",
+            "progress_rate_mps"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "route_id": {"type": "string"},
+            "provenance_id": {"type": "string"},
+            "registry_checksum": {"type": "string"},
+            "geometry": {"$ref": "#/$defs/line_segment_geometry"},
+            "source_coordinate_frame": {"type": "string"},
+            "geometry_checksum": {"type": "string"},
+            "s_m": {"type": "number"},
+            "n_m": {"type": "number"},
+            "progress_rate_mps": {"type": ["number", "null"]}
+          }
+        }
+      ]
+    },
+    "conflict_frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"},
+            "geometry_checksum": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "zone_id",
+            "provenance_id",
+            "registry_checksum",
+            "geometry",
+            "robot_signed_distance_to_zone_m",
+            "focal_actor_signed_distance_to_zone_m",
+            "focal_actor_status"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "zone_id": {"type": "string"},
+            "provenance_id": {"type": "string"},
+            "registry_checksum": {"type": "string"},
+            "geometry": {"$ref": "#/$defs/circle_geometry"},
+            "source_coordinate_frame": {"type": "string"},
+            "geometry_checksum": {"type": "string"},
+            "robot_signed_distance_to_zone_m": {"type": "number"},
+            "focal_actor_signed_distance_to_zone_m": {"type": ["number", "null"]},
+            "focal_actor_status": {"enum": ["available", "unavailable"]},
+            "focal_actor_reason": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "relative_interaction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "actor_id",
+            "relative_longitudinal_m",
+            "relative_lateral_m",
+            "center_distance_m",
+            "proxy_surface_clearance_m",
+            "proxy_surface_clearance_status",
+            "proxy_surface_clearance_reason",
+            "clearance_semantics",
+            "center_distance_semantics",
+            "geometric_body_clearance_status",
+            "geometric_body_clearance_reason",
+            "robot_radius_m",
+            "focal_actor_radius_m"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "actor_id": {"type": "string"},
+            "relative_longitudinal_m": {"type": "number"},
+            "relative_lateral_m": {"type": "number"},
+            "center_distance_m": {"type": "number"},
+            "proxy_surface_clearance_m": {"type": ["number", "null"]},
+            "proxy_surface_clearance_status": {"enum": ["available", "unavailable"]},
+            "proxy_surface_clearance_reason": {"type": "string"},
+            "clearance_semantics": {"type": "string"},
+            "center_distance_semantics": {"type": "string"},
+            "geometric_body_clearance_status": {"enum": ["available", "unavailable"]},
+            "geometric_body_clearance_reason": {"type": "string"},
+            "robot_radius_m": {"type": ["number", "null"]},
+            "focal_actor_radius_m": {"type": ["number", "null"]},
+            "relative_velocity_status": {"enum": ["available", "unavailable"]},
+            "relative_velocity_reason": {"type": "string"},
+            "radial_closing_speed_mps": {"type": ["number", "null"]},
+            "closest_approach": {"type": "object"},
+            "relative_velocity_longitudinal_mps": {"type": ["number", "null"]},
+            "relative_velocity_lateral_mps": {"type": ["number", "null"]},
+            "relative_velocity_convention": {"type": "string"},
+            "closing_speed_convention": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "global_minimum_actor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "actor_id", "center_distance_m"],
+          "properties": {
+            "status": {"const": "available"},
+            "actor_id": {"type": "string"},
+            "center_distance_m": {"type": "number"}
+          }
+        }
+      ]
+    },
+    "commands_frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "commanded", "executed", "executed_status"],
+          "properties": {
+            "status": {"const": "available"},
+            "commanded": {"type": "object"},
+            "executed": {"type": ["object", "null"]},
+            "executed_status": {"enum": ["available", "unavailable"]}
+          }
+        }
+      ]
+    },
+    "route_progress": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "start_s_m", "end_s_m", "delta_s_m"],
+          "properties": {
+            "status": {"const": "available"},
+            "start_s_m": {"type": "number"},
+            "end_s_m": {"type": "number"},
+            "delta_s_m": {"type": "number"}
+          }
+        }
+      ]
+    },
+    "stall_diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_version",
+        "status",
+        "reason",
+        "stall_min_duration_s",
+        "sustained_stall_duration_s",
+        "speed_coverage",
+        "sustained_stall_onset_step"
+      ],
+      "properties": {
+        "profile_version": {"type": "string"},
+        "status": {"enum": ["available", "unavailable", "not_observed"]},
+        "reason": {"type": "string"},
+        "stall_min_duration_s": {"type": "number"},
+        "sustained_stall_duration_s": {"type": ["number", "null"]},
+        "speed_coverage": {"$ref": "#/$defs/coverage_record"},
+        "sustained_stall_onset_step": {"type": ["integer", "null"]}
+      }
+    },
+    "reversal_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_version",
+        "direction_semantics",
+        "heading_reversal_count",
+        "velocity_reversal_count"
+      ],
+      "properties": {
+        "profile_version": {"type": "string"},
+        "direction_semantics": {"type": "string"},
+        "heading_reversal_count": {"type": "integer", "minimum": 0},
+        "velocity_reversal_count": {"type": "integer", "minimum": 0}
       }
     },
     "common_event_anchor": {

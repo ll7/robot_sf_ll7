@@ -53,6 +53,6 @@ Pair compatibility requires an explicit comparison grain:
   may differ and `shared_prefix=false` is allowed, with equal map/horizon/config metadata.
 
 Event alignment selects the first available anchor from the declared fallback order and writes
-`anchor_time_s` plus per-frame `tau_s = t - anchor_time_s`. The terminal fallback is available
-only from typed terminal outcome or `EpisodeEventLedger.v2` evidence with a known in-interval
-time; the builder does not fabricate a terminal anchor from the final frame.
+`anchor_time_s` plus per-frame `tau_s = t - anchor_time_s`. The terminal fallback remains
+unavailable because no canonical timed terminal-event contract exists for this issue; the builder
+does not fabricate a terminal anchor from the final frame.

@@ -6,6 +6,7 @@ import hashlib
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -527,6 +528,17 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     assert typed_event["collision_partner_id"] == "ped-a"
     assert typed_event["collision_partner_type"] == "pedestrian"
 
+    static_payload = _trace_payload(collision_mode="static_geometry_collision")
+    static = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(static_payload)
+    )
+    static_event = {event["event_type"]: event for event in static["event_anchors"]}[
+        "exact_collision_event"
+    ]
+    assert static_event["status"] == "available"
+    assert static_event["collision_partner_type"] == "static_geometry"
+    assert static_event["collision_partner_id"] is None
+
     invented_payload = _trace_payload(collision_mode="invented_events")
     invented = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(invented_payload)
@@ -566,37 +578,17 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     assert outside_event["reason"] == "collision_time_outside_encounter_interval"
 
 
-def test_terminal_event_requires_typed_provenance() -> None:
-    """Terminal fallback must come from typed terminal evidence, not the last frame."""
+def test_terminal_event_has_no_timed_contract() -> None:
+    """Terminal fallback must stay unavailable until a canonical timed contract exists."""
 
-    no_terminal = build_worked_example_process_trace_from_export(
+    payload = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(_trace_payload())
     )
-    no_terminal_event = {event["event_type"]: event for event in no_terminal["event_anchors"]}[
+    terminal_event = {event["event_type"]: event for event in payload["event_anchors"]}[
         "terminal_event"
     ]
-    assert no_terminal_event["status"] == "unavailable"
-
-    typed_terminal = build_worked_example_process_trace_from_export(
-        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_typed"))
-    )
-    terminal_event = {event["event_type"]: event for event in typed_terminal["event_anchors"]}[
-        "terminal_event"
-    ]
-    assert terminal_event["status"] == "available"
-    assert terminal_event["time_s"] == pytest.approx(0.3)
-    assert terminal_event["terminal_reason"] == "trace_end"
-
-    outside = build_worked_example_process_trace_from_export(
-        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_late")),
-        encounter_report=_encounter_report(start_time_s=0.0, end_time_s=0.2),
-        encounter_report_input_checksum="0" * 64,
-    )
-    outside_terminal = {event["event_type"]: event for event in outside["event_anchors"]}[
-        "terminal_event"
-    ]
-    assert outside_terminal["status"] == "unavailable"
-    assert outside_terminal["reason"] == "terminal_time_outside_encounter_interval"
+    assert terminal_event["status"] == "unavailable"
+    assert terminal_event["source_fields"] == ["terminal_event_contract_unavailable"]
 
 
 def test_partial_radius_and_nonfinite_heading_fail_closed() -> None:
@@ -663,6 +655,16 @@ def test_nonfinite_command_and_missing_stall_speed_fail_closed() -> None:
     assert {event["event_type"]: event for event in missing_speed["event_anchors"]}[
         "sustained_stall_onset"
     ]["status"] == "unavailable"
+
+    missing_recovery = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(stall_pattern=[0.0, 0.0, 0.0, 0.0, 1.0], missing_velocity_step=3)
+        )
+    )
+    recovery_events = {event["event_type"]: event for event in missing_recovery["event_anchors"]}
+    assert missing_recovery["diagnostics"]["stall"]["status"] == "unavailable"
+    assert recovery_events["sustained_stall_onset"]["status"] == "unavailable"
+    assert recovery_events["recovery_onset"]["status"] == "unavailable"
 
     command_gap = build_worked_example_process_trace_from_export(
         simulation_trace_export_from_dict(
@@ -739,16 +741,93 @@ def test_semantic_validator_rejects_available_event_without_coordinates() -> Non
 def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection() -> None:
     """Nested schema and semantic checks should reject bogus replacement records."""
 
-    payload = build_worked_example_process_trace_from_export(
-        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_typed"))
+    base_payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_typed"))
     )
-    payload["frames"][0]["commands"] = {"status": "available", "commanded": "banana"}
-    with pytest.raises(Exception, match="/frames/0/commands"):
+    route_payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_typed")),
+        route=RouteSpec(
+            "r-main",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-fixture.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
+        conflict_zone=ConflictZoneSpec(
+            "door",
+            (1.0, 0.0),
+            0.25,
+            "zone-fixture.v1",
+            _zone_checksum((1.0, 0.0), 0.25),
+        ),
+    )
+
+    probes: list[tuple[str, list[object], object]] = [
+        ("/frames/0/source_coordinates/robot", ["frames", 0, "source_coordinates", "robot"], {}),
+        (
+            "/frames/0/source_coordinates/focal_actor",
+            ["frames", 0, "source_coordinates", "focal_actor"],
+            {"position": ["banana"], "heading": 0.0, "velocity": [0.0, 0.0], "radius_m": 0.25},
+        ),
+        ("/frames/0/world/robot", ["frames", 0, "world", "robot"], {"position": [0.0, 0.0]}),
+        ("/frames/0/world/focal_actor", ["frames", 0, "world", "focal_actor"], {"banana": True}),
+        ("/frames/0/route", ["frames", 0, "route"], {"status": "available", "route_id": "r"}),
+        ("/frames/0/conflict", ["frames", 0, "conflict"], {"status": "available", "zone_id": "z"}),
+        (
+            "/frames/0/relative_interaction",
+            ["frames", 0, "relative_interaction"],
+            {"status": "available", "actor_id": "ped-a"},
+        ),
+        (
+            "/frames/0/commands",
+            ["frames", 0, "commands"],
+            {"status": "available", "commanded": "banana"},
+        ),
+        (
+            "/diagnostics/route_progress",
+            ["diagnostics", "route_progress"],
+            {"status": "available", "start_s_m": "banana", "end_s_m": 1.0, "delta_s_m": 1.0},
+        ),
+        ("/diagnostics/stall", ["diagnostics", "stall"], {"status": "available"}),
+        (
+            "/diagnostics/reversal_counts",
+            ["diagnostics", "reversal_counts"],
+            {
+                "profile_version": "v",
+                "direction_semantics": "v",
+                "heading_reversal_count": -1,
+                "velocity_reversal_count": 0,
+            },
+        ),
+        ("/diagnostics/coverage", ["diagnostics", "coverage"], {"frame_count": 0}),
+        (
+            "/diagnostics/threshold_exposure/duration_s",
+            ["diagnostics", "threshold_exposure", "duration_s"],
+            "banana",
+        ),
+        (
+            "/encounters/global_minimum_over_all_actors/series/0",
+            ["encounters", "global_minimum_over_all_actors", "series", 0],
+            {"step": 0, "time_s": 0.0, "actor_id": 7, "center_distance_m": 1.0},
+        ),
+    ]
+    for expected_path, target_path, value in probes:
+        payload = deepcopy(route_payload)
+        _set_path(payload, target_path, value)
+        with pytest.raises(Exception, match=expected_path):
+            validate_worked_example_process_trace(payload)
+
+    payload = deepcopy(base_payload)
+    payload["event_anchor_hierarchy"]["available_anchors"][0]["event_type"] = "banana"
+    with pytest.raises(Exception, match="/event_anchor_hierarchy/available_anchors"):
         validate_worked_example_process_trace(payload)
 
-    payload = build_worked_example_process_trace_from_export(
-        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_typed"))
-    )
+    payload = deepcopy(base_payload)
+    payload["event_anchor_hierarchy"]["available_anchors"].pop(0)
+    with pytest.raises(Exception, match="/event_anchor_hierarchy/available_anchors"):
+        validate_worked_example_process_trace(payload)
+
+    payload = deepcopy(base_payload)
     anchors = payload["event_anchor_hierarchy"]["available_anchors"]
     assert len(anchors) >= 2
     payload["event_anchor_hierarchy"]["selected_anchor"] = anchors[-1]
@@ -756,8 +835,32 @@ def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection
     with pytest.raises(Exception, match="/event_anchor_hierarchy/selected_anchor"):
         validate_worked_example_process_trace(payload)
 
+    payload = deepcopy(base_payload)
+    wrong_anchor = payload["event_anchor_hierarchy"]["available_anchors"][-1]
+    payload["event_anchor_hierarchy"]["selected_anchor"] = wrong_anchor
+    payload["event_anchor_hierarchy"]["anchor_time_s"] = wrong_anchor["time_s"]
+    for frame in payload["frames"]:
+        if frame["event_alignment"]["status"] == "available":
+            frame["event_alignment"]["anchor_event_id"] = wrong_anchor["event_id"]
+            frame["event_alignment"]["anchor_event_type"] = wrong_anchor["event_type"]
+            frame["event_alignment"]["anchor_time_s"] = wrong_anchor["time_s"]
+            frame["event_alignment"]["tau_s"] = frame["time_s"] - wrong_anchor["time_s"]
+    with pytest.raises(Exception, match="/event_anchor_hierarchy/selected_anchor"):
+        validate_worked_example_process_trace(payload)
 
-def _trace_payload(  # noqa: C901, PLR0913
+
+def _set_path(payload: dict[str, object], path: list[object], value: object) -> None:
+    cursor: object = payload
+    for key in path[:-1]:
+        cursor = cursor[key]  # type: ignore[index]
+    last = path[-1]
+    if isinstance(last, int):
+        cursor[last] = value  # type: ignore[index]
+    else:
+        cursor[last] = value  # type: ignore[index]
+
+
+def _trace_payload(  # noqa: C901, PLR0912, PLR0913
     *,
     trace_id: str = "process-trace-fixture",
     seed: int = 113,
@@ -772,7 +875,6 @@ def _trace_payload(  # noqa: C901, PLR0913
     include_run_config: bool = True,
     config_digest: str = "a" * 64,
     collision_mode: str | None = None,
-    terminal_mode: str | None = None,
     missing_actor_radius_step: int | None = None,
     nonfinite_heading_step: int | None = None,
     stall_pattern: list[float] | None = None,
@@ -788,6 +890,10 @@ def _trace_payload(  # noqa: C901, PLR0913
         {"linear_velocity": 0.7, "angular_velocity": 0.0},
     ]
     positions = [[0.0, 0.0], [0.2, 0.0], [0.4, 0.0], [0.6, 0.0]]
+    if stall_pattern is not None and len(stall_pattern) > len(positions):
+        for step in range(len(positions), len(stall_pattern)):
+            positions.append([0.2 * step, 0.0])
+            actions.append({"linear_velocity": 0.7, "angular_velocity": 0.0})
     if diverge_after_start:
         positions[1:] = [[0.2, 0.1], [0.4, 0.2], [0.6, 0.3]]
     frames = []
@@ -837,10 +943,12 @@ def _trace_payload(  # noqa: C901, PLR0913
                 "schema_version": "EpisodeEventLedger.v2",
                 "collision_events": [
                     {
-                        "collision_time": 0.15,
-                        "actor_id": "robot",
-                        "collision_partner_id": "ped-a",
                         "collision_partner_type": "pedestrian",
+                        "collision_partner_id": "ped-a",
+                        "collision_time": 0.15,
+                        "relative_speed_at_contact": 1.0,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
                     }
                 ],
             }
@@ -849,10 +957,26 @@ def _trace_payload(  # noqa: C901, PLR0913
                 "schema_version": "EpisodeEventLedger.v2",
                 "collision_events": [
                     {
-                        "collision_time": 0.35,
-                        "actor_id": "robot",
-                        "collision_partner_id": "ped-a",
                         "collision_partner_type": "pedestrian",
+                        "collision_partner_id": "ped-a",
+                        "collision_time": 0.35,
+                        "relative_speed_at_contact": 1.0,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
+                    }
+                ],
+            }
+        if collision_mode == "static_geometry_collision" and step == 1:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [
+                    {
+                        "collision_partner_type": "static_geometry",
+                        "collision_partner_id": None,
+                        "collision_time": 0.15,
+                        "relative_speed_at_contact": None,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
                     }
                 ],
             }
@@ -868,16 +992,6 @@ def _trace_payload(  # noqa: C901, PLR0913
             }
         if collision_mode == "invented_events" and step == 1:
             planner["event_ledger"] = {"events": [{"event_type": "collision", "time_s": 0.15}]}
-        if terminal_mode == "ledger_typed" and step == 3:
-            planner["event_ledger"] = {
-                **planner.get("event_ledger", {"schema_version": "EpisodeEventLedger.v2"}),
-                "terminal_events": [{"terminal_time": 0.3, "terminal_reason": "trace_end"}],
-            }
-        if terminal_mode == "ledger_late" and step == 3:
-            planner["event_ledger"] = {
-                **planner.get("event_ledger", {"schema_version": "EpisodeEventLedger.v2"}),
-                "terminal_events": [{"terminal_time": 0.35, "terminal_reason": "trace_end"}],
-            }
         velocity = [float(stall_pattern[step]), 0.0] if stall_pattern is not None else robot_vel
         robot = {
             "position": position,

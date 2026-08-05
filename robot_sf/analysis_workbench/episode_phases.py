@@ -37,7 +37,7 @@ def summarize_stall(
         if _run_duration(frames, start, end) >= stall_min_duration_s
     ]
     missing_speed_count = sum(1 for frame in frames if speed_getter(frame) is None)
-    missing_speed_blocks_duration = missing_speed_count > 0 and bool(runs)
+    missing_speed_blocks_duration = missing_speed_count > 0
     duration = (
         None
         if missing_speed_blocks_duration
@@ -155,6 +155,8 @@ def first_recovery_frame(
         stall_min_duration_s=stall_min_duration_s,
     )
     if onset is None:
+        return None
+    if any(speed_getter(frame) is None for frame in frames):
         return None
     after_onset = False
     for frame in frames:

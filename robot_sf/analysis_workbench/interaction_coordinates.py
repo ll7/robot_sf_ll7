@@ -53,6 +53,7 @@ EVENT_PROFILE_VERSION = "worked_example_event_detectors.v1"
 THRESHOLD_PROFILE_VERSION = "worked_example_threshold_profile.diagnostic.v1"
 CANONICAL_ENCOUNTER_SCHEMA_VERSION = "near_miss_encounter.v1"
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+COLLISION_PARTNER_TYPES = frozenset({"pedestrian", "static_geometry", "boundary", "goal_artifact"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +176,11 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
     diagnostics = payload.get("diagnostics")
     if isinstance(diagnostics, Mapping):
         errors.extend(_validate_diagnostics_record(diagnostics))
+    encounters = payload.get("encounters")
+    if isinstance(encounters, Mapping):
+        errors.extend(
+            _validate_global_minimum_series(encounters.get("global_minimum_over_all_actors"))
+        )
     focal = (
         payload.get("encounters", {}).get("focal")
         if isinstance(payload.get("encounters"), Mapping)
@@ -230,11 +236,45 @@ def _validate_frame_record(frame: Mapping[str, Any], index: int) -> list[str]:
         )
     )
     errors.extend(
+        _validate_actor_state(
+            frame.get("source_coordinates", {}).get("focal_actor")
+            if isinstance(frame.get("source_coordinates"), Mapping)
+            else None,
+            f"/frames/{index}/source_coordinates/focal_actor",
+            nullable=True,
+        )
+    )
+    errors.extend(
         _require_keys(
             frame.get("world"),
             f"/frames/{index}/world",
             required={"status", "reason", "robot", "focal_actor"},
             allowed={"status", "reason", "robot", "focal_actor"},
+        )
+    )
+    errors.extend(
+        _validate_actor_state(
+            frame.get("world", {}).get("robot")
+            if isinstance(frame.get("world"), Mapping)
+            else None,
+            f"/frames/{index}/world/robot",
+            nullable=False,
+        )
+    )
+    errors.extend(
+        _validate_actor_state(
+            frame.get("world", {}).get("focal_actor")
+            if isinstance(frame.get("world"), Mapping)
+            else None,
+            f"/frames/{index}/world/focal_actor",
+            nullable=True,
+        )
+    )
+    errors.extend(_validate_route_record(frame.get("route"), f"/frames/{index}/route"))
+    errors.extend(_validate_conflict_record(frame.get("conflict"), f"/frames/{index}/conflict"))
+    errors.extend(
+        _validate_relative_record(
+            frame.get("relative_interaction"), f"/frames/{index}/relative_interaction"
         )
     )
     errors.extend(
@@ -249,6 +289,151 @@ def _validate_frame_record(frame: Mapping[str, Any], index: int) -> list[str]:
     )
     errors.extend(_validate_commands_record(frame.get("commands"), f"/frames/{index}/commands"))
     return errors
+
+
+def _validate_route_record(value: object, path: str) -> list[str]:
+    required = (
+        {"status", "reason"}
+        if _status(value) == "unavailable"
+        else {
+            "status",
+            "route_id",
+            "provenance_id",
+            "registry_checksum",
+            "geometry",
+            "s_m",
+            "n_m",
+            "progress_rate_mps",
+        }
+    )
+    allowed = required | {"reason", "source_coordinate_frame", "geometry_checksum"}
+    errors = _require_keys(value, path, required=required, allowed=allowed)
+    if not isinstance(value, Mapping) or value.get("status") != "available":
+        return errors
+    for key in ("s_m", "n_m"):
+        if not _finite_json_number(value.get(key)):
+            errors.append(f"{path}/{key}: expected finite number")
+    if not _finite_or_null(value.get("progress_rate_mps")):
+        errors.append(f"{path}/progress_rate_mps: expected finite number or null")
+    errors.extend(_validate_geometry(value.get("geometry"), f"{path}/geometry"))
+    return errors
+
+
+def _validate_conflict_record(value: object, path: str) -> list[str]:
+    required = (
+        {"status", "reason"}
+        if _status(value) == "unavailable"
+        else {
+            "status",
+            "zone_id",
+            "provenance_id",
+            "registry_checksum",
+            "geometry",
+            "robot_signed_distance_to_zone_m",
+            "focal_actor_signed_distance_to_zone_m",
+            "focal_actor_status",
+        }
+    )
+    allowed = required | {
+        "reason",
+        "source_coordinate_frame",
+        "geometry_checksum",
+        "focal_actor_reason",
+    }
+    errors = _require_keys(value, path, required=required, allowed=allowed)
+    if not isinstance(value, Mapping) or value.get("status") != "available":
+        return errors
+    if not _finite_json_number(value.get("robot_signed_distance_to_zone_m")):
+        errors.append(f"{path}/robot_signed_distance_to_zone_m: expected finite number")
+    if value.get("focal_actor_status") not in {"available", "unavailable"}:
+        errors.append(f"{path}/focal_actor_status: expected available or unavailable")
+    if not _finite_or_null(value.get("focal_actor_signed_distance_to_zone_m")):
+        errors.append(
+            f"{path}/focal_actor_signed_distance_to_zone_m: expected finite number or null"
+        )
+    errors.extend(_validate_geometry(value.get("geometry"), f"{path}/geometry"))
+    return errors
+
+
+def _validate_relative_record(value: object, path: str) -> list[str]:
+    required = (
+        {"status", "reason"}
+        if _status(value) == "unavailable"
+        else {
+            "status",
+            "actor_id",
+            "relative_longitudinal_m",
+            "relative_lateral_m",
+            "center_distance_m",
+            "proxy_surface_clearance_m",
+            "proxy_surface_clearance_status",
+            "proxy_surface_clearance_reason",
+            "clearance_semantics",
+            "center_distance_semantics",
+            "geometric_body_clearance_status",
+            "geometric_body_clearance_reason",
+            "robot_radius_m",
+            "focal_actor_radius_m",
+        }
+    )
+    allowed = required | {
+        "relative_velocity_status",
+        "relative_velocity_reason",
+        "radial_closing_speed_mps",
+        "closest_approach",
+        "relative_velocity_longitudinal_mps",
+        "relative_velocity_lateral_mps",
+        "relative_velocity_convention",
+        "closing_speed_convention",
+    }
+    errors = _require_keys(value, path, required=required, allowed=allowed)
+    if not isinstance(value, Mapping) or value.get("status") != "available":
+        return errors
+    for key in (
+        "relative_longitudinal_m",
+        "relative_lateral_m",
+        "center_distance_m",
+    ):
+        if not _finite_json_number(value.get(key)):
+            errors.append(f"{path}/{key}: expected finite number")
+    if not _finite_or_null(value.get("proxy_surface_clearance_m")):
+        errors.append(f"{path}/proxy_surface_clearance_m: expected finite number or null")
+    for key in ("robot_radius_m", "focal_actor_radius_m", "radial_closing_speed_mps"):
+        if key in value and not _finite_or_null(value.get(key)):
+            errors.append(f"{path}/{key}: expected finite number or null")
+    if value.get("proxy_surface_clearance_status") not in {"available", "unavailable"}:
+        errors.append(f"{path}/proxy_surface_clearance_status: expected available or unavailable")
+    return errors
+
+
+def _validate_geometry(value: object, path: str) -> list[str]:
+    if not isinstance(value, Mapping):
+        return [f"{path}: expected object"]
+    geometry_type = value.get("type")
+    if geometry_type == "line_segment":
+        errors = _require_keys(
+            value,
+            path,
+            required={"type", "start", "end"},
+            allowed={"type", "start", "end"},
+        )
+        for key in ("start", "end"):
+            if not _finite_vector2(value.get(key)):
+                errors.append(f"{path}/{key}: expected finite 2-vector")
+        return errors
+    if geometry_type == "circle":
+        errors = _require_keys(
+            value,
+            path,
+            required={"type", "center", "radius_m"},
+            allowed={"type", "center", "radius_m"},
+        )
+        if not _finite_vector2(value.get("center")):
+            errors.append(f"{path}/center: expected finite 2-vector")
+        if not _finite_json_number(value.get("radius_m")):
+            errors.append(f"{path}/radius_m: expected finite number")
+        return errors
+    return [f"{path}/type: unexpected geometry type"]
 
 
 def _validate_commands_record(value: object, path: str) -> list[str]:
@@ -299,7 +484,7 @@ def _validate_actor_state(value: object, path: str, *, nullable: bool) -> list[s
     return errors
 
 
-def _validate_diagnostics_record(diagnostics: Mapping[str, Any]) -> list[str]:
+def _validate_diagnostics_record(diagnostics: Mapping[str, Any]) -> list[str]:  # noqa: C901
     errors: list[str] = []
     errors.extend(
         _require_keys(
@@ -353,6 +538,96 @@ def _validate_diagnostics_record(diagnostics: Mapping[str, Any]) -> list[str]:
             },
         )
     )
+    coverage = diagnostics.get("coverage")
+    errors.extend(
+        _require_keys(
+            coverage,
+            "/diagnostics/coverage",
+            required={"frame_count", "relative_interaction", "proxy_surface_clearance"},
+            allowed={"frame_count", "relative_interaction", "proxy_surface_clearance"},
+        )
+    )
+    if isinstance(coverage, Mapping):
+        if not isinstance(coverage.get("frame_count"), int) or coverage["frame_count"] < 1:
+            errors.append("/diagnostics/coverage/frame_count: expected positive integer")
+        for key in ("relative_interaction", "proxy_surface_clearance"):
+            errors.extend(
+                _validate_coverage_record(coverage.get(key), f"/diagnostics/coverage/{key}")
+            )
+    threshold = diagnostics.get("threshold_exposure")
+    if isinstance(threshold, Mapping):
+        for key in ("threshold_m",):
+            if not _finite_json_number(threshold.get(key)):
+                errors.append(f"/diagnostics/threshold_exposure/{key}: expected finite number")
+        for key in ("duration_s", "integrated_clearance_deficit_m_s"):
+            if not _finite_or_null(threshold.get(key)):
+                errors.append(
+                    f"/diagnostics/threshold_exposure/{key}: expected finite number or null"
+                )
+    reversal = diagnostics.get("reversal_counts")
+    if isinstance(reversal, Mapping):
+        for key in ("heading_reversal_count", "velocity_reversal_count"):
+            if not isinstance(reversal.get(key), int) or reversal[key] < 0:
+                errors.append(f"/diagnostics/reversal_counts/{key}: expected nonnegative integer")
+    return errors
+
+
+def _validate_coverage_record(value: object, path: str) -> list[str]:
+    errors = _require_keys(
+        value,
+        path,
+        required={"status", "available_frame_count", "missing_frame_count"},
+        allowed={
+            "status",
+            "frame_count",
+            "available_frame_count",
+            "missing_frame_count",
+            "missing_radius_frame_count",
+            "missing_actor_interval_frame_count",
+            "reason",
+        },
+    )
+    if not isinstance(value, Mapping):
+        return errors
+    if value.get("status") not in {"complete", "partial"}:
+        errors.append(f"{path}/status: expected complete or partial")
+    for key, item in value.items():
+        if key.endswith("_count") and (not isinstance(item, int) or item < 0):
+            errors.append(f"{path}/{key}: expected nonnegative integer")
+    return errors
+
+
+def _validate_global_minimum_series(value: object) -> list[str]:
+    errors = _require_keys(
+        value,
+        "/encounters/global_minimum_over_all_actors",
+        required={"status", "reason", "series"},
+        allowed={"status", "reason", "series"},
+    )
+    if not isinstance(value, Mapping):
+        return errors
+    series = value.get("series")
+    if not isinstance(series, list):
+        return [*errors, "/encounters/global_minimum_over_all_actors/series: expected array"]
+    for index, row in enumerate(series):
+        row_path = f"/encounters/global_minimum_over_all_actors/series/{index}"
+        errors.extend(
+            _require_keys(
+                row,
+                row_path,
+                required={"step", "time_s", "actor_id", "center_distance_m"},
+                allowed={"step", "time_s", "actor_id", "center_distance_m"},
+            )
+        )
+        if isinstance(row, Mapping):
+            if not isinstance(row.get("step"), int):
+                errors.append(f"{row_path}/step: expected integer")
+            if not _finite_json_number(row.get("time_s")):
+                errors.append(f"{row_path}/time_s: expected finite number")
+            if not isinstance(row.get("actor_id"), str):
+                errors.append(f"{row_path}/actor_id: expected string")
+            if not _finite_json_number(row.get("center_distance_m")):
+                errors.append(f"{row_path}/center_distance_m: expected finite number")
     return errors
 
 
@@ -378,7 +653,7 @@ def _json_scalar(value: object) -> bool:
     return value is None or isinstance(value, str | bool) or _finite_json_number(value)
 
 
-def _validate_event_anchor_hierarchy(  # noqa: C901
+def _validate_event_anchor_hierarchy(  # noqa: C901, PLR0912
     hierarchy: Mapping[str, Any],
     events: object,
     frames: object,
@@ -393,6 +668,20 @@ def _validate_event_anchor_hierarchy(  # noqa: C901
     ]
     if hierarchy.get("fallback_order") != expected_fallback_order:
         errors.append("/event_anchor_hierarchy/fallback_order: unexpected fallback order")
+    expected_available = _expected_hierarchy_anchors(events, expected_fallback_order)
+    if hierarchy.get("available_anchors") != expected_available:
+        errors.append(
+            "/event_anchor_hierarchy/available_anchors: must match canonical event anchors"
+        )
+    expected_selected = expected_available[0] if expected_available else None
+    expected_status = "available" if expected_selected is not None else "unavailable"
+    if hierarchy.get("status") != expected_status:
+        errors.append("/event_anchor_hierarchy/status: must match canonical event anchors")
+    if hierarchy.get("selected_anchor") != expected_selected:
+        errors.append("/event_anchor_hierarchy/selected_anchor: must match canonical event anchors")
+    expected_anchor_time = expected_selected["time_s"] if expected_selected is not None else None
+    if hierarchy.get("anchor_time_s") != expected_anchor_time:
+        errors.append("/event_anchor_hierarchy/anchor_time_s: must match canonical event anchors")
     if hierarchy.get("status") == "available":
         selected = hierarchy.get("selected_anchor")
         if not isinstance(selected, Mapping):
@@ -444,6 +733,35 @@ def _validate_event_anchor_hierarchy(  # noqa: C901
                         f"/frames/{index}/event_alignment/tau_s: inconsistent with anchor"
                     )
     return errors
+
+
+def _expected_hierarchy_anchors(
+    events: object, fallback_order: Sequence[str]
+) -> list[dict[str, Any]]:
+    if not isinstance(events, list):
+        return []
+    available = {
+        str(event["event_type"]): event
+        for event in events
+        if isinstance(event, Mapping)
+        and event.get("status") == "available"
+        and event.get("event_type") in fallback_order
+        and _finite_json_number(event.get("time_s"))
+        and isinstance(event.get("event_id"), str)
+    }
+    return [
+        {
+            "rank": rank,
+            "event_type": event_type,
+            "event_id": str(available[event_type]["event_id"]),
+            "time_s": float(available[event_type]["time_s"]),
+            "selection_role": "first_safety_predicate_breach"
+            if event_type == "first_safety_predicate_breach"
+            else "fallback_anchor",
+        }
+        for rank, event_type in enumerate(fallback_order)
+        if event_type in available
+    ]
 
 
 def _validate_pair_semantics(pair: Mapping[str, Any]) -> list[str]:
@@ -521,6 +839,18 @@ def _validate_canonical_declared_encounter(declared: Mapping[str, Any]) -> list[
 
 def _finite_json_number(value: object) -> bool:
     return isinstance(value, int | float) and math.isfinite(float(value))
+
+
+def _finite_or_null(value: object) -> bool:
+    return value is None or _finite_json_number(value)
+
+
+def _finite_vector2(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(_finite_json_number(item) for item in value)
+    )
 
 
 def load_near_miss_encounter_report(path: Path) -> dict[str, Any]:
@@ -1927,7 +2257,6 @@ def _collision_event_anchor(
             zone_id=None,
         )
         event["time_s"] = float(state["collision_time"])
-        event["actor_id"] = state.get("actor_id")
         event["collision_partner_id"] = state.get("collision_partner_id")
         event["collision_partner_type"] = state.get("collision_partner_type")
         event["event_relative_time"] = _event_relative_time(
@@ -1955,35 +2284,14 @@ def _terminal_event_anchor(
     frames: Sequence[Mapping[str, Any]],
     focal_actor_id: object,
 ) -> dict[str, Any]:
-    state = _terminal_anchor_state(trace, frames)
-    if state["status"] == "available":
-        event = _event_from_condition(
-            "terminal_event",
-            state["frame"],
-            actor_id=focal_actor_id,
-            source_fields=[str(state["source_field"])],
-            absent_status="unavailable",
-            zone_id=None,
-        )
-        event["time_s"] = float(state["terminal_time"])
-        event["terminal_reason"] = str(state["terminal_reason"])
-        event["event_relative_time"] = _event_relative_time(
-            float(state["terminal_time"]),
-            float(state["terminal_time"]),
-        )
-        return event
-    event = _event_from_condition(
+    return _event_from_condition(
         "terminal_event",
         None,
         actor_id=focal_actor_id,
-        source_fields=["planner.event_ledger.terminal_events", "planner.outcome.terminal_event"],
+        source_fields=["terminal_event_contract_unavailable"],
         absent_status="unavailable",
         zone_id=None,
     )
-    if state["observed"]:
-        event["reason"] = str(state.get("reason", "terminal_observed_time_unavailable"))
-        event["terminal_observed"] = True
-    return event
 
 
 def _collision_anchor_state(
@@ -2003,7 +2311,6 @@ def _collision_anchor_state(
                     "observed": True,
                     "frame": frame,
                     "collision_time": float(collision_time),
-                    "actor_id": signal.get("actor_id"),
                     "collision_partner_id": signal.get("collision_partner_id"),
                     "collision_partner_type": signal.get("collision_partner_type"),
                 }
@@ -2013,34 +2320,6 @@ def _collision_anchor_state(
                 "reason": "collision_time_outside_encounter_interval",
             }
     return {"status": "unavailable", "observed": boolean_observed}
-
-
-def _terminal_anchor_state(
-    trace: SimulationTraceExport,
-    frames: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    observed = False
-    for trace_frame in trace.frames:
-        signal = _canonical_terminal_signal(trace_frame.planner)
-        observed = observed or signal["observed"]
-        terminal_time = signal.get("terminal_time")
-        if isinstance(terminal_time, int | float) and math.isfinite(float(terminal_time)):
-            frame = _frame_at_or_after_time(frames, float(terminal_time))
-            if frame is not None:
-                return {
-                    "status": "available",
-                    "observed": True,
-                    "frame": frame,
-                    "terminal_time": float(terminal_time),
-                    "terminal_reason": signal.get("terminal_reason", "terminal"),
-                    "source_field": signal.get("source", "terminal_signal"),
-                }
-            return {
-                "status": "unavailable",
-                "observed": True,
-                "reason": "terminal_time_outside_encounter_interval",
-            }
-    return {"status": "unavailable", "observed": observed}
 
 
 def _frame_at_or_after_time(
@@ -2088,37 +2367,6 @@ def _canonical_collision_signal(planner: Mapping[str, Any]) -> dict[str, Any]:
     return {"observed": False, "source": "no_canonical_collision_signal"}
 
 
-def _canonical_terminal_signal(planner: Mapping[str, Any]) -> dict[str, Any]:
-    ledger_signal = _ledger_terminal_signal(planner.get("event_ledger"))
-    if ledger_signal.get("terminal_time") is not None or ledger_signal.get("source") == (
-        "invalid_terminal_event_record_shape"
-    ):
-        return ledger_signal
-    outcome = planner.get("outcome")
-    if isinstance(outcome, Mapping):
-        terminal = outcome.get("terminal_event")
-        terminal_time = outcome.get("terminal_time")
-        terminal_reason = outcome.get("terminal_reason", outcome.get("termination_reason"))
-        if (
-            terminal is True
-            and _finite_json_number(terminal_time)
-            and isinstance(terminal_reason, str)
-        ):
-            return {
-                "observed": True,
-                "source": "outcome.terminal_event",
-                "terminal_time": float(terminal_time),
-                "terminal_reason": terminal_reason,
-            }
-        if terminal is True:
-            return {"observed": True, "source": "outcome.terminal_event"}
-        if terminal not in (False, None):
-            return {"observed": False, "source": "invalid_outcome_terminal_shape"}
-    if ledger_signal["observed"]:
-        return ledger_signal
-    return {"observed": False, "source": "no_canonical_terminal_signal"}
-
-
 def _ledger_collision_signal(ledger: object) -> dict[str, Any]:
     if not (
         isinstance(ledger, Mapping) and ledger.get("schema_version") == "EpisodeEventLedger.v2"
@@ -2137,57 +2385,36 @@ def _ledger_collision_signal(ledger: object) -> dict[str, Any]:
             "observed": True,
             "source": "event_ledger.collision_events",
             "collision_time": float(collision_time),
-            "actor_id": str(record["actor_id"]),
-            "collision_partner_id": str(record["collision_partner_id"]),
+            "collision_partner_id": record["collision_partner_id"],
             "collision_partner_type": str(record["collision_partner_type"]),
         }
     return {"observed": bool(records), "source": "event_ledger.collision_events"}
 
 
-def _ledger_terminal_signal(ledger: object) -> dict[str, Any]:
-    if not (
-        isinstance(ledger, Mapping) and ledger.get("schema_version") == "EpisodeEventLedger.v2"
-    ):
-        return {"observed": False, "source": "event_ledger_unavailable"}
-    records = ledger.get("terminal_events")
-    if not (isinstance(records, Sequence) and not isinstance(records, str | bytes)):
-        return {"observed": False, "source": "event_ledger_terminal_events_unavailable"}
-    for record in records:
-        if not isinstance(record, Mapping):
-            continue
-        if not _valid_terminal_record(record):
-            return {"observed": False, "source": "invalid_terminal_event_record_shape"}
-        return {
-            "observed": True,
-            "source": "event_ledger.terminal_events",
-            "terminal_time": float(record["terminal_time"]),
-            "terminal_reason": str(record["terminal_reason"]),
-        }
-    return {"observed": bool(records), "source": "event_ledger.terminal_events"}
-
-
 def _valid_collision_record(record: Mapping[str, Any]) -> bool:
-    allowed = {"collision_time", "actor_id", "collision_partner_id", "collision_partner_type"}
+    allowed = {
+        "collision_partner_type",
+        "collision_partner_id",
+        "collision_time",
+        "relative_speed_at_contact",
+        "clearance_series_source",
+        "exact_event_source",
+    }
     if set(record) != allowed:
         return False
+    partner_id = record.get("collision_partner_id")
+    relative_speed = record.get("relative_speed_at_contact")
     return (
         _finite_json_number(record.get("collision_time"))
-        and isinstance(record.get("actor_id"), str)
-        and isinstance(record.get("collision_partner_id"), str)
         and isinstance(record.get("collision_partner_type"), str)
-        and bool(record["actor_id"])
-        and bool(record["collision_partner_id"])
-        and bool(record["collision_partner_type"])
-    )
-
-
-def _valid_terminal_record(record: Mapping[str, Any]) -> bool:
-    allowed = {"terminal_time", "terminal_reason"}
-    return (
-        set(record) == allowed
-        and _finite_json_number(record.get("terminal_time"))
-        and isinstance(record.get("terminal_reason"), str)
-        and bool(record["terminal_reason"])
+        and record["collision_partner_type"] in COLLISION_PARTNER_TYPES
+        and (partner_id is None or isinstance(partner_id, str))
+        and (partner_id is None or bool(partner_id.strip()))
+        and (relative_speed is None or _finite_json_number(relative_speed))
+        and isinstance(record.get("clearance_series_source"), str)
+        and bool(record["clearance_series_source"].strip())
+        and isinstance(record.get("exact_event_source"), str)
+        and bool(record["exact_event_source"].strip())
     )
 
 

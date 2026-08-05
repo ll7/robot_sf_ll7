@@ -27,6 +27,12 @@ def main() -> int:
     parser.add_argument("--focal-actor-id", help="Explicit actor ID for the focal encounter.")
     parser.add_argument("--pair-input", type=Path, help="Optional second trace for compatibility.")
     parser.add_argument(
+        "--pair-comparison-grain",
+        choices=("matched_planner_pair", "matched_realization_pair"),
+        default="matched_realization_pair",
+        help="Declared comparison grain for --pair-input compatibility gates.",
+    )
+    parser.add_argument(
         "--encounter-report",
         type=Path,
         help="Optional canonical near_miss_encounter.v1 report used to bind the focal interval.",
@@ -112,6 +118,7 @@ def main() -> int:
         focal_actor_id=args.focal_actor_id,
         pair_input_path=args.pair_input,
         encounter_report_path=args.encounter_report,
+        pair_comparison_grain=args.pair_comparison_grain,
     )
     print(f"wrote {output}")
     return 0

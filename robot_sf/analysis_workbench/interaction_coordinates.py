@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -51,6 +52,7 @@ NEAR_MISS_ENCOUNTER_SCHEMA_FILE = (
 EVENT_PROFILE_VERSION = "worked_example_event_detectors.v1"
 THRESHOLD_PROFILE_VERSION = "worked_example_threshold_profile.diagnostic.v1"
 CANONICAL_ENCOUNTER_SCHEMA_VERSION = "near_miss_encounter.v1"
+DEFAULT_PAIR_COMPARISON_GRAIN = "matched_realization_pair"
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +143,17 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
                 value = frame.get(key)
                 if isinstance(value, Mapping) and not value:
                     errors.append(f"/frames/{index}/{key}: expected non-empty record")
+            relative = frame.get("relative_interaction")
+            if isinstance(relative, Mapping) and relative.get("status") == "available":
+                for key in (
+                    "relative_longitudinal_m",
+                    "relative_lateral_m",
+                    "center_distance_m",
+                ):
+                    if not _finite_json_number(relative.get(key)):
+                        errors.append(
+                            f"/frames/{index}/relative_interaction/{key}: expected finite number"
+                        )
     events = payload.get("event_anchors")
     if isinstance(events, list):
         for index, event in enumerate(events):
@@ -157,6 +170,9 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
                     errors.append(f"/event_anchors/{index}/step: required when status is available")
             if event.get("event_type") == "terminal_event":
                 errors.append(f"/event_anchors/{index}/event_type: terminal_event is not emitted")
+    hierarchy = payload.get("event_anchor_hierarchy")
+    if isinstance(hierarchy, Mapping):
+        errors.extend(_validate_event_anchor_hierarchy(hierarchy, events, frames))
     focal = (
         payload.get("encounters", {}).get("focal")
         if isinstance(payload.get("encounters"), Mapping)
@@ -168,10 +184,18 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
             errors.append("/encounters/focal/status: expected available or unavailable")
         if status == "available" and not focal.get("actor_id"):
             errors.append("/encounters/focal/actor_id: required when status is available")
+        declared = focal.get("declared_encounter")
+        if (
+            status == "available"
+            and isinstance(declared, Mapping)
+            and declared.get("schema_version") == CANONICAL_ENCOUNTER_SCHEMA_VERSION
+        ):
+            errors.extend(_validate_canonical_declared_encounter(declared))
     pair = payload.get("pair_compatibility")
     if isinstance(pair, Mapping):
         if pair.get("status") not in {"available", "unavailable", "incompatible"}:
             errors.append("/pair_compatibility/status: invalid status")
+        errors.extend(_validate_pair_semantics(pair))
         divergence = pair.get("divergence_interpretation")
         if isinstance(divergence, Mapping) and divergence.get("allowed") is True:
             shared_prefix = pair.get("shared_prefix")
@@ -182,6 +206,121 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
                     "/pair_compatibility/divergence_interpretation/allowed: requires shared_prefix true"
                 )
     return errors
+
+
+def _validate_event_anchor_hierarchy(  # noqa: C901
+    hierarchy: Mapping[str, Any],
+    events: object,
+    frames: object,
+) -> list[str]:
+    errors: list[str] = []
+    if hierarchy.get("status") == "available":
+        selected = hierarchy.get("selected_anchor")
+        if not isinstance(selected, Mapping):
+            errors.append("/event_anchor_hierarchy/selected_anchor: required when available")
+            return errors
+        if selected not in hierarchy.get("available_anchors", []):
+            errors.append("/event_anchor_hierarchy/selected_anchor: must be one available anchor")
+        anchor_time = hierarchy.get("anchor_time_s")
+        if not _finite_json_number(anchor_time) or anchor_time != selected.get("time_s"):
+            errors.append("/event_anchor_hierarchy/anchor_time_s: must match selected anchor time")
+        if isinstance(events, list):
+            by_id = {
+                event.get("event_id"): event
+                for event in events
+                if isinstance(event, Mapping) and event.get("status") == "available"
+            }
+            if selected.get("event_id") not in by_id:
+                errors.append(
+                    "/event_anchor_hierarchy/selected_anchor/event_id: unavailable anchor selected"
+                )
+        if isinstance(frames, list) and _finite_json_number(anchor_time):
+            for index, frame in enumerate(frames):
+                if not isinstance(frame, Mapping):
+                    continue
+                alignment = frame.get("event_alignment")
+                if not isinstance(alignment, Mapping) or alignment.get("status") != "available":
+                    errors.append(
+                        f"/frames/{index}/event_alignment: required for available hierarchy"
+                    )
+                    continue
+                expected_tau = float(frame["time_s"]) - float(anchor_time)
+                if not math.isclose(
+                    float(alignment.get("tau_s", math.nan)), expected_tau, abs_tol=1e-12
+                ):
+                    errors.append(
+                        f"/frames/{index}/event_alignment/tau_s: inconsistent with anchor"
+                    )
+    return errors
+
+
+def _validate_pair_semantics(pair: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    grain = pair.get("comparison_grain")
+    grain_id = grain.get("grain_id") if isinstance(grain, Mapping) else None
+    if grain_id not in {"matched_planner_pair", "matched_realization_pair"}:
+        errors.append("/pair_compatibility/comparison_grain/grain_id: invalid or undeclared grain")
+    provenance = pair.get("provenance_gate")
+    initial = pair.get("initial_state_equivalence")
+    if pair.get("status") == "available":
+        if not (isinstance(provenance, Mapping) and provenance.get("compatible") is True):
+            errors.append(
+                "/pair_compatibility/provenance_gate/compatible: required for available pair"
+            )
+        if not (isinstance(initial, Mapping) and initial.get("equivalent") is True):
+            errors.append("/pair_compatibility/initial_state_equivalence/equivalent: required")
+    if isinstance(provenance, Mapping):
+        checks = provenance.get("checks")
+        if isinstance(checks, Mapping):
+            for key in ("map_id_present", "horizon_present", "config_digest_present"):
+                if pair.get("status") == "available" and checks.get(key) is not True:
+                    errors.append(f"/pair_compatibility/provenance_gate/checks/{key}: required")
+    return errors
+
+
+def _validate_canonical_declared_encounter(declared: Mapping[str, Any]) -> list[str]:
+    record = declared.get("canonical_record")
+    if not isinstance(record, Mapping):
+        return ["/encounters/focal/declared_encounter/canonical_record: required"]
+    required = {
+        "schema_version",
+        "encounter_id",
+        "actor_id",
+        "start_time_s",
+        "end_time_s",
+        "duration_s",
+        "minimum_clearance_m",
+        "minimum_ttc_s",
+        "maximum_closing_speed_mps",
+        "minimum_pet_s",
+        "sample_count",
+        "valid_exposure_duration_s",
+        "termination_reason",
+        "contact_terminated",
+        "contact_status",
+        "contact_time_s",
+        "unavailable_fields",
+        "evidence_status",
+    }
+    extra = set(record) - required
+    missing = required - set(record)
+    errors = [
+        f"/encounters/focal/declared_encounter/canonical_record/{key}: unexpected field"
+        for key in sorted(extra)
+    ]
+    errors.extend(
+        f"/encounters/focal/declared_encounter/canonical_record/{key}: required"
+        for key in sorted(missing)
+    )
+    if record.get("schema_version") != CANONICAL_ENCOUNTER_SCHEMA_VERSION:
+        errors.append(
+            "/encounters/focal/declared_encounter/canonical_record/schema_version: invalid"
+        )
+    return errors
+
+
+def _finite_json_number(value: object) -> bool:
+    return isinstance(value, int | float) and math.isfinite(float(value))
 
 
 def load_near_miss_encounter_report(path: Path) -> dict[str, Any]:
@@ -218,6 +357,7 @@ def build_worked_example_process_trace(
     focal_actor_id: str | None = None,
     pair_input_path: Path | None = None,
     encounter_report_path: Path | None = None,
+    pair_comparison_grain: str = DEFAULT_PAIR_COMPARISON_GRAIN,
 ) -> dict[str, Any]:
     """Build a renderer-neutral process trace from one admitted trace export.
 
@@ -226,6 +366,7 @@ def build_worked_example_process_trace(
     """
 
     trace = load_simulation_trace_export(input_path)
+    input_checksum = _sha256_file(input_path)
     pair_trace = load_simulation_trace_export(pair_input_path) if pair_input_path else None
     encounter_report = (
         load_near_miss_encounter_report(encounter_report_path)
@@ -239,6 +380,8 @@ def build_worked_example_process_trace(
         focal_actor_id=focal_actor_id,
         pair_trace=pair_trace,
         encounter_report=encounter_report,
+        encounter_report_input_checksum=input_checksum if encounter_report is not None else None,
+        pair_comparison_grain=pair_comparison_grain,
     )
     validate_worked_example_process_trace(payload, source=input_path)
     return payload
@@ -252,6 +395,8 @@ def build_worked_example_process_trace_from_export(
     focal_actor_id: str | None = None,
     pair_trace: SimulationTraceExport | None = None,
     encounter_report: Mapping[str, Any] | None = None,
+    encounter_report_input_checksum: str | None = None,
+    pair_comparison_grain: str = DEFAULT_PAIR_COMPARISON_GRAIN,
 ) -> dict[str, Any]:
     """Build a schema-valid process trace from a typed trace export.
 
@@ -263,6 +408,7 @@ def build_worked_example_process_trace_from_export(
         trace,
         requested_actor_id=focal_actor_id,
         encounter_report=encounter_report,
+        encounter_report_input_checksum=encounter_report_input_checksum,
     )
     route_availability = _route_availability(route)
     conflict_availability = _conflict_availability(conflict_zone)
@@ -287,11 +433,14 @@ def build_worked_example_process_trace_from_export(
         declared=focal.get("declared_encounter"),
     )
     events = _event_anchors(trace, frames=frames, focal_actor_id=focal.get("actor_id"))
+    event_anchor_hierarchy = _event_anchor_hierarchy(events)
+    frames = _frames_with_event_alignment(frames, event_anchor_hierarchy)
     pair = (
         build_pair_compatibility_record(
             trace,
             pair_trace,
             left_events=events,
+            comparison_grain=pair_comparison_grain,
             right_events=_event_anchors(
                 pair_trace,
                 frames=[
@@ -310,7 +459,7 @@ def build_worked_example_process_trace_from_export(
             ),
         )
         if pair_trace is not None
-        else unavailable_pair_compatibility()
+        else unavailable_pair_compatibility(comparison_grain=pair_comparison_grain)
     )
     payload: dict[str, Any] = {
         "schema_version": WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_VERSION,
@@ -342,7 +491,7 @@ def build_worked_example_process_trace_from_export(
             route_available=route_availability["status"] == "available",
         ),
         "event_anchors": events,
-        "event_anchor_hierarchy": _event_anchor_hierarchy(events),
+        "event_anchor_hierarchy": event_anchor_hierarchy,
         "pair_compatibility": pair,
     }
     validate_worked_example_process_trace(payload)
@@ -363,6 +512,14 @@ def write_worked_example_process_trace(input_path: Path, output_path: Path, **kw
         encoding="utf-8",
     )
     return output_path
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _source_trace(trace: SimulationTraceExport) -> dict[str, Any]:
@@ -496,8 +653,19 @@ def _resolve_focal_actor(
     *,
     requested_actor_id: str | None = None,
     encounter_report: Mapping[str, Any] | None = None,
+    encounter_report_input_checksum: str | None = None,
 ) -> dict[str, Any]:
-    declared = _declared_encounter(trace, encounter_report=encounter_report)
+    declared = _declared_encounter(
+        trace,
+        encounter_report=encounter_report,
+        encounter_report_input_checksum=encounter_report_input_checksum,
+    )
+    if encounter_report is not None and declared.get("status") == "unavailable":
+        return {
+            "status": "unavailable",
+            "reason": str(declared.get("reason", "canonical_encounter_unavailable")),
+            "declared_encounter": declared,
+        }
     actor_ids = sorted(
         {
             str(pedestrian["id"])
@@ -561,9 +729,14 @@ def _declared_encounter(
     trace: SimulationTraceExport,
     *,
     encounter_report: Mapping[str, Any] | None = None,
+    encounter_report_input_checksum: str | None = None,
 ) -> dict[str, Any]:
     if encounter_report is not None:
-        return _select_canonical_encounter(trace, encounter_report)
+        return _select_canonical_encounter(
+            trace,
+            encounter_report,
+            expected_input_checksum=encounter_report_input_checksum,
+        )
     for frame in trace.frames:
         for key in ("focal_encounter", "encounter"):
             value = frame.planner.get(key)
@@ -594,7 +767,20 @@ def _declared_encounter(
 def _select_canonical_encounter(
     trace: SimulationTraceExport,
     encounter_report: Mapping[str, Any],
+    *,
+    expected_input_checksum: str | None,
 ) -> dict[str, Any]:
+    checksum_status = _encounter_report_checksum_status(
+        encounter_report,
+        expected_input_checksum=expected_input_checksum,
+    )
+    if checksum_status["status"] != "available":
+        return {
+            "status": "unavailable",
+            "reason": checksum_status["reason"],
+            "schema_version": CANONICAL_ENCOUNTER_SCHEMA_VERSION,
+            "checksum_binding": checksum_status,
+        }
     encounters = encounter_report.get("encounters")
     if not isinstance(encounters, Sequence) or isinstance(encounters, str | bytes):
         return {
@@ -641,6 +827,38 @@ def _select_canonical_encounter(
         "canonical_record": {key: selected[key] for key in selected},
         "report_profile": dict(encounter_report["profile"]),
         "report_provenance": dict(encounter_report["provenance"]),
+        "checksum_binding": checksum_status,
+    }
+
+
+def _encounter_report_checksum_status(
+    encounter_report: Mapping[str, Any],
+    *,
+    expected_input_checksum: str | None,
+) -> dict[str, Any]:
+    if expected_input_checksum is None:
+        return {
+            "status": "unavailable",
+            "reason": "input_trace_checksum_unavailable",
+        }
+    provenance = encounter_report.get("provenance")
+    input_checksums = provenance.get("input_checksums") if isinstance(provenance, Mapping) else None
+    if not isinstance(input_checksums, Mapping):
+        return {
+            "status": "unavailable",
+            "reason": "canonical_encounter_input_checksums_unavailable",
+        }
+    checksum_values = {str(value) for value in input_checksums.values()}
+    if expected_input_checksum not in checksum_values:
+        return {
+            "status": "unavailable",
+            "reason": "canonical_encounter_input_checksum_mismatch",
+            "expected_input_checksum": expected_input_checksum,
+        }
+    return {
+        "status": "available",
+        "reason": "canonical_encounter_input_checksum_matched",
+        "input_checksum": expected_input_checksum,
     }
 
 
@@ -704,9 +922,10 @@ def _frame_in_focal_encounter(
 def _world_actor(actor: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if actor is None:
         return None
+    heading = _finite_float(actor.get("heading"))
     return {
         "position": list(_vector2(actor.get("position")) or ()),
-        "heading": actor.get("heading"),
+        "heading": heading,
         "velocity": list(_vector2(actor.get("velocity")) or ()),
         "radius_m": _radius(actor),
     }
@@ -826,7 +1045,9 @@ def _relative_state(
     if robot_pos is None or focal_pos is None:
         return {"status": "unavailable", "reason": "missing_position"}
     rel_pos = (focal_pos[0] - robot_pos[0], focal_pos[1] - robot_pos[1])
-    heading = float(frame.robot.get("heading", 0.0))
+    heading = _finite_float(frame.robot.get("heading"))
+    if heading is None:
+        return {"status": "unavailable", "reason": "missing_or_nonfinite_robot_heading"}
     forward = (math.cos(heading), math.sin(heading))
     left = (-forward[1], forward[0])
     center_distance = _norm(rel_pos)
@@ -929,7 +1150,9 @@ def _diagnostics(frames: Sequence[Mapping[str, Any]], *, route_available: bool) 
         exposure = None
         deficit = None
     return {
-        "minimum_proxy_surface_clearance_m": min(clearances) if clearances else None,
+        "minimum_proxy_surface_clearance_m": min(clearances)
+        if clearances and coverage["proxy_surface_clearance"]["status"] == "complete"
+        else None,
         "threshold_exposure": {
             "profile_version": THRESHOLD_PROFILE_VERSION,
             "threshold_m": threshold,
@@ -1087,14 +1310,7 @@ def _event_anchors(
             absent_status="not_observed" if _has_conflict_signal(frames) else "unavailable",
             zone_id=_first_zone_id(frames),
         ),
-        _event_from_condition(
-            "exact_collision_event",
-            _first_collision_frame(trace, frames),
-            actor_id=focal_actor_id,
-            source_fields=["planner.outcome.collision_event", "planner.event_ledger"],
-            absent_status="not_observed" if _has_collision_signal(trace) else "unavailable",
-            zone_id=None,
-        ),
+        _collision_event_anchor(trace, frames=frames, focal_actor_id=focal_actor_id),
         _event_from_condition(
             "proxy_overlap_event",
             _first_proxy_overlap_frame(frames),
@@ -1153,7 +1369,7 @@ def _event_from_condition(
             if absent_status == "not_observed"
             else "required_signal_unavailable",
             "source_fields": source_fields,
-            "event_relative_coordinates": {
+            "event_relative_time": {
                 "status": "unavailable",
                 "reason": f"event_{absent_status}",
             },
@@ -1162,7 +1378,8 @@ def _event_from_condition(
                 "reason": f"event_{absent_status}",
             },
         }
-    event_relative = _event_relative_coordinates(frame)
+    event_relative = _event_relative_time(float(frame["time_s"]), float(frame["time_s"]))
+    visual_eligible = event_type != "trace_end_boundary"
     return {
         "event_id": f"step-{int(frame['step']):04d}-{_slug(event_type)}",
         "event_type": event_type,
@@ -1174,65 +1391,98 @@ def _event_from_condition(
         "actor_id": str(actor_id) if actor_id is not None else None,
         "zone_id": str(zone_id) if zone_id is not None else None,
         "source_fields": source_fields,
-        "event_relative_coordinates": event_relative,
+        "event_relative_time": event_relative,
         "visual_anchor_eligibility": {
-            "eligible": True,
-            "reason": "deterministic_trace_event",
+            "eligible": visual_eligible,
+            "reason": "deterministic_trace_event"
+            if visual_eligible
+            else "trace_end_boundary_requires_alignment",
         },
     }
 
 
-def _event_relative_coordinates(frame: Mapping[str, Any]) -> dict[str, Any]:
-    relative = frame.get("relative_interaction")
-    if not isinstance(relative, Mapping) or relative.get("status") != "available":
-        return {"status": "unavailable", "reason": "relative_interaction_unavailable_at_event"}
-    required = ("relative_longitudinal_m", "relative_lateral_m", "center_distance_m")
-    if any(not isinstance(relative.get(key), int | float) for key in required):
-        return {"status": "unavailable", "reason": "event_relative_coordinate_fields_missing"}
+def _event_relative_time(time_s: float, anchor_time_s: float) -> dict[str, Any]:
     return {
         "status": "available",
-        "frame": "robot_heading_aligned",
-        "actor_minus_robot": True,
-        "relative_longitudinal_m": float(relative["relative_longitudinal_m"]),
-        "relative_lateral_m": float(relative["relative_lateral_m"]),
-        "center_distance_m": float(relative["center_distance_m"]),
+        "anchor_time_s": anchor_time_s,
+        "tau_s": time_s - anchor_time_s,
     }
 
 
-def _event_anchor_hierarchy(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    priority = {
-        "exact_collision_event": 0,
-        "proxy_overlap_event": 1,
-        "minimum_clearance": 2,
-        "conflict_zone_entry": 3,
-        "first_material_deceleration": 4,
-        "first_material_turn_response": 5,
-        "sustained_stall_onset": 6,
-        "recovery_onset": 7,
-        "trace_end_boundary": 8,
+def _event_anchor_hierarchy(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    fallback_order = [
+        "exact_collision_event",
+        "proxy_overlap_event",
+        "minimum_clearance",
+        "conflict_zone_entry",
+        "first_material_deceleration",
+        "first_material_turn_response",
+        "sustained_stall_onset",
+        "recovery_onset",
+        "trace_end_boundary",
+    ]
+    available = {
+        str(event["event_type"]): event for event in events if event.get("status") == "available"
     }
+    ranked = [
+        {
+            "rank": rank,
+            "event_type": event_type,
+            "event_id": str(available[event_type]["event_id"]),
+            "time_s": float(available[event_type]["time_s"]),
+            "selection_role": "first_safety_predicate_breach"
+            if event_type == "proxy_overlap_event"
+            else "fallback_anchor",
+        }
+        for rank, event_type in enumerate(fallback_order)
+        if event_type in available
+    ]
+    selected = ranked[0] if ranked else None
+    return {
+        "status": "available" if selected is not None else "unavailable",
+        "fallback_order": fallback_order,
+        "available_anchors": ranked,
+        "selected_anchor": selected,
+        "anchor_time_s": selected["time_s"] if selected is not None else None,
+    }
+
+
+def _frames_with_event_alignment(
+    frames: Sequence[Mapping[str, Any]],
+    hierarchy: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    selected = hierarchy.get("selected_anchor")
+    if not isinstance(selected, Mapping) or not isinstance(selected.get("time_s"), int | float):
+        return [
+            {
+                **frame,
+                "event_alignment": {"status": "unavailable", "reason": "no_available_anchor"},
+            }
+            for frame in frames
+        ]
+    anchor_time = float(selected["time_s"])
     return [
         {
-            "rank": index,
-            "event_type": str(event["event_type"]),
-            "event_id": str(event["event_id"]),
-            "status": str(event["status"]),
+            **frame,
+            "event_alignment": {
+                "status": "available",
+                "anchor_event_id": selected["event_id"],
+                "anchor_event_type": selected["event_type"],
+                "anchor_time_s": anchor_time,
+                "tau_s": float(frame["time_s"]) - anchor_time,
+            },
         }
-        for index, event in enumerate(
-            sorted(
-                events,
-                key=lambda event: (
-                    priority.get(str(event.get("event_type")), 999),
-                    0 if event.get("status") == "available" else 1,
-                    int(event.get("step", 1_000_000)),
-                    str(event.get("event_id")),
-                ),
-            )
-        )
+        for frame in frames
     ]
 
 
 def _minimum_clearance_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    if any(
+        frame["relative_interaction"].get("status") == "available"
+        and frame["relative_interaction"].get("proxy_surface_clearance_status") != "available"
+        for frame in frames
+    ):
+        return None
     candidates = [
         frame
         for frame in frames
@@ -1311,7 +1561,7 @@ def _first_zone_id(frames: Sequence[Mapping[str, Any]]) -> object:
 
 
 def _has_collision_signal(trace: SimulationTraceExport) -> bool:
-    return any(_typed_collision_event(frame.planner) is not None for frame in trace.frames)
+    return any(_canonical_collision_signal(frame.planner)["observed"] for frame in trace.frames)
 
 
 def _has_proxy_clearance_signal(frames: Sequence[Mapping[str, Any]]) -> bool:
@@ -1325,34 +1575,111 @@ def _has_robot_velocity_signal(frames: Sequence[Mapping[str, Any]]) -> bool:
     return any(_speed_from_frame(frame) is not None for frame in frames)
 
 
+def _collision_event_anchor(
+    trace: SimulationTraceExport,
+    *,
+    frames: Sequence[Mapping[str, Any]],
+    focal_actor_id: object,
+) -> dict[str, Any]:
+    state = _collision_anchor_state(trace, frames)
+    if state["status"] == "available":
+        event = _event_from_condition(
+            "exact_collision_event",
+            state["frame"],
+            actor_id=focal_actor_id,
+            source_fields=["planner.event_ledger.collision_events"],
+            absent_status="unavailable",
+            zone_id=None,
+        )
+        event["time_s"] = float(state["collision_time_s"])
+        event["event_relative_time"] = _event_relative_time(
+            float(state["collision_time_s"]),
+            float(state["collision_time_s"]),
+        )
+        return event
+    event = _event_from_condition(
+        "exact_collision_event",
+        None,
+        actor_id=focal_actor_id,
+        source_fields=["planner.outcome.collision_event", "planner.event_ledger.collision_events"],
+        absent_status="unavailable",
+        zone_id=None,
+    )
+    if state["observed"]:
+        event["reason"] = "collision_observed_time_unavailable"
+        event["collision_observed"] = True
+    return event
+
+
+def _collision_anchor_state(
+    trace: SimulationTraceExport,
+    frames: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    boolean_observed = False
+    for trace_frame in trace.frames:
+        signal = _canonical_collision_signal(trace_frame.planner)
+        boolean_observed = boolean_observed or signal["observed"]
+        collision_time = signal.get("collision_time_s")
+        if isinstance(collision_time, int | float) and math.isfinite(float(collision_time)):
+            frame = _frame_at_or_after_time(frames, float(collision_time))
+            if frame is not None:
+                return {
+                    "status": "available",
+                    "observed": True,
+                    "frame": frame,
+                    "collision_time_s": float(collision_time),
+                }
+    return {"status": "unavailable", "observed": boolean_observed}
+
+
+def _frame_at_or_after_time(
+    frames: Sequence[Mapping[str, Any]],
+    collision_time_s: float,
+) -> Mapping[str, Any] | None:
+    return next(
+        (frame for frame in frames if float(frame["time_s"]) >= collision_time_s),
+        frames[-1] if frames else None,
+    )
+
+
 def _first_collision_frame(
     trace: SimulationTraceExport,
     frames: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any] | None:
     for trace_frame, process_frame in zip(trace.frames, frames, strict=False):
-        if _typed_collision_event(trace_frame.planner) is not None:
+        signal = _canonical_collision_signal(trace_frame.planner)
+        if signal.get("collision_time_s") is not None:
             return process_frame
     return None
 
 
-def _typed_collision_event(planner: Mapping[str, Any]) -> Mapping[str, Any] | None:
+def _canonical_collision_signal(planner: Mapping[str, Any]) -> dict[str, Any]:
     outcome = planner.get("outcome")
     if isinstance(outcome, Mapping):
         collision = outcome.get("collision_event")
-        if isinstance(collision, Mapping) and collision.get("event_type") == "collision":
-            return collision
+        if collision is True:
+            return {"observed": True, "source": "outcome.collision_event"}
+        if collision is False or collision is None:
+            pass
+        else:
+            return {"observed": False, "source": "invalid_outcome_collision_shape"}
     ledger = planner.get("event_ledger")
-    records: Sequence[Any]
-    if isinstance(ledger, Mapping):
-        records = ledger.get("events", [])
-    else:
-        records = (
-            ledger if isinstance(ledger, Sequence) and not isinstance(ledger, str | bytes) else []
-        )
-    for record in records:
-        if isinstance(record, Mapping) and record.get("event_type") == "collision":
-            return record
-    return None
+    if isinstance(ledger, Mapping) and ledger.get("schema_version") == "EpisodeEventLedger.v2":
+        records = ledger.get("collision_events")
+        if isinstance(records, Sequence) and not isinstance(records, str | bytes):
+            for record in records:
+                if not isinstance(record, Mapping):
+                    continue
+                collision_time = record.get("collision_time_s", record.get("time_s"))
+                if isinstance(collision_time, int | float) and math.isfinite(float(collision_time)):
+                    return {
+                        "observed": True,
+                        "source": "event_ledger.collision_events",
+                        "collision_time_s": float(collision_time),
+                    }
+            if records:
+                return {"observed": True, "source": "event_ledger.collision_events"}
+    return {"observed": False, "source": "no_canonical_collision_signal"}
 
 
 def _first_proxy_overlap_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
@@ -1535,6 +1862,12 @@ def _vector2(value: Any) -> tuple[float, float] | None:
 
 def _radius(actor: Mapping[str, Any]) -> float | None:
     value = actor.get("radius")
+    if isinstance(value, int | float) and math.isfinite(float(value)):
+        return float(value)
+    return None
+
+
+def _finite_float(value: Any) -> float | None:
     if isinstance(value, int | float) and math.isfinite(float(value)):
         return float(value)
     return None

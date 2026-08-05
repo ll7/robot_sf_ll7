@@ -115,7 +115,8 @@
           "conflict",
           "relative_interaction",
           "global_minimum_actor",
-          "commands"
+          "commands",
+          "event_alignment"
         ],
         "properties": {
           "frame_index": {"type": "integer"},
@@ -127,7 +128,8 @@
           "conflict": {"type": "object"},
           "relative_interaction": {"type": "object"},
           "global_minimum_actor": {"type": "object"},
-          "commands": {"type": "object"}
+          "commands": {"type": "object"},
+          "event_alignment": {"$ref": "#/$defs/event_alignment"}
         }
       }
     },
@@ -205,6 +207,7 @@
           "actor_id",
           "zone_id",
           "source_fields",
+          "event_relative_time",
           "visual_anchor_eligibility"
         ],
         "properties": {
@@ -230,12 +233,18 @@
           "actor_id": {"type": ["string", "null"]},
           "zone_id": {"type": ["string", "null"]},
           "reason": {"type": "string"},
+          "collision_observed": {"type": "boolean"},
           "source_fields": {"type": "array", "items": {"type": "string"}},
-          "event_relative_coordinates": {
+          "event_relative_time": {
             "type": "object",
-            "additionalProperties": true,
+            "additionalProperties": false,
             "required": ["status"],
-            "properties": {"status": {"enum": ["available", "unavailable"]}}
+            "properties": {
+              "status": {"enum": ["available", "unavailable"]},
+              "anchor_time_s": {"type": "number"},
+              "tau_s": {"type": "number"},
+              "reason": {"type": "string"}
+            }
           },
           "visual_anchor_eligibility": {
             "type": "object",
@@ -250,18 +259,15 @@
       }
     },
     "event_anchor_hierarchy": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["rank", "event_type", "event_id", "status"],
-        "properties": {
-          "rank": {"type": "integer", "minimum": 0},
-          "event_type": {"type": "string"},
-          "event_id": {"type": "string"},
-          "status": {"enum": ["available", "unavailable", "not_observed"]}
-        }
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "fallback_order", "available_anchors", "selected_anchor", "anchor_time_s"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "fallback_order": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "available_anchors": {"type": "array", "items": {"$ref": "#/$defs/hierarchy_anchor"}},
+        "selected_anchor": {"anyOf": [{"$ref": "#/$defs/hierarchy_anchor"}, {"type": "null"}]},
+        "anchor_time_s": {"type": ["number", "null"]}
       }
     },
     "pair_compatibility": {
@@ -282,7 +288,14 @@
         "profile_version": {"type": "string"},
         "status": {"enum": ["available", "unavailable", "incompatible"]},
         "reason": {"type": "string"},
-        "comparison_grain": {"type": "object", "minProperties": 1},
+        "comparison_grain": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["grain_id"],
+          "properties": {
+            "grain_id": {"enum": ["matched_planner_pair", "matched_realization_pair", "undeclared"]}
+          }
+        },
         "provenance_gate": {"type": "object", "minProperties": 1},
         "initial_state_equivalence": {"type": "object"},
         "route_spawn_separation": {"type": "object"},
@@ -305,6 +318,31 @@
     }
   },
   "$defs": {
+    "event_alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "anchor_event_id": {"type": "string"},
+        "anchor_event_type": {"type": "string"},
+        "anchor_time_s": {"type": "number"},
+        "tau_s": {"type": "number"},
+        "reason": {"type": "string"}
+      }
+    },
+    "hierarchy_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rank", "event_type", "event_id", "time_s", "selection_role"],
+      "properties": {
+        "rank": {"type": "integer", "minimum": 0},
+        "event_type": {"type": "string"},
+        "event_id": {"type": "string"},
+        "time_s": {"type": "number"},
+        "selection_role": {"enum": ["first_safety_predicate_breach", "fallback_anchor"]}
+      }
+    },
     "focal_encounter": {
       "type": "object",
       "additionalProperties": true,

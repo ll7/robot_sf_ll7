@@ -19,6 +19,7 @@ change canonical benchmark metrics, SNQI, planner behavior, or figure admission.
 ```bash
 uv run python scripts/analysis/build_worked_example_process_trace.py \
   --input tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
+  --pair-comparison-grain matched_realization_pair \
   --route-id fixture-route \
   --route-provenance-id fixture-route.v1 \
   --route-registry-checksum 0000000000000000000000000000000000000000000000000000000000000000 \
@@ -33,9 +34,22 @@ uv run python scripts/analysis/build_worked_example_process_trace.py \
 ```
 
 Add `--encounter-report path/to/near_miss_encounter.v1.json` when binding the focal actor
-and interval to canonical near-miss encounter output.
+and interval to canonical near-miss encounter output. The report must validate against the
+canonical `near_miss_encounter.v1` schema and its provenance `input_checksums` must include
+the SHA-256 of the input trace file.
 
 Route and conflict projections are available only when the caller provides world-frame,
 provenance- and checksum-bound finite geometry. Missing actor intervals, velocities, radii,
 route/zone registry evidence, exact collision telemetry, or source-coordinate support are
 reported as unavailable or not observed instead of zero-filled.
+
+Pair compatibility requires an explicit comparison grain:
+
+- `matched_planner_pair`: same planner, required initial-state equality, and equal
+  map/horizon/config metadata.
+- `matched_realization_pair`: same seed, required initial-state equality, and equal
+  map/horizon/config metadata.
+
+Event alignment selects the first available anchor from the declared fallback order and writes
+`anchor_time_s` plus per-frame `tau_s = t - anchor_time_s`. Trace end is a boundary fallback,
+not a standalone visual anchor without alignment.

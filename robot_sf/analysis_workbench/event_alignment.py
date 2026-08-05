@@ -11,16 +11,21 @@ if TYPE_CHECKING:
     from robot_sf.analysis_workbench.simulation_trace_export import SimulationTraceExport
 
 PAIR_COMPATIBILITY_PROFILE_VERSION = "pair_compatibility.deterministic.v1"
+PAIR_COMPARISON_GRAINS = frozenset({"matched_planner_pair", "matched_realization_pair"})
 
 
-def unavailable_pair_compatibility(reason: str = "no_pair_trace_declared") -> dict[str, Any]:
+def unavailable_pair_compatibility(
+    reason: str = "no_pair_trace_declared",
+    *,
+    comparison_grain: str | None = None,
+) -> dict[str, Any]:
     """Return an explicit unavailable pair-compatibility record."""
 
     return {
         "profile_version": PAIR_COMPATIBILITY_PROFILE_VERSION,
         "status": "unavailable",
         "reason": reason,
-        "comparison_grain": _comparison_grain(),
+        "comparison_grain": _comparison_grain(comparison_grain),
         "provenance_gate": {"status": "unavailable", "compatible": False, "reason": reason},
         "initial_state_equivalence": {"status": "unavailable", "reason": reason},
         "route_spawn_separation": {"status": "unavailable", "reason": reason},
@@ -40,6 +45,7 @@ def build_pair_compatibility_record(
     *,
     left_events: Sequence[Mapping[str, Any]],
     right_events: Sequence[Mapping[str, Any]],
+    comparison_grain: str,
     position_tolerance_m: float = 1e-6,
     heading_tolerance_rad: float = 1e-6,
     shared_prefix_steps: int = 3,
@@ -50,9 +56,14 @@ def build_pair_compatibility_record(
         JSON-safe pair compatibility record.
     """
 
+    if comparison_grain not in PAIR_COMPARISON_GRAINS:
+        return unavailable_pair_compatibility(
+            "unsupported_pair_comparison_grain",
+            comparison_grain=comparison_grain,
+        )
     if not left.frames or not right.frames:
-        return unavailable_pair_compatibility("empty_pair_trace")
-    provenance = _provenance_gate(left, right)
+        return unavailable_pair_compatibility("empty_pair_trace", comparison_grain=comparison_grain)
+    provenance = _provenance_gate(left, right, comparison_grain=comparison_grain)
     initial = _initial_equivalence(
         left,
         right,
@@ -77,7 +88,7 @@ def build_pair_compatibility_record(
         "initial_robot_separation_m": initial.get("robot_position_delta_m"),
         "max_initial_actor_separation_m": initial.get("max_actor_position_delta_m"),
     }
-    compatible = bool(provenance["compatible"])
+    compatible = bool(provenance["compatible"] and initial.get("equivalent"))
     common_event_anchors = _common_event_anchors(left_events, right_events) if compatible else []
     shared_prefix_status = (
         compatible
@@ -87,7 +98,7 @@ def build_pair_compatibility_record(
     return {
         "profile_version": PAIR_COMPATIBILITY_PROFILE_VERSION,
         "status": "available" if compatible else "incompatible",
-        "comparison_grain": _comparison_grain(),
+        "comparison_grain": _comparison_grain(comparison_grain),
         "provenance_gate": provenance,
         "initial_state_equivalence": initial,
         "route_spawn_separation": route_spawn,
@@ -99,7 +110,7 @@ def build_pair_compatibility_record(
             "reason": (
                 "shared_prefix_available"
                 if shared_prefix_status
-                else "scenario_or_configuration_incompatible"
+                else "grain_provenance_or_initial_state_incompatible"
                 if not compatible
                 else "no_shared_prefix_reject_divergence_output"
             ),
@@ -107,34 +118,74 @@ def build_pair_compatibility_record(
     }
 
 
-def _comparison_grain() -> dict[str, Any]:
+def _comparison_grain(comparison_grain: str | None) -> dict[str, Any]:
     return {
-        "grain_id": "matched_planner_realization.v1",
+        "grain_id": comparison_grain or "undeclared",
         "left_role": "primary_trace",
         "right_role": "comparison_trace",
-        "required_gate_fields": ["scenario_id", "coordinate_frame", "units"],
-        "conditional_gate_fields": ["map_id", "horizon", "config_digest"],
-        "seed_handling": "reported_not_required_for_sensitivity_pairs",
+        "required_gate_fields": [
+            "scenario_id",
+            "coordinate_frame",
+            "units",
+            "map_id",
+            "horizon",
+            "config_digest",
+            "initial_state",
+        ],
+        "planner_seed_rule": _planner_seed_rule(comparison_grain),
         "divergence_quantity": "per-frame difference curves require shared_prefix true",
         "anchor_alignment": "deterministic_common_event_identity",
     }
 
 
-def _provenance_gate(left: SimulationTraceExport, right: SimulationTraceExport) -> dict[str, Any]:
-    optional = {
+def _planner_seed_rule(comparison_grain: str | None) -> str:
+    if comparison_grain == "matched_planner_pair":
+        return "planner_id_equal_required_seed_reported"
+    if comparison_grain == "matched_realization_pair":
+        return "seed_equal_required_planner_reported"
+    return "unsupported_grain"
+
+
+def _provenance_gate(
+    left: SimulationTraceExport,
+    right: SimulationTraceExport,
+    *,
+    comparison_grain: str,
+) -> dict[str, Any]:
+    required_meta = {
         "map_id": (_meta(left, "map_id"), _meta(right, "map_id")),
         "horizon": (_meta(left, "horizon"), _meta(right, "horizon")),
         "config_digest": (_meta(left, "config_digest"), _meta(right, "config_digest")),
+    }
+    availability = {
+        key: {
+            "left": left_value,
+            "right": right_value,
+            "status": "available"
+            if left_value is not None and right_value is not None
+            else "unavailable",
+        }
+        for key, (left_value, right_value) in required_meta.items()
     }
     checks = {
         "scenario_id_equal": left.source.scenario_id == right.source.scenario_id,
         "coordinate_frame_equal": left.coordinate_frame == right.coordinate_frame,
         "units_equal": left.units == right.units,
         "seed_equal": left.source.seed == right.source.seed,
-        "map_id_equal": _optional_equal(*optional["map_id"]),
-        "horizon_equal": _optional_equal(*optional["horizon"]),
-        "config_digest_equal": _optional_equal(*optional["config_digest"]),
+        "planner_id_equal": left.source.planner_id == right.source.planner_id,
+        "map_id_present": availability["map_id"]["status"] == "available",
+        "horizon_present": availability["horizon"]["status"] == "available",
+        "config_digest_present": availability["config_digest"]["status"] == "available",
+        "map_id_equal": _required_equal(*required_meta["map_id"]),
+        "horizon_equal": _required_equal(*required_meta["horizon"]),
+        "config_digest_equal": _required_equal(*required_meta["config_digest"]),
     }
+    if comparison_grain == "matched_planner_pair":
+        grain_specific = checks["planner_id_equal"]
+    elif comparison_grain == "matched_realization_pair":
+        grain_specific = checks["seed_equal"]
+    else:
+        grain_specific = False
     return {
         "status": "available",
         "compatible": bool(
@@ -144,18 +195,11 @@ def _provenance_gate(left: SimulationTraceExport, right: SimulationTraceExport) 
             and checks["map_id_equal"]
             and checks["horizon_equal"]
             and checks["config_digest_equal"]
+            and grain_specific
         ),
         "checks": checks,
-        "availability": {
-            key: {
-                "left": left_value,
-                "right": right_value,
-                "status": "available"
-                if left_value is not None and right_value is not None
-                else "unavailable",
-            }
-            for key, (left_value, right_value) in optional.items()
-        },
+        "availability": availability,
+        "comparison_grain": comparison_grain,
         "left_trace_id": left.trace_id,
         "right_trace_id": right.trace_id,
     }
@@ -385,9 +429,9 @@ def _nullable_delta(left: object, right: object) -> float | None:
     return None
 
 
-def _optional_equal(left: object, right: object) -> bool:
+def _required_equal(left: object, right: object) -> bool:
     if left is None or right is None:
-        return True
+        return False
     return left == right
 
 

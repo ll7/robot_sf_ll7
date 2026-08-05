@@ -26,18 +26,28 @@ def summarize_stall(
         JSON-safe stall summary.
     """
 
-    duration = duration_where(
+    runs = _low_speed_runs(
         frames,
-        lambda frame: (
-            speed_getter(frame) is not None
-            and (speed_getter(frame) or 0.0) < stall_speed_threshold_mps
-        ),
+        speed_getter=speed_getter,
+        stall_speed_threshold_mps=stall_speed_threshold_mps,
     )
+    qualifying_runs = [
+        (start, end)
+        for start, end in runs
+        if _run_duration(frames, start, end) >= stall_min_duration_s
+    ]
+    duration = sum(_run_duration(frames, start, end) for start, end in qualifying_runs)
+    missing_speed_count = sum(1 for frame in frames if speed_getter(frame) is None)
     return {
         "profile_version": PHASE_PROFILE_VERSION,
         "status": "available",
         "stall_min_duration_s": stall_min_duration_s,
         "sustained_stall_duration_s": duration,
+        "speed_coverage": {
+            "status": "complete" if missing_speed_count == 0 else "partial",
+            "available_frame_count": len(frames) - missing_speed_count,
+            "missing_frame_count": missing_speed_count,
+        },
         "sustained_stall_onset_step": (
             int(onset["step"])
             if (
@@ -184,6 +194,12 @@ def _low_speed_runs(
     if start is not None:
         runs.append((start, len(frames) - 1))
     return runs
+
+
+def _run_duration(frames: Sequence[Mapping[str, Any]], start: int, end: int) -> float:
+    if end <= start:
+        return 0.0
+    return float(frames[end]["time_s"]) - float(frames[start]["time_s"])
 
 
 def _wrapped_angle_delta(current: float, previous: float) -> float:

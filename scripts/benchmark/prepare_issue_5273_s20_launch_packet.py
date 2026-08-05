@@ -401,30 +401,88 @@ def _run_canonical_preflight(
     repo_root: Path, config_path: Path, planner_key: str
 ) -> dict[str, Any]:
     """Run canonical metadata-only preflight without entering campaign execution."""
-    from robot_sf.benchmark.camera_ready._legacy_campaign_facade import (
-        load_campaign_config,
-        prepare_campaign_preflight,
-    )
-
     command = _canonical_preflight_command(_relative_path(repo_root, config_path), planner_key)
     try:
         with tempfile.TemporaryDirectory(prefix="issue5273-s20-preflight-") as temporary_root:
-            cfg = load_campaign_config(config_path)
-            prepared = prepare_campaign_preflight(
-                cfg,
-                output_root=Path(temporary_root),
-                campaign_id=f"issue-5273-s20-preflight-{planner_key}",
-                invoked_command=command,
-                checkpoint_preflight_mode="metadata_only",
+            completed = subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    "python",
+                    "scripts/tools/run_camera_ready_benchmark.py",
+                    "--config",
+                    _relative_path(repo_root, config_path),
+                    "--output-root",
+                    temporary_root,
+                    "--campaign-id",
+                    f"issue-5273-s20-preflight-{planner_key}",
+                    "--skip-publication-bundle",
+                    "--mode",
+                    "preflight",
+                    "--checkpoint-preflight-mode",
+                    "metadata_only",
+                    "--log-level",
+                    "ERROR",
+                ],
+                cwd=repo_root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=180,
             )
-            return {
-                "status": "passed",
-                "command": command,
-                "validate_config": _read_json(prepared["validate_config_path"]),
-                "preview_scenarios": _read_json(prepared["preview_scenarios_path"]),
-                "matrix_summary": _read_json(prepared["matrix_summary_json_path"]),
+            try:
+                result = json.loads(completed.stdout)
+            except (TypeError, json.JSONDecodeError) as exc:
+                return {
+                    "status": "blocked",
+                    "command": command,
+                    "error_type": type(exc).__name__,
+                    "error": (
+                        f"canonical preflight exited {completed.returncode} without a JSON result: "
+                        f"{_sanitize_error(repo_root, completed.stderr.strip())}"
+                    ),
+                }
+            if completed.returncode != 0 or not isinstance(result, dict):
+                reason = result.get("status_reason") if isinstance(result, dict) else None
+                return {
+                    "status": "blocked",
+                    "command": command,
+                    "error_type": str(result.get("status", "CanonicalPreflightProcessError"))
+                    if isinstance(result, dict)
+                    else "CanonicalPreflightProcessError",
+                    "error": _sanitize_error(
+                        repo_root,
+                        str(reason or completed.stderr.strip() or "canonical preflight failed"),
+                    ),
+                }
+            paths = {
+                "validate_config": result.get("validate_config_path"),
+                "preview_scenarios": result.get("preview_scenarios_path"),
+                "matrix_summary": result.get("matrix_summary_json"),
             }
-    except Exception as exc:  # noqa: BLE001 - preserve the exact fail-closed preflight reason
+            if not all(isinstance(path, str) and Path(path).is_file() for path in paths.values()):
+                return {
+                    "status": "blocked",
+                    "command": command,
+                    "error_type": "CanonicalPreflightArtifactError",
+                    "error": "canonical preflight did not emit all required metadata artifacts",
+                }
+            try:
+                return {
+                    "status": "passed",
+                    "command": command,
+                    "validate_config": _read_json(Path(paths["validate_config"])),
+                    "preview_scenarios": _read_json(Path(paths["preview_scenarios"])),
+                    "matrix_summary": _read_json(Path(paths["matrix_summary"])),
+                }
+            except (OSError, ValueError) as exc:
+                return {
+                    "status": "blocked",
+                    "command": command,
+                    "error_type": type(exc).__name__,
+                    "error": _sanitize_error(repo_root, str(exc)),
+                }
+    except (OSError, subprocess.TimeoutExpired) as exc:
         return {
             "status": "blocked",
             "command": command,

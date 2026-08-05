@@ -1,0 +1,76 @@
+# Issue 576 (BR-06): predictive-foresight sub-base, chained on the family base.
+#
+# This config is the intermediate base for all predictive-foresight
+# issue_576_br06 variants (v5, v6, v6_auto_envs, v7, v7_auto_envs, v8, v9,
+# v9_auto_envs, v10) and the related issue_708 from-scratch run (v11).
+#
+# Keys held here are byte-identical across every predictive variant listed
+# above. Each variant still overrides its own policy_id, num_envs, worker_mode,
+# reward profile, model-specific foresight settings (model_id, max_agents,
+# horizon_steps, ego_conditioning), evaluation schedule, convergence plateau,
+# tracking metadata, and any other per-run key that differs across the
+# predictive family.
+#
+# Non-predictive variants (v2, v3, v4) inherit directly from
+# expert_ppo_issue_576_br06_base.yaml and are not affected by this sub-base.
+#
+# The deterministic equivalence test in
+# tests/integration/test_train_expert_ppo.py guards that every variant still
+# resolves to its frozen pre-change values.
+base_config: expert_ppo_issue_576_br06_base.yaml
+# Shared PPO hyperparameters – byte-identical across all predictive variants.
+best_checkpoint_metric: success_rate
+ppo_hyperparams:
+  learning_rate: 7.5e-5
+  batch_size: 256
+  n_epochs: 4
+  ent_coef: 0.008
+  clip_range: 0.1
+  target_kl: 0.02
+seeds:
+  - 123
+  - 231
+  - 777
+  - 992
+  - 1337
+randomize_seeds: true
+total_timesteps: 30000000
+# Keep this intermediate overlay independently loadable. Every predictive
+# child explicitly overrides the same convergence value below, so inheritance
+# does not change any child's effective configuration.
+policy_id: ppo_expert_br06_predictive_sub_base
+convergence:
+  plateau_window: 3000
+evaluation:
+  evaluation_episodes: 30
+  hold_out_scenarios: []
+  step_schedule:
+    - every_steps: 1000000
+# Shared predictive-foresight env_overrides – keys that are byte-identical
+# across all predictive variants. Per-variant keys (model_id, max_agents,
+# horizon_steps, ego_conditioning) remain explicit in each variant.
+env_overrides:
+  predictive_foresight_enabled: true
+  predictive_foresight_device: cpu
+  predictive_foresight_rollout_dt: 0.2
+  predictive_foresight_near_distance: 0.7
+  predictive_foresight_front_corridor_length: 3.0
+  predictive_foresight_front_corridor_half_width: 1.0
+# Shared scenario sampling – byte-identical across all predictive variants.
+scenario_sampling:
+  strategy: random
+  profile_strategy: cycle
+  weights:
+    classic_cross_trap_medium: 3.0
+    classic_cross_trap_high: 4.0
+    classic_doorway_low: 3.0
+    classic_doorway_high: 4.0
+    classic_bottleneck_medium: 3.0
+    classic_bottleneck_high: 3.5
+    classic_realworld_double_bottleneck_high: 4.0
+    classic_group_crossing_medium: 2.5
+    classic_group_crossing_high: 3.0
+    classic_merging_medium: 2.5
+    classic_overtaking_medium: 2.5
+    classic_head_on_corridor_medium: 2.0
+    classic_t_intersection_medium: 2.0

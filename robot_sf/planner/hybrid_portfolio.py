@@ -189,7 +189,7 @@ class HybridPortfolioAdapter:
             command = self._call_head(selected, observation)
             self._record_decision(desired_head=desired, selected_head=selected)
             return command
-        except Exception as exc:
+        except Exception as exc:  # broad catch: head surface unknown; fall back to ORCA
             if not bool(self.config.fallback_on_exception):
                 raise
             logger.warning(

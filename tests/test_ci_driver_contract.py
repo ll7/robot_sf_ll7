@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
+SECURITY_BASELINE_WORKFLOW = ROOT / ".github" / "workflows" / "security-baseline.yml"
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
 ISSUE_1436_POLICY = ROOT / "docs" / "context" / "issue_1436_reproducibility_flaky_acceptance.md"
@@ -421,11 +422,41 @@ def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
     assert system_packages_step is not None, "System packages step not found"
     assert sync_step is not None, "Sync dependencies step not found"
     assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"
-    assert system_packages_step["if"] == "runner.os == 'Linux'"
-    assert sync_step["env"]["CI_STEP_TIMEOUT_SECONDS"] == (
-        "${{ runner.os == 'Linux' && '1200' || '' }}"
-    )
+    assert "runner.os == 'Linux'" in system_packages_step["if"]
+    assert "inputs.install-system-packages == 'true'" in system_packages_step["if"]
+    assert sync_step["env"]["CI_STEP_TIMEOUT_SECONDS"] == "1200"
     assert "${{ inputs.sync-args }}" in sync_step["run"]
+
+
+def test_security_advisory_skips_unneeded_linux_system_packages() -> None:
+    """Keep the Ruff-only advisory independent of unrelated hosted apt repositories."""
+    action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))
+    system_packages_step = next(
+        (
+            step
+            for step in action["runs"]["steps"]
+            if step.get("name") == "System packages for headless"
+        ),
+        None,
+    )
+    security_workflow = yaml.safe_load(SECURITY_BASELINE_WORKFLOW.read_text(encoding="utf-8"))
+    setup_step = next(
+        (
+            step
+            for step in security_workflow["jobs"]["ruff-security-advisory"]["steps"]
+            if step.get("uses") == "./.github/actions/setup-ci-python"
+        ),
+        None,
+    )
+
+    assert action["inputs"]["install-system-packages"]["default"] == "true"
+    assert system_packages_step is not None, "System packages step not found"
+    assert (
+        system_packages_step["if"]
+        == "${{ runner.os == 'Linux' && inputs.install-system-packages == 'true' }}"
+    )
+    assert setup_step is not None, "security-baseline setup step not found"
+    assert setup_step["with"] == {"install-system-packages": "false"}
 
 
 def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -> None:

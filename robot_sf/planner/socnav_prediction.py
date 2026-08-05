@@ -319,7 +319,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         checkpoint_sha256 = self._compute_checkpoint_sha256()
         try:
             self._model = self._build_model()
-        except Exception as exc:
+        except Exception as exc:  # broad catch: load surface unknown; fall back or fail
             self._record_foresight_load_failure(exc, checkpoint_sha256)
             if self._allow_fallback:
                 self._load_error = exc

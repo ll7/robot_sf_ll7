@@ -1,0 +1,28 @@
+{
+  "profile": "RFC8785",
+  "vectors": [
+    {
+      "name": "object member ordering",
+      "value": {"z": "last", "a": "first"},
+      "canonical": "{\"a\":\"first\",\"z\":\"last\"}"
+    },
+    {
+      "name": "IEEE 754 number rendering",
+      "value": {"numbers": [333333333.33333329, 1e+30, 4.50, 2e-3, 1e-27, -0.0]},
+      "canonical": "{\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27,0]}"
+    },
+    {
+      "name": "UTF-16 property ordering",
+      "value": {
+        "€": "Euro Sign",
+        "\r": "Carriage Return",
+        "דּ": "Hebrew Letter Dalet With Dagesh",
+        "1": "One",
+        "😀": "Emoji: Grinning Face",
+        "": "Control",
+        "ö": "Latin Small Letter O With Diaeresis"
+      },
+      "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}"
+    }
+  ]
+}

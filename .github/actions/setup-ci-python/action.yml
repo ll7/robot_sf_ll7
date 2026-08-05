@@ -17,6 +17,9 @@ inputs:
   sync-args:
     description: Arguments forwarded to uv sync; defaults to the full CI environment.
     default: "--all-extras --frozen"
+  install-system-packages:
+    description: Install Linux packages needed by headless runtime and GUI-capable jobs.
+    default: "true"
 
 runs:
   using: composite
@@ -41,7 +44,7 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: System packages for headless
-      if: runner.os == 'Linux'
+      if: ${{ runner.os == 'Linux' && inputs.install-system-packages == 'true' }}
       shell: bash
       env:
         CI_STEP_TIMEOUT_SECONDS: "1200"
@@ -57,9 +60,9 @@ runs:
     - name: Sync dependencies (locked, with transient-failure retry)
       shell: bash
       env:
-        # macOS hosted runners do not provide GNU timeout(1), which the timer
-        # deliberately requires when a timeout is requested.
-        CI_STEP_TIMEOUT_SECONDS: ${{ runner.os == 'Linux' && '1200' || '' }}
+        # setup-python runs above, so macOS can use the timer's Python standard-library
+        # fallback without installing GNU Coreutils.
+        CI_STEP_TIMEOUT_SECONDS: "1200"
       run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" bash scripts/dev/uv_sync_retry.sh -- ${{ inputs.sync-args }}
 
     - name: Report uv cache state after sync

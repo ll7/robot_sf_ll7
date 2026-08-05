@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
@@ -14,7 +15,9 @@ from robot_sf.benchmark.camera_ready._artifacts import (
     _write_matrix_summary_artifacts,
 )
 from robot_sf.benchmark.camera_ready._config import (
+    _assert_radius_sweep_preflight_ready,
     _load_campaign_scenarios,
+    _radius_binding_metadata,
     _resolved_seed_inventory,
     _scenario_horizon_summary,
 )
@@ -62,7 +65,6 @@ CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
@@ -76,6 +78,29 @@ _CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
 # distinct from a declared ``backfilled`` source: it makes the cross-arm asymmetry visible in the
 # manifest without inventing tuning parameters the author never recorded (issue #5143).
 _TUNING_BACKFILL_PENDING = "backfill_pending"
+_SCENARIO_FILE_REFERENCE_FIELDS = ("map_file", "route_overrides_file")
+
+
+def _campaign_config_provenance(cfg: CampaignConfig) -> dict[str, str]:
+    """Return portable immutable-config provenance for preflight artifacts.
+
+    Campaign configs loaded from the repository retain their source path.  A
+    preflight packet must name that repository-relative path and its full file
+    checksum so evidence-registry tooling can verify the packet against the
+    producing commit.  Programmatically constructed or external configs have
+    no portable repository provenance, so this helper intentionally omits the
+    fields rather than serializing an absolute local path.
+    """
+    if cfg.source_config_path is None or not cfg.source_config_sha256:
+        return {}
+    config_path = Path(cfg.source_config_path).resolve()
+    portable_path = _repo_relative(config_path)
+    if Path(portable_path).is_absolute():
+        return {}
+    return {
+        "config_path": portable_path,
+        "config_sha256": cfg.source_config_sha256,
+    }
 
 
 def _verify_existing_resume_context(
@@ -220,6 +245,51 @@ def _scenario_display_name(scenario: dict[str, Any]) -> str:
     return str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
 
 
+def _portable_scenario_file_reference(value: str | Path) -> str:
+    """Return a repository-portable representation of a scenario file reference."""
+    path = Path(value)
+    if not path.is_absolute():
+        return path.as_posix()
+    return _repo_relative(path)
+
+
+def _portable_preview_route_override(value: str | Path) -> str:
+    """Return portable route-override provenance without leaking a worktree path."""
+    normalized = _portable_scenario_file_reference(value)
+    return Path(normalized).name if Path(normalized).is_absolute() else normalized
+
+
+def _preview_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
+    """Return one preview scenario with repository-portable route provenance."""
+    preview = _jsonable_repo_relative(scenario)
+    route_override = scenario.get("route_overrides_file")
+    if isinstance(route_override, (str, Path)):
+        preview["route_overrides_file"] = _portable_preview_route_override(route_override)
+    return preview
+
+
+def _scenario_hash_payload(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize resolved scenario file references before deriving matrix identity.
+
+    Returns:
+        JSON-serializable scenarios with repository-portable file references.
+    """
+    payload: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        normalized = dict(_jsonable_repo_relative(scenario))
+        for field_name in _SCENARIO_FILE_REFERENCE_FIELDS:
+            value = scenario.get(field_name)
+            if isinstance(value, (str, Path)):
+                normalized[field_name] = _portable_scenario_file_reference(value)
+        payload.append(normalized)
+    return payload
+
+
+def _scenario_matrix_hash(scenarios: list[dict[str, Any]]) -> str:
+    """Return the stable hash for resolved scenarios independent of their worktree path."""
+    return _hash_payload(_scenario_hash_payload(scenarios))
+
+
 def _build_preflight_validate_payload(  # noqa: PLR0913
     cfg: CampaignConfig,
     *,
@@ -244,7 +314,9 @@ def _build_preflight_validate_payload(  # noqa: PLR0913
         "schema_version": "benchmark-preflight-validate-config.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": created_at_utc,
+        **_campaign_config_provenance(cfg),
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
+        "radius_binding": _radius_binding_metadata(cfg.radius_sweep),
         "scenario_count": len(scenarios),
         "scenario_candidates": {
             "requested": list(cfg.scenario_candidates.names),
@@ -354,6 +426,8 @@ def _build_preflight_preview_payload(
         "schema_version": "benchmark-preflight-preview-scenarios.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": created_at_utc,
+        "radius_binding": _radius_binding_metadata(cfg.radius_sweep),
+        **_campaign_config_provenance(cfg),
         "scenario_count": len(scenarios),
         "preview_limit": preview_limit,
         "scenario_candidates": list(cfg.scenario_candidates.names),
@@ -390,7 +464,7 @@ def _build_preflight_preview_payload(
         ]
     else:
         payload["truncated"] = False
-        payload["scenarios"] = scenarios
+        payload["scenarios"] = [_preview_scenario(scenario) for scenario in scenarios]
     return payload
 
 
@@ -529,7 +603,7 @@ def _compute_campaign_metadata(
         ``git_meta``, ``config_hash``, ``noise_spec``, and ``noise_hash``.
     """
     resolved_seeds = _resolved_seed_inventory(scenarios)
-    scenario_hash = _hash_payload(scenarios)
+    scenario_hash = _scenario_matrix_hash(scenarios)
     scenario_horizons_summary = _scenario_horizon_summary(
         scenarios,
         schedule_path=cfg.scenario_horizons_path,
@@ -921,6 +995,7 @@ def _build_manifest_context_block(
         "started_at_utc": created_at_utc,
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": metadata["scenario_hash"],
+        "radius_binding": _radius_binding_metadata(cfg.radius_sweep),
         "scenario_candidates": list(cfg.scenario_candidates.names),
         "scenario_amv_overrides": {
             scenario_name: dict(values)
@@ -1183,6 +1258,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     if build_route_clearance_warnings is None:
         build_route_clearance_warnings = _build_route_clearance_warnings
     validate_campaign_config(cfg)
+    _assert_radius_sweep_preflight_ready(cfg.radius_sweep)
     ckpt_report, campaign_id, campaign_root, reports_dir, preflight_dir = (
         _validate_and_setup_campaign(
             cfg,

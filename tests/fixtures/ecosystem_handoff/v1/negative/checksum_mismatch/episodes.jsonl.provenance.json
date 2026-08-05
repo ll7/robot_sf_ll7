@@ -1,0 +1,101 @@
+{
+  "campaign_identity": {
+    "config_hash": "8be75a0e6f13356a",
+    "scenario_matrix_hash": "8be75a0e6f13356a",
+    "suite_key": "robot_sf.ecosystem_handoff.v1",
+    "total_jobs": 1,
+    "written": 1
+  },
+  "completeness": {
+    "required_fields_checked": [
+      "schema_version",
+      "run",
+      "inputs",
+      "campaign_identity",
+      "completeness"
+    ],
+    "status": "complete"
+  },
+  "derived_artifacts": [
+    {
+      "kind": "table_input",
+      "path": "table_input.csv",
+      "sha256": "3c480189beaf53b1f2b02c461d5d18f523e16f87a7f7300af8754fee677e4c9a"
+    },
+    {
+      "kind": "figure_input",
+      "path": "figure_input.json",
+      "sha256": "c52f81c7f6a492cb6343002a12b5219a31403db383f9ca3f92297b8df1226e26"
+    }
+  ],
+  "inputs": {
+    "algo_config": {
+      "artifact_status": "available",
+      "path": "fixture_manifest.json",
+      "sha256": "aeba3a724624052e1ffee180da81071dfc01c6a455e53d7fbff922469136dd3a"
+    },
+    "scenario_matrix": {
+      "artifact_status": "available",
+      "path": "fixture_manifest.json",
+      "sha256": "aeba3a724624052e1ffee180da81071dfc01c6a455e53d7fbff922469136dd3a"
+    },
+    "schema_path": {
+      "artifact_status": "available",
+      "path": "episode.schema.v1.json",
+      "sha256": "fb1488a4e9d8352decd047641bf488c88abf0fa3cb3ce193cbd3c8564ebc8a91"
+    }
+  },
+  "raw_artifacts": [
+    {
+      "artifact_status": "available",
+      "kind": "episodes_jsonl",
+      "path": "episodes.jsonl",
+      "sha256": "040a809461204dcecea37874d80e341b0b65ced5f9dadadf9df5accfa8310e5f"
+    }
+  ],
+  "rows": [
+    {
+      "config_hash": "8be75a0e6f13356a",
+      "episode_id": "ecosystem-handoff-v1-episode-0001",
+      "jsonl_line": 0,
+      "postprocessing": [
+        {
+          "status": "completed",
+          "step": "fixture_serialization"
+        },
+        {
+          "status": "completed",
+          "step": "conformance_validation"
+        }
+      ],
+      "raw_artifact": "episodes.jsonl",
+      "repo_commit": "contract:3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+      "scenario_id": "conformance.minimal_success",
+      "seed": 271828,
+      "simulator_settings": {
+        "dt": 1.0,
+        "horizon": 4,
+        "observation_level": "oracle_full_state",
+        "observation_mode": "conformance",
+        "record_forces": false
+      }
+    }
+  ],
+  "run": {
+    "benchmark_profile": "conformance",
+    "execution_context": {
+      "cpu_model": "not-captured",
+      "hostname": "portable",
+      "platform": "portable",
+      "python_version": "3.11+",
+      "thread_env": {}
+    },
+    "invocation": "uv run python scripts/tools/build_ecosystem_handoff_fixture.py",
+    "protocol_version": "0.1.0",
+    "python_version": "3.11+",
+    "repo_commit": "contract:3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+    "run_id": "ecosystem-handoff-v1",
+    "runner": "ecosystem_handoff_fixture"
+  },
+  "schema_version": "benchmark_result_provenance.v1"
+}

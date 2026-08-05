@@ -49,8 +49,8 @@ def test_process_trace_coordinate_frames_explicit_available_and_unavailable() ->
 
     available = build_worked_example_process_trace_from_export(
         trace,
-        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0)),
-        conflict_zone=ConflictZoneSpec("door", (1.0, 0.0), 0.25),
+        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0), "route-fixture.v1"),
+        conflict_zone=ConflictZoneSpec("door", (1.0, 0.0), 0.25, "zone-fixture.v1"),
     )
 
     validate_worked_example_process_trace(available)
@@ -157,7 +157,12 @@ def test_pair_compatibility_matched_start_common_anchors_without_duration_normal
         {
             "step": 4,
             "time_s": 0.4,
-            "robot": {"position": [0.8, 0.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+            "robot": {
+                "position": [0.8, 0.0],
+                "heading": 0.0,
+                "velocity": [1.0, 0.0],
+                "radius": 0.25,
+            },
             "pedestrians": [
                 {"id": "ped-a", "position": [1.4, 0.0], "velocity": [0.0, 0.0], "radius": 0.25}
             ],
@@ -191,6 +196,8 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         str(TRACE_FIXTURE_PATH),
         "--route-id",
         "fixture-route",
+        "--route-provenance-id",
+        "fixture-route.v1",
         "--route-start",
         "0",
         "0",
@@ -199,6 +206,8 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         "0",
         "--conflict-zone-id",
         "fixture-zone",
+        "--conflict-provenance-id",
+        "fixture-zone.v1",
         "--conflict-center",
         "1",
         "0",
@@ -221,7 +230,93 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
     validate_worked_example_process_trace(json.loads(first.read_text(encoding="utf-8")))
 
 
-def _trace_payload(
+def test_process_trace_rejects_mismatched_requested_actor() -> None:
+    """Requested actor IDs must not contradict declared encounter bindings."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+
+    payload = build_worked_example_process_trace_from_export(trace, focal_actor_id="ped-missing")
+
+    assert payload["coordinate_frames"]["relative_interaction"] == {
+        "status": "unavailable",
+        "reason": "requested_focal_actor_missing",
+    }
+    assert payload["encounters"]["focal"]["reason"] == "requested_focal_actor_missing"
+
+
+def test_process_trace_preserves_robot_frame_without_world_claim() -> None:
+    """Robot-frame source traces must not be labeled as world-frame diagnostics."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload(coordinate_frame="robot"))
+
+    payload = build_worked_example_process_trace_from_export(trace)
+
+    assert payload["source_coordinate_frame"] == "robot"
+    assert payload["coordinate_frames"]["world"]["status"] == "unavailable"
+    assert payload["frames"][0]["world"]["status"] == "unavailable"
+    assert payload["frames"][0]["source_coordinates"]["coordinate_frame"] == "robot"
+
+
+def test_invalid_conflict_zone_is_unavailable_everywhere() -> None:
+    """Invalid conflict geometry should not leak per-frame occupancy values."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+
+    payload = build_worked_example_process_trace_from_export(
+        trace,
+        conflict_zone=ConflictZoneSpec("bad-zone", (0.0, 0.0), -1.0, "bad-zone.v1"),
+    )
+
+    assert payload["coordinate_frames"]["conflict"]["reason"] == "registered_conflict_zone_invalid"
+    assert {frame["conflict"]["status"] for frame in payload["frames"]} == {"unavailable"}
+    assert payload["diagnostics"]["conflict_zone_occupancy"]["robot_duration_s"] is None
+
+
+def test_exact_collision_uses_telemetry_and_proxy_overlap_is_separate() -> None:
+    """Proxy overlap must not masquerade as exact collision telemetry."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload(proxy_overlap=True))
+
+    payload = build_worked_example_process_trace_from_export(trace)
+    events = {event["event_type"]: event for event in payload["event_anchors"]}
+
+    assert events["exact_collision_event"]["status"] == "unavailable"
+    assert events["proxy_overlap_event"]["status"] == "available"
+
+
+def test_pair_compatibility_gates_actor_start_mismatch() -> None:
+    """Known-bad doorway-style actor/spawn mismatch should be incompatible."""
+
+    left = simulation_trace_export_from_dict(_trace_payload(trace_id="doorway-seed-113"))
+    right = simulation_trace_export_from_dict(
+        _trace_payload(trace_id="doorway-seed-114", actor_start_offset=0.2, seed=114)
+    )
+
+    payload = build_worked_example_process_trace_from_export(left, pair_trace=right)
+    pair = payload["pair_compatibility"]
+
+    assert pair["status"] == "incompatible"
+    assert pair["initial_state_equivalence"]["equivalent"] is False
+    assert pair["divergence_interpretation"]["reason"] == "scenario_or_initial_state_incompatible"
+
+
+def test_schema_rejects_metrics_snqi_and_unknown_event_fields() -> None:
+    """The schema should reject benchmark metric replacements and arbitrary event objects."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+    payload = build_worked_example_process_trace_from_export(trace)
+    payload["metrics"] = {}
+
+    with pytest.raises(Exception, match="Additional properties"):
+        validate_worked_example_process_trace(payload)
+
+    payload.pop("metrics")
+    payload["event_anchors"][0]["extra"] = True
+    with pytest.raises(Exception, match="/event_anchors/0"):
+        validate_worked_example_process_trace(payload)
+
+
+def _trace_payload(  # noqa: PLR0913
     *,
     trace_id: str = "process-trace-fixture",
     seed: int = 113,
@@ -229,6 +324,9 @@ def _trace_payload(
     static_relative_velocity: bool = False,
     turn_and_decelerate: bool = False,
     diverge_after_start: bool = False,
+    coordinate_frame: str = "world",
+    proxy_overlap: bool = False,
+    actor_start_offset: float = 0.0,
 ) -> dict[str, object]:
     robot_vel = [0.0, 0.0] if static_relative_velocity else [1.0, 0.0]
     ped_vel = [0.0, 0.0]
@@ -246,7 +344,10 @@ def _trace_payload(
         peds = [
             {
                 "id": "ped-a",
-                "position": [1.0 + 0.1 * step, 0.0],
+                "position": [
+                    (0.2 if proxy_overlap else 1.0) + actor_start_offset + 0.1 * step,
+                    0.0,
+                ],
                 "velocity": ped_vel,
                 "radius": 0.25,
             }
@@ -260,6 +361,20 @@ def _trace_payload(
                     "radius": 0.25,
                 }
             )
+        encounter = {
+            "actor_id": "ped-a",
+            "encounter_id": "ped-a:encounter-0001",
+            "profile_version": "near_miss_encounter.v1",
+            "start_step": 0,
+            "end_step": 3,
+            "start_time_s": 0.0,
+            "end_time_s": 0.3,
+            "available_duration_s": 0.3,
+            "min_clearance_m": -0.3 if proxy_overlap else 0.5,
+            "min_ttc_s": 0.4,
+            "min_pet_s": None,
+            "contact": False,
+        }
         frames.append(
             {
                 "step": step,
@@ -273,10 +388,7 @@ def _trace_payload(
                 "pedestrians": peds,
                 "planner": {
                     "selected_action": actions[step],
-                    "encounter": {
-                        "actor_id": "ped-a",
-                        "encounter_id": "ped-a:encounter-0001",
-                    },
+                    "encounter": encounter,
                     "event": "step",
                 },
             }
@@ -292,7 +404,7 @@ def _trace_payload(
             "generated_by": "unit-test fixture",
         },
         "evidence_boundary": "analysis_workbench_only",
-        "coordinate_frame": "world",
+        "coordinate_frame": coordinate_frame,
         "units": {"position": "m", "heading": "rad", "time": "s", "velocity": "m/s"},
         "frames": frames,
     }

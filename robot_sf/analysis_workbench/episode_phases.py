@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,7 @@ def summarize_stall(
     *,
     speed_getter: Any,
     stall_speed_threshold_mps: float,
+    stall_min_duration_s: float,
 ) -> dict[str, Any]:
     """Summarize sustained low-speed time.
 
@@ -34,7 +36,20 @@ def summarize_stall(
     return {
         "profile_version": PHASE_PROFILE_VERSION,
         "status": "available",
+        "stall_min_duration_s": stall_min_duration_s,
         "sustained_stall_duration_s": duration,
+        "sustained_stall_onset_step": (
+            int(onset["step"])
+            if (
+                onset := first_sustained_stall_frame(
+                    frames,
+                    speed_getter=speed_getter,
+                    stall_speed_threshold_mps=stall_speed_threshold_mps,
+                    stall_min_duration_s=stall_min_duration_s,
+                )
+            )
+            else None
+        ),
     }
 
 
@@ -62,7 +77,8 @@ def summarize_reversals(
         if isinstance(heading, int | float):
             if (
                 previous_heading is not None
-                and abs(float(heading) - previous_heading) > heading_delta_threshold_rad
+                and abs(_wrapped_angle_delta(float(heading), previous_heading))
+                > heading_delta_threshold_rad
             ):
                 heading_reversals += 1
             previous_heading = float(heading)
@@ -73,9 +89,68 @@ def summarize_reversals(
     )
     return {
         "profile_version": REVERSAL_PROFILE_VERSION,
+        "direction_semantics": "route_progress_rate_sign_and_wrapped_heading_delta",
         "heading_reversal_count": heading_reversals,
         "velocity_reversal_count": velocity_reversals,
     }
+
+
+def first_sustained_stall_frame(
+    frames: Sequence[Mapping[str, Any]],
+    *,
+    speed_getter: Any,
+    stall_speed_threshold_mps: float,
+    stall_min_duration_s: float,
+) -> Mapping[str, Any] | None:
+    """Return the first frame in a low-speed run that satisfies minimum duration.
+
+    Returns:
+        Frame mapping or ``None``.
+    """
+
+    for start, end in _low_speed_runs(
+        frames,
+        speed_getter=speed_getter,
+        stall_speed_threshold_mps=stall_speed_threshold_mps,
+    ):
+        duration = float(frames[end]["time_s"]) - float(frames[start]["time_s"])
+        if duration >= stall_min_duration_s:
+            return frames[start]
+    return None
+
+
+def first_recovery_frame(
+    frames: Sequence[Mapping[str, Any]],
+    *,
+    speed_getter: Any,
+    stall_speed_threshold_mps: float,
+    stall_min_duration_s: float,
+    recovery_speed_threshold_mps: float,
+) -> Mapping[str, Any] | None:
+    """Return first recovery frame after a qualifying stall run.
+
+    Returns:
+        Frame mapping or ``None``.
+    """
+
+    onset = first_sustained_stall_frame(
+        frames,
+        speed_getter=speed_getter,
+        stall_speed_threshold_mps=stall_speed_threshold_mps,
+        stall_min_duration_s=stall_min_duration_s,
+    )
+    if onset is None:
+        return None
+    after_onset = False
+    for frame in frames:
+        if frame is onset:
+            after_onset = True
+        if not after_onset:
+            continue
+        speed = speed_getter(frame)
+        if speed is not None and speed >= recovery_speed_threshold_mps:
+            return frame
+    return None
 
 
 def duration_where(frames: Sequence[Mapping[str, Any]], predicate: Any) -> float:
@@ -90,3 +165,28 @@ def duration_where(frames: Sequence[Mapping[str, Any]], predicate: Any) -> float
         if predicate(left):
             duration += float(right["time_s"]) - float(left["time_s"])
     return duration
+
+
+def _low_speed_runs(
+    frames: Sequence[Mapping[str, Any]],
+    *,
+    speed_getter: Any,
+    stall_speed_threshold_mps: float,
+) -> list[tuple[int, int]]:
+    runs: list[tuple[int, int]] = []
+    start: int | None = None
+    for index, frame in enumerate(frames):
+        speed = speed_getter(frame)
+        is_stalled = speed is not None and speed < stall_speed_threshold_mps
+        if is_stalled and start is None:
+            start = index
+        if not is_stalled and start is not None:
+            runs.append((start, max(start, index - 1)))
+            start = None
+    if start is not None:
+        runs.append((start, len(frames) - 1))
+    return runs
+
+
+def _wrapped_angle_delta(current: float, previous: float) -> float:
+    return (current - previous + math.pi) % (2.0 * math.pi) - math.pi

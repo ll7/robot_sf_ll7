@@ -3,15 +3,19 @@
   "$id": "https://robot-sf.local/schemas/worked_example_process_trace.v1.json",
   "title": "Robot SF Worked Example Process Trace v1",
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "required": [
     "schema_version",
     "process_trace_id",
     "source_trace",
     "evidence_boundary",
+    "source_coordinate_frame",
+    "units",
+    "claim_boundary",
     "profiles",
     "coordinate_frames",
     "encounters",
+    "frames",
     "diagnostics",
     "event_anchors",
     "pair_compatibility"
@@ -21,16 +25,49 @@
     "process_trace_id": {"type": "string", "minLength": 1},
     "source_trace": {
       "type": "object",
-      "additionalProperties": true,
-      "required": ["schema_version", "trace_id", "source"],
+      "additionalProperties": false,
+      "required": ["schema_version", "trace_id", "coordinate_frame", "units", "source"],
       "properties": {
         "schema_version": {"const": "simulation_trace_export.v1"},
         "trace_id": {"type": "string", "minLength": 1},
-        "source": {"type": "object"}
+        "coordinate_frame": {"type": "string", "minLength": 1},
+        "units": {"type": "object"},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scenario_id", "seed", "planner_id", "episode_id", "generated_by"],
+          "properties": {
+            "scenario_id": {"type": "string"},
+            "seed": {"type": "integer"},
+            "planner_id": {"type": "string"},
+            "episode_id": {"type": "string"},
+            "generated_by": {"type": "string"}
+          }
+        }
       }
     },
     "evidence_boundary": {"const": "analysis_workbench_only"},
-    "profiles": {"type": "object"},
+    "source_coordinate_frame": {"type": "string", "minLength": 1},
+    "units": {"type": "object"},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_anchor_profile",
+        "threshold_profile",
+        "phase_profile",
+        "reversal_profile",
+        "safety_surrogate_profile"
+      ],
+      "properties": {
+        "event_anchor_profile": {"$ref": "#/$defs/profile"},
+        "threshold_profile": {"$ref": "#/$defs/profile"},
+        "phase_profile": {"$ref": "#/$defs/profile"},
+        "reversal_profile": {"$ref": "#/$defs/profile"},
+        "safety_surrogate_profile": {"$ref": "#/$defs/profile"}
+      }
+    },
     "coordinate_frames": {
       "type": "object",
       "additionalProperties": false,
@@ -42,18 +79,199 @@
         "relative_interaction": {"$ref": "#/$defs/availability"}
       }
     },
-    "event_anchors": {"type": "array", "items": {"type": "object"}},
-    "pair_compatibility": {"type": "object"}
+    "encounters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["focal", "global_minimum_over_all_actors", "actor_switch_events"],
+      "properties": {
+        "focal": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["status"],
+          "properties": {"status": {"type": "string"}}
+        },
+        "global_minimum_over_all_actors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "series"],
+          "properties": {
+            "status": {"type": "string"},
+            "reason": {"type": "string"},
+            "series": {"type": "array", "items": {"type": "object"}}
+          }
+        },
+        "actor_switch_events": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "frame_index",
+          "step",
+          "time_s",
+          "source_coordinates",
+          "world",
+          "route",
+          "conflict",
+          "relative_interaction",
+          "global_minimum_actor",
+          "commands"
+        ],
+        "properties": {
+          "frame_index": {"type": "integer"},
+          "step": {"type": "integer"},
+          "time_s": {"type": "number"},
+          "source_coordinates": {"type": "object"},
+          "world": {"type": "object"},
+          "route": {"type": "object"},
+          "conflict": {"type": "object"},
+          "relative_interaction": {"type": "object"},
+          "global_minimum_actor": {"type": "object"},
+          "commands": {"type": "object"}
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_proxy_surface_clearance_m",
+        "threshold_exposure",
+        "route_progress",
+        "stall",
+        "conflict_zone_occupancy",
+        "reversal_counts"
+      ],
+      "properties": {
+        "minimum_proxy_surface_clearance_m": {"type": ["number", "null"]},
+        "threshold_exposure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile_version",
+            "threshold_m",
+            "duration_s",
+            "integrated_clearance_deficit_m_s",
+            "status"
+          ],
+          "properties": {
+            "profile_version": {"type": "string"},
+            "threshold_m": {"type": "number"},
+            "duration_s": {"type": ["number", "null"]},
+            "integrated_clearance_deficit_m_s": {"type": ["number", "null"]},
+            "status": {"type": "string"}
+          }
+        },
+        "route_progress": {"type": "object"},
+        "stall": {"type": "object"},
+        "conflict_zone_occupancy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "robot_duration_s", "focal_actor_duration_s"],
+          "properties": {
+            "status": {"type": "string"},
+            "reason": {"type": "string"},
+            "robot_duration_s": {"type": ["number", "null"]},
+            "focal_actor_duration_s": {"type": ["number", "null"]}
+          }
+        },
+        "reversal_counts": {"type": "object"}
+      }
+    },
+    "event_anchors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "event_type",
+          "detector_profile_version",
+          "status",
+          "confidence",
+          "actor_id",
+          "zone_id",
+          "source_fields",
+          "visual_anchor_eligibility"
+        ],
+        "properties": {
+          "event_id": {"type": "string"},
+          "event_type": {"type": "string"},
+          "detector_profile_version": {"type": "string"},
+          "status": {"enum": ["available", "unavailable", "not_observed"]},
+          "confidence": {"type": "string"},
+          "time_s": {"type": "number"},
+          "step": {"type": "integer"},
+          "actor_id": {"type": ["string", "null"]},
+          "zone_id": {"type": ["string", "null"]},
+          "reason": {"type": "string"},
+          "source_fields": {"type": "array", "items": {"type": "string"}},
+          "visual_anchor_eligibility": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["eligible", "reason"],
+            "properties": {
+              "eligible": {"type": "boolean"},
+              "reason": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "pair_compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_version",
+        "status",
+        "initial_state_equivalence",
+        "route_spawn_separation",
+        "shared_prefix",
+        "valid_common_event_anchors",
+        "divergence_interpretation"
+      ],
+      "properties": {
+        "profile_version": {"type": "string"},
+        "status": {"type": "string"},
+        "reason": {"type": "string"},
+        "provenance_gate": {"type": "object"},
+        "initial_state_equivalence": {"type": "object"},
+        "route_spawn_separation": {"type": "object"},
+        "shared_prefix": {"type": "object"},
+        "valid_common_event_anchors": {"type": "array", "items": {"type": "string"}},
+        "duration_normalization": {"type": "object"},
+        "divergence_interpretation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowed", "reason"],
+          "properties": {
+            "allowed": {"type": "boolean"},
+            "reason": {"type": "string"}
+          }
+        }
+      }
+    }
   },
   "$defs": {
     "availability": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["status"],
+      "required": ["status", "reason"],
       "properties": {
         "status": {"enum": ["available", "unavailable"]},
         "reason": {"type": "string"}
       }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["profile_version"],
+      "properties": {"profile_version": {"type": "string", "minLength": 1}}
     }
   }
 }

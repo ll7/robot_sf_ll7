@@ -19,6 +19,8 @@ from robot_sf.baselines.sac import SACPlanner
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.risk_dwa import _wrap_angle
 
+_DEFAULT_WAYPOINT_MAX_DISTANCE_FROM_ROBOT_M = 3.0
+
 
 @dataclass(frozen=True)
 class HybridGlobalRLLocalConfig:
@@ -31,7 +33,7 @@ class HybridGlobalRLLocalConfig:
     allow_goal_fallback: bool = False
     fail_closed_on_missing_waypoint: bool = True
     preserve_final_goal: bool = True
-    waypoint_max_distance_from_robot: float = 3.0
+    waypoint_max_distance_from_robot: float = _DEFAULT_WAYPOINT_MAX_DISTANCE_FROM_ROBOT_M
     max_linear_speed: float = 1.0
     max_angular_speed: float = 1.0
 
@@ -433,7 +435,9 @@ def build_hybrid_global_rl_config(data: dict[str, Any] | None) -> HybridGlobalRL
         fail_closed_on_missing_waypoint=bool(payload.get("fail_closed_on_missing_waypoint", True)),
         preserve_final_goal=bool(payload.get("preserve_final_goal", True)),
         waypoint_max_distance_from_robot=float(
-            payload.get("waypoint_max_distance_from_robot", 3.0)
+            payload.get(
+                "waypoint_max_distance_from_robot", _DEFAULT_WAYPOINT_MAX_DISTANCE_FROM_ROBOT_M
+            )
         ),
         max_linear_speed=float(payload.get("max_linear_speed", 1.0)),
         max_angular_speed=float(payload.get("max_angular_speed", 1.0)),

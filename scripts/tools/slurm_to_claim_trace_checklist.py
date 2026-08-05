@@ -18,6 +18,7 @@ from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
+from robot_sf.evidence.writers import write_json, write_text
 from scripts.tools.reconcile_slurm_evidence import _load_finalizer_report
 
 SCHEMA_VERSION = "slurm-to-claim-trace-checklist.v1"
@@ -670,10 +671,10 @@ def main(argv: list[str] | None = None) -> int:
         repo_root=args.repo_root,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(args.output, report)
     if args.markdown_output is not None:
         args.markdown_output.parent.mkdir(parents=True, exist_ok=True)
-        args.markdown_output.write_text(render_markdown(report), encoding="utf-8")
+        write_text(args.markdown_output, render_markdown(report), issue_ref="robot_sf#3425")
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["status"] == "pass" else 1

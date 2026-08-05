@@ -1,0 +1,180 @@
+# 0.8 m arm of the issue #6642 collision-envelope radius sweep (Gate 2 of #6600).
+#
+# Plain-language summary: this is the radius sweep's 0.8 m arm campaign config.
+# It is structurally identical to the 1.0 m arm campaign config (complete
+# 14-planner release roster, 48-cell classic_interactions_francis2023 matrix,
+# paper_eval_s30 seeds 111-140, horizon 600, differential-drive kinematics), so
+# the radius treatment is the only factor that differs across arms. All three
+# radius arms (0.5/0.8/1.0 m) run at one immutable campaign commit.
+#
+# Claim boundary: GATE 2 PRE-SUBMISSION ADMISSION ONLY. This config declares the
+# 0.8 m arm structure and carries the admitted Gate 1 runtime-binding receipt.
+# It is NOT benchmark evidence on its own. The merged camera-ready loader binds
+# the declared radius to every loaded scenario; production submission still
+# requires the separate Gate 2 queue, input, row-accounting, and admission gates.
+# Unlike the 1.0 m arm, the 0.8 m arm has no release-baseline counterpart, so its
+# preflight remains a treatment-arm check only.
+name: issue_6642_radius_sweep_arm_0p8m
+paper_facing: true
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+seed_policy:
+  mode: seed-set
+  seed_set: paper_eval_s30
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+workers: 32
+horizon: 600
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: false
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: true
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+# Issue-scoped release tag, distinct from the frozen 0.0.3.post1 release so the
+# sweep arms are pinned to their own immutable campaign commit (per #6600).
+release_tag: "issue-6642-radius-sweep-0p8m"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: baseline-ready-core
+
+# Radius-sweep treatment and runtime-binding metadata. The manifest builder and
+# camera-ready loader consume this block. The status and Gate 1 provenance below
+# admit the runtime binding; they do not admit production evidence.
+radius_sweep:
+  issue: 6642
+  parent_issue: 6600
+  arm_key: r0p8
+  radius_m: 0.8
+  baseline_arm: false
+  runtime_binding_status: bound_runtime
+  binding_contract_version: radius_binding_canary.v1
+  gate1_canary_issue: 6641
+  gate1_receipt_sha256: 88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922
+  gate1_source_commit: 2910980fa7c49b726c3007c1f93aba6ec0b54d8e
+  runtime_binding_note: >-
+    Runtime binding admitted after the Gate 1 #6641 receipt at the merged
+    source commit. Production compute remains blocked until the separate Gate 2
+    campaign admission gates pass.
+
+planners:
+  # --- core 7 (identical stanzas to the canonical 0.0.3.post1 release campaign) ---
+  - key: prediction_planner
+    algo: prediction_planner
+    planner_group: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
+
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+
+  - key: socnav_sampling
+    algo: socnav_sampling
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+
+  - key: sacadrl
+    algo: sacadrl
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback
+
+  # --- hybrid-rule arms (stanzas as executed in the h600 hybrid-roster campaign) ---
+  - key: scenario_adaptive_hybrid_orca_v1
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    benchmark_profile: experimental
+
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    benchmark_profile: experimental
+
+  - key: hybrid_rule_v3_fast_progress_static_escape
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    benchmark_profile: experimental
+
+  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+    benchmark_profile: experimental
+
+  # --- h600 launch-packet candidate arms ---
+  - key: guarded_ppo
+    algo: guarded_ppo
+    planner_group: experimental
+    algo_config: configs/algos/guarded_ppo_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: predictive_mppi
+    algo: predictive_mppi
+    planner_group: experimental
+    algo_config: configs/algos/predictive_mppi_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: risk_dwa
+    algo: risk_dwa
+    planner_group: experimental
+    algo_config: configs/algos/risk_dwa_camera_ready.yaml
+    benchmark_profile: experimental

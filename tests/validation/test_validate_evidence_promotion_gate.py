@@ -149,3 +149,77 @@ def test_validate_all_ignores_non_directory_scan_roots(tmp_path: Path) -> None:
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload["validation_summary"]["total_validated"] == 0
+
+
+def test_output_json_writes_marked_file_and_keeps_stdout_unmarked(tmp_path: Path) -> None:
+    """--output-json routes through the shared writer while stdout keeps its schema."""
+    note = tmp_path / "note.md"
+    note.write_text(
+        "\n".join(
+            [
+                "# Smoke Evidence",
+                "",
+                "COMMAND: uv run python scripts/validation/example.py",
+                "COMMIT: 2072e083a6554cbc03638f0941e5c5c74317ef6c",
+                "SUMMARY JSON: output/summary.json",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    output_json = tmp_path / "validation_result.json"
+
+    result = run_validator("--context-note", str(note), "--output-json", str(output_json))
+
+    assert result.returncode == 0
+    stdout_payload = json.loads(result.stdout)
+    assert "review_marker" not in stdout_payload
+    file_payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert file_payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert file_payload == {"review_marker": "AI-GENERATED NEEDS-REVIEW", **stdout_payload}
+
+
+def test_output_json_marks_evidence_bundle_and_validate_all_outputs(tmp_path: Path) -> None:
+    """Both remaining --output-json branches write through the shared marked writer."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "summary.json").write_text(
+        json.dumps(
+            {
+                "command": "uv run python scripts/validation/example.py",
+                "commit": "2072e083a6554cbc03638f0941e5c5c74317ef6c",
+                "summary": {"episodes_total": 2, "success_rate": 1.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    bundle_output = tmp_path / "bundle_result.json"
+
+    bundle_result = run_validator(
+        "--evidence-bundle",
+        str(bundle),
+        "--claimed-tier",
+        "smoke",
+        "--output-json",
+        str(bundle_output),
+    )
+
+    assert bundle_result.returncode == 0
+    bundle_file_payload = json.loads(bundle_output.read_text(encoding="utf-8"))
+    assert bundle_file_payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert "review_marker" not in json.loads(bundle_result.stdout)
+
+    root = tmp_path / "scan_root"
+    note_dir = root / "docs" / "context"
+    note_dir.mkdir(parents=True)
+    (note_dir / "diagnostic_note.md").write_text(
+        "# Diagnostic Note\n\nThis is diagnostic-only evidence and not a promotion.",
+        encoding="utf-8",
+    )
+    all_output = tmp_path / "all_result.json"
+
+    all_result = run_validator("--root", str(root), "--output-json", str(all_output))
+
+    assert all_result.returncode == 0
+    all_file_payload = json.loads(all_output.read_text(encoding="utf-8"))
+    assert all_file_payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert "review_marker" not in json.loads(all_result.stdout)

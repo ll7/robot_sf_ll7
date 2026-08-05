@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6412_real_reexport_package/figure_artifacts.json",
+  "artifact_sha256": "a1fd44b970ecd365a07d9dbe17a3a8a2ec036e37a7c1825a09a39c93486ee30c",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

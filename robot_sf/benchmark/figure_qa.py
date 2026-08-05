@@ -572,6 +572,20 @@ _DEFECT_TYPE_SATURATED_COLOR_COUNT = "saturated_color_count"
 _SEVERITY_ERROR = "error"
 _SEVERITY_WARN = "warn"
 
+# These tags identify annotation/reference-line interactions that are deliberate
+# parts of the trace-scene renderer.  They are downgraded to warnings only when
+# the renderer opts in with an explicit artist gid; ordinary text-on-line
+# overlaps remain hard defects.
+_INTENTIONAL_TEXT_LINE_TEXT_GIDS = frozenset(
+    {
+        "trace-scene-pedestrian-label",
+        "trace-scene-time-label",
+        "trace-scene-reference-label",
+    }
+)
+_INTENTIONAL_TEXT_LINE_LINE_GIDS = frozenset({"trace-scene-label-leader"})
+_INTENTIONAL_TEXT_MARKER_TEXT_GIDS = frozenset({"trace-scene-time-label"})
+
 _TEXT_OVERLAP_TOLERANCE_PX = 2.0
 _TEXT_LINE_OVERLAP_TOLERANCE_PX = 1.0
 _TEXT_MARKER_OVERLAP_TOLERANCE_PX = 1.0
@@ -672,7 +686,7 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
         max_severity: ``"error"`` (default) or ``"warn"``.
 
     Raises:
-        AssertionError: When at least one defect meets the severity threshold.
+        ValueError: When at least one defect meets the severity threshold.
     """
     severity_order = {_SEVERITY_WARN: 0, _SEVERITY_ERROR: 1}
     threshold = severity_order.get(max_severity, 1)
@@ -685,9 +699,10 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
     )
     failing = [d for d in defects if severity_order.get(d.severity, 1) >= threshold]
     summary = "; ".join(f"[{d.defect_type}] {d.message}" for d in failing)
-    assert not failing, (
-        f"Figure has {len(failing)} defect(s) at severity >= {max_severity}: {summary}"
-    )
+    if failing:
+        raise ValueError(
+            f"Figure has {len(failing)} defect(s) at severity >= {max_severity}: {summary}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -815,19 +830,37 @@ def _check_text_line_overlap(
 
     for text_artist in text_artists:
         text_bbox = text_artist.get_window_extent(renderer)
+        cx, cy = _bbox_center(text_bbox)
+        label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
+        intentional_overlap = False
+        nonintentional_overlap = False
         for line in lines:
             if _line_bbox_overlaps_text(line, text_bbox, ax, renderer, tolerance):
-                cx, cy = _bbox_center(text_bbox)
-                label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
-                defects.append(
-                    FigureDefect(
-                        defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
-                        severity=_SEVERITY_ERROR,
-                        message=f"Text {label!r} overlaps a line artist.",
-                        location=(cx, cy),
-                    )
+                intentional = (
+                    text_artist.get_gid() in _INTENTIONAL_TEXT_LINE_TEXT_GIDS
+                    and line.get_gid() in _INTENTIONAL_TEXT_LINE_LINE_GIDS
                 )
-                break
+                if not intentional:
+                    defects.append(
+                        FigureDefect(
+                            defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
+                            severity=_SEVERITY_ERROR,
+                            message=f"Text {label!r} overlaps a line artist.",
+                            location=(cx, cy),
+                        )
+                    )
+                    nonintentional_overlap = True
+                    break
+                intentional_overlap = True
+        if intentional_overlap and not nonintentional_overlap:
+            defects.append(
+                FigureDefect(
+                    defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
+                    severity=_SEVERITY_WARN,
+                    message=f"Expected annotation overlap: Text {label!r} overlaps a line artist.",
+                    location=(cx, cy),
+                )
+            )
 
 
 def _line_bbox_overlaps_text(
@@ -922,11 +955,16 @@ def _check_text_marker_overlap(
                 if _point_in_bbox(px, py, text_bbox, tolerance):
                     cx, cy = _bbox_center(text_bbox)
                     label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
+                    intentional = text_artist.get_gid() in _INTENTIONAL_TEXT_MARKER_TEXT_GIDS
                     defects.append(
                         FigureDefect(
                             defect_type=_DEFECT_TYPE_TEXT_MARKER_OVERLAP,
-                            severity=_SEVERITY_ERROR,
-                            message=f"Text {label!r} overlaps a scatter marker.",
+                            severity=_SEVERITY_WARN if intentional else _SEVERITY_ERROR,
+                            message=(
+                                f"Expected annotation overlap: Text {label!r} overlaps a scatter marker."
+                                if intentional
+                                else f"Text {label!r} overlaps a scatter marker."
+                            ),
                             location=(cx, cy),
                         )
                     )

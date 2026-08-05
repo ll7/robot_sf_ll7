@@ -13,6 +13,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_csv, write_json, write_text
+
 DEFAULT_EVIDENCE_DIR = Path("docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23")
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_1462_s10_h500_failure_modes_2026-05-24")
 
@@ -65,21 +67,15 @@ def _load_csv(path: Path) -> list[dict[str, str]]:
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write dictionaries to a CSV file."""
+    """Write dictionaries to a CSV file through the shared evidence writer."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not rows:
-        path.write_text("", encoding="utf-8")
-        return
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(path, rows, allow_empty=True)
 
 
 def _write_json(path: Path, payload: Any) -> None:
-    """Write deterministic JSON."""
+    """Write deterministic JSON through the shared evidence writer."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(path, payload)
 
 
 def _generated_filenames() -> tuple[str, ...]:
@@ -548,7 +544,7 @@ The taxonomy is aggregate evidence. It can distinguish broad difficulty, candida
 collision-heavy cells, and timeout/unfinished-heavy cells. It does not prove behavioral mechanisms
 such as waiting, yielding, or hesitation without trace/video review.
 """
-    (output_dir / "README.md").write_text(readme, encoding="utf-8")
+    write_text(output_dir / "README.md", readme, issue_ref="robot_sf#1462")
 
 
 def main() -> int:

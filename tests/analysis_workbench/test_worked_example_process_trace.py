@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from copy import deepcopy
@@ -11,16 +12,20 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
+from robot_sf import analysis_workbench
 from robot_sf.analysis_workbench import interaction_coordinates as coordinates
 from robot_sf.analysis_workbench.interaction_coordinates import (
     WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_VERSION,
     ConflictZoneSpec,
     RouteSpec,
+    WorkedExampleProcessTraceValidationError,
     build_worked_example_process_trace,
     build_worked_example_process_trace_from_export,
     load_registered_conflict_zone_spec,
     load_registered_route_spec,
+    load_worked_example_process_trace_schema,
     validate_worked_example_process_trace,
 )
 from robot_sf.analysis_workbench.simulation_trace_export import simulation_trace_export_from_dict
@@ -172,6 +177,73 @@ def test_full_artifact_replay_binds_focal_interval_and_envelope(
         validate_worked_example_process_trace(forged)
 
 
+@pytest.mark.parametrize(
+    ("path", "value", "error_path"),
+    (
+        (
+            ["encounters", "focal", "actor_contiguity", "contiguous"],
+            1,
+            "/encounters/focal/actor_contiguity/contiguous",
+        ),
+        (
+            ["pair_compatibility", "provenance_gate", "checks", "scenario_id_equal"],
+            1,
+            "/pair_compatibility/provenance_gate/checks/scenario_id_equal",
+        ),
+        (
+            ["pair_compatibility", "route_spawn_separation", "initial_robot_separation_m"],
+            False,
+            "/pair_compatibility/route_spawn_separation/initial_robot_separation_m",
+        ),
+    ),
+)
+def test_full_artifact_replay_is_json_type_sensitive(
+    path: list[object],
+    value: object,
+    error_path: str,
+) -> None:
+    """JSON booleans and numbers must never replay as interchangeable values."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-right", planner_id="planner-b")
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    forged = deepcopy(payload)
+    _set_path(forged, path, value)
+
+    with pytest.raises(Exception, match=error_path):
+        validate_worked_example_process_trace(forged)
+
+
+def test_public_schema_types_pair_and_actor_contiguity_fields_strictly() -> None:
+    """The public schema must reject bool/number substitutions without replay support."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-right", planner_id="planner-b")
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    validator = Draft202012Validator(load_worked_example_process_trace_schema())
+    probes = (
+        (["encounters", "focal", "actor_contiguity", "contiguous"], 1),
+        (["pair_compatibility", "provenance_gate", "checks", "scenario_id_equal"], 1),
+        (["pair_compatibility", "route_spawn_separation", "initial_robot_separation_m"], False),
+    )
+
+    for path, value in probes:
+        forged = deepcopy(payload)
+        _set_path(forged, path, value)
+        assert any(
+            path[: len(error.absolute_path)] == list(error.absolute_path)
+            for error in validator.iter_errors(forged)
+        )
+
+
 def test_external_expected_artifact_digest_rejects_coherent_report_downgrade() -> None:
     """Admission, not a self-authored receipt, binds a fully rewritten artifact."""
 
@@ -185,13 +257,109 @@ def test_external_expected_artifact_digest_rejects_coherent_report_downgrade() -
 
     validate_worked_example_process_trace(
         admitted,
-        expected_artifact_sha256=_json_digest(admitted),
+        expected_artifact_sha256=analysis_workbench.worked_example_process_trace_artifact_sha256(
+            admitted
+        ),
     )
     with pytest.raises(Exception, match="/artifact_sha256"):
         validate_worked_example_process_trace(
             coherently_downgraded,
-            expected_artifact_sha256=_json_digest(admitted),
+            expected_artifact_sha256=analysis_workbench.worked_example_process_trace_artifact_sha256(
+                admitted
+            ),
         )
+
+
+def test_public_artifact_digest_hashes_exact_official_writer_bytes() -> None:
+    """External admission uses the deterministic bytes written to disk, including newline."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    expected_bytes = (json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n").encode(
+        "utf-8"
+    )
+    expected_sha256 = hashlib.sha256(expected_bytes).hexdigest()
+
+    assert analysis_workbench.serialize_worked_example_process_trace(payload) == expected_bytes
+    assert (
+        analysis_workbench.worked_example_process_trace_artifact_sha256(payload) == expected_sha256
+    )
+    validate_worked_example_process_trace(
+        payload,
+        expected_artifact_sha256=expected_sha256,
+    )
+    with pytest.raises(Exception, match="/artifact_sha256"):
+        validate_worked_example_process_trace(
+            payload,
+            expected_artifact_sha256=_json_digest(payload),
+        )
+
+
+def test_public_validation_normalizes_malformed_json_types() -> None:
+    """Malformed digests, values, and non-string keys must never leak raw TypeError."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    with pytest.raises(WorkedExampleProcessTraceValidationError, match="/artifact_sha256"):
+        validate_worked_example_process_trace(
+            payload,
+            expected_artifact_sha256=123,  # type: ignore[arg-type]
+        )
+
+    malformed = deepcopy(payload)
+    malformed["source_trace"]["content_receipt"]["content_contract"]["frames"][0]["planner"][1] = (
+        "non-string-key"
+    )
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        validate_worked_example_process_trace(malformed)
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+    malformed_frame = replace(
+        trace.frames[0],
+        planner={**trace.frames[0].planner, 1: "non-string-key"},
+    )
+    malformed_trace = replace(trace, frames=(malformed_frame, *trace.frames[1:]))
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        build_worked_example_process_trace_from_export(malformed_trace)
+
+
+def test_public_serializer_rejects_values_outside_exact_json_domain() -> None:
+    """Digest helpers cannot coerce keys, containers, or nonfinite scalars into collisions."""
+
+    malformed_payloads = (
+        {1: "integer-key"},
+        {"tuple": (1, 2)},
+        {"nonfinite": math.nan},
+    )
+    for malformed in malformed_payloads:
+        with pytest.raises(WorkedExampleProcessTraceValidationError):
+            analysis_workbench.serialize_worked_example_process_trace(malformed)  # type: ignore[arg-type]
+        with pytest.raises(WorkedExampleProcessTraceValidationError):
+            analysis_workbench.worked_example_process_trace_artifact_sha256(malformed)  # type: ignore[arg-type]
+
+
+def test_direct_geometry_inputs_cannot_coerce_nonfinite_values_or_keys() -> None:
+    """Direct RouteSpec inputs fail cleanly instead of colliding with JSON lookalikes."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+    actual_nan = RouteSpec("route", (0.0, 0.0), (math.nan, 0.0))
+    literal_lookalike = RouteSpec(
+        "route",
+        (0.0, 0.0),
+        ({"nonfinite_number": "nan"}, 0.0),  # type: ignore[arg-type]
+    )
+    integer_key = RouteSpec(
+        "route",
+        (0.0, 0.0),
+        (1.0, 0.0),
+        geometry={1: "integer-key"},  # type: ignore[dict-item]
+    )
+
+    for route in (actual_nan, literal_lookalike, integer_key):
+        with pytest.raises(WorkedExampleProcessTraceValidationError):
+            build_worked_example_process_trace_from_export(trace, route=route)
 
 
 def test_bound_report_rejects_coherent_inner_selected_record_rehash() -> None:
@@ -247,9 +415,9 @@ def test_full_reconstruction_rejects_coherent_source_and_focal_rebinding() -> No
 @pytest.mark.parametrize(
     ("mutation", "error_path"),
     (
-        ("unknown_top_level", "/source_trace/content_contract"),
-        ("promoted_evidence", "/source_trace/content_contract"),
-        ("unknown_units", "/source_trace/content_contract"),
+        ("unknown_top_level", "/source_trace/content_receipt"),
+        ("promoted_evidence", "/source_trace/content_receipt"),
+        ("unknown_units", "/source_trace/content_receipt"),
     ),
 )
 def test_embedded_source_receipt_is_exact_simulation_trace_export_contract(
@@ -262,14 +430,15 @@ def test_embedded_source_receipt_is_exact_simulation_trace_export_contract(
         simulation_trace_export_from_dict(_trace_payload(nonfinite_heading_step=1))
     )
     forged = deepcopy(payload)
-    contract = forged["source_trace"]["content_contract"]
+    receipt = forged["source_trace"]["content_receipt"]
+    contract = receipt["content_contract"]
     if mutation == "unknown_top_level":
         contract["promoted_claim"] = True
     elif mutation == "promoted_evidence":
         contract["evidence_boundary"] = "benchmark_evidence"
     else:
         contract["units"]["acceleration"] = "m/s^2"
-    source_digest = _json_digest(contract)
+    source_digest = _json_digest(receipt)
     forged["source_trace"]["content_sha256"] = source_digest
     forged["analysis_input_contract"]["source_trace_content_sha256"] = source_digest
     analysis_digest = _json_digest(forged["analysis_input_contract"])
@@ -514,7 +683,125 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         assert result.returncode == 0, result.stderr
 
     assert first.read_bytes() == second.read_bytes()
-    validate_worked_example_process_trace(json.loads(first.read_text(encoding="utf-8")))
+    writer_sha256 = hashlib.sha256(second.read_bytes()).hexdigest()
+    assert result.stdout.strip() == f"wrote {second} sha256={writer_sha256}"
+    validate_worked_example_process_trace(
+        json.loads(first.read_text(encoding="utf-8")),
+        expected_artifact_sha256=writer_sha256,
+    )
+
+
+def test_process_trace_cli_resolves_canonical_geometry_owners(tmp_path: Path) -> None:
+    """A repeatable logical-ref resolver verifies route and conflict owners without path leaks."""
+
+    registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    route_entry = next(
+        entry for entry in registry["routes"] if entry["entry_id"] == "fixture-route"
+    )
+    conflict_entry = next(
+        entry for entry in registry["conflict_zones"] if entry["entry_id"] == "fixture-zone"
+    )
+    owner_ref = "owners/cli-fixture-map.json"
+    route_selector = {"map_id": "fixture-map", "route_id": "fixture-route"}
+    conflict_selector = {"map_id": "fixture-map", "zone_id": "fixture-zone"}
+    owner_path = tmp_path / "owner.json"
+    owner_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "process_trace_geometry_owner.v1",
+                "geometry_bindings": [
+                    {"selector": route_selector, "geometry": route_entry["geometry"]},
+                    {"selector": conflict_selector, "geometry": conflict_entry["geometry"]},
+                ],
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    owner_digest = hashlib.sha256(owner_path.read_bytes()).hexdigest()
+    route_entry["upstream_binding"] = {
+        "kind": "canonical_source",
+        "source_artifact_ref": owner_ref,
+        "source_content_sha256": owner_digest,
+        "selector": route_selector,
+    }
+    conflict_entry["upstream_binding"] = {
+        "kind": "canonical_source",
+        "source_artifact_ref": owner_ref,
+        "source_content_sha256": owner_digest,
+        "selector": conflict_selector,
+    }
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+    output_path = tmp_path / "process-trace.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(CLI_PATH),
+            "--input",
+            str(TRACE_FIXTURE_PATH),
+            "--geometry-registry",
+            str(registry_path),
+            "--route-entry-id",
+            "fixture-route",
+            "--conflict-zone-entry-id",
+            "fixture-zone",
+            "--geometry-owner",
+            f"{owner_ref}={owner_path}",
+            "--out",
+            str(output_path),
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    for key in ("route", "conflict"):
+        assert payload["coordinate_frames"][key]["status"] == "available"
+        assert (
+            payload["coordinate_frames"][key]["registry"]["owner_validation"]["status"]
+            == "verified"
+        )
+    assert str(owner_path) not in json.dumps(payload, sort_keys=True)
+
+
+@pytest.mark.parametrize(
+    "owner_args",
+    (
+        ["missing-equals"],
+        ["owners/map.json=/tmp/one.json", "owners/map.json=/tmp/two.json"],
+    ),
+)
+def test_process_trace_cli_rejects_malformed_or_duplicate_owner_resolvers(
+    tmp_path: Path,
+    owner_args: list[str],
+) -> None:
+    """Each logical owner ref must have exactly one well-formed private path mapping."""
+
+    command = [
+        sys.executable,
+        str(CLI_PATH),
+        "--input",
+        str(TRACE_FIXTURE_PATH),
+        "--out",
+        str(tmp_path / "output.json"),
+    ]
+    for owner_arg in owner_args:
+        command.extend(("--geometry-owner", owner_arg))
+    result = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "--geometry-owner" in result.stderr
 
 
 def test_process_trace_cli_requires_pair_grain_for_pair_input(tmp_path: Path) -> None:
@@ -745,6 +1032,100 @@ def test_canonical_encounter_selector_searches_all_report_encounters() -> None:
         assert focal["encounter_id"] == "ped-b:encounter-0002"
         assert focal["declared_encounter"]["canonical_record"]["actor_id"] == "ped-b"
         validate_worked_example_process_trace(payload)
+
+
+def test_canonical_encounter_ids_are_globally_unique_before_selection() -> None:
+    """Duplicate canonical IDs anywhere in a report make focal selection unavailable."""
+
+    report = _encounter_report()
+    first_duplicate = deepcopy(report["encounters"][0])
+    first_duplicate.update(
+        {
+            "encounter_id": "ped-b:encounter-0002",
+            "actor_id": "ped-b",
+            "start_time_s": 0.1,
+            "end_time_s": 0.2,
+        }
+    )
+    second_duplicate = deepcopy(first_duplicate)
+    second_duplicate.update({"start_time_s": 0.2, "end_time_s": 0.3})
+    report["encounters"].extend((first_duplicate, second_duplicate))
+    report["denominator"]["actor_count"] = 2
+    report["denominator"]["encounter_count"] = 3
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(actor_switch=True)),
+        focal_actor_id="ped-a",
+        encounter_report=report,
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    assert payload["encounters"]["focal"]["status"] == "unavailable"
+    assert payload["encounters"]["focal"]["reason"] == "canonical_encounter_id_not_unique"
+
+
+def test_canonical_encounter_id_cannot_name_another_actor() -> None:
+    """Actor-prefixed canonical IDs must agree with the record actor binding."""
+
+    report = _encounter_report()
+    report["encounters"][0]["encounter_id"] = "ped-b:encounter-0001"
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(actor_switch=True)),
+        focal_encounter_id="ped-b:encounter-0001",
+        encounter_report=report,
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    assert payload["encounters"]["focal"]["status"] == "unavailable"
+    assert payload["encounters"]["focal"]["reason"] == "canonical_encounter_id_actor_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_reason"),
+    (
+        ("cross_frame_actor", "planner_encounter_actor_hint_ambiguous"),
+        ("same_frame_list_actor", "planner_encounter_actor_hint_ambiguous"),
+        ("cross_frame_encounter", "planner_encounter_id_hint_ambiguous"),
+        ("single_hint_actor_mismatch", "planner_encounter_id_actor_mismatch"),
+    ),
+)
+def test_planner_encounter_hints_fail_closed_on_any_ambiguity(
+    mode: str,
+    expected_reason: str,
+) -> None:
+    """All frames and list entries contribute to one fail-closed hint decision."""
+
+    trace_payload = _trace_payload(actor_switch=True)
+    if mode == "cross_frame_actor":
+        trace_payload["frames"][1]["planner"]["encounter"] = {
+            "actor_id": "ped-b",
+            "encounter_id": "ped-b:encounter-0001",
+        }
+    elif mode == "same_frame_list_actor":
+        for frame in trace_payload["frames"]:
+            frame["planner"].pop("encounter")
+        trace_payload["frames"][0]["planner"]["encounters"] = [
+            {"actor_id": "ped-a", "encounter_id": "ped-a:encounter-0001"},
+            {"actor_id": "ped-b", "encounter_id": "ped-b:encounter-0001"},
+        ]
+    elif mode == "cross_frame_encounter":
+        trace_payload["frames"][1]["planner"]["encounter"] = {
+            "actor_id": "ped-a",
+            "encounter_id": "ped-a:encounter-0002",
+        }
+    else:
+        for frame in trace_payload["frames"]:
+            frame["planner"]["encounter"] = {
+                "actor_id": "ped-a",
+                "encounter_id": "ped-b:encounter-0001",
+            }
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload)
+    )
+
+    assert payload["encounters"]["focal"]["status"] == "unavailable"
+    assert payload["encounters"]["focal"]["reason"] == expected_reason
 
 
 def test_unrelated_canonical_encounter_checksum_abstains() -> None:
@@ -1271,6 +1652,124 @@ def test_geometry_registry_receipts_are_checkout_portable(tmp_path: Path) -> Non
         )
 
 
+def test_geometry_owner_schema_is_public_and_strict() -> None:
+    """The canonical owner envelope, selectors, and geometry are a public strict contract."""
+
+    schema = coordinates.load_process_trace_geometry_owner_schema()
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
+    valid = {
+        "schema_version": "process_trace_geometry_owner.v1",
+        "geometry_bindings": [
+            {
+                "selector": {"map_id": "fixture-map", "spawn_id": 1},
+                "geometry": {
+                    "type": "line_segment",
+                    "start": [0.0, 0.0],
+                    "end": [1.0, 0.0],
+                },
+            }
+        ],
+    }
+    assert not list(validator.iter_errors(valid))
+
+    malformed_selector = deepcopy(valid)
+    malformed_selector["geometry_bindings"][0]["selector"] = {"map_id": ["not-scalar"]}
+    assert list(validator.iter_errors(malformed_selector))
+    malformed_geometry = deepcopy(valid)
+    malformed_geometry["geometry_bindings"][0]["geometry"]["start"] = [0.0]
+    assert list(validator.iter_errors(malformed_geometry))
+    extra_envelope = {**valid, "private_path": "/tmp/owner.json"}
+    assert list(validator.iter_errors(extra_envelope))
+
+
+@pytest.mark.parametrize(
+    ("invalid_binding", "expected_reason"),
+    (
+        (
+            {
+                "selector": {"unrelated": math.nan},
+                "geometry": {
+                    "type": "line_segment",
+                    "start": [0.0, 0.0],
+                    "end": [1.0, 0.0],
+                },
+            },
+            "registered_route_owner_artifact_invalid_json",
+        ),
+        (
+            {
+                "selector": {"unrelated": ["not-scalar"]},
+                "geometry": {
+                    "type": "line_segment",
+                    "start": [0.0, 0.0],
+                    "end": [1.0, 0.0],
+                },
+            },
+            "registered_route_owner_selector_invalid",
+        ),
+        (
+            {
+                "selector": {"unrelated": "binding"},
+                "geometry": {
+                    "type": "line_segment",
+                    "start": [0.0],
+                    "end": [1.0, 0.0],
+                },
+            },
+            "registered_route_owner_geometry_invalid",
+        ),
+    ),
+)
+def test_geometry_owner_validates_entire_envelope_before_selector_scan(
+    tmp_path: Path,
+    invalid_binding: dict[str, object],
+    expected_reason: str,
+) -> None:
+    """An unrelated malformed binding cannot be skipped in favor of one valid match."""
+
+    registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    route_entry = next(entry for entry in registry["routes"] if entry["entry_id"] == "r-main")
+    selector = {"map_id": "fixture-map", "spawn_id": 1, "goal_id": 2}
+    owner_ref = "owners/strict-owner.json"
+    owner_path = tmp_path / "strict-owner.json"
+    owner_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "process_trace_geometry_owner.v1",
+                "geometry_bindings": [
+                    invalid_binding,
+                    {"selector": selector, "geometry": route_entry["geometry"]},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    route_entry["upstream_binding"] = {
+        "kind": "canonical_source",
+        "source_artifact_ref": owner_ref,
+        "source_content_sha256": hashlib.sha256(owner_path.read_bytes()).hexdigest(),
+        "selector": selector,
+    }
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+    route = load_registered_route_spec(
+        registry_path,
+        "r-main",
+        geometry_owner_paths={owner_ref: owner_path},
+    )
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=route,
+    )
+
+    assert payload["coordinate_frames"]["route"]["status"] == "unavailable"
+    assert payload["coordinate_frames"]["route"]["reason"] == expected_reason
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        coordinates.load_process_trace_geometry_owner(owner_path)
+
+
 def test_canonical_geometry_owner_must_resolve_digest_and_exact_selector_geometry(
     tmp_path: Path,
 ) -> None:
@@ -1317,7 +1816,7 @@ def test_canonical_geometry_owner_must_resolve_digest_and_exact_selector_geometr
         simulation_trace_export_from_dict(_trace_payload()), route=fabricated_route
     )
     assert fabricated["coordinate_frames"]["route"]["reason"] == (
-        "registered_route_owner_geometry_unverified"
+        "registered_route_owner_artifact_schema_invalid"
     )
 
     owner_path.write_text(
@@ -2163,7 +2662,7 @@ def test_global_minimum_and_switches_replay_from_source_actor_inventory() -> Non
         validate_worked_example_process_trace(forged)
 
 
-def test_derived_source_coordinates_and_commands_replay_from_content_contract() -> None:
+def test_derived_source_coordinates_and_commands_replay_from_content_receipt() -> None:
     """Swapping a valid source-A receipt into source-B derived frames must reject."""
 
     source_a = build_worked_example_process_trace_from_export(
@@ -2181,11 +2680,11 @@ def test_derived_source_coordinates_and_commands_replay_from_content_contract() 
         validate_worked_example_process_trace(forged)
 
     forged_command = deepcopy(source_b)
-    forged_command["source_trace"]["content_contract"]["frames"][0]["planner"]["selected_action"][
-        "linear_velocity"
-    ] = 0.123
+    forged_command["source_trace"]["content_receipt"]["content_contract"]["frames"][0]["planner"][
+        "selected_action"
+    ]["linear_velocity"] = 0.123
     forged_command["source_trace"]["content_sha256"] = _digest_contract(
-        forged_command["source_trace"]["content_contract"]
+        forged_command["source_trace"]["content_receipt"]
     )
     with pytest.raises(Exception, match="/frames/0/commands"):
         validate_worked_example_process_trace(forged_command)
@@ -2321,10 +2820,12 @@ def test_source_and_pair_hashes_recompute_from_canonical_content_receipts() -> N
         pair_comparison_grain="matched_planner_pair",
     )
 
-    assert payload["source_trace"]["content_contract"] == _canonical_trace_contract(left_payload)
-    assert payload["pair_compatibility"]["right_source_trace"]["content_contract"] == (
-        _canonical_trace_contract(right_payload)
+    assert payload["source_trace"]["content_receipt"]["content_contract"] == (
+        _canonical_trace_contract(left_payload)
     )
+    assert payload["pair_compatibility"]["right_source_trace"]["content_receipt"][
+        "content_contract"
+    ] == (_canonical_trace_contract(right_payload))
 
     forged_left = deepcopy(payload)
     forged_left["source_trace"]["content_sha256"] = "0" * 64
@@ -2367,7 +2868,7 @@ def test_common_anchors_require_derived_right_receipt_ids() -> None:
         validate_worked_example_process_trace(forged)
 
 
-def test_right_event_receipts_replay_from_right_content_contract() -> None:
+def test_right_event_receipts_replay_from_right_content_receipt() -> None:
     """Right receipts cannot be coherently moved by changing step/time/id and common anchor."""
 
     payload = build_worked_example_process_trace_from_export(
@@ -2558,7 +3059,7 @@ def test_run_config_contract_replays_from_embedded_source_content() -> None:
         validate_worked_example_process_trace(forged_status)
 
 
-def test_embedded_content_contracts_are_strict_json_for_nonfinite_source_values() -> None:
+def test_embedded_content_receipts_are_strict_json_for_nonfinite_source_values() -> None:
     """Builder payloads with admitted nonfinite source values must still serialize strictly."""
 
     for trace_payload in (
@@ -2570,6 +3071,105 @@ def test_embedded_content_contracts_are_strict_json_for_nonfinite_source_values(
             simulation_trace_export_from_dict(trace_payload)
         )
         json.dumps(payload, allow_nan=False, sort_keys=True)
+
+
+def test_nonfinite_receipt_is_injective_against_literal_planner_objects() -> None:
+    """An actual NaN and a literal lookalike planner object need distinct identities."""
+
+    literal_payload = _trace_payload(trace_id="literal-nonfinite-object")
+    literal_payload["frames"][0]["planner"]["receipt_probe"] = {"nonfinite_number": "nan"}
+    nan_payload = deepcopy(literal_payload)
+    nan_payload["frames"][0]["planner"]["receipt_probe"] = math.nan
+
+    literal = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(literal_payload)
+    )
+    actual_nan = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(nan_payload)
+    )
+
+    assert literal["source_trace"]["content_sha256"] != actual_nan["source_trace"]["content_sha256"]
+    assert literal["analysis_input_sha256"] != actual_nan["analysis_input_sha256"]
+    assert literal["process_trace_id"] != actual_nan["process_trace_id"]
+    assert coordinates.worked_example_process_trace_artifact_sha256(
+        literal
+    ) != coordinates.worked_example_process_trace_artifact_sha256(actual_nan)
+
+    left = simulation_trace_export_from_dict(_trace_payload(trace_id="pair-left"))
+    literal_pair = build_worked_example_process_trace_from_export(
+        left,
+        pair_trace=simulation_trace_export_from_dict(literal_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    nan_pair = build_worked_example_process_trace_from_export(
+        left,
+        pair_trace=simulation_trace_export_from_dict(nan_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    assert (
+        literal_pair["pair_compatibility"]["right_source_trace"]["content_sha256"]
+        != nan_pair["pair_compatibility"]["right_source_trace"]["content_sha256"]
+    )
+    assert (
+        literal_pair["analysis_input_contract"]["pair_trace"]["content_sha256"]
+        != nan_pair["analysis_input_contract"]["pair_trace"]["content_sha256"]
+    )
+
+
+def test_nonfinite_receipt_uses_canonical_paths_and_rejects_ambiguous_ledgers() -> None:
+    """Only sorted, unique, non-overlapping RFC6901 paths may restore null targets."""
+
+    trace_payload = _trace_payload()
+    trace_payload["frames"][0]["planner"]["receipt~/probe"] = math.nan
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload)
+    )
+    receipt = payload["source_trace"]["content_receipt"]
+    assert receipt["nonfinite_numbers"] == [
+        {
+            "path": "/frames/0/planner/receipt~0~1probe",
+            "value": "nan",
+        }
+    ]
+
+    mutations = []
+    malformed_escape = deepcopy(payload)
+    malformed_escape["source_trace"]["content_receipt"]["nonfinite_numbers"][0]["path"] = (
+        "/frames/0/planner/receipt~2probe"
+    )
+    mutations.append(malformed_escape)
+
+    duplicate = deepcopy(payload)
+    duplicate["source_trace"]["content_receipt"]["nonfinite_numbers"].append(
+        deepcopy(duplicate["source_trace"]["content_receipt"]["nonfinite_numbers"][0])
+    )
+    mutations.append(duplicate)
+
+    prefix_conflict = deepcopy(payload)
+    prefix_conflict["source_trace"]["content_receipt"]["nonfinite_numbers"].insert(
+        0,
+        {"path": "/frames/0/planner", "value": "nan"},
+    )
+    mutations.append(prefix_conflict)
+
+    non_null_target = deepcopy(payload)
+    non_null_target["source_trace"]["content_receipt"]["content_contract"]["frames"][0]["planner"][
+        "receipt~/probe"
+    ] = 0.0
+    mutations.append(non_null_target)
+
+    wrong_container = deepcopy(payload)
+    wrong_container["source_trace"]["content_receipt"]["nonfinite_numbers"][0]["path"] = (
+        "/frames/not-an-index/planner/receipt~0~1probe"
+    )
+    mutations.append(wrong_container)
+
+    for forged in mutations:
+        forged["source_trace"]["content_sha256"] = _json_digest(
+            forged["source_trace"]["content_receipt"]
+        )
+        with pytest.raises(Exception, match="/source_trace/content_receipt"):
+            validate_worked_example_process_trace(forged)
 
 
 def test_semantic_validator_rejects_available_event_without_coordinates() -> None:
@@ -2859,8 +3459,13 @@ def _rebuild_dependent_process_views(
 
 
 def _canonical_trace_checksum(payload: dict[str, object]) -> str:
-    contract = _canonical_trace_contract(payload)
-    return _digest_contract(contract)
+    return _digest_contract(
+        {
+            "schema_version": "simulation_trace_export_receipt.v1",
+            "content_contract": _canonical_trace_contract(payload),
+            "nonfinite_numbers": [],
+        }
+    )
 
 
 def _digest_contract(contract: object) -> str:

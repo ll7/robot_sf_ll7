@@ -8,6 +8,7 @@ change canonical benchmark metrics, SNQI, planner behavior, or figure admission.
 
 - Schema: `robot_sf/analysis_workbench/schemas/worked_example_process_trace.v1.json`
 - Geometry-registry schema: `robot_sf/analysis_workbench/schemas/process_trace_geometry_registry.v1.json`
+- Geometry-owner schema: `robot_sf/analysis_workbench/schemas/process_trace_geometry_owner.v1.json`
 - Builder and coordinate orchestration: `robot_sf/analysis_workbench/interaction_coordinates.py`
 - Pair compatibility: `robot_sf/analysis_workbench/event_alignment.py`
 - Stall/reversal phase summaries: `robot_sf/analysis_workbench/episode_phases.py`
@@ -35,27 +36,40 @@ SHA-256 receipts. Validation rechecks the canonical report schema and requires t
 encounter, and complete selected record to replay that receipt exactly.
 Use `--focal-actor-id` to select an actor across every canonical report encounter, or
 `--focal-encounter-id` to select one unique encounter directly. When both are present they must
-resolve to the same canonical record.
+resolve to the same canonical record. Canonical encounter IDs are unique across the complete
+report and an actor-prefixed ID must name its record actor. Without a report, every planner hint
+in every frame and every `planner.encounters` list entry participates in focal binding;
+contradictory actor or encounter IDs, including an actor-prefixed planner ID that names a different
+actor, make the focal encounter explicitly unavailable.
 
 Add `--pair-input path/to/other_trace.json --pair-comparison-grain ...` when building pair
 compatibility; the comparison grain is required whenever a pair input is present.
 
 Every analysis-affecting input is also recorded once in the versioned top-level
 `analysis_input_contract`: the exact source digest, route and conflict registry inputs, pair
-presence and full source content, report presence and full content, nullable focal selectors, and
+presence and full source receipt, report presence and full content, nullable focal selectors, and
 the requested comparison grain. `analysis_input_sha256` is the canonical JSON digest of that
 contract, and the full digest is part of `process_trace_id`. Semantic validation reconstructs the
-complete artifact from the strict embedded `simulation_trace_export.v1` receipt and this contract;
+complete artifact from the strict embedded `simulation_trace_export_receipt.v1` envelope and this
+contract;
 it does not trust the emitted focal actor, interval flags, frame indices, coordinate projections,
 diagnostics, events, pair summaries, units, or coordinate-frame envelope. The embedded source
-receipt preserves explicit nonfinite-number sentinels but otherwise obeys the exact source schema,
+receipt contains a strict-JSON `content_contract` plus a canonical, sorted
+`nonfinite_numbers` path/value ledger. Actual NaN and infinities become `null` only at the ledger's
+RFC 6901 paths; decoding restores only validated ledger targets. A literal planner object that
+resembles an old nonfinite marker remains ordinary content. The content SHA covers the entire
+envelope, including the ledger, and the decoded contract must obey the exact source schema,
 including its fixed evidence boundary and units and rejection of unknown envelope fields.
 
 Content addressing inside an artifact detects partial rewrites, not a party that rewrites the
 entire artifact and all of its self-authored hashes. Admission must therefore obtain the expected
-final canonical-JSON SHA-256 independently and pass it as `expected_artifact_sha256` to
-`validate_worked_example_process_trace`. This external expected digest is the authenticity/trust
-boundary; the process-trace builder does not claim a signature or standalone authenticity.
+SHA-256 of the exact official writer bytes independently and pass it as
+`expected_artifact_sha256` to `validate_worked_example_process_trace`. Official bytes use
+`indent=2`, sorted keys, `allow_nan=False`, UTF-8, and one trailing newline; the public
+`serialize_worked_example_process_trace` and
+`worked_example_process_trace_artifact_sha256` helpers define that contract. The CLI prints this
+writer-byte SHA after writing. The external expected digest is the admission trust boundary; the
+process-trace builder does not claim a signature or standalone authenticity.
 
 The analysis workbench owns `process_trace_geometry_registry.v1` as an adapter and receipt format,
 not as a second production map-authoring source. Production registry entries must derive from or
@@ -84,13 +98,21 @@ supplied registry receipt.
 receipt and are available only as fixture proof. A `canonical_source` binding is stricter: the
 owner reference must resolve in private validation context, its raw bytes must match the declared
 SHA-256, and its selector must resolve exactly once to byte-semantically equal geometry in the
-recognized `process_trace_geometry_owner.v1` envelope (`geometry_bindings` entries contain exact
-`selector` and `geometry` objects). Missing, fabricated, digest-mismatched, ambiguous,
+strict public `process_trace_geometry_owner.v1` envelope (`geometry_bindings` entries contain exact
+`selector` and `geometry` objects). The owner loader rejects duplicate JSON keys and non-standard
+NaN/Infinity constants and validates the complete envelope before scanning for a selector.
+Missing, fabricated, digest-mismatched, malformed, ambiguous,
 selector-mismatched, geometry-mismatched, or unrecognized owners make the projection explicitly
 unavailable while preserving the supplied registry input receipt. The adapter therefore cannot
 promote geometry merely because its own registry is internally consistent. Absolute paths,
 including Windows drive-absolute forms on non-Windows hosts, remain private resolver context and
 are rejected as public artifact references.
+
+For canonical entries, pass repeatable `--geometry-owner REF=PATH` mappings to the CLI. `REF` is
+the stable logical `source_artifact_ref`; `PATH` is private local resolver context threaded to both
+route and conflict loaders and never emitted into the process trace. Malformed mappings and
+duplicate logical references are rejected. Omitting a needed mapping does not silently bless the
+adapter: unresolved canonical owners remain explicitly unavailable.
 
 Ordered route polylines use cumulative arclength and nearest-segment projection; equal-distance
 ties abstain as ambiguous. Zero-length, adjacent backtracking/overlap, and nonlocal intersections

@@ -64,7 +64,7 @@
         "coordinate_frame",
         "units",
         "content_sha256",
-        "content_contract",
+        "content_receipt",
         "run_config_contract",
         "source"
       ],
@@ -74,7 +74,7 @@
         "coordinate_frame": {"type": "string", "minLength": 1},
         "units": {"type": "object"},
         "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "content_contract": {"type": "object"},
+        "content_receipt": {"$ref": "#/$defs/trace_content_receipt"},
         "run_config_contract": {
           "oneOf": [
             {
@@ -392,18 +392,11 @@
             "grain_id": {"enum": ["matched_planner_pair", "matched_realization_pair", "undeclared"]}
           }
         },
-        "provenance_gate": {
-          "type": "object",
-          "minProperties": 1,
-          "properties": {
-            "left_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "right_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-          }
-        },
+        "provenance_gate": {"$ref": "#/$defs/pair_provenance_gate"},
         "right_source_trace": {"$ref": "#/$defs/pair_source_trace"},
-        "initial_state_equivalence": {"type": "object"},
-        "route_spawn_separation": {"type": "object"},
-        "shared_prefix": {"type": "object"},
+        "initial_state_equivalence": {"$ref": "#/$defs/pair_initial_state_equivalence"},
+        "route_spawn_separation": {"$ref": "#/$defs/pair_route_spawn_separation"},
+        "shared_prefix": {"$ref": "#/$defs/pair_shared_prefix"},
         "valid_common_event_anchors": {
           "type": "array",
           "items": {"$ref": "#/$defs/common_event_anchor"}
@@ -476,7 +469,155 @@
         "status": {"enum": ["available", "unavailable"]},
         "actor_id": {"type": "string"},
         "encounter_id": {"type": ["string", "null"]},
-        "declared_encounter": {"type": "object"}
+        "declared_encounter": {"type": "object"},
+        "actor_contiguity": {"$ref": "#/$defs/actor_contiguity"}
+      }
+    },
+    "actor_contiguity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "actor_id",
+            "contiguous",
+            "missing_steps",
+            "reason",
+            "computed_available_duration_s",
+            "computed_min_proxy_surface_clearance_m",
+            "canonical_encounter_record_status"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "actor_id": {"type": "string"},
+            "contiguous": {"type": "boolean"},
+            "missing_steps": {"type": "array", "items": {"type": "integer"}},
+            "reason": {"type": "string"},
+            "computed_available_duration_s": {"type": ["number", "null"]},
+            "computed_min_proxy_surface_clearance_m": {"type": ["number", "null"]},
+            "canonical_encounter_record_status": {
+              "enum": ["available", "unavailable"]
+            }
+          }
+        }
+      ]
+    },
+    "pair_provenance_gate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "compatible", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "compatible": {"const": false},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "compatible",
+            "checks",
+            "availability",
+            "time_step_contracts",
+            "comparison_grain",
+            "left_trace_id",
+            "right_trace_id",
+            "left_content_sha256",
+            "right_content_sha256"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "compatible": {"type": "boolean"},
+            "checks": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {"type": "boolean"}
+            },
+            "availability": {"type": "object"},
+            "time_step_contracts": {"type": "object"},
+            "comparison_grain": {
+              "enum": ["matched_planner_pair", "matched_realization_pair"]
+            },
+            "left_trace_id": {"type": "string"},
+            "right_trace_id": {"type": "string"},
+            "left_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "right_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      ]
+    },
+    "pair_initial_state_equivalence": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "equivalent": {"type": "boolean"},
+        "actor_id_sets_equal": {"type": "boolean"},
+        "robot_position_delta_m": {"type": ["number", "null"]},
+        "robot_velocity_delta_mps": {"type": ["number", "null"]},
+        "robot_heading_delta_rad": {"type": ["number", "null"]},
+        "robot_radius_delta_m": {"type": ["number", "null"]},
+        "max_actor_position_delta_m": {"type": ["number", "null"]},
+        "max_actor_velocity_delta_mps": {"type": ["number", "null"]},
+        "max_actor_radius_delta_m": {"type": ["number", "null"]},
+        "position_tolerance_m": {"type": "number"},
+        "heading_tolerance_rad": {"type": "number"},
+        "actor_position_delta_m": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        },
+        "actor_velocity_delta_mps": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        },
+        "actor_radius_delta_m": {
+          "type": "object",
+          "additionalProperties": {"type": ["number", "null"]}
+        }
+      }
+    },
+    "pair_route_spawn_separation": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "scenario_provenance_compatible": {"type": "boolean"},
+        "scenario_id_equal": {"type": "boolean"},
+        "planner_id_left": {"type": "string"},
+        "planner_id_right": {"type": "string"},
+        "seed_left": {"type": "integer"},
+        "seed_right": {"type": "integer"},
+        "initial_robot_separation_m": {"type": ["number", "null"]},
+        "max_initial_actor_separation_m": {"type": ["number", "null"]}
+      }
+    },
+    "pair_shared_prefix": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "shared_prefix": {"type": "boolean"},
+        "matched_steps": {"type": "integer", "minimum": 0},
+        "required_steps": {"type": "integer", "minimum": 0},
+        "position_tolerance_m": {"type": "number"},
+        "heading_tolerance_rad": {"type": "number"}
       }
     },
     "coverage_record": {
@@ -994,7 +1135,7 @@
             "coordinate_frame",
             "units",
             "content_sha256",
-            "content_contract",
+            "content_receipt",
             "source"
           ],
           "properties": {
@@ -1004,7 +1145,7 @@
             "coordinate_frame": {"type": "string", "minLength": 1},
             "units": {"type": "object"},
             "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "content_contract": {"type": "object"},
+            "content_receipt": {"$ref": "#/$defs/trace_content_receipt"},
             "source": {
               "type": "object",
               "additionalProperties": false,
@@ -1106,6 +1247,27 @@
         }
       ]
     },
+    "trace_content_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "content_contract", "nonfinite_numbers"],
+      "properties": {
+        "schema_version": {"const": "simulation_trace_export_receipt.v1"},
+        "content_contract": {"type": "object"},
+        "nonfinite_numbers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "value"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^/"},
+              "value": {"enum": ["nan", "inf", "-inf"]}
+            }
+          }
+        }
+      }
+    },
     "analysis_pair_input": {
       "oneOf": [
         {
@@ -1117,11 +1279,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "content_sha256", "content_contract"],
+          "required": ["status", "content_sha256", "content_receipt"],
           "properties": {
             "status": {"const": "supplied"},
             "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-            "content_contract": {"type": "object"}
+            "content_receipt": {"$ref": "#/$defs/trace_content_receipt"}
           }
         }
       ]

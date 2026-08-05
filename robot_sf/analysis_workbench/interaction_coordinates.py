@@ -29,6 +29,11 @@ from robot_sf.analysis_workbench.event_alignment import (
     build_trace_run_config_contract,
     unavailable_pair_compatibility,
 )
+from robot_sf.analysis_workbench.process_trace_receipt import (
+    build_simulation_trace_receipt,
+    decode_simulation_trace_receipt,
+    simulation_trace_receipt_sha256,
+)
 from robot_sf.analysis_workbench.safety_surrogates import (
     SAFETY_SURROGATE_PROFILE_VERSION,
     constant_velocity_closest_approach,
@@ -54,10 +59,14 @@ NEAR_MISS_ENCOUNTER_SCHEMA_FILE = (
 GEOMETRY_REGISTRY_SCHEMA_FILE = (
     Path(__file__).with_name("schemas") / "process_trace_geometry_registry.v1.json"
 )
+GEOMETRY_OWNER_SCHEMA_FILE = (
+    Path(__file__).with_name("schemas") / "process_trace_geometry_owner.v1.json"
+)
 EVENT_PROFILE_VERSION = "worked_example_event_detectors.v1"
 THRESHOLD_PROFILE_VERSION = "worked_example_threshold_profile.diagnostic.v1"
 CANONICAL_ENCOUNTER_SCHEMA_VERSION = "near_miss_encounter.v1"
 GEOMETRY_REGISTRY_SCHEMA_VERSION = "process_trace_geometry_registry.v1"
+GEOMETRY_OWNER_SCHEMA_VERSION = "process_trace_geometry_owner.v1"
 ENCOUNTER_REPORT_INPUT_SCHEMA_VERSION = "near_miss_encounter_report_input.v1"
 ANALYSIS_INPUT_SCHEMA_VERSION = "worked_example_process_trace_analysis_input.v1"
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -164,6 +173,17 @@ def load_process_trace_geometry_registry_schema() -> dict[str, Any]:
     return json.loads(GEOMETRY_REGISTRY_SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=1)
+def load_process_trace_geometry_owner_schema() -> dict[str, Any]:
+    """Load the public ``process_trace_geometry_owner.v1`` JSON schema.
+
+    Returns:
+        Parsed JSON Schema document.
+    """
+
+    return json.loads(GEOMETRY_OWNER_SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
 def validate_worked_example_process_trace(
     payload: Mapping[str, Any],
     *,
@@ -176,34 +196,44 @@ def validate_worked_example_process_trace(
     ``geometry_registry_paths`` resolves stable registry and canonical owner
     artifact references to machine-local files. Absolute paths are deliberately
     validation context, never part of the public process-trace payload. Admission callers can pass
-    an independently obtained ``expected_artifact_sha256`` over canonical JSON;
+    an independently obtained ``expected_artifact_sha256`` over official writer bytes;
     a digest stored inside the payload would not authenticate a coherent rewrite.
     """
 
-    validator = Draft202012Validator(load_worked_example_process_trace_schema())
-    errors = [
-        f"{json_pointer(error.absolute_path)}: {error.message}"
-        for error in sorted(
-            validator.iter_errors(payload),
-            key=lambda err: list(err.absolute_path),
+    errors: list[str] = []
+    try:
+        validator = Draft202012Validator(load_worked_example_process_trace_schema())
+        errors.extend(
+            f"{json_pointer(error.absolute_path)}: {error.message}"
+            for error in sorted(
+                validator.iter_errors(payload),
+                key=lambda err: [str(part) for part in err.absolute_path],
+            )
         )
-    ]
+    except (AttributeError, KeyError, TypeError, ValueError):
+        errors.append("/: malformed JSON payload")
     if expected_artifact_sha256 is not None:
-        if SHA256_HEX_RE.fullmatch(expected_artifact_sha256) is None:
+        if (
+            not isinstance(expected_artifact_sha256, str)
+            or SHA256_HEX_RE.fullmatch(expected_artifact_sha256) is None
+        ):
             errors.append("/artifact_sha256: expected external sha256 hex digest")
         else:
             try:
-                actual_artifact_sha256 = _json_sha256_digest(payload)
+                actual_artifact_sha256 = worked_example_process_trace_artifact_sha256(payload)
             except (TypeError, ValueError):
                 actual_artifact_sha256 = None
             if actual_artifact_sha256 != expected_artifact_sha256:
                 errors.append("/artifact_sha256: does not match external admission digest")
-    errors.extend(
-        _semantic_validation_errors(
-            payload,
-            geometry_registry_paths=geometry_registry_paths,
+    try:
+        errors.extend(
+            _semantic_validation_errors(
+                payload,
+                geometry_registry_paths=geometry_registry_paths,
+            )
         )
-    )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        errors.append("/: malformed JSON payload")
     if errors:
         raise WorkedExampleProcessTraceValidationError(errors, source=source)
 
@@ -277,14 +307,14 @@ def _validate_analysis_input_identity(  # noqa: C901, PLR0912
                 isinstance(right_source, Mapping)
                 and right_source.get("status") == "available"
                 and pair_receipt.get("content_sha256") == right_source.get("content_sha256")
-                and pair_receipt.get("content_contract") == right_source.get("content_contract")
+                and pair_receipt.get("content_receipt") == right_source.get("content_receipt")
             ):
                 errors.append(
                     "/analysis_input_contract/pair_trace: must match embedded right source receipt"
                 )
-            pair_content = pair_receipt.get("content_contract")
+            pair_content = pair_receipt.get("content_receipt")
             try:
-                pair_content_digest = _json_sha256_digest(pair_content)
+                pair_content_digest = simulation_trace_receipt_sha256(pair_content)
             except (TypeError, ValueError):
                 pair_content_digest = None
             if pair_receipt.get("content_sha256") != pair_content_digest:
@@ -340,13 +370,13 @@ def _validate_full_artifact_replay(
     pair_receipt = contract.get("pair_trace")
     pair_trace: SimulationTraceExport | None = None
     if isinstance(pair_receipt, Mapping) and pair_receipt.get("status") == "supplied":
-        pair_content = pair_receipt.get("content_contract")
+        pair_content = pair_receipt.get("content_receipt")
         if not isinstance(pair_content, Mapping):
-            return ["/analysis_input_contract/pair_trace/content_contract: required"]
-        pair_trace = _trace_from_content_contract(pair_content)
+            return ["/analysis_input_contract/pair_trace/content_receipt: required"]
+        pair_trace = _trace_from_content_receipt(pair_content)
         if pair_trace is None:
             return [
-                "/analysis_input_contract/pair_trace/content_contract: invalid simulation trace receipt"
+                "/analysis_input_contract/pair_trace/content_receipt: invalid simulation trace receipt"
             ]
     report_receipt = contract.get("encounter_report")
     encounter_report: Mapping[str, Any] | None = None
@@ -1661,37 +1691,43 @@ def _validate_source_trace_semantics(source_trace: Mapping[str, Any]) -> list[st
             errors.append("/source_trace/run_config_contract/config_digest: expected sha256 hex")
         if run_config.get("source") != "planner.run_config":
             errors.append("/source_trace/run_config_contract/source: expected planner.run_config")
-    errors.extend(_validate_source_trace_content_contract(source_trace, "/source_trace"))
+    errors.extend(_validate_source_trace_content_receipt(source_trace, "/source_trace"))
     return errors
 
 
-def _validate_source_trace_content_contract(
+def _validate_source_trace_content_receipt(
     source_trace: Mapping[str, Any],
     path: str,
 ) -> list[str]:
-    contract = source_trace.get("content_contract")
-    if not isinstance(contract, Mapping):
-        return [f"{path}/content_contract: required"]
-    trace = _trace_from_content_contract(contract)
+    receipt = source_trace.get("content_receipt")
+    if not isinstance(receipt, Mapping):
+        return [f"{path}/content_receipt: required"]
+    trace = _trace_from_content_receipt(receipt)
     if trace is None:
-        return [f"{path}/content_contract: invalid simulation trace content contract"]
-    expected_digest = _json_sha256_digest(contract)
+        return [f"{path}/content_receipt: invalid simulation trace content receipt"]
+    try:
+        expected_digest = simulation_trace_receipt_sha256(receipt)
+    except (TypeError, ValueError):
+        return [f"{path}/content_receipt: must be strict JSON"]
     if source_trace.get("content_sha256") != expected_digest:
-        return [f"{path}/content_sha256: must match content_contract digest"]
+        return [f"{path}/content_sha256: must match content_receipt digest"]
+    contract = receipt.get("content_contract")
+    if not isinstance(contract, Mapping):
+        return [f"{path}/content_receipt/content_contract: required"]
     errors: list[str] = []
     errors.extend(
-        error.replace("source trace frame ", f"{path}/content_contract/frames/").replace(
-            ": duplicate pedestrian id ", "/pedestrians: duplicate pedestrian id "
-        )
+        error.replace(
+            "source trace frame ", f"{path}/content_receipt/content_contract/frames/"
+        ).replace(": duplicate pedestrian id ", "/pedestrians: duplicate pedestrian id ")
         for error in _duplicate_pedestrian_identity_errors(trace, label="source trace")
     )
     for key in ("schema_version", "trace_id", "coordinate_frame", "units", "source"):
         if source_trace.get(key) != contract.get(key):
-            errors.append(f"{path}/{key}: must match content_contract")
+            errors.append(f"{path}/{key}: must match content_receipt")
     if "run_config_contract" in source_trace and source_trace.get(
         "run_config_contract"
     ) != _run_config_contract(trace):
-        errors.append(f"{path}/run_config_contract: must replay content_contract")
+        errors.append(f"{path}/run_config_contract: must replay content_receipt")
     return errors
 
 
@@ -2209,7 +2245,7 @@ def _validate_event_replays(
     trace = _trace_from_source_contract(source_trace)
     try:
         if trace is None:
-            return ["/source_trace/content_contract: required for event replay"]
+            return ["/source_trace/content_receipt: required for event replay"]
         expected = _event_anchors(
             trace,
             frames=event_frames,
@@ -2232,45 +2268,18 @@ def _validate_event_replays(
 def _trace_from_source_contract(source_trace: object) -> SimulationTraceExport | None:
     if not isinstance(source_trace, Mapping):
         return None
-    contract = source_trace.get("content_contract")
-    if not isinstance(contract, Mapping):
+    receipt = source_trace.get("content_receipt")
+    if not isinstance(receipt, Mapping):
         return None
-    return _trace_from_content_contract(contract)
+    return _trace_from_content_receipt(receipt)
 
 
-def _trace_from_content_contract(contract: Mapping[str, Any]) -> SimulationTraceExport | None:
+def _trace_from_content_receipt(receipt: Mapping[str, Any]) -> SimulationTraceExport | None:
     try:
-        restored = _restore_nonfinite_receipt_values(contract)
-        if not isinstance(restored, Mapping):
-            return None
+        restored = decode_simulation_trace_receipt(receipt)
         return simulation_trace_export_from_dict(restored)
     except (RobotSfError, TypeError, ValueError):
         return None
-
-
-def _restore_nonfinite_receipt_values(value: object) -> object:
-    """Decode only the exact sentinel emitted by :func:`_strict_json_value`.
-
-    Returns:
-        A recursively restored source payload suitable for strict source validation.
-    """
-
-    if isinstance(value, Mapping):
-        if "nonfinite_number" in value:
-            if set(value) != {"nonfinite_number"}:
-                raise ValueError("nonfinite sentinel cannot contain additional fields")
-            sentinel = value["nonfinite_number"]
-            if sentinel == "nan":
-                return math.nan
-            if sentinel == "inf":
-                return math.inf
-            if sentinel == "-inf":
-                return -math.inf
-            raise ValueError("invalid nonfinite sentinel")
-        return {str(key): _restore_nonfinite_receipt_values(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_restore_nonfinite_receipt_values(item) for item in value]
-    return value
 
 
 def _validate_source_contract_frame_replays(
@@ -2453,7 +2462,7 @@ def _validate_pair_semantics(  # noqa: C901, PLR0912
             right_source = pair.get("right_source_trace")
             if isinstance(right_source, Mapping) and right_source.get("status") == "available":
                 errors.extend(
-                    _validate_source_trace_content_contract(
+                    _validate_source_trace_content_receipt(
                         right_source,
                         "/pair_compatibility/right_source_trace",
                     )
@@ -2612,6 +2621,8 @@ def _replayed_trace_events(
 
 
 def _replay_mismatch_errors(actual: object, expected: object, path: str) -> list[str]:
+    if type(actual) is not type(expected):
+        return [f"{path}: must replay embedded source content"]
     if isinstance(actual, Mapping) and isinstance(expected, Mapping):
         errors: list[str] = []
         for key in sorted(set(actual) | set(expected)):
@@ -3024,6 +3035,67 @@ def load_registered_route_spec(
     )
 
 
+def load_process_trace_geometry_owner(path: Path) -> dict[str, Any]:
+    """Load and validate one strict canonical geometry-owner artifact.
+
+    Returns:
+        Validated geometry-owner payload.
+    """
+
+    resolved = path.resolve()
+    try:
+        raw = resolved.read_bytes()
+    except OSError as exc:
+        raise WorkedExampleProcessTraceValidationError(
+            ["expected readable process_trace_geometry_owner.v1 JSON"],
+            source=resolved,
+        ) from exc
+    return _geometry_owner_payload_from_bytes(raw, source=resolved)
+
+
+def _geometry_owner_payload_from_bytes(raw: bytes, *, source: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(
+            raw,
+            parse_constant=_reject_nonstandard_json_constant,
+            object_pairs_hook=_strict_json_object,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise WorkedExampleProcessTraceValidationError(
+            ["/: expected strict process_trace_geometry_owner.v1 JSON"],
+            source=source,
+        ) from exc
+    if not isinstance(payload, Mapping):
+        raise WorkedExampleProcessTraceValidationError(
+            ["/: expected process-trace geometry owner mapping"],
+            source=source,
+        )
+    validator = Draft202012Validator(load_process_trace_geometry_owner_schema())
+    errors = [
+        f"{json_pointer(error.absolute_path)}: {error.message}"
+        for error in sorted(
+            validator.iter_errors(payload),
+            key=lambda error: [str(part) for part in error.absolute_path],
+        )
+    ]
+    if errors:
+        raise WorkedExampleProcessTraceValidationError(errors, source=source)
+    return dict(payload)
+
+
+def _reject_nonstandard_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant {value}")
+
+
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key {key!r}")
+        result[key] = value
+    return result
+
+
 def load_registered_conflict_zone_spec(
     path: Path,
     entry_id: str,
@@ -3332,17 +3404,24 @@ def build_worked_example_process_trace_from_export(  # noqa: PLR0913
         Schema-valid process trace payload.
     """
 
-    payload = _build_worked_example_process_trace_from_export(
-        trace,
-        route=route,
-        conflict_zone=conflict_zone,
-        focal_actor_id=focal_actor_id,
-        focal_encounter_id=focal_encounter_id,
-        pair_trace=pair_trace,
-        encounter_report=encounter_report,
-        encounter_report_input_checksum=encounter_report_input_checksum,
-        pair_comparison_grain=pair_comparison_grain,
-    )
+    try:
+        payload = _build_worked_example_process_trace_from_export(
+            trace,
+            route=route,
+            conflict_zone=conflict_zone,
+            focal_actor_id=focal_actor_id,
+            focal_encounter_id=focal_encounter_id,
+            pair_trace=pair_trace,
+            encounter_report=encounter_report,
+            encounter_report_input_checksum=encounter_report_input_checksum,
+            pair_comparison_grain=pair_comparison_grain,
+        )
+    except WorkedExampleProcessTraceValidationError:
+        raise
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise WorkedExampleProcessTraceValidationError(
+            ["/analysis_input_contract: malformed non-JSON input"]
+        ) from exc
     validate_worked_example_process_trace(
         payload,
         geometry_registry_paths=_geometry_registry_paths_for_specs(route, conflict_zone),
@@ -3510,11 +3589,11 @@ def _analysis_input_contract(  # noqa: PLR0913
 
     pair_receipt: dict[str, Any] = {"status": "not_supplied"}
     if pair_trace is not None:
-        pair_content_contract = _trace_content_contract(pair_trace)
+        pair_content_receipt = build_simulation_trace_receipt(pair_trace)
         pair_receipt = {
             "status": "supplied",
-            "content_sha256": _json_sha256_digest(pair_content_contract),
-            "content_contract": pair_content_contract,
+            "content_sha256": simulation_trace_receipt_sha256(pair_content_receipt),
+            "content_receipt": pair_content_receipt,
         }
     report_receipt: dict[str, Any] = {"status": "not_supplied"}
     if encounter_report is not None:
@@ -3547,11 +3626,36 @@ def write_worked_example_process_trace(input_path: Path, output_path: Path, **kw
 
     payload = build_worked_example_process_trace(input_path, **kwargs)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
+    output_path.write_bytes(serialize_worked_example_process_trace(payload))
     return output_path
+
+
+def serialize_worked_example_process_trace(payload: Mapping[str, Any]) -> bytes:
+    """Serialize the exact deterministic bytes emitted by the official writer.
+
+    Returns:
+        UTF-8 JSON bytes with deterministic formatting and one trailing newline.
+    """
+
+    try:
+        _assert_exact_json_value(payload)
+        return (json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n").encode(
+            "utf-8"
+        )
+    except (TypeError, ValueError) as exc:
+        raise WorkedExampleProcessTraceValidationError(
+            ["/: payload must contain only strict JSON values with string object keys"]
+        ) from exc
+
+
+def worked_example_process_trace_artifact_sha256(payload: Mapping[str, Any]) -> str:
+    """Digest the exact deterministic bytes emitted by the official writer.
+
+    Returns:
+        SHA-256 hex digest of :func:`serialize_worked_example_process_trace`.
+    """
+
+    return hashlib.sha256(serialize_worked_example_process_trace(payload)).hexdigest()
 
 
 def _sha256_file(path: Path) -> str:
@@ -3563,13 +3667,14 @@ def _sha256_file(path: Path) -> str:
 
 
 def _source_trace(trace: SimulationTraceExport) -> dict[str, Any]:
+    content_receipt = build_simulation_trace_receipt(trace)
     return {
         "schema_version": SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
         "trace_id": trace.trace_id,
         "coordinate_frame": trace.coordinate_frame,
         "units": trace.units,
-        "content_sha256": _trace_content_sha256(trace),
-        "content_contract": _trace_content_contract(trace),
+        "content_sha256": simulation_trace_receipt_sha256(content_receipt),
+        "content_receipt": content_receipt,
         "run_config_contract": _run_config_contract(trace),
         "source": {
             "scenario_id": trace.source.scenario_id,
@@ -3582,7 +3687,7 @@ def _source_trace(trace: SimulationTraceExport) -> dict[str, Any]:
 
 
 def _trace_content_sha256(trace: SimulationTraceExport) -> str:
-    return _json_sha256_digest(_trace_content_contract(trace))
+    return simulation_trace_receipt_sha256(build_simulation_trace_receipt(trace))
 
 
 def _duplicate_pedestrian_identity_errors(
@@ -3608,45 +3713,42 @@ def _duplicate_pedestrian_identity_errors(
     return errors
 
 
-def _trace_content_contract(trace: SimulationTraceExport) -> dict[str, Any]:
-    return {
-        "schema_version": SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
-        "trace_id": trace.trace_id,
-        "source": {
-            "scenario_id": trace.source.scenario_id,
-            "seed": trace.source.seed,
-            "planner_id": trace.source.planner_id,
-            "episode_id": trace.source.episode_id,
-            "generated_by": trace.source.generated_by,
-        },
-        "evidence_boundary": trace.evidence_boundary,
-        "coordinate_frame": trace.coordinate_frame,
-        "units": trace.units,
-        "frames": [
-            {
-                "step": frame.step,
-                "time_s": frame.time_s,
-                "robot": _strict_json_value(frame.robot),
-                "pedestrians": _strict_json_value(list(frame.pedestrians)),
-                "planner": _strict_json_value(frame.planner),
-            }
-            for frame in trace.frames
-        ],
-    }
-
-
 def _strict_json_value(value: Any) -> Any:
     if isinstance(value, bool) or value is None or isinstance(value, str):
         return value
     if isinstance(value, int):
         return value
     if isinstance(value, float):
-        return value if math.isfinite(value) else {"nonfinite_number": repr(value)}
+        if not math.isfinite(value):
+            raise TypeError("strict JSON numbers must be finite")
+        return value
     if isinstance(value, Mapping):
-        return {str(key): _strict_json_value(item) for key, item in value.items()}
+        if any(type(key) is not str for key in value):
+            raise TypeError("strict JSON object keys must be strings")
+        return {key: _strict_json_value(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
         return [_strict_json_value(item) for item in value]
-    return value
+    raise TypeError(f"unsupported strict JSON value: {type(value).__name__}")
+
+
+def _assert_exact_json_value(value: object, *, path: str = "") -> None:
+    if value is None or type(value) in {bool, str, int}:
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise TypeError(f"nonfinite JSON number at {path or '/'}")
+    if type(value) is list:
+        for index, item in enumerate(value):
+            _assert_exact_json_value(item, path=f"{path}/{index}")
+        return
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError(f"non-string JSON key at {path or '/'}")
+            _assert_exact_json_value(item, path=f"{path}/{key}")
+        return
+    raise TypeError(f"non-JSON value at {path or '/'}: {type(value).__name__}")
 
 
 def _run_config_contract(trace: SimulationTraceExport) -> dict[str, Any]:
@@ -3970,15 +4072,31 @@ def _geometry_checksum(geometry: Mapping[str, Any]) -> str:
 
 def _route_spec_geometry(route: RouteSpec) -> dict[str, Any]:
     if isinstance(route.geometry, Mapping):
-        return {str(key): _strict_json_value(value) for key, value in route.geometry.items()}
+        geometry = _strict_json_value(route.geometry)
+        if not isinstance(geometry, dict):
+            raise TypeError("route geometry must be a JSON object")
+        return geometry
+    if not (
+        len(route.start) == 2
+        and len(route.end) == 2
+        and all(_finite_json_number(value) for value in (*route.start, *route.end))
+    ):
+        raise TypeError("route endpoints must be finite two-vectors")
     return {"type": "line_segment", "start": list(route.start), "end": list(route.end)}
 
 
 def _conflict_spec_geometry(conflict_zone: ConflictZoneSpec) -> dict[str, Any]:
     if isinstance(conflict_zone.geometry, Mapping):
-        return {
-            str(key): _strict_json_value(value) for key, value in conflict_zone.geometry.items()
-        }
+        geometry = _strict_json_value(conflict_zone.geometry)
+        if not isinstance(geometry, dict):
+            raise TypeError("conflict geometry must be a JSON object")
+        return geometry
+    if not (
+        len(conflict_zone.center) == 2
+        and all(_finite_json_number(value) for value in conflict_zone.center)
+        and _finite_json_number(conflict_zone.radius_m)
+    ):
+        raise TypeError("conflict geometry must use finite numeric coordinates")
     return {
         "type": "circle",
         "center": list(conflict_zone.center),
@@ -4202,7 +4320,7 @@ def _registry_binding(  # noqa: C901, PLR0913
     }
 
 
-def _geometry_owner_validation(  # noqa: C901
+def _geometry_owner_validation(  # noqa: C901, PLR0912
     binding: object,
     *,
     geometry: Mapping[str, Any],
@@ -4264,33 +4382,42 @@ def _geometry_owner_validation(  # noqa: C901
             "reason": f"{reason_prefix}_owner_content_mismatch",
         }
     try:
-        owner = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        owner = _geometry_owner_payload_from_bytes(raw, source=resolved_path)
+    except WorkedExampleProcessTraceValidationError as exc:
+        if any("/selector" in error for error in exc.errors):
+            suffix = "owner_selector_invalid"
+        elif any("/geometry" in error for error in exc.errors):
+            suffix = "owner_geometry_invalid"
+        elif any("expected strict" in error for error in exc.errors):
+            suffix = "owner_artifact_invalid_json"
+        else:
+            suffix = "owner_artifact_schema_invalid"
+        return {"status": "unavailable", "reason": f"{reason_prefix}_{suffix}"}
+    try:
+        selector_digest = _json_sha256_digest(selector)
+        candidates = [
+            item
+            for item in owner["geometry_bindings"]
+            if _json_sha256_digest(item["selector"]) == selector_digest
+        ]
+    except (KeyError, TypeError, ValueError):
         return {
             "status": "unavailable",
-            "reason": f"{reason_prefix}_owner_geometry_unverified",
+            "reason": f"{reason_prefix}_owner_canonicalization_invalid",
         }
-    if not (
-        isinstance(owner, Mapping)
-        and set(owner) == {"schema_version", "geometry_bindings"}
-        and owner.get("schema_version") == "process_trace_geometry_owner.v1"
-        and isinstance(owner.get("geometry_bindings"), list)
-    ):
-        return {
-            "status": "unavailable",
-            "reason": f"{reason_prefix}_owner_geometry_unverified",
-        }
-    candidates = [
-        item
-        for item in owner["geometry_bindings"]
-        if isinstance(item, Mapping)
-        and set(item) == {"selector", "geometry"}
-        and _json_sha256_digest(item.get("selector")) == _json_sha256_digest(selector)
-    ]
     if len(candidates) != 1:
         suffix = "owner_selector_ambiguous" if len(candidates) > 1 else "owner_selector_unresolved"
         return {"status": "unavailable", "reason": f"{reason_prefix}_{suffix}"}
-    if _json_sha256_digest(candidates[0].get("geometry")) != _json_sha256_digest(geometry):
+    try:
+        geometry_matches = _json_sha256_digest(candidates[0]["geometry"]) == _json_sha256_digest(
+            geometry
+        )
+    except (KeyError, TypeError, ValueError):
+        return {
+            "status": "unavailable",
+            "reason": f"{reason_prefix}_owner_canonicalization_invalid",
+        }
+    if not geometry_matches:
         return {"status": "unavailable", "reason": f"{reason_prefix}_owner_geometry_mismatch"}
     return {
         "status": "available",
@@ -4344,7 +4471,7 @@ def _resolve_focal_actor(  # noqa: C901
         encounter_report=encounter_report,
         encounter_report_input_checksum=encounter_report_input_checksum,
     )
-    if encounter_report is not None and declared.get("status") == "unavailable":
+    if declared.get("status") == "unavailable":
         return {
             "status": "unavailable",
             "reason": str(declared.get("reason", "canonical_encounter_unavailable")),
@@ -4418,7 +4545,7 @@ def _resolve_focal_actor(  # noqa: C901
     return {"status": "unavailable", "reason": "multiple_actors_without_encounter_binding"}
 
 
-def _declared_encounter(
+def _declared_encounter(  # noqa: C901
     trace: SimulationTraceExport,
     *,
     requested_actor_id: str | None = None,
@@ -4434,34 +4561,80 @@ def _declared_encounter(
             requested_actor_id=requested_actor_id,
             requested_encounter_id=requested_encounter_id,
         )
+    hints: list[dict[str, Any]] = []
     for frame in trace.frames:
         for key in ("focal_encounter", "encounter"):
             value = frame.planner.get(key)
             if isinstance(value, Mapping):
                 actor_id = value.get("actor_id") or value.get("pedestrian_id")
                 if actor_id is not None:
-                    return {
-                        "actor_id": str(actor_id),
-                        "encounter_id": value.get("encounter_id"),
-                        "schema_version": "planner_actor_hint.v1",
-                        "source": f"planner.{key}",
-                    }
+                    hints.append(
+                        {
+                            "actor_id": str(actor_id),
+                            "encounter_id": str(value["encounter_id"])
+                            if value.get("encounter_id") is not None
+                            else None,
+                            "source": f"planner.{key}",
+                        }
+                    )
         encounters = frame.planner.get("encounters")
         if isinstance(encounters, Sequence) and not isinstance(encounters, str | bytes):
             for value in encounters:
                 if isinstance(value, Mapping):
                     actor_id = value.get("actor_id") or value.get("pedestrian_id")
                     if actor_id is not None:
-                        return {
-                            "actor_id": str(actor_id),
-                            "encounter_id": value.get("encounter_id"),
-                            "schema_version": "planner_actor_hint.v1",
-                            "source": "planner.encounters",
-                        }
-    return {}
+                        hints.append(
+                            {
+                                "actor_id": str(actor_id),
+                                "encounter_id": str(value["encounter_id"])
+                                if value.get("encounter_id") is not None
+                                else None,
+                                "source": "planner.encounters",
+                            }
+                        )
+    if not hints:
+        return {}
+    actor_ids = sorted({hint["actor_id"] for hint in hints})
+    if len(actor_ids) != 1:
+        return {
+            "status": "unavailable",
+            "reason": "planner_encounter_actor_hint_ambiguous",
+            "schema_version": "planner_actor_hint.v1",
+            "hint_actor_ids": actor_ids,
+        }
+    encounter_ids = sorted(
+        {hint["encounter_id"] for hint in hints if hint["encounter_id"] is not None}
+    )
+    if len(encounter_ids) > 1:
+        return {
+            "status": "unavailable",
+            "reason": "planner_encounter_id_hint_ambiguous",
+            "schema_version": "planner_actor_hint.v1",
+            "actor_id": actor_ids[0],
+            "hint_encounter_ids": encounter_ids,
+        }
+    if (
+        encounter_ids
+        and ":" in encounter_ids[0]
+        and encounter_ids[0].split(":", 1)[0] != actor_ids[0]
+    ):
+        return {
+            "status": "unavailable",
+            "reason": "planner_encounter_id_actor_mismatch",
+            "schema_version": "planner_actor_hint.v1",
+            "actor_id": actor_ids[0],
+            "hint_encounter_ids": encounter_ids,
+        }
+    sources = sorted({hint["source"] for hint in hints})
+    return {
+        "actor_id": actor_ids[0],
+        "encounter_id": encounter_ids[0] if encounter_ids else None,
+        "schema_version": "planner_actor_hint.v1",
+        "source": sources[0] if len(sources) == 1 else "planner.multiple_hints",
+    }
 
 
-def _select_canonical_encounter(
+def _select_canonical_encounter(  # noqa: C901
     trace: SimulationTraceExport,
     encounter_report: Mapping[str, Any],
     *,
@@ -4497,6 +4670,33 @@ def _select_canonical_encounter(
             "status": "unavailable",
             "reason": "canonical_encounter_report_has_no_encounters",
             "schema_version": CANONICAL_ENCOUNTER_SCHEMA_VERSION,
+        }
+    encounter_id_counts: dict[str, int] = {}
+    for encounter in valid:
+        encounter_id = str(encounter.get("encounter_id"))
+        encounter_id_counts[encounter_id] = encounter_id_counts.get(encounter_id, 0) + 1
+    duplicate_ids = sorted(
+        encounter_id for encounter_id, count in encounter_id_counts.items() if count != 1
+    )
+    if duplicate_ids:
+        return {
+            "status": "unavailable",
+            "reason": "canonical_encounter_id_not_unique",
+            "schema_version": CANONICAL_ENCOUNTER_SCHEMA_VERSION,
+            "duplicate_encounter_ids": duplicate_ids,
+        }
+    mismatched_ids = sorted(
+        str(encounter.get("encounter_id"))
+        for encounter in valid
+        if ":" in str(encounter.get("encounter_id"))
+        and str(encounter.get("encounter_id")).split(":", 1)[0] != str(encounter.get("actor_id"))
+    )
+    if mismatched_ids:
+        return {
+            "status": "unavailable",
+            "reason": "canonical_encounter_id_actor_mismatch",
+            "schema_version": CANONICAL_ENCOUNTER_SCHEMA_VERSION,
+            "mismatched_encounter_ids": mismatched_ids,
         }
     actor_ids = {
         str(pedestrian["id"])

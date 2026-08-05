@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import re
 from typing import TYPE_CHECKING, Any
+
+from robot_sf.analysis_workbench.process_trace_receipt import (
+    build_simulation_trace_receipt,
+    simulation_trace_receipt_sha256,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -117,7 +120,7 @@ def build_pair_compatibility_record(
             "coordinate_frame": right.coordinate_frame,
             "units": right.units,
             "content_sha256": _trace_content_sha256(right),
-            "content_contract": _trace_content_contract(right),
+            "content_receipt": build_simulation_trace_receipt(right),
             "source": {
                 "scenario_id": right.source.scenario_id,
                 "seed": right.source.seed,
@@ -595,55 +598,8 @@ def _finite_float(value: object) -> float | None:
 
 
 def _trace_content_sha256(trace: SimulationTraceExport) -> str:
-    return _json_sha256_digest(_trace_content_contract(trace))
-
-
-def _trace_content_contract(trace: SimulationTraceExport) -> dict[str, Any]:
-    return {
-        "schema_version": "simulation_trace_export.v1",
-        "trace_id": trace.trace_id,
-        "source": {
-            "scenario_id": trace.source.scenario_id,
-            "seed": trace.source.seed,
-            "planner_id": trace.source.planner_id,
-            "episode_id": trace.source.episode_id,
-            "generated_by": trace.source.generated_by,
-        },
-        "evidence_boundary": trace.evidence_boundary,
-        "coordinate_frame": trace.coordinate_frame,
-        "units": trace.units,
-        "frames": [
-            {
-                "step": frame.step,
-                "time_s": frame.time_s,
-                "robot": _strict_json_value(frame.robot),
-                "pedestrians": _strict_json_value(list(frame.pedestrians)),
-                "planner": _strict_json_value(frame.planner),
-            }
-            for frame in trace.frames
-        ],
-    }
-
-
-def _strict_json_value(value: Any) -> Any:
-    if isinstance(value, bool) or value is None or isinstance(value, str):
-        return value
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return value if math.isfinite(value) else {"nonfinite_number": repr(value)}
-    if isinstance(value, dict):
-        return {str(key): _strict_json_value(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
-        return [_strict_json_value(item) for item in value]
-    return value
-
-
-def _json_sha256_digest(value: object) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
-        "utf-8"
-    )
-    return hashlib.sha256(encoded).hexdigest()
+    receipt = build_simulation_trace_receipt(trace)
+    return simulation_trace_receipt_sha256(receipt)
 
 
 def _common_event_anchors(

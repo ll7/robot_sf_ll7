@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/process_trace_geometry_owner.v1.json",
+  "title": "Robot SF Process Trace Geometry Owner v1",
+  "description": "Canonical geometry-owner bindings verified by process-trace registry adapters.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "geometry_bindings"],
+  "properties": {
+    "schema_version": {"const": "process_trace_geometry_owner.v1"},
+    "geometry_bindings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/geometry_binding"}
+    }
+  },
+  "$defs": {
+    "vector2": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "line_segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "start", "end"],
+      "properties": {
+        "type": {"const": "line_segment"},
+        "start": {"$ref": "#/$defs/vector2"},
+        "end": {"$ref": "#/$defs/vector2"}
+      }
+    },
+    "polyline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "points"],
+      "properties": {
+        "type": {"const": "polyline"},
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/vector2"}
+        }
+      }
+    },
+    "route_graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "segments"],
+      "properties": {
+        "type": {"const": "route_graph"},
+        "segments": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/line_segment"}
+        }
+      }
+    },
+    "circle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "center", "radius_m"],
+      "properties": {
+        "type": {"const": "circle"},
+        "center": {"$ref": "#/$defs/vector2"},
+        "radius_m": {"type": "number", "minimum": 0}
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "position"],
+      "properties": {
+        "type": {"const": "point"},
+        "position": {"$ref": "#/$defs/vector2"}
+      }
+    },
+    "polygon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "points"],
+      "properties": {
+        "type": {"const": "polygon"},
+        "points": {
+          "type": "array",
+          "minItems": 3,
+          "items": {"$ref": "#/$defs/vector2"}
+        }
+      }
+    },
+    "geometry": {
+      "oneOf": [
+        {"$ref": "#/$defs/line_segment"},
+        {"$ref": "#/$defs/polyline"},
+        {"$ref": "#/$defs/route_graph"},
+        {"$ref": "#/$defs/circle"},
+        {"$ref": "#/$defs/point"},
+        {"$ref": "#/$defs/polygon"}
+      ]
+    },
+    "geometry_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selector", "geometry"],
+      "properties": {
+        "selector": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": ["string", "number", "boolean"]}
+        },
+        "geometry": {"$ref": "#/$defs/geometry"}
+      }
+    }
+  }
+}

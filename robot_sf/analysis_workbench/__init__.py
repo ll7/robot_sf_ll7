@@ -1,6 +1,7 @@
 """Analysis-workbench contracts and helpers."""
 
 from robot_sf.analysis_workbench.interaction_coordinates import (
+    GEOMETRY_OWNER_SCHEMA_VERSION,
     GEOMETRY_REGISTRY_SCHEMA_VERSION,
     WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_VERSION,
     ConflictZoneSpec,
@@ -8,11 +9,15 @@ from robot_sf.analysis_workbench.interaction_coordinates import (
     WorkedExampleProcessTraceValidationError,
     build_worked_example_process_trace,
     build_worked_example_process_trace_from_export,
+    load_process_trace_geometry_owner,
+    load_process_trace_geometry_owner_schema,
     load_process_trace_geometry_registry_schema,
     load_registered_conflict_zone_spec,
     load_registered_route_spec,
     load_worked_example_process_trace_schema,
+    serialize_worked_example_process_trace,
     validate_worked_example_process_trace,
+    worked_example_process_trace_artifact_sha256,
     write_worked_example_process_trace,
 )
 from robot_sf.analysis_workbench.real_trace_source_discovery import (
@@ -70,6 +75,7 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
 
 __all__ = [
     "CONTRACT_EVIDENCE_BOUNDARY",
+    "GEOMETRY_OWNER_SCHEMA_VERSION",
     "GEOMETRY_REGISTRY_SCHEMA_VERSION",
     "REAL_TRACE_SOURCE_DISCOVERY_SCHEMA_VERSION",
     "REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_VERSION",
@@ -106,6 +112,8 @@ __all__ = [
     "check_real_trace_source_discovery",
     "check_real_trace_validation_contract",
     "extract_trace_failure_predicates",
+    "load_process_trace_geometry_owner",
+    "load_process_trace_geometry_owner_schema",
     "load_process_trace_geometry_registry_schema",
     "load_real_trace_source_discovery",
     "load_real_trace_validation_contract",
@@ -116,10 +124,12 @@ __all__ = [
     "load_trace_annotation_set",
     "load_worked_example_process_trace_schema",
     "render_trace_failure_predicate_markdown",
+    "serialize_worked_example_process_trace",
     "simulation_trace_export_from_dict",
     "trace_annotation_set_from_dict",
     "validate_simulation_timeline",
     "validate_worked_example_process_trace",
+    "worked_example_process_trace_artifact_sha256",
     "write_simulation_timeline",
     "write_worked_example_process_trace",
 ]

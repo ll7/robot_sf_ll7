@@ -26,6 +26,7 @@ from robot_sf.data_ingestion.real_trajectory_contract import (
     load_manifest,
     run_preflight,
 )
+from robot_sf.evidence.writers import write_json, write_text
 
 SCHEMA_VERSION = "issue_4013.real_trajectory_readiness.v1"
 DEFAULT_MANIFEST = Path("configs/data/issue_4013_eth_biwi_real_trajectory_manifest.yaml")
@@ -215,11 +216,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
-    args.output_json.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    write_json(args.output_json, report)
     args.output_markdown.parent.mkdir(parents=True, exist_ok=True)
-    args.output_markdown.write_text(render_markdown(report), encoding="utf-8")
+    write_text(args.output_markdown, render_markdown(report), issue_ref="robot_sf#4013")
     print(json.dumps({"status": report["status"], "output_json": str(args.output_json)}))
     return 0
 

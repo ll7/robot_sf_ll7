@@ -429,7 +429,7 @@ def test_load_scenario_matrix_and_small_helpers_cover_default_branches(
     empty = runner_mod._stack_or_zero([], stack_fn=np.stack, empty_shape=(0, 2))
     assert empty.shape == (0, 2)
 
-    with pytest.raises(AssertionError, match="empty_shape should have zero"):
+    with pytest.raises(ValueError, match="empty_shape should have zero"):
         runner_mod._stack_or_zero([], stack_fn=np.stack, empty_shape=(1, 2))
 
 

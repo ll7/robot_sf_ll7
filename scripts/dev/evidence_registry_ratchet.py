@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: ratchet gate tooling; the local write_json is a definition-only
+# forwarding helper that persists the monotone baseline next to the ratchet, and the
+# docs/context/evidence tree is a read-only input.
 """Evidence-registry integrity downward ratchet (issue #5275).
 
 This helper turns the report-mode evidence-registry linter

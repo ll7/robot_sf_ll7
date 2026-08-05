@@ -367,6 +367,7 @@ def write_csv(
     path: Path,
     rows: list[dict[str, Any]],
     *,
+    allow_empty: bool = False,
     catalog_area: str | None = None,
     catalog_status: str = "evidence",
     catalog_freshness: str = "evidence",
@@ -377,9 +378,25 @@ def write_csv(
     automatically in ``docs/context/catalog.yaml`` (issue #6116).
     ``catalog_area`` overrides the default ``benchmark_evidence``
     classification when needed.
+
+    ``allow_empty`` preserves a caller's historical zero-byte output contract;
+    it is opt-in because an empty row list has no field names from which to
+    derive a marked CSV schema.
     """
-    if not rows:
+    if not rows and not allow_empty:
         raise ValueError(f"cannot write empty CSV: {path}")
+    if not rows:
+        # Some callers have a historical zero-byte contract for empty output.  Emitting the
+        # review marker would make csv.DictReader treat it as a header, so preserve those bytes
+        # exactly when the caller opts into the compatibility path.
+        path.write_text("", encoding="utf-8")
+        _maybe_register(
+            path,
+            catalog_area=catalog_area,
+            catalog_status=catalog_status,
+            catalog_freshness=catalog_freshness,
+        )
+        return
     with path.open("w", newline="", encoding="utf-8") as handle:
         handle.write(review_marker_comment() + "\n")
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")

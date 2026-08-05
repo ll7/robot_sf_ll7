@@ -46,6 +46,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bypassed). Byte-identity was verified by downloading each published asset and confirming its
   SHA-256 equals the in-tree blob SHA-256. These are non-benchmark legacy checkpoints retained for
   traceability and local debugging; they are **not benchmark evidence**.
+* **issue #6158 topology-parallel nonlinear model predictive control (NMPC) offline verdict
+  (#5310 analysis child).** New
+  `scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py`
+  diagnostic validator that exercises the merged #6152 prototype
+  (`robot_sf/planner/topology_parallel_nmpc.py`, executed unchanged) against the eight
+  required gates and records exactly one of the four issue verdicts to
+  `docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md`.
+  Recorded verdict: `invalid_regression`. Gate 1 (K=1 legacy parity) failed: open-space
+  commands match exactly, but the pedestrian-conflict fixture returns an angular command
+  of approximately `-6.6e-8` rad/s for topology default versus `-2.47e-2` rad/s for
+  legacy, exceeding the 1e-6 tolerance. Gate 2 (materially distinct x-y-t rollouts) also
+  failed: across a diverse suite of controlled conflict fixtures, no fixture
+  separated every feasible hypothesis pair above epsilon (best minimum pairwise separation
+  ~1.9e-4 m vs epsilon 1e-3 m). Some individual pairs exceeded epsilon, but the shared
+  objective and only a weak +/-0.1 rad/s initial-guess bias did not produce a fully
+  materially distinct hypothesis set on the tested fixtures. Gate 3 (objective
+  invariance), 4 (deterministic ordering / feasible-first selection / two-tick
+  hysteresis), 6 (registration guard + builder), 7 (per-hypothesis p50/p95/max latency),
+  and 8 (PR #6170 +1238/-9, net +1229 audit) all pass. Gate 5 fails: infeasible,
+  deadline-exceeded, and solver error-status paths stop correctly, but a solver exception
+  propagates instead of returning the fail-closed stop command. The prototype's
+  `control_period_s` is 2.0 s (~20x the 100 ms real-time gate), so it is offline-only
+  and blocks downstream
+  real-time use. Diagnostic-only: no real-time, safety, benchmark-superiority,
+  default-planner-promotion, or #5423/STKP-eligibility claim. Parent #5310 state updated
+  as an offline prototype. The prototype, config, registration, and tests are unchanged.
 
 * **issue #6152 topology-parallel NMPC prototype (#5310 child).** New
   `robot_sf/planner/topology_parallel_nmpc.py` with

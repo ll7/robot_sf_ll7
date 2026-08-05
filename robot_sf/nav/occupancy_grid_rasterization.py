@@ -405,9 +405,9 @@ def rasterize_pedestrians_array(
             )
             count += 1
         except (ValueError, IndexError, TypeError) as e:
-            logger.warning(f"Failed to rasterize pedestrian {i}: {e}")
+            logger.warning("Failed to rasterize pedestrian {}: {}", i, e)
 
-    logger.debug(f"Rasterized {count}/{num_peds} pedestrians")
+    logger.debug("Rasterized {}/{} pedestrians", count, num_peds)
     return count
 
 

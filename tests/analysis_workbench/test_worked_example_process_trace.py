@@ -49,8 +49,8 @@ def test_process_trace_coordinate_frames_explicit_available_and_unavailable() ->
 
     available = build_worked_example_process_trace_from_export(
         trace,
-        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0), "route-fixture.v1"),
-        conflict_zone=ConflictZoneSpec("door", (1.0, 0.0), 0.25, "zone-fixture.v1"),
+        route=RouteSpec("r-main", (0.0, 0.0), (10.0, 0.0), "route-fixture.v1", "0" * 64),
+        conflict_zone=ConflictZoneSpec("door", (1.0, 0.0), 0.25, "zone-fixture.v1", "1" * 64),
     )
 
     validate_worked_example_process_trace(available)
@@ -123,6 +123,14 @@ def test_process_trace_event_anchors_are_versioned_and_profiled() -> None:
     assert events["first_material_deceleration"]["step"] == 1
     assert events["first_material_turn_response"]["step"] == 2
     assert events["conflict_zone_entry"]["status"] == "unavailable"
+    assert "terminal_event" not in events
+    assert events["trace_end_boundary"]["status"] == "available"
+    assert events["trace_end_boundary"]["event_relative_coordinates"]["status"] == "available"
+    assert payload["event_anchor_hierarchy"][0]["event_type"] in {
+        "exact_collision_event",
+        "proxy_overlap_event",
+        "minimum_clearance",
+    }
     assert payload["diagnostics"]["stall"]["profile_version"] == "worked_example_phase_profile.v1"
     assert payload["diagnostics"]["reversal_counts"]["profile_version"] == (
         "worked_example_reversal_profile.v1"
@@ -180,7 +188,9 @@ def test_pair_compatibility_matched_start_common_anchors_without_duration_normal
 
     assert pair["initial_state_equivalence"]["equivalent"] is True
     assert pair["shared_prefix"]["shared_prefix"] is True
-    assert "minimum_clearance" in pair["valid_common_event_anchors"]
+    assert any(
+        anchor["event_type"] == "minimum_clearance" for anchor in pair["valid_common_event_anchors"]
+    )
     assert pair["duration_normalization"] == {"applied": False}
 
 
@@ -198,6 +208,8 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         "fixture-route",
         "--route-provenance-id",
         "fixture-route.v1",
+        "--route-registry-checksum",
+        "0" * 64,
         "--route-start",
         "0",
         "0",
@@ -208,6 +220,8 @@ def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
         "fixture-zone",
         "--conflict-provenance-id",
         "fixture-zone.v1",
+        "--conflict-registry-checksum",
+        "1" * 64,
         "--conflict-center",
         "1",
         "0",
@@ -264,7 +278,7 @@ def test_invalid_conflict_zone_is_unavailable_everywhere() -> None:
 
     payload = build_worked_example_process_trace_from_export(
         trace,
-        conflict_zone=ConflictZoneSpec("bad-zone", (0.0, 0.0), -1.0, "bad-zone.v1"),
+        conflict_zone=ConflictZoneSpec("bad-zone", (0.0, 0.0), -1.0, "bad-zone.v1", "1" * 64),
     )
 
     assert payload["coordinate_frames"]["conflict"]["reason"] == "registered_conflict_zone_invalid"
@@ -284,8 +298,8 @@ def test_exact_collision_uses_telemetry_and_proxy_overlap_is_separate() -> None:
     assert events["proxy_overlap_event"]["status"] == "available"
 
 
-def test_pair_compatibility_gates_actor_start_mismatch() -> None:
-    """Known-bad doorway-style actor/spawn mismatch should be incompatible."""
+def test_pair_compatibility_allows_sensitivity_anchors_without_divergence() -> None:
+    """Doorway start/spawn sensitivity can align anchors but not emit divergence curves."""
 
     left = simulation_trace_export_from_dict(_trace_payload(trace_id="doorway-seed-113"))
     right = simulation_trace_export_from_dict(
@@ -295,9 +309,16 @@ def test_pair_compatibility_gates_actor_start_mismatch() -> None:
     payload = build_worked_example_process_trace_from_export(left, pair_trace=right)
     pair = payload["pair_compatibility"]
 
-    assert pair["status"] == "incompatible"
+    assert pair["status"] == "available"
     assert pair["initial_state_equivalence"]["equivalent"] is False
-    assert pair["divergence_interpretation"]["reason"] == "scenario_or_initial_state_incompatible"
+    assert pair["shared_prefix"]["shared_prefix"] is False
+    assert (
+        pair["divergence_interpretation"]["reason"] == "no_shared_prefix_reject_divergence_output"
+    )
+    assert any(
+        anchor["event_type"] == "trace_end_boundary"
+        for anchor in pair["valid_common_event_anchors"]
+    )
 
 
 def test_schema_rejects_metrics_snqi_and_unknown_event_fields() -> None:
@@ -313,6 +334,42 @@ def test_schema_rejects_metrics_snqi_and_unknown_event_fields() -> None:
     payload.pop("metrics")
     payload["event_anchors"][0]["extra"] = True
     with pytest.raises(Exception, match="/event_anchors/0"):
+        validate_worked_example_process_trace(payload)
+
+
+def test_process_trace_binds_canonical_near_miss_encounter_interval() -> None:
+    """Canonical near_miss_encounter.v1 reports should define actor and interval binding."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+
+    payload = build_worked_example_process_trace_from_export(
+        trace,
+        encounter_report=_encounter_report(start_time_s=0.1, end_time_s=0.2),
+    )
+
+    focal = payload["encounters"]["focal"]
+    assert focal["source"] == "canonical_near_miss_encounter_report"
+    assert focal["declared_encounter"]["canonical_record"]["minimum_clearance_m"] == pytest.approx(
+        0.5
+    )
+    assert [frame["relative_interaction"]["status"] for frame in payload["frames"]] == [
+        "unavailable",
+        "available",
+        "available",
+        "unavailable",
+    ]
+    assert payload["diagnostics"]["coverage"]["relative_interaction"]["status"] == "partial"
+    assert payload["diagnostics"]["threshold_exposure"]["duration_s"] is None
+
+
+def test_semantic_validator_rejects_available_event_without_coordinates() -> None:
+    """Available semantic anchors require step/time and non-empty records."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    payload["event_anchors"][0].pop("time_s")
+    with pytest.raises(Exception, match="/event_anchors/0/time_s"):
         validate_worked_example_process_trace(payload)
 
 
@@ -364,16 +421,6 @@ def _trace_payload(  # noqa: PLR0913
         encounter = {
             "actor_id": "ped-a",
             "encounter_id": "ped-a:encounter-0001",
-            "profile_version": "near_miss_encounter.v1",
-            "start_step": 0,
-            "end_step": 3,
-            "start_time_s": 0.0,
-            "end_time_s": 0.3,
-            "available_duration_s": 0.3,
-            "min_clearance_m": -0.3 if proxy_overlap else 0.5,
-            "min_ttc_s": 0.4,
-            "min_pet_s": None,
-            "contact": False,
         }
         frames.append(
             {
@@ -407,4 +454,69 @@ def _trace_payload(  # noqa: PLR0913
         "coordinate_frame": coordinate_frame,
         "units": {"position": "m", "heading": "rad", "time": "s", "velocity": "m/s"},
         "frames": frames,
+    }
+
+
+def _encounter_report(*, start_time_s: float = 0.0, end_time_s: float = 0.3) -> dict[str, object]:
+    return {
+        "schema_version": "near_miss_encounter.v1",
+        "status": "complete",
+        "evidence_status": "diagnostic-only",
+        "claim_boundary": "diagnostic encounter grouping only",
+        "profile": {
+            "schema_version": "NearMissEncounterProfile.v1",
+            "profile_id": "unit-test-profile",
+            "qualification_rule": "distance_or_ttc",
+            "continuity_gap_s": 0.2,
+            "distance_threshold_m": 1.0,
+            "ttc_threshold_s": 2.0,
+            "units": {"distance": "m", "time": "s", "speed": "m/s"},
+        },
+        "units": {
+            "time": "s",
+            "distance": "m",
+            "speed": "m/s",
+            "encounter_duration": "s",
+            "valid_exposure_duration": "s",
+        },
+        "denominator": {
+            "sample_unit": "trace_sample",
+            "encounter_unit": "encounter",
+            "input_sample_count": 4,
+            "actor_count": 1,
+            "qualifying_sample_count": 2,
+            "encounter_count": 1,
+            "valid_exposure_duration_s": end_time_s - start_time_s,
+        },
+        "encounters": [
+            {
+                "schema_version": "near_miss_encounter.v1",
+                "encounter_id": "ped-a:encounter-0001",
+                "actor_id": "ped-a",
+                "start_time_s": start_time_s,
+                "end_time_s": end_time_s,
+                "duration_s": end_time_s - start_time_s,
+                "minimum_clearance_m": 0.5,
+                "minimum_ttc_s": 0.4,
+                "maximum_closing_speed_mps": 1.0,
+                "minimum_pet_s": None,
+                "sample_count": 2,
+                "valid_exposure_duration_s": end_time_s - start_time_s,
+                "termination_reason": "trace_end",
+                "contact_terminated": False,
+                "contact_status": "not-observed",
+                "contact_time_s": None,
+                "unavailable_fields": [],
+                "evidence_status": "diagnostic-only",
+            }
+        ],
+        "exclusions": [],
+        "missingness": {"field_counts": {}, "sample_exclusion_counts": {}},
+        "provenance": {
+            "source_commit": "0" * 40,
+            "release_id": "unit-test",
+            "bundle_id": "unit-test",
+            "input_checksums": {"trace": "0" * 64},
+            "input_checksum_digest": "1" * 64,
+        },
     }

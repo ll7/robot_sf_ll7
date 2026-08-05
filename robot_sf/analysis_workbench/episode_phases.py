@@ -84,9 +84,7 @@ def summarize_reversals(
             previous_heading = float(heading)
         if speed_getter(frame) is None:
             continue
-    velocity_reversals = sum(
-        1 for left, right in pairwise(signs) if left != 0 and right not in (0, left)
-    )
+    velocity_reversals = _nonzero_sign_reversals(signs)
     return {
         "profile_version": REVERSAL_PROFILE_VERSION,
         "direction_semantics": "route_progress_rate_sign_and_wrapped_heading_delta",
@@ -190,3 +188,15 @@ def _low_speed_runs(
 
 def _wrapped_angle_delta(current: float, previous: float) -> float:
     return (current - previous + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def _nonzero_sign_reversals(signs: Sequence[int]) -> int:
+    reversals = 0
+    previous_nonzero: int | None = None
+    for sign in signs:
+        if sign == 0:
+            continue
+        if previous_nonzero is not None and sign != previous_nonzero:
+            reversals += 1
+        previous_nonzero = sign
+    return reversals

@@ -21,15 +21,21 @@ uv run python scripts/analysis/build_worked_example_process_trace.py \
   --input tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
   --route-id fixture-route \
   --route-provenance-id fixture-route.v1 \
+  --route-registry-checksum 0000000000000000000000000000000000000000000000000000000000000000 \
   --route-start 0 0 \
   --route-end 2 0 \
   --conflict-zone-id fixture-zone \
   --conflict-provenance-id fixture-zone.v1 \
+  --conflict-registry-checksum 1111111111111111111111111111111111111111111111111111111111111111 \
   --conflict-center 1 0 \
   --conflict-radius-m 0.25 \
   --out output/worked_example_process_trace_fixture.json
 ```
 
-Route and conflict projections are available only when the caller provides provenance-bound geometry.
-Missing actor bindings, velocities, radii, route provenance, zone provenance, or source-coordinate
-support are reported as unavailable or not observed instead of zero-filled.
+Add `--encounter-report path/to/near_miss_encounter.v1.json` when binding the focal actor
+and interval to canonical near-miss encounter output.
+
+Route and conflict projections are available only when the caller provides world-frame,
+provenance- and checksum-bound finite geometry. Missing actor intervals, velocities, radii,
+route/zone registry evidence, exact collision telemetry, or source-coordinate support are
+reported as unavailable or not observed instead of zero-filled.

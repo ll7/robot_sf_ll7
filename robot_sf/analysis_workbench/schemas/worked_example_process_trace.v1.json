@@ -18,6 +18,7 @@
     "frames",
     "diagnostics",
     "event_anchors",
+    "event_anchor_hierarchy",
     "pair_compatibility"
   ],
   "properties": {
@@ -84,12 +85,7 @@
       "additionalProperties": false,
       "required": ["focal", "global_minimum_over_all_actors", "actor_switch_events"],
       "properties": {
-        "focal": {
-          "type": "object",
-          "additionalProperties": true,
-          "required": ["status"],
-          "properties": {"status": {"type": "string"}}
-        },
+        "focal": {"$ref": "#/$defs/focal_encounter"},
         "global_minimum_over_all_actors": {
           "type": "object",
           "additionalProperties": false,
@@ -145,6 +141,7 @@
         "stall",
         "conflict_zone_occupancy",
         "reversal_counts"
+        ,"coverage"
       ],
       "properties": {
         "minimum_proxy_surface_clearance_m": {"type": ["number", "null"]},
@@ -163,7 +160,8 @@
             "threshold_m": {"type": "number"},
             "duration_s": {"type": ["number", "null"]},
             "integrated_clearance_deficit_m_s": {"type": ["number", "null"]},
-            "status": {"type": "string"}
+            "status": {"type": "string"},
+            "reason": {"type": "string"}
           }
         },
         "route_progress": {"type": "object"},
@@ -180,6 +178,16 @@
           }
         },
         "reversal_counts": {"type": "object"}
+        ,"coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frame_count", "relative_interaction", "proxy_surface_clearance"],
+          "properties": {
+            "frame_count": {"type": "integer", "minimum": 1},
+            "relative_interaction": {"$ref": "#/$defs/coverage_record"},
+            "proxy_surface_clearance": {"$ref": "#/$defs/coverage_record"}
+          }
+        }
       }
     },
     "event_anchors": {
@@ -201,7 +209,19 @@
         ],
         "properties": {
           "event_id": {"type": "string"},
-          "event_type": {"type": "string"},
+          "event_type": {
+            "enum": [
+              "minimum_clearance",
+              "first_material_deceleration",
+              "first_material_turn_response",
+              "conflict_zone_entry",
+              "exact_collision_event",
+              "proxy_overlap_event",
+              "sustained_stall_onset",
+              "recovery_onset",
+              "trace_end_boundary"
+            ]
+          },
           "detector_profile_version": {"type": "string"},
           "status": {"enum": ["available", "unavailable", "not_observed"]},
           "confidence": {"type": "string"},
@@ -211,6 +231,12 @@
           "zone_id": {"type": ["string", "null"]},
           "reason": {"type": "string"},
           "source_fields": {"type": "array", "items": {"type": "string"}},
+          "event_relative_coordinates": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["status"],
+            "properties": {"status": {"enum": ["available", "unavailable"]}}
+          },
           "visual_anchor_eligibility": {
             "type": "object",
             "additionalProperties": false,
@@ -223,12 +249,29 @@
         }
       }
     },
+    "event_anchor_hierarchy": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rank", "event_type", "event_id", "status"],
+        "properties": {
+          "rank": {"type": "integer", "minimum": 0},
+          "event_type": {"type": "string"},
+          "event_id": {"type": "string"},
+          "status": {"enum": ["available", "unavailable", "not_observed"]}
+        }
+      }
+    },
     "pair_compatibility": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "profile_version",
         "status",
+        "comparison_grain",
+        "provenance_gate",
         "initial_state_equivalence",
         "route_spawn_separation",
         "shared_prefix",
@@ -237,13 +280,17 @@
       ],
       "properties": {
         "profile_version": {"type": "string"},
-        "status": {"type": "string"},
+        "status": {"enum": ["available", "unavailable", "incompatible"]},
         "reason": {"type": "string"},
-        "provenance_gate": {"type": "object"},
+        "comparison_grain": {"type": "object", "minProperties": 1},
+        "provenance_gate": {"type": "object", "minProperties": 1},
         "initial_state_equivalence": {"type": "object"},
         "route_spawn_separation": {"type": "object"},
         "shared_prefix": {"type": "object"},
-        "valid_common_event_anchors": {"type": "array", "items": {"type": "string"}},
+        "valid_common_event_anchors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/common_event_anchor"}
+        },
         "duration_normalization": {"type": "object"},
         "divergence_interpretation": {
           "type": "object",
@@ -258,6 +305,52 @@
     }
   },
   "$defs": {
+    "focal_encounter": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "actor_id": {"type": "string"},
+        "encounter_id": {"type": ["string", "null"]},
+        "declared_encounter": {"type": "object"}
+      }
+    },
+    "coverage_record": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "available_frame_count", "missing_frame_count", "reason"],
+      "properties": {
+        "status": {"enum": ["complete", "partial"]},
+        "available_frame_count": {"type": "integer", "minimum": 0},
+        "missing_frame_count": {"type": "integer", "minimum": 0},
+        "reason": {"type": "string"}
+      }
+    },
+    "common_event_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_type",
+        "detector_profile_version",
+        "actor_id",
+        "zone_id",
+        "source_fields",
+        "status",
+        "left_event_id",
+        "right_event_id"
+      ],
+      "properties": {
+        "event_type": {"type": "string"},
+        "detector_profile_version": {"type": "string"},
+        "actor_id": {"type": ["string", "null"]},
+        "zone_id": {"type": ["string", "null"]},
+        "source_fields": {"type": "array", "items": {"type": "string"}},
+        "status": {"const": "available"},
+        "left_event_id": {"type": "string"},
+        "right_event_id": {"type": "string"}
+      }
+    },
     "availability": {
       "type": "object",
       "additionalProperties": true,

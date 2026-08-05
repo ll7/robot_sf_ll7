@@ -1002,9 +1002,17 @@ def test_load_sweep_summary_fails_closed(tmp_path: Path) -> None:
 
 
 def test_cli_blocked_exits_nonzero(tmp_path: Path) -> None:
-    """Omitting the sweep summary fails closed with the blocked exit code."""
+    """Blocked mode keeps campaign provenance absent and analysis provenance distinct."""
     cli = _load_cli()
-    exit_code = cli.main(["--output-dir", str(tmp_path / "bundle"), "--json"])
+    exit_code = cli.main(
+        [
+            "--output-dir",
+            str(tmp_path / "bundle"),
+            "--campaign-commit",
+            "a" * 40,
+            "--json",
+        ]
+    )
     assert exit_code == cli.EXIT_BLOCKED_PENDING_GATE2
     assert (tmp_path / "bundle" / "result.json").is_file()
 

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/worked_example_process_trace.v1.json",
+  "title": "Robot SF Worked Example Process Trace v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "process_trace_id",
+    "source_trace",
+    "evidence_boundary",
+    "profiles",
+    "coordinate_frames",
+    "encounters",
+    "diagnostics",
+    "event_anchors",
+    "pair_compatibility"
+  ],
+  "properties": {
+    "schema_version": {"const": "worked_example_process_trace.v1"},
+    "process_trace_id": {"type": "string", "minLength": 1},
+    "source_trace": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema_version", "trace_id", "source"],
+      "properties": {
+        "schema_version": {"const": "simulation_trace_export.v1"},
+        "trace_id": {"type": "string", "minLength": 1},
+        "source": {"type": "object"}
+      }
+    },
+    "evidence_boundary": {"const": "analysis_workbench_only"},
+    "profiles": {"type": "object"},
+    "coordinate_frames": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["world", "route", "conflict", "relative_interaction"],
+      "properties": {
+        "world": {"$ref": "#/$defs/availability"},
+        "route": {"$ref": "#/$defs/availability"},
+        "conflict": {"$ref": "#/$defs/availability"},
+        "relative_interaction": {"$ref": "#/$defs/availability"}
+      }
+    },
+    "event_anchors": {"type": "array", "items": {"type": "object"}},
+    "pair_compatibility": {"type": "object"}
+  },
+  "$defs": {
+    "availability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"}
+      }
+    }
+  }
+}

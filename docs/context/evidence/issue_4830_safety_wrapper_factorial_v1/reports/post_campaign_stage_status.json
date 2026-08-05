@@ -1,0 +1,18 @@
+{
+  "campaign": {
+    "exit_code": 0,
+    "soft_contract_warning": false,
+    "status": "completed",
+    "summary_json": "private_ops:job-13775/reports/campaign_summary.json",
+    "summary_status": "loaded",
+    "warnings": []
+  },
+  "claim_boundary": "Campaign execution and post-campaign reporting are separate status lanes; a completed campaign is not benchmark evidence until its report is available and validated.",
+  "job_exit_code": 0,
+  "post_campaign_stage": {
+    "exit_code": 0,
+    "name": "camera_ready_campaign",
+    "status": "completed"
+  },
+  "schema_version": "robot-sf-post-campaign-stage-status.v1"
+}

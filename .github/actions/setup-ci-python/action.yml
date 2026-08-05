@@ -17,6 +17,9 @@ inputs:
   sync-args:
     description: Arguments forwarded to uv sync; defaults to the full CI environment.
     default: "--all-extras --frozen"
+  install-system-packages:
+    description: Install Linux packages needed by headless runtime and GUI-capable jobs.
+    default: "true"
 
 runs:
   using: composite
@@ -41,7 +44,7 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: System packages for headless
-      if: runner.os == 'Linux'
+      if: ${{ runner.os == 'Linux' && inputs.install-system-packages == 'true' }}
       shell: bash
       env:
         CI_STEP_TIMEOUT_SECONDS: "1200"

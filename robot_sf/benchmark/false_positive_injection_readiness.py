@@ -286,7 +286,11 @@ def check_false_positive_injection_readiness(
             observation_view=observation_view,
         )
 
-    assert perturbation_spec is not None  # guaranteed when no blockers recorded
+    # Malformed construction always records a blocker and returns above.
+    if perturbation_spec is None:  # pragma: no cover
+        raise RuntimeError(  # pragma: no cover
+            "false-positive perturbation specification was not constructed"
+        )
     injected_actor_count = perturbation_spec.false_positive_actor_count
     if injected_actor_count == 0:
         # No false-positive actors requested: explicitly unavailable, mirroring how

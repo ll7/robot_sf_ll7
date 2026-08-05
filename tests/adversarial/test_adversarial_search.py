@@ -2373,8 +2373,264 @@ def test_default_evaluator_treats_failures_as_failed_jobs(
         )
 
 
+def test_default_evaluator_records_fail_closed_benchmark_availability(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fallback availability is persisted with the candidate attribution for later accounting."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write one episode and return a fallback preflight summary."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "failures": [],
+            "algorithm_metadata_contract": {"planner_kinematics": {"execution_mode": "adapter"}},
+            "preflight": {"status": "fallback"},
+        }
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "adapter"
+    assert evaluation.failure_attribution.details["readiness_status"] == "fallback"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+    written = json.loads((tmp_path / "candidate" / "failure_attribution.json").read_text())
+    assert written["details"]["availability_status"] == "not_available"
+
+
+def test_default_evaluator_overrides_failed_preflight_for_non_ok_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Non-ok episode metadata cannot be reported as available by a failed preflight label."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write a degraded episode and a misleadingly non-terminal preflight summary."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                    "algorithm_metadata": {
+                        "status": "policy_step_timeout_fallback",
+                        "planner_kinematics": {"execution_mode": "adapter"},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "failures": [],
+            "total_jobs": 1,
+            "written": 1,
+            "preflight": {"status": "failed"},
+        }
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "adapter"
+    assert evaluation.failure_attribution.details["readiness_status"] == "fallback"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+
+
+@pytest.mark.parametrize("preflight_status", ("failed", "partial"))
+def test_default_evaluator_rejects_non_terminal_preflight_with_valid_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    preflight_status: str,
+) -> None:
+    """A non-terminal preflight cannot be made available by a valid episode record."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write valid metadata alongside a failed or partial preflight summary."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                    "algorithm_metadata": {
+                        "status": "ok",
+                        "planner_kinematics": {"execution_mode": "adapter"},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "failures": [],
+            "total_jobs": 1,
+            "written": 1,
+            "preflight": {"status": preflight_status},
+        }
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "adapter"
+    assert evaluation.failure_attribution.details["readiness_status"] == "degraded"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+
+
+@pytest.mark.parametrize(
+    ("metadata_status", "expected_readiness", "expected_availability"),
+    (
+        ("ok", "adapter", "available"),
+        ("policy_step_timeout_fallback", "fallback", "not_available"),
+    ),
+)
+def test_default_evaluator_uses_episode_metadata_when_batch_summary_omits_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    metadata_status: str,
+    expected_readiness: str,
+    expected_availability: str,
+) -> None:
+    """Direct batch summaries cannot erase the episode's execution provenance."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write a production-shaped episode and a direct-runner summary."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "status": "success",
+                    "outcome": {"collision": False, "route_complete": True},
+                    "algorithm_metadata": {
+                        "status": metadata_status,
+                        "planner_kinematics": {"execution_mode": "adapter"},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {"failures": [], "total_jobs": 1, "written": 1}
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "adapter"
+    assert evaluation.failure_attribution.details["readiness_status"] == expected_readiness
+    assert evaluation.failure_attribution.details["availability_status"] == expected_availability
+
+
+def test_default_evaluator_fails_closed_when_episode_record_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A positive batch count cannot substitute for a missing episode record."""
+    config = _config(tmp_path)
+
+    monkeypatch.setattr(
+        search,
+        "run_batch",
+        lambda *_args, **_kwargs: {"failures": [], "total_jobs": 1, "written": 1},
+    )
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "unknown"
+    assert evaluation.failure_attribution.details["readiness_status"] == "degraded"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+
+
+@pytest.mark.parametrize(
+    "algorithm_metadata",
+    (None, [], {}, {"status": "ok"}),
+)
+def test_default_evaluator_fails_closed_when_algorithm_metadata_is_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    algorithm_metadata: object,
+) -> None:
+    """A written episode without a complete metadata contract is unavailable."""
+    config = _config(tmp_path)
+
+    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
+        """Write an episode with incomplete execution provenance."""
+        out_path = kwargs["out_path"]
+        assert isinstance(out_path, Path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        record: dict[str, object] = {
+            "status": "success",
+            "outcome": {"collision": False, "route_complete": True},
+        }
+        record["algorithm_metadata"] = algorithm_metadata
+        out_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        return {"failures": [], "total_jobs": 1, "written": 1}
+
+    monkeypatch.setattr(search, "run_batch", fake_run_batch)
+
+    evaluation = search._default_evaluator(
+        config,
+        _candidate(1),
+        tmp_path / "scenario.yaml",
+        tmp_path / "candidate",
+    )
+
+    assert evaluation.failure_attribution.details["execution_mode"] == "unknown"
+    assert evaluation.failure_attribution.details["readiness_status"] == "degraded"
+    assert evaluation.failure_attribution.details["availability_status"] == "not_available"
+
+
 def test_failure_attribution_covers_primary_outcomes() -> None:
-    """Failure attribution must distinguish collision, timeout, incomplete, and errors."""
+    """Failure attribution must distinguish safety, liveness, and evaluation outcomes."""
     collision = attribution_from_episode_record(
         {"status": "done", "outcome": {"collision": True, "route_complete": False}}
     )
@@ -2384,6 +2640,13 @@ def test_failure_attribution_covers_primary_outcomes() -> None:
     timeout = attribution_from_episode_record(
         {"status": "done", "outcome": {"timeout_event": True, "route_complete": False}}
     )
+    severe_intrusion = attribution_from_episode_record(
+        {
+            "status": "done",
+            "outcome": {"route_complete": False},
+            "metrics": {"severe_intrusion": True},
+        }
+    )
     incomplete = attribution_from_episode_record(
         {"status": "done", "outcome": {"route_complete": False}}
     )
@@ -2391,6 +2654,7 @@ def test_failure_attribution_covers_primary_outcomes() -> None:
 
     assert collision.primary_failure == "collision"
     assert legacy_collision.primary_failure == "collision"
+    assert severe_intrusion.primary_failure == "severe_intrusion"
     assert timeout.primary_failure == "timeout"
     assert incomplete.primary_failure == "incomplete"
     assert error.to_json()["status"] == "evaluation_failed"

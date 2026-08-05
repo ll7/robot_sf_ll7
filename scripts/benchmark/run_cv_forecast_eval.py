@@ -13,6 +13,7 @@ Usage::
 This is diagnostic-only evidence, not paper-facing benchmark proof.
 """
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse
@@ -291,7 +292,12 @@ def _git_head() -> str:
             check=False,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
+        # Narrowed from `except Exception` (#6690): OSError covers git-binary /
+        # spawn failures and SubprocessError covers the timeout=5 contract
+        # (TimeoutExpired; CalledProcessError is impossible with check=False).
+        # Programmer errors such as ValueError must propagate instead of
+        # silently dropping provenance.
         return ""
 
 
@@ -360,7 +366,7 @@ def evaluate_single_trace(
             dt_s=dt_s,
             baseline_function=baseline_function,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - per-trace fail-closed isolation (#6690)
         result["status"] = "evaluation_error"
         result["error"] = str(exc)
         result["metrics"] = {"forecast_evaluable_samples": 0.0}

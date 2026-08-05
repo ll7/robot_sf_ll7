@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: coordination-preflight gate whose report JSON/markdown are optional
+# durable rerun outputs written to caller-supplied paths (default None) and must byte-match the
+# in-memory report for reader equality; not a committed evidence-tree serialization path.
 """Issue #3080 readiness helper for closed-loop prediction Package C.
 
 Package C coordinates a same-seed comparison of four forecast arms

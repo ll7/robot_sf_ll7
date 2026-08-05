@@ -26,6 +26,8 @@ SocNavPlannerConfig = _socnav.SocNavPlannerConfig
 SocNavPlannerPolicy = _socnav.SocNavPlannerPolicy
 PredictiveTrajectoryModel = _socnav.PredictiveTrajectoryModel
 
+_DEFAULT_FORECAST_VARIANT_RISK_DISTANCE_M = 3.0
+
 
 class PredictionPlannerAdapter(SamplingPlannerAdapter):
     """Predictive local planner with deterministic sampled-rollout search.
@@ -101,7 +103,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 ),
                 dt_s=float(getattr(self.config, "forecast_variant_dt_s", 0.1)),
                 risk_distance_m=float(
-                    getattr(self.config, "forecast_variant_risk_distance_m", 3.0)
+                    getattr(
+                        self.config,
+                        "forecast_variant_risk_distance_m",
+                        _DEFAULT_FORECAST_VARIANT_RISK_DISTANCE_M,
+                    )
                 ),
             )
             logger.info(

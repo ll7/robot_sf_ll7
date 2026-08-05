@@ -244,7 +244,7 @@ def _run_env_smoke() -> DoctorCheck:
             close = getattr(env, "close", None)
             if callable(close):
                 close()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - diagnostic smoke: any env failure is a failed check
         return DoctorCheck(
             name="env_smoke",
             status="failed",
@@ -331,8 +331,7 @@ def _resolve_quickstart_examples(
     manifest_path = workspace_root / "examples" / "examples_manifest.yaml"
     try:
         manifest = load_manifest(manifest_path=manifest_path, validate_paths=False)
-    # Any loader exception, including malformed YAML, must become a readiness failure.
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - any loader failure becomes a readiness failure
         return (), f"{type(exc).__name__}: {exc}"
 
     examples = tuple(manifest.examples_for_category("quickstart"))

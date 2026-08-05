@@ -1319,16 +1319,7 @@ def test_load_expert_training_config_base_config_cycle_raises_value_error(
 
 
 def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> None:
-    """A missing/nonexistent base_config must fail closed.
-
-    The resolver raises FileNotFoundError (an OSError) for a missing base_config;
-    a cycle raises ValueError (covered above). Issue #6490 expected a ValueError
-    here as well, but the byte-frozen resolver in scripts/training/train_ppo.py
-    surfaces missing-base as FileNotFoundError. The run still fails closed
-    (no silent wrong values), so this asserts the actual fail-closed behavior;
-    narrowing missing-base to ValueError is tracked as a follow-up because
-    scripts/training/train_ppo.py is out of scope for this refactor.
-    """
+    """A missing/nonexistent base_config must fail closed with a ValueError."""
     scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
     config_path = tmp_path / "missing_base.yaml"
     config_path.write_text(
@@ -1342,7 +1333,7 @@ def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> Non
         ),
         encoding="utf-8",
     )
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ValueError, match="does not exist"):
         _load_expert_training_config_mapping(config_path)
 
 
@@ -1998,6 +1989,154 @@ def test_issue_2557_base_config_inheritance_equivalence() -> None:
         )
 
 
+# Issue #6681: the three issue_791 seed-replica groups were migrated to shared
+# base configs via the existing base_config resolver. The constants below pin
+# that contract and the frozen pre-change resolved-config baseline.
+_ISSUE_791_ABLATE_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_791_BASELINE_PATH = Path("tests/integration/_baseline_issue_791_seed_replicas_resolved.json")
+
+# Every migrated issue_791 seed-replica variant and its shared base config.
+# Frozen in the pre-change baseline at origin/main c8a10c04; the resolver must
+# reconstruct each variant's mapping byte-identically from the base + overrides.
+_ISSUE_791_MIGRATED_VARIANTS = {
+    # Group (a): all_scenarios_10m_env22_large_capacity leader + seed replicas.
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    # Group (b): reward_curriculum_promotion_10m eval_aligned_large_capacity
+    # leader + seed231/seed1337 variants and their _fixed counterparts.
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    # Group (c): reward_curriculum_promotion_3m eval_aligned seed replicas.
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+}
+
+# Known silent divergence pinned by the migration: only the all_scenarios leader
+# carries env_factory_kwargs.peds_have_obstacle_forces; the seed replicas must
+# keep its absence. Every resolved mapping stays byte-identical to origin/main.
+_ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE = {
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": True,
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": False,
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": False,
+}
+
+# Not migrated, but inherits the group (a) leader via base_config; its resolved
+# mapping must stay unchanged too.
+_ISSUE_791_BEST_CKPT_GUARD = (
+    "expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml"
+)
+
+
+def _issue_791_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for ``config_path``."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _issue_791_baseline() -> dict:
+    """Load the frozen pre-change resolved-config baseline for the migration."""
+    assert _ISSUE_791_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_791_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+@pytest.mark.parametrize("variant", sorted(_ISSUE_791_MIGRATED_VARIANTS))
+def test_issue_791_seed_replicas_resolve_to_prechange_values(variant: str) -> None:
+    """Each migrated issue_791 seed-replica variant matches its pre-refactor mapping.
+
+    The base_config deep-merge must reconstruct the exact pre-change resolved
+    mapping for every migrated variant, including the preserved
+    peds_have_obstacle_forces divergence.
+    """
+    path = (_ISSUE_791_ABLATE_DIR / variant).resolve()
+    baseline = _issue_791_baseline()
+
+    actual_fingerprint = _issue_791_fingerprint(path)
+    assert actual_fingerprint == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    # Exercise the full construction path so the loader does not diverge from the
+    # resolver output after inheritance.
+    config = load_expert_training_config(path)
+    assert config.policy_id
+
+
+@pytest.mark.parametrize("variant", sorted(_ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE))
+def test_issue_791_peds_have_obstacle_forces_divergence_preserved(variant: str) -> None:
+    """The all_scenarios leader keeps env_factory_kwargs.peds_have_obstacle_forces.
+
+    The replicas keep its absence; the shared env_overrides value stays common.
+    This pins the silent divergence the migration must preserve exactly.
+    """
+    resolved = _load_expert_training_config_mapping((_ISSUE_791_ABLATE_DIR / variant).resolve())
+    expects_override = _ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE[variant]
+
+    assert resolved["env_overrides"]["peds_have_obstacle_forces"] is True
+    if expects_override:
+        assert resolved["env_factory_kwargs"]["peds_have_obstacle_forces"] is True
+    else:
+        assert "peds_have_obstacle_forces" not in resolved["env_factory_kwargs"]
+
+
+def test_issue_791_bases_inheritance_and_no_self_reference() -> None:
+    """Every migrated variant inherits its shared base and the bases stay lean."""
+    for variant, base_name in _ISSUE_791_MIGRATED_VARIANTS.items():
+        variant_path = (_ISSUE_791_ABLATE_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        assert variant_yaml["base_config"] == base_name
+
+        base_path = (_ISSUE_791_ABLATE_DIR / base_name).resolve()
+        base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+        # A base must not self-inherit and carries no launch identity.
+        assert "base_config" not in base_yaml
+        assert "policy_id" not in base_yaml
+
+
+def test_issue_791_best_ckpt_inheriting_leader_guard_unchanged() -> None:
+    """A config inheriting the group (a) leader must resolve unchanged too.
+
+    expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml uses
+    the all_scenarios leader as its base_config, so converting the leader to
+    inherit from a shared base must leave its resolved mapping identical.
+    """
+    baseline = _issue_791_baseline()
+    path = (_ISSUE_791_ABLATE_DIR / _ISSUE_791_BEST_CKPT_GUARD).resolve()
+    assert (
+        _issue_791_fingerprint(path) == baseline["non_migrated_guards"][_ISSUE_791_BEST_CKPT_GUARD]
+    )
+
+
 def test_issue_6679_single_factor_base_config_inheritance_equivalence() -> None:
     """All 18 single_factor ablation variants must match pre-refactor resolved fingerprints."""
     baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()
@@ -2145,3 +2284,127 @@ def test_issue_6682_issue_739_variant_equivalence(rel_path: str) -> None:
 
     config = load_expert_training_config(config_path)
     assert config.policy_id
+
+
+_ISSUE_6683_BASELINE_PATH = Path("tests/integration/_baseline_issue_6683_resolved.json")
+_ISSUE_6683_MATRIX_PATH = "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml"
+
+# The eight PPO training configs that carried the deprecated, ignored
+# evaluation.frequency_episodes field on origin/main before issue #6683 removed
+# it, plus the candidate matrix that inherits feature_extractor_sweep_base.yaml.
+_ISSUE_6683_VARIANT_PATHS = [
+    "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml",
+    "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml",
+    _ISSUE_6683_MATRIX_PATH,
+    "configs/training/ppo/feature_extractor_sweep_base.yaml",
+    "configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+]
+
+# Lineages resolving through feature_extractor_sweep_base.yaml, which carried
+# frequency_episodes: 10 before issue #6683. Removal falls back to the loader
+# default 0 there — the single intentional resolved-value change, mirroring the
+# #6513 precedent (the field was always ignored in favor of step_schedule).
+_ISSUE_6683_SWEEP_BASE_LINEAGE = frozenset(
+    {
+        "configs/training/ppo/feature_extractor_sweep_base.yaml",
+        _ISSUE_6683_MATRIX_PATH,
+    }
+)
+
+_ISSUE_6683_EXPERT_VARIANT_PATHS = [
+    path for path in _ISSUE_6683_VARIANT_PATHS if path != _ISSUE_6683_MATRIX_PATH
+]
+
+
+def _issue_6683_prechange_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved-config baseline."""
+    baseline_path = _ISSUE_6683_BASELINE_PATH.resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-mapping.v1"
+    assert isinstance(baseline["source_revision"], str)
+    assert set(baseline["variants"]) == set(_ISSUE_6683_VARIANT_PATHS)
+    return baseline
+
+
+def _issue_6683_resolved_mapping(rel_path: str) -> dict:
+    """Resolve a variant mapping the way its consumer does.
+
+    Expert training configs load directly. The candidate matrix resolves through
+    its base_config pointer relative to the repository root, mirroring
+    scripts/training/fixed_feature_extractor_candidates.py.
+    """
+    if rel_path != _ISSUE_6683_MATRIX_PATH:
+        return _load_expert_training_config_mapping(Path(rel_path))
+    matrix = yaml.safe_load(Path(rel_path).read_text(encoding="utf-8"))
+    return _load_expert_training_config_mapping(Path(matrix["base_config"]))
+
+
+def test_issue_6683_baseline_records_removed_field_values() -> None:
+    """The frozen baseline records the removed values: seven 0s and two 10s."""
+    baseline = _issue_6683_prechange_baseline()
+    recorded = baseline["pre_change_frequency_episodes"]
+    assert set(recorded) == set(_ISSUE_6683_VARIANT_PATHS)
+    for rel_path in _ISSUE_6683_SWEEP_BASE_LINEAGE:
+        assert recorded[rel_path] == 10
+    for rel_path in set(_ISSUE_6683_VARIANT_PATHS) - _ISSUE_6683_SWEEP_BASE_LINEAGE:
+        assert recorded[rel_path] == 0
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6683_VARIANT_PATHS)
+def test_issue_6683_frequency_episodes_drop_preserves_resolution(rel_path: str) -> None:
+    """Resolved configs are identical except for the intentionally dropped field."""
+    expected_mapping = _issue_6683_prechange_baseline()["variants"][rel_path]
+
+    resolved = _issue_6683_resolved_mapping(rel_path)
+    # The deprecated field is gone from the config side in every lineage.
+    assert "frequency_episodes" not in resolved.get("evaluation", {})
+
+    assert _strip_frequency_episodes(resolved) == _strip_frequency_episodes(expected_mapping), (
+        f"Resolved config {rel_path} differs from the baseline beyond the "
+        f"dropped evaluation.frequency_episodes field."
+    )
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6683_EXPERT_VARIANT_PATHS)
+def test_issue_6683_expert_configs_keep_step_schedule_cadence(rel_path: str) -> None:
+    """All eight expert configs load with step_schedule as the cadence source."""
+    config = load_expert_training_config(Path(rel_path))
+    assert config.policy_id
+    assert config.evaluation.step_schedule
+    # The deprecated field resolves to the loader default everywhere now; for
+    # the sweep-base lineage that is the intentional ignored-field drop 10 -> 0.
+    assert config.evaluation.frequency_episodes == 0
+
+
+def test_issue_6683_candidate_matrix_lineage_keeps_runner_semantics() -> None:
+    """The inheriting matrix keeps its pointer, overrides, and rebuilt schedule."""
+    baseline = _issue_6683_prechange_baseline()
+    expected_overrides = baseline["matrix_overrides"][_ISSUE_6683_MATRIX_PATH]
+
+    matrix = yaml.safe_load(Path(_ISSUE_6683_MATRIX_PATH).read_text(encoding="utf-8"))
+    for key, value in expected_overrides.items():
+        assert matrix[key] == value
+
+    base_config = load_expert_training_config(Path(matrix["base_config"]))
+    assert base_config.evaluation.step_schedule
+    # Mirror the _configure_candidate EvaluationSchedule rebuild: cadence comes
+    # from the matrix eval_every and the deprecated field falls to default 0.
+    rebuilt = EvaluationSchedule(
+        frequency_episodes=base_config.evaluation.frequency_episodes,
+        evaluation_episodes=int(matrix["eval_episodes"]),
+        hold_out_scenarios=base_config.evaluation.hold_out_scenarios,
+        step_schedule=((None, int(matrix["eval_every"])),),
+        randomize_seeds=False,
+        scenario_config=base_config.evaluation.scenario_config,
+    )
+    assert rebuilt.frequency_episodes == 0
+    assert rebuilt.evaluation_episodes == 5
+    assert rebuilt.hold_out_scenarios == ()
+    assert rebuilt.step_schedule == ((None, 48000),)

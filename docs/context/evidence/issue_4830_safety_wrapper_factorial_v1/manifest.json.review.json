@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/manifest.json",
+  "artifact_sha256": "0da65e5eaac5202055dc1e2c5420d2cb8d3d9e1bd10d15f58c0efaaf478bd64a",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

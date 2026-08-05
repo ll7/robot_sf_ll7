@@ -49,6 +49,7 @@ from robot_sf.data.external.eth_ucy_trajectories import (
     load_track_set,
     track_set_summary,
 )
+from robot_sf.data.external.sdd_trajectories import load_sdd_track_set
 from scripts.tools import manage_external_data
 
 if TYPE_CHECKING:
@@ -814,6 +815,59 @@ def test_realism_validation_against_staged_track_set(tmp_path: Path) -> None:
     assert scorecard.status == "ok"
     assert scorecard.metrics["fundamental_diagram_comparison"]["status"] == "ok"
     assert "eth-ucy/eth" in scorecard.reference_source
+
+
+def test_realism_validation_dispatches_sdd_track_set(tmp_path: Path) -> None:
+    """An SDD track set reaches the existing scorecard metric path."""
+
+    annotation_path = tmp_path / "annotations.txt"
+    annotation_path.write_text(
+        "\n".join(
+            [
+                "1 0 0 2 2 0 0 0 0 Pedestrian",
+                "1 2 0 4 2 1 0 0 0 Pedestrian",
+                "1 4 0 6 2 2 0 1 0 Pedestrian",
+                '2 8 8 10 10 0 0 0 0 "Pedestrian"',
+                "2 8 10 10 12 1 0 0 1 Pedestrian",
+                "2 8 12 10 14 2 0 0 0 Pedestrian",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    track_set = load_sdd_track_set(
+        annotation_path,
+        scene="synthetic-campus",
+        split="train",
+        frame_rate_hz=2.0,
+        meters_per_pixel=0.5,
+    )
+    sim_positions, sim_velocities = _gridded_real(track_set)
+
+    scorecard = run_realism_validation_from_track_set(
+        dataset_id="sdd/synthetic-campus/train",
+        track_set=track_set,
+        sim_positions=sim_positions,
+        sim_velocities=sim_velocities,
+    )
+
+    assert scorecard.status == "ok"
+    assert scorecard.metrics["fundamental_diagram_comparison"]["status"] == "ok"
+    assert "sdd/synthetic-campus/train" in scorecard.reference_source
+    assert scorecard.reconstruction is not None
+    assert scorecard.reconstruction["pedestrian_count"] == 2
+
+
+def test_missing_sdd_reference_remains_not_available() -> None:
+    """The SDD dispatch preserves the scorecard's fail-closed missing-data status."""
+
+    scorecard = run_realism_validation_from_track_set(
+        dataset_id="sdd/missing/train",
+        track_set=None,
+    )
+
+    assert scorecard.status == "not_available"
+    assert scorecard.to_dict()["status"] == "not_available"
 
 
 def _gridded_real(track_set: EthUcyTrackSet) -> tuple[np.ndarray, np.ndarray]:

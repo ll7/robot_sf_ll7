@@ -215,7 +215,7 @@ def load_campaign_result_store(store_dir: Path) -> CampaignResultStore:
 
     try:
         episodes = read_parquet_frame(parquet_path)
-    except Exception as exc:
+    except Exception as exc:  # wrap external parquet reader errors into the store contract (#6690)
         raise CandidateTraceResolutionError(
             f"campaign result store episodes.parquet unreadable: {exc}"
         ) from exc
@@ -887,10 +887,24 @@ def load_episode_mapping(  # noqa: C901, PLR0912, PLR0915
             raise CandidateTraceResolutionError(
                 f"episode mapping row {index} marks an outcome mismatch with equal outcomes"
             )
-        assert episode_id is not None
-        assert release_episode_id is not None
-        assert scenario_id is not None and planner is not None and seed is not None
-        assert trace_uri is not None and trace_sha256 is not None
+        # The fail-closed checks above reject every missing identity, trace, digest,
+        # or outcome before this point. Keep those guarantees under Python -O.
+        if episode_id is None:  # pragma: no cover
+            raise ValueError(
+                f"episode mapping row {index} is missing episode_id"
+            )  # pragma: no cover
+        if release_episode_id is None:  # pragma: no cover
+            raise ValueError(  # pragma: no cover
+                f"episode mapping row {index} is missing release_episode_id"
+            )
+        if scenario_id is None or planner is None or seed is None:  # pragma: no cover
+            raise ValueError(  # pragma: no cover
+                f"episode mapping row {index} has incomplete request identity"
+            )
+        if trace_uri is None or trace_sha256 is None:  # pragma: no cover
+            raise ValueError(
+                f"episode mapping row {index} is missing trace provenance"
+            )  # pragma: no cover
         tuple_key = _episode_request_key(scenario_id, planner, seed)
         row = {
             **dict(raw_row),

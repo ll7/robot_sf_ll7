@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sys
 from pathlib import Path
@@ -53,6 +54,19 @@ def test_float_helper_defaults_non_numeric_optional_values() -> None:
     assert parse("nan") == 0.0
     assert parse("not-a-number") == 0.0
     assert parse("1.25") == 1.25
+
+
+def test_empty_csv_output_preserves_zero_byte_reader_contract(tmp_path: Path) -> None:
+    """An empty issue #1462 table remains empty to the standard CSV reader."""
+    path = tmp_path / "empty.csv"
+
+    analyze_issue_1462_h500_failure_modes._write_csv(path, [])
+
+    assert path.read_bytes() == b""
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames is None
+        assert list(reader) == []
 
 
 def test_std_helper_uses_population_standard_deviation() -> None:

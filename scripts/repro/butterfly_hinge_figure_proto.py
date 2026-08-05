@@ -40,6 +40,15 @@ Implemented since the first cut:
 - ``build_provenance_sidecar``: episode ids/planners/seeds/source commits, trace file
   hashes, script commit, detector config, and figure hash, written to
   ``butterfly_hinge_provenance.json`` alongside the analysis-dump ``butterfly_hinge_report.json``.
+- Full render invocation pinning (issue #6616 recurrence guard): the sidecar now records
+  the COMPLETE invocation -- ``invocation.argv`` (the verbatim CLI argv, including every
+  non-default flag such as ``--b-story-steps 235``) plus ``invocation.parsed_args`` (the
+  resolved non-default flag values) -- and the CLI accepts pinned
+  ``--expect-b-story-steps N`` / ``--expect-n-steps-b N`` expectations that FAIL CLOSED at
+  render time when the analysis-window parameter or the rendered episode-B step count
+  disagrees with the pinned value. This is the guard against the 2026-08-01 silent
+  fallback that re-rendered the doorway contrast figure without ``--b-story-steps`` and
+  shipped a strip whose near-miss step count disagreed with its own caption.
 
 Still NOT implemented:
 - The 2x3 contact sheet layout; this geometry-dominant pair currently uses two panels.
@@ -2056,12 +2065,18 @@ def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct pr
     qa_defects_after: int,
     framing: dict[str, Any] | None = None,
     figure_layout: str = "screen",
+    invocation: dict[str, Any],
 ) -> dict[str, Any]:
     """Provenance sidecar (item 4): episode ids, planners, seeds, source commits,
     config/trace hashes -- everything needed to reproduce or audit the shipped still
     independent of the (much larger) ``butterfly_hinge_report.json`` analysis dump.
     ``framing`` records which rendering mode produced the figure (hinge/pivot vs
     matched seed-pair contrast) and, for contrast mode, the author ruling that chose it.
+    ``invocation`` (issue #6616) pins the COMPLETE render invocation -- ``argv`` (the
+    verbatim CLI argument list, including every non-default flag such as
+    ``--b-story-steps``) plus ``parsed_args`` (the resolved non-default flag values) -- so
+    a re-render reading this sidecar can recover the exact analysis-window-defining flags
+    instead of silently falling back to defaults.
 
     Returns:
         JSON-serializable provenance dict.
@@ -2074,6 +2089,7 @@ def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct pr
         "schema_version": "butterfly-hinge-provenance.v1",
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "framing": framing or {"mode": "hinge_pivot"},
+        "invocation": invocation,
         "script": {
             "path": str(script_path.relative_to(robot_sf_repo)),
             "repo": str(robot_sf_repo),
@@ -2200,6 +2216,107 @@ def _compose_hinge_headline(
     )
 
 
+def _jsonable(value: Any) -> Any:
+    """Convert one parsed CLI value to a JSON-serializable form.
+
+    Returns:
+        ``value`` unchanged unless it is a :class:`~pathlib.Path`, which becomes ``str``.
+    """
+    return str(value) if isinstance(value, Path) else value
+
+
+def _non_default_parsed_args(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> dict[str, Any]:
+    """Collect every parsed *flag* whose resolved value differs from its default.
+
+    This is the "every non-default flag" half of the pinned invocation (issue #6616): the
+    sidecar's ``invocation.argv`` records exactly what was typed; this dict records the
+    resolved value of every flag that was NOT left at its default, so a re-render reading
+    the sidecar can reconstruct the analysis-defining options (e.g. ``--b-story-steps``)
+    without re-parsing. Positional arguments are deliberately excluded: they carry no
+    analysis-window meaning and are already captured verbatim in ``argv``.
+
+    Returns:
+        Mapping ``argument-dest -> resolved value`` (JSON-serializable) for every flag
+        whose resolved value differs from its parser default.
+    """
+    resolved = vars(args)
+    return {
+        dest: _jsonable(value)
+        for dest, value in resolved.items()
+        if value != parser.get_default(dest)
+    }
+
+
+def _build_invocation_record(
+    argv: list[str], args: argparse.Namespace, parser: argparse.ArgumentParser
+) -> dict[str, Any]:
+    """Capture the parsed render invocation for the provenance sidecar.
+
+    Returns:
+        Dict with ``argv`` (the verbatim CLI argument list, every non-default flag
+        included) and ``parsed_args`` (the resolved non-default flag values) -- the two
+        blocks issue #6616 requires the sidecar to pin so a re-render cannot silently
+        change analysis windows.
+    """
+    return {
+        "argv": list(argv),
+        "parsed_args": _non_default_parsed_args(parser, args),
+    }
+
+
+def assert_render_expectations_match(
+    *,
+    expected_b_story_steps: int | None,
+    expected_n_steps_b: int | None,
+    actual_b_story_steps: int,
+    actual_n_steps_b: int,
+) -> None:
+    """Fail closed when a pinned render expectation disagrees with the resolved render.
+
+    Recurrence guard for issue #6616: the 2026-08-01 doorway regression was a *silent*
+    fallback -- a re-render dropped ``--b-story-steps 235``, fell back to the 220-step
+    default, and shipped a strip whose near-miss step count disagreed with its own
+    caption, and nothing caught it because the registered command recorded the script but
+    not the full flag set. This turns that class of regression from a silent artifact into
+    a hard, actionable error at render time.
+
+    Args:
+        expected_b_story_steps: The pinned ``--expect-b-story-steps`` value, or ``None``
+            when no expectation was registered.
+        expected_n_steps_b: The pinned ``--expect-n-steps-b`` value, or ``None``.
+        actual_b_story_steps: The resolved ``--b-story-steps`` analysis-window parameter.
+        actual_n_steps_b: The rendered episode B step count (``len(ep_b.robot_xy)``) --
+            the window the figure's near-miss counts are actually computed over.
+
+    Raises:
+        RuntimeError: When an expectation is set and disagrees with the actual render
+            inputs. The message names the exact flag and both values so a re-renderer can
+            recover the pinned invocation (recorded verbatim in the sidecar under
+            ``invocation.argv``).
+    """
+    if expected_b_story_steps is not None and expected_b_story_steps != actual_b_story_steps:
+        raise RuntimeError(
+            f"pinned render expectation mismatch: --expect-b-story-steps "
+            f"{expected_b_story_steps} != resolved --b-story-steps {actual_b_story_steps}; "
+            "refusing to render a figure whose analysis window was silently changed "
+            "(issue #6616 recurrence guard). Re-run with the full registered invocation "
+            "from the provenance sidecar (invocation.argv) or re-pin the expectation "
+            "deliberately."
+        )
+    if expected_n_steps_b is not None and expected_n_steps_b != actual_n_steps_b:
+        raise RuntimeError(
+            f"pinned render expectation mismatch: --expect-n-steps-b {expected_n_steps_b} "
+            f"!= rendered episode B step count {actual_n_steps_b} "
+            f"(len(ep_b.robot_xy), the window the figure's near-miss counts are computed "
+            "over); refusing to render a figure whose caption would disagree with its "
+            "rendered strip (issue #6616 recurrence guard). Re-run with the full "
+            "registered invocation from the provenance sidecar (invocation.argv) or "
+            "re-pin the expectation deliberately."
+        )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -2220,6 +2337,28 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Truncate episode B's story window to this many steps (default: 220, ~22s at "
         "dt=0.1s -- covers B's own closest approach without dragging its full timeout tail).",
     )
+    parser.add_argument(
+        "--expect-b-story-steps",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Fail closed (exit non-zero before rendering) when the resolved "
+        "--b-story-steps value differs from N. Pins the analysis-window parameter in the "
+        "registered render command (issue #6616 recurrence guard); a re-render that "
+        "silently drops --b-story-steps and falls back to the 220-step default can no "
+        "longer ship a mismatched figure.",
+    )
+    parser.add_argument(
+        "--expect-n-steps-b",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Fail closed (exit non-zero before rendering) when the rendered episode B "
+        "step count (len(ep_b.robot_xy)) differs from N. Pins the window the figure's "
+        "near-miss counts are actually computed over (issue #6616 recurrence guard); a "
+        "re-render that silently changes the story window can no longer ship a strip "
+        "whose near-miss step count disagrees with its caption.",
+    )
     parser.add_argument("--no-video", action="store_true", help="Skip the side-by-side A/B video.")
     parser.add_argument(
         "--layout",
@@ -2239,12 +2378,28 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
     Returns:
         Process exit code.
     """
-    args = _build_parser().parse_args(argv)
+    #: The verbatim invocation, pinned into the provenance sidecar so a re-render cannot
+    #: silently change analysis windows (issue #6616 recurrence guard).
+    cli_argv = list(sys.argv[1:]) if argv is None else list(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
     ep_a = load_episode(args.episode_a, args.label_a)
     ep_b = load_episode(args.episode_b, args.label_b, max_steps=args.b_story_steps)
+
+    # Issue #6616 recurrence guard: fail closed BEFORE rendering/output when a pinned
+    # expectation disagrees with the resolved analysis window (e.g. a re-render that
+    # silently dropped --b-story-steps 235 and fell back to the 220 default would make
+    # --expect-b-story-steps 235 / --expect-n-steps-b 235 fail here, instead of shipping
+    # a strip whose near-miss step count disagrees with its caption).
+    assert_render_expectations_match(
+        expected_b_story_steps=args.expect_b_story_steps,
+        expected_n_steps_b=args.expect_n_steps_b,
+        actual_b_story_steps=args.b_story_steps,
+        actual_n_steps_b=len(ep_b.robot_xy),
+    )
 
     # Item 1: lock ONE focal pedestrian, shared by both panels, reusing the shipped
     # trace_scene_figure selection rule (see select_focal_pedestrian docstring).
@@ -2458,6 +2613,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
     report_path = out_dir / "butterfly_hinge_report.json"
     report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
+    invocation = _build_invocation_record(cli_argv, args, parser)
     provenance = build_provenance_sidecar(
         ep_a=ep_a,
         ep_b=ep_b,
@@ -2473,6 +2629,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         qa_defects_after=len(qa_errors),
         framing=framing,
         figure_layout=layout,
+        invocation=invocation,
     )
     provenance_path = out_dir / "butterfly_hinge_provenance.json"
     provenance_path.write_text(json.dumps(provenance, indent=2, default=str), encoding="utf-8")

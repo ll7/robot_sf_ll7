@@ -221,7 +221,7 @@
       "context": "_preflight_policy",
       "fingerprint": "669b2ff25f68c9e9",
       "handler": "Exception",
-      "lineno": 871,
+      "lineno": 874,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)"
     },
@@ -230,7 +230,7 @@
       "context": "_preflight_policy",
       "fingerprint": "eaed931d8e0c298c",
       "handler": "Exception",
-      "lineno": 901,
+      "lineno": 904,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)"
     },
@@ -302,7 +302,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2332,
+      "lineno": 2340,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -311,7 +311,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "3e85dca65fdc0caf",
       "handler": "Exception",
-      "lineno": 2334,
+      "lineno": 2342,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -320,7 +320,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2350,
+      "lineno": 2358,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -329,7 +329,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2434,
+      "lineno": 2442,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -338,7 +338,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "83f25d3b1aad5e1e",
       "handler": "Exception",
-      "lineno": 2436,
+      "lineno": 2444,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -347,7 +347,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2452,
+      "lineno": 2460,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -464,7 +464,7 @@
       "context": "evaluate_ablation_cell",
       "fingerprint": "e76a49e66f08e2f7",
       "handler": "Exception",
-      "lineno": 369,
+      "lineno": 370,
       "path": "scripts/benchmark/build_horizon_timestep_ablation_report.py",
       "source": "except Exception as exc:  # noqa: BLE001 - per-cell fail-closed isolation (#6690)"
     },
@@ -473,7 +473,7 @@
       "context": "evaluate_single_trace",
       "fingerprint": "64db8c06bf9d2d87",
       "handler": "Exception",
-      "lineno": 368,
+      "lineno": 369,
       "path": "scripts/benchmark/run_cv_forecast_eval.py",
       "source": "except Exception as exc:  # noqa: BLE001 - per-trace fail-closed isolation (#6690)"
     },
@@ -491,7 +491,7 @@
       "context": "run_authorized_runtime_preflight",
       "fingerprint": "856c60cbc2991ba3",
       "handler": "Exception",
-      "lineno": 1849,
+      "lineno": 1850,
       "path": "scripts/benchmark/run_issue_5578_speed_tier_campaign.py",
       "source": "except Exception as exc:  # campaign fail-closed boundary: record failure, re-raise (#6690)"
     },
@@ -500,7 +500,7 @@
       "context": "execute_authorized_campaign",
       "fingerprint": "f7b92ea53f5dd085",
       "handler": "Exception",
-      "lineno": 2206,
+      "lineno": 2207,
       "path": "scripts/benchmark/run_issue_5578_speed_tier_campaign.py",
       "source": "except Exception as exc:  # campaign fail-closed boundary: record failure, re-raise (#6690)"
     },
@@ -509,7 +509,7 @@
       "context": "_fixture_contract",
       "fingerprint": "79b171dffff047dd",
       "handler": "Exception",
-      "lineno": 358,
+      "lineno": 359,
       "path": "scripts/benchmark/run_observation_noise_live_replay_issue_2777.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - fail-closed blocker path"
     },
@@ -932,7 +932,7 @@
       "context": "_git_head",
       "fingerprint": "817839546378425a",
       "handler": "Exception",
-      "lineno": 51,
+      "lineno": 52,
       "path": "scripts/tools/classify_observation_noise_mechanisms.py",
       "source": "except Exception:"
     },
@@ -968,7 +968,7 @@
       "context": "_load_algorithm_readiness",
       "fingerprint": "33868ad5aca59d3d",
       "handler": "Exception",
-      "lineno": 127,
+      "lineno": 129,
       "path": "scripts/tools/generate_next_issue_shortlist.py",
       "source": "except Exception:"
     },
@@ -1031,7 +1031,7 @@
       "context": "main",
       "fingerprint": "aafb1044661c8b62",
       "handler": "Exception",
-      "lineno": 55,
+      "lineno": 88,
       "path": "scripts/tools/orca_rvo2_preflight.py",
       "source": "except Exception as exc:"
     },
@@ -1319,7 +1319,7 @@
       "context": "_init_wandb",
       "fingerprint": "c69862f1d86e1c9c",
       "handler": "Exception",
-      "lineno": 1503,
+      "lineno": 1505,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },
@@ -1328,7 +1328,7 @@
       "context": "_collect_scenario_coverage",
       "fingerprint": "3b3a0ef3ccea6c5c",
       "handler": "Exception",
-      "lineno": 1936,
+      "lineno": 1938,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception:  # pragma: no cover - best effort across vec env types"
     },
@@ -1337,7 +1337,7 @@
       "context": "_upload_wandb_best_checkpoint_artifact",
       "fingerprint": "a37b06c9172d6e1c",
       "handler": "Exception",
-      "lineno": 2286,
+      "lineno": 2288,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },
@@ -1389,20 +1389,20 @@
     {
       "col_offset": 16,
       "context": "test_weight_computation._find_and_import_script",
-      "fingerprint": "ea0e60635ac0c271",
+      "fingerprint": "c9e140072062c9aa",
       "handler": "Exception",
       "lineno": 113,
       "path": "scripts/validate_snqi_scripts.py",
-      "source": "except Exception as e:  # pragma: no cover - import fallback diagnostics"
+      "source": "except Exception as e:  # pragma: no cover - broad catch: optional import fallback"
     },
     {
       "col_offset": 4,
       "context": "test_weight_computation",
-      "fingerprint": "cabfc5ddccbcab13",
+      "fingerprint": "e87eb2704a914bed",
       "handler": "Exception",
       "lineno": 146,
       "path": "scripts/validate_snqi_scripts.py",
-      "source": "except Exception as e:"
+      "source": "except Exception as e:  # broad catch: top-level validation boundary"
     },
     {
       "col_offset": 12,
@@ -1659,47 +1659,47 @@
     {
       "col_offset": 4,
       "context": "main",
-      "fingerprint": "2a9fbbb545a4a89a",
+      "fingerprint": "3863630db1d2bc28",
       "handler": "Exception",
       "lineno": 122,
       "path": "scripts/validation/verify_maps.py",
-      "source": "except Exception as e:"
+      "source": "except Exception as e:  # broad catch: map-verification boundary; exit nonzero"
     },
     {
       "col_offset": 4,
       "context": "test_configuration_system",
-      "fingerprint": "eb7c97f676e65d14",
+      "fingerprint": "c0e339c727849693",
       "handler": "Exception",
       "lineno": 37,
       "path": "scripts/validation/verify_sf_implementation.py",
-      "source": "except Exception as e:  # pragma: no cover - defensive"
+      "source": "except Exception as e:  # pragma: no cover - broad catch: config-test boundary"
     },
     {
       "col_offset": 4,
       "context": "test_registry_system",
-      "fingerprint": "db517ddc125789d9",
+      "fingerprint": "f0d5a877028bd13d",
       "handler": "Exception",
       "lineno": 61,
       "path": "scripts/validation/verify_sf_implementation.py",
-      "source": "except Exception as e:"
+      "source": "except Exception as e:  # broad catch: registry smoke-test boundary"
     },
     {
       "col_offset": 4,
       "context": "test_cli_integration",
-      "fingerprint": "e273856b2d9291e1",
+      "fingerprint": "8423967892c943f8",
       "handler": "Exception",
       "lineno": 106,
       "path": "scripts/validation/verify_sf_implementation.py",
-      "source": "except Exception as e:"
+      "source": "except Exception as e:  # broad catch: CLI-integration smoke-test boundary"
     },
     {
       "col_offset": 4,
       "context": "test_configuration_files",
-      "fingerprint": "a08547fdfa652afb",
+      "fingerprint": "e816c3a12e1bc3c3",
       "handler": "Exception",
       "lineno": 135,
       "path": "scripts/validation/verify_sf_implementation.py",
-      "source": "except Exception as e:"
+      "source": "except Exception as e:  # broad catch: config-files validation boundary"
     }
   ],
   "patterns": [

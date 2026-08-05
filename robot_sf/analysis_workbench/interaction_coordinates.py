@@ -38,8 +38,8 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
     SimulationTraceExport,
     SimulationTraceFrame,
-    SimulationTraceSource,
     load_simulation_trace_export,
+    simulation_trace_export_from_dict,
 )
 from robot_sf.common.json_pointer import json_pointer
 from robot_sf.errors import RobotSfError
@@ -59,6 +59,7 @@ THRESHOLD_PROFILE_VERSION = "worked_example_threshold_profile.diagnostic.v1"
 CANONICAL_ENCOUNTER_SCHEMA_VERSION = "near_miss_encounter.v1"
 GEOMETRY_REGISTRY_SCHEMA_VERSION = "process_trace_geometry_registry.v1"
 ENCOUNTER_REPORT_INPUT_SCHEMA_VERSION = "near_miss_encounter_report_input.v1"
+ANALYSIS_INPUT_SCHEMA_VERSION = "worked_example_process_trace_analysis_input.v1"
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 COLLISION_PARTNER_TYPES = frozenset({"pedestrian", "static_geometry", "boundary", "goal_artifact"})
 EXPECTED_EVENT_TYPES = [
@@ -95,6 +96,8 @@ class RouteSpec:
     registry_content_sha256: str | None = None
     registry_entry_id: str | None = None
     registry_entry_sha256: str | None = None
+    owner_artifact_ref: str | None = None
+    owner_artifact_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +115,8 @@ class ConflictZoneSpec:
     registry_content_sha256: str | None = None
     registry_entry_id: str | None = None
     registry_entry_sha256: str | None = None
+    owner_artifact_ref: str | None = None
+    owner_artifact_path: str | None = None
 
 
 class WorkedExampleProcessTraceValidationError(RobotSfError, ValueError):
@@ -164,12 +169,15 @@ def validate_worked_example_process_trace(
     *,
     source: str | Path | None = None,
     geometry_registry_paths: Mapping[str, str | Path] | None = None,
+    expected_artifact_sha256: str | None = None,
 ) -> None:
     """Validate a process trace payload against its versioned schema.
 
-    ``geometry_registry_paths`` resolves stable registry artifact references to
-    machine-local files. Absolute paths are deliberately validation context,
-    never part of the public process-trace payload.
+    ``geometry_registry_paths`` resolves stable registry and canonical owner
+    artifact references to machine-local files. Absolute paths are deliberately
+    validation context, never part of the public process-trace payload. Admission callers can pass
+    an independently obtained ``expected_artifact_sha256`` over canonical JSON;
+    a digest stored inside the payload would not authenticate a coherent rewrite.
     """
 
     validator = Draft202012Validator(load_worked_example_process_trace_schema())
@@ -180,6 +188,16 @@ def validate_worked_example_process_trace(
             key=lambda err: list(err.absolute_path),
         )
     ]
+    if expected_artifact_sha256 is not None:
+        if SHA256_HEX_RE.fullmatch(expected_artifact_sha256) is None:
+            errors.append("/artifact_sha256: expected external sha256 hex digest")
+        else:
+            try:
+                actual_artifact_sha256 = _json_sha256_digest(payload)
+            except (TypeError, ValueError):
+                actual_artifact_sha256 = None
+            if actual_artifact_sha256 != expected_artifact_sha256:
+                errors.append("/artifact_sha256: does not match external admission digest")
     errors.extend(
         _semantic_validation_errors(
             payload,
@@ -190,12 +208,188 @@ def validate_worked_example_process_trace(
         raise WorkedExampleProcessTraceValidationError(errors, source=source)
 
 
+def _validate_analysis_input_identity(  # noqa: C901, PLR0912
+    payload: Mapping[str, Any],
+) -> list[str]:
+    """Validate the content-addressed analysis-input receipt and public identity.
+
+    Returns:
+        Semantic validation errors for the construction receipt and identity.
+    """
+
+    contract = payload.get("analysis_input_contract")
+    if not isinstance(contract, Mapping):
+        return ["/analysis_input_contract: required"]
+    required = {
+        "schema_version",
+        "source_trace_content_sha256",
+        "route",
+        "conflict",
+        "pair_trace",
+        "encounter_report",
+        "focal_actor_id",
+        "focal_encounter_id",
+        "pair_comparison_grain",
+    }
+    errors = _require_keys(
+        contract,
+        "/analysis_input_contract",
+        required=required,
+        allowed=required,
+    )
+    if contract.get("schema_version") != ANALYSIS_INPUT_SCHEMA_VERSION:
+        errors.append("/analysis_input_contract/schema_version: invalid")
+    try:
+        expected_digest = _json_sha256_digest(contract)
+    except (TypeError, ValueError):
+        errors.append("/analysis_input_contract: must be canonical strict JSON")
+        return errors
+    if payload.get("analysis_input_sha256") != expected_digest:
+        errors.append("/analysis_input_sha256: must match analysis_input_contract digest")
+    source_trace = payload.get("source_trace")
+    trace_id = source_trace.get("trace_id") if isinstance(source_trace, Mapping) else None
+    expected_id = (
+        f"{trace_id}-process-trace-{expected_digest}" if isinstance(trace_id, str) else None
+    )
+    if payload.get("process_trace_id") != expected_id:
+        errors.append("/process_trace_id: must bind the full analysis input digest")
+    if isinstance(source_trace, Mapping) and contract.get(
+        "source_trace_content_sha256"
+    ) != source_trace.get("content_sha256"):
+        errors.append(
+            "/analysis_input_contract/source_trace_content_sha256: must match source_trace"
+        )
+    coordinate_frames = payload.get("coordinate_frames")
+    if isinstance(coordinate_frames, Mapping):
+        for contract_key, frame_key in (("route", "route"), ("conflict", "conflict")):
+            frame = coordinate_frames.get(frame_key)
+            receipt = frame.get("input_contract") if isinstance(frame, Mapping) else None
+            if contract.get(contract_key) != receipt:
+                errors.append(
+                    f"/analysis_input_contract/{contract_key}: must match coordinate input receipt"
+                )
+    pair_receipt = contract.get("pair_trace")
+    pair = payload.get("pair_compatibility")
+    right_source = pair.get("right_source_trace") if isinstance(pair, Mapping) else None
+    if isinstance(pair_receipt, Mapping):
+        if pair_receipt.get("status") == "supplied":
+            if not (
+                isinstance(right_source, Mapping)
+                and right_source.get("status") == "available"
+                and pair_receipt.get("content_sha256") == right_source.get("content_sha256")
+                and pair_receipt.get("content_contract") == right_source.get("content_contract")
+            ):
+                errors.append(
+                    "/analysis_input_contract/pair_trace: must match embedded right source receipt"
+                )
+            pair_content = pair_receipt.get("content_contract")
+            try:
+                pair_content_digest = _json_sha256_digest(pair_content)
+            except (TypeError, ValueError):
+                pair_content_digest = None
+            if pair_receipt.get("content_sha256") != pair_content_digest:
+                errors.append(
+                    "/analysis_input_contract/pair_trace/content_sha256: must match content"
+                )
+        elif pair_receipt != {"status": "not_supplied"}:
+            errors.append("/analysis_input_contract/pair_trace: invalid absence receipt")
+    report_receipt = contract.get("encounter_report")
+    if isinstance(report_receipt, Mapping):
+        if report_receipt.get("status") == "supplied":
+            content = report_receipt.get("content_contract")
+            try:
+                content_digest = _json_sha256_digest(content)
+            except (TypeError, ValueError):
+                content_digest = None
+            if report_receipt.get("content_sha256") != content_digest:
+                errors.append(
+                    "/analysis_input_contract/encounter_report/content_sha256: must match content"
+                )
+            if isinstance(content, Mapping):
+                report_validator = Draft202012Validator(load_near_miss_encounter_schema())
+                errors.extend(
+                    "/analysis_input_contract/encounter_report/content_contract"
+                    f"{json_pointer(error.absolute_path)}: {error.message}"
+                    for error in sorted(
+                        report_validator.iter_errors(content),
+                        key=lambda item: list(item.absolute_path),
+                    )
+                )
+        elif report_receipt != {"status": "not_supplied"}:
+            errors.append("/analysis_input_contract/encounter_report: invalid absence receipt")
+    return errors
+
+
+def _validate_full_artifact_replay(
+    payload: Mapping[str, Any],
+    *,
+    geometry_registry_paths: Mapping[str, str | Path] | None,
+) -> list[str]:
+    """Rebuild the complete public artifact from source and bound input receipts.
+
+    Returns:
+        Field-level replay errors for any surface that differs from reconstruction.
+    """
+
+    contract = payload.get("analysis_input_contract")
+    if not isinstance(contract, Mapping):
+        return []
+    trace = _trace_from_source_contract(payload.get("source_trace"))
+    if trace is None:
+        return []
+    pair_receipt = contract.get("pair_trace")
+    pair_trace: SimulationTraceExport | None = None
+    if isinstance(pair_receipt, Mapping) and pair_receipt.get("status") == "supplied":
+        pair_content = pair_receipt.get("content_contract")
+        if not isinstance(pair_content, Mapping):
+            return ["/analysis_input_contract/pair_trace/content_contract: required"]
+        pair_trace = _trace_from_content_contract(pair_content)
+        if pair_trace is None:
+            return [
+                "/analysis_input_contract/pair_trace/content_contract: invalid simulation trace receipt"
+            ]
+    report_receipt = contract.get("encounter_report")
+    encounter_report: Mapping[str, Any] | None = None
+    encounter_checksum: str | None = None
+    if isinstance(report_receipt, Mapping) and report_receipt.get("status") == "supplied":
+        report_content = report_receipt.get("content_contract")
+        if not isinstance(report_content, Mapping):
+            return ["/analysis_input_contract/encounter_report/content_contract: required"]
+        encounter_report = report_content
+        checksum_value = report_receipt.get("expected_input_checksum")
+        encounter_checksum = checksum_value if isinstance(checksum_value, str) else None
+    route = _route_spec_from_input_contract(
+        contract.get("route"),
+        geometry_registry_paths=geometry_registry_paths,
+    )
+    conflict_zone = _conflict_spec_from_input_contract(
+        contract.get("conflict"),
+        geometry_registry_paths=geometry_registry_paths,
+    )
+    try:
+        expected = _build_worked_example_process_trace_from_export(
+            trace,
+            route=route,
+            conflict_zone=conflict_zone,
+            focal_actor_id=_optional_string(contract.get("focal_actor_id")),
+            focal_encounter_id=_optional_string(contract.get("focal_encounter_id")),
+            pair_trace=pair_trace,
+            encounter_report=encounter_report,
+            encounter_report_input_checksum=encounter_checksum,
+            pair_comparison_grain=_optional_string(contract.get("pair_comparison_grain")),
+        )
+    except (KeyError, TypeError, ValueError, WorkedExampleProcessTraceValidationError):
+        return ["/analysis_input_contract: cannot reconstruct canonical artifact"]
+    return _replay_mismatch_errors(payload, expected, "")
+
+
 def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
     payload: Mapping[str, Any],
     *,
     geometry_registry_paths: Mapping[str, str | Path] | None,
 ) -> list[str]:
     errors: list[str] = []
+    errors.extend(_validate_analysis_input_identity(payload))
     if payload.get("profiles") != _profiles():
         errors.append("/profiles: must match exact versioned diagnostic profiles")
     if payload.get("claim_boundary") != CLAIM_BOUNDARY:
@@ -320,6 +514,12 @@ def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
                 errors.append(
                     "/pair_compatibility/divergence_interpretation/allowed: requires shared_prefix true"
                 )
+    errors.extend(
+        _validate_full_artifact_replay(
+            payload,
+            geometry_registry_paths=geometry_registry_paths,
+        )
+    )
     return errors
 
 
@@ -715,6 +915,7 @@ def _validate_supplied_geometry_registry_receipt(
         provenance_id=_optional_string(value.get("provenance_id")),
         geometry=geometry,
         reason_prefix=reason_prefix,
+        artifact_paths=geometry_registry_paths,
     )
     if binding.get("status") != "available":
         if (
@@ -723,6 +924,10 @@ def _validate_supplied_geometry_registry_receipt(
             and availability_contract.get("reason") == binding.get("reason")
         ):
             return []
+        if "_owner_" in str(binding.get("reason", "")):
+            return [
+                f"/coordinate_frames/{kind}/input_contract: canonical owner artifact must resolve and replay exact geometry"
+            ]
         return [
             f"/coordinate_frames/{kind}/input_contract: must replay external geometry registry receipt"
         ]
@@ -924,6 +1129,13 @@ def _route_spec_from_frame(
         artifact_ref,
         geometry_registry_paths=geometry_registry_paths,
     )
+    entry_id = str(registry.get("entry_id"))
+    owner_ref, owner_path = _registry_entry_owner_from_path(
+        registry_path,
+        collection="routes",
+        entry_id=entry_id,
+        artifact_paths=geometry_registry_paths,
+    )
     return RouteSpec(
         str(route_record.get("route_id")),
         points[0],
@@ -934,8 +1146,10 @@ def _route_spec_from_frame(
         registry_artifact_ref=artifact_ref,
         registry_path=str(registry_path) if registry_path is not None else None,
         registry_content_sha256=str(registry.get("content_sha256")),
-        registry_entry_id=str(registry.get("entry_id")),
+        registry_entry_id=entry_id,
         registry_entry_sha256=str(registry.get("entry_sha256")),
+        owner_artifact_ref=owner_ref,
+        owner_artifact_path=str(owner_path) if owner_path is not None else None,
     )
 
 
@@ -994,6 +1208,13 @@ def _conflict_spec_from_frame(
         artifact_ref,
         geometry_registry_paths=geometry_registry_paths,
     )
+    entry_id = str(registry.get("entry_id"))
+    owner_ref, owner_path = _registry_entry_owner_from_path(
+        registry_path,
+        collection="conflict_zones",
+        entry_id=entry_id,
+        artifact_paths=geometry_registry_paths,
+    )
     return ConflictZoneSpec(
         str(conflict_record.get("zone_id")),
         center,
@@ -1004,8 +1225,10 @@ def _conflict_spec_from_frame(
         registry_artifact_ref=artifact_ref,
         registry_path=str(registry_path) if registry_path is not None else None,
         registry_content_sha256=str(registry.get("content_sha256")),
-        registry_entry_id=str(registry.get("entry_id")),
+        registry_entry_id=entry_id,
         registry_entry_sha256=str(registry.get("entry_sha256")),
+        owner_artifact_ref=owner_ref,
+        owner_artifact_path=str(owner_path) if owner_path is not None else None,
     )
 
 
@@ -2016,63 +2239,38 @@ def _trace_from_source_contract(source_trace: object) -> SimulationTraceExport |
 
 
 def _trace_from_content_contract(contract: Mapping[str, Any]) -> SimulationTraceExport | None:
-    source = contract.get("source")
-    frames = contract.get("frames")
-    if not (
-        contract.get("schema_version") == SIMULATION_TRACE_EXPORT_SCHEMA_VERSION
-        and isinstance(contract.get("trace_id"), str)
-        and isinstance(source, Mapping)
-        and isinstance(contract.get("evidence_boundary"), str)
-        and isinstance(contract.get("coordinate_frame"), str)
-        and isinstance(contract.get("units"), Mapping)
-        and isinstance(frames, list)
-    ):
-        return None
-    required_source = {"scenario_id", "seed", "planner_id", "episode_id", "generated_by"}
-    if not required_source.issubset(source):
-        return None
-    trace_frames: list[SimulationTraceFrame] = []
-    for frame in frames:
-        if not isinstance(frame, Mapping):
+    try:
+        restored = _restore_nonfinite_receipt_values(contract)
+        if not isinstance(restored, Mapping):
             return None
-        step = frame.get("step")
-        time_s = frame.get("time_s")
-        robot = frame.get("robot")
-        pedestrians = frame.get("pedestrians")
-        planner = frame.get("planner")
-        if not (
-            _json_integer(step)
-            and _finite_json_number(time_s)
-            and isinstance(robot, Mapping)
-            and isinstance(pedestrians, list)
-            and all(isinstance(actor, Mapping) for actor in pedestrians)
-            and isinstance(planner, Mapping)
-        ):
-            return None
-        trace_frames.append(
-            SimulationTraceFrame(
-                step=step,
-                time_s=float(time_s),
-                robot=dict(robot),
-                pedestrians=[dict(actor) for actor in pedestrians],
-                planner=dict(planner),
-            )
-        )
-    return SimulationTraceExport(
-        schema_version=str(contract["schema_version"]),
-        trace_id=str(contract["trace_id"]),
-        source=SimulationTraceSource(
-            scenario_id=str(source["scenario_id"]),
-            seed=int(source["seed"]),
-            planner_id=str(source["planner_id"]),
-            episode_id=str(source["episode_id"]),
-            generated_by=str(source["generated_by"]),
-        ),
-        evidence_boundary=str(contract["evidence_boundary"]),
-        coordinate_frame=str(contract["coordinate_frame"]),
-        units={str(key): str(value) for key, value in contract["units"].items()},
-        frames=trace_frames,
-    )
+        return simulation_trace_export_from_dict(restored)
+    except (RobotSfError, TypeError, ValueError):
+        return None
+
+
+def _restore_nonfinite_receipt_values(value: object) -> object:
+    """Decode only the exact sentinel emitted by :func:`_strict_json_value`.
+
+    Returns:
+        A recursively restored source payload suitable for strict source validation.
+    """
+
+    if isinstance(value, Mapping):
+        if "nonfinite_number" in value:
+            if set(value) != {"nonfinite_number"}:
+                raise ValueError("nonfinite sentinel cannot contain additional fields")
+            sentinel = value["nonfinite_number"]
+            if sentinel == "nan":
+                return math.nan
+            if sentinel == "inf":
+                return math.inf
+            if sentinel == "-inf":
+                return -math.inf
+            raise ValueError("invalid nonfinite sentinel")
+        return {str(key): _restore_nonfinite_receipt_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_restore_nonfinite_receipt_values(item) for item in value]
+    return value
 
 
 def _validate_source_contract_frame_replays(
@@ -2421,6 +2619,15 @@ def _replay_mismatch_errors(actual: object, expected: object, path: str) -> list
                 errors.append(f"{path}/{key}: must replay embedded source content")
                 continue
             errors.extend(_replay_mismatch_errors(actual[key], expected[key], f"{path}/{key}"))
+        return errors
+    if isinstance(actual, list) and isinstance(expected, list):
+        errors = []
+        for index in range(max(len(actual), len(expected))):
+            item_path = f"{path}/{index}"
+            if index >= len(actual) or index >= len(expected):
+                errors.append(f"{item_path}: must replay embedded source content")
+                continue
+            errors.extend(_replay_mismatch_errors(actual[index], expected[index], item_path))
         return errors
     if actual != expected:
         return [f"{path}: must replay embedded source content"]
@@ -2776,7 +2983,12 @@ def load_near_miss_encounter_report(path: Path) -> dict[str, Any]:
     return dict(payload)
 
 
-def load_registered_route_spec(path: Path, entry_id: str) -> RouteSpec:
+def load_registered_route_spec(
+    path: Path,
+    entry_id: str,
+    *,
+    geometry_owner_paths: Mapping[str, str | Path] | None = None,
+) -> RouteSpec:
     """Resolve one route from a versioned external process-trace geometry registry.
 
     Returns:
@@ -2791,6 +3003,10 @@ def load_registered_route_spec(path: Path, entry_id: str) -> RouteSpec:
     points = _route_geometry_points(geometry)
     start = points[0] if points else (math.nan, math.nan)
     end = points[-1] if points else (math.nan, math.nan)
+    owner_ref, owner_path = _resolve_registry_entry_owner(
+        entry,
+        artifact_paths=geometry_owner_paths,
+    )
     return RouteSpec(
         route_id=str(entry.get("route_id", "")),
         start=start,
@@ -2803,10 +3019,17 @@ def load_registered_route_spec(path: Path, entry_id: str) -> RouteSpec:
         registry_content_sha256=content_sha256,
         registry_entry_id=entry_id,
         registry_entry_sha256=_json_sha256_digest(entry),
+        owner_artifact_ref=owner_ref,
+        owner_artifact_path=str(owner_path) if owner_path is not None else None,
     )
 
 
-def load_registered_conflict_zone_spec(path: Path, entry_id: str) -> ConflictZoneSpec:
+def load_registered_conflict_zone_spec(
+    path: Path,
+    entry_id: str,
+    *,
+    geometry_owner_paths: Mapping[str, str | Path] | None = None,
+) -> ConflictZoneSpec:
     """Resolve one conflict zone from a versioned external process-trace geometry registry.
 
     Returns:
@@ -2820,6 +3043,10 @@ def load_registered_conflict_zone_spec(path: Path, entry_id: str) -> ConflictZon
     center = _vector2(geometry_record.get("center")) or (math.nan, math.nan)
     radius = geometry_record.get("radius_m")
     radius_m = float(radius) if _finite_json_number(radius) else math.nan
+    owner_ref, owner_path = _resolve_registry_entry_owner(
+        entry,
+        artifact_paths=geometry_owner_paths,
+    )
     return ConflictZoneSpec(
         zone_id=str(entry.get("zone_id", "")),
         center=center,
@@ -2832,6 +3059,8 @@ def load_registered_conflict_zone_spec(path: Path, entry_id: str) -> ConflictZon
         registry_content_sha256=content_sha256,
         registry_entry_id=entry_id,
         registry_entry_sha256=_json_sha256_digest(entry),
+        owner_artifact_ref=owner_ref,
+        owner_artifact_path=str(owner_path) if owner_path is not None else None,
     )
 
 
@@ -2887,6 +3116,8 @@ def _stable_geometry_registry_artifact_ref(value: object) -> bool:
     """Return whether a registry reference is portable public identity."""
 
     if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    if re.match(r"^[A-Za-z]:[/\\]", value):
         return False
     if "\\" in value or "~" in value:
         return False
@@ -2944,6 +3175,57 @@ def _resolve_geometry_registry_path(
     return (Path.cwd() / artifact_ref).resolve()
 
 
+def _resolve_registry_entry_owner(
+    entry: Mapping[str, Any],
+    *,
+    artifact_paths: Mapping[str, str | Path] | None,
+) -> tuple[str | None, Path | None]:
+    """Resolve a canonical owner reference into private validation context.
+
+    Returns:
+        Stable owner reference and its private resolved path, when canonical.
+    """
+
+    binding = entry.get("upstream_binding")
+    if not isinstance(binding, Mapping) or binding.get("kind") != "canonical_source":
+        return None, None
+    artifact_ref = binding.get("source_artifact_ref")
+    if not isinstance(artifact_ref, str):
+        return None, None
+    return artifact_ref, _resolve_geometry_registry_path(
+        artifact_ref,
+        geometry_registry_paths=artifact_paths,
+    )
+
+
+def _registry_entry_owner_from_path(
+    registry_path: Path | None,
+    *,
+    collection: str,
+    entry_id: str | None,
+    artifact_paths: Mapping[str, str | Path] | None,
+) -> tuple[str | None, Path | None]:
+    if registry_path is None or entry_id is None:
+        return None, None
+    try:
+        payload = json.loads(registry_path.read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, None
+    entries = payload.get(collection) if isinstance(payload, Mapping) else None
+    matches = (
+        [
+            entry
+            for entry in entries
+            if isinstance(entry, Mapping) and entry.get("entry_id") == entry_id
+        ]
+        if isinstance(entries, list)
+        else []
+    )
+    if len(matches) != 1:
+        return None, None
+    return _resolve_registry_entry_owner(matches[0], artifact_paths=artifact_paths)
+
+
 def _geometry_registry_paths_for_specs(
     route: RouteSpec | None,
     conflict_zone: ConflictZoneSpec | None,
@@ -2959,6 +3241,8 @@ def _geometry_registry_paths_for_specs(
         if spec is None or not spec.registry_artifact_ref or not spec.registry_path:
             continue
         paths.setdefault(spec.registry_artifact_ref, Path(spec.registry_path).resolve())
+        if spec.owner_artifact_ref and spec.owner_artifact_path:
+            paths.setdefault(spec.owner_artifact_ref, Path(spec.owner_artifact_path).resolve())
     return paths
 
 
@@ -3048,6 +3332,42 @@ def build_worked_example_process_trace_from_export(  # noqa: PLR0913
         Schema-valid process trace payload.
     """
 
+    payload = _build_worked_example_process_trace_from_export(
+        trace,
+        route=route,
+        conflict_zone=conflict_zone,
+        focal_actor_id=focal_actor_id,
+        focal_encounter_id=focal_encounter_id,
+        pair_trace=pair_trace,
+        encounter_report=encounter_report,
+        encounter_report_input_checksum=encounter_report_input_checksum,
+        pair_comparison_grain=pair_comparison_grain,
+    )
+    validate_worked_example_process_trace(
+        payload,
+        geometry_registry_paths=_geometry_registry_paths_for_specs(route, conflict_zone),
+    )
+    return payload
+
+
+def _build_worked_example_process_trace_from_export(  # noqa: PLR0913
+    trace: SimulationTraceExport,
+    *,
+    route: RouteSpec | None = None,
+    conflict_zone: ConflictZoneSpec | None = None,
+    focal_actor_id: str | None = None,
+    focal_encounter_id: str | None = None,
+    pair_trace: SimulationTraceExport | None = None,
+    encounter_report: Mapping[str, Any] | None = None,
+    encounter_report_input_checksum: str | None = None,
+    pair_comparison_grain: str | None = None,
+) -> dict[str, Any]:
+    """Construct a process trace without recursively invoking semantic validation.
+
+    Returns:
+        Unvalidated deterministic process-trace payload used by build and replay.
+    """
+
     identity_errors = _duplicate_pedestrian_identity_errors(trace, label="source trace")
     if pair_trace is not None:
         identity_errors.extend(
@@ -3126,9 +3446,23 @@ def build_worked_example_process_trace_from_export(  # noqa: PLR0913
         "route": _strict_json_value(route_input_contract),
         "conflict": _strict_json_value(conflict_input_contract),
     }
+    analysis_input_contract = _analysis_input_contract(
+        trace,
+        route_input_contract=route_input_contract,
+        conflict_input_contract=conflict_input_contract,
+        focal_actor_id=focal_actor_id,
+        focal_encounter_id=focal_encounter_id,
+        pair_trace=pair_trace,
+        encounter_report=encounter_report,
+        encounter_report_input_checksum=encounter_report_input_checksum,
+        pair_comparison_grain=pair_comparison_grain,
+    )
+    analysis_input_sha256 = _json_sha256_digest(analysis_input_contract)
     payload: dict[str, Any] = {
         "schema_version": WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_VERSION,
-        "process_trace_id": f"{trace.trace_id}-process-trace",
+        "process_trace_id": f"{trace.trace_id}-process-trace-{analysis_input_sha256}",
+        "analysis_input_contract": analysis_input_contract,
+        "analysis_input_sha256": analysis_input_sha256,
         "source_trace": _source_trace(trace),
         "evidence_boundary": "analysis_workbench_only",
         "source_coordinate_frame": trace.coordinate_frame,
@@ -3157,11 +3491,51 @@ def build_worked_example_process_trace_from_export(  # noqa: PLR0913
         "event_anchor_hierarchy": event_anchor_hierarchy,
         "pair_compatibility": pair,
     }
-    validate_worked_example_process_trace(
-        payload,
-        geometry_registry_paths=_geometry_registry_paths_for_specs(route, conflict_zone),
-    )
     return payload
+
+
+def _analysis_input_contract(  # noqa: PLR0913
+    trace: SimulationTraceExport,
+    *,
+    route_input_contract: Mapping[str, Any],
+    conflict_input_contract: Mapping[str, Any],
+    focal_actor_id: str | None,
+    focal_encounter_id: str | None,
+    pair_trace: SimulationTraceExport | None,
+    encounter_report: Mapping[str, Any] | None,
+    encounter_report_input_checksum: str | None,
+    pair_comparison_grain: str | None,
+) -> dict[str, Any]:
+    """Return the canonical receipt for every analysis-affecting input."""
+
+    pair_receipt: dict[str, Any] = {"status": "not_supplied"}
+    if pair_trace is not None:
+        pair_content_contract = _trace_content_contract(pair_trace)
+        pair_receipt = {
+            "status": "supplied",
+            "content_sha256": _json_sha256_digest(pair_content_contract),
+            "content_contract": pair_content_contract,
+        }
+    report_receipt: dict[str, Any] = {"status": "not_supplied"}
+    if encounter_report is not None:
+        content_contract = _strict_json_value(encounter_report)
+        report_receipt = {
+            "status": "supplied",
+            "content_sha256": _json_sha256_digest(content_contract),
+            "content_contract": content_contract,
+            "expected_input_checksum": encounter_report_input_checksum,
+        }
+    return {
+        "schema_version": ANALYSIS_INPUT_SCHEMA_VERSION,
+        "source_trace_content_sha256": _trace_content_sha256(trace),
+        "route": _strict_json_value(route_input_contract),
+        "conflict": _strict_json_value(conflict_input_contract),
+        "pair_trace": pair_receipt,
+        "encounter_report": report_receipt,
+        "focal_actor_id": focal_actor_id,
+        "focal_encounter_id": focal_encounter_id,
+        "pair_comparison_grain": pair_comparison_grain,
+    }
 
 
 def write_worked_example_process_trace(input_path: Path, output_path: Path, **kwargs: Any) -> Path:
@@ -3386,6 +3760,12 @@ def _route_spec_from_input_contract(
         if artifact_ref is not None
         else None
     )
+    owner_ref, owner_path = _registry_entry_owner_from_path(
+        registry_path,
+        collection="routes",
+        entry_id=_optional_string(registry.get("entry_id")),
+        artifact_paths=geometry_registry_paths,
+    )
     return RouteSpec(
         route_id=str(value.get("route_id", "")),
         start=start,
@@ -3398,6 +3778,8 @@ def _route_spec_from_input_contract(
         registry_content_sha256=_optional_string(registry.get("content_sha256")),
         registry_entry_id=_optional_string(registry.get("entry_id")),
         registry_entry_sha256=_optional_string(registry.get("entry_sha256")),
+        owner_artifact_ref=owner_ref,
+        owner_artifact_path=str(owner_path) if owner_path is not None else None,
     )
 
 
@@ -3427,6 +3809,12 @@ def _conflict_spec_from_input_contract(
         if artifact_ref is not None
         else None
     )
+    owner_ref, owner_path = _registry_entry_owner_from_path(
+        registry_path,
+        collection="conflict_zones",
+        entry_id=_optional_string(registry.get("entry_id")),
+        artifact_paths=geometry_registry_paths,
+    )
     return ConflictZoneSpec(
         zone_id=str(value.get("zone_id", "")),
         center=center,
@@ -3439,6 +3827,8 @@ def _conflict_spec_from_input_contract(
         registry_content_sha256=_optional_string(registry.get("content_sha256")),
         registry_entry_id=_optional_string(registry.get("entry_id")),
         registry_entry_sha256=_optional_string(registry.get("entry_sha256")),
+        owner_artifact_ref=owner_ref,
+        owner_artifact_path=str(owner_path) if owner_path is not None else None,
     )
 
 
@@ -3484,6 +3874,7 @@ def _route_availability(
         provenance_id=route.provenance_id,
         geometry=geometry,
         reason_prefix="registered_route",
+        owner_artifact_path=route.owner_artifact_path,
     )
     if registry.get("status") != "available":
         return {"status": "unavailable", "reason": str(registry["reason"])}
@@ -3552,6 +3943,7 @@ def _conflict_availability(
         provenance_id=conflict_zone.provenance_id,
         geometry=geometry,
         reason_prefix="registered_conflict_zone",
+        owner_artifact_path=conflict_zone.owner_artifact_path,
     )
     if registry.get("status") != "available":
         return {"status": "unavailable", "reason": str(registry["reason"])}
@@ -3728,6 +4120,8 @@ def _registry_binding(  # noqa: C901, PLR0913
     provenance_id: str | None,
     geometry: Mapping[str, Any],
     reason_prefix: str,
+    owner_artifact_path: str | None = None,
+    artifact_paths: Mapping[str, str | Path] | None = None,
 ) -> dict[str, Any]:
     if not all((path, artifact_ref, content_sha256, entry_id, entry_sha256)):
         return {"status": "unavailable", "reason": f"{reason_prefix}_registry_artifact_unavailable"}
@@ -3780,6 +4174,16 @@ def _registry_binding(  # noqa: C901, PLR0913
         or entry.get("geometry") != geometry
     ):
         return {"status": "unavailable", "reason": f"{reason_prefix}_registry_entry_mismatch"}
+    upstream_binding = entry.get("upstream_binding")
+    owner_validation = _geometry_owner_validation(
+        upstream_binding,
+        geometry=geometry,
+        reason_prefix=reason_prefix,
+        owner_artifact_path=owner_artifact_path,
+        artifact_paths=artifact_paths,
+    )
+    if owner_validation.get("status") == "unavailable":
+        return owner_validation
     return {
         "status": "available",
         "receipt": {
@@ -3793,6 +4197,109 @@ def _registry_binding(  # noqa: C901, PLR0913
             "geometry_kind": str(geometry.get("type")),
             "resolved_geometry": dict(geometry),
             "upstream_binding": dict(entry["upstream_binding"]),
+            "owner_validation": owner_validation["receipt"],
+        },
+    }
+
+
+def _geometry_owner_validation(  # noqa: C901
+    binding: object,
+    *,
+    geometry: Mapping[str, Any],
+    reason_prefix: str,
+    owner_artifact_path: str | None,
+    artifact_paths: Mapping[str, str | Path] | None,
+) -> dict[str, Any]:
+    """Verify registry adapter geometry against its declared upstream owner.
+
+    Returns:
+        Available owner receipt or an explicit unavailable reason.
+    """
+
+    if not isinstance(binding, Mapping):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_owner_binding_invalid"}
+    if binding.get("kind") == "fixture_only":
+        return {
+            "status": "available",
+            "receipt": {
+                "status": "fixture_only",
+                "reason": "fixture_binding_not_canonical_owner",
+            },
+        }
+    if binding.get("kind") != "canonical_source":
+        return {"status": "unavailable", "reason": f"{reason_prefix}_owner_binding_invalid"}
+    artifact_ref = binding.get("source_artifact_ref")
+    expected_digest = binding.get("source_content_sha256")
+    selector = binding.get("selector")
+    if not (
+        isinstance(artifact_ref, str)
+        and _stable_geometry_registry_artifact_ref(artifact_ref)
+        and isinstance(expected_digest, str)
+        and SHA256_HEX_RE.fullmatch(expected_digest)
+        and isinstance(selector, Mapping)
+    ):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_owner_binding_invalid"}
+    resolved_path = (
+        Path(owner_artifact_path).resolve()
+        if owner_artifact_path is not None
+        else _resolve_geometry_registry_path(
+            artifact_ref,
+            geometry_registry_paths=artifact_paths,
+        )
+    )
+    if resolved_path is None:
+        return {
+            "status": "unavailable",
+            "reason": f"{reason_prefix}_owner_artifact_unresolved",
+        }
+    try:
+        if not resolved_path.is_file():
+            raise OSError
+        raw = resolved_path.read_bytes()
+    except OSError:
+        return {"status": "unavailable", "reason": f"{reason_prefix}_owner_artifact_missing"}
+    if hashlib.sha256(raw).hexdigest() != expected_digest:
+        return {
+            "status": "unavailable",
+            "reason": f"{reason_prefix}_owner_content_mismatch",
+        }
+    try:
+        owner = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {
+            "status": "unavailable",
+            "reason": f"{reason_prefix}_owner_geometry_unverified",
+        }
+    if not (
+        isinstance(owner, Mapping)
+        and set(owner) == {"schema_version", "geometry_bindings"}
+        and owner.get("schema_version") == "process_trace_geometry_owner.v1"
+        and isinstance(owner.get("geometry_bindings"), list)
+    ):
+        return {
+            "status": "unavailable",
+            "reason": f"{reason_prefix}_owner_geometry_unverified",
+        }
+    candidates = [
+        item
+        for item in owner["geometry_bindings"]
+        if isinstance(item, Mapping)
+        and set(item) == {"selector", "geometry"}
+        and _json_sha256_digest(item.get("selector")) == _json_sha256_digest(selector)
+    ]
+    if len(candidates) != 1:
+        suffix = "owner_selector_ambiguous" if len(candidates) > 1 else "owner_selector_unresolved"
+        return {"status": "unavailable", "reason": f"{reason_prefix}_{suffix}"}
+    if _json_sha256_digest(candidates[0].get("geometry")) != _json_sha256_digest(geometry):
+        return {"status": "unavailable", "reason": f"{reason_prefix}_owner_geometry_mismatch"}
+    return {
+        "status": "available",
+        "receipt": {
+            "status": "verified",
+            "source_artifact_ref": artifact_ref,
+            "source_content_sha256": expected_digest,
+            "selector": dict(selector),
+            "geometry_sha256": _json_sha256_digest(geometry),
         },
     }
 
@@ -5179,7 +5686,7 @@ def _terminal_event_anchor(
     )
 
 
-def _collision_anchor_state(  # noqa: C901
+def _collision_anchor_state(
     trace: SimulationTraceExport,
     frames: Sequence[Mapping[str, Any]],
     *,
@@ -5207,19 +5714,14 @@ def _collision_anchor_state(  # noqa: C901
             )
     if not candidates:
         return {"status": "unavailable", "observed": boolean_observed}
-    collision_time, _, _, trace_frame, signal = min(candidates, key=lambda item: item[:3])
+    collision_time, _, _, _, signal = min(candidates, key=lambda item: item[:3])
     if trace_bounds is not None and not (trace_bounds[0] <= collision_time <= trace_bounds[1]):
         return {
             "status": "unavailable",
             "observed": True,
             "reason": "collision_time_outside_trace_sample_bounds",
         }
-    frame = next(
-        (candidate for candidate in frames if candidate.get("step") == trace_frame.step),
-        None,
-    )
-    if frame is None:
-        frame = _frame_for_collision_time(frames, collision_time)
+    frame = _frame_for_collision_time(frames, collision_time)
     if frame is None:
         return {
             "status": "unavailable",

@@ -40,6 +40,23 @@ resolve to the same canonical record.
 Add `--pair-input path/to/other_trace.json --pair-comparison-grain ...` when building pair
 compatibility; the comparison grain is required whenever a pair input is present.
 
+Every analysis-affecting input is also recorded once in the versioned top-level
+`analysis_input_contract`: the exact source digest, route and conflict registry inputs, pair
+presence and full source content, report presence and full content, nullable focal selectors, and
+the requested comparison grain. `analysis_input_sha256` is the canonical JSON digest of that
+contract, and the full digest is part of `process_trace_id`. Semantic validation reconstructs the
+complete artifact from the strict embedded `simulation_trace_export.v1` receipt and this contract;
+it does not trust the emitted focal actor, interval flags, frame indices, coordinate projections,
+diagnostics, events, pair summaries, units, or coordinate-frame envelope. The embedded source
+receipt preserves explicit nonfinite-number sentinels but otherwise obeys the exact source schema,
+including its fixed evidence boundary and units and rejection of unknown envelope fields.
+
+Content addressing inside an artifact detects partial rewrites, not a party that rewrites the
+entire artifact and all of its self-authored hashes. Admission must therefore obtain the expected
+final canonical-JSON SHA-256 independently and pass it as `expected_artifact_sha256` to
+`validate_worked_example_process_trace`. This external expected digest is the authenticity/trust
+boundary; the process-trace builder does not claim a signature or standalone authenticity.
+
 The analysis workbench owns `process_trace_geometry_registry.v1` as an adapter and receipt format,
 not as a second production map-authoring source. Production registry entries must derive from or
 explicitly bind the hash-pinned owner artifact and its native selector. Routes should preserve
@@ -63,6 +80,18 @@ availability replay from that declaration and the source coordinate frame; pair-
 the same input declaration. A projection-unavailable source frame therefore cannot hide a corrupt
 supplied registry receipt.
 
+`fixture_only` upstream bindings remain explicitly labeled in the emitted `owner_validation`
+receipt and are available only as fixture proof. A `canonical_source` binding is stricter: the
+owner reference must resolve in private validation context, its raw bytes must match the declared
+SHA-256, and its selector must resolve exactly once to byte-semantically equal geometry in the
+recognized `process_trace_geometry_owner.v1` envelope (`geometry_bindings` entries contain exact
+`selector` and `geometry` objects). Missing, fabricated, digest-mismatched, ambiguous,
+selector-mismatched, geometry-mismatched, or unrecognized owners make the projection explicitly
+unavailable while preserving the supplied registry input receipt. The adapter therefore cannot
+promote geometry merely because its own registry is internally consistent. Absolute paths,
+including Windows drive-absolute forms on non-Windows hosts, remain private resolver context and
+are rejected as public artifact references.
+
 Ordered route polylines use cumulative arclength and nearest-segment projection; equal-distance
 ties abstain as ambiguous. Zero-length, adjacent backtracking/overlap, and nonlocal intersections
 also fail closed. `route_graph` is schema-recognized only so branched authoring inputs can
@@ -75,8 +104,10 @@ static-geometry partners. The deterministic earliest canonical episode collision
 focal matching is metadata and never replaces it with a later collision. Partner type and ID remain
 truthful, while `actor_id` is null unless a separate `focal_binding` record proves that the
 pedestrian partner matches the selected focal encounter. Boolean values are never admitted as
-numeric timestamps. Duplicate pedestrian IDs in any left or pair-right source frame are rejected
-before focal lookup.
+numeric timestamps. The event time stays the exact ledger time, while its step/frame is selected
+deterministically as the first source sample at or after that time (within validated trace bounds),
+never from whichever frame happened to carry the ledger record. Duplicate pedestrian IDs in any
+left or pair-right source frame are rejected before focal lookup.
 
 Pair compatibility requires an explicit comparison grain:
 

@@ -7,6 +7,8 @@
   "required": [
     "schema_version",
     "process_trace_id",
+    "analysis_input_contract",
+    "analysis_input_sha256",
     "source_trace",
     "evidence_boundary",
     "source_coordinate_frame",
@@ -24,6 +26,35 @@
   "properties": {
     "schema_version": {"const": "worked_example_process_trace.v1"},
     "process_trace_id": {"type": "string", "minLength": 1},
+    "analysis_input_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "source_trace_content_sha256",
+        "route",
+        "conflict",
+        "pair_trace",
+        "encounter_report",
+        "focal_actor_id",
+        "focal_encounter_id",
+        "pair_comparison_grain"
+      ],
+      "properties": {
+        "schema_version": {"const": "worked_example_process_trace_analysis_input.v1"},
+        "source_trace_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "route": {"$ref": "#/$defs/geometry_input_contract"},
+        "conflict": {"$ref": "#/$defs/geometry_input_contract"},
+        "pair_trace": {"$ref": "#/$defs/analysis_pair_input"},
+        "encounter_report": {"$ref": "#/$defs/analysis_report_input"},
+        "focal_actor_id": {"type": ["string", "null"]},
+        "focal_encounter_id": {"type": ["string", "null"]},
+        "pair_comparison_grain": {
+          "enum": ["matched_planner_pair", "matched_realization_pair", null]
+        }
+      }
+    },
+    "analysis_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "source_trace": {
       "type": "object",
       "additionalProperties": false,
@@ -587,7 +618,8 @@
         "coordinate_frame",
         "geometry_kind",
         "resolved_geometry",
-        "upstream_binding"
+        "upstream_binding",
+        "owner_validation"
       ],
       "properties": {
         "schema_version": {"const": "process_trace_geometry_registry.v1"},
@@ -599,7 +631,38 @@
         "coordinate_frame": {"const": "world"},
         "geometry_kind": {"enum": ["line_segment", "polyline", "circle"]},
         "resolved_geometry": {"type": "object"},
-        "upstream_binding": {"$ref": "#/$defs/geometry_upstream_binding"}
+        "upstream_binding": {"$ref": "#/$defs/geometry_upstream_binding"},
+        "owner_validation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "reason"],
+              "properties": {
+                "status": {"const": "fixture_only"},
+                "reason": {"const": "fixture_binding_not_canonical_owner"}
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "source_artifact_ref",
+                "source_content_sha256",
+                "selector",
+                "geometry_sha256"
+              ],
+              "properties": {
+                "status": {"const": "verified"},
+                "source_artifact_ref": {"type": "string", "minLength": 1},
+                "source_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "selector": {"type": "object", "minProperties": 1},
+                "geometry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              }
+            }
+          ]
+        }
       }
     },
     "circle_geometry": {
@@ -1038,6 +1101,55 @@
                 "entry_id": {"type": ["string", "null"]},
                 "entry_sha256": {"type": ["string", "null"]}
               }
+            }
+          }
+        }
+      ]
+    },
+    "analysis_pair_input": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "not_supplied"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "content_sha256", "content_contract"],
+          "properties": {
+            "status": {"const": "supplied"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "content_contract": {"type": "object"}
+          }
+        }
+      ]
+    },
+    "analysis_report_input": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "not_supplied"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "content_sha256",
+            "content_contract",
+            "expected_input_checksum"
+          ],
+          "properties": {
+            "status": {"const": "supplied"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "content_contract": {"type": "object"},
+            "expected_input_checksum": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9a-f]{64}$"
             }
           }
         }

@@ -22,12 +22,13 @@ from typing import Any
 
 import yaml
 
+from robot_sf.evidence.writers import write_json
+
 SCHEMA_VERSION = "issue-5273-s20-launch-packet.v1"
 ISSUE = 5273
 PARENT_ISSUE = 5273
 DEFAULT_SOURCE_DIRECTORY = (
-    "configs/benchmarks/splits/"
-    "paper_experiment_matrix_v1_scenario_horizons_h500_s20"
+    "configs/benchmarks/splits/paper_experiment_matrix_v1_scenario_horizons_h500_s20"
 )
 DEFAULT_MANIFEST = f"{DEFAULT_SOURCE_DIRECTORY}/split_manifest.json"
 DEFAULT_OUTPUT = "docs/context/evidence/issue_5273_s20_launch_packet.json"
@@ -213,10 +214,18 @@ def _inventory_children(  # noqa: C901, PLR0912, PLR0915
     source_ref = manifest.get("source_config")
     source_digest = manifest.get("source_sha256")
     if not isinstance(source_ref, str) or not source_ref:
-        _append_blocker(blockers, _blocker("source_config_missing", "manifest source_config is missing"))
+        _append_blocker(
+            blockers, _blocker("source_config_missing", "manifest source_config is missing")
+        )
     if not isinstance(source_digest, str) or not _SHA256.fullmatch(source_digest):
-        _append_blocker(blockers, _blocker("source_hash_missing", "manifest source_sha256 is invalid"))
-    if isinstance(source_ref, str) and isinstance(source_digest, str) and _SHA256.fullmatch(source_digest):
+        _append_blocker(
+            blockers, _blocker("source_hash_missing", "manifest source_sha256 is invalid")
+        )
+    if (
+        isinstance(source_ref, str)
+        and isinstance(source_digest, str)
+        and _SHA256.fullmatch(source_digest)
+    ):
         try:
             source_path = _resolve_relative(repo_root, source_ref, field="source_config")
             observed = _sha256(source_path)
@@ -233,14 +242,18 @@ def _inventory_children(  # noqa: C901, PLR0912, PLR0915
 
     children = manifest.get("children")
     if not isinstance(children, list) or not children:
-        _append_blocker(blockers, _blocker("children_missing", "manifest children must be non-empty"))
+        _append_blocker(
+            blockers, _blocker("children_missing", "manifest children must be non-empty")
+        )
         return manifest, [], blockers
 
     manifest_dir = manifest_path.resolve().parent
     declared_names: list[str] = []
     for index, child in enumerate(children):
         if not isinstance(child, dict):
-            _append_blocker(blockers, _blocker("child_invalid", f"children[{index}] is not an object"))
+            _append_blocker(
+                blockers, _blocker("child_invalid", f"children[{index}] is not an object")
+            )
             continue
         filename = child.get("filename")
         if isinstance(filename, str):
@@ -266,30 +279,42 @@ def _inventory_children(  # noqa: C901, PLR0912, PLR0915
         filename = child.get("filename")
         digest = child.get("sha256")
         planners = child.get("planner_keys")
-        if not isinstance(filename, str) or Path(filename).name != filename or not filename.endswith(
-            ".yaml"
+        if (
+            not isinstance(filename, str)
+            or Path(filename).name != filename
+            or not filename.endswith(".yaml")
         ):
             _append_blocker(
                 blockers,
-                _blocker("child_path_invalid", f"children[{index}].filename is not a safe YAML name"),
+                _blocker(
+                    "child_path_invalid", f"children[{index}].filename is not a safe YAML name"
+                ),
             )
             continue
         if filename in seen_filenames:
-            _append_blocker(blockers, _blocker("duplicate_child", f"duplicate child filename: {filename}"))
+            _append_blocker(
+                blockers, _blocker("duplicate_child", f"duplicate child filename: {filename}")
+            )
             continue
         seen_filenames.add(filename)
         if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
-            _append_blocker(blockers, _blocker("child_hash_missing", f"invalid SHA-256 for {filename}"))
+            _append_blocker(
+                blockers, _blocker("child_hash_missing", f"invalid SHA-256 for {filename}")
+            )
             continue
         if not isinstance(planners, list) or len(planners) != 1 or not isinstance(planners[0], str):
             _append_blocker(
                 blockers,
-                _blocker("arm_identity_invalid", f"{filename} must declare exactly one planner key"),
+                _blocker(
+                    "arm_identity_invalid", f"{filename} must declare exactly one planner key"
+                ),
             )
             continue
         planner_key = planners[0]
         if planner_key in seen_planners:
-            _append_blocker(blockers, _blocker("duplicate_arm_identity", planner_key, arm=planner_key))
+            _append_blocker(
+                blockers, _blocker("duplicate_arm_identity", planner_key, arm=planner_key)
+            )
             continue
         seen_planners.add(planner_key)
 
@@ -310,11 +335,15 @@ def _inventory_children(  # noqa: C901, PLR0912, PLR0915
                 ),
             )
         planner_entries = config_payload.get("planners")
-        config_planner_keys = [
-            entry.get("key")
-            for entry in planner_entries
-            if isinstance(entry, dict) and isinstance(entry.get("key"), str)
-        ] if isinstance(planner_entries, list) else []
+        config_planner_keys = (
+            [
+                entry.get("key")
+                for entry in planner_entries
+                if isinstance(entry, dict) and isinstance(entry.get("key"), str)
+            ]
+            if isinstance(planner_entries, list)
+            else []
+        )
         if config_planner_keys != [planner_key]:
             _append_blocker(
                 blockers,
@@ -337,7 +366,11 @@ def _inventory_children(  # noqa: C901, PLR0912, PLR0915
         ):
             _append_blocker(
                 blockers,
-                _blocker("config_provenance_invalid", f"{filename}: split_provenance drift", arm=planner_key),
+                _blocker(
+                    "config_provenance_invalid",
+                    f"{filename}: split_provenance drift",
+                    arm=planner_key,
+                ),
             )
         validated.append(
             {
@@ -420,49 +453,144 @@ def _expected_identity_block(  # noqa: C901, PLR0912
     validate = preflight.get("validate_config")
     preview = preflight.get("preview_scenarios")
     matrix = preflight.get("matrix_summary")
-    if not isinstance(validate, dict) or not isinstance(preview, dict) or not isinstance(matrix, dict):
-        _append_blocker(blockers, _blocker("preflight_artifact_invalid", "canonical preflight artifacts are incomplete", arm=planner_key))
+    if (
+        not isinstance(validate, dict)
+        or not isinstance(preview, dict)
+        or not isinstance(matrix, dict)
+    ):
+        _append_blocker(
+            blockers,
+            _blocker(
+                "preflight_artifact_invalid",
+                "canonical preflight artifacts are incomplete",
+                arm=planner_key,
+            ),
+        )
         return None, blockers
     if validate.get("config_sha256") != child["config_sha256"]:
-        _append_blocker(blockers, _blocker("config_drift", "preflight config hash differs from manifest", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "config_drift", "preflight config hash differs from manifest", arm=planner_key
+            ),
+        )
     if preview.get("truncated") is not False:
-        _append_blocker(blockers, _blocker("scenario_preview_truncated", "canonical preview does not enumerate every scenario", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "scenario_preview_truncated",
+                "canonical preview does not enumerate every scenario",
+                arm=planner_key,
+            ),
+        )
     resolved_scenarios = validate.get("scenario_candidates", {}).get("resolved")
     scenarios = preview.get("scenarios")
-    if not isinstance(resolved_scenarios, list) or not all(isinstance(item, str) and item for item in resolved_scenarios):
-        _append_blocker(blockers, _blocker("scenario_identity_missing", "preflight has no resolved scenario identity list", arm=planner_key))
+    if not isinstance(resolved_scenarios, list) or not all(
+        isinstance(item, str) and item for item in resolved_scenarios
+    ):
+        _append_blocker(
+            blockers,
+            _blocker(
+                "scenario_identity_missing",
+                "preflight has no resolved scenario identity list",
+                arm=planner_key,
+            ),
+        )
         resolved_scenarios = []
-    preview_names = [
-        item.get("name")
-        for item in scenarios
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    ] if isinstance(scenarios, list) else []
+    preview_names = (
+        [
+            item.get("name")
+            for item in scenarios
+            if isinstance(item, dict) and isinstance(item.get("name"), str)
+        ]
+        if isinstance(scenarios, list)
+        else []
+    )
     if preview_names != resolved_scenarios:
-        _append_blocker(blockers, _blocker("scenario_identity_drift", "preview scenario identities differ from validation", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "scenario_identity_drift",
+                "preview scenario identities differ from validation",
+                arm=planner_key,
+            ),
+        )
     if len(set(resolved_scenarios)) != len(resolved_scenarios):
-        _append_blocker(blockers, _blocker("duplicate_row_identity", "preflight contains duplicate scenario identities", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "duplicate_row_identity",
+                "preflight contains duplicate scenario identities",
+                arm=planner_key,
+            ),
+        )
     seed_policy = validate.get("seed_policy")
     seeds = seed_policy.get("resolved_seeds") if isinstance(seed_policy, dict) else None
     if not isinstance(seeds, list) or not seeds or not all(isinstance(seed, int) for seed in seeds):
-        _append_blocker(blockers, _blocker("seed_identity_missing", "preflight has no resolved integer seed set", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "seed_identity_missing",
+                "preflight has no resolved integer seed set",
+                arm=planner_key,
+            ),
+        )
         seeds = []
     if len(set(seeds)) != len(seeds):
-        _append_blocker(blockers, _blocker("duplicate_row_identity", "preflight contains duplicate seeds", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "duplicate_row_identity", "preflight contains duplicate seeds", arm=planner_key
+            ),
+        )
     rows = matrix.get("rows")
     if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
-        _append_blocker(blockers, _blocker("matrix_identity_missing", "preflight matrix must contain one arm row", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "matrix_identity_missing",
+                "preflight matrix must contain one arm row",
+                arm=planner_key,
+            ),
+        )
         row: dict[str, Any] = {}
     else:
         row = rows[0]
         if row.get("planner_key") != planner_key:
-            _append_blocker(blockers, _blocker("matrix_planner_mismatch", "matrix planner identity differs from manifest", arm=planner_key))
+            _append_blocker(
+                blockers,
+                _blocker(
+                    "matrix_planner_mismatch",
+                    "matrix planner identity differs from manifest",
+                    arm=planner_key,
+                ),
+            )
         if row.get("resolved_seeds") != seeds or row.get("repeats") != len(seeds):
-            _append_blocker(blockers, _blocker("matrix_seed_mismatch", "matrix seed identity differs from validation", arm=planner_key))
+            _append_blocker(
+                blockers,
+                _blocker(
+                    "matrix_seed_mismatch",
+                    "matrix seed identity differs from validation",
+                    arm=planner_key,
+                ),
+            )
         if row.get("scenario_count") != len(resolved_scenarios):
-            _append_blocker(blockers, _blocker("matrix_scenario_count_mismatch", "matrix scenario count differs from validation", arm=planner_key))
+            _append_blocker(
+                blockers,
+                _blocker(
+                    "matrix_scenario_count_mismatch",
+                    "matrix scenario count differs from validation",
+                    arm=planner_key,
+                ),
+            )
     kinematics = row.get("kinematics")
     if not isinstance(kinematics, str) or not kinematics:
-        _append_blocker(blockers, _blocker("kinematics_identity_missing", "matrix has no kinematics identity", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "kinematics_identity_missing", "matrix has no kinematics identity", arm=planner_key
+            ),
+        )
         kinematics = ""
     identities = [
         {
@@ -474,7 +602,14 @@ def _expected_identity_block(  # noqa: C901, PLR0912
         for scenario_id in resolved_scenarios
         for seed in seeds
     ]
-    identities.sort(key=lambda item: (item["planner_key"], item["scenario_id"], item["seed"], item["kinematics"]))
+    identities.sort(
+        key=lambda item: (
+            item["planner_key"],
+            item["scenario_id"],
+            item["seed"],
+            item["kinematics"],
+        )
+    )
     if blockers:
         return None, blockers
     scenario_matrix = validate.get("scenario_matrix")
@@ -507,7 +642,12 @@ def _build_arm(
     config_path = repo_root / child["config_path"]
     blockers: list[dict[str, str]] = []
     if child["observed_sha256"] != child["config_sha256"]:
-        _append_blocker(blockers, _blocker("child_hash_mismatch", "config bytes do not match manifest hash", arm=planner_key))
+        _append_blocker(
+            blockers,
+            _blocker(
+                "child_hash_mismatch", "config bytes do not match manifest hash", arm=planner_key
+            ),
+        )
     if child["fallback_settings"]:
         _append_blocker(
             blockers,
@@ -580,9 +720,13 @@ def build_packet(
         if isinstance(arm.get("expected_row_identity"), dict)
         for identity in arm["expected_row_identity"].get("row_identities", [])
     ]
-    identity_keys = [json.dumps(identity, sort_keys=True, separators=(",", ":")) for identity in identities]
+    identity_keys = [
+        json.dumps(identity, sort_keys=True, separators=(",", ":")) for identity in identities
+    ]
     if len(set(identity_keys)) != len(identity_keys):
-        _append_blocker(blockers, _blocker("duplicate_row_identity", "duplicate row identity across arms"))
+        _append_blocker(
+            blockers, _blocker("duplicate_row_identity", "duplicate row identity across arms")
+        )
     for arm in arms:
         identity = arm.get("expected_row_identity")
         if isinstance(identity, dict):
@@ -596,11 +740,24 @@ def build_packet(
         for arm in arms
         if isinstance(arm.get("expected_row_identity"), dict)
     ]
-    consistency_fields = ("scenario_matrix", "seed_set", "scenario_count", "scenario_ids", "resolved_seeds", "kinematics", "scenario_horizons", "horizon")
+    consistency_fields = (
+        "scenario_matrix",
+        "seed_set",
+        "scenario_count",
+        "scenario_ids",
+        "resolved_seeds",
+        "kinematics",
+        "scenario_horizons",
+        "horizon",
+    )
     for field in consistency_fields:
-        values = {json.dumps(block.get(field), sort_keys=True) for block in successful_identity_blocks}
+        values = {
+            json.dumps(block.get(field), sort_keys=True) for block in successful_identity_blocks
+        }
         if len(values) > 1:
-            _append_blocker(blockers, _blocker("config_drift", f"preflight arms disagree on {field}"))
+            _append_blocker(
+                blockers, _blocker("config_drift", f"preflight arms disagree on {field}")
+            )
     first_identity = successful_identity_blocks[0] if successful_identity_blocks else {}
     packet_status = "blocked" if blockers else "prepared_not_submitted"
     expected_row_count = sum(
@@ -653,7 +810,9 @@ def _assert_fail_closed(packet: dict[str, Any]) -> None:
         raise ValueError("launch packet must never claim production execution")
     identities: list[str] = []
     for arm in packet.get("arms", []):
-        if arm.get("fallback_settings") and arm.get("aggregation", {}).get("native_aggregation_eligible"):
+        if arm.get("fallback_settings") and arm.get("aggregation", {}).get(
+            "native_aggregation_eligible"
+        ):
             raise ValueError("fallback-enabled arm cannot be native-aggregate eligible")
         identity = arm.get("expected_row_identity")
         if isinstance(identity, dict):
@@ -665,16 +824,14 @@ def _assert_fail_closed(packet: dict[str, Any]) -> None:
         raise ValueError("duplicate row identities cannot be emitted")
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    """Write stable, reviewable JSON evidence."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=None, help=f"Split manifest (default: {DEFAULT_MANIFEST})")
-    parser.add_argument("--output", type=Path, default=None, help=f"Packet output (default: {DEFAULT_OUTPUT})")
+    parser.add_argument(
+        "--manifest", type=Path, default=None, help=f"Split manifest (default: {DEFAULT_MANIFEST})"
+    )
+    parser.add_argument(
+        "--output", type=Path, default=None, help=f"Packet output (default: {DEFAULT_OUTPUT})"
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -694,7 +851,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not output.is_absolute():
         output = root / output
     packet = build_packet(root, manifest)
-    _write_json(output, packet)
+    write_json(output, packet, catalog_area="benchmark_evidence")
     print(
         json.dumps(
             {

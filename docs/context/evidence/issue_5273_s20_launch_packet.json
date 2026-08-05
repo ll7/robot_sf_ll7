@@ -991,7 +991,7 @@
   ],
   "parent_issue": 5273,
   "production_execution_performed": false,
-  "repository_commit": "223a8a408fa179264769c9063ac337f418a0cda8",
+  "repository_commit": "4564127b2396ddbb9eefc5dd833dfc1e219cd5ec",
   "resolved_seeds": [
     111,
     112,
@@ -1014,6 +1014,7 @@
     129,
     130
   ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "scenario_count": 48,
   "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
   "schema_version": "issue-5273-s20-launch-packet.v1",

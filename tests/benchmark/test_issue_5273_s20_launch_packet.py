@@ -17,7 +17,10 @@ def _sha256(path: Path) -> str:
 
 
 def _write_fixture(
-    tmp_path: Path, *, planner_keys: tuple[str, ...] = ("goal", "social_force"), fallback: bool = False
+    tmp_path: Path,
+    *,
+    planner_keys: tuple[str, ...] = ("goal", "social_force"),
+    fallback: bool = False,
 ) -> Path:
     source = tmp_path / "source.yaml"
     source.write_text("name: source\n", encoding="utf-8")

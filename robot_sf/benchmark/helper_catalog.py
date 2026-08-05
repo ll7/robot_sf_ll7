@@ -46,7 +46,7 @@ def prepare_classic_env(
         logger.info("Classic environment prepared successfully")
         return env, seeds
 
-    except Exception as e:
+    except Exception as e:  # wrapper contract: any setup failure becomes a RuntimeError (#6690)
         logger.error(f"Failed to prepare classic environment: {e}")
         raise RuntimeError(f"Environment preparation failed: {e}") from e
 
@@ -163,6 +163,6 @@ def run_episodes_with_recording(
         logger.info(f"Completed {len(results)} episodes")
         return results
 
-    except Exception as e:
+    except Exception as e:  # wrapper contract: any episode failure becomes RuntimeError (#6690)
         logger.error(f"Episode execution failed: {e}")
         raise RuntimeError(f"Failed to run episodes: {e}") from e

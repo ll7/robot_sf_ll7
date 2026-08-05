@@ -1098,7 +1098,7 @@ def validate_selection_manifest(manifest: dict[str, Any]) -> None:
             raise PortfolioSelectionError(f"Schema validation failed: {formatted}")
     except PortfolioSelectionError:
         raise
-    except Exception as exc:
+    except Exception as exc:  # jsonschema failures wrap into the documented error (#6690)
         raise PortfolioSelectionError(f"Validation error: {exc}") from exc
 
 

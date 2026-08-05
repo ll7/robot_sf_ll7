@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 
 def _load_json(path: Path) -> dict[str, Any] | None:
     """Load a JSON file, returning ``None`` when absent."""
@@ -585,8 +587,8 @@ def generate_matrix(
     output_dir.mkdir(parents=True, exist_ok=True)
     md_path = output_dir / "mixed_scenario_matrix.md"
     json_path = output_dir / "summary.json"
-    md_path.write_text(md, encoding="utf-8")
-    json_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    write_text(md_path, md, issue_ref="robot_sf#2766")
+    write_json(json_path, summary)
     return md_path, json_path
 
 

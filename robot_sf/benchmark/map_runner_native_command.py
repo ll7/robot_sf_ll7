@@ -684,9 +684,13 @@ class NativeCommandPlanner:
         """
         if self._process is None or self._process.poll() is not None:
             self._start_process()
-        assert self._process is not None
-        assert self._process.stdin is not None
-        assert self._process.stdout is not None
+        # Internal subprocess invariants established by _start_process().
+        if self._process is None:  # pragma: no cover
+            raise RuntimeError("native-command process did not start")  # pragma: no cover
+        if self._process.stdin is None:  # pragma: no cover
+            raise RuntimeError("native-command process has no stdin pipe")  # pragma: no cover
+        if self._process.stdout is None:  # pragma: no cover
+            raise RuntimeError("native-command process has no stdout pipe")  # pragma: no cover
         try:
             self._process.stdin.write((request + "\n").encode("utf-8"))
             self._process.stdin.flush()
@@ -726,8 +730,11 @@ class NativeCommandPlanner:
         Returns:
             Decoded response text without the line terminator.
         """
-        assert self._process is not None
-        assert self._process.stdout is not None
+        # Only the persistent-process path calls this helper.
+        if self._process is None:  # pragma: no cover
+            raise RuntimeError("native-command process is unavailable")  # pragma: no cover
+        if self._process.stdout is None:  # pragma: no cover
+            raise RuntimeError("native-command process has no stdout pipe")  # pragma: no cover
         deadline = time.monotonic() + self._spec.step_timeout_sec
         with selectors.DefaultSelector() as selector:
             selector.register(self._process.stdout, selectors.EVENT_READ)

@@ -300,9 +300,14 @@ def recompute_snqi_weights(
 
     # Get git SHA for provenance. NOTE: ``capture_output=True`` is equivalent to
     # ``stdout=PIPE, stderr=PIPE``, so also passing ``stderr=DEVNULL`` is an
-    # invalid combination that always raises ``ValueError`` (swallowed by the
-    # handler below) -- which silently degraded ``git_sha`` to ``"unknown"`` for
-    # every recorded weight config (issue #4895). Do not reintroduce it.
+    # invalid combination that always raises ``ValueError`` (the old broad
+    # handler swallowed it) -- which silently degraded ``git_sha`` to
+    # ``"unknown"`` for every recorded weight config (issue #4895). Do not
+    # reintroduce it. The handler is narrowed to ``OSError`` (missing git
+    # binary / spawn failure, the only realistic runtime failure with
+    # ``check=False`` and no timeout): a ``ValueError`` from invalid run()
+    # arguments is a programmer error and must propagate instead of silently
+    # degrading provenance (#6690).
     try:
         result = run(
             ["git", "rev-parse", "HEAD"],
@@ -311,7 +316,7 @@ def recompute_snqi_weights(
             check=False,
         )
         git_sha = result.stdout.strip()[:8] if result.returncode == 0 else "unknown"
-    except Exception:
+    except OSError:
         git_sha = "unknown"
 
     # Compute hash of baseline stats for reproducibility

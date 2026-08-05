@@ -413,3 +413,36 @@ def test_runner_rows_share_seed_and_scenario(tmp_path):
     assert {row["scenario_id"] for row in report["rows"]} == {fixture["scenario_id"]}
     # The verdict is one of the three allowed branches.
     assert report["verdict"]["decision"] in {"continue", "revise", "stop"}
+
+
+def test_git_head_realistic_failures_keep_empty_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing git binary or a timeout still degrades provenance to '' (#6690)."""
+    module = _load_runner()
+
+    def _spawn_failure(*args: object, **kwargs: object) -> str:
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(module.subprocess, "run", _spawn_failure)
+    assert module._git_head() == ""
+
+    def _timeout(*args: object, **kwargs: object) -> str:
+        raise module.subprocess.TimeoutExpired(cmd="git", timeout=5)
+
+    monkeypatch.setattr(module.subprocess, "run", _timeout)
+    assert module._git_head() == ""
+
+
+def test_git_head_programmer_error_is_not_swallowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ValueError is outside the narrowed spawn/timeout boundary and must surface (#6690)."""
+    module = _load_runner()
+
+    def _programmer_error(*args: object, **kwargs: object) -> str:
+        raise ValueError("invalid subprocess arguments")
+
+    monkeypatch.setattr(module.subprocess, "run", _programmer_error)
+    with pytest.raises(ValueError, match="invalid subprocess arguments"):
+        module._git_head()

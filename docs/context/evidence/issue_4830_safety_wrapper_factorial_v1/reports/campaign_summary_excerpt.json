@@ -1,0 +1,30 @@
+{
+  "schema_version": "robot_sf.issue_4830_campaign_summary_excerpt.v1",
+  "campaign_id": "issue4830_safety_wrapper_factorial_v1",
+  "job_id": "13775",
+  "private_campaign": "2026-07-issue4830-safety-wrapper-factorial-v1",
+  "source_location": "private_ops:job-13775",
+  "producing_commit": "8b5ce0b1ca5b7845ae05b0fdc07761079c75d380",
+  "config_path": "configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml",
+  "config_sha256": "a507d55282eaf95b8d67c8e2a0764786db9eddc30905531fb5b14da913a97be4",
+  "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "scenario_matrix_hash": "c10df617a87c",
+  "seeds": [
+    111,
+    112,
+    113
+  ],
+  "arms": 6,
+  "episodes": 864,
+  "episodes_per_arm": 144,
+  "unique_pairing_keys": 432,
+  "campaign_execution_status": "completed",
+  "evidence_status": "valid",
+  "integrity_status": "valid",
+  "post_campaign_stage_status": "completed",
+  "benchmark_success": true,
+  "successful_runs": 6,
+  "unexpected_failed_runs": 0,
+  "fallback_or_degraded_rows": 0,
+  "claim_boundary": "This excerpt records the completed diagnostic campaign surface. It is not a safety certification, dissertation evidence admission, or paired factorial result."
+}

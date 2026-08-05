@@ -1,0 +1,24 @@
+# Frozen single-scenario template for the issue #5303 diagnostic-only handoff.
+#
+# This is deliberately a one-scenario projection of
+# configs/scenarios/archetypes/classic_group_crossing.yaml.  The generic adversarial
+# bundle writer materializes the first template scenario, so pointing it at the
+# three-row archetype file would silently run the ``low`` row instead of the frozen
+# held-out ``medium`` family member.
+scenarios:
+  - name: classic_group_crossing_medium
+    map_id: classic_group_crossing
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.08
+      groups: 0.5
+    robot_config: {}
+    metadata:
+      archetype: group_crossing
+      density: medium
+      flow: bi
+      groups: 0.5
+      issue_5303_source:
+        family_config: configs/scenarios/archetypes/classic_group_crossing.yaml
+        scenario_name: classic_group_crossing_medium
+    seeds: [171, 172, 173]

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/comparability_matrix.json",
+  "artifact_sha256": "f5786b65f3973ea2b781c7e0ff485f8e0e388b4940738c6c37748d291d1b769d",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

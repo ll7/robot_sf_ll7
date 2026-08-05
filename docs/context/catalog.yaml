@@ -176,6 +176,10 @@ entries:
   status: current
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/issue_6700_mpc_tuning_campaign_compute_blocker.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/README.md
   status: evidence
   freshness: dated
@@ -4716,6 +4720,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/issue_6095_s10_discriminability_calibration.md
+  status: proposal
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
   status: evidence
   freshness: evidence
@@ -4780,6 +4792,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5303_search_promotion_preregistration
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6474_social_compliance_preregistration.json
   status: evidence
   freshness: evidence
@@ -4788,7 +4804,19 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6676_risk_aware_trajectory_ranker_smoke
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6412_real_reexport_package
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4830_safety_wrapper_factorial_v1
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6592_retrospective_precision
   status: evidence
   freshness: evidence
   area: benchmark_evidence

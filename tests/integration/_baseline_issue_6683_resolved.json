@@ -1,0 +1,555 @@
+{
+  "field_removed": "evaluation.frequency_episodes",
+  "issue": 6683,
+  "matrix_overrides": {
+    "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml": {
+      "base_config": "configs/training/ppo/feature_extractor_sweep_base.yaml",
+      "eval_episodes": 5,
+      "eval_every": 48000,
+      "metric": "eval_episode_return",
+      "total_timesteps": 12000000
+    }
+  },
+  "pre_change_frequency_episodes": {
+    "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml": 0,
+    "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml": 0,
+    "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml": 10,
+    "configs/training/ppo/feature_extractor_sweep_base.yaml": 10,
+    "configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml": 0,
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml": 0,
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml": 0,
+    "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml": 0,
+    "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml": 0
+  },
+  "schema_version": "resolved-config-mapping.v1",
+  "source_revision": "95e9b14f0d224d54531a80f51769953f4bb02c76",
+  "variants": {
+    "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml": {
+      "best_checkpoint_metric": "success_rate",
+      "convergence": {
+        "collision_rate": 0.05,
+        "plateau_window": 1,
+        "success_rate": 0.9
+      },
+      "density_curriculum": {
+        "advance_rule": "timestep",
+        "enabled": true,
+        "enforce_nondecreasing_density": true,
+        "stages": [
+          {
+            "density_m2": 0.04,
+            "difficulty": 0,
+            "id": "sparse",
+            "max_peds_per_group": 3,
+            "until_timesteps": 32
+          },
+          {
+            "density_m2": 0.08,
+            "difficulty": 0,
+            "id": "medium",
+            "max_peds_per_group": 4,
+            "until_timesteps": 64
+          },
+          {
+            "density_m2": 0.12,
+            "difficulty": 0,
+            "id": "dense",
+            "max_peds_per_group": 5,
+            "until_timesteps": null
+          }
+        ]
+      },
+      "env_overrides": {
+        "observation_mode": "default_gym",
+        "sim_config": {
+          "difficulty": 0,
+          "max_peds_per_group": 3,
+          "ped_density_by_difficulty": [
+            0.04
+          ]
+        }
+      },
+      "evaluation": {
+        "evaluation_episodes": 1,
+        "frequency_episodes": 0,
+        "step_schedule": [
+          {
+            "every_steps": 96,
+            "until_step": 96
+          }
+        ]
+      },
+      "feature_extractor": "mlp",
+      "num_envs": 1,
+      "policy_id": "issue_4018_density_curriculum_smoke",
+      "policy_net_arch": [
+        32,
+        32
+      ],
+      "ppo_hyperparams": {
+        "batch_size": 16,
+        "ent_coef": 0.0,
+        "learning_rate": 0.0003,
+        "n_epochs": 1,
+        "n_steps": 16
+      },
+      "scenario_config": "../../../scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml",
+      "scenario_sampling": {
+        "strategy": "cycle"
+      },
+      "seeds": [
+        4018
+      ],
+      "total_timesteps": 96,
+      "tracking": {
+        "tensorboard": false,
+        "wandb": {
+          "enabled": false,
+          "tags": [
+            "issue-4018",
+            "density-curriculum-smoke"
+          ]
+        }
+      },
+      "worker_mode": "dummy"
+    },
+    "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml": {
+      "best_checkpoint_metric": "success_rate",
+      "convergence": {
+        "collision_rate": 0.05,
+        "plateau_window": 1,
+        "success_rate": 0.9
+      },
+      "density_curriculum": {
+        "enabled": false
+      },
+      "env_overrides": {
+        "observation_mode": "default_gym",
+        "sim_config": {
+          "difficulty": 0,
+          "max_peds_per_group": 3,
+          "ped_density_by_difficulty": [
+            0.04
+          ]
+        }
+      },
+      "evaluation": {
+        "evaluation_episodes": 1,
+        "frequency_episodes": 0,
+        "step_schedule": [
+          {
+            "every_steps": 96,
+            "until_step": 96
+          }
+        ]
+      },
+      "feature_extractor": "mlp",
+      "num_envs": 1,
+      "policy_id": "issue_4018_fixed_density_smoke",
+      "policy_net_arch": [
+        32,
+        32
+      ],
+      "ppo_hyperparams": {
+        "batch_size": 16,
+        "ent_coef": 0.0,
+        "learning_rate": 0.0003,
+        "n_epochs": 1,
+        "n_steps": 16
+      },
+      "scenario_config": "../../../scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml",
+      "scenario_sampling": {
+        "strategy": "cycle"
+      },
+      "seeds": [
+        4018
+      ],
+      "total_timesteps": 96,
+      "tracking": {
+        "tensorboard": false,
+        "wandb": {
+          "enabled": false,
+          "tags": [
+            "issue-4018",
+            "fixed-density-smoke"
+          ]
+        }
+      },
+      "worker_mode": "dummy"
+    },
+    "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml": {
+      "convergence": {
+        "collision_rate": 0.05,
+        "plateau_window": 2000,
+        "success_rate": 0.9
+      },
+      "env_factory_kwargs": {
+        "reward_kwargs": {
+          "weights": {
+            "collision": -5.0,
+            "comfort": -0.4,
+            "living": -0.01,
+            "near_miss": -0.8,
+            "progress": 2.5,
+            "smoothness": -0.15,
+            "terminal_bonus": 2.0,
+            "ttc_risk": -0.6
+          }
+        },
+        "reward_name": "route_completion_v2"
+      },
+      "evaluation": {
+        "evaluation_episodes": 5,
+        "frequency_episodes": 10,
+        "hold_out_scenarios": [],
+        "step_schedule": [
+          {
+            "every_steps": 16000
+          }
+        ]
+      },
+      "feature_extractor": "mlp",
+      "feature_extractor_kwargs": {
+        "drive_hidden_dims": [
+          16,
+          8
+        ],
+        "dropout_rate": 0.1,
+        "ray_hidden_dims": [
+          64,
+          32
+        ]
+      },
+      "num_envs": "auto",
+      "policy_id": "feat_extractor_sweep_base",
+      "policy_net_arch": [
+        64,
+        64
+      ],
+      "scenario_config": "../../scenarios/classic_interactions.yaml",
+      "seeds": [
+        123
+      ],
+      "total_timesteps": 32000,
+      "tracking": {
+        "tensorboard": false,
+        "wandb": {
+          "enabled": false
+        }
+      },
+      "worker_mode": "auto"
+    },
+    "configs/training/ppo/feature_extractor_sweep_base.yaml": {
+      "convergence": {
+        "collision_rate": 0.05,
+        "plateau_window": 2000,
+        "success_rate": 0.9
+      },
+      "env_factory_kwargs": {
+        "reward_kwargs": {
+          "weights": {
+            "collision": -5.0,
+            "comfort": -0.4,
+            "living": -0.01,
+            "near_miss": -0.8,
+            "progress": 2.5,
+            "smoothness": -0.15,
+            "terminal_bonus": 2.0,
+            "ttc_risk": -0.6
+          }
+        },
+        "reward_name": "route_completion_v2"
+      },
+      "evaluation": {
+        "evaluation_episodes": 5,
+        "frequency_episodes": 10,
+        "hold_out_scenarios": [],
+        "step_schedule": [
+          {
+            "every_steps": 16000
+          }
+        ]
+      },
+      "feature_extractor": "mlp",
+      "feature_extractor_kwargs": {
+        "drive_hidden_dims": [
+          16,
+          8
+        ],
+        "dropout_rate": 0.1,
+        "ray_hidden_dims": [
+          64,
+          32
+        ]
+      },
+      "num_envs": "auto",
+      "policy_id": "feat_extractor_sweep_base",
+      "policy_net_arch": [
+        64,
+        64
+      ],
+      "scenario_config": "../../scenarios/classic_interactions.yaml",
+      "seeds": [
+        123
+      ],
+      "total_timesteps": 32000,
+      "tracking": {
+        "tensorboard": false,
+        "wandb": {
+          "enabled": false
+        }
+      },
+      "worker_mode": "auto"
+    },
+    "configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml": {
+      "algorithm": "recurrent_ppo",
+      "convergence": {
+        "collision_rate": 0.1,
+        "plateau_window": 512,
+        "success_rate": 0.8
+      },
+      "env_factory_kwargs": {
+        "reward_name": "route_completion_v2"
+      },
+      "env_overrides": {
+        "observation_mode": "socnav_struct"
+      },
+      "evaluation": {
+        "evaluation_episodes": 3,
+        "frequency_episodes": 0,
+        "randomize_seeds": false,
+        "step_schedule": [
+          {
+            "every_steps": 1024
+          }
+        ]
+      },
+      "policy_id": "ppo_lstm_recurrent_issue_4014_smoke",
+      "randomize_seeds": false,
+      "recurrent_ppo_hyperparams": {
+        "batch_size": 64,
+        "gae_lambda": 0.95,
+        "gamma": 0.99,
+        "learning_rate": 0.0001,
+        "n_epochs": 2,
+        "n_steps": 128,
+        "policy_kwargs": {
+          "enable_critic_lstm": true,
+          "lstm_hidden_size": 128,
+          "n_lstm_layers": 1,
+          "shared_lstm": false
+        }
+      },
+      "scenario_config": "../../scenarios/sets/classic_cross_trap_subset.yaml",
+      "seeds": [
+        4014
+      ],
+      "total_timesteps": 2048
+    },
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml": {
+      "convergence": {
+        "collision_rate": 0.1,
+        "plateau_window": 512,
+        "success_rate": 0.8
+      },
+      "env_factory_kwargs": {
+        "reward_name": "route_completion_v2"
+      },
+      "env_overrides": {
+        "observation_mode": "default"
+      },
+      "evaluation": {
+        "evaluation_episodes": 3,
+        "frequency_episodes": 0,
+        "randomize_seeds": false,
+        "step_schedule": [
+          {
+            "every_steps": 1024
+          }
+        ]
+      },
+      "feature_extractor": "mamba",
+      "feature_extractor_kwargs": {
+        "backend": "torch_ssm_lite",
+        "d_conv": 4,
+        "d_model": 64,
+        "d_state": 16,
+        "drive_hidden_dims": [
+          32,
+          16
+        ],
+        "dropout_rate": 0.0,
+        "expand": 2,
+        "num_layers": 1,
+        "sequence_source": "rays"
+      },
+      "policy_id": "ppo_mamba_issue_4014_smoke",
+      "ppo_hyperparams": {
+        "batch_size": 64,
+        "gae_lambda": 0.95,
+        "gamma": 0.99,
+        "learning_rate": 0.0001,
+        "n_epochs": 2,
+        "n_steps": 128
+      },
+      "randomize_seeds": false,
+      "scenario_config": "../../scenarios/sets/classic_cross_trap_subset.yaml",
+      "seeds": [
+        4014
+      ],
+      "total_timesteps": 2048
+    },
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml": {
+      "convergence": {
+        "collision_rate": 0.1,
+        "plateau_window": 512,
+        "success_rate": 0.8
+      },
+      "env_factory_kwargs": {
+        "reward_name": "route_completion_v2"
+      },
+      "env_overrides": {
+        "observation_mode": "default_gym"
+      },
+      "evaluation": {
+        "evaluation_episodes": 3,
+        "frequency_episodes": 0,
+        "randomize_seeds": false,
+        "step_schedule": [
+          {
+            "every_steps": 1024
+          }
+        ]
+      },
+      "feature_extractor": "mamba",
+      "feature_extractor_kwargs": {
+        "backend": "torch_ssm_lite",
+        "d_conv": 4,
+        "d_model": 64,
+        "d_state": 16,
+        "drive_hidden_dims": [
+          32,
+          16
+        ],
+        "dropout_rate": 0.0,
+        "expand": 2,
+        "num_layers": 1,
+        "sequence_source": "rays"
+      },
+      "num_envs": 1,
+      "policy_id": "ppo_mamba_issue_4014_smoke_matched",
+      "ppo_hyperparams": {
+        "batch_size": 64,
+        "gae_lambda": 0.95,
+        "gamma": 0.99,
+        "learning_rate": 0.0001,
+        "n_epochs": 2,
+        "n_steps": 128
+      },
+      "randomize_seeds": false,
+      "scenario_config": "../../scenarios/sets/classic_cross_trap_subset.yaml",
+      "seeds": [
+        4014
+      ],
+      "total_timesteps": 2048,
+      "tracking": {
+        "tensorboard": false
+      },
+      "worker_mode": "dummy"
+    },
+    "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml": {
+      "convergence": {
+        "collision_rate": 0.1,
+        "plateau_window": 512,
+        "success_rate": 0.8
+      },
+      "env_factory_kwargs": {
+        "reward_name": "route_completion_v2"
+      },
+      "env_overrides": {
+        "observation_mode": "default_gym"
+      },
+      "evaluation": {
+        "evaluation_episodes": 3,
+        "frequency_episodes": 0,
+        "randomize_seeds": false,
+        "step_schedule": [
+          {
+            "every_steps": 1024
+          }
+        ]
+      },
+      "num_envs": 1,
+      "policy_id": "ppo_issue_4014_smoke_matched",
+      "ppo_hyperparams": {
+        "batch_size": 64,
+        "gae_lambda": 0.95,
+        "gamma": 0.99,
+        "learning_rate": 0.0001,
+        "n_epochs": 2,
+        "n_steps": 128
+      },
+      "randomize_seeds": false,
+      "scenario_config": "../../scenarios/sets/classic_cross_trap_subset.yaml",
+      "seeds": [
+        4014
+      ],
+      "total_timesteps": 2048,
+      "tracking": {
+        "tensorboard": false
+      },
+      "worker_mode": "dummy"
+    },
+    "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml": {
+      "algorithm": "recurrent_ppo",
+      "convergence": {
+        "collision_rate": 0.1,
+        "plateau_window": 512,
+        "success_rate": 0.8
+      },
+      "env_factory_kwargs": {
+        "reward_name": "route_completion_v2"
+      },
+      "env_overrides": {
+        "observation_mode": "default_gym"
+      },
+      "evaluation": {
+        "evaluation_episodes": 3,
+        "frequency_episodes": 0,
+        "randomize_seeds": false,
+        "step_schedule": [
+          {
+            "every_steps": 1024
+          }
+        ]
+      },
+      "num_envs": 1,
+      "policy_id": "recurrent_ppo_lstm_issue_4014_smoke_matched",
+      "randomize_seeds": false,
+      "recurrent_policy": "MultiInputLstmPolicy",
+      "recurrent_ppo_hyperparams": {
+        "batch_size": 64,
+        "gae_lambda": 0.95,
+        "gamma": 0.99,
+        "learning_rate": 0.0001,
+        "n_epochs": 2,
+        "n_steps": 128,
+        "policy_kwargs": {
+          "enable_critic_lstm": true,
+          "lstm_hidden_size": 128,
+          "n_lstm_layers": 1,
+          "shared_lstm": false
+        }
+      },
+      "scenario_config": "../../scenarios/sets/classic_cross_trap_subset.yaml",
+      "seeds": [
+        4014
+      ],
+      "total_timesteps": 2048,
+      "tracking": {
+        "tensorboard": false
+      },
+      "worker_mode": "dummy"
+    }
+  }
+}

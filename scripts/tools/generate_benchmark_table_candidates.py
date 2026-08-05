@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 
 def _load_json(path: Path) -> dict[str, Any] | None:
     """Load a JSON mapping, returning ``None`` when the source is absent."""
@@ -321,7 +323,8 @@ def generate_table_candidates(
     output_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = output_dir / "table_candidates.md"
     summary_path = output_dir / "summary.json"
-    markdown_path.write_text(
+    write_text(
+        markdown_path,
         build_markdown(
             ledger=ledger,
             claim_map=claim_map,
@@ -329,12 +332,9 @@ def generate_table_candidates(
             observation_noise_summary=observation_noise_summary,
             generated_at=generated_at,
         ),
-        encoding="utf-8",
+        issue_ref="robot_sf#2767",
     )
-    summary_path.write_text(
-        json.dumps(build_summary(generated_at=generated_at, sources=sources), indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_json(summary_path, build_summary(generated_at=generated_at, sources=sources))
     return markdown_path, summary_path
 
 

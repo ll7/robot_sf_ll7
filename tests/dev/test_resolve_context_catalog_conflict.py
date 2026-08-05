@@ -1,5 +1,8 @@
 """Tests for the generated-file conflict resolver (issue #6781)."""
 
+# evidence-writer-exempt: these tests write only to pytest tmp_path fixtures
+# (synthetic conflicts), never to generated evidence paths.
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

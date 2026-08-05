@@ -745,7 +745,8 @@ def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
         Normalized time to goal (0.0-1.0), or 1.0 if not successful.
     """
     if success_rate(data, horizon=horizon) == 1.0:
-        assert data.reached_goal_step is not None
+        if data.reached_goal_step is None:
+            raise RuntimeError("successful episode has no recorded goal step")
         return float(data.reached_goal_step) / float(horizon)
     return 1.0
 
@@ -758,7 +759,8 @@ def time_to_goal_norm_success_only(data: EpisodeData, horizon: int) -> float:
     """
     if success_rate(data, horizon=horizon) != 1.0:
         return float("nan")
-    assert data.reached_goal_step is not None
+    if data.reached_goal_step is None:
+        raise RuntimeError("successful episode has no recorded goal step")
     return float(data.reached_goal_step) / float(horizon)
 
 

@@ -318,6 +318,9 @@ class TestMainCLI:
         assert (out / "gate_report.md").exists()
         report = json.loads((out / "gate_report.json").read_text(encoding="utf-8"))
         assert report["recommendation"] == "revise"
+        assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+        md_first_line = (out / "gate_report.md").read_text(encoding="utf-8").splitlines()[0]
+        assert md_first_line == "<!-- AI-GENERATED (robot_sf#2843) - NEEDS-REVIEW -->"
 
     def test_writes_markdown_with_missing_metric(self, tmp_path: Path):
         """Missing optional metric values render as NA instead of failing."""

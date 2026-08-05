@@ -38,6 +38,10 @@ the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
+Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
+preflight configuration and its explicit no-result boundary:
+[issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).
+
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
 or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).
@@ -51,6 +55,11 @@ Issue #5792 one-command demo reproducibility and CPU UX smoke record:
 Issue #5579 MPC tuning-budget archaeology and completed bounded sensitivity diagnostic (two
 prediction-MPC arms, 20-point shared grid, fixed paired slice, and blocked fail-closed read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
+
+Issue #6700 SLURM compute run for the preregistered two-phase matched-budget MPC tuning-sensitivity
+campaign — blocked on this lane (not authorized to submit, no SLURM tooling, two-phase packet
+refreeze and passed native canary not yet on main); blocker and enabling gate:
+[issue_6700_mpc_tuning_campaign_compute_blocker.md](issue_6700_mpc_tuning_campaign_compute_blocker.md).
 
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7
 scenario discovery research program:

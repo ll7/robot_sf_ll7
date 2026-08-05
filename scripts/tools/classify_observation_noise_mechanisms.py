@@ -27,6 +27,7 @@ from robot_sf.benchmark.observation_noise_mechanism_classifier import (
     MECHANISM_LABELS,
     classify_all_conditions,
 )
+from robot_sf.evidence.writers import write_json, write_text
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE = (
@@ -272,13 +273,11 @@ def main() -> None:
     report = _build_mechanism_report(classified, fixture_meta, repro)
 
     json_path = output_dir / "mechanism_report.json"
-    with open(json_path, "w", encoding="utf-8") as fh:
-        json.dump(report, fh, indent=2)
+    write_json(json_path, report)
 
     md_content = _generate_markdown(classified, fixture_meta, repro)
     md_path = output_dir / "README.md"
-    with open(md_path, "w", encoding="utf-8") as fh:
-        fh.write(md_content)
+    write_text(md_path, md_content, issue_ref="robot_sf#2782")
 
     print(f"Wrote {json_path}")
     print(f"Wrote {md_path}")

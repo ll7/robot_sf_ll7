@@ -915,7 +915,8 @@ class OccupancyGrid:
 
         num_peds = pedestrians[0].shape[0] if isinstance(pedestrians, tuple) else len(pedestrians)
         logger.debug(
-            "Generating grid: shape={}, obstacles={}, pedestrians={}, ego_frame={}, origin=({:.2f}, {:.2f})",
+            "Generating grid: shape={}, obstacles={}, pedestrians={}, "
+            "ego_frame={}, origin=({:.2f}, {:.2f})",
             shape,
             len(obstacles),
             num_peds,

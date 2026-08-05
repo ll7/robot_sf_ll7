@@ -13,6 +13,7 @@ Usage::
         --output-dir docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15
 """
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse

@@ -45,6 +45,7 @@ stability. The preflight artifact states prominently:
 ``NOT BENCHMARK EVIDENCE -- DISJOINT-SEED ACTIVATION CHECK ONLY``.
 """
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse

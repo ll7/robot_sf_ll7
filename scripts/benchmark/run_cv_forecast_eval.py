@@ -13,6 +13,7 @@ Usage::
 This is diagnostic-only evidence, not paper-facing benchmark proof.
 """
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse

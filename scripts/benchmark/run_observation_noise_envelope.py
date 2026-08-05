@@ -11,6 +11,7 @@ Usage::
         --output-dir docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13
 """
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse

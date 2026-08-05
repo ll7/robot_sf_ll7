@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run or fail-close the issue #2777 live observation-perturbation replay batch."""
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse

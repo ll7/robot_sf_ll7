@@ -20,13 +20,18 @@ import yaml
 from robot_sf.benchmark.camera_ready._config_types import (
     _AMV_DIMENSIONS,
     _CHECKPOINT_PROVENANCE_ENFORCEMENT,
+    _RADIUS_BINDING_STATUSES,
     _TUNING_EFFORT_ENFORCEMENT,
     _TUNING_SOURCES,
     DEFAULT_SEED_SETS_PATH,
+    RADIUS_BINDING_CONTRACT_VERSION,
+    RADIUS_BINDING_STATUS_BOUND_RUNTIME,
+    RADIUS_BINDING_STATUS_PENDING_GATE1,
     TUNING_SOURCE_DECLARED,
     AmvProfileConfig,
     CampaignConfig,
     PlannerSpec,
+    RadiusSweepConfig,
     ScenarioCandidateSelection,
     SeedPolicy,
     SnqiContractConfig,
@@ -57,6 +62,101 @@ _PAPER_KINEMATICS_BY_PROFILE = {
 }
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
 _SNQI_CONTRACT_ENFORCEMENT = {"warn", "error", "enforce"}
+
+
+class RadiusSweepBindingPreflightError(RuntimeError):
+    """Raised when a radius-sweep arm is not bound to runtime geometry."""
+
+
+def _validate_radius_sweep_config(  # noqa: C901
+    cfg: RadiusSweepConfig,
+    *,
+    source: str,
+) -> None:
+    """Validate the issue #6642 radius-binding contract."""
+    if cfg.issue != 6642 or cfg.parent_issue != 6600:
+        raise ValueError(
+            f"{source} must identify issue 6642 with parent issue 6600; "
+            f"got issue={cfg.issue!r}, parent_issue={cfg.parent_issue!r}"
+        )
+    if not re.fullmatch(r"r\d+p\d+", cfg.arm_key):
+        raise ValueError(f"{source}.arm_key must match r<major>p<minor>, got {cfg.arm_key!r}")
+    if not math.isfinite(cfg.radius_m) or cfg.radius_m <= 0.0:
+        raise ValueError(f"{source}.radius_m must be a positive finite number")
+    if not isinstance(cfg.baseline_arm, bool):
+        raise TypeError(f"{source}.baseline_arm must be a boolean")
+    if cfg.runtime_binding_status not in _RADIUS_BINDING_STATUSES:
+        known = ", ".join(_RADIUS_BINDING_STATUSES)
+        raise ValueError(
+            f"Unsupported {source}.runtime_binding_status "
+            f"{cfg.runtime_binding_status!r}; expected one of: {known}"
+        )
+    if cfg.runtime_binding_status != RADIUS_BINDING_STATUS_BOUND_RUNTIME:
+        return
+    if cfg.binding_contract_version != RADIUS_BINDING_CONTRACT_VERSION:
+        raise ValueError(
+            f"{source}.binding_contract_version must be "
+            f"{RADIUS_BINDING_CONTRACT_VERSION!r} for bound_runtime arms"
+        )
+    if cfg.gate1_canary_issue != 6641:
+        raise ValueError(f"{source}.gate1_canary_issue must be 6641 for bound_runtime arms")
+    if not isinstance(cfg.gate1_receipt_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", cfg.gate1_receipt_sha256
+    ):
+        raise ValueError(
+            f"{source}.gate1_receipt_sha256 must be a lowercase 64-character SHA-256 digest"
+        )
+    if not isinstance(cfg.gate1_source_commit, str) or not re.fullmatch(
+        r"[0-9a-f]{40}", cfg.gate1_source_commit
+    ):
+        raise ValueError(
+            f"{source}.gate1_source_commit must be a lowercase 40-character commit hash"
+        )
+
+
+def _radius_binding_metadata(
+    radius_sweep: RadiusSweepConfig | None,
+) -> dict[str, Any] | None:
+    """Return the JSON-serializable radius-binding provenance block."""
+    if radius_sweep is None:
+        return None
+    return {
+        "issue": radius_sweep.issue,
+        "parent_issue": radius_sweep.parent_issue,
+        "arm_key": radius_sweep.arm_key,
+        "radius_m": float(radius_sweep.radius_m),
+        "baseline_arm": radius_sweep.baseline_arm,
+        "status": radius_sweep.runtime_binding_status,
+        "source": "radius_sweep.radius_m",
+        "contract_version": radius_sweep.binding_contract_version,
+        "runtime_binding_status": radius_sweep.runtime_binding_status,
+        "binding_contract_version": radius_sweep.binding_contract_version,
+        "gate1_canary_issue": radius_sweep.gate1_canary_issue,
+        "gate1_receipt_sha256": radius_sweep.gate1_receipt_sha256,
+        "gate1_source_commit": radius_sweep.gate1_source_commit,
+        "runtime_binding_note": radius_sweep.runtime_binding_note,
+    }
+
+
+def _assert_radius_sweep_preflight_ready(
+    radius_sweep: RadiusSweepConfig | None,
+) -> None:
+    """Reject radius arms that are not explicitly admitted for runtime use."""
+    if radius_sweep is None:
+        return
+    _validate_radius_sweep_config(radius_sweep, source="radius_sweep")
+    if radius_sweep.runtime_binding_status == RADIUS_BINDING_STATUS_PENDING_GATE1:
+        raise RadiusSweepBindingPreflightError(
+            "Radius-sweep arm "
+            f"{radius_sweep.arm_key!r} remains "
+            f"{RADIUS_BINDING_STATUS_PENDING_GATE1}; no episodes may execute. "
+            "Run and admit the Gate 1 binding canary before using a production arm."
+        )
+    if radius_sweep.runtime_binding_status != RADIUS_BINDING_STATUS_BOUND_RUNTIME:
+        raise RadiusSweepBindingPreflightError(
+            "Radius-sweep arm has no admitted runtime binding: "
+            f"{radius_sweep.runtime_binding_status!r}"
+        )
 
 
 def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:
@@ -578,8 +678,51 @@ def _apply_scenario_amv_overrides(
     return patched_scenarios
 
 
+def _apply_radius_sweep_binding(
+    scenarios: list[dict[str, Any]],
+    radius_sweep: RadiusSweepConfig | None,
+) -> list[dict[str, Any]]:
+    """Bind an admitted radius treatment to every scenario's robot config.
+
+    The pending preparation status raises before any scenario is returned. A
+    bound arm receives a deep-copied ``robot_config.radius`` and an explicit
+    metadata block; all unrelated scenario fields remain unchanged.
+
+    Returns:
+        Scenario copies with the admitted radius binding, or the original list
+        when no radius block is configured.
+    """
+    if radius_sweep is None:
+        return scenarios
+    _assert_radius_sweep_preflight_ready(radius_sweep)
+
+    binding_metadata = _radius_binding_metadata(radius_sweep)
+    assert binding_metadata is not None  # validated non-None input above
+    patched_scenarios: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        patched = deepcopy(scenario)
+        robot_config_raw = patched.get("robot_config")
+        if robot_config_raw is None:
+            robot_config: dict[str, Any] = {}
+        elif isinstance(robot_config_raw, Mapping):
+            robot_config = dict(robot_config_raw)
+        else:
+            raise RadiusSweepBindingPreflightError(
+                "Cannot bind radius sweep: scenario robot_config is not a mapping"
+            )
+        robot_config["radius"] = float(radius_sweep.radius_m)
+        patched["robot_config"] = robot_config
+
+        metadata_raw = patched.get("metadata")
+        metadata = dict(metadata_raw) if isinstance(metadata_raw, Mapping) else {}
+        metadata["radius_binding"] = dict(binding_metadata)
+        patched["metadata"] = metadata
+        patched_scenarios.append(patched)
+    return patched_scenarios
+
+
 def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
-    """Load campaign scenarios and apply optional seed override.
+    """Load campaign scenarios, seed overrides, and radius treatment binding.
 
     Returns:
         Scenario list consumable by benchmark runners.
@@ -629,15 +772,14 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
         schedule_path=cfg.scenario_horizons_path,
     )
     seeds_override = _resolve_seed_override(cfg.seed_policy)
-    if seeds_override is None:
-        return scenario_dicts
-
-    seeded: list[dict[str, Any]] = []
-    for scenario in scenario_dicts:
-        patched = dict(scenario)
-        patched["seeds"] = list(seeds_override)
-        seeded.append(patched)
-    return seeded
+    if seeds_override is not None:
+        seeded: list[dict[str, Any]] = []
+        for scenario in scenario_dicts:
+            patched = dict(scenario)
+            patched["seeds"] = list(seeds_override)
+            seeded.append(patched)
+        scenario_dicts = seeded
+    return _apply_radius_sweep_binding(scenario_dicts, cfg.radius_sweep)
 
 
 def _resolved_seed_inventory(scenarios: list[dict[str, Any]]) -> list[int]:
@@ -705,6 +847,8 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError(
                 "scenario_amv_overrides entries must include at least one AMV taxonomy dimension"
             )
+    if cfg.radius_sweep is not None:
+        _validate_radius_sweep_config(cfg.radius_sweep, source="CampaignConfig.radius_sweep")
     if cfg.synthetic_actuation_profile is not None:
         if cfg.synthetic_actuation_profile.claim_scope == SYNTHETIC_ACTUATION_CLAIM_SCOPE:
             validate_synthetic_actuation_profile(cfg.synthetic_actuation_profile)
@@ -1122,6 +1266,91 @@ def _parse_scenario_amv_overrides(  # noqa: C901
     return scenario_amv_overrides
 
 
+def _parse_radius_sweep(  # noqa: C901
+    raw: Any,
+    *,
+    config_path: Path,
+) -> RadiusSweepConfig | None:
+    """Parse the optional issue #6642 radius-binding block.
+
+    Returns:
+        Typed radius-binding configuration, or ``None`` when the block is absent.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise TypeError(f"radius_sweep must be a mapping: {config_path}")
+
+    def _required_int(key: str) -> int:
+        value = raw.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"radius_sweep.{key} must be an integer: {config_path}")
+        return value
+
+    def _optional_int(key: str) -> int | None:
+        value = raw.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"radius_sweep.{key} must be an integer when provided: {config_path}")
+        return value
+
+    arm_key = raw.get("arm_key")
+    if not isinstance(arm_key, str) or not arm_key.strip():
+        raise TypeError(f"radius_sweep.arm_key must be a non-empty string: {config_path}")
+    radius_raw = raw.get("radius_m")
+    try:
+        radius_m = float(radius_raw)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"radius_sweep.radius_m must be numeric: {config_path}") from exc
+    baseline_arm = raw.get("baseline_arm")
+    if not isinstance(baseline_arm, bool):
+        raise TypeError(f"radius_sweep.baseline_arm must be a boolean: {config_path}")
+    status = raw.get("runtime_binding_status")
+    if not isinstance(status, str) or not status.strip():
+        raise TypeError(
+            f"radius_sweep.runtime_binding_status must be a non-empty string: {config_path}"
+        )
+    contract_version = raw.get("binding_contract_version")
+    if contract_version is not None and not isinstance(contract_version, str):
+        raise TypeError(
+            f"radius_sweep.binding_contract_version must be a string when provided: {config_path}"
+        )
+    receipt_sha = raw.get("gate1_receipt_sha256")
+    if receipt_sha is not None and not isinstance(receipt_sha, str):
+        raise TypeError(
+            f"radius_sweep.gate1_receipt_sha256 must be a string when provided: {config_path}"
+        )
+    source_commit = raw.get("gate1_source_commit")
+    if source_commit is not None and not isinstance(source_commit, str):
+        raise TypeError(
+            f"radius_sweep.gate1_source_commit must be a string when provided: {config_path}"
+        )
+    note = raw.get("runtime_binding_note")
+    if note is not None and not isinstance(note, str):
+        raise TypeError(
+            f"radius_sweep.runtime_binding_note must be a string when provided: {config_path}"
+        )
+
+    parsed = RadiusSweepConfig(
+        issue=_required_int("issue"),
+        parent_issue=_required_int("parent_issue"),
+        arm_key=arm_key.strip(),
+        radius_m=radius_m,
+        baseline_arm=baseline_arm,
+        runtime_binding_status=status.strip(),
+        binding_contract_version=(
+            contract_version.strip() if isinstance(contract_version, str) else None
+        ),
+        gate1_canary_issue=_optional_int("gate1_canary_issue"),
+        gate1_receipt_sha256=(receipt_sha.strip() if isinstance(receipt_sha, str) else None),
+        gate1_source_commit=(source_commit.strip() if isinstance(source_commit, str) else None),
+        runtime_binding_note=note.strip() if isinstance(note, str) else None,
+    )
+    _validate_radius_sweep_config(parsed, source=f"radius_sweep in {config_path}")
+    return parsed
+
+
 @dataclass(frozen=True)
 class _ParsedCampaignConfig:
     """Parsed campaign components carried from parsing into final assembly.
@@ -1145,6 +1374,7 @@ class _ParsedCampaignConfig:
     required_dimensions: dict[str, tuple[str, ...]]
     scenario_candidates: tuple[str, ...]
     scenario_amv_overrides: dict[str, dict[str, str]]
+    radius_sweep: RadiusSweepConfig | None
     synthetic_actuation_raw: dict[str, Any] | None
     kinematics_matrix: tuple[str, ...]
 
@@ -1262,6 +1492,7 @@ def _assemble_campaign_config(
         planners=parsed.planner_specs,
         scenario_candidates=ScenarioCandidateSelection(names=parsed.scenario_candidates),
         scenario_amv_overrides=parsed.scenario_amv_overrides,
+        radius_sweep=parsed.radius_sweep,
         scenario_horizons_path=parsed.scenario_horizons_path,
         seed_policy=parsed.seed_policy,
         workers=int(payload.get("workers", 1)),
@@ -1351,6 +1582,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
     required_dimensions = _parse_amv_required_dimensions(amv_raw)
     scenario_candidates = _parse_scenario_candidates(payload)
     scenario_amv_overrides = _parse_scenario_amv_overrides(payload)
+    radius_sweep = _parse_radius_sweep(payload.get("radius_sweep"), config_path=config_path)
     synthetic_actuation_raw = payload.get("synthetic_actuation_profile")
     if synthetic_actuation_raw is not None and not isinstance(synthetic_actuation_raw, dict):
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
@@ -1374,6 +1606,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         required_dimensions=required_dimensions,
         scenario_candidates=scenario_candidates,
         scenario_amv_overrides=scenario_amv_overrides,
+        radius_sweep=radius_sweep,
         synthetic_actuation_raw=synthetic_actuation_raw,
         kinematics_matrix=kinematics_matrix,
     )

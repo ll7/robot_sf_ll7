@@ -16,10 +16,12 @@ planner inputs, with a fail-closed machine-readable go/no-go verdict per binding
 (`radius_binding_canary.v1`):
 [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
 
-Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600): dry-run manifest
-pinning the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the 48-cell
-classic_interactions_francis2023 matrix at one immutable campaign commit; preparation only, not
-benchmark evidence, production compute blocked until the Gate 1 binding canary (#6641) passes:
+Issue #6642 collision-envelope radius sweep admission (Gate 2 of #6600): manifest and three
+arm configs pin the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the
+48-cell classic_interactions_francis2023 matrix at one immutable campaign commit, with
+fail-closed cross-arm non-radius consistency checks. Gate 1 runtime binding is admitted;
+the configs are still not benchmark evidence and production compute remains blocked by
+the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
 
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and

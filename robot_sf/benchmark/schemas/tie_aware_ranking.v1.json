@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/tie_aware_ranking.v1.json",
+  "title": "Tie-aware benchmark ranking export",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "metric", "policy", "items", "relations", "tie_groups", "summary"],
+  "properties": {
+    "schema_version": {"const": "tie_aware_ranking.v1"},
+    "metric": {
+      "type": "object",
+      "required": ["id", "higher_is_better", "desirability"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "unit": {"type": "string"},
+        "description": {"type": "string"},
+        "higher_is_better": {"type": "boolean"},
+        "desirability": {"enum": ["higher_is_better", "lower_is_better"]}
+      },
+      "additionalProperties": false
+    },
+    "policy": {"type": "object"},
+    "items": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/item"}
+    },
+    "relations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/relation"}
+    },
+    "tie_groups": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/tie_group"}
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "item_count",
+        "comparison_eligible_item_count",
+        "incomparable_item_count",
+        "relation_count",
+        "relation_counts",
+        "exact_tie_group_count",
+        "scientific_rank_is_not_total"
+      ],
+      "properties": {
+        "item_count": {"type": "integer", "minimum": 0},
+        "comparison_eligible_item_count": {"type": "integer", "minimum": 0},
+        "incomparable_item_count": {"type": "integer", "minimum": 0},
+        "relation_count": {"type": "integer", "minimum": 0},
+        "relation_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "exact_tie_group_count": {"type": "integer", "minimum": 0},
+        "scientific_rank_is_not_total": {"const": true}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "uncertainty": {
+      "type": ["object", "null"],
+      "required": ["low", "high", "source"],
+      "properties": {
+        "low": {"type": "number"},
+        "high": {"type": "number"},
+        "source": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "support": {
+      "type": ["object", "null"],
+      "required": ["n", "N"],
+      "properties": {
+        "n": {"type": "integer", "minimum": 0},
+        "N": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "score",
+        "uncertainty",
+        "support",
+        "eligible",
+        "comparison_eligible",
+        "comparability",
+        "evidence",
+        "display_order",
+        "tie_group_id",
+        "rank_range"
+      ],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "score": {"type": "number"},
+        "uncertainty": {"$ref": "#/$defs/uncertainty"},
+        "support": {"$ref": "#/$defs/support"},
+        "eligible": {"type": "boolean"},
+        "comparison_eligible": {"type": "boolean"},
+        "comparability": {
+          "type": "object",
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"enum": ["comparable", "incomparable"]},
+            "reason": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "evidence": {},
+        "display_order": {"type": "integer", "minimum": 1},
+        "tie_group_id": {"type": ["string", "null"]},
+        "rank_range": {
+          "type": ["array", "null"],
+          "prefixItems": [
+            {"type": "integer", "minimum": 1},
+            {"type": "integer", "minimum": 1}
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right", "relation", "reason"],
+      "properties": {
+        "left": {"type": "string", "minLength": 1},
+        "right": {"type": "string", "minLength": 1},
+        "relation": {"enum": ["strict_before", "exact_tie", "non_identifiable", "incomparable"]},
+        "reason": {"type": "string", "minLength": 1},
+        "better": {"type": "string", "minLength": 1},
+        "worse": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"relation": {"const": "strict_before"}}},
+          "then": {"required": ["better", "worse"]}
+        }
+      ]
+    },
+    "tie_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "members", "score"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^tie-[0-9]{3}$"},
+        "members": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string"}},
+        "score": {"type": "number"}
+      }
+    }
+  }
+}

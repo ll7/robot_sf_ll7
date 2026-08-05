@@ -30,6 +30,7 @@ dependencies = [
     "rich>=15.0.0",
     "psutil>=6.1.0",
     "jsonschema>=4.23.0",
+    "rfc8785==0.1.4",
     "shapely>=2.1.2",
     "networkx>=3.6.1,<4.0",
     "pyvisgraph>=0.2.1",
@@ -82,7 +83,7 @@ analytics = [
     "pyarrow>=25.0.0",
 ]
 browser = [
-    "playwright>=1.61.0",
+    "playwright>=1.62.0",
 ]
 sacadrl = [
     "tensorflow>=2.15.0",
@@ -196,7 +197,7 @@ exclude = [
 allow-direct-references = true
 
 [tool.ruff]
-required-version = "==0.16.0"
+required-version = "==0.16.1"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -557,8 +558,11 @@ max-statements = 60
 # cluster-bootstrap carry compact one-line docstrings; complexity concentrates in the
 # fail-closed coverage and verification routines.
 "robot_sf/benchmark/control_action_latency_snqi.py" = ["DOC201", "C901"]
-"robot_sf/adversarial/search.py" = ["BLE001"]
-"robot_sf/adversarial/certification.py" = ["BLE001", "PLC0415"]
+# Issue #6459: search.py and certification.py BLE001 removed - broad catches now carry
+# inline `# noqa: BLE001 - <reason>` directives (search evaluation-attribution sites,
+# certification adapter-defensive site). certification.py keeps PLC0415 for the lazy
+# scenario_certification import_module probe.
+"robot_sf/adversarial/certification.py" = ["PLC0415"]
 "tests/adversarial/**/*.py" = ["D100", "D103", "TC003"]
 
 # fast-pysf subtree: gradual adoption - complexity rules relaxed, allow prints in examples/benchmarks
@@ -680,7 +684,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
     "scalene>=2.3.0",
-    "ruff==0.16.0",
+    "ruff==0.16.1",
     "pre-commit>=4.6.1",
     "setuptools>=83.0.0",
     "pylint>=4.0.6",

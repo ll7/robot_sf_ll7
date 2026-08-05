@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/passing-clearance-contract.v1.json",
+  "title": "RobotSF PassingClearanceContract.v1",
+  "description": "Opt-in circular-proxy passing-clearance contract. It does not define a universal AMMV threshold.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "distance_basis",
+    "robot_radius_m",
+    "pedestrian_radius_m",
+    "combined_radius_m",
+    "encounter_type",
+    "speed_conditioning",
+    "speed_range_mps",
+    "desired_clearance_m",
+    "minimum_clearance_m",
+    "source_citation",
+    "source_platform_geometry",
+    "evidence_class",
+    "limitation",
+    "units",
+    "profile_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "PassingClearanceContract.v1"
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "distance_basis": {
+      "const": "surface_clearance_m"
+    },
+    "robot_radius_m": {
+      "type": "number",
+      "minimum": 0
+    },
+    "pedestrian_radius_m": {
+      "type": "number",
+      "minimum": 0
+    },
+    "combined_radius_m": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "encounter_type": {
+      "enum": [
+        "passing",
+        "overtaking",
+        "unspecified"
+      ]
+    },
+    "speed_conditioning": {
+      "enum": [
+        "unavailable",
+        "range_mps"
+      ]
+    },
+    "speed_range_mps": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "desired_clearance_m": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "minimum_clearance_m": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "source_citation": {
+      "type": "string"
+    },
+    "source_platform_geometry": {
+      "type": "string"
+    },
+    "evidence_class": {
+      "enum": [
+        "source_observation",
+        "derived_transfer_prior",
+        "author_defined",
+        "legacy_unverified"
+      ]
+    },
+    "limitation": {
+      "type": "string"
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "distance",
+        "speed"
+      ],
+      "properties": {
+        "distance": {
+          "const": "m"
+        },
+        "speed": {
+          "const": "m/s"
+        }
+      }
+    },
+    "profile_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

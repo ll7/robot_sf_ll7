@@ -41,6 +41,12 @@
       "geometry": {"type": "polyline", "points": [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]]}
     },
     {
+      "entry_id": "adjacent-backtracking",
+      "route_id": "adjacent-backtracking",
+      "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-adjacent-backtracking"},
+      "geometry": {"type": "polyline", "points": [[0.0, 0.0], [2.0, 0.0], [1.0, 0.0]]}
+    },
+    {
       "entry_id": "branching",
       "route_id": "branching",
       "upstream_binding": {"kind": "fixture_only", "fixture_id": "issue-6790-branching"},

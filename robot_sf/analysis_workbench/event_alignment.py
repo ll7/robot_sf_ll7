@@ -491,7 +491,7 @@ def _wrapped_angle_delta(left: float, right: float) -> float:
 def _nullable_delta(left: object, right: object) -> float | None:
     if left is None and right is None:
         return 0.0
-    if isinstance(left, int | float) and isinstance(right, int | float):
+    if _finite_number(left) and _finite_number(right):
         return abs(float(left) - float(right))
     return None
 

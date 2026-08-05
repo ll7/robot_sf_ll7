@@ -91,7 +91,7 @@ def summarize_reversals(
             rate = float(route["progress_rate_mps"])
             signs.append(1 if rate > 1e-6 else -1 if rate < -1e-6 else 0)
         heading = frame["world"]["robot"].get("heading") if frame["world"]["robot"] else None
-        if isinstance(heading, int | float):
+        if isinstance(heading, int | float) and not isinstance(heading, bool):
             if (
                 previous_heading is not None
                 and abs(_wrapped_angle_delta(float(heading), previous_heading))

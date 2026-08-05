@@ -89,7 +89,7 @@
     "evidence_boundary": {"const": "analysis_workbench_only"},
     "source_coordinate_frame": {"type": "string", "minLength": 1},
     "units": {"type": "object"},
-    "claim_boundary": {"type": "string", "minLength": 1},
+    "claim_boundary": {"const": "Diagnostic renderer-neutral process quantities derived from admitted trace fields. Not calibrated AMMV safety thresholds, collision probabilities, causal attribution, or replacement benchmark metrics."},
     "profiles": {
       "type": "object",
       "additionalProperties": false,
@@ -114,8 +114,8 @@
       "required": ["world", "route", "conflict", "relative_interaction"],
       "properties": {
         "world": {"$ref": "#/$defs/availability"},
-        "route": {"$ref": "#/$defs/availability"},
-        "conflict": {"$ref": "#/$defs/availability"},
+        "route": {"$ref": "#/$defs/geometry_availability"},
+        "conflict": {"$ref": "#/$defs/geometry_availability"},
         "relative_interaction": {"$ref": "#/$defs/availability"}
       }
     },
@@ -346,6 +346,7 @@
         "shared_prefix",
         "valid_common_event_anchors",
         "right_event_anchors",
+        "right_coordinate_input_contract",
         "divergence_interpretation"
       ],
       "properties": {
@@ -379,6 +380,15 @@
         "right_event_anchors": {
           "type": "array",
           "items": {"$ref": "#/$defs/event_receipt"}
+        },
+        "right_coordinate_input_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["route", "conflict"],
+          "properties": {
+            "route": {"$ref": "#/$defs/geometry_input_contract"},
+            "conflict": {"$ref": "#/$defs/geometry_input_contract"}
+          }
         },
         "duration_normalization": {"type": "object"},
         "divergence_interpretation": {
@@ -990,6 +1000,48 @@
         "status": {"enum": ["available", "unavailable"]},
         "reason": {"type": "string"}
       }
+    },
+    "geometry_availability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "reason", "input_contract"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "input_contract": {"$ref": "#/$defs/geometry_input_contract"}
+      }
+    },
+    "geometry_input_contract": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "not_supplied"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["status", "provenance_id", "registry_checksum", "geometry", "registry"],
+          "properties": {
+            "status": {"enum": ["supplied", "supplied_unregistered"]},
+            "provenance_id": {"type": ["string", "null"]},
+            "registry_checksum": {"type": ["string", "null"]},
+            "geometry": {"type": "object"},
+            "registry": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["artifact_ref", "content_sha256", "entry_id", "entry_sha256"],
+              "properties": {
+                "artifact_ref": {"type": ["string", "null"]},
+                "content_sha256": {"type": ["string", "null"]},
+                "entry_id": {"type": ["string", "null"]},
+                "entry_sha256": {"type": ["string", "null"]}
+              }
+            }
+          }
+        }
+      ]
     },
     "profile": {
       "type": "object",

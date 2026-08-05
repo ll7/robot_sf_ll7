@@ -1,0 +1,7 @@
+{
+  "contract_digest": "3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+  "contract_path": "robot_sf/benchmark/contracts/robot_sf_ecosystem_contract.v1.json",
+  "contract_version": "1.0.0",
+  "fixture_id": "robot_sf.ecosystem_handoff.v1",
+  "schema_version": "robot_sf_ecosystem_contract_reference.v1"
+}

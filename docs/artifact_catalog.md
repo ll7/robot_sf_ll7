@@ -1,8 +1,12 @@
-# Artifact Catalog v1
+# Artifact Catalog v1 and v2
 
 `artifact_catalog.v1` records stable semantic IDs for reusable figures and tables.
 It separates the identity of an artifact from whatever generated path currently
 stores the rendered file.
+
+`artifact_catalog.v2` is an additive opt-in for figure publication metadata. It
+does not replace v1 catalogs and it does not validate plotted values or scientific
+claims.
 
 Use this catalog when a report, paper draft, or follow-up workflow needs to cite
 the same figure or table across reruns.
@@ -26,6 +30,17 @@ Each artifact row has:
 - `generation_commit`: commit used for generation
 - `claim_boundary`: what the artifact can and cannot support
 - `caption_file`: optional checksummed caption/source text
+
+In v2, every figure also has `figure_semantics` with explicit declarations for
+the metric ID, unit, desirability direction, support and denominator, comparison
+status, uncertainty declaration, tie policy, legend-series identities, and
+legend completeness. A deterministic accessibility palette contract may be
+declared. Without one, the accessibility result is reported as unavailable; no
+pixel, OCR, filename, or metric-name inference is performed.
+
+The existing `source_files`, `generation_commit`, `claim_boundary`, and required
+v2 caption metadata form the provenance surface. Passing semantic QA means only
+that the declared metadata is complete and internally consistent.
 
 The validator fails closed when IDs are duplicated, required files are missing,
 checksums mismatch, or a durable reference points at local-only locations such as

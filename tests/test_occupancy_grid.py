@@ -23,6 +23,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from loguru import logger
 from shapely.geometry import Polygon as _ShapelyPolygon
 
 from robot_sf.nav import occupancy_grid_rasterization as rasterization
@@ -672,6 +673,70 @@ class TestGenerateStructuredLoggerPaths:
 
         assert grid_data.shape == grid.shape
         assert grid.is_initialized
+
+    def test_generate_preserves_debug_message_format(self):
+        """Generate diagnostics retain the prior f-string's rendered text."""
+        config = GridConfig(
+            resolution=1.0,
+            width=4.0,
+            height=6.0,
+            channels=[GridChannel.OBSTACLES],
+        )
+        grid = OccupancyGrid(config=config)
+        captured: list[str] = []
+        handler_id = logger.add(
+            lambda message: captured.append(message.record["message"]),
+            level="DEBUG",
+        )
+        try:
+            grid.generate(
+                obstacles=[((0.0, 0.0), (1.0, 1.0))],
+                pedestrians=[((2.0, 2.0), 0.25)],
+                robot_pose=((1.25, 3.75), 0.0),
+            )
+        finally:
+            logger.remove(handler_id)
+
+        assert (
+            "Generating grid: shape=(1, 6, 4), obstacles=1, pedestrians=1, "
+            "ego_frame=False, origin=(0.00, 0.00)"
+        ) in captured
+
+    def test_array_rasterization_preserves_failure_log_messages(self, monkeypatch):
+        """Array-rasterizer failure and summary diagnostics retain their prior text."""
+        config = GridConfig(
+            resolution=1.0,
+            width=4.0,
+            height=4.0,
+            channels=[GridChannel.PEDESTRIANS],
+        )
+        grid_array = np.zeros((config.grid_height, config.grid_width), dtype=config.dtype)
+
+        def fail_rasterization(*_args, **_kwargs):
+            raise ValueError("forced failure")
+
+        monkeypatch.setattr(rasterization, "rasterize_circle_fast", fail_rasterization)
+        captured: list[str] = []
+        handler_id = logger.add(
+            lambda message: captured.append(message.record["message"]),
+            level="DEBUG",
+        )
+        try:
+            count = rasterization.rasterize_pedestrians_array(
+                np.array([[1.0, 1.0], [2.0, 2.0]]),
+                np.array([0.25, 0.5]),
+                grid_array,
+                config,
+            )
+        finally:
+            logger.remove(handler_id)
+
+        assert count == 0
+        assert captured == [
+            "Failed to rasterize pedestrian 0: forced failure",
+            "Failed to rasterize pedestrian 1: forced failure",
+            "Rasterized 0/2 pedestrians",
+        ]
 
 
 class TestVectorizedParity:

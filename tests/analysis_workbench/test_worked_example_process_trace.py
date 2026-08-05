@@ -917,6 +917,146 @@ def test_semantic_validator_rejects_forged_event_pair_and_source_records() -> No
         validate_worked_example_process_trace(forged_anchor)
 
 
+def test_semantic_validator_rejects_coherently_moved_event_and_frame_records() -> None:
+    """Event and frame records must replay from public source-coordinate frames."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(turn_and_decelerate=True)),
+        route=RouteSpec(
+            "r-main",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-fixture.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
+        conflict_zone=ConflictZoneSpec(
+            "door",
+            (1.0, 0.0),
+            0.25,
+            "zone-fixture.v1",
+            _zone_checksum((1.0, 0.0), 0.25),
+        ),
+    )
+
+    moved = deepcopy(payload)
+    minimum = moved["event_anchors"][0]
+    minimum["event_id"] = "step-0002-minimum-clearance"
+    minimum["time_s"] = moved["frames"][2]["time_s"]
+    minimum["step"] = moved["frames"][2]["step"]
+    minimum["event_relative_time"] = {
+        "status": "available",
+        "anchor_time_s": moved["frames"][2]["time_s"],
+        "tau_s": 0.0,
+    }
+    with pytest.raises(Exception, match="/event_anchors/0"):
+        validate_worked_example_process_trace(moved)
+
+    probes = [
+        (["frames", 0, "world", "robot", "position"], [99.0, 0.0], "/frames/0/world/robot"),
+        (["frames", 0, "route", "s_m"], 99.0, "/frames/0/route/s_m"),
+        (
+            ["frames", 0, "route", "focal_actor_s_m"],
+            99.0,
+            "/frames/0/route/focal_actor_s_m",
+        ),
+        (
+            ["frames", 0, "conflict", "robot_signed_distance_to_zone_m"],
+            99.0,
+            "/frames/0/conflict/robot_signed_distance_to_zone_m",
+        ),
+        (
+            [
+                "frames",
+                0,
+                "relative_interaction",
+                "closest_approach",
+                "center_distance_at_closest_approach_m",
+            ],
+            99.0,
+            "/frames/0/relative_interaction/closest_approach",
+        ),
+    ]
+    for target_path, value, expected_path in probes:
+        forged = deepcopy(payload)
+        _set_path(forged, target_path, value)
+        with pytest.raises(Exception, match=expected_path):
+            validate_worked_example_process_trace(forged)
+
+
+def test_pair_receipts_resolve_right_events_and_bind_content_sha() -> None:
+    """Pair common anchors and content hashes should bind to real left/right receipts."""
+
+    left_payload = _trace_payload(trace_id="pair-left", planner_id="planner-a", seed=7)
+    right_payload = _trace_payload(trace_id="pair-right", planner_id="planner-b", seed=7)
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(left_payload),
+        pair_trace=simulation_trace_export_from_dict(right_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    assert payload["pair_compatibility"]["valid_common_event_anchors"]
+
+    forged_left_sha = deepcopy(payload)
+    forged_left_sha["pair_compatibility"]["provenance_gate"]["left_content_sha256"] = "0" * 64
+    with pytest.raises(Exception, match="/pair_compatibility/provenance_gate/left_content_sha256"):
+        validate_worked_example_process_trace(forged_left_sha)
+
+    forged_right_sha = deepcopy(payload)
+    forged_right_sha["pair_compatibility"]["provenance_gate"]["right_content_sha256"] = "0" * 64
+    with pytest.raises(Exception, match="/pair_compatibility/provenance_gate/right_content_sha256"):
+        validate_worked_example_process_trace(forged_right_sha)
+
+    forged_right_anchor = deepcopy(payload)
+    forged_right_anchor["pair_compatibility"]["valid_common_event_anchors"][0]["right_event_id"] = (
+        "missing-right-event"
+    )
+    with pytest.raises(Exception, match="/pair_compatibility/valid_common_event_anchors/0"):
+        validate_worked_example_process_trace(forged_right_anchor)
+
+
+def test_collision_time_must_be_within_declared_and_sampled_bounds() -> None:
+    """Canonical collision anchors must not pin out-of-sample times to edge frames."""
+
+    for mode in ("ledger_collision_before_trace", "ledger_collision_after_trace"):
+        payload = build_worked_example_process_trace_from_export(
+            simulation_trace_export_from_dict(_trace_payload(collision_mode=mode))
+        )
+        collision = next(
+            event
+            for event in payload["event_anchors"]
+            if event["event_type"] == "exact_collision_event"
+        )
+        assert collision["status"] == "unavailable"
+        assert collision["reason"] == "collision_time_outside_trace_sample_bounds"
+
+
+def test_run_config_contract_scans_all_frames_and_rejects_bool_or_inconsistent_time_step() -> None:
+    """Configured time_step_s must be a consistent non-bool contract across declarations."""
+
+    bool_step = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(time_step_s=True))
+    )
+    assert bool_step["source_trace"]["run_config_contract"] == {
+        "status": "unavailable",
+        "reason": "run_config_time_step_unavailable",
+    }
+
+    missing_later = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(missing_later_time_step=True))
+    )
+    assert missing_later["source_trace"]["run_config_contract"] == {
+        "status": "unavailable",
+        "reason": "run_config_time_step_unavailable",
+    }
+
+    inconsistent = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(inconsistent_time_step=True))
+    )
+    assert inconsistent["source_trace"]["run_config_contract"] == {
+        "status": "unavailable",
+        "reason": "run_config_time_step_inconsistent",
+    }
+
+
 def test_semantic_validator_rejects_available_event_without_coordinates() -> None:
     """Available semantic anchors require step/time and non-empty records."""
 
@@ -1192,7 +1332,9 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
     planner_id: str = "ppo",
     include_run_config: bool = True,
     config_digest: str = "a" * 64,
-    time_step_s: float | None = 0.1,
+    time_step_s: object = 0.1,
+    missing_later_time_step: bool = False,
+    inconsistent_time_step: bool = False,
     collision_mode: str | None = None,
     missing_actor_radius_step: int | None = None,
     nonfinite_heading_step: int | None = None,
@@ -1265,8 +1407,10 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
                 "horizon": 4,
                 "config_digest": config_digest,
             }
-            if time_step_s is not None:
-                planner["run_config"]["time_step_s"] = time_step_s
+            if not (missing_later_time_step and step > 0) and time_step_s is not None:
+                planner["run_config"]["time_step_s"] = (
+                    0.2 if inconsistent_time_step and step > 0 else time_step_s
+                )
         if collision_mode == "outcome_boolean" and step == 1:
             planner["outcome"] = {"collision_event": True}
         if collision_mode == "ledger_typed" and step == 1:
@@ -1327,6 +1471,34 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
                         "collision_partner_type": "pedestrian",
                         "collision_partner_id": "ped-a",
                         "collision_time": 0.35,
+                        "relative_speed_at_contact": 1.0,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
+                    }
+                ],
+            }
+        if collision_mode == "ledger_collision_before_trace" and step == 1:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [
+                    {
+                        "collision_partner_type": "pedestrian",
+                        "collision_partner_id": "ped-a",
+                        "collision_time": -1.0,
+                        "relative_speed_at_contact": 1.0,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
+                    }
+                ],
+            }
+        if collision_mode == "ledger_collision_after_trace" and step == 1:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [
+                    {
+                        "collision_partner_type": "pedestrian",
+                        "collision_partner_id": "ped-a",
+                        "collision_time": 10.0,
                         "relative_speed_at_contact": 1.0,
                         "clearance_series_source": "simulator.contact",
                         "exact_event_source": "simulator.collision",

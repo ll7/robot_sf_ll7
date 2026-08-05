@@ -170,6 +170,7 @@ def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
                         errors.append(
                             f"/frames/{index}/relative_interaction/{key}: expected finite number"
                         )
+        errors.extend(_validate_frame_replays(frames))
     source_trace = payload.get("source_trace")
     if isinstance(source_trace, Mapping):
         errors.extend(_validate_source_trace_semantics(source_trace))
@@ -224,7 +225,7 @@ def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
     if isinstance(pair, Mapping):
         if pair.get("status") not in {"available", "unavailable", "incompatible"}:
             errors.append("/pair_compatibility/status: invalid status")
-        errors.extend(_validate_pair_semantics(pair, events))
+        errors.extend(_validate_pair_semantics(pair, events, source_trace))
         divergence = pair.get("divergence_interpretation")
         if isinstance(divergence, Mapping) and divergence.get("allowed") is True:
             shared_prefix = pair.get("shared_prefix")
@@ -326,6 +327,206 @@ def _validate_frame_record(frame: Mapping[str, Any], index: int) -> list[str]:
     )
     errors.extend(_validate_commands_record(frame.get("commands"), f"/frames/{index}/commands"))
     return errors
+
+
+def _validate_frame_replays(frames: Sequence[object]) -> list[str]:
+    errors: list[str] = []
+    for index, frame in enumerate(frames):
+        if not isinstance(frame, Mapping):
+            continue
+        source = frame.get("source_coordinates")
+        if not isinstance(source, Mapping):
+            continue
+        robot = source.get("robot")
+        focal = source.get("focal_actor")
+        robot_pos = _vector2(robot.get("position")) if isinstance(robot, Mapping) else None
+        robot_vel = _vector2(robot.get("velocity")) if isinstance(robot, Mapping) else None
+        focal_actor = _source_focal_actor_for_replay(frame, focal)
+        errors.extend(_validate_world_replay(frame, index, source, robot, focal))
+        errors.extend(
+            _validate_route_replay(frame, index, source, robot_pos, robot_vel, focal_actor)
+        )
+        errors.extend(_validate_conflict_replay(frame, index, source, robot_pos, focal_actor))
+        errors.extend(
+            _validate_relative_replay(frame, index, source, robot_pos, robot_vel, focal_actor)
+        )
+    return errors
+
+
+def _source_focal_actor_for_replay(
+    frame: Mapping[str, Any],
+    focal: object,
+) -> dict[str, Any] | None:
+    if not isinstance(focal, Mapping):
+        return None
+    relative = frame.get("relative_interaction")
+    actor_id = relative.get("actor_id") if isinstance(relative, Mapping) else None
+    return {
+        "id": actor_id,
+        "position": focal.get("position"),
+        "heading": focal.get("heading"),
+        "velocity": focal.get("velocity"),
+        "radius": focal.get("radius_m"),
+    }
+
+
+def _validate_world_replay(
+    frame: Mapping[str, Any],
+    index: int,
+    source: Mapping[str, Any],
+    robot: object,
+    focal: object,
+) -> list[str]:
+    world = frame.get("world")
+    if not isinstance(world, Mapping) or world.get("status") != "available":
+        return []
+    if source.get("coordinate_frame") != "world":
+        return [f"/frames/{index}/world/status: source coordinate frame is not world"]
+    if world.get("robot") != robot:
+        return [f"/frames/{index}/world/robot: must replay source robot"]
+    if world.get("focal_actor") != focal:
+        return [f"/frames/{index}/world/focal_actor: must replay source focal actor"]
+    return []
+
+
+def _validate_route_replay(
+    frame: Mapping[str, Any],
+    index: int,
+    source: Mapping[str, Any],
+    robot_pos: tuple[float, float] | None,
+    robot_vel: tuple[float, float] | None,
+    focal_actor: Mapping[str, Any] | None,
+) -> list[str]:
+    route_record = frame.get("route")
+    if not isinstance(route_record, Mapping) or route_record.get("status") != "available":
+        return []
+    route = _route_spec_from_frame(route_record)
+    if route is None:
+        return [f"/frames/{index}/route: cannot replay route geometry"]
+    expected = _route_frame(
+        robot_pos,
+        robot_vel,
+        focal_actor,
+        route,
+        str(source.get("coordinate_frame")),
+    )
+    errors: list[str] = []
+    for key in ("s_m", "n_m", "progress_rate_mps"):
+        if route_record.get(key) != expected.get(key):
+            errors.append(f"/frames/{index}/route/{key}: must replay source coordinates")
+    for key in (
+        "focal_actor_status",
+        "focal_actor_s_m",
+        "focal_actor_n_m",
+        "focal_actor_progress_rate_mps",
+    ):
+        if route_record.get(key) != expected.get(key):
+            errors.append(f"/frames/{index}/route/{key}: must replay source focal actor")
+    return errors
+
+
+def _route_spec_from_frame(route_record: Mapping[str, Any]) -> RouteSpec | None:
+    geometry = route_record.get("geometry")
+    if not isinstance(geometry, Mapping):
+        return None
+    start = _vector2(geometry.get("start"))
+    end = _vector2(geometry.get("end"))
+    if start is None or end is None:
+        return None
+    return RouteSpec(
+        str(route_record.get("route_id")),
+        start,
+        end,
+        str(route_record.get("provenance_id")),
+        str(route_record.get("registry_checksum")),
+    )
+
+
+def _validate_conflict_replay(
+    frame: Mapping[str, Any],
+    index: int,
+    source: Mapping[str, Any],
+    robot_pos: tuple[float, float] | None,
+    focal_actor: Mapping[str, Any] | None,
+) -> list[str]:
+    conflict_record = frame.get("conflict")
+    if not isinstance(conflict_record, Mapping) or conflict_record.get("status") != "available":
+        return []
+    conflict = _conflict_spec_from_frame(conflict_record)
+    if conflict is None:
+        return [f"/frames/{index}/conflict: cannot replay conflict geometry"]
+    expected = _conflict_frame(
+        robot_pos,
+        focal_actor,
+        conflict,
+        str(source.get("coordinate_frame")),
+    )
+    errors: list[str] = []
+    for key in (
+        "robot_signed_distance_to_zone_m",
+        "focal_actor_status",
+        "focal_actor_signed_distance_to_zone_m",
+    ):
+        if conflict_record.get(key) != expected.get(key):
+            errors.append(f"/frames/{index}/conflict/{key}: must replay source coordinates")
+    return errors
+
+
+def _conflict_spec_from_frame(conflict_record: Mapping[str, Any]) -> ConflictZoneSpec | None:
+    geometry = conflict_record.get("geometry")
+    if not isinstance(geometry, Mapping):
+        return None
+    center = _vector2(geometry.get("center"))
+    radius = geometry.get("radius_m")
+    if center is None or not _finite_json_number(radius):
+        return None
+    return ConflictZoneSpec(
+        str(conflict_record.get("zone_id")),
+        center,
+        float(radius),
+        str(conflict_record.get("provenance_id")),
+        str(conflict_record.get("registry_checksum")),
+    )
+
+
+def _validate_relative_replay(
+    frame: Mapping[str, Any],
+    index: int,
+    source: Mapping[str, Any],
+    robot_pos: tuple[float, float] | None,
+    robot_vel: tuple[float, float] | None,
+    focal_actor: Mapping[str, Any] | None,
+) -> list[str]:
+    relative = frame.get("relative_interaction")
+    if not isinstance(relative, Mapping) or relative.get("status") != "available":
+        return []
+    expected = _relative_state(
+        _replay_frame_robot(source),
+        focal=focal_actor,
+        robot_pos=robot_pos,
+        robot_vel=robot_vel,
+    )
+    errors: list[str] = []
+    for key in (
+        "relative_longitudinal_m",
+        "relative_lateral_m",
+        "center_distance_m",
+        "proxy_surface_clearance_m",
+        "proxy_surface_clearance_status",
+        "closest_approach",
+    ):
+        if relative.get(key) != expected.get(key):
+            errors.append(
+                f"/frames/{index}/relative_interaction/{key}: must replay source coordinates"
+            )
+    return errors
+
+
+def _replay_frame_robot(source: Mapping[str, Any]) -> SimulationTraceFrame:
+    robot = dict(source.get("robot")) if isinstance(source.get("robot"), Mapping) else {}
+    if "radius_m" in robot:
+        robot["radius"] = robot["radius_m"]
+    return SimulationTraceFrame(step=0, time_s=0.0, robot=dict(robot), pedestrians=[], planner={})
 
 
 def _validate_route_record(value: object, path: str) -> list[str]:  # noqa: C901
@@ -1112,7 +1313,7 @@ def _expected_hierarchy_anchors(
     ]
 
 
-def _validate_event_inventory(
+def _validate_event_inventory(  # noqa: C901
     events: list[object],
     frames: object,
     *,
@@ -1140,6 +1341,8 @@ def _validate_event_inventory(
             continue
         path = f"/event_anchors/{EXPECTED_EVENT_TYPES.index(event_type)}"
         errors.extend(_validate_event_record_semantics(event, path, frame_by_step, focal_actor_id))
+    if isinstance(frames, list):
+        errors.extend(_validate_event_replays(events, frames, focal_actor_id))
     terminal = by_type.get("terminal_event")
     if isinstance(terminal, Mapping):
         if terminal.get("status") != "unavailable":
@@ -1149,6 +1352,103 @@ def _validate_event_inventory(
                 errors.append(f"/event_anchors/9/{key}: terminal_event must not carry time")
         if terminal.get("source_fields") != ["terminal_event_contract_unavailable"]:
             errors.append("/event_anchors/9/source_fields: terminal_event contract unavailable")
+    return errors
+
+
+def _validate_event_replays(
+    events: Sequence[object],
+    frames: Sequence[object],
+    focal_actor_id: object,
+) -> list[str]:
+    process_frames = [frame for frame in frames if isinstance(frame, Mapping)]
+    event_frames = _diagnostic_frames(process_frames)
+    try:
+        expected = [
+            _event_from_condition(
+                "minimum_clearance",
+                _minimum_clearance_frame(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["relative_interaction.proxy_surface_clearance_m"],
+                absent_status="unavailable",
+                zone_id=None,
+            ),
+            _event_from_condition(
+                "first_material_deceleration",
+                _first_deceleration_frame(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["commands.commanded.linear_velocity"],
+                absent_status=_absent_status_for_command_signal(event_frames, "linear_velocity"),
+                zone_id=None,
+            ),
+            _event_from_condition(
+                "first_material_turn_response",
+                _first_turn_frame(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["commands.commanded.angular_velocity"],
+                absent_status=_absent_status_for_command_signal(event_frames, "angular_velocity"),
+                zone_id=None,
+            ),
+            _event_from_condition(
+                "conflict_zone_entry",
+                _first_conflict_entry(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["conflict.robot_signed_distance_to_zone_m"],
+                absent_status="not_observed"
+                if _has_conflict_signal(event_frames)
+                else "unavailable",
+                zone_id=_first_zone_id(event_frames),
+            ),
+            None,
+            _event_from_condition(
+                "first_safety_predicate_breach",
+                _first_safety_predicate_breach_frame(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["relative_interaction.proxy_surface_clearance_m"],
+                absent_status=_absent_status_for_proxy_clearance(event_frames),
+                zone_id=None,
+            ),
+            _event_from_condition(
+                "proxy_overlap_event",
+                _first_proxy_overlap_frame(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["relative_interaction.proxy_surface_clearance_m"],
+                absent_status=_absent_status_for_proxy_clearance(event_frames),
+                zone_id=None,
+            ),
+            _event_from_condition(
+                "sustained_stall_onset",
+                _first_stall_frame(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["robot.velocity"],
+                absent_status=_absent_status_for_robot_velocity(event_frames),
+                zone_id=None,
+            ),
+            _event_from_condition(
+                "recovery_onset",
+                _first_recovery_frame(event_frames),
+                actor_id=focal_actor_id,
+                source_fields=["robot.velocity"],
+                absent_status=_absent_status_for_robot_velocity(event_frames),
+                zone_id=None,
+            ),
+            _event_from_condition(
+                "terminal_event",
+                None,
+                actor_id=focal_actor_id,
+                source_fields=["terminal_event_contract_unavailable"],
+                absent_status="unavailable",
+                zone_id=None,
+            ),
+        ]
+    except (KeyError, TypeError, ValueError):
+        return ["/event_anchors: cannot replay malformed frames"]
+    errors: list[str] = []
+    for index, expected_event in enumerate(expected):
+        if expected_event is None:
+            continue
+        actual = events[index] if index < len(events) else None
+        if isinstance(actual, Mapping) and dict(actual) != expected_event:
+            errors.append(f"/event_anchors/{index}: must replay detector output")
     return errors
 
 
@@ -1217,7 +1517,11 @@ def _validate_encounter_replays(encounters: Mapping[str, Any], frames: object) -
     return errors
 
 
-def _validate_pair_semantics(pair: Mapping[str, Any], events: object) -> list[str]:  # noqa: C901
+def _validate_pair_semantics(  # noqa: C901
+    pair: Mapping[str, Any],
+    events: object,
+    source_trace: object,
+) -> list[str]:
     errors: list[str] = []
     grain = pair.get("comparison_grain")
     grain_id = grain.get("grain_id") if isinstance(grain, Mapping) else None
@@ -1245,6 +1549,21 @@ def _validate_pair_semantics(pair: Mapping[str, Any], events: object) -> list[st
                     and SHA256_HEX_RE.fullmatch(provenance[key])
                 ):
                     errors.append(f"/pair_compatibility/provenance_gate/{key}: expected sha256 hex")
+            if isinstance(source_trace, Mapping) and provenance.get(
+                "left_content_sha256"
+            ) != source_trace.get("content_sha256"):
+                errors.append(
+                    "/pair_compatibility/provenance_gate/left_content_sha256: must match source trace"
+                )
+            right_source = pair.get("right_source_trace")
+            if (
+                isinstance(right_source, Mapping)
+                and right_source.get("status") == "available"
+                and provenance.get("right_content_sha256") != right_source.get("content_sha256")
+            ):
+                errors.append(
+                    "/pair_compatibility/provenance_gate/right_content_sha256: must match right source trace"
+                )
         checks = provenance.get("checks")
         if isinstance(checks, Mapping):
             required = ["map_id_present", "horizon_present"]
@@ -1263,6 +1582,11 @@ def _validate_common_event_anchor_semantics(pair: Mapping[str, Any], events: obj
     left_by_id = {
         event.get("event_id"): event
         for event in events
+        if isinstance(event, Mapping) and event.get("status") == "available"
+    }
+    right_by_id = {
+        event.get("event_id"): event
+        for event in pair.get("right_event_anchors", [])
         if isinstance(event, Mapping) and event.get("status") == "available"
     }
     errors: list[str] = []
@@ -1287,8 +1611,13 @@ def _validate_common_event_anchor_semantics(pair: Mapping[str, Any], events: obj
         )
         if anchor_identity != identity:
             errors.append(f"{path}: identity must match resolved left event")
+        right = right_by_id.get(anchor.get("right_event_id"))
         if not isinstance(anchor.get("right_event_id"), str) or not anchor["right_event_id"]:
             errors.append(f"{path}/right_event_id: required")
+        elif not isinstance(right, Mapping):
+            errors.append(f"{path}/right_event_id: must resolve to available right event")
+        elif _process_event_identity(right) != identity:
+            errors.append(f"{path}: right identity must match resolved left event")
     return errors
 
 
@@ -1618,26 +1947,31 @@ def _trace_content_contract(trace: SimulationTraceExport) -> dict[str, Any]:
 
 
 def _run_config_contract(trace: SimulationTraceExport) -> dict[str, Any]:
-    run_config = next(
-        (
-            frame.planner.get("run_config")
-            for frame in trace.frames
-            if isinstance(frame.planner.get("run_config"), Mapping)
-        ),
-        None,
-    )
-    if not isinstance(run_config, Mapping):
+    run_configs = [
+        frame.planner.get("run_config")
+        for frame in trace.frames
+        if isinstance(frame.planner.get("run_config"), Mapping)
+    ]
+    if not run_configs:
         return {"status": "unavailable", "reason": "run_config_unavailable"}
-    time_step = run_config.get("time_step_s")
-    config_digest = run_config.get("config_digest")
-    if not (_finite_json_number(time_step) and float(time_step) > 0.0):
+    time_steps = [run_config.get("time_step_s") for run_config in run_configs]
+    if any(
+        isinstance(time_step, bool)
+        or not (_finite_json_number(time_step) and float(time_step) > 0.0)
+        for time_step in time_steps
+    ):
         return {"status": "unavailable", "reason": "run_config_time_step_unavailable"}
-    if not (isinstance(config_digest, str) and SHA256_HEX_RE.fullmatch(config_digest)):
+    if len({float(time_step) for time_step in time_steps}) != 1:
+        return {"status": "unavailable", "reason": "run_config_time_step_inconsistent"}
+    digests = [run_config.get("config_digest") for run_config in run_configs]
+    if any(not (isinstance(digest, str) and SHA256_HEX_RE.fullmatch(digest)) for digest in digests):
         return {"status": "unavailable", "reason": "run_config_digest_unavailable"}
+    if len(set(digests)) != 1:
+        return {"status": "unavailable", "reason": "run_config_digest_inconsistent"}
     return {
         "status": "available",
-        "time_step_s": float(time_step),
-        "config_digest": config_digest,
+        "time_step_s": float(time_steps[0]),
+        "config_digest": str(digests[0]),
         "source": "planner.run_config",
     }
 
@@ -3015,7 +3349,7 @@ def _terminal_event_anchor(
     )
 
 
-def _collision_anchor_state(
+def _collision_anchor_state(  # noqa: C901
     trace: SimulationTraceExport,
     frames: Sequence[Mapping[str, Any]],
     *,
@@ -3025,6 +3359,7 @@ def _collision_anchor_state(
     boolean_observed = False
     saw_unbound = False
     saw_focal_outside = False
+    trace_bounds = _trace_time_bounds(trace)
     for trace_frame in trace.frames:
         signals = _canonical_collision_signals(trace_frame.planner)
         boolean_observed = boolean_observed or any(signal["observed"] for signal in signals)
@@ -3049,6 +3384,14 @@ def _collision_anchor_state(
             ):
                 saw_focal_outside = True
                 continue
+            if trace_bounds is not None and not (
+                trace_bounds[0] <= collision_time_float <= trace_bounds[1]
+            ):
+                return {
+                    "status": "unavailable",
+                    "observed": True,
+                    "reason": "collision_time_outside_trace_sample_bounds",
+                }
             frame = _frame_for_collision_time(frames, collision_time_float)
             if frame is not None:
                 return {
@@ -3077,6 +3420,13 @@ def _collision_anchor_state(
             "reason": "collision_not_bound_to_focal_encounter",
         }
     return {"status": "unavailable", "observed": boolean_observed}
+
+
+def _trace_time_bounds(trace: SimulationTraceExport) -> tuple[float, float] | None:
+    times = [frame.time_s for frame in trace.frames if math.isfinite(float(frame.time_s))]
+    if not times:
+        return None
+    return min(times), max(times)
 
 
 def _collision_binds_focal(signal: Mapping[str, Any], focal_actor_id: object) -> bool:

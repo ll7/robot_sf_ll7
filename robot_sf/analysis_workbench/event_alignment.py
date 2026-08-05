@@ -29,10 +29,12 @@ def unavailable_pair_compatibility(
         "reason": reason,
         "comparison_grain": _comparison_grain(comparison_grain),
         "provenance_gate": {"status": "unavailable", "compatible": False, "reason": reason},
+        "right_source_trace": {"status": "unavailable", "reason": reason},
         "initial_state_equivalence": {"status": "unavailable", "reason": reason},
         "route_spawn_separation": {"status": "unavailable", "reason": reason},
         "shared_prefix": {"status": "unavailable", "reason": reason},
         "valid_common_event_anchors": [],
+        "right_event_anchors": [],
         "duration_normalization": {"applied": False},
         "divergence_interpretation": {
             "allowed": False,
@@ -106,10 +108,16 @@ def build_pair_compatibility_record(
         "status": "available" if compatible else "incompatible",
         "comparison_grain": _comparison_grain(comparison_grain),
         "provenance_gate": provenance,
+        "right_source_trace": {
+            "status": "available",
+            "trace_id": right.trace_id,
+            "content_sha256": _trace_content_sha256(right),
+        },
         "initial_state_equivalence": initial,
         "route_spawn_separation": route_spawn,
         "shared_prefix": shared_prefix,
         "valid_common_event_anchors": common_event_anchors,
+        "right_event_anchors": _event_receipts(right_events),
         "duration_normalization": {"applied": False},
         "divergence_interpretation": {
             "allowed": shared_prefix_status,
@@ -535,6 +543,26 @@ def _common_event_anchors(
             item["left_event_id"],
         ),
     )
+
+
+def _event_receipts(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    receipts = []
+    for event in events:
+        if event.get("status") != "available":
+            continue
+        identity = _event_identity(event)
+        receipts.append(
+            {
+                "event_id": event["event_id"],
+                "event_type": identity[0],
+                "detector_profile_version": identity[1],
+                "actor_id": identity[2],
+                "zone_id": identity[3],
+                "source_fields": list(identity[4]),
+                "status": "available",
+            }
+        )
+    return sorted(receipts, key=lambda item: str(item["event_id"]))
 
 
 def _event_identity(event: Mapping[str, Any]) -> tuple[str, str, object, object, tuple[str, ...]]:

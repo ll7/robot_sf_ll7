@@ -324,10 +324,12 @@
         "status",
         "comparison_grain",
         "provenance_gate",
+        "right_source_trace",
         "initial_state_equivalence",
         "route_spawn_separation",
         "shared_prefix",
         "valid_common_event_anchors",
+        "right_event_anchors",
         "divergence_interpretation"
       ],
       "properties": {
@@ -350,12 +352,17 @@
             "right_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
           }
         },
+        "right_source_trace": {"$ref": "#/$defs/pair_source_trace"},
         "initial_state_equivalence": {"type": "object"},
         "route_spawn_separation": {"type": "object"},
         "shared_prefix": {"type": "object"},
         "valid_common_event_anchors": {
           "type": "array",
           "items": {"$ref": "#/$defs/common_event_anchor"}
+        },
+        "right_event_anchors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/event_receipt"}
         },
         "duration_normalization": {"type": "object"},
         "divergence_interpretation": {
@@ -774,6 +781,51 @@
         "status": {"const": "available"},
         "left_event_id": {"type": "string"},
         "right_event_id": {"type": "string"}
+      }
+    },
+    "pair_source_trace": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "trace_id", "content_sha256"],
+          "properties": {
+            "status": {"const": "available"},
+            "trace_id": {"type": "string"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      ]
+    },
+    "event_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "event_type",
+        "detector_profile_version",
+        "actor_id",
+        "zone_id",
+        "source_fields",
+        "status"
+      ],
+      "properties": {
+        "event_id": {"type": "string"},
+        "event_type": {"type": "string"},
+        "detector_profile_version": {"type": "string"},
+        "actor_id": {"type": ["string", "null"]},
+        "zone_id": {"type": ["string", "null"]},
+        "source_fields": {"type": "array", "items": {"type": "string"}},
+        "status": {"const": "available"}
       }
     },
     "availability": {

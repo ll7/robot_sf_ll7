@@ -1598,19 +1598,23 @@ def validate_ch7_worked_example_portfolio(  # noqa: C901, PLR0912, PLR0915
     violations: list[str] = []
     if not isinstance(manifest, Mapping):
         return PortfolioValidation([f"manifest must be a dict, got {type(manifest).__name__}"])
-    try:
-        from jsonschema import Draft202012Validator  # noqa: PLC0415
+    from robot_sf.common.optional_import import try_import  # noqa: PLC0415
 
-        schema = json.loads(_schema_path().read_text(encoding="utf-8"))
-        errors = sorted(
-            Draft202012Validator(schema).iter_errors(manifest),
-            key=lambda error: list(error.absolute_path),
-        )
-        for error in errors:
-            path = "/".join(str(part) for part in error.absolute_path)
-            violations.append(f"schema /{path}: {error.message}")
-    except (ImportError, OSError, json.JSONDecodeError) as exc:
-        violations.append(f"schema validation unavailable: {exc}")
+    jsonschema = try_import("jsonschema")
+    if jsonschema is None:
+        violations.append("schema validation unavailable: jsonschema is not installed")
+    else:
+        try:
+            schema = json.loads(_schema_path().read_text(encoding="utf-8"))
+            errors = sorted(
+                jsonschema.Draft202012Validator(schema).iter_errors(manifest),
+                key=lambda error: list(error.absolute_path),
+            )
+            for error in errors:
+                path = "/".join(str(part) for part in error.absolute_path)
+                violations.append(f"schema /{path}: {error.message}")
+        except (OSError, json.JSONDecodeError) as exc:
+            violations.append(f"schema validation unavailable: {exc}")
     if manifest.get("schema_version") != SCHEMA_VERSION:
         violations.append(f"schema_version mismatch: {manifest.get('schema_version')!r}")
     expected = canonical_sha256({**dict(manifest), "content_sha256": ""})

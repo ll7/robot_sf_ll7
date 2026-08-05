@@ -37,8 +37,8 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
     SimulationTraceExport,
     SimulationTraceFrame,
+    SimulationTraceSource,
     load_simulation_trace_export,
-    simulation_trace_export_from_dict,
 )
 from robot_sf.common.json_pointer import json_pointer
 from robot_sf.errors import RobotSfError
@@ -183,6 +183,8 @@ def _semantic_validation_errors(  # noqa: C901, PLR0912, PLR0915
         if isinstance(payload.get("encounters"), Mapping)
         else None
     )
+    if isinstance(source_trace, Mapping) and isinstance(frames, list):
+        errors.extend(_validate_source_contract_frame_replays(source_trace, frames, focal))
     events = payload.get("event_anchors")
     if isinstance(events, list):
         errors.extend(
@@ -390,18 +392,42 @@ def _validate_source_actor_state(value: object, path: str) -> list[str]:
     return errors
 
 
-def _validate_coordinate_frame_contracts(
+def _validate_coordinate_frame_contracts(  # noqa: C901
     coordinate_frames: object,
     frames: Sequence[object],
 ) -> list[str]:
     if not isinstance(coordinate_frames, Mapping):
         return []
     errors: list[str] = []
-    route_contract = coordinate_frames.get("route")
-    conflict_contract = coordinate_frames.get("conflict")
+    contracts = {
+        "world": coordinate_frames.get("world"),
+        "route": coordinate_frames.get("route"),
+        "conflict": coordinate_frames.get("conflict"),
+        "relative_interaction": coordinate_frames.get("relative_interaction"),
+    }
+    route_contract = contracts["route"]
+    conflict_contract = contracts["conflict"]
     for index, frame in enumerate(frames):
         if not isinstance(frame, Mapping):
             continue
+        for key, contract in contracts.items():
+            record = frame.get(key)
+            if not isinstance(contract, Mapping) or not isinstance(record, Mapping):
+                continue
+            contract_status = contract.get("status")
+            record_status = record.get("status")
+            if contract_status == "unavailable" and record_status == "available":
+                errors.append(
+                    f"/coordinate_frames/{key}/status: unavailable contract cannot have available frames"
+                )
+            if (
+                contract_status == "available"
+                and record_status == "unavailable"
+                and not _frame_unavailable_allowed_by_contract(key, record)
+            ):
+                errors.append(
+                    f"/frames/{index}/{key}/status: unavailable frame must match coordinate contract"
+                )
         route = frame.get("route")
         if (
             isinstance(route_contract, Mapping)
@@ -427,6 +453,22 @@ def _validate_coordinate_frame_contracts(
                         f"/frames/{index}/conflict/{key}: must match coordinate_frames.conflict"
                     )
     return errors
+
+
+def _frame_unavailable_allowed_by_contract(key: str, record: Mapping[str, Any]) -> bool:
+    reason = record.get("reason")
+    return (key, reason) in {
+        ("world", "missing_robot_position"),
+        ("route", "missing_robot_position"),
+        ("conflict", "missing_robot_position"),
+        ("relative_interaction", "focal_actor_missing_at_step"),
+        ("relative_interaction", "outside_focal_encounter_interval"),
+        ("relative_interaction", "focal_actor_not_in_frame"),
+        ("relative_interaction", "missing_or_nonfinite_robot_heading"),
+        ("relative_interaction", "missing_focal_actor_position"),
+        ("relative_interaction", "missing_position"),
+        ("relative_interaction", "missing_robot_position"),
+    }
 
 
 def _validate_frame_replays(frames: Sequence[object]) -> list[str]:
@@ -991,9 +1033,8 @@ def _validate_source_trace_content_contract(
     contract = source_trace.get("content_contract")
     if not isinstance(contract, Mapping):
         return [f"{path}/content_contract: required"]
-    try:
-        simulation_trace_export_from_dict(dict(contract))
-    except Exception:  # noqa: BLE001
+    trace = _trace_from_content_contract(contract)
+    if trace is None:
         return [f"{path}/content_contract: invalid simulation trace content contract"]
     expected_digest = _json_sha256_digest(contract)
     if source_trace.get("content_sha256") != expected_digest:
@@ -1002,6 +1043,10 @@ def _validate_source_trace_content_contract(
     for key in ("schema_version", "trace_id", "coordinate_frame", "units", "source"):
         if source_trace.get(key) != contract.get(key):
             errors.append(f"{path}/{key}: must match content_contract")
+    if "run_config_contract" in source_trace and source_trace.get(
+        "run_config_contract"
+    ) != _run_config_contract(trace):
+        errors.append(f"{path}/run_config_contract: must replay content_contract")
     return errors
 
 
@@ -1544,10 +1589,106 @@ def _trace_from_source_contract(source_trace: object) -> SimulationTraceExport |
     contract = source_trace.get("content_contract")
     if not isinstance(contract, Mapping):
         return None
-    try:
-        return simulation_trace_export_from_dict(dict(contract))
-    except Exception:  # noqa: BLE001
+    return _trace_from_content_contract(contract)
+
+
+def _trace_from_content_contract(contract: Mapping[str, Any]) -> SimulationTraceExport | None:
+    source = contract.get("source")
+    frames = contract.get("frames")
+    if not (
+        contract.get("schema_version") == SIMULATION_TRACE_EXPORT_SCHEMA_VERSION
+        and isinstance(contract.get("trace_id"), str)
+        and isinstance(source, Mapping)
+        and isinstance(contract.get("evidence_boundary"), str)
+        and isinstance(contract.get("coordinate_frame"), str)
+        and isinstance(contract.get("units"), Mapping)
+        and isinstance(frames, list)
+    ):
         return None
+    required_source = {"scenario_id", "seed", "planner_id", "episode_id", "generated_by"}
+    if not required_source.issubset(source):
+        return None
+    trace_frames: list[SimulationTraceFrame] = []
+    for frame in frames:
+        if not isinstance(frame, Mapping):
+            return None
+        step = frame.get("step")
+        time_s = frame.get("time_s")
+        robot = frame.get("robot")
+        pedestrians = frame.get("pedestrians")
+        planner = frame.get("planner")
+        if not (
+            isinstance(step, int)
+            and _finite_json_number(time_s)
+            and isinstance(robot, Mapping)
+            and isinstance(pedestrians, list)
+            and all(isinstance(actor, Mapping) for actor in pedestrians)
+            and isinstance(planner, Mapping)
+        ):
+            return None
+        trace_frames.append(
+            SimulationTraceFrame(
+                step=step,
+                time_s=float(time_s),
+                robot=dict(robot),
+                pedestrians=[dict(actor) for actor in pedestrians],
+                planner=dict(planner),
+            )
+        )
+    return SimulationTraceExport(
+        schema_version=str(contract["schema_version"]),
+        trace_id=str(contract["trace_id"]),
+        source=SimulationTraceSource(
+            scenario_id=str(source["scenario_id"]),
+            seed=int(source["seed"]),
+            planner_id=str(source["planner_id"]),
+            episode_id=str(source["episode_id"]),
+            generated_by=str(source["generated_by"]),
+        ),
+        evidence_boundary=str(contract["evidence_boundary"]),
+        coordinate_frame=str(contract["coordinate_frame"]),
+        units={str(key): str(value) for key, value in contract["units"].items()},
+        frames=trace_frames,
+    )
+
+
+def _validate_source_contract_frame_replays(
+    source_trace: Mapping[str, Any],
+    frames: Sequence[object],
+    focal: object,
+) -> list[str]:
+    trace = _trace_from_source_contract(source_trace)
+    if trace is None:
+        return []
+    focal_actor_id = focal.get("actor_id") if isinstance(focal, Mapping) else None
+    focal_encounter = focal if isinstance(focal, Mapping) else {}
+    errors: list[str] = []
+    for index, frame in enumerate(frames):
+        if not isinstance(frame, Mapping):
+            continue
+        if index >= len(trace.frames):
+            errors.append(f"/frames/{index}: missing source content frame")
+            continue
+        source_frame = trace.frames[index]
+        if frame.get("step") != source_frame.step or frame.get("time_s") != source_frame.time_s:
+            errors.append(f"/frames/{index}: step/time must match source content frame")
+            continue
+        expected = _process_frame(
+            source_frame,
+            frame_index=index,
+            focal_actor_id=focal_actor_id,
+            focal_encounter=focal_encounter,
+            route=None,
+            conflict_zone=None,
+            source_coordinate_frame=trace.coordinate_frame,
+        )
+        if frame.get("source_coordinates") != expected["source_coordinates"]:
+            errors.append(f"/frames/{index}/source_coordinates: must replay source content")
+        if frame.get("commands") != expected["commands"]:
+            errors.append(f"/frames/{index}/commands: must replay source content")
+    if len(frames) != len(trace.frames):
+        errors.append("/frames: frame count must match source content")
+    return errors
 
 
 def _validate_event_record_semantics(
@@ -1682,7 +1823,7 @@ def _validate_pair_semantics(  # noqa: C901, PLR0912
     return errors
 
 
-def _validate_right_event_receipts(pair: Mapping[str, Any]) -> list[str]:
+def _validate_right_event_receipts(pair: Mapping[str, Any]) -> list[str]:  # noqa: C901
     receipts = pair.get("right_event_anchors")
     if not isinstance(receipts, list):
         return []
@@ -1716,7 +1857,63 @@ def _validate_right_event_receipts(pair: Mapping[str, Any]) -> list[str]:
         eligibility = receipt.get("visual_anchor_eligibility")
         if not (isinstance(eligibility, Mapping) and eligibility.get("eligible") is True):
             errors.append(f"{path}/visual_anchor_eligibility: available receipt must be eligible")
+    expected = _right_event_receipts_from_source(pair)
+    if expected is not None and receipts != expected:
+        errors.append("/pair_compatibility/right_event_anchors: must replay right source content")
     return errors
+
+
+def _right_event_receipts_from_source(pair: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+    right_source = pair.get("right_source_trace")
+    if not isinstance(right_source, Mapping) or right_source.get("status") != "available":
+        return None
+    trace = _trace_from_source_contract(right_source)
+    if trace is None:
+        return None
+    focal = _resolve_focal_actor(trace)
+    frames = [
+        _process_frame(
+            frame,
+            frame_index=index,
+            focal_actor_id=focal.get("actor_id"),
+            focal_encounter=focal,
+            route=None,
+            conflict_zone=None,
+            source_coordinate_frame=trace.coordinate_frame,
+        )
+        for index, frame in enumerate(trace.frames)
+    ]
+    events = _event_anchors(
+        trace,
+        frames=_diagnostic_frames(frames),
+        focal_actor_id=focal.get("actor_id"),
+        focal_interval=_focal_interval_bounds(focal),
+    )
+    return _event_receipts_for_validation(events)
+
+
+def _event_receipts_for_validation(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    receipts = []
+    for event in events:
+        if event.get("status") != "available":
+            continue
+        receipts.append(
+            {
+                "event_id": event["event_id"],
+                "event_type": str(event["event_type"]),
+                "detector_profile_version": str(event["detector_profile_version"]),
+                "time_s": float(event["time_s"]),
+                "step": int(event["step"]),
+                "confidence": str(event["confidence"]),
+                "actor_id": event.get("actor_id"),
+                "zone_id": event.get("zone_id"),
+                "source_fields": [str(field) for field in event.get("source_fields", [])],
+                "status": "available",
+                "event_relative_time": dict(event["event_relative_time"]),
+                "visual_anchor_eligibility": dict(event["visual_anchor_eligibility"]),
+            }
+        )
+    return sorted(receipts, key=lambda item: str(item["event_id"]))
 
 
 def _validate_common_event_anchor_semantics(pair: Mapping[str, Any], events: object) -> list[str]:
@@ -2081,13 +2278,27 @@ def _trace_content_contract(trace: SimulationTraceExport) -> dict[str, Any]:
             {
                 "step": frame.step,
                 "time_s": frame.time_s,
-                "robot": frame.robot,
-                "pedestrians": list(frame.pedestrians),
-                "planner": frame.planner,
+                "robot": _strict_json_value(frame.robot),
+                "pedestrians": _strict_json_value(list(frame.pedestrians)),
+                "planner": _strict_json_value(frame.planner),
             }
             for frame in trace.frames
         ],
     }
+
+
+def _strict_json_value(value: Any) -> Any:
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else {"nonfinite_number": repr(value)}
+    if isinstance(value, Mapping):
+        return {str(key): _strict_json_value(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+        return [_strict_json_value(item) for item in value]
+    return value
 
 
 def _run_config_contract(trace: SimulationTraceExport) -> dict[str, Any]:
@@ -2487,7 +2698,9 @@ def _encounter_report_checksum_status(
 
 
 def _json_sha256_digest(value: object) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
+        "utf-8"
+    )
     return hashlib.sha256(encoded).hexdigest()
 
 

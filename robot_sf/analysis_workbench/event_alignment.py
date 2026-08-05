@@ -504,17 +504,33 @@ def _trace_content_contract(trace: SimulationTraceExport) -> dict[str, Any]:
             {
                 "step": frame.step,
                 "time_s": frame.time_s,
-                "robot": frame.robot,
-                "pedestrians": list(frame.pedestrians),
-                "planner": frame.planner,
+                "robot": _strict_json_value(frame.robot),
+                "pedestrians": _strict_json_value(list(frame.pedestrians)),
+                "planner": _strict_json_value(frame.planner),
             }
             for frame in trace.frames
         ],
     }
 
 
+def _strict_json_value(value: Any) -> Any:
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else {"nonfinite_number": repr(value)}
+    if isinstance(value, dict):
+        return {str(key): _strict_json_value(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_strict_json_value(item) for item in value]
+    return value
+
+
 def _json_sha256_digest(value: object) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
+        "utf-8"
+    )
     return hashlib.sha256(encoded).hexdigest()
 
 

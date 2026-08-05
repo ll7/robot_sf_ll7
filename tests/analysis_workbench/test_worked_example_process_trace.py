@@ -1031,6 +1031,52 @@ def test_top_level_route_and_conflict_contracts_bind_frame_geometry() -> None:
         validate_worked_example_process_trace(conflict_forged)
 
 
+def test_availability_contracts_reject_bidirectional_status_forgery() -> None:
+    """Top-level and frame availability status must stay mutually consistent."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=RouteSpec(
+            "route-b",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-b.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
+        conflict_zone=ConflictZoneSpec(
+            "zone-b",
+            (1.0, 0.0),
+            0.25,
+            "zone-b.v1",
+            _zone_checksum((1.0, 0.0), 0.25),
+        ),
+    )
+
+    route_top_unavailable = deepcopy(payload)
+    route_top_unavailable["coordinate_frames"]["route"] = {
+        "status": "unavailable",
+        "reason": "registered_route_unavailable",
+    }
+    with pytest.raises(Exception, match="/coordinate_frames/route/status"):
+        validate_worked_example_process_trace(route_top_unavailable)
+
+    route_frame_unavailable = deepcopy(payload)
+    route_frame_unavailable["frames"][0]["route"] = {
+        "status": "unavailable",
+        "reason": "registered_route_unavailable",
+    }
+    with pytest.raises(Exception, match="/frames/0/route/status"):
+        validate_worked_example_process_trace(route_frame_unavailable)
+
+    relative_top_unavailable = deepcopy(payload)
+    relative_top_unavailable["coordinate_frames"]["relative_interaction"] = {
+        "status": "unavailable",
+        "reason": "requested_focal_actor_missing",
+    }
+    with pytest.raises(Exception, match="/coordinate_frames/relative_interaction/status"):
+        validate_worked_example_process_trace(relative_top_unavailable)
+
+
 def test_focal_actor_identity_binds_to_source_coordinates() -> None:
     """Coordinated focal/event/relative renames must not override source actor identity."""
 
@@ -1091,6 +1137,34 @@ def test_global_minimum_and_switches_replay_from_source_actor_inventory() -> Non
 
     with pytest.raises(Exception, match="/frames/0/global_minimum_actor"):
         validate_worked_example_process_trace(forged)
+
+
+def test_derived_source_coordinates_and_commands_replay_from_content_contract() -> None:
+    """Swapping a valid source-A receipt into source-B derived frames must reject."""
+
+    source_a = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(trace_id="source-a", actor_start_offset=0.4)
+        )
+    )
+    source_b = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(trace_id="source-b"))
+    )
+
+    forged = deepcopy(source_b)
+    forged["source_trace"] = deepcopy(source_a["source_trace"])
+    with pytest.raises(Exception, match="/frames/0/source_coordinates"):
+        validate_worked_example_process_trace(forged)
+
+    forged_command = deepcopy(source_b)
+    forged_command["source_trace"]["content_contract"]["frames"][0]["planner"]["selected_action"][
+        "linear_velocity"
+    ] = 0.123
+    forged_command["source_trace"]["content_sha256"] = _digest_contract(
+        forged_command["source_trace"]["content_contract"]
+    )
+    with pytest.raises(Exception, match="/frames/0/commands"):
+        validate_worked_example_process_trace(forged_command)
 
 
 def test_pair_receipts_resolve_right_events_and_bind_content_sha() -> None:
@@ -1175,6 +1249,40 @@ def test_common_anchors_require_derived_right_receipt_ids() -> None:
         if receipt["event_id"] == old_right_id:
             receipt["event_id"] = new_right_id
             break
+
+    with pytest.raises(Exception, match="/pair_compatibility/right_event_anchors"):
+        validate_worked_example_process_trace(forged)
+
+
+def test_right_event_receipts_replay_from_right_content_contract() -> None:
+    """Right receipts cannot be coherently moved by changing step/time/id and common anchor."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-left", planner_id="planner-a", seed=7)
+        ),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-right", planner_id="planner-b", seed=7)
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+    assert payload["pair_compatibility"]["valid_common_event_anchors"]
+    forged = deepcopy(payload)
+    anchor = forged["pair_compatibility"]["valid_common_event_anchors"][0]
+    receipt = next(
+        item
+        for item in forged["pair_compatibility"]["right_event_anchors"]
+        if item["event_id"] == anchor["right_event_id"]
+    )
+    receipt["step"] = receipt["step"] + 1
+    receipt["time_s"] = receipt["time_s"] + 0.1
+    receipt["event_id"] = f"step-{receipt['step']:04d}-{receipt['event_type'].replace('_', '-')}"
+    receipt["event_relative_time"] = {
+        "status": "available",
+        "anchor_time_s": receipt["time_s"],
+        "tau_s": 0.0,
+    }
+    anchor["right_event_id"] = receipt["event_id"]
 
     with pytest.raises(Exception, match="/pair_compatibility/right_event_anchors"):
         validate_worked_example_process_trace(forged)
@@ -1297,6 +1405,40 @@ def test_run_config_contract_scans_all_frames_and_rejects_bool_or_inconsistent_t
         "status": "unavailable",
         "reason": "run_config_unavailable",
     }
+
+
+def test_run_config_contract_replays_from_embedded_source_content() -> None:
+    """Run-config status/time/reason cannot be changed independently from source content."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    forged_time = deepcopy(payload)
+    forged_time["source_trace"]["run_config_contract"]["time_step_s"] = 0.2
+    with pytest.raises(Exception, match="/source_trace/run_config_contract"):
+        validate_worked_example_process_trace(forged_time)
+
+    forged_status = deepcopy(payload)
+    forged_status["source_trace"]["run_config_contract"] = {
+        "status": "unavailable",
+        "reason": "attacker_reason",
+    }
+    with pytest.raises(Exception, match="/source_trace/run_config_contract"):
+        validate_worked_example_process_trace(forged_status)
+
+
+def test_embedded_content_contracts_are_strict_json_for_nonfinite_source_values() -> None:
+    """Builder payloads with admitted nonfinite source values must still serialize strictly."""
+
+    for trace_payload in (
+        _trace_payload(nonfinite_heading_step=1),
+        _trace_payload(nan_command_step=1),
+        _trace_payload(missing_actor_radius_step=1),
+    ):
+        payload = build_worked_example_process_trace_from_export(
+            simulation_trace_export_from_dict(trace_payload)
+        )
+        json.dumps(payload, allow_nan=False, sort_keys=True)
 
 
 def test_semantic_validator_rejects_available_event_without_coordinates() -> None:
@@ -1538,6 +1680,10 @@ def _set_path(payload: dict[str, object], path: list[object], value: object) -> 
 
 def _canonical_trace_checksum(payload: dict[str, object]) -> str:
     contract = _canonical_trace_contract(payload)
+    return _digest_contract(contract)
+
+
+def _digest_contract(contract: object) -> str:
     return hashlib.sha256(
         json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()

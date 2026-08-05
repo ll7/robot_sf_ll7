@@ -408,7 +408,7 @@ def _run_candidate_baseline(
             timestamp=timestamp,
         )
         _validate_batch_schema(batch, schema)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - per-row fail-closed isolation (#6690)
         row["row_status"] = "failed"
         row["exclusion_reason"] = str(exc)
         return row, None

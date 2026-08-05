@@ -73,7 +73,7 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
 
         return 0
 
-    except Exception:
+    except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)
         logger.bind(event="snqi_cli_failed", stage="recompute_weights").exception(
             "SNQI CLI failed while recomputing weights."
         )
@@ -235,7 +235,7 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
             impacts.get(comp, 0.0)
 
         return 0
-    except Exception:
+    except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)
         logger.bind(event="snqi_cli_failed", stage="ablation_analysis").exception(
             "SNQI CLI failed while computing ablation analysis."
         )
@@ -302,7 +302,7 @@ def cmd_inventory_weights(args: argparse.Namespace) -> int:
             )
             return EXIT_VALIDATION_ERROR
         return EXIT_SUCCESS
-    except Exception:
+    except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)
         logger.bind(event="snqi_cli_failed", stage="weights_inventory").exception(
             "SNQI CLI failed while building the weight-set inventory."
         )

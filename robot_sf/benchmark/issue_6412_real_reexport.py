@@ -659,7 +659,7 @@ def assemble_real_reexport_package(
         output_dir.parent.mkdir(parents=True, exist_ok=True)
         os.replace(staging, output_dir)
         return manifest
-    except Exception:
+    except Exception:  # cleanup boundary: remove staging on any failure, then re-raise (#6690)
         if staging.exists():
             shutil.rmtree(staging)
         raise
@@ -966,7 +966,7 @@ def export_compact_evidence(package_dir: Path, output_dir: Path) -> dict[str, An
         output_dir.parent.mkdir(parents=True, exist_ok=True)
         os.replace(staging, output_dir)
         return manifest
-    except Exception:
+    except Exception:  # cleanup boundary: remove staging on any failure, then re-raise (#6690)
         if staging.exists():
             shutil.rmtree(staging)
         raise

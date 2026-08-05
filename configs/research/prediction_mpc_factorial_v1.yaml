@@ -163,21 +163,22 @@ stop_rules:
   blocked_if: "missing paired episodes, provenance mismatch, or unresolvable fallback execution"
 
 # Dependencies (all must be resolved before GPU submission).
-# #5353 (matched-capability fairness contract) is RESOLVED as of issue #5483:
-# the capability-matrix gating logic is merged and the dependency status is
-# reconciled with the closed tracker state. #5351 (hierarchical paired analysis)
-# splits into two stages: its *input contract* (tracked manifest + fail-closed
-# checker) was delivered by #5776 and is verified by the readiness gate's
-# hierarchical_input_gate_reconciled criterion; the actual analysis still depends
-# on the #4364 successor-release typed-ledger rows, which remain absent, so #5351
-# stays a blocking dependency (see also issue #4364).
+# #5353 (matched-capability fairness contract) is resolved via #5483. #5351
+# (hierarchical paired analysis) is also closed: #5776 delivered the input gate,
+# #4364 delivered the checksum-pinned successor rows, and the deterministic
+# analysis report is tracked under the #5351 evidence surface. The report remains
+# blocked_review_pending for human claim review; that review is not silently
+# promoted by this campaign readiness packet.
 dependencies:
   - issue: 5351
     description: "Hierarchical paired analysis with multiplicity"
-    status: open
+    status: resolved
     input_gate_delivered_by: 5776
-    analysis_blocked_on: 4364
-    blocking: "successor-release typed-ledger rows for preregistered contrasts (input contract delivered by #5776)"
+    successor_release_delivered_by: 4364
+    analysis_artifact_path: "docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/hierarchical_paired_release_analysis_report.json"
+    analysis_artifact_status: delivered_review_pending
+    claim_gate: human_review_pending
+    blocking: ""
   - issue: 5353
     description: "Matched-capability fairness contract"
     status: resolved

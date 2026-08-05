@@ -129,6 +129,54 @@ class PrimitiveGeneratorConfig:
 
 
 @dataclass(frozen=True)
+class RBFGeneratorConfig:
+    """Configuration for the finite radial-basis-function (RBF) generator.
+
+    The generator is deliberately a deterministic, model-free stand-in for a
+    learned candidate proposal: a Gaussian radial basis bends a smooth
+    start-to-goal rollout left or right, while the existing brake candidate
+    preserves a low-displacement option. It does not estimate risk or learn the
+    hard gates. Its defaults produce the same four-candidate budget as
+    :class:`PrimitiveGeneratorConfig`, which makes it suitable for a matched
+    offline comparison.
+
+    Attributes:
+        lateral_offsets_m: Lateral amplitudes (metres) for the RBF candidates.
+        cruise_speed_mps: Reference speed used to limit sampled waypoint speed.
+        goal_reach_fraction: Fraction of the start-to-goal distance to cover.
+        rbf_center_fraction: Normalized horizon location of the RBF centre.
+        rbf_width_fraction: Positive normalized width of the RBF basis.
+        include_brake_primitive: Whether to append the low-displacement option.
+        brake_displacement_m: Forward displacement (m) of the brake option.
+    """
+
+    lateral_offsets_m: tuple[float, ...] = (-0.6, 0.0, 0.6)
+    cruise_speed_mps: float = 1.0
+    goal_reach_fraction: float = 1.0
+    rbf_center_fraction: float = 0.65
+    rbf_width_fraction: float = 0.25
+    include_brake_primitive: bool = True
+    brake_displacement_m: float = 0.2
+
+    def __post_init__(self) -> None:
+        """Validate RBF parameters so malformed candidates fail closed."""
+        if not self.lateral_offsets_m:
+            raise ValueError("RBFGeneratorConfig.lateral_offsets_m must be non-empty")
+        if any(not math.isfinite(value) for value in self.lateral_offsets_m):
+            raise ValueError("RBFGeneratorConfig.lateral_offsets_m must be finite")
+        if not math.isfinite(self.cruise_speed_mps) or self.cruise_speed_mps <= 0.0:
+            raise ValueError("RBFGeneratorConfig.cruise_speed_mps must be finite and > 0")
+        if not (0.0 < self.goal_reach_fraction <= 1.0):
+            raise ValueError("RBFGeneratorConfig.goal_reach_fraction must be in (0, 1]")
+        if not (0.0 < self.rbf_center_fraction < 1.0):
+            raise ValueError("RBFGeneratorConfig.rbf_center_fraction must be in (0, 1)")
+        if not math.isfinite(self.rbf_width_fraction) or self.rbf_width_fraction <= 0.0:
+            raise ValueError("RBFGeneratorConfig.rbf_width_fraction must be finite and > 0")
+        if self.brake_displacement_m < 0.0 or not math.isfinite(self.brake_displacement_m):
+            raise ValueError("RBFGeneratorConfig.brake_displacement_m must be finite >= 0")
+
+
+@dataclass(frozen=True)
 class RankingWeights:
     """Non-negative weights for the (lower-is-better) composite ranking cost.
 
@@ -344,6 +392,48 @@ def _arc_primitive(
     return CandidateAction(action_id=action_id, waypoints=waypoints, representation="primitive")
 
 
+def _rbf_lateral_profile(
+    fraction: NDArray[np.floating], *, center_fraction: float, width_fraction: float
+) -> NDArray[np.floating]:
+    """Return a finite RBF profile that starts at zero and has unit amplitude."""
+    basis = np.exp(-0.5 * np.square((fraction - center_fraction) / width_fraction))
+    profile = basis - basis[0]
+    scale = float(np.max(np.abs(profile)))
+    if scale <= 1.0e-12:
+        return np.zeros_like(fraction)
+    return profile / scale
+
+
+def _rbf_candidate(
+    action_id: str,
+    start: NDArray[np.floating],
+    unit: NDArray[np.floating],
+    perp: NDArray[np.floating],
+    *,
+    progress_m: float,
+    lateral_offset_m: float,
+    horizon_steps: int,
+    config: RBFGeneratorConfig,
+) -> CandidateAction:
+    """Build one smooth RBF-deformed waypoint sequence.
+
+    Returns:
+        A finite RBF-backed :class:`CandidateAction` with ``(H + 1, 2)``
+        waypoints.
+    """
+    steps = np.arange(horizon_steps + 1, dtype=float)
+    fraction = steps / horizon_steps
+    longitudinal = (progress_m * _smoothstep(fraction))[:, None] * unit[None, :]
+    profile = _rbf_lateral_profile(
+        fraction,
+        center_fraction=config.rbf_center_fraction,
+        width_fraction=config.rbf_width_fraction,
+    )
+    lateral = (lateral_offset_m * profile)[:, None] * perp[None, :]
+    waypoints = start[None, :] + longitudinal + lateral
+    return CandidateAction(action_id=action_id, waypoints=waypoints, representation="rbf")
+
+
 def _limit_candidate_speed(
     candidate: CandidateAction, *, dt_s: float, cruise_speed_mps: float
 ) -> CandidateAction:
@@ -468,6 +558,107 @@ def generate_primitive_candidates(
 
     for candidate in candidates:
         candidate.as_array(horizon_steps=horizon_steps)  # validates shape + finiteness
+    return candidates
+
+
+def generate_rbf_candidates(
+    start_position: Sequence[float] | NDArray[np.floating],
+    local_goal: Sequence[float] | NDArray[np.floating],
+    *,
+    horizon_steps: int,
+    dt_s: float,
+    config: RBFGeneratorConfig | None = None,
+) -> list[CandidateAction]:
+    """Generate finite radial-basis-function candidate trajectories.
+
+    This has the same planner-agnostic interface and candidate contract as
+    :func:`generate_primitive_candidates`. It creates at least three finite
+    ``CandidateAction`` instances with stable action ids and shape ``(H + 1, 2)``.
+    Risk estimation and hard-gate evaluation remain exclusively the responsibility
+    of :func:`rank_trajectories`.
+
+    Args:
+        start_position: Robot start position ``(2,)`` in metres.
+        local_goal: Local goal position ``(2,)`` in metres.
+        horizon_steps: Number of horizon steps ``H`` (must be positive).
+        dt_s: Timestep in seconds (must be positive).
+        config: RBF geometry; defaults to :class:`RBFGeneratorConfig`.
+
+    Returns:
+        List of at least three finite RBF-backed candidate actions.
+
+    Raises:
+        ValueError: If inputs are invalid or fewer than three candidates are
+            configured.
+    """
+    if horizon_steps <= 0:
+        raise ValueError("horizon_steps must be positive")
+    if not math.isfinite(dt_s) or dt_s <= 0.0:
+        raise ValueError("dt_s must be finite and positive")
+    cfg = config if config is not None else RBFGeneratorConfig()
+
+    start = np.asarray(start_position, dtype=float).reshape(2)
+    goal = np.asarray(local_goal, dtype=float).reshape(2)
+    if not (np.all(np.isfinite(start)) and np.all(np.isfinite(goal))):
+        raise ValueError("start_position and local_goal must be finite")
+
+    delta = goal - start
+    distance = float(np.linalg.norm(delta))
+    if distance < 1.0e-9:
+        unit = np.array([1.0, 0.0])
+        distance = 0.0
+    else:
+        unit = delta / distance
+    perp = np.array([-unit[1], unit[0]])
+
+    reach_m = cfg.cruise_speed_mps * horizon_steps * dt_s
+    progress_m = min(distance * cfg.goal_reach_fraction, reach_m)
+    candidates: list[CandidateAction] = []
+    for index, offset in enumerate(cfg.lateral_offsets_m):
+        label = "straight" if offset == 0.0 else ("left" if offset > 0.0 else "right")
+        candidates.append(
+            _limit_candidate_speed(
+                _rbf_candidate(
+                    f"rbf_{label}_{index}",
+                    start,
+                    unit,
+                    perp,
+                    progress_m=progress_m,
+                    lateral_offset_m=offset,
+                    horizon_steps=horizon_steps,
+                    config=cfg,
+                ),
+                dt_s=dt_s,
+                cruise_speed_mps=cfg.cruise_speed_mps,
+            )
+        )
+
+    if cfg.include_brake_primitive:
+        candidates.append(
+            _limit_candidate_speed(
+                _rbf_candidate(
+                    "rbf_brake",
+                    start,
+                    unit,
+                    perp,
+                    progress_m=min(cfg.brake_displacement_m, reach_m),
+                    lateral_offset_m=0.0,
+                    horizon_steps=horizon_steps,
+                    config=cfg,
+                ),
+                dt_s=dt_s,
+                cruise_speed_mps=cfg.cruise_speed_mps,
+            )
+        )
+
+    if len(candidates) < 3:
+        raise ValueError(
+            "RBF generator must produce at least three candidates; "
+            f"got {len(candidates)} (enlarge lateral_offsets_m or enable the brake primitive)"
+        )
+
+    for candidate in candidates:
+        candidate.as_array(horizon_steps=horizon_steps)
     return candidates
 
 
@@ -837,8 +1028,10 @@ __all__ = [
     "HardGateResult",
     "PeakRiskTiming",
     "PrimitiveGeneratorConfig",
+    "RBFGeneratorConfig",
     "RankingWeights",
     "ScoreComponents",
     "generate_primitive_candidates",
+    "generate_rbf_candidates",
     "rank_trajectories",
 ]

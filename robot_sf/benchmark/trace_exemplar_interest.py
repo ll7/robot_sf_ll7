@@ -1,7 +1,8 @@
-"""Score trace-exemplar episodes for figure-selection interest.
+"""Score trace-exemplar episodes for exploratory figure-selection interest.
 
-This module implements a figure-selection heuristic for choosing illustrative
-episodes. It is NOT a benchmark metric and carries no evaluation claim.
+This module implements an exploratory/triage-only heuristic for choosing
+illustrative episodes. It is NOT a benchmark metric, portfolio admission rule,
+paper-facing selector, or evaluation claim.
 """
 
 from __future__ import annotations

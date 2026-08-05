@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Smoke tests for scripts/dev/update_pr_branch_safely.sh (issue #5775).
+# Smoke tests for scripts/dev/update_pr_branch_safely.sh (issue #5775,
+# deleted-source-ref restore coverage for issue #6689).
 #
 # The wrapper shells out to `gh` for metadata and to `git` for the local
 # fallback.  We mock both so the tests stay fully offline and do not depend on
 # GitHub availability, credentials, or a real remote.  The mock records which
-# mutating path (REST update-branch vs. local rebase/push) the wrapper selected.
+# mutating path (REST update-branch vs. local rebase/push vs. plain restore
+# push) the wrapper selected.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -52,8 +54,9 @@ assert_json() {
 # Mock gh: returns PR metadata for the pulls endpoint and makes the REST
 # update-branch endpoint fail (404-style), so the tests can exercise both the
 # guarded local fallback and the no-fallback branch. The mock honors the
-# wrapper's compact TSV metadata selector and scalar selectors used by older
-# callers.
+# wrapper's compact TSV metadata selector (head SHA, head ref, base ref, head
+# repository, base repository) and scalar selectors used by older callers.
+# PR 3 is a cross-fork PR whose head lives in another repository.
 make_gh() {
   cat > "${MOCK_DIR}/gh" <<'EOF'
 #!/usr/bin/env bash
@@ -82,7 +85,7 @@ case "$url" in
     ;;
   *"/pulls/1")
     if [[ "$jq" == *"@tsv"* ]]; then
-      printf 'headsha\tfeature\tmain'
+      printf 'headsha\tfeature\tmain\towner/repo\towner/repo'
     else
       case "$jq" in
         ".head.sha") printf 'headsha';;
@@ -95,11 +98,23 @@ case "$url" in
     ;;
   *"/pulls/2")
     if [[ "$jq" == *"@tsv"* ]]; then
-      printf 'othersha\tfeature2\tmain'
+      printf 'othersha\tfeature2\tmain\towner/repo\towner/repo'
     else
       case "$jq" in
         ".head.sha") printf 'othersha';;
         ".head.ref") printf 'feature2';;
+        ".base.ref") printf 'main';;
+      esac
+    fi
+    exit 0
+    ;;
+  *"/pulls/3")
+    if [[ "$jq" == *"@tsv"* ]]; then
+      printf 'forksha\tfeature3\tmain\tfork/repo\towner/repo'
+    else
+      case "$jq" in
+        ".head.sha") printf 'forksha';;
+        ".head.ref") printf 'feature3';;
         ".base.ref") printf 'main';;
       esac
     fi
@@ -112,6 +127,24 @@ case "$url" in
 esac
 EOF
   chmod +x "${MOCK_DIR}/gh"
+
+  # Default git mock: answers the deleted-source-ref probe as "ref present" so
+  # tests that do not exercise restore keep the historical update path, and
+  # refuses every other (mutating) git operation. Tests that exercise restore
+  # overwrite this stub with a scenario-specific one.
+  cat > "${MOCK_DIR}/git" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${MOCK_DIR}/git_calls"
+if [[ "$1" == "ls-remote" ]]; then
+  ref=""
+  for a in "$@"; do ref="$a"; done
+  printf 'headsha\trefs/heads/%s\n' "$ref"
+  exit 0
+fi
+echo "git mock: refusing $*" >&2
+exit 1
+EOF
+  chmod +x "${MOCK_DIR}/git"
 }
 
 # 1. Missing --expected-head-sha must fail closed before any network call.
@@ -240,6 +273,9 @@ assert_ok "dry-run exits 0" "$RC"
 
 # The same mocked successful endpoint must remain available to a non-dry-run
 # invocation, proving the safety guard did not disable the primary update path.
+# Reinstall the default mocks so the deleted-source-ref probe reports the ref
+# as present and every mutating git operation stays refused.
+make_gh
 : > "${MOCK_DIR}/gh_calls"
 : > "${MOCK_DIR}/git_calls"
 RC=0
@@ -247,7 +283,7 @@ OUT="$(MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" 1 --
   --expected-head-sha headsha 2>/dev/null)" || RC=$?
 assert_ok "non-dry-run REST update exits 0" "$RC"
 assert_json "non-dry-run REST output is valid JSON" "$OUT"
-if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "update_requested" and d["updated"] is True' <<<"$OUT"; then
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "update_requested" and d["updated"] is True and d["source_ref_restored"] is False' <<<"$OUT"; then
   echo "PASS: non-dry-run retains the REST update path"
   PASS=$((PASS + 1))
 else
@@ -261,11 +297,11 @@ else
   echo "FAIL: non-dry-run skipped the remote update-branch endpoint"
   FAIL=$((FAIL + 1))
 fi
-if [[ -s "${MOCK_DIR}/git_calls" ]]; then
-  echo "FAIL: successful REST update invoked local Git"
+if grep -Eq '^(fetch|rebase|push) ' "${MOCK_DIR}/git_calls"; then
+  echo "FAIL: successful REST update invoked mutating local Git"
   FAIL=$((FAIL + 1))
 else
-  echo "PASS: successful REST update skipped local Git"
+  echo "PASS: successful REST update skipped mutating local Git"
   PASS=$((PASS + 1))
 fi
 
@@ -289,6 +325,11 @@ case "$*" in
   "fetch custom main feature") :;;
   "rebase custom/main") : > "${MOCK_DIR}/rebased";;
   "push --force-with-lease=custom/feature:headsha custom HEAD:refs/heads/feature") :;;
+  "ls-remote --heads custom feature")
+    # Deleted-source-ref pre-check: report the head ref as present so this
+    # fallback scenario runs unchanged.
+    printf 'headsha\trefs/heads/feature\n'
+    ;;
   "ls-remote --heads custom refs/heads/feature")
     if [[ "${EMPTY_VERIFY:-0}" -eq 1 ]]; then exit 0; fi
     printf 'newhead\trefs/heads/feature\n'
@@ -486,6 +527,217 @@ if echo "$OUT" | grep -q '"status":"error"'; then
   PASS=$((PASS + 1))
 else
   echo "FAIL: malformed guard output did not report a deterministic error"
+  FAIL=$((FAIL + 1))
+fi
+
+# 9. Deleted PR source ref restore (issue #6689): when the head branch is
+#    missing on the remote, the wrapper restores refs/heads/<head-ref> with a
+#    plain (non-force) push of the immutable PR head SHA before running the
+#    update path. Restore failures fail closed, dry-run never restores,
+#    cross-fork PRs fail closed, and a concurrently reappeared ref is
+#    re-detected so the normal update path continues without overwriting.
+make_gh
+cat > "${MOCK_DIR}/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "${MOCK_DIR}/git_calls"
+case "$*" in
+  "ls-remote --heads origin feature")
+    if [[ -f "${MOCK_DIR}/ref_present" ]]; then printf 'headsha\trefs/heads/feature\n'; fi
+    ;;
+  "ls-remote --heads origin feature3")
+    if [[ -f "${MOCK_DIR}/ref_present_f3" ]]; then printf 'forksha\trefs/heads/feature3\n'; fi
+    ;;
+  "fetch origin headsha")
+    if [[ "${MOCK_FETCH_FAIL:-0}" -eq 1 ]]; then exit 1; fi
+    : > "${MOCK_DIR}/fetched"
+    ;;
+  "rev-parse FETCH_HEAD")
+    if [[ -f "${MOCK_DIR}/fetched" ]]; then printf 'headsha'; else exit 1; fi
+    ;;
+  "push origin headsha:refs/heads/feature")
+    if [[ "${MOCK_RESTORE_PUSH_REJECT:-0}" -eq 1 ]]; then
+      if [[ "${MOCK_RESTORE_REAPPEAR:-0}" -eq 1 ]]; then : > "${MOCK_DIR}/ref_present"; fi
+      exit 1
+    fi
+    : > "${MOCK_DIR}/ref_present"
+    ;;
+  "ls-remote --heads origin refs/heads/feature")
+    if [[ -f "${MOCK_DIR}/ref_present" ]]; then printf 'headsha\trefs/heads/feature\n'; fi
+    ;;
+  *) echo "git mock: unhandled $*" >&2; exit 1;;
+esac
+EOF
+chmod +x "${MOCK_DIR}/git"
+
+# 9a. A deleted head ref is restored at the expected head SHA before the
+#     update path runs; the restore is reported in the JSON result.
+rm -f "${MOCK_DIR}/ref_present" "${MOCK_DIR}/fetched"
+: > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/gh_calls"
+RC=0
+OUT="$(MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --pr 1 --repo owner/repo \
+  --expected-head-sha headsha 2>/dev/null)" || RC=$?
+assert_ok "deleted head ref restore followed by REST update exits 0" "$RC"
+assert_json "restore result is valid JSON" "$OUT"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "update_requested" and d["updated"] is True and d["source_ref_restored"] is True' <<<"$OUT"; then
+  echo "PASS: restore is reported in the JSON result before the update path"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: restore was not reported in the JSON result"
+  FAIL=$((FAIL + 1))
+fi
+if grep -q '^fetch origin headsha$' "${MOCK_DIR}/git_calls" \
+  && grep -q '^push origin headsha:refs/heads/feature$' "${MOCK_DIR}/git_calls" \
+  && grep -q '^ls-remote --heads origin refs/heads/feature$' "${MOCK_DIR}/git_calls"; then
+  echo "PASS: restore fetched, pushed, and verified the immutable head SHA"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: restore did not fetch/push/verify the immutable head SHA"
+  FAIL=$((FAIL + 1))
+fi
+if grep -q -- '--force' "${MOCK_DIR}/git_calls"; then
+  echo "FAIL: restore used a force push"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: restore used a plain (non-force) push"
+  PASS=$((PASS + 1))
+fi
+FETCH_LN="$(grep -n '^fetch origin headsha$' "${MOCK_DIR}/git_calls" | head -n1 | cut -d: -f1 || true)"
+PUSH_LN="$(grep -n '^push origin headsha:refs/heads/feature$' "${MOCK_DIR}/git_calls" | head -n1 | cut -d: -f1 || true)"
+VERIFY_LN="$(grep -n '^ls-remote --heads origin refs/heads/feature$' "${MOCK_DIR}/git_calls" | head -n1 | cut -d: -f1 || true)"
+if [[ -n "$FETCH_LN" && -n "$PUSH_LN" && -n "$VERIFY_LN" \
+  && "$FETCH_LN" -lt "$PUSH_LN" && "$PUSH_LN" -lt "$VERIFY_LN" ]]; then
+  echo "PASS: restore order is fetch, push, then verification"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: restore order was not fetch, push, then verification"
+  FAIL=$((FAIL + 1))
+fi
+if grep -q '/pulls/1/update-branch' "${MOCK_DIR}/gh_calls"; then
+  echo "PASS: update path ran after the restore"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: update path did not run after the restore"
+  FAIL=$((FAIL + 1))
+fi
+
+# 9b. A restore failure (unreachable immutable head SHA) fails closed with a
+#     machine-readable error before any update path runs.
+rm -f "${MOCK_DIR}/ref_present" "${MOCK_DIR}/fetched"
+: > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/gh_calls"
+RC=0
+OUT="$(MOCK_FETCH_FAIL=1 MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --pr 1 --repo owner/repo \
+  --expected-head-sha headsha 2>/dev/null)" || RC=$?
+assert_fail "unreachable immutable head SHA fails closed" "$RC"
+assert_json "restore failure result is valid JSON" "$OUT"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "source_ref_restore_failed" and d["method"] == "source_ref_restore" and "could not fetch immutable PR head SHA" in (d["error"] or "")' <<<"$OUT"; then
+  echo "PASS: unreachable SHA reports source_ref_restore_failed"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: unreachable SHA did not report source_ref_restore_failed"
+  FAIL=$((FAIL + 1))
+fi
+if grep -q '^push ' "${MOCK_DIR}/git_calls" || grep -q '/pulls/1/update-branch' "${MOCK_DIR}/gh_calls"; then
+  echo "FAIL: failed restore still attempted an update path"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: failed restore attempted no push and no update-branch"
+  PASS=$((PASS + 1))
+fi
+
+# 9c. Dry-run performs no restore even when the head ref is deleted.
+rm -f "${MOCK_DIR}/ref_present" "${MOCK_DIR}/fetched"
+: > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/gh_calls"
+RC=0
+OUT="$(MOCK_UPDATE_BRANCH_SUCCESS=1 PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --pr 1 --repo owner/repo \
+  --expected-head-sha headsha --dry-run 2>/dev/null)" || RC=$?
+assert_ok "dry-run with deleted head ref exits 0" "$RC"
+assert_json "dry-run restore result is valid JSON" "$OUT"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "dry_run" and d["updated"] is False and d["source_ref_restored"] is False' <<<"$OUT"; then
+  echo "PASS: dry-run reports a non-mutating plan without restore"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: dry-run did not report a non-mutating plan"
+  FAIL=$((FAIL + 1))
+fi
+if [[ -s "${MOCK_DIR}/git_calls" ]] || [[ -f "${MOCK_DIR}/ref_present" ]]; then
+  echo "FAIL: dry-run performed a restore or git operation"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: dry-run performed no restore and no git operation"
+  PASS=$((PASS + 1))
+fi
+
+# 9d. A cross-fork PR with a deleted head branch fails closed instead of
+#     attempting a restore through the base repository remote.
+rm -f "${MOCK_DIR}/ref_present_f3" "${MOCK_DIR}/fetched"
+: > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/gh_calls"
+RC=0
+OUT="$(PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --pr 3 --repo owner/repo \
+  --expected-head-sha forksha 2>/dev/null)" || RC=$?
+assert_fail "cross-fork PR with deleted head ref fails closed" "$RC"
+assert_json "cross-fork result is valid JSON" "$OUT"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "source_ref_restore_failed" and d["method"] == "source_ref_restore" and "cross-fork" in (d["error"] or "")' <<<"$OUT"; then
+  echo "PASS: cross-fork PR reports a machine-readable restore refusal"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: cross-fork PR did not report a machine-readable restore refusal"
+  FAIL=$((FAIL + 1))
+fi
+if grep -Eq '^(fetch|push) ' "${MOCK_DIR}/git_calls"; then
+  echo "FAIL: cross-fork PR attempted a fetch or push"
+  FAIL=$((FAIL + 1))
+else
+  echo "PASS: cross-fork PR attempted no fetch or push"
+  PASS=$((PASS + 1))
+fi
+
+# 9e. A concurrently reappeared ref is re-detected after a rejected restore
+#     push; the normal update path continues without overwriting the ref.
+rm -f "${MOCK_DIR}/ref_present" "${MOCK_DIR}/fetched"
+: > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/gh_calls"
+RC=0
+OUT="$(MOCK_RESTORE_PUSH_REJECT=1 MOCK_RESTORE_REAPPEAR=1 MOCK_UPDATE_BRANCH_SUCCESS=1 \
+  PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --pr 1 --repo owner/repo \
+  --expected-head-sha headsha 2>/dev/null)" || RC=$?
+assert_ok "reappeared ref continues with the normal update path" "$RC"
+assert_json "reappeared ref result is valid JSON" "$OUT"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "update_requested" and d["updated"] is True and d["source_ref_restored"] is False' <<<"$OUT"; then
+  echo "PASS: reappeared ref is not claimed as a restore"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: reappeared ref handling was incorrect"
+  FAIL=$((FAIL + 1))
+fi
+if grep -q '^push origin headsha:refs/heads/feature$' "${MOCK_DIR}/git_calls" \
+  && grep -q '/pulls/1/update-branch' "${MOCK_DIR}/gh_calls"; then
+  echo "PASS: rejected restore push re-detected the ref and ran the update path"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: rejected restore push did not continue with the update path"
+  FAIL=$((FAIL + 1))
+fi
+
+# 9f. A rejected restore push with the ref still missing fails closed.
+rm -f "${MOCK_DIR}/ref_present" "${MOCK_DIR}/fetched"
+: > "${MOCK_DIR}/git_calls"
+: > "${MOCK_DIR}/gh_calls"
+RC=0
+OUT="$(MOCK_RESTORE_PUSH_REJECT=1 MOCK_UPDATE_BRANCH_SUCCESS=1 \
+  PATH="${MOCK_DIR}:$PATH" bash "$SCRIPT" --pr 1 --repo owner/repo \
+  --expected-head-sha headsha 2>/dev/null)" || RC=$?
+assert_fail "rejected restore push with missing ref fails closed" "$RC"
+assert_json "rejected restore result is valid JSON" "$OUT"
+if python3 -c 'import json, sys; d=json.load(sys.stdin); assert d["status"] == "source_ref_restore_failed" and "still missing" in (d["error"] or "")' <<<"$OUT"; then
+  echo "PASS: rejected restore push reports a machine-readable error"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: rejected restore push did not report a machine-readable error"
   FAIL=$((FAIL + 1))
 fi
 

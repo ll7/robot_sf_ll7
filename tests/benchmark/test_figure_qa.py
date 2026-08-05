@@ -749,7 +749,7 @@ def test_assert_clean_passes_clean_figure() -> None:
 def test_assert_clean_raises_on_overlap() -> None:
     """assert_clean should raise when an error-severity defect is seeded."""
     fig = _make_figure_with_texts(["a", "b"], positions=[(5.0, 5.0), (5.03, 5.0)])
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         assert_clean(fig, max_severity="error")
     plt.close(fig)
 

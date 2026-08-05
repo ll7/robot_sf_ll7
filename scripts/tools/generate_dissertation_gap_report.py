@@ -7,12 +7,12 @@ paper-facing results, or safety claims.
 from __future__ import annotations
 
 import argparse
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.evidence.writers import write_json, write_text
 
 LEDGER_PATH = Path("docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json")
 REGISTER_PATH = Path("docs/context/evidence/issue_2762_negative_result_register/register.json")
@@ -227,14 +227,11 @@ def main() -> None:
 
     json_out = Path(args.json_output)
     json_out.parent.mkdir(parents=True, exist_ok=True)
-    json_out.write_text(
-        json.dumps(json_report, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(json_out, json_report)
 
     md_out = Path(args.markdown_output)
     md_out.parent.mkdir(parents=True, exist_ok=True)
-    md_out.write_text(md_text, encoding="utf-8")
+    write_text(md_out, md_text, issue_ref="robot_sf#2784")
 
     print(f"JSON report written to {json_out}")
     print(f"Markdown report written to {md_out}")

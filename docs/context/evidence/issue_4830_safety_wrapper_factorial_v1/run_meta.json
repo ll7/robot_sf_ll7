@@ -1,0 +1,85 @@
+{
+  "repo": {
+    "remote": "https://github.com/ll7/robot_sf_ll7",
+    "branch": "main",
+    "commit": "8b5ce0b1ca5b7845ae05b0fdc07761079c75d380"
+  },
+  "execution_context": {
+    "hostname": "auxme-imech093",
+    "cpu_model": "AMD EPYC 9354P 32-Core Processor",
+    "python_version": "3.13.1",
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "thread_env": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    }
+  },
+  "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "scenario_matrix_hash": "c10df617a87c",
+  "latency_stress_profile": null,
+  "seed_policy": {
+    "mode": "fixed-list",
+    "seed_set": null,
+    "seeds": [
+      111,
+      112,
+      113
+    ],
+    "resolved_seeds": [
+      111,
+      112,
+      113
+    ],
+    "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml"
+  },
+  "preflight_artifacts": {
+    "validate_config": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/preflight/validate_config.json",
+    "preview_scenarios": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/preflight/preview_scenarios.json",
+    "amv_coverage_json": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/amv_coverage_summary.json",
+    "amv_coverage_md": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/amv_coverage_summary.md",
+    "comparability_json": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/comparability_matrix.json",
+    "comparability_md": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/comparability_matrix.md",
+    "seed_variability_json": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/seed_variability_by_scenario.json",
+    "seed_variability_csv": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/statistical_sufficiency.json",
+    "actuation_envelope_json": null,
+    "actuation_envelope_md": null
+  },
+  "synthetic_actuation_artifacts": {
+    "json": null,
+    "md": null
+  },
+  "snqi_artifacts": {
+    "diagnostics_json": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/snqi_diagnostics.json",
+    "diagnostics_md": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/snqi_diagnostics.md",
+    "sensitivity_csv": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/snqi_sensitivity.csv"
+  },
+  "seed_variability_artifacts": {
+    "json": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/seed_variability_by_scenario.json",
+    "csv": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/statistical_sufficiency.json"
+  },
+  "seed_variability": {
+    "metrics": [
+      "success",
+      "collisions",
+      "near_misses",
+      "time_to_goal_norm",
+      "snqi"
+    ],
+    "row_count": 288,
+    "bootstrap_method": "bootstrap_mean_over_seed_means",
+    "bootstrap_level": 0.95,
+    "bootstrap_samples": 300,
+    "seed": 123
+  },
+  "campaign_id": "issue4830_safety_wrapper_factorial_v1",
+  "started_at_utc": "2026-07-29T10:27:02.624054Z",
+  "finished_at_utc": "2026-07-29T10:40:23.242447Z",
+  "invoked_command": "python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml --output-root output/benchmarks/camera_ready --mode run --log-level INFO --campaign-id issue4830_safety_wrapper_factorial_v1 --skip-publication-bundle --arm-isolation subprocess",
+  "runtime_sec": 800.6803789430123,
+  "episodes_per_second": 1.07908226893305
+}

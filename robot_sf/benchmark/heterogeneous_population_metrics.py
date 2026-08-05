@@ -28,7 +28,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.finite_checks import require_finite_array, require_finite_scalar
+from robot_sf.common.validation import require_finite_array, require_finite_scalar
 
 HETEROGENEOUS_POPULATION_METRICS_SCHEMA = "heterogeneous_population_metrics.v1"
 

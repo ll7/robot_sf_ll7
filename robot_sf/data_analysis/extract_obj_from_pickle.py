@@ -10,6 +10,7 @@ import os
 import numpy as np
 from loguru import logger
 
+from robot_sf.data_analysis.pickle_utils import ensure_dir_exists, extract_timestamp
 from robot_sf.data_analysis.plot_dataset import (
     plot_all_npc_ped_positions,
     plot_all_npc_ped_velocities,
@@ -120,7 +121,7 @@ def plot_all_data_pkl(
     map_def: MapDefinition | None = None,
     unique_id: str | None = None,
     interactive: bool = True,
-):
+) -> None:
     """
     Plot all available data from simulation states extracted from pickle file.
 
@@ -207,23 +208,9 @@ def plot_all_data_pkl(
     logger.info("All data extracted and plotted successfully")
 
 
-def ensure_dir_exists(directory):
-    """
-    Ensure that a directory exists, creating it if necessary.
-
-    Args:
-        directory (str): Path to the directory to check/create
-    """
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-        logger.info(f"Created directory: {directory}")
-
-
 if __name__ == "__main__":
     # Example usage
     from pathlib import Path
-
-    from robot_sf.data_analysis.extract_json_from_pickle import extract_timestamp
 
     # Ensure the plots directory exists
     PLOTS_DIR = "robot_sf/data_analysis/plots"

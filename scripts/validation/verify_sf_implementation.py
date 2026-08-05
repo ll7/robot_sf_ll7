@@ -34,7 +34,7 @@ def test_configuration_system():
                 return True
             print(f"❌ Unexpected ModuleNotFoundError: {e}")
             return False
-    except Exception as e:  # pragma: no cover - defensive
+    except Exception as e:  # pragma: no cover - broad catch: config-test boundary
         print(f"❌ Configuration test failed: {e}")
         return False
 
@@ -58,7 +58,7 @@ def test_registry_system():
         print("✅ Registry structure is correct")
         return True
 
-    except Exception as e:
+    except Exception as e:  # broad catch: registry smoke-test boundary
         print(f"❌ Registry test failed: {e}")
         return False
 
@@ -103,7 +103,7 @@ def test_cli_integration():
         print("✅ CLI integration is complete")
         return True
 
-    except Exception as e:
+    except Exception as e:  # broad catch: CLI-integration smoke-test boundary
         print(f"❌ CLI test failed: {e}")
         return False
 
@@ -132,7 +132,7 @@ def test_configuration_files():
     except ImportError:
         print("⚠️  Cannot test YAML config (yaml module not available)")
         return True  # Not a failure
-    except Exception as e:
+    except Exception as e:  # broad catch: config-files validation boundary
         print(f"❌ Config test failed: {e}")
         return False
 

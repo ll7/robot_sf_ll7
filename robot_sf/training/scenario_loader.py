@@ -30,6 +30,7 @@ from robot_sf.nav.map_config import (
 )
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
+from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
@@ -1914,6 +1915,23 @@ def _resolve_speed_override(
     return float(value) if value is not None else None
 
 
+def _resolve_start_override(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+) -> tuple[float, float]:
+    """Resolve an optional coordinate override for a pedestrian start position.
+
+    Returns:
+        tuple[float, float]: Existing or overridden start position.
+    """
+    if "start" not in entry:
+        return ped.start
+    value = entry.get("start")
+    if value is None:
+        raise ValueError("'start' must be a 2-item list or tuple")
+    return _coerce_point(value, "start")
+
+
 def _resolve_wait_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
@@ -2086,6 +2104,7 @@ def _apply_single_pedestrian_override(
     Returns:
         SinglePedestrianDefinition: Updated pedestrian definition.
     """
+    start = _resolve_start_override(ped, entry)
     goal, trajectory, trajectory_labels = _resolve_goal_trajectory_override(ped, entry, map_def)
     speed = _resolve_speed_override(ped, entry)
     wait_at = _resolve_wait_override(
@@ -2106,7 +2125,7 @@ def _apply_single_pedestrian_override(
 
     return SinglePedestrianDefinition(
         id=ped.id,
-        start=ped.start,
+        start=start,
         goal=goal,
         trajectory=trajectory,
         speed_m_s=speed,
@@ -2243,6 +2262,21 @@ def _apply_prf_config_override(
     config.sim_config.prf_config = PedRobotForceConfig(**kwargs)
 
 
+def _apply_residual_adversary_override(
+    config: RobotSimulationConfig,
+    overrides: Any,
+) -> None:
+    """Apply a validated residual-adversary mapping from a scenario config.
+
+    Scenario loading mutates an already-created ``SimulationSettings`` instance, so
+    assigning a raw mapping would bypass its construction-time normalization. Build
+    the nested dataclass here to keep malformed or unknown fields fail-closed.
+    """
+    if not isinstance(overrides, Mapping):
+        raise ValueError("simulation_config.residual_adversary must be a mapping.")
+    config.sim_config.residual_adversary = ResidualAdversaryConfig(**dict(overrides))
+
+
 def _apply_simulation_overrides(
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
@@ -2298,6 +2332,8 @@ def _apply_simulation_overrides(
     # distance, and active flag can be tuned per-scenario without touching defaults.
     if "prf_config" in overrides:
         _apply_prf_config_override(config, overrides["prf_config"])
+    if "residual_adversary" in overrides:
+        _apply_residual_adversary_override(config, overrides["residual_adversary"])
 
 
 def _apply_map_pool(

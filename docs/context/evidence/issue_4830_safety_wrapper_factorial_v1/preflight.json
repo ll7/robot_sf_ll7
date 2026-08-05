@@ -1,0 +1,13 @@
+{
+  "cluster": "imech192",
+  "route_id": "imech192:l40s-cpu",
+  "checks": [
+    {"name":"cuda","status":"ok","gpu_count":1},
+    {"name":"git_state","status":"ok","public_commit":"8b5ce0b1ca5b7845ae05b0fdc07761079c75d380","dirty_files":0},
+    {"name":"optional_deps","status":"missing","missing":"cmake"},
+    {"name":"slurm_test_only","status":"available","submitted":false},
+    {"name":"uv_sync_core","status":"missing_uv"},
+    {"name":"wandb_offline","status":"python_import_failed","mode":"offline"},
+    {"name":"wandb_online","status":"missing_auth","mode":"online"}
+  ]
+}

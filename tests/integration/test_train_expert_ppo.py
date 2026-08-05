@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import copy
+import hashlib
 import json
 import sys
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,6 +34,7 @@ from scripts.training.train_ppo import (
     _DirectWandbTrainingMetricsCallback,
     _extract_direct_wandb_train_metrics,
     _finalize_best_checkpoint,
+    _load_expert_training_config_mapping,
     _parse_num_envs,
     _persist_best_checkpoint_if_updated,
     _reapply_resumed_ppo_hyperparams,
@@ -732,6 +737,606 @@ def test_load_expert_training_config_merges_base_config(tmp_path) -> None:
     assert config.tracking["wandb"]["tags"] == ["base", "num-envs-14"]
 
 
+# Issue #6490: the issue_576_br06 PPO family was migrated to inherit shared
+# settings from a single base config. The constants below pin that contract.
+# Issue #6680: predictive variants (v5-v10) and the issue-708 from-scratch
+# run (v11) now additionally chain through a predictive sub-base that holds
+# the byte-identical shared predictive keys.
+_ISSUE_576_BR06_FAMILY_DIR = Path("configs/training/ppo")
+_ISSUE_576_BR06_BASE_NAME = "expert_ppo_issue_576_br06_base.yaml"
+_ISSUE_576_BR06_PREDICTIVE_SUB_BASE_NAME = "expert_ppo_issue_576_br06_predictive_sub_base.yaml"
+# Set of variants whose base_config points at the predictive sub-base rather
+# than directly at the family base (two-level chain).
+_ISSUE_576_BR06_PREDICTIVE_VARIANTS = frozenset(
+    {
+        "expert_ppo_issue_576_br06_v5_predictive_foresight.yaml",
+        "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml",
+        "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml",
+        "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml",
+        "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml",
+        "expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml",
+        "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml",
+        "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml",
+        "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml",
+        "expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml",
+    }
+)
+_ISSUE_576_BR06_VARIANTS = [
+    "expert_ppo_issue_576_br06_v2_15m_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml",
+    "expert_ppo_issue_576_br06_v2_sanity_500k_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml",
+    "expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml",
+    "expert_ppo_issue_576_br06_v4_validation_120k.yaml",
+    "expert_ppo_issue_576_br06_v5_predictive_foresight.yaml",
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml",
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml",
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml",
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml",
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml",
+    "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml",
+    "expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml",
+]
+# The five variants that previously carried the deprecated
+# evaluation.frequency_episodes field (ignored by train_ppo.py in favor of
+# step_schedule). The migration drops it from exactly these files.
+_ISSUE_576_BR06_DROPPED_FREQUENCY_EPISODES = {
+    "expert_ppo_issue_576_br06_v2_15m_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml",
+    "expert_ppo_issue_576_br06_v2_sanity_500k_all_maps.yaml",
+    "expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml",
+    "expert_ppo_issue_576_br06_v4_validation_120k.yaml",
+}
+
+# Frozen pre-inheritance resolved-config baseline. It is the canonical JSON
+# (sorted keys, compact separators) of `_load_expert_training_config_mapping`
+# for every variant on origin/main BEFORE the base_config refactor, compressed
+# with zlib and base64-encoded so the regression oracle stays self-contained
+# (no git dependency, no opaque external fixture). Regenerate against a clean
+# origin/main checkout with:
+#   uv run python -c "import json,zlib,base64,pathlib;from scripts.training.train_ppo \
+#     import _load_expert_training_config_mapping as L;b=pathlib.Path('configs/training/ppo'); \
+#     d={p.name:L(b/p) for p in sorted(b.glob('expert_ppo_issue_576_br06_v*.yaml'))}; \
+#     print(base64.b64encode(zlib.compress(json.dumps(d,sort_keys=True,separators=(',',':')).encode(),9)).decode())"
+# Frozen pre-inheritance resolved-config baseline. It is the canonical JSON
+# (sorted keys, compact separators) of `_load_expert_training_config_mapping`
+# for every variant on origin/main BEFORE the base_config refactor (plus v11
+# added in issue #6680 using post-migration resolved values; the v2–v10 slice
+# is byte-identical to the original baseline), compressed with zlib and
+# base64-encoded so the regression oracle stays self-contained. Regenerate
+# against a clean post-migration checkout with:
+#   uv run python -c "import json,zlib,base64,hashlib,pathlib; \
+#     from scripts.training.train_ppo import _load_expert_training_config_mapping as L; \
+#     b=pathlib.Path('configs/training/ppo'); \
+#     d={p.name:L(b/p) for p in sorted(b.glob('expert_ppo_issue_576_br06_v*.yaml'))}; \
+#     v11=b/'expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml'; \
+#     d[v11.name]=L(v11); \
+#     blob=json.dumps(d,sort_keys=True,separators=(',',':')).encode(); \
+#     print(hashlib.sha256(blob).hexdigest()); \
+#     print(base64.b64encode(zlib.compress(blob,9)).decode())"
+_ISSUE_576_BR06_PRECHANGE_BASELINE_B64 = (
+    "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"
+    "BX7p/+IVSu+6wfD6f4Fj+Bg="
+)
+_ISSUE_576_BR06_PRECHANGE_BASELINE_SHA256 = (
+    "5d51cc77d1a4b7946bc8de53e7fd8c4eedcf3c39d3e53be692c5163379fbb719"
+)
+
+# Per-variant family-specific overrides (captured from origin/main). Documents
+# that the inheritance refactor leaves every launch/reward/foresight/warm-start/
+# tracking override explicit. Tuple order:
+# (policy_id, num_envs, worker_mode, seeds, total_timesteps, reward_name,
+#  foresight_model_id, resume_model_id, wandb_group, wandb_tags)
+_ISSUE_576_BR06_EXPECTED_OVERRIDES = {
+    "expert_ppo_issue_576_br06_v2_15m_all_maps.yaml": (
+        "ppo_expert_br06_v2_15m_all_maps",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        15000000,
+        "route_completion_v2",
+        None,
+        None,
+        "issue-576-br06",
+        ["issue-576", "br-06", "ppo", "retrain-v2", "route-completion-v2"],
+    ),
+    "expert_ppo_issue_576_br06_v2_15m_all_maps_randomized.yaml": (
+        "ppo_expert_br06_v2_15m_all_maps_randomized",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        15000000,
+        "route_completion_v2",
+        None,
+        None,
+        "issue-576-br06-randomized",
+        ["issue-576", "br-06", "ppo", "retrain-v2", "route-completion-v2", "randomize-seeds"],
+    ),
+    "expert_ppo_issue_576_br06_v2_sanity_500k_all_maps.yaml": (
+        "ppo_expert_br06_v2_sanity_500k_all_maps",
+        "auto",
+        "auto",
+        (123,),
+        500000,
+        "route_completion_v2",
+        None,
+        None,
+        "issue-576-br06",
+        ["issue-576", "br-06", "ppo", "sanity", "route-completion-v2"],
+    ),
+    "expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml": (
+        "ppo_expert_br06_v3_15m_all_maps_randomized",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        15000000,
+        "route_completion_v3",
+        None,
+        None,
+        "issue-576-br06-v3-randomized",
+        ["issue-576", "br-06", "ppo", "retrain-v3", "route-completion-v3", "randomize-seeds"],
+    ),
+    "expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml": (
+        "ppo_expert_br06_v4_overnight_safety_warmstart",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        None,
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v4-overnight",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "warmstart",
+            "route-completion-v3",
+            "safety-weighted",
+            "randomized",
+            "overnight",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v4_validation_120k.yaml": (
+        "ppo_expert_br06_v4_validation_120k",
+        4,
+        "subproc",
+        (123,),
+        15360000,
+        "route_completion_v3",
+        None,
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        None,
+        None,
+    ),
+    "expert_ppo_issue_576_br06_v5_predictive_foresight.yaml": (
+        "ppo_expert_br06_v5_predictive_foresight",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v5-predictive-foresight",
+        ["issue-576", "br-06", "ppo", "predictive-foresight", "route-completion-v3", "randomized"],
+    ),
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned.yaml": (
+        "ppo_expert_br06_v6_predictive_foresight_success_aligned",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v6-predictive-foresight-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-aligned-reward",
+            "v6",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v6_predictive_foresight_success_aligned_auto_envs.yaml": (
+        "ppo_expert_br06_v6_predictive_foresight_success_aligned_auto_envs",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v6-predictive-foresight-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-aligned-reward",
+            "v6",
+            "route-completion-v3",
+            "randomized",
+            "auto-envs",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned.yaml": (
+        "ppo_expert_br06_v7_predictive_foresight_xl_ego_success_aligned",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v7-predictive-foresight-xl-ego-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-aligned-reward",
+            "v7",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs.yaml": (
+        "ppo_expert_br06_v7_predictive_foresight_xl_ego_success_aligned_auto_envs",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v7-predictive-foresight-xl-ego-success-aligned",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-aligned-reward",
+            "v7",
+            "route-completion-v3",
+            "randomized",
+            "auto-envs",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v8_predictive_foresight_success_priority.yaml": (
+        "ppo_expert_br06_v8_predictive_foresight_success_priority",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v8-predictive-foresight-success-priority",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-priority-reward",
+            "v8",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority.yaml": (
+        "ppo_expert_br06_v9_predictive_foresight_xl_ego_success_priority",
+        8,
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v9-predictive-foresight-xl-ego-success-priority",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-priority-reward",
+            "v9",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs.yaml": (
+        "ppo_expert_br06_v9_predictive_foresight_xl_ego_success_priority_auto_envs",
+        "auto",
+        "auto",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_xl_ego",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v9-predictive-foresight-xl-ego-success-priority",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "xl-ego",
+            "success-priority-reward",
+            "v9",
+            "route-completion-v3",
+            "randomized",
+            "auto-envs",
+        ],
+    ),
+    "expert_ppo_issue_576_br06_v10_predictive_foresight_success_priority_policy_analysis_select.yaml": (
+        "ppo_expert_br06_v10_predictive_foresight_success_priority_policy_analysis_select",
+        "auto_throughput",
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "issue-576-br06-v10-predictive-foresight-policy-analysis-select",
+        [
+            "issue-576",
+            "br-06",
+            "ppo",
+            "predictive-foresight",
+            "success-priority-reward",
+            "v10",
+            "policy-analysis-select",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+    "expert_ppo_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch.yaml": (
+        "ppo_expert_issue_708_br06_v11_predictive_foresight_success_priority_from_scratch",
+        "auto_throughput",
+        "subproc",
+        (123, 231, 777, 992, 1337),
+        30000000,
+        "route_completion_v3",
+        "predictive_proxy_selected_v2_full",
+        None,  # from-scratch run: no resume_model_id
+        "issue-708-ppo-from-scratch",
+        [
+            "issue-708",
+            "ppo",
+            "from-scratch",
+            "predictive-foresight",
+            "success-priority-reward",
+            "route-completion-v3",
+            "randomized",
+        ],
+    ),
+}
+
+
+def _issue_576_br06_prechange_baseline() -> dict:
+    """Decode and integrity-check the frozen pre-refactor resolved-config baseline."""
+    blob = zlib.decompress(base64.b64decode(_ISSUE_576_BR06_PRECHANGE_BASELINE_B64))
+    assert hashlib.sha256(blob).hexdigest() == _ISSUE_576_BR06_PRECHANGE_BASELINE_SHA256
+    return json.loads(blob)
+
+
+def _strip_frequency_episodes(mapping: dict) -> dict:
+    """Return a copy of ``mapping`` without the deprecated evaluation.frequency_episodes."""
+    cleaned = copy.deepcopy(mapping)
+    evaluation = cleaned.get("evaluation")
+    if isinstance(evaluation, dict):
+        evaluation.pop("frequency_episodes", None)
+    return cleaned
+
+
+@pytest.mark.parametrize("variant", _ISSUE_576_BR06_VARIANTS)
+def test_issue_576_br06_family_resolves_to_prechange_values(variant: str) -> None:
+    """Each migrated variant must resolve to its pre-refactor effective values.
+
+    The base_config deep-merge must preserve every resolved value. The only
+    intentional change is dropping the deprecated, ignored
+    evaluation.frequency_episodes field from the five variants that carried it
+    (it resolves to 0 everywhere now; cadence is controlled by step_schedule), so
+    it is stripped from both sides before the exhaustive mapping comparison.
+    """
+    path = (_ISSUE_576_BR06_FAMILY_DIR / variant).resolve()
+
+    resolved_mapping = _load_expert_training_config_mapping(path)
+    # Exercise the full construction path to confirm load_expert_training_config
+    # does not diverge from the resolver output.
+    config = load_expert_training_config(path)
+
+    expected_mapping = _issue_576_br06_prechange_baseline()[variant]
+    assert _strip_frequency_episodes(resolved_mapping) == _strip_frequency_episodes(
+        expected_mapping
+    )
+    # Cadence source is unchanged and the deprecated field now resolves to 0.
+    assert config.evaluation.step_schedule
+    assert config.evaluation.frequency_episodes == 0
+
+
+@pytest.mark.parametrize("variant", _ISSUE_576_BR06_VARIANTS)
+def test_issue_576_br06_family_overrides_remain_explicit(variant: str) -> None:
+    """Family-specific launch/reward/foresight/warm-start/tracking overrides stay explicit."""
+    (
+        policy_id,
+        num_envs,
+        worker_mode,
+        seeds,
+        total_timesteps,
+        reward_name,
+        foresight_model_id,
+        resume_model_id,
+        wandb_group,
+        wandb_tags,
+    ) = _ISSUE_576_BR06_EXPECTED_OVERRIDES[variant]
+
+    config = load_expert_training_config((_ISSUE_576_BR06_FAMILY_DIR / variant).resolve())
+    variant_yaml = yaml.safe_load(
+        (_ISSUE_576_BR06_FAMILY_DIR / variant).read_text(encoding="utf-8")
+    )
+
+    assert config.policy_id == policy_id
+    # num_envs is normalized by the loader (e.g. "auto" -> "auto_throughput"),
+    # so compare against the parsed form rather than the raw token.
+    assert config.num_envs == _parse_num_envs(num_envs)
+    assert config.worker_mode == worker_mode
+    assert config.seeds == seeds
+    assert config.total_timesteps == total_timesteps
+    assert config.env_factory_kwargs["reward_name"] == reward_name
+    assert config.env_overrides.get("predictive_foresight_model_id") == foresight_model_id
+    assert config.resume_model_id == resume_model_id
+    assert config.tracking["wandb"].get("group") == wandb_group
+    assert config.tracking["wandb"].get("tags") == wandb_tags
+    # Plateau window remains an explicit per-variant override (not in the base).
+    assert "plateau_window" in variant_yaml["convergence"]
+
+
+def test_issue_576_br06_base_inheritance_and_frequency_episodes_drop() -> None:
+    """Every variant inherits the base (directly or via predictive sub-base) and
+    no longer carries the deprecated evaluation.frequency_episodes field.
+
+    Issue #6680: predictive variants (v5-v10 and v11) now chain through
+    expert_ppo_issue_576_br06_predictive_sub_base.yaml which itself inherits
+    from expert_ppo_issue_576_br06_base.yaml. Non-predictive variants still
+    inherit the family base directly.
+    """
+    base_path = (_ISSUE_576_BR06_FAMILY_DIR / _ISSUE_576_BR06_BASE_NAME).resolve()
+    base_text = base_path.read_text(encoding="utf-8")
+    base_yaml = yaml.safe_load(base_text)
+    # The family base must not self-inherit or carry the deprecated field.
+    assert "base_config" not in base_yaml
+    assert "frequency_episodes" not in base_yaml.get("evaluation", {})
+
+    sub_base_path = (
+        _ISSUE_576_BR06_FAMILY_DIR / _ISSUE_576_BR06_PREDICTIVE_SUB_BASE_NAME
+    ).resolve()
+    sub_base_yaml = yaml.safe_load(sub_base_path.read_text(encoding="utf-8"))
+    # The predictive sub-base must chain on the family base (one level up) and
+    # must not carry the deprecated field.
+    assert sub_base_yaml.get("base_config") == _ISSUE_576_BR06_BASE_NAME
+    assert "frequency_episodes" not in sub_base_yaml.get("evaluation", {})
+
+    for variant in _ISSUE_576_BR06_VARIANTS:
+        variant_path = (_ISSUE_576_BR06_FAMILY_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        # Predictive variants chain through the sub-base; non-predictive
+        # variants still inherit the family base directly.
+        if variant in _ISSUE_576_BR06_PREDICTIVE_VARIANTS:
+            assert variant_yaml["base_config"] == _ISSUE_576_BR06_PREDICTIVE_SUB_BASE_NAME
+        else:
+            assert variant_yaml["base_config"] == _ISSUE_576_BR06_BASE_NAME
+        # The deprecated field is dropped everywhere (it was only ever present
+        # in the five variants listed below, and ignored in favor of step_schedule).
+        assert "frequency_episodes" not in variant_yaml.get("evaluation", {})
+        # Cadence source remains explicit per variant.
+        assert variant_yaml["evaluation"]["step_schedule"]
+    assert len(_ISSUE_576_BR06_DROPPED_FREQUENCY_EPISODES) == 5
+
+
+def test_load_expert_training_config_base_config_cycle_raises_value_error(
+    tmp_path,
+) -> None:
+    """A base_config cycle (self-reference or mutual) must raise ValueError."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    self_ref = tmp_path / "self_cycle.yaml"
+    self_ref.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": "self_cycle.yaml",
+                "scenario_config": str(scenario_config),
+                "total_timesteps": 1000,
+                "seeds": [1],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="base_config cycle detected"):
+        _load_expert_training_config_mapping(self_ref)
+
+    mutual_a = tmp_path / "mutual_a.yaml"
+    mutual_b = tmp_path / "mutual_b.yaml"
+    mutual_a.write_text(
+        yaml.safe_dump({"base_config": "mutual_b.yaml", "policy_id": "a"}),
+        encoding="utf-8",
+    )
+    mutual_b.write_text(
+        yaml.safe_dump({"base_config": "mutual_a.yaml", "policy_id": "b"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="base_config cycle detected"):
+        _load_expert_training_config_mapping(mutual_a)
+
+
+def test_load_expert_training_config_missing_base_config_raises(tmp_path) -> None:
+    """A missing/nonexistent base_config must fail closed with a ValueError."""
+    scenario_config = Path("configs/scenarios/classic_interactions_francis2023.yaml").resolve()
+    config_path = tmp_path / "missing_base.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": "does_not_exist_base.yaml",
+                "scenario_config": str(scenario_config),
+                "total_timesteps": 1000,
+                "seeds": [1],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="does not exist"):
+        _load_expert_training_config_mapping(config_path)
+
+
 @pytest.mark.parametrize("num_envs", [8, 14, 16, 30, 32])
 def test_num_envs_benchmark_variants_inherit_shared_config(num_envs: int) -> None:
     """The issue-576 num_envs variants should keep only launch-specific overrides."""
@@ -1355,3 +1960,451 @@ def test_persist_best_checkpoint_if_updated_uploads_immediately(tmp_path, monkey
     assert second_best is None
     assert second_eval_step == 17_000_000
     assert len(run.logged) == 1
+
+
+def test_issue_2557_base_config_inheritance_equivalence() -> None:
+    """All issue-2557 variants must match their pre-refactor resolved-config fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_2557_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    ablate_dir = Path("configs/training/ppo/ablations")
+    variant_paths = sorted(ablate_dir.glob("expert_ppo_issue_2557_*_seed*_fixed.yaml"))
+    assert len(variant_paths) == 24
+    assert {path.name for path in variant_paths} == set(fingerprints)
+
+    for config_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(config_path)
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[config_path.name], (
+            f"Resolved config {config_path.name} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )
+
+
+# Issue #6681: the three issue_791 seed-replica groups were migrated to shared
+# base configs via the existing base_config resolver. The constants below pin
+# that contract and the frozen pre-change resolved-config baseline.
+_ISSUE_791_ABLATE_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_791_BASELINE_PATH = Path("tests/integration/_baseline_issue_791_seed_replicas_resolved.json")
+
+# Every migrated issue_791 seed-replica variant and its shared base config.
+# Frozen in the pre-change baseline at origin/main c8a10c04; the resolver must
+# reconstruct each variant's mapping byte-identically from the base + overrides.
+_ISSUE_791_MIGRATED_VARIANTS = {
+    # Group (a): all_scenarios_10m_env22_large_capacity leader + seed replicas.
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": (
+        "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_base.yaml"
+    ),
+    # Group (b): reward_curriculum_promotion_10m eval_aligned_large_capacity
+    # leader + seed231/seed1337 variants and their _fixed counterparts.
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+    ),
+    # Group (c): reward_curriculum_promotion_3m eval_aligned seed replicas.
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml": (
+        "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_base.yaml"
+    ),
+}
+
+# Known silent divergence pinned by the migration: only the all_scenarios leader
+# carries env_factory_kwargs.peds_have_obstacle_forces; the seed replicas must
+# keep its absence. Every resolved mapping stays byte-identical to origin/main.
+_ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE = {
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": True,
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": False,
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": False,
+}
+
+# Not migrated, but inherits the group (a) leader via base_config; its resolved
+# mapping must stay unchanged too.
+_ISSUE_791_BEST_CKPT_GUARD = (
+    "expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml"
+)
+
+
+def _issue_791_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for ``config_path``."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _issue_791_baseline() -> dict:
+    """Load the frozen pre-change resolved-config baseline for the migration."""
+    assert _ISSUE_791_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_791_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+@pytest.mark.parametrize("variant", sorted(_ISSUE_791_MIGRATED_VARIANTS))
+def test_issue_791_seed_replicas_resolve_to_prechange_values(variant: str) -> None:
+    """Each migrated issue_791 seed-replica variant matches its pre-refactor mapping.
+
+    The base_config deep-merge must reconstruct the exact pre-change resolved
+    mapping for every migrated variant, including the preserved
+    peds_have_obstacle_forces divergence.
+    """
+    path = (_ISSUE_791_ABLATE_DIR / variant).resolve()
+    baseline = _issue_791_baseline()
+
+    actual_fingerprint = _issue_791_fingerprint(path)
+    assert actual_fingerprint == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    # Exercise the full construction path so the loader does not diverge from the
+    # resolver output after inheritance.
+    config = load_expert_training_config(path)
+    assert config.policy_id
+
+
+@pytest.mark.parametrize("variant", sorted(_ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE))
+def test_issue_791_peds_have_obstacle_forces_divergence_preserved(variant: str) -> None:
+    """The all_scenarios leader keeps env_factory_kwargs.peds_have_obstacle_forces.
+
+    The replicas keep its absence; the shared env_overrides value stays common.
+    This pins the silent divergence the migration must preserve exactly.
+    """
+    resolved = _load_expert_training_config_mapping((_ISSUE_791_ABLATE_DIR / variant).resolve())
+    expects_override = _ISSUE_791_ALL_SCENARIOS_PEDS_OVERRIDE[variant]
+
+    assert resolved["env_overrides"]["peds_have_obstacle_forces"] is True
+    if expects_override:
+        assert resolved["env_factory_kwargs"]["peds_have_obstacle_forces"] is True
+    else:
+        assert "peds_have_obstacle_forces" not in resolved["env_factory_kwargs"]
+
+
+def test_issue_791_bases_inheritance_and_no_self_reference() -> None:
+    """Every migrated variant inherits its shared base and the bases stay lean."""
+    for variant, base_name in _ISSUE_791_MIGRATED_VARIANTS.items():
+        variant_path = (_ISSUE_791_ABLATE_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        assert variant_yaml["base_config"] == base_name
+
+        base_path = (_ISSUE_791_ABLATE_DIR / base_name).resolve()
+        base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+        # A base must not self-inherit and carries no launch identity.
+        assert "base_config" not in base_yaml
+        assert "policy_id" not in base_yaml
+
+
+def test_issue_791_best_ckpt_inheriting_leader_guard_unchanged() -> None:
+    """A config inheriting the group (a) leader must resolve unchanged too.
+
+    expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml uses
+    the all_scenarios leader as its base_config, so converting the leader to
+    inherit from a shared base must leave its resolved mapping identical.
+    """
+    baseline = _issue_791_baseline()
+    path = (_ISSUE_791_ABLATE_DIR / _ISSUE_791_BEST_CKPT_GUARD).resolve()
+    assert (
+        _issue_791_fingerprint(path) == baseline["non_migrated_guards"][_ISSUE_791_BEST_CKPT_GUARD]
+    )
+
+
+def test_issue_6679_single_factor_base_config_inheritance_equivalence() -> None:
+    """All 18 single_factor ablation variants must match pre-refactor resolved fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    single_factor_dir = Path("configs/training/ppo/ablations/single_factor")
+    variant_paths = [
+        path
+        for path in sorted(single_factor_dir.glob("*.yaml"))
+        if not path.name.endswith("_base.yaml")
+    ]
+    assert len(variant_paths) == 18
+    assert {path.name for path in variant_paths} == set(fingerprints)
+
+    for config_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(config_path)
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[config_path.name], (
+            f"Resolved config {config_path.name} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )
+
+
+_SINGLE_FACTOR_VARIANTS = [
+    "asymmetric_critic_only_10m_env22_seed123.yaml",
+    "asymmetric_critic_only_10m_env22_seed1337.yaml",
+    "asymmetric_critic_only_10m_env22_seed231.yaml",
+    "asymmetric_critic_only_1m_env22_seed123.yaml",
+    "asymmetric_critic_only_1m_env22_seed1337.yaml",
+    "asymmetric_critic_only_1m_env22_seed231.yaml",
+    "attention_only_10m_env22_seed123.yaml",
+    "attention_only_10m_env22_seed1337.yaml",
+    "attention_only_10m_env22_seed231.yaml",
+    "attention_only_1m_env22_seed123.yaml",
+    "attention_only_1m_env22_seed1337.yaml",
+    "attention_only_1m_env22_seed231.yaml",
+    "reward_curriculum_only_10m_env22_seed123.yaml",
+    "reward_curriculum_only_10m_env22_seed1337.yaml",
+    "reward_curriculum_only_10m_env22_seed231.yaml",
+    "reward_curriculum_only_1m_env22_seed123.yaml",
+    "reward_curriculum_only_1m_env22_seed1337.yaml",
+    "reward_curriculum_only_1m_env22_seed231.yaml",
+]
+
+
+@pytest.mark.parametrize("variant", _SINGLE_FACTOR_VARIANTS)
+def test_issue_6679_single_factor_variant_equivalence(variant: str) -> None:
+    """Parametrized equivalence test covering every migrated single_factor ablation variant."""
+    baseline_path = Path("tests/integration/_baseline_issue_6679_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    expected_fingerprint = baseline["variants"][variant]
+
+    config_path = Path("configs/training/ppo/ablations/single_factor") / variant
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+
+    assert actual_fingerprint == expected_fingerprint, (
+        f"Variant {variant} resolved fingerprint {actual_fingerprint} "
+        f"does not match baseline {expected_fingerprint}"
+    )
+
+    config = load_expert_training_config(config_path)
+    assert config.policy_id
+    assert len(config.seeds) == 1
+
+
+_ISSUE_739_BASE_NAME = "expert_ppo_issue_739_base.yaml"
+
+_ISSUE_739_VARIANT_PATHS = [
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_baseline.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_grid_goal.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_obs_selective.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_core.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage1_reward_tuned.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_opt_scale.yaml",
+    "configs/training/ppo/ablations/expert_ppo_issue_739_stage2_sampling.yaml",
+    "configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml",
+]
+
+
+def test_issue_6682_issue_739_base_config_inheritance_equivalence() -> None:
+    """All issue-739 family variants must match their pre-refactor resolved fingerprints."""
+    baseline_path = Path("tests/integration/_baseline_issue_6682_resolved.json").resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert isinstance(baseline["source_revision"], str)
+    fingerprints = baseline["variants"]
+    assert isinstance(fingerprints, dict)
+
+    ablate_dir = Path("configs/training/ppo/ablations")
+    stage_variant_paths = sorted(ablate_dir.glob("expert_ppo_issue_739_stage*.yaml"))
+    assert len(stage_variant_paths) == 7
+    variant_paths = [str(path) for path in stage_variant_paths]
+    variant_paths.append("configs/training/ppo/expert_ppo_issue_739_12m_baseline_retrain.yaml")
+    assert set(variant_paths) == set(fingerprints)
+
+    base_path = ablate_dir / _ISSUE_739_BASE_NAME
+    assert base_path.exists()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert "base_config" not in base_yaml
+
+    for rel_path in variant_paths:
+        resolved = _load_expert_training_config_mapping(Path(rel_path))
+        canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+        actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        assert actual_fingerprint == fingerprints[rel_path], (
+            f"Resolved config {rel_path} differs from the baseline at "
+            f"{baseline['source_revision']}."
+        )
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_739_VARIANT_PATHS)
+def test_issue_6682_issue_739_variant_equivalence(rel_path: str) -> None:
+    """Parametrized equivalence test covering every migrated issue-739 family variant."""
+    baseline_path = Path("tests/integration/_baseline_issue_6682_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    expected_fingerprint = baseline["variants"][rel_path]
+
+    config_path = Path(rel_path)
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+
+    assert actual_fingerprint == expected_fingerprint, (
+        f"Variant {rel_path} resolved fingerprint {actual_fingerprint} "
+        f"does not match baseline {expected_fingerprint}"
+    )
+
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    base_path = (config_path.parent / raw["base_config"]).resolve()
+    assert base_path.name == _ISSUE_739_BASE_NAME
+    assert base_path.exists()
+
+    config = load_expert_training_config(config_path)
+    assert config.policy_id
+
+
+_ISSUE_6683_BASELINE_PATH = Path("tests/integration/_baseline_issue_6683_resolved.json")
+_ISSUE_6683_MATRIX_PATH = "configs/training/ppo/feature_extractor_candidates_12m_issue193.yaml"
+
+# The eight PPO training configs that carried the deprecated, ignored
+# evaluation.frequency_episodes field on origin/main before issue #6683 removed
+# it, plus the candidate matrix that inherits feature_extractor_sweep_base.yaml.
+_ISSUE_6683_VARIANT_PATHS = [
+    "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml",
+    "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml",
+    _ISSUE_6683_MATRIX_PATH,
+    "configs/training/ppo/feature_extractor_sweep_base.yaml",
+    "configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml",
+    "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml",
+    "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+]
+
+# Lineages resolving through feature_extractor_sweep_base.yaml, which carried
+# frequency_episodes: 10 before issue #6683. Removal falls back to the loader
+# default 0 there — the single intentional resolved-value change, mirroring the
+# #6513 precedent (the field was always ignored in favor of step_schedule).
+_ISSUE_6683_SWEEP_BASE_LINEAGE = frozenset(
+    {
+        "configs/training/ppo/feature_extractor_sweep_base.yaml",
+        _ISSUE_6683_MATRIX_PATH,
+    }
+)
+
+_ISSUE_6683_EXPERT_VARIANT_PATHS = [
+    path for path in _ISSUE_6683_VARIANT_PATHS if path != _ISSUE_6683_MATRIX_PATH
+]
+
+
+def _issue_6683_prechange_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved-config baseline."""
+    baseline_path = _ISSUE_6683_BASELINE_PATH.resolve()
+    assert baseline_path.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-mapping.v1"
+    assert isinstance(baseline["source_revision"], str)
+    assert set(baseline["variants"]) == set(_ISSUE_6683_VARIANT_PATHS)
+    return baseline
+
+
+def _issue_6683_resolved_mapping(rel_path: str) -> dict:
+    """Resolve a variant mapping the way its consumer does.
+
+    Expert training configs load directly. The candidate matrix resolves through
+    its base_config pointer relative to the repository root, mirroring
+    scripts/training/fixed_feature_extractor_candidates.py.
+    """
+    if rel_path != _ISSUE_6683_MATRIX_PATH:
+        return _load_expert_training_config_mapping(Path(rel_path))
+    matrix = yaml.safe_load(Path(rel_path).read_text(encoding="utf-8"))
+    return _load_expert_training_config_mapping(Path(matrix["base_config"]))
+
+
+def test_issue_6683_baseline_records_removed_field_values() -> None:
+    """The frozen baseline records the removed values: seven 0s and two 10s."""
+    baseline = _issue_6683_prechange_baseline()
+    recorded = baseline["pre_change_frequency_episodes"]
+    assert set(recorded) == set(_ISSUE_6683_VARIANT_PATHS)
+    for rel_path in _ISSUE_6683_SWEEP_BASE_LINEAGE:
+        assert recorded[rel_path] == 10
+    for rel_path in set(_ISSUE_6683_VARIANT_PATHS) - _ISSUE_6683_SWEEP_BASE_LINEAGE:
+        assert recorded[rel_path] == 0
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6683_VARIANT_PATHS)
+def test_issue_6683_frequency_episodes_drop_preserves_resolution(rel_path: str) -> None:
+    """Resolved configs are identical except for the intentionally dropped field."""
+    expected_mapping = _issue_6683_prechange_baseline()["variants"][rel_path]
+
+    resolved = _issue_6683_resolved_mapping(rel_path)
+    # The deprecated field is gone from the config side in every lineage.
+    assert "frequency_episodes" not in resolved.get("evaluation", {})
+
+    assert _strip_frequency_episodes(resolved) == _strip_frequency_episodes(expected_mapping), (
+        f"Resolved config {rel_path} differs from the baseline beyond the "
+        f"dropped evaluation.frequency_episodes field."
+    )
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6683_EXPERT_VARIANT_PATHS)
+def test_issue_6683_expert_configs_keep_step_schedule_cadence(rel_path: str) -> None:
+    """All eight expert configs load with step_schedule as the cadence source."""
+    config = load_expert_training_config(Path(rel_path))
+    assert config.policy_id
+    assert config.evaluation.step_schedule
+    # The deprecated field resolves to the loader default everywhere now; for
+    # the sweep-base lineage that is the intentional ignored-field drop 10 -> 0.
+    assert config.evaluation.frequency_episodes == 0
+
+
+def test_issue_6683_candidate_matrix_lineage_keeps_runner_semantics() -> None:
+    """The inheriting matrix keeps its pointer, overrides, and rebuilt schedule."""
+    baseline = _issue_6683_prechange_baseline()
+    expected_overrides = baseline["matrix_overrides"][_ISSUE_6683_MATRIX_PATH]
+
+    matrix = yaml.safe_load(Path(_ISSUE_6683_MATRIX_PATH).read_text(encoding="utf-8"))
+    for key, value in expected_overrides.items():
+        assert matrix[key] == value
+
+    base_config = load_expert_training_config(Path(matrix["base_config"]))
+    assert base_config.evaluation.step_schedule
+    # Mirror the _configure_candidate EvaluationSchedule rebuild: cadence comes
+    # from the matrix eval_every and the deprecated field falls to default 0.
+    rebuilt = EvaluationSchedule(
+        frequency_episodes=base_config.evaluation.frequency_episodes,
+        evaluation_episodes=int(matrix["eval_episodes"]),
+        hold_out_scenarios=base_config.evaluation.hold_out_scenarios,
+        step_schedule=((None, int(matrix["eval_every"])),),
+        randomize_seeds=False,
+        scenario_config=base_config.evaluation.scenario_config,
+    )
+    assert rebuilt.frequency_episodes == 0
+    assert rebuilt.evaluation_episodes == 5
+    assert rebuilt.hold_out_scenarios == ()
+    assert rebuilt.step_schedule == ((None, 48000),)

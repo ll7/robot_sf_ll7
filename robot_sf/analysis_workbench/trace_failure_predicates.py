@@ -455,18 +455,89 @@ def aggregate_trace_failure_predicate_tables(
         Aggregate rows grouped by scenario family, planner, seed, predicate ID,
         validity status, and severity.
     """
-    grouped_predicates: Counter[tuple[str, str, int, str, str, str]] = Counter()
-    trace_denominators: Counter[tuple[str, str, int]] = Counter()
-    trace_sources_by_group: dict[tuple[str, str, int], set[str]] = defaultdict(set)
-    trace_status_counts: dict[tuple[str, str, int, str], Counter[str]] = defaultdict(Counter)
-    included_trace_count = 0
-    predicate_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
     failed_trace_id_list = list(failed_trace_ids or [])
     failed_trace_slice_rows = _json_safe_failed_trace_slices(failed_trace_slices)
     failed_trace_count = _failed_trace_count(
         failed_trace_ids=failed_trace_id_list,
         failed_trace_slices=failed_trace_slice_rows,
     )
+
+    accumulated = _accumulate_trace_predicates(
+        traces,
+        scenario_family=scenario_family,
+        matrix=matrix,
+        failed_trace_count=failed_trace_count,
+    )
+
+    expected_slices = _matrix_expected_slices(matrix, scenario_family_filter=scenario_family)
+    absent_expected_slices = _absent_expected_slice_rows(
+        expected_slices=expected_slices,
+        observed_slices=set(accumulated.trace_denominators),
+        failed_trace_ids=failed_trace_id_list,
+        failed_trace_slices=failed_trace_slice_rows,
+    )
+    absent_expected_slice_count = len(absent_expected_slices)
+    _record_absent_expected_slice_statuses(
+        accumulated.predicate_status_counts,
+        absent_expected_slice_count=absent_expected_slice_count,
+    )
+
+    rows = _build_aggregate_rows(
+        grouped_predicates=accumulated.grouped_predicates,
+        trace_denominators=accumulated.trace_denominators,
+        trace_sources_by_group=accumulated.trace_sources_by_group,
+    )
+    zero_predicate_groups = _build_zero_predicate_groups(
+        trace_sources_by_group=accumulated.trace_sources_by_group,
+        trace_denominators=accumulated.trace_denominators,
+        trace_status_counts=accumulated.trace_status_counts,
+    )
+    return _build_aggregate_payload(
+        rows=rows,
+        zero_predicate_groups=zero_predicate_groups,
+        included_trace_count=accumulated.included_trace_count,
+        failed_trace_count=failed_trace_count,
+        failed_trace_slice_rows=failed_trace_slice_rows,
+        expected_slices=expected_slices,
+        absent_expected_slices=absent_expected_slices,
+        absent_expected_slice_count=absent_expected_slice_count,
+        predicate_status_counts=accumulated.predicate_status_counts,
+        scenario_family=scenario_family,
+        matrix=matrix,
+    )
+
+
+@dataclass(slots=True)
+class _TracePredicateAccumulation:
+    """Mutable accumulation state for trace predicate aggregation."""
+
+    grouped_predicates: Counter[tuple[str, str, int, str, str, str]]
+    trace_denominators: Counter[tuple[str, str, int]]
+    trace_sources_by_group: dict[tuple[str, str, int], set[str]]
+    trace_status_counts: dict[tuple[str, str, int, str], Counter[str]]
+    included_trace_count: int
+    predicate_status_counts: dict[str, Counter[str]]
+
+
+def _accumulate_trace_predicates(
+    traces: Iterable[SimulationTraceExport],
+    *,
+    scenario_family: str | None,
+    matrix: Mapping[str, Any] | None,
+    failed_trace_count: int,
+) -> _TracePredicateAccumulation:
+    """Iterate traces, extract predicates, and accumulate grouping counters.
+
+    Returns:
+        Accumulation state with grouped predicates, denominators, and status counts.
+    """
+    grouped_predicates: Counter[tuple[str, str, int, str, str, str]] = Counter()
+    trace_denominators: Counter[tuple[str, str, int]] = Counter()
+    trace_sources_by_group: dict[tuple[str, str, int], set[str]] = defaultdict(set)
+    trace_status_counts: dict[tuple[str, str, int, str], Counter[str]] = defaultdict(Counter)
+    included_trace_count = 0
+    predicate_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
+
     if failed_trace_count:
         for _failure_index in range(failed_trace_count):
             for pred_id in TRACE_FAILURE_PREDICATE_IDS:
@@ -515,19 +586,27 @@ def aggregate_trace_failure_predicate_tables(
             predicate_statuses_in_trace,
         )
 
-    expected_slices = _matrix_expected_slices(matrix, scenario_family_filter=scenario_family)
-    absent_expected_slices = _absent_expected_slice_rows(
-        expected_slices=expected_slices,
-        observed_slices=set(trace_denominators),
-        failed_trace_ids=failed_trace_id_list,
-        failed_trace_slices=failed_trace_slice_rows,
-    )
-    absent_expected_slice_count = len(absent_expected_slices)
-    _record_absent_expected_slice_statuses(
-        predicate_status_counts,
-        absent_expected_slice_count=absent_expected_slice_count,
+    return _TracePredicateAccumulation(
+        grouped_predicates=grouped_predicates,
+        trace_denominators=trace_denominators,
+        trace_sources_by_group=trace_sources_by_group,
+        trace_status_counts=trace_status_counts,
+        included_trace_count=included_trace_count,
+        predicate_status_counts=predicate_status_counts,
     )
 
+
+def _build_aggregate_rows(
+    *,
+    grouped_predicates: Counter[tuple[str, str, int, str, str, str]],
+    trace_denominators: Counter[tuple[str, str, int]],
+    trace_sources_by_group: dict[tuple[str, str, int], set[str]],
+) -> list[dict[str, Any]]:
+    """Build sorted aggregate rows from grouped predicate counters.
+
+    Returns:
+        Sorted aggregate row dicts including zero-predicate placeholder rows.
+    """
     rows = [
         {
             "scenario_family": family,
@@ -580,8 +659,21 @@ def aggregate_trace_failure_predicate_tables(
                 "predicate_rate_per_trace": 0.0,
             }
         )
+    return rows
 
-    zero_predicate_groups = [
+
+def _build_zero_predicate_groups(
+    *,
+    trace_sources_by_group: dict[tuple[str, str, int], set[str]],
+    trace_denominators: Counter[tuple[str, str, int]],
+    trace_status_counts: dict[tuple[str, str, int, str], Counter[str]],
+) -> list[dict[str, Any]]:
+    """Build trace groups where no valid predicate was observed.
+
+    Returns:
+        Row dicts for each trace source with zero valid predicates.
+    """
+    return [
         {
             "scenario_family": family,
             "planner_id": planner_id,
@@ -607,6 +699,26 @@ def aggregate_trace_failure_predicate_tables(
         if trace_status_counts[trace_key].get(VALIDITY_STATUS_VALID, 0) == 0
     ]
 
+
+def _build_aggregate_payload(  # noqa: PLR0913
+    *,
+    rows: list[dict[str, Any]],
+    zero_predicate_groups: list[dict[str, Any]],
+    included_trace_count: int,
+    failed_trace_count: int,
+    failed_trace_slice_rows: list[dict[str, Any]],
+    expected_slices: set[tuple[str, str, int]],
+    absent_expected_slices: list[dict[str, Any]],
+    absent_expected_slice_count: int,
+    predicate_status_counts: dict[str, Counter[str]],
+    scenario_family: str | None,
+    matrix: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Assemble the final aggregate predicate table payload.
+
+    Returns:
+        Complete ``trace_failure_predicates.v1`` aggregate payload.
+    """
     matrix_metadata = _matrix_metadata(matrix, included_traces=included_trace_count)
     return {
         "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,

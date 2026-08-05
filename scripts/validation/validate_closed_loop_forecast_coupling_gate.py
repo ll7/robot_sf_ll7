@@ -15,6 +15,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 _DEFAULT_FORECAST_PATH = (
     "docs/context/evidence/issue_2781_interaction_aware_forecast_2026-06-15/comparison_report.json"
 )
@@ -300,11 +302,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.output_dir:
         try:
             args.output_dir.mkdir(parents=True, exist_ok=True)
-            (args.output_dir / "gate_report.json").write_text(
-                json.dumps(report, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            (args.output_dir / "gate_report.md").write_text(md, encoding="utf-8")
+            write_json(args.output_dir / "gate_report.json", report)
+            write_text(args.output_dir / "gate_report.md", md, issue_ref="robot_sf#2843")
         except OSError as exc:
             print(json.dumps({"status": "error", "error": str(exc)}))
             return 1

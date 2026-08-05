@@ -65,7 +65,7 @@ def _iter_first(
     except StopIteration:  # empty generator
         return None, iter(())
 
-    def chain_first():  # local generator
+    def chain_first() -> Iterator[np.ndarray]:  # local generator
         """Yield the first frame followed by the remaining iterator."""
         yield first
         yield from it
@@ -263,7 +263,8 @@ def encode_frames(
         stop_sampler()
         return EncodeResult(path=out_path, status="failed", note=err)
 
-    assert first is not None  # for type checker
+    if first is None:
+        raise TypeError("successful frame validation produced no first frame")
     frame_list = _materialize_frames(first, chained)
     if not frame_list:
         stop_sampler()

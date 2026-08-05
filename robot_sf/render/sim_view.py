@@ -380,7 +380,7 @@ class SimulationView:
         # On non-Linux platforms, rely on SDL driver only (do not treat missing DISPLAY as headless)
         return False
 
-    def render(self, state: VisualizableSimState, target_fps: float = 60):
+    def render(self, state: VisualizableSimState, target_fps: float = 60) -> None:
         """
         Render one frame and handle events.
 
@@ -643,11 +643,11 @@ class SimulationView:
             self.offset[1] = self._prev_offset_for_ego_up[1]
             self._prev_offset_for_ego_up = None
 
-    def exit_simulation(self, return_frames: bool = False):
+    def exit_simulation(self, return_frames: bool = False) -> list[np.ndarray] | None:
         """Exit the simulation.
 
         Returns:
-            list | None: Captured video frames if return_frames=True, otherwise None (implicit).
+            list[np.ndarray] | None: Captured frames when requested, otherwise ``None``.
         """
         logger.debug("Exiting the simulation.")
         self.is_exit_requested = True
@@ -768,7 +768,7 @@ class SimulationView:
             # Limit this loop to 30 event checks per second (sufficient for UI interaction)
             self.clock.tick(30)
 
-    def clear(self):
+    def clear(self) -> None:
         """
         Clears the screen and updates the display.
 
@@ -941,15 +941,22 @@ class SimulationView:
         )
 
     def _draw_pedestrians(self, ped_pos: np.ndarray, ped_actions: np.ndarray | None = None):
-        """Draw pedestrians scaled to their radius with an optional motion indicator."""
-        action_map: dict[tuple[float, float], tuple[float, float]] = {}
-        if ped_actions is not None:
-            for start, end in ped_actions:
-                action_map[tuple(start)] = tuple(end)
+        """Draw pedestrians scaled to their radius with an optional motion indicator.
+
+        Action rows are matched by pedestrian index instead of the former
+        O(P*A) nearest-neighbor scan (issue #6460): ``ped_pos`` and
+        ``ped_actions`` are both derived from ``pysf_sim.peds.pos()``, so row
+        ``i`` of ``ped_actions`` belongs to pedestrian ``i`` of ``ped_pos``.
+        The ego-pedestrian simulators append one trailing ego action row, which
+        has no ``ped_pos`` entry and is simply not drawn. With exactly
+        duplicate pedestrian positions the old dict-based match collapsed to a
+        single action; index matching draws each pedestrian's own action.
+        """
+        num_actions = len(ped_actions) if ped_actions is not None else 0
 
         radius_px = self.ped_radius * self.scaling
         ped_sprite = self._get_entity_sprite("ped") if self.ped_render_mode == "sprite" else None
-        for ped_x, ped_y in ped_pos:
+        for ped_idx, (ped_x, ped_y) in enumerate(ped_pos):
             center = self._scale_tuple((ped_x, ped_y))
             if ped_sprite is not None:
                 self._draw_sprite(ped_sprite, center, radius_px)
@@ -957,22 +964,15 @@ class SimulationView:
                 pygame.draw.circle(self.screen, PED_COLOR, center, radius_px)
 
             # If we have an action for this ped, draw a direction line
-            if action_map:
-                # Match by nearest start point to the ped position
-                nearest = min(
-                    action_map.items(),
-                    key=lambda item: (item[0][0] - ped_x) ** 2 + (item[0][1] - ped_y) ** 2,
-                    default=None,
+            if ped_idx < num_actions:
+                _, end = ped_actions[ped_idx]
+                pygame.draw.line(
+                    self.screen,
+                    PED_ACTION_COLOR,
+                    center,
+                    self._scale_tuple(end),
+                    width=2,
                 )
-                if nearest is not None:
-                    _, end = nearest
-                    pygame.draw.line(
-                        self.screen,
-                        PED_ACTION_COLOR,
-                        center,
-                        self._scale_tuple(end),
-                        width=2,
-                    )
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles

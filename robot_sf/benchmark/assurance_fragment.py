@@ -28,7 +28,263 @@ def _repo_relative(path: Path, repo_root: Path) -> str:
         return str(resolved)
 
 
-def build_assurance_fragment(  # noqa: C901, PLR0915
+def _build_root_and_context_nodes(campaign_meta: dict[str, Any]) -> dict[str, Any]:
+    """Build the root goal and context nodes (G_root, C_matrix, C_git).
+
+    Returns:
+        Dict of root goal and context GSN nodes keyed by node ID.
+    """
+
+    campaign_name = campaign_meta.get("name", "unnamed_campaign")
+    scenario_matrix = campaign_meta.get("scenario_matrix", "unknown_matrix")
+    scenario_matrix_hash = campaign_meta.get("scenario_matrix_hash", "")
+    git_hash = campaign_meta.get("git_hash", "unknown")
+
+    return {
+        "G_root": {
+            "id": "G_root",
+            "type": "goal",
+            "text": (
+                f"Campaign '{campaign_name}' meets safety, comfort, and performance "
+                f"requirements on scenario matrix '{scenario_matrix}'."
+            ),
+            "children": ["S_campaign", "C_matrix", "C_git"],
+        },
+        "C_matrix": {
+            "id": "C_matrix",
+            "type": "context",
+            "text": f"Scenario Matrix: {scenario_matrix} (SHA-256: {scenario_matrix_hash})",
+        },
+        "C_git": {
+            "id": "C_git",
+            "type": "context",
+            "text": f"Git Commit SHA: {git_hash}",
+        },
+    }
+
+
+def _build_campaign_strategy_nodes(
+    campaign_summary: dict[str, Any], repo_root: Path, planner_goal_ids: list[str]
+) -> dict[str, Any]:
+    """Build the campaign strategy and summary solution nodes.
+
+    Returns:
+        Dict containing S_campaign and Sn_campaign_summary nodes.
+    """
+
+    s_campaign_children = list(planner_goal_ids) + ["Sn_campaign_summary"]
+
+    summary_rel = campaign_summary.get("artifacts", {}).get("campaign_summary_json", "")
+    summary_sha = ""
+    if summary_rel:
+        summary_path = repo_root / summary_rel
+        if summary_path.exists():
+            summary_sha = _sha256_file(summary_path)
+
+    return {
+        "S_campaign": {
+            "id": "S_campaign",
+            "type": "strategy",
+            "text": (
+                "Argue by demonstrating each evaluated planner satisfies individual "
+                "gate and performance criteria."
+            ),
+            "children": s_campaign_children,
+        },
+        "Sn_campaign_summary": {
+            "id": "Sn_campaign_summary",
+            "type": "solution",
+            "text": f"Campaign summary report: {summary_rel}",
+            "metadata": {
+                "path": summary_rel,
+                "sha256": summary_sha,
+            },
+        },
+    }
+
+
+def _build_planner_episode_map(
+    run_entries: list[dict[str, Any]], repo_root: Path
+) -> dict[str, tuple[str, str]]:
+    """Map planner keys to (episodes_relative_path, sha256) from run entries.
+
+    Returns:
+        Dict mapping planner key to (relative episodes path, sha256) tuples.
+    """
+
+    planner_to_episodes: dict[str, tuple[str, str]] = {}
+    for entry in run_entries:
+        pkey = entry.get("planner_key")
+        ep_path_str = entry.get("episodes_path")
+        if pkey and ep_path_str:
+            ep_path = repo_root / ep_path_str
+            if ep_path.exists():
+                sha = _sha256_file(ep_path)
+                planner_to_episodes[pkey] = (ep_path_str, sha)
+    return planner_to_episodes
+
+
+def _build_single_planner_nodes(
+    row: dict[str, Any], planner_to_episodes: dict[str, tuple[str, str]]
+) -> dict[str, Any]:
+    """Build all GSN nodes for a single planner row.
+
+    Returns:
+        Dict of GSN nodes for the planner keyed by node ID.
+    """
+
+    pkey = row["planner_key"]
+    algo = row.get("algo", "unknown_algo")
+    kinematics = row.get("kinematics", "unknown_kinematics")
+    episodes_count = row.get("episodes", 0)
+    success_mean = row.get("success_mean", "0.0")
+    collisions_mean = row.get("collisions_mean", "0.0")
+    snqi_mean = row.get("snqi_mean", "nan")
+    readiness_tier = row.get("readiness_tier", "unknown_tier")
+    execution_mode = row.get("execution_mode", "unknown_mode")
+    p_success = row.get("benchmark_success", "false")
+
+    p_goal_id = f"G_{pkey}"
+    p_strat_id = f"S_{pkey}"
+    p_context_id = f"C_{pkey}_context"
+    p_train_id = f"A_{pkey}_train"
+    p_deploy_id = f"A_{pkey}_deploy"
+
+    strat_children = [f"G_{pkey}_success", f"G_{pkey}_safety"]
+    if snqi_mean != "nan":
+        strat_children.append(f"G_{pkey}_snqi")
+
+    ep_rel, ep_sha = planner_to_episodes.get(pkey, ("", ""))
+    ep_solution_id = f"Sn_{pkey}_episodes"
+
+    nodes: dict[str, Any] = {
+        p_goal_id: {
+            "id": p_goal_id,
+            "type": "goal",
+            "text": (
+                f"Planner '{pkey}' ({algo}) meets gate requirements "
+                f"under '{kinematics}' kinematics."
+            ),
+            "children": [p_strat_id, p_context_id, p_train_id, p_deploy_id],
+        },
+        p_context_id: {
+            "id": p_context_id,
+            "type": "context",
+            "text": f"Planner Readiness: {readiness_tier}, Execution Mode: {execution_mode}",
+        },
+        p_train_id: {
+            "id": p_train_id,
+            "type": "assumption",
+            "text": (
+                f"AMLAS Training Data: training data assumptions for learned "
+                f"components of '{pkey}' stated, not verified."
+            ),
+        },
+        p_deploy_id: {
+            "id": p_deploy_id,
+            "type": "assumption",
+            "text": (
+                f"AMLAS Deployment Match: deployment-context and ODD match "
+                f"for '{pkey}' stated, not verified."
+            ),
+        },
+        p_strat_id: {
+            "id": p_strat_id,
+            "type": "strategy",
+            "text": (
+                f"Demonstrate performance metrics satisfy release criteria "
+                f"and benchmark thresholds for '{pkey}'."
+            ),
+            "children": strat_children,
+        },
+        ep_solution_id: {
+            "id": ep_solution_id,
+            "type": "solution",
+            "text": f"Episode logs for '{pkey}': {ep_rel}",
+            "metadata": {
+                "path": ep_rel,
+                "sha256": ep_sha,
+                "episode_count": episodes_count,
+            },
+        },
+        f"G_{pkey}_success": {
+            "id": f"G_{pkey}_success",
+            "type": "goal",
+            "text": (
+                f"Planner achieves success rate mean of {success_mean} "
+                f"(benchmark_success={p_success})."
+            ),
+            "children": [ep_solution_id],
+        },
+        f"G_{pkey}_safety": {
+            "id": f"G_{pkey}_safety",
+            "type": "goal",
+            "text": f"Planner achieves collision rate mean of {collisions_mean}.",
+            "children": [ep_solution_id],
+        },
+    }
+
+    if snqi_mean != "nan":
+        nodes[f"G_{pkey}_snqi"] = {
+            "id": f"G_{pkey}_snqi",
+            "type": "goal",
+            "text": f"Planner achieves SNQI mean score of {snqi_mean}.",
+            "children": [ep_solution_id],
+        }
+
+    return nodes
+
+
+def _build_release_gate_nodes(
+    release_gate_report: dict[str, Any], nodes: dict[str, Any], repo_root: Path
+) -> dict[str, Any]:
+    """Build release-gate solution and per-planner gate goal nodes.
+
+    Returns:
+        Dict of release-gate GSN nodes keyed by node ID.
+    """
+
+    gate_rel = _repo_relative(
+        Path(release_gate_report.get("provenance", {}).get("input", {}).get("path", "")),
+        repo_root,
+    )
+    gate_sha = release_gate_report.get("provenance", {}).get("input", {}).get("sha256", "")
+
+    gate_nodes: dict[str, Any] = {
+        "Sn_release_gates": {
+            "id": "Sn_release_gates",
+            "type": "solution",
+            "text": f"Release gate evaluation report: {gate_rel}",
+            "metadata": {
+                "path": gate_rel,
+                "sha256": gate_sha,
+            },
+        },
+    }
+
+    for row in release_gate_report.get("matrix_rows", []):
+        pkey = row.get("planner_key")
+        if pkey:
+            p_strat_id = f"S_{pkey}"
+            if p_strat_id in nodes:
+                g_gate_id = f"G_{pkey}_gates"
+                gate_nodes[g_gate_id] = {
+                    "id": g_gate_id,
+                    "type": "goal",
+                    "text": (
+                        f"Release gates safety: {row.get('safety_status')}, "
+                        f"comfort: {row.get('comfort_status')} "
+                        f"(overall={row.get('overall_status')})."
+                    ),
+                    "children": ["Sn_release_gates"],
+                }
+                if g_gate_id not in nodes[p_strat_id]["children"]:
+                    nodes[p_strat_id]["children"].append(g_gate_id)
+
+    return gate_nodes
+
+
+def build_assurance_fragment(
     campaign_summary: dict[str, Any],
     repo_root: Path,
     release_gate_report: dict[str, Any] | None = None,
@@ -39,213 +295,26 @@ def build_assurance_fragment(  # noqa: C901, PLR0915
         JSON-serializable GSN assurance fragment payload.
     """
     campaign_meta = campaign_summary.get("campaign", {})
-    campaign_name = campaign_meta.get("name", "unnamed_campaign")
     campaign_id = campaign_meta.get("campaign_id", "unnamed_campaign_id")
-    scenario_matrix = campaign_meta.get("scenario_matrix", "unknown_matrix")
-    scenario_matrix_hash = campaign_meta.get("scenario_matrix_hash", "")
-    git_hash = campaign_meta.get("git_hash", "unknown")
-    campaign_meta.get("benchmark_success", False)
 
     nodes: dict[str, Any] = {}
+    nodes.update(_build_root_and_context_nodes(campaign_meta))
 
-    # G0: Root Goal
-    g0_id = "G_root"
-    nodes[g0_id] = {
-        "id": g0_id,
-        "type": "goal",
-        "text": f"Campaign '{campaign_name}' meets safety, comfort, and performance requirements on scenario matrix '{scenario_matrix}'.",
-        "children": ["S_campaign", "C_matrix", "C_git"],
-    }
-
-    # C_matrix: Context for Matrix
-    nodes["C_matrix"] = {
-        "id": "C_matrix",
-        "type": "context",
-        "text": f"Scenario Matrix: {scenario_matrix} (SHA-256: {scenario_matrix_hash})",
-    }
-
-    # C_git: Context for git commit
-    nodes["C_git"] = {
-        "id": "C_git",
-        "type": "context",
-        "text": f"Git Commit SHA: {git_hash}",
-    }
-
-    # S_campaign: Decompose campaign by planners
-    s_campaign_id = "S_campaign"
     planner_rows = campaign_summary.get("planner_rows", [])
     planner_goal_ids = [
         f"G_{row.get('planner_key')}" for row in planner_rows if row.get("planner_key")
     ]
+    nodes.update(_build_campaign_strategy_nodes(campaign_summary, repo_root, planner_goal_ids))
 
-    # We also link the final summary JSON as a direct solution/evidence for this strategy
-    s_campaign_children = list(planner_goal_ids) + ["Sn_campaign_summary"]
-    nodes[s_campaign_id] = {
-        "id": s_campaign_id,
-        "type": "strategy",
-        "text": "Argue by demonstrating each evaluated planner satisfies individual gate and performance criteria.",
-        "children": s_campaign_children,
-    }
+    planner_to_episodes = _build_planner_episode_map(campaign_summary.get("runs", []), repo_root)
 
-    # Sn_campaign_summary: Solution node for summary
-    summary_rel = campaign_summary.get("artifacts", {}).get("campaign_summary_json", "")
-    summary_sha = ""
-    if summary_rel:
-        summary_path = repo_root / summary_rel
-        if summary_path.exists():
-            summary_sha = _sha256_file(summary_path)
-
-    nodes["Sn_campaign_summary"] = {
-        "id": "Sn_campaign_summary",
-        "type": "solution",
-        "text": f"Campaign summary report: {summary_rel}",
-        "metadata": {
-            "path": summary_rel,
-            "sha256": summary_sha,
-        },
-    }
-
-    # Map planner run entries for episodes files
-    run_entries = campaign_summary.get("runs", [])
-    planner_to_episodes: dict[str, tuple[str, str]] = {}
-    for entry in run_entries:
-        pkey = entry.get("planner_key")
-        ep_path_str = entry.get("episodes_path")
-        if pkey and ep_path_str:
-            ep_path = repo_root / ep_path_str
-            if ep_path.exists():
-                sha = _sha256_file(ep_path)
-                planner_to_episodes[pkey] = (ep_path_str, sha)
-
-    # Process each planner row
     for row in planner_rows:
-        pkey = row.get("planner_key")
-        if not pkey:
+        if not row.get("planner_key"):
             continue
-        algo = row.get("algo", "unknown_algo")
-        kinematics = row.get("kinematics", "unknown_kinematics")
-        episodes_count = row.get("episodes", 0)
-        success_mean = row.get("success_mean", "0.0")
-        collisions_mean = row.get("collisions_mean", "0.0")
-        snqi_mean = row.get("snqi_mean", "nan")
-        readiness_tier = row.get("readiness_tier", "unknown_tier")
-        execution_mode = row.get("execution_mode", "unknown_mode")
-        p_success = row.get("benchmark_success", "false")
+        nodes.update(_build_single_planner_nodes(row, planner_to_episodes))
 
-        p_goal_id = f"G_{pkey}"
-        p_strat_id = f"S_{pkey}"
-        p_context_id = f"C_{pkey}_context"
-        p_train_id = f"A_{pkey}_train"
-        p_deploy_id = f"A_{pkey}_deploy"
-
-        p_children = [p_strat_id, p_context_id, p_train_id, p_deploy_id]
-
-        nodes[p_goal_id] = {
-            "id": p_goal_id,
-            "type": "goal",
-            "text": f"Planner '{pkey}' ({algo}) meets gate requirements under '{kinematics}' kinematics.",
-            "children": p_children,
-        }
-
-        nodes[p_context_id] = {
-            "id": p_context_id,
-            "type": "context",
-            "text": f"Planner Readiness: {readiness_tier}, Execution Mode: {execution_mode}",
-        }
-
-        # AMLAS-style placeholders for learned components
-        nodes[p_train_id] = {
-            "id": p_train_id,
-            "type": "assumption",
-            "text": f"AMLAS Training Data: training data assumptions for learned components of '{pkey}' stated, not verified.",
-        }
-        nodes[p_deploy_id] = {
-            "id": p_deploy_id,
-            "type": "assumption",
-            "text": f"AMLAS Deployment Match: deployment-context and ODD match for '{pkey}' stated, not verified.",
-        }
-
-        strat_children = [f"G_{pkey}_success", f"G_{pkey}_safety"]
-        if snqi_mean != "nan":
-            strat_children.append(f"G_{pkey}_snqi")
-
-        nodes[p_strat_id] = {
-            "id": p_strat_id,
-            "type": "strategy",
-            "text": f"Demonstrate performance metrics satisfy release criteria and benchmark thresholds for '{pkey}'.",
-            "children": strat_children,
-        }
-
-        # Find episodes file
-        ep_rel, ep_sha = planner_to_episodes.get(pkey, ("", ""))
-        ep_solution_id = f"Sn_{pkey}_episodes"
-
-        nodes[ep_solution_id] = {
-            "id": ep_solution_id,
-            "type": "solution",
-            "text": f"Episode logs for '{pkey}': {ep_rel}",
-            "metadata": {
-                "path": ep_rel,
-                "sha256": ep_sha,
-                "episode_count": episodes_count,
-            },
-        }
-
-        nodes[f"G_{pkey}_success"] = {
-            "id": f"G_{pkey}_success",
-            "type": "goal",
-            "text": f"Planner achieves success rate mean of {success_mean} (benchmark_success={p_success}).",
-            "children": [ep_solution_id],
-        }
-
-        nodes[f"G_{pkey}_safety"] = {
-            "id": f"G_{pkey}_safety",
-            "type": "goal",
-            "text": f"Planner achieves collision rate mean of {collisions_mean}.",
-            "children": [ep_solution_id],
-        }
-
-        if snqi_mean != "nan":
-            nodes[f"G_{pkey}_snqi"] = {
-                "id": f"G_{pkey}_snqi",
-                "type": "goal",
-                "text": f"Planner achieves SNQI mean score of {snqi_mean}.",
-                "children": [ep_solution_id],
-            }
-
-    # Add release gate report details if available
     if release_gate_report:
-        gate_rel = _repo_relative(
-            Path(release_gate_report.get("provenance", {}).get("input", {}).get("path", "")),
-            repo_root,
-        )
-        gate_sha = release_gate_report.get("provenance", {}).get("input", {}).get("sha256", "")
-
-        nodes["Sn_release_gates"] = {
-            "id": "Sn_release_gates",
-            "type": "solution",
-            "text": f"Release gate evaluation report: {gate_rel}",
-            "metadata": {
-                "path": gate_rel,
-                "sha256": gate_sha,
-            },
-        }
-
-        # Link each planner goal to the release gates solution
-        for row in release_gate_report.get("matrix_rows", []):
-            pkey = row.get("planner_key")
-            if pkey:
-                p_strat_id = f"S_{pkey}"
-                if p_strat_id in nodes:
-                    g_gate_id = f"G_{pkey}_gates"
-                    nodes[g_gate_id] = {
-                        "id": g_gate_id,
-                        "type": "goal",
-                        "text": f"Release gates safety: {row.get('safety_status')}, comfort: {row.get('comfort_status')} (overall={row.get('overall_status')}).",
-                        "children": ["Sn_release_gates"],
-                    }
-                    if g_gate_id not in nodes[p_strat_id]["children"]:
-                        nodes[p_strat_id]["children"].append(g_gate_id)
+        nodes.update(_build_release_gate_nodes(release_gate_report, nodes, repo_root))
 
     return {
         "schema_version": "assurance_fragment.v1",
@@ -328,7 +397,7 @@ def render_assurance_fragment_to_markdown(payload: dict[str, Any]) -> str:  # no
 
     visited = set()
 
-    def print_node(node_id, indent=0):
+    def print_node(node_id, indent=0) -> None:
         """Recursively append ``node_id`` and its GSN children to ``lines`` as an indented tree."""
         if node_id not in nodes or node_id in visited:
             return

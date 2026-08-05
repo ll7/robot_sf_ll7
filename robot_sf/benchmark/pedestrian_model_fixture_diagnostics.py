@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from robot_sf.common.validation import _require_finite_number
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
@@ -123,18 +124,6 @@ class PedestrianModelFixtureTrace:
     duration_s: float
     positions: np.ndarray
     velocities: np.ndarray
-
-
-def _require_finite_number(
-    value: float, field_name: str, *, positive: bool = False, non_negative: bool = False
-) -> None:
-    """Validate ``value`` is finite (and optionally positive/non-negative), else raise."""
-    if isinstance(value, bool) or not math.isfinite(float(value)):
-        raise ValueError(f"{field_name} must be finite")
-    if positive and float(value) <= 0.0:
-        raise ValueError(f"{field_name} must be positive")
-    if non_negative and float(value) < 0.0:
-        raise ValueError(f"{field_name} must be non-negative")
 
 
 def build_pedestrian_model_fixture_scenarios() -> dict[str, PedestrianModelFixtureSpec]:

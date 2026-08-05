@@ -110,7 +110,7 @@ def test_weight_computation():
                     if importlib.util.find_spec(candidate) is None:
                         continue
                     return importlib.import_module(candidate)
-                except Exception as e:  # pragma: no cover - import fallback diagnostics
+                except Exception as e:  # pragma: no cover - broad catch: optional import fallback
                     print(f"⚠ Failed to import '{candidate}': {e}")
             return None
 
@@ -143,7 +143,7 @@ def test_weight_computation():
         print("✓ All basic tests: PASS")
         return True
 
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level validation boundary
         print(f"✗ Test failed: {e}")
         return False
 

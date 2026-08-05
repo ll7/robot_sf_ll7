@@ -88,7 +88,7 @@ def _sample_points_near_anchor(
     attempts = 0
     max_attempts = num_samples * 50
 
-    def clip_spread(v):
+    def clip_spread(v) -> np.ndarray | np.floating:
         """Clamp lateral sample spread to the sidewalk half-width.
 
         Returns:
@@ -959,7 +959,257 @@ def _apply_forced_population_contract(
     ped_states[:, 2:4] *= speed_factors[:, np.newaxis]
 
 
-def populate_simulation(  # noqa: C901,PLR0913
+@dataclass
+class _BackgroundPopulation:
+    """Spawned crowd and route channels plus behavior state before merging."""
+
+    crowd_states: PedState
+    crowd_groups: list[PedGrouping]
+    zone_assignments: ZoneAssignments
+    route_states: PedState
+    route_groups: list[PedGrouping]
+    route_assignments: dict[int, GlobalRoute]
+    initial_sections: list[int]
+    behavior_zones: list[Zone]
+    scatter_exclusions: list[PreparedGeometry] | None
+    scatter_rng: np.random.Generator | None
+    synthesized: bool
+
+
+def _synthesize_background_population(
+    crowd_spawn_config: PedSpawnConfig,
+    prepared_obstacles: list[PreparedGeometry],
+    single_pedestrians: list,
+    map_bounds: tuple[float, float, float, float] | None,
+    reserved_zones: list[Zone] | None,
+    ped_radius: float,
+    reserved_zone_radius: float,
+    background_size: int,
+) -> _BackgroundPopulation:
+    """Synthesize a seeded free-space background when maps lack spawn geometry.
+
+    Returns:
+        Background population with synthetic crowd zones and scatter state for behavior.
+    """
+    if map_bounds is None:
+        raise ValueError(
+            "force_population_size requires map_bounds to synthesize the remaining "
+            f"{background_size} background pedestrians"
+        )
+    if ped_radius <= 0 or reserved_zone_radius < 0:
+        raise ValueError(
+            "geometry-less forced population synthesis requires ped_radius > 0 and "
+            "reserved_zone_radius >= 0"
+        )
+    scatter_exclusions = _scatter_exclusions(
+        prepared_obstacles,
+        reserved_zones or [],
+        single_pedestrians,
+        ped_radius,
+        reserved_zone_radius,
+    )
+    (
+        crowd_ped_states_np,
+        crowd_groups,
+        zone_assignments,
+        behavior_zones,
+        scatter_rng,
+    ) = _populate_scattered_background(
+        crowd_spawn_config,
+        background_size,
+        map_bounds,
+        scatter_exclusions,
+        ped_radius,
+    )
+    return _BackgroundPopulation(
+        crowd_states=crowd_ped_states_np,
+        crowd_groups=crowd_groups,
+        zone_assignments=zone_assignments,
+        route_states=np.zeros((0, 6)),
+        route_groups=[],
+        route_assignments={},
+        initial_sections=[],
+        behavior_zones=behavior_zones,
+        scatter_exclusions=scatter_exclusions,
+        scatter_rng=scatter_rng,
+        synthesized=True,
+    )
+
+
+def _spawn_zoned_background_population(
+    crowd_spawn_config: PedSpawnConfig,
+    route_spawn_config: PedSpawnConfig,
+    ped_crowded_zones: list[Zone],
+    ped_routes: list[GlobalRoute],
+    prepared_obstacles: list[PreparedGeometry],
+) -> _BackgroundPopulation:
+    """Spawn background pedestrians from map-defined crowded zones and routes.
+
+    Returns:
+        Background population drawn from the map's crowded zones and routes.
+    """
+    crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
+        crowd_spawn_config,
+        ped_crowded_zones,
+        obstacle_polygons=prepared_obstacles,
+    )
+    route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
+        route_spawn_config,
+        ped_routes,
+        obstacle_polygons=prepared_obstacles,
+    )
+    return _BackgroundPopulation(
+        crowd_states=crowd_ped_states_np,
+        crowd_groups=crowd_groups,
+        zone_assignments=zone_assignments,
+        route_states=route_ped_states_np,
+        route_groups=route_groups,
+        route_assignments=route_assignments,
+        initial_sections=initial_sections,
+        behavior_zones=ped_crowded_zones,
+        scatter_exclusions=None,
+        scatter_rng=None,
+        synthesized=False,
+    )
+
+
+def _merge_pedestrian_states(
+    background: _BackgroundPopulation,
+    single_pedestrians: list,
+    spawn_config: PedSpawnConfig,
+    tau: float,
+    apply_archetypes_to_forced_population: bool,
+) -> tuple[PedState, int, int]:
+    """Merge crowd, route, and single-pedestrian states into one tau-augmented array.
+
+    Returns:
+        Combined pedestrian states plus the route and single-pedestrian ID offsets.
+    """
+    if single_pedestrians:
+        single_ped_states_np, _single_ped_metadata = populate_single_pedestrians(
+            single_pedestrians,
+            spawn_config.initial_speed,
+        )
+    else:
+        single_ped_states_np = np.empty((0, 7))
+
+    combined_ped_states_np = np.concatenate(
+        (background.crowd_states, background.route_states, single_ped_states_np[:, :6]),
+    )
+    _apply_forced_population_contract(
+        combined_ped_states_np,
+        spawn_config,
+        apply_archetypes_to_forced_population,
+    )
+    taus = np.full((combined_ped_states_np.shape[0]), tau)
+    ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
+
+    route_offset = background.crowd_states.shape[0]
+    single_offset = route_offset + background.route_states.shape[0]
+    return ped_states, route_offset, single_offset
+
+
+def _create_state_views(
+    ped_states: np.ndarray,
+    tau: float,
+    route_offset: int,
+    single_offset: int,
+    add_ego_state: bool,
+) -> tuple[PedestrianStates, PedestrianStates, PedestrianStates]:
+    """Create combined, crowd-only, and route-only pedestrian state views.
+
+    Returns:
+        The combined, crowd, and route state views consumed by behavior controllers.
+    """
+    if add_ego_state:
+        # Create dummy ego state and inject it
+        ego_state = np.array([0, 0, 0, 0, 0, 0, tau]).reshape(1, -1)
+        new_ped_states = np.concatenate((ped_states, ego_state), axis=0)
+        pysf_state = PedestrianStates(lambda: new_ped_states)
+        crowd_pysf_state = PedestrianStates(lambda: new_ped_states[:route_offset])
+        route_pysf_state = PedestrianStates(
+            lambda: new_ped_states[route_offset:single_offset]
+        )  # Exclude single and ego states
+    else:
+        pysf_state = PedestrianStates(lambda: ped_states)
+        crowd_pysf_state = PedestrianStates(lambda: ped_states[:route_offset])
+        route_pysf_state = PedestrianStates(lambda: ped_states[route_offset:single_offset])
+    return pysf_state, crowd_pysf_state, route_pysf_state
+
+
+def _create_groups_and_behaviors(
+    pysf_state: PedestrianStates,
+    crowd_pysf_state: PedestrianStates,
+    route_pysf_state: PedestrianStates,
+    background: _BackgroundPopulation,
+    route_offset: int,
+    prepared_obstacles: list[PreparedGeometry],
+    spawn_config: PedSpawnConfig,
+) -> tuple[PedestrianGroupings, list[PedestrianBehavior]]:
+    """Build pedestrian groupings and the crowded-zone/route behavior controllers.
+
+    Returns:
+        Combined group memberships plus crowd and route behavior controllers.
+    """
+    combined_groups = background.crowd_groups + [
+        {ped_id + route_offset for ped_id in peds} for peds in background.route_groups
+    ]
+    groups = PedestrianGroupings(pysf_state)
+    for ped_ids in combined_groups:
+        groups.new_group(ped_ids)
+    crowd_groupings = PedestrianGroupings(crowd_pysf_state)
+    for ped_ids in background.crowd_groups:
+        crowd_groupings.new_group(ped_ids)
+    route_groupings = PedestrianGroupings(route_pysf_state)
+    for ped_ids in background.route_groups:
+        route_groupings.new_group(ped_ids)
+    crowd_behavior = CrowdedZoneBehavior(
+        crowd_groupings,
+        background.zone_assignments,
+        background.behavior_zones,
+        obstacle_polygons=background.scatter_exclusions,
+        rng=background.scatter_rng,
+        goal_sample_max_attempts_per_point=1000 if background.synthesized else 20,
+    )
+    route_behavior = FollowRouteBehavior(
+        route_groupings,
+        background.route_assignments,
+        background.initial_sections,
+        obstacle_polygons=prepared_obstacles,
+        reset_at_start=spawn_config.reset_follow_route_at_start,
+        global_ped_offset=route_offset,
+    )
+    return groups, [crowd_behavior, route_behavior]
+
+
+def _attach_single_pedestrian_behavior(
+    ped_behaviors: list[PedestrianBehavior],
+    pysf_state: PedestrianStates,
+    groups: PedestrianGroupings,
+    single_pedestrians: list,
+    single_offset: int,
+    time_step_s: float,
+    single_ped_goal_threshold: float | None,
+) -> None:
+    """Register single-member groups and the single-pedestrian behavior controller.
+
+    Single pedestrians start as single-member groups for optional join/leave behaviors.
+    """
+    for ped_id in range(single_offset, single_offset + len(single_pedestrians)):
+        groups.new_group({ped_id})
+    ped_behaviors.append(
+        SinglePedestrianBehavior(
+            pysf_state,
+            groups,
+            single_pedestrians,
+            single_offset,
+            time_step_s=time_step_s,
+            goal_proximity_threshold=single_ped_goal_threshold,
+        )
+    )
+
+
+def populate_simulation(  # noqa: PLR0913
     tau: float,
     spawn_config: PedSpawnConfig,
     ped_routes: list[GlobalRoute],
@@ -976,14 +1226,8 @@ def populate_simulation(  # noqa: C901,PLR0913
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
-    Combines three independent spawning strategies:
-      1. Route followers: Groups traveling along predefined paths.
-      2. Crowded zone pedestrians: Groups in open areas with local goals.
-      3. Single pedestrians: Individually controlled agents with explicit behavior.
-
-    All pedestrian states are merged into a unified array with consistent tau
-    (relaxation time) values. Group memberships and behavioral controllers are
-    created and returned for use in the physics simulation.
+    Merges route followers, crowded-zone groups, and single pedestrians into one
+    population with consistent tau values, group memberships, and behavior controllers.
 
     Args:
         tau: Relaxation time (seconds) for all pedestrians in the simulation.
@@ -991,203 +1235,57 @@ def populate_simulation(  # noqa: C901,PLR0913
         ped_routes: GlobalRoute objects defining paths for route-following pedestrians.
         ped_crowded_zones: Zone geometries for crowded zone pedestrians.
         obstacle_polygons: Optional obstacle geometries to avoid during spawning.
-            Can be raw coordinate lists or Shapely PreparedGeometry objects.
-        single_pedestrians: Optional list of SinglePedestrianDefinition objects
-            for individually controlled pedestrians with explicit goals/trajectories.
+        single_pedestrians: Optional SinglePedestrianDefinition objects for explicit goals.
         time_step_s: Simulation step time in seconds (used for wait behavior).
-        single_ped_goal_threshold: Optional distance threshold for single-ped waypoint arrival.
-        add_ego_state: If True, adds a pedestrian state for the ego agent at the end of the array.
-        map_bounds: Optional free-space bounds used only for geometry-less forced backgrounds.
-        reserved_zones: Robot spawn/goal zones excluded from synthesized background placement.
+        single_ped_goal_threshold: Optional distance threshold for waypoint arrival.
+        add_ego_state: If True, adds an ego-agent pedestrian state at the array end.
+        map_bounds: Optional free-space bounds for geometry-less forced backgrounds.
+        reserved_zones: Robot zones excluded from synthesized background placement.
         ped_radius: Pedestrian collision radius used by synthesized placement.
         reserved_zone_radius: Additional agent radius applied around reserved zones.
 
     Returns:
-        Tuple of (pysf_state, groups, ped_behaviors):
-            - pysf_state: PedestrianStates view of all pedestrians for physics engine.
-            - groups: PedestrianGroupings tracking group memberships.
-            - ped_behaviors: List of PedestrianBehavior controllers for crowd dynamics
-              (includes CrowdedZoneBehavior, FollowRouteBehavior, and SinglePedestrianBehavior).
-
-    Example:
-        >>> pysf_state, groups, behaviors = populate_simulation(
-        ...     tau=0.5,
-        ...     spawn_config=config,
-        ...     ped_routes=routes,
-        ...     ped_crowded_zones=zones,
-        ... )
-        >>> # Use pysf_state and behaviors in physics simulation
+        Tuple (pysf_state, groups, ped_behaviors) with the merged state view,
+        group memberships, and behavior controllers for crowd dynamics.
     """
+    # fmt: off
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
     single_pedestrians = single_pedestrians or []
-
-    # ``force_population_size`` sets the exact total across every spawn channel. Reserve
-    # map-defined single pedestrians first, then split the remaining background budget
-    # between crowded zones and routes. Without the reservation, a map with one explicit
-    # pedestrian and a forced route population of 12 instantiated 13 pedestrians.
     crowd_spawn_config, route_spawn_config, apply_archetypes_to_forced_population = (
         _spawn_configs_for_forced_population(
-            spawn_config,
-            ped_routes,
-            ped_crowded_zones,
-            single_pedestrians,
-        )
-    )
-
+            spawn_config, ped_routes, ped_crowded_zones, single_pedestrians))
     forced_size = spawn_config.force_population_size
     background_size = None if forced_size is None else forced_size - len(single_pedestrians)
     synthesize_background = bool(
-        background_size is not None
-        and background_size > 0
-        and not ped_crowded_zones
-        and not ped_routes
-    )
-    synthetic_behavior_exclusions: list[PreparedGeometry] | None = None
-    synthetic_rng: np.random.Generator | None = None
-    behavior_crowded_zones = ped_crowded_zones
+        background_size is not None and background_size > 0
+        and not ped_crowded_zones and not ped_routes)
     if synthesize_background:
-        if map_bounds is None:
-            raise ValueError(
-                "force_population_size requires map_bounds to synthesize the remaining "
-                f"{background_size} background pedestrians"
-            )
-        if ped_radius <= 0 or reserved_zone_radius < 0:
-            raise ValueError(
-                "geometry-less forced population synthesis requires ped_radius > 0 and "
-                "reserved_zone_radius >= 0"
-            )
-        synthetic_behavior_exclusions = _scatter_exclusions(
+        background = _synthesize_background_population(
+            crowd_spawn_config, prepared_obstacles, single_pedestrians, map_bounds,
+            reserved_zones, ped_radius, reserved_zone_radius, int(background_size),
+        )
+    else:
+        background = _spawn_zoned_background_population(
+            crowd_spawn_config, route_spawn_config, ped_crowded_zones, ped_routes,
             prepared_obstacles,
-            reserved_zones or [],
-            single_pedestrians,
-            ped_radius,
-            reserved_zone_radius,
         )
-        (
-            crowd_ped_states_np,
-            crowd_groups,
-            zone_assignments,
-            behavior_crowded_zones,
-            synthetic_rng,
-        ) = _populate_scattered_background(
-            crowd_spawn_config,
-            int(background_size),
-            map_bounds,
-            synthetic_behavior_exclusions,
-            ped_radius,
-        )
-        route_ped_states_np = np.zeros((0, 6))
-        route_groups, route_assignments, initial_sections = [], {}, []
-    else:
-        crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
-            crowd_spawn_config,
-            ped_crowded_zones,
-            obstacle_polygons=prepared_obstacles,
-        )
-        route_ped_states_np, route_groups, route_assignments, initial_sections = (
-            populate_ped_routes(
-                route_spawn_config,
-                ped_routes,
-                obstacle_polygons=prepared_obstacles,
-            )
-        )
-
-    # Populate single pedestrians if provided
-    if single_pedestrians:
-        single_ped_states_np, _single_ped_metadata = populate_single_pedestrians(
-            single_pedestrians,
-            spawn_config.initial_speed,
-        )
-    else:
-        single_ped_states_np = np.empty((0, 7))
-
-    # Combine all pedestrian states: crowd + route + single
-    combined_ped_states_np = np.concatenate(
-        (crowd_ped_states_np, route_ped_states_np, single_ped_states_np[:, :6]),
-    )
-    _apply_forced_population_contract(
-        combined_ped_states_np,
-        spawn_config,
+    ped_states, route_offset, single_offset = _merge_pedestrian_states(
+        background, single_pedestrians, spawn_config, tau,
         apply_archetypes_to_forced_population,
     )
-    taus = np.full((combined_ped_states_np.shape[0]), tau)
-    ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
-
-    # Calculate ID offsets for each pedestrian category
-    route_offset = crowd_ped_states_np.shape[0]
-    single_offset = route_offset + route_ped_states_np.shape[0]
-
-    # Adjust group IDs for routes
-    combined_groups = crowd_groups + [{id + route_offset for id in peds} for peds in route_groups]
-
-    # Single pedestrians start as single-member groups for optional join/leave behaviors.
-
-    # Create pedestrian state views
-    if add_ego_state:
-        # Create dummy ego state and inject it
-        ego_state = np.array(
-            [
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                tau,
-            ]
-        ).reshape(1, -1)
-        new_ped_states = np.concatenate((ped_states, ego_state), axis=0)
-        pysf_state = PedestrianStates(lambda: new_ped_states)
-        crowd_pysf_state = PedestrianStates(lambda: new_ped_states[:route_offset])
-        route_pysf_state = PedestrianStates(
-            lambda: new_ped_states[route_offset:single_offset]
-        )  # Exclude single and ego states
-    else:
-        pysf_state = PedestrianStates(lambda: ped_states)
-        crowd_pysf_state = PedestrianStates(lambda: ped_states[:route_offset])
-        route_pysf_state = PedestrianStates(lambda: ped_states[route_offset:single_offset])
-
-    groups = PedestrianGroupings(pysf_state)
-    for ped_ids in combined_groups:
-        groups.new_group(ped_ids)
-    crowd_groupings = PedestrianGroupings(crowd_pysf_state)
-    for ped_ids in crowd_groups:
-        crowd_groupings.new_group(ped_ids)
-    route_groupings = PedestrianGroupings(route_pysf_state)
-    for ped_ids in route_groups:
-        route_groupings.new_group(ped_ids)
-
-    crowd_behavior = CrowdedZoneBehavior(
-        crowd_groupings,
-        zone_assignments,
-        behavior_crowded_zones,
-        obstacle_polygons=synthetic_behavior_exclusions,
-        rng=synthetic_rng,
-        goal_sample_max_attempts_per_point=1000 if synthesize_background else 20,
+    pysf_state, crowd_pysf_state, route_pysf_state = _create_state_views(
+        ped_states, tau, route_offset, single_offset, add_ego_state,
     )
-    route_behavior = FollowRouteBehavior(
-        route_groupings,
-        route_assignments,
-        initial_sections,
-        obstacle_polygons=prepared_obstacles,
-        reset_at_start=spawn_config.reset_follow_route_at_start,
+    groups, ped_behaviors = _create_groups_and_behaviors(
+        pysf_state, crowd_pysf_state, route_pysf_state, background, route_offset,
+        prepared_obstacles, spawn_config,
     )
-    ped_behaviors: list[PedestrianBehavior] = [crowd_behavior, route_behavior]
-
     if single_pedestrians:
-        for ped_id in range(single_offset, single_offset + len(single_pedestrians)):
-            groups.new_group({ped_id})
-        ped_behaviors.append(
-            SinglePedestrianBehavior(
-                pysf_state,
-                groups,
-                single_pedestrians,
-                single_offset,
-                time_step_s=time_step_s,
-                goal_proximity_threshold=single_ped_goal_threshold,
-            )
+        _attach_single_pedestrian_behavior(
+            ped_behaviors, pysf_state, groups, single_pedestrians, single_offset,
+            time_step_s, single_ped_goal_threshold,
         )
     if add_ego_state:
         groups.new_group({pysf_state.num_peds - 1})  # Add ego_ped to groups
-
     return pysf_state, groups, ped_behaviors
+    # fmt: on

@@ -478,7 +478,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                 ),
             )
             return linear, angular
-        except Exception as exc:  # pragma: no cover - safety net
+        # Upstream planner failures use the heuristic fallback when enabled.
+        except Exception as exc:  # pragma: no cover - broad catch: planner surface unknown; heuristic fallback or re-raise
             if self._allow_fallback:
                 return self._heuristic_plan(observation)
             raise RuntimeError("SocNavBench planner failed during _plan_upstream.") from exc
@@ -762,6 +763,10 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                     except ValueError:
                         pass
                 os.chdir(prev_cwd)
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SamplingPlannerAdapter"}
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:

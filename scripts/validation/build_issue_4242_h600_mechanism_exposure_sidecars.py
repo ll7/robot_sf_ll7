@@ -18,11 +18,11 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     unknown_failure_mechanism_record,
     validate_failure_mechanism_record,
 )
-from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.interaction_exposure import (
     compute_interaction_exposure_fields,
     not_derivable_interaction_exposure,
 )
+from robot_sf.evidence.writers import write_csv, write_json, write_sha256sums, write_text
 
 SCHEMA_VERSION = "issue_4242_h600_mechanism_exposure_backfill.v1"
 DEFAULT_SOURCE_MANIFEST = Path(
@@ -77,17 +77,6 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
-
-
-def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _repo_path(path: Path, *, repo_root: Path) -> Path:
@@ -266,16 +255,8 @@ def build_sidecars(
     backfill_manifest_path = output_dir / BACKFILL_MANIFEST
     report_path = output_dir / BACKFILL_REPORT
 
-    _write_csv(
-        mechanism_path,
-        mechanism_rows,
-        [*IDENTIFIER_FIELDS, *REQUIRED_MECHANISM_FIELDS, "mechanism_backfill_status"],
-    )
-    _write_csv(
-        exposure_path,
-        exposure_rows,
-        [*IDENTIFIER_FIELDS, *EXPOSURE_FIELDS, "interaction_exposure_backfill_status"],
-    )
+    write_csv(mechanism_path, mechanism_rows)
+    write_csv(exposure_path, exposure_rows)
 
     backfill_manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -293,7 +274,7 @@ def build_sidecars(
         "interaction_exposure_status_counts": dict(sorted(exposure_statuses.items())),
         "runs": run_summaries,
     }
-    _write_json(backfill_manifest_path, backfill_manifest)
+    write_json(backfill_manifest_path, backfill_manifest)
     _write_report(report_path, backfill_manifest)
 
     manifest["generated_outputs"] = sorted(
@@ -310,8 +291,8 @@ def build_sidecars(
         "mechanism_status_counts": dict(sorted(mechanism_statuses.items())),
         "interaction_exposure_status_counts": dict(sorted(exposure_statuses.items())),
     }
-    _write_json(output_dir / "source_manifest.json", manifest)
-    _write_sha256sums(output_dir)
+    write_json(output_dir / "source_manifest.json", manifest)
+    write_sha256sums(output_dir)
     return backfill_manifest
 
 
@@ -352,15 +333,7 @@ def _write_report(path: Path, manifest: dict[str, Any]) -> None:
             "",
         ]
     )
-    path.write_text("\n".join(lines), encoding="utf-8")
-
-
-def _write_sha256sums(output_dir: Path) -> None:
-    rows = []
-    for path in sorted(output_dir.iterdir()):
-        if path.is_file() and path.name != "SHA256SUMS":
-            rows.append(f"{sha256_file(path)}  {path.as_posix()}")
-    (output_dir / "SHA256SUMS").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#4242")
 
 
 def _now() -> str:

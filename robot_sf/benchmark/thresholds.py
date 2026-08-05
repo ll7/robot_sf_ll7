@@ -13,6 +13,10 @@ from typing import Any
 
 from robot_sf.benchmark.constants import COLLISION_DIST, COMFORT_FORCE_THRESHOLD, NEAR_MISS_DIST
 from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.passing_clearance import (
+    PassingClearanceContract,
+    resolve_passing_clearance_contract,
+)
 
 THRESHOLD_PROFILE_ID = "social_nav_thresholds_v1"
 LEGACY_MISSING_THRESHOLD_PROFILE_ID = "legacy_missing_threshold_profile_v0"
@@ -81,7 +85,11 @@ def threshold_profile_signature(profile: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def build_metric_parameters(*, profile: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_metric_parameters(
+    *,
+    profile: dict[str, Any] | None = None,
+    passing_clearance_contract: PassingClearanceContract | dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build metric-parameter metadata for episode/report payloads.
 
     Returns:
@@ -90,6 +98,12 @@ def build_metric_parameters(*, profile: dict[str, Any] | None = None) -> dict[st
     threshold_profile = deepcopy(default_threshold_profile())
     if profile is not None:
         threshold_profile.update(profile)
+    if passing_clearance_contract is not None:
+        contract = resolve_passing_clearance_contract(passing_clearance_contract)
+        if contract is None:  # pragma: no cover
+            raise RuntimeError("passing clearance contract was not resolved")  # pragma: no cover
+        threshold_profile["passing_clearance_contract"] = contract.to_dict()
+        threshold_profile["passing_clearance_contract_hash"] = contract.profile_hash
     return {
         "threshold_profile": threshold_profile,
         "threshold_signature": threshold_profile_signature(threshold_profile),
@@ -164,7 +178,8 @@ def validate_threshold_parameter_consistency(records: list[dict[str, Any]]) -> d
                 ),
             )
 
-    assert reference_profile is not None
+    if reference_profile is None:  # pragma: no cover
+        raise RuntimeError("threshold profile reference was not selected")  # pragma: no cover
     return {
         "threshold_profile": reference_profile,
         "threshold_signature": threshold_profile_signature(reference_profile),

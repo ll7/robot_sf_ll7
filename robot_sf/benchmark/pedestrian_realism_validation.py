@@ -54,6 +54,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from robot_sf.data.external.eth_ucy_trajectories import EthUcyTrackSet
+    from robot_sf.data.external.sdd_trajectories import SddTrajectoryTrackSet
+
+    TrackSet = EthUcyTrackSet | SddTrajectoryTrackSet
 
 __all__ = [
     "REALISM_CLAIM_BOUNDARY",
@@ -919,7 +922,7 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
 
 
 def build_track_reconstruction_plan(
-    track_set: EthUcyTrackSet | None,
+    track_set: TrackSet | None,
     *,
     dataset_id: str | None = None,
     padding_m: float = 1.0,
@@ -942,7 +945,7 @@ def build_track_reconstruction_plan(
         padding_m: Non-negative padding around observed position bounds.
         direction_epsilon_m: Displacement below this value is treated as stationary.
         scene_geometry: Optional trusted scene bounds and static blocking obstacles. This is
-            caller-supplied adapter input; ETH/UCY track files do not provide it.
+            caller-supplied adapter input; trajectory files do not provide it.
 
     Returns:
         A ``partial`` plan for non-empty tracks or a ``not_available`` plan when
@@ -959,15 +962,16 @@ def build_track_reconstruction_plan(
     )
     split = track_set.split if track_set is not None else "unknown"
     geometry_blocker = (
-        "Static scene geometry is not encoded in ETH/UCY trajectory tracks; "
+        f"Static scene geometry is not encoded in {_track_set_source_name(track_set)} "
+        "trajectory tracks; "
         "trajectory bounds are diagnostic-only and cannot seed a scene-faithful benchmark."
     )
     geometry_status = (
         "scene_geometry_validated" if scene_geometry is not None else "trajectory_bounds_only"
     )
     timing_blocker = (
-        "Replay preserves relative entry delays but not per-waypoint timestamps; a simulator "
-        "trace adapter is required for time-faithful trajectory comparison."
+        "Replay seed inputs do not encode per-waypoint timestamps in the simulator definition; "
+        "a simulator trace adapter is required for time-faithful trajectory comparison."
     )
     if track_set is None or not track_set.tracks:
         return _empty_reconstruction_plan(
@@ -1168,7 +1172,7 @@ def _validate_tracks_against_scene_geometry(
 
 
 def _validated_track_arrays(
-    track_set: EthUcyTrackSet,
+    track_set: TrackSet,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     """Validate parsed track arrays before deriving replay inputs.
 
@@ -1194,7 +1198,7 @@ def _validated_track_arrays(
 
 
 def _build_reconstruction_pedestrians(
-    track_set: EthUcyTrackSet,
+    track_set: TrackSet,
     track_arrays: list[tuple[np.ndarray, np.ndarray]],
     *,
     flow_axis_index: int | None,
@@ -1333,10 +1337,26 @@ def _crowds_complete(crowds: RealismCrowdInputs) -> bool:
     )
 
 
+def _track_set_source_name(track_set: TrackSet | None) -> str:
+    """Return a human-readable source family for a parsed track set."""
+
+    if track_set is None:
+        return "real reference"
+    return "SDD" if track_set.asset_id == "sdd" else "ETH/UCY"
+
+
+def _track_set_reference_id(track_set: TrackSet) -> str:
+    """Return the scorecard reference id without changing metric semantics."""
+
+    if track_set.asset_id == "sdd":
+        return f"sdd/{track_set.scene}/{track_set.split}"
+    return f"{track_set.asset_id}/{track_set.split}"
+
+
 def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric and scene inputs
     *,
     dataset_id: str,
-    track_set: EthUcyTrackSet | None,
+    track_set: TrackSet | None,
     sim_positions: np.ndarray | None = None,
     sim_velocities: np.ndarray | None = None,
     rmse_pairs: Sequence[RealismTrackPair] | None = None,
@@ -1345,10 +1365,10 @@ def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric an
     movement_axis: int = 0,
     scene_geometry: RealismSceneGeometry | None = None,
 ) -> RealismScorecard:
-    """Run realism validation against a parsed real ETH/UCY track set.
+    """Run realism validation against a parsed real trajectory track set.
 
     Convenience wrapper that derives the real reference distributions from a
-    parsed :class:`EthUcyTrackSet` and fails closed when the track set is absent
+    parsed ETH/UCY or SDD track set and fails closed when the track set is absent
     (``not_available``). When the track set is present, the real positions are
     gridded onto a common time axis and velocities are finite-differenced to
     build the real crowd arrays for the distribution metrics.
@@ -1373,7 +1393,8 @@ def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric an
             fundamental_diagram=None,
             lane_formation=None,
             reference_source=(
-                f"eth-ucy split not staged; see {getattr(track_set, 'docs_path', 'docs/datasets/eth-ucy.md')}"
+                f"{_track_set_source_name(track_set)} split not available; see "
+                f"{getattr(track_set, 'docs_path', 'docs/datasets/eth-ucy.md')}"
                 if track_set is not None
                 else "real reference track set not provided"
             ),
@@ -1388,7 +1409,7 @@ def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric an
 
     real_positions, real_velocities = _gridded_crowd_from_tracks(track_set, cfg)
     reference_source = (
-        f"eth-ucy/{track_set.split} ({track_set.format}), "
+        f"{_track_set_reference_id(track_set)} ({track_set.format}), "
         f"{len(track_set.tracks)} pedestrians, gridded at {cfg.resample_hz} Hz"
     )
     crowds = RealismCrowdInputs(
@@ -1603,7 +1624,7 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
 
 
 def _gridded_crowd_from_tracks(
-    track_set: EthUcyTrackSet,
+    track_set: TrackSet,
     config: RealismMetricConfig,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Grid a parsed real track set onto a common time axis for crowd metrics.

@@ -56,7 +56,7 @@ class StatisticalSufficiencyReport:
     scaling_efficiency: dict  # populated by the orchestrator after runtime is measured
 
 
-def evaluate_precision(groups, cfg):  # T033
+def evaluate_precision(groups, cfg) -> StatisticalSufficiencyReport:  # T033
     """Evaluate precision targets for rate metrics in grouped aggregates.
 
     Returns:

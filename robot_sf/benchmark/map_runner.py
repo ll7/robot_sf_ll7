@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from copy import deepcopy
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
+from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
+    BaseContext,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 import numpy as np
 from loguru import logger
@@ -132,6 +135,7 @@ from robot_sf.benchmark.map_runner_policies import hybrid_global_rl as _hybrid_g
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
+from robot_sf.benchmark.map_runner_policies import socnav_family as _socnav_family_builder
 from robot_sf.benchmark.map_runner_policy_actions import (
     ppo_action_to_unicycle as _ppo_action_to_unicycle_impl,
 )
@@ -201,6 +205,15 @@ from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
 )
+
+# Keep the return and configuration aliases available for runtime annotation consumers such as
+# schema tooling.
+from robot_sf.benchmark.types import (  # noqa: TC001
+    EpisodeRecordDict,
+    MapBatchConfig,
+    NoiseSpec,
+    TrackingPrecisionSpec,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -209,7 +222,10 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.planner.dwa import DWAPlannerAdapter, build_dwa_config
+from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for tests.
+    DWAPlannerAdapter,
+    build_dwa_config,
+)
 from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter  # noqa: F401
 from robot_sf.planner.grid_route import (  # noqa: F401
     GridRoutePlannerAdapter,
@@ -221,11 +237,11 @@ from robot_sf.planner.guarded_ppo import (
     build_guarded_ppo_fallback,
     build_guarded_ppo_prior,
 )
-from robot_sf.planner.hybrid_orca_sampler import (
+from robot_sf.planner.hybrid_orca_sampler import (  # noqa: F401 - registry re-export.
     HybridORCASamplerAdapter,
     build_hybrid_orca_sampler_build_config,
 )
-from robot_sf.planner.hybrid_portfolio import (
+from robot_sf.planner.hybrid_portfolio import (  # noqa: F401 - registry re-export.
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
 )
@@ -238,7 +254,7 @@ from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,
 )
-from robot_sf.planner.nmpc_social import (
+from robot_sf.planner.nmpc_social import (  # noqa: F401 - registry re-export.
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
 )
@@ -246,7 +262,13 @@ from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
 )
-from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
+from robot_sf.planner.protocol import (
+    DIAGNOSTICS_UNAVAILABLE_KEY,
+    DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+    PLANNER_TYPE_KEY,
+    normalize_planner_diagnostics,
+)
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter  # noqa: F401 - registry re-export.
 from robot_sf.planner.safety_barrier import (  # noqa: F401
     SafetyBarrierPlannerAdapter,
     build_safety_barrier_config,
@@ -257,19 +279,19 @@ from robot_sf.planner.safety_shield import (
     shield_contract_metadata,
     update_shield_stats,
 )
-from robot_sf.planner.social_navigation_pyenvs_force_model import (
+from robot_sf.planner.social_navigation_pyenvs_force_model import (  # noqa: F401
     SocialNavigationPyEnvsForceModelAdapter,
     build_social_navigation_pyenvs_force_model_config,
 )
-from robot_sf.planner.social_navigation_pyenvs_hsfm import (
+from robot_sf.planner.social_navigation_pyenvs_hsfm import (  # noqa: F401
     SocialNavigationPyEnvsHSFMAdapter,
     build_social_navigation_pyenvs_hsfm_config,
 )
-from robot_sf.planner.social_navigation_pyenvs_orca import (
+from robot_sf.planner.social_navigation_pyenvs_orca import (  # noqa: F401
     SocialNavigationPyEnvsORCAAdapter,
     build_social_navigation_pyenvs_orca_config,
 )
-from robot_sf.planner.socnav import (
+from robot_sf.planner.socnav import (  # noqa: F401 - registry re-export.
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
@@ -849,7 +871,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
             "status": "ok",
             "learned_policy_contract": learned_contract,
         }
-    except Exception as exc:
+    except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)
         if not _is_socnav_algorithm(algo):
             raise
         message = (
@@ -879,7 +901,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
                     "policy": policy,
                     "learned_policy_contract": learned_contract,
                 }
-            except Exception as fallback_exc:
+            except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)
                 raise RuntimeError(
                     f"{message} Fallback attempt also failed: {fallback_exc}",
                 ) from fallback_exc
@@ -1905,7 +1927,7 @@ def _build_holonomic_world_velocity_policy(
     return _policy, meta
 
 
-def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
+def _build_socnav_family_adapter(
     algo_key: str,
     algo: str,
     algo_config: dict[str, Any],
@@ -1914,14 +1936,15 @@ def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
 ) -> Any:
     """Construct the SocNav-family planner adapter for ``algo_key``.
 
-    Covers the classical/adapter planners that build an adapter object and share the
-    common adapter policy tail (ORCA/HRVO, force models, SoNIC/GenSafeNav/CrowdNav,
-    SACADRL, prediction, hybrid portfolios, NMPC, and the RVO placeholder). A couple of
-    branches mutate ``meta`` in place (prediction overrides, selector boundary,
+    Delegates to the data-driven registry in
+    ``robot_sf.benchmark.map_runner_policies.socnav_family`` (issue #6467), which
+    replaces the former hand-written dispatch chain. Behavior is preserved exactly:
+    unknown keys raise ``ValueError`` mentioning the original label, and a couple of
+    specs mutate ``meta`` in place (prediction overrides, selector boundary,
     placeholder status).
 
     Args:
-        algo_key: Lowercased algorithm key used for branching.
+        algo_key: Lowercased algorithm key used for registry lookup.
         algo: Original algorithm label (used only for the unknown-algorithm error).
         algo_config: Algorithm configuration payload.
         meta: Algorithm metadata dict; mutated in place for a few planner variants.
@@ -1930,163 +1953,13 @@ def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
         Any: The constructed planner adapter.
     """
     socnav_cfg = _build_socnav_config(algo_config)
-
-    if algo_key in {"socnav_sampling", "sampling"}:
-        # Keep `socnav_sampling` as the native in-repo sampling adapter baseline.
-        # `socnav_bench` is the upstream SocNavBench wrapper.
-        adapter = SamplingPlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"social_force", "sf"}:
-        adapter = SocialForcePlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"orca"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_orca_nonholonomic"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        config = deepcopy(socnav_cfg)
-        config.orca_heading_slowdown = 0.8
-        config.orca_commit_distance = 1.8
-        config.orca_commit_lateral_gain = 0.6
-        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_orca_dd"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        config = deepcopy(socnav_cfg)
-        config.orca_time_horizon = 3.0
-        config.orca_neighbor_dist = 8.0
-        config.orca_max_neighbors = 6
-        config.orca_stall_speed_threshold = 0.1
-        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_orca_relaxed"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        config = deepcopy(socnav_cfg)
-        config.orca_time_horizon = 8.0
-        config.orca_obstacle_range = 8.0
-        config.orca_obstacle_threshold = 0.6
-        config.orca_head_on_bias = 0.4
-        config.orca_symmetry_bias = 0.15
-        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_hrvo"}:
-        adapter = HRVOPlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"hrvo"}:
-        adapter = HRVOPlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
-        adapter = SocialNavigationPyEnvsORCAAdapter(
-            config=build_social_navigation_pyenvs_orca_config(algo_config)
-        )
-    elif algo_key in {
-        "social_navigation_pyenvs_socialforce",
-        "social_nav_pyenvs_socialforce",
-    }:
-        adapter = SocialNavigationPyEnvsForceModelAdapter(
-            config=build_social_navigation_pyenvs_force_model_config(
-                algo_config,
-                default_policy_name="socialforce",
-            )
-        )
-    elif algo_key in {
-        "social_navigation_pyenvs_sfm_helbing",
-        "social_nav_pyenvs_sfm_helbing",
-    }:
-        adapter = SocialNavigationPyEnvsForceModelAdapter(
-            config=build_social_navigation_pyenvs_force_model_config(
-                algo_config,
-                default_policy_name="sfm_helbing",
-            )
-        )
-    elif algo_key in {
-        "social_navigation_pyenvs_hsfm_new_guo",
-        "social_nav_pyenvs_hsfm_new_guo",
-    }:
-        adapter = SocialNavigationPyEnvsHSFMAdapter(
-            config=build_social_navigation_pyenvs_hsfm_config(
-                algo_config,
-                default_policy_name="hsfm_new_guo",
-            )
-        )
-    elif algo_key in {"crowdnav_height"}:
-        crowdnav_adapter_cls, crowdnav_config_builder = _crowdnav_height_symbols()
-        adapter = crowdnav_adapter_cls(config=crowdnav_config_builder(algo_config))
-    elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
-        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
-        adapter = sonic_adapter_cls(config=sonic_config_builder(algo_config))
-    elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
-        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
-        adapter = sonic_adapter_cls(
-            config=sonic_config_builder(
-                {
-                    **algo_config,
-                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
-                    "model_name": algo_config.get("model_name", "Ours_GST"),
-                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
-                }
-            )
-        )
-    elif algo_key in {
-        "gensafenav_gst_predictor_rand",
-        "gensafe_gst_predictor_rand",
-        "gst_predictor_rand",
-    }:
-        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
-        adapter = sonic_adapter_cls(
-            config=sonic_config_builder(
-                {
-                    **algo_config,
-                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
-                    "model_name": algo_config.get("model_name", "GST_predictor_rand"),
-                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
-                }
-            )
-        )
-    elif algo_key in {"sacadrl", "sa_cadrl"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key == "prediction_planner":
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = PredictionPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-        meta.update(_prediction_planner_metadata_overrides(algo_config))
-    elif algo_key == "hybrid_portfolio":
-        allow_fallback = bool(algo_config.get("allow_fallback", True))
-        hybrid_cfg = build_hybrid_portfolio_build_config(algo_config)
-        adapter = HybridPortfolioAdapter(
-            hybrid_config=hybrid_cfg.hybrid,
-            risk_dwa=RiskDWAPlannerAdapter(config=hybrid_cfg.risk_dwa),
-            mppi=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
-            orca=ORCAPlannerAdapter(config=hybrid_cfg.socnav, allow_fallback=allow_fallback),
-            prediction=PredictionPlannerAdapter(
-                config=hybrid_cfg.socnav, allow_fallback=allow_fallback
-            ),
-        )
-    elif algo_key == "planner_selector_v2_diagnostic":
-        adapter = _build_planner_selector_v2_adapter(algo_config)
-        meta["selector_boundary"] = {
-            "diagnostic_only": True,
-            "benchmark_strength": False,
-            "learned_policy_used": False,
-            "claim_boundary": "diagnostic_only_not_benchmark_success",
-        }
-    elif algo_key == "hybrid_orca_sampler":
-        allow_fallback = bool(algo_config.get("allow_fallback", True))
-        hybrid_cfg = build_hybrid_orca_sampler_build_config(algo_config)
-        adapter = HybridORCASamplerAdapter(
-            config=hybrid_cfg.guard,
-            orca_adapter=ORCAPlannerAdapter(
-                config=hybrid_cfg.socnav,
-                allow_fallback=allow_fallback,
-            ),
-            sampler_adapter=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
-        )
-    elif algo_key in {"socnav_bench"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"nmpc_social", "nmpc"}:
-        adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(algo_config))
-    elif algo_key == "dwa":
-        adapter = DWAPlannerAdapter(config=build_dwa_config(algo_config))
-    elif algo_key == "rvo":
-        adapter = SamplingPlannerAdapter(config=socnav_cfg)
-        meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})
-    else:
-        raise ValueError(f"Unknown map-based algorithm '{algo}'.")
-    return adapter
+    return _socnav_family_builder.build_socnav_family_adapter(
+        algo_key=algo_key,
+        algo=algo,
+        algo_config=algo_config,
+        meta=meta,
+        socnav_cfg=socnav_cfg,
+    )
 
 
 def _build_common_adapter_policy(  # noqa: C901
@@ -2186,14 +2059,28 @@ def _build_common_adapter_policy(  # noqa: C901
         def _planner_stats() -> dict[str, Any]:
             """Expose generic adapter diagnostics for episode metadata.
 
+            Propagated through the canonical #6492 ``normalize_planner_diagnostics``
+            so the SocNav-family adapter arm shares one fail-closed diagnostics
+            schema (string ``planner_type``) with the runner native-command arm;
+            every counter the adapter already carries is preserved unchanged.
+
             Returns:
                 dict[str, Any]: Adapter diagnostic payload.
             """
             diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
-            runtime = dict(diagnostics) if isinstance(diagnostics, dict) else {}
             foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
-            if isinstance(foresight, dict):
-                runtime.update(foresight)
+            runtime = normalize_planner_diagnostics(
+                diagnostics, fallback_planner_type=type(adapter).__name__
+            )
+            if isinstance(foresight, Mapping):
+                for key, value in foresight.items():
+                    if key in {
+                        PLANNER_TYPE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+                    }:
+                        continue
+                    runtime[key] = value
             return runtime
 
         _policy._planner_stats = _planner_stats
@@ -2495,11 +2382,11 @@ def _run_map_episode(  # noqa: PLR0913
     record_simulation_step_trace: bool = False,
     close_policy: bool = True,
     policy_builder: Any | None = None,
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Run one scenario/seed episode through the extracted episode executor.
 
     Returns:
-        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+        EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
     _sync_episode_compat_overrides()
     return _execute_map_episode(
@@ -2553,11 +2440,11 @@ def _write_validated_to_handle(
 
 def _run_map_job_worker(
     job: tuple[dict[str, Any], int, dict[str, Any]],
-) -> dict[str, Any]:
+) -> EpisodeRecordDict:
     """Execute one serialized map-runner job.
 
     Returns:
-        dict[str, Any]: Episode record returned by ``_run_map_episode``.
+        EpisodeRecordDict: Episode record returned by ``_run_map_episode``.
     """
     return _execute_map_job(job, run_map_episode=_run_map_episode)
 
@@ -2621,7 +2508,7 @@ def _run_map_jobs_with_policy_cache(
                 policy_cache[key] = _build_policy(algo, algo_config)
         return policy_cache[key]
 
-    def run_cached_map_episode(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    def run_cached_map_episode(*args: Any, **kwargs: Any) -> EpisodeRecordDict:
         """Run one episode without closing the arm-owned cached policy.
 
         Returns:
@@ -2634,7 +2521,9 @@ def _run_map_jobs_with_policy_cache(
             policy_builder=cached_policy_builder,
         )
 
-    def run_cached_map_job(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
+    def run_cached_map_job(
+        job: tuple[dict[str, Any], int, dict[str, Any]],
+    ) -> EpisodeRecordDict:
         """Execute one map job through the cached-policy episode runner.
 
         Returns:
@@ -2773,11 +2662,738 @@ def _record_result_provenance_manifest(  # noqa: PLR0913
     provenance["result_manifest_status"] = "available"
 
 
-def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
-    scenarios_or_path: list[dict[str, Any]] | str | Path,
+@dataclass
+class _BatchContext:
+    """Mutable context accumulated during ``run_map_batch`` orchestration."""
+
+    # Raw parameters forwarded from the public signature.
+    scenarios_or_path: list[dict[str, object]] | str | Path
+    scenario_path_arg: str | Path | None
+    out_path_arg: str | Path
+    schema_path: str | Path
+    horizon: int | None
+    dt: float | None
+    record_forces: bool
+    snqi_weights: dict[str, float] | None
+    snqi_baseline: dict[str, dict[str, float]] | None
+    algo: str
+    algo_config_path: str | None
+    benchmark_profile: BenchmarkProfile
+    socnav_missing_prereq_policy: str
+    adapter_impact_eval: bool
+    experimental_ped_impact: bool
+    ped_impact_radius_m: float
+    ped_impact_window_steps: int
+    observation_mode: str | None
+    observation_level: str | None
+    benchmark_track: str | None
+    track_schema_version: str | None
+    observation_noise: dict[str, Any] | None
+    tracking_precision: dict[str, Any] | None
+    synthetic_actuation_profile: dict[str, Any] | None
+    latency_stress_profile: dict[str, Any] | None
+    safety_wrapper: dict[str, Any] | None
+    cbf_safety_filter: dict[str, Any] | None
+    record_planner_decision_trace: bool
+    record_simulation_step_trace: bool
+    multiprocessing_context: BaseContext | None
+    workers: int
+    resume: bool
+    circuit_breaker_threshold: int | None
+
+    # Resolved during _init_batch_context.
+    scenarios: list[dict[str, Any]] = field(default_factory=list)
+    scenario_path: Path = field(default_factory=lambda: Path("."))
+    suite_seeds: dict[str, list[int]] = field(default_factory=dict)
+    suite_key: str = ""
+    noise_spec: dict[str, Any] | None = None
+    noise_hash: str | None = None
+    tracking_precision_spec: dict[str, Any] | None = None
+    tracking_precision_spec_hash: str | None = None
+    actuation_profile: Any = None
+    latency_profile: Any = None
+    latency_metadata_dt: float = 0.1
+
+    # Resolved during _load_and_filter_scenarios.
+    filtered: list[dict[str, Any]] = field(default_factory=list)
+    metric_affecting_config: dict[str, Any] = field(default_factory=dict)
+
+    # Resolved during _resolve_algorithm_contract.
+    kinematics_tag: str = ""
+    scenario_kinematics: list[str] = field(default_factory=list)
+    batch_observation_mode: str | None = None
+    raw_policy_cfg: dict[str, Any] = field(default_factory=dict)
+    policy_cfg: dict[str, Any] = field(default_factory=dict)
+    algo_contract: dict[str, Any] = field(default_factory=dict)
+    active_observation_mode: str = ""
+    active_observation_level: str = ""
+    jobs: list[tuple[dict[str, Any], int]] = field(default_factory=list)
+
+    # Resolved during _run_preflight_pipeline.
+    out_path: Path = field(default_factory=lambda: Path("."))
+    schema: dict[str, Any] = field(default_factory=dict)
+    robot_command_mode: str | None = None
+    readiness: Any = None
+    preflight: dict[str, Any] = field(default_factory=dict)
+    preflight_skipped_jobs: int = 0
+
+
+def _init_batch_context(  # noqa: PLR0913
+    scenarios_or_path: list[dict[str, object]] | str | Path,
+    scenario_path_arg: str | Path | None,
+    out_path_arg: str | Path,
+    schema_path: str | Path,
+    *,
+    horizon: int | None,
+    dt: float | None,
+    record_forces: bool,
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
+    algo: str,
+    algo_config_path: str | None,
+    benchmark_profile: BenchmarkProfile,
+    socnav_missing_prereq_policy: str,
+    adapter_impact_eval: bool,
+    experimental_ped_impact: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+    observation_mode: str | None,
+    observation_level: str | None,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    observation_noise: dict[str, Any] | None,
+    tracking_precision: dict[str, Any] | None,
+    synthetic_actuation_profile: dict[str, Any] | None,
+    latency_stress_profile: dict[str, Any] | None,
+    safety_wrapper: dict[str, Any] | None,
+    cbf_safety_filter: dict[str, Any] | None,
+    record_planner_decision_trace: bool,
+    record_simulation_step_trace: bool,
+    multiprocessing_context: BaseContext | None,
+    workers: int,
+    resume: bool,
+    circuit_breaker_threshold: int | None,
+) -> _BatchContext:
+    """Create the batch context and normalize controls before scenario validation.
+
+    Returns:
+        The initialized batch context.
+    """
+    ctx = _BatchContext(
+        scenarios_or_path=scenarios_or_path,
+        scenario_path_arg=scenario_path_arg,
+        out_path_arg=out_path_arg,
+        schema_path=schema_path,
+        horizon=horizon,
+        dt=dt,
+        record_forces=record_forces,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        algo=algo,
+        algo_config_path=algo_config_path,
+        benchmark_profile=benchmark_profile,
+        socnav_missing_prereq_policy=socnav_missing_prereq_policy,
+        adapter_impact_eval=adapter_impact_eval,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+        observation_mode=observation_mode,
+        observation_level=observation_level,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        observation_noise=observation_noise,
+        tracking_precision=tracking_precision,
+        synthetic_actuation_profile=synthetic_actuation_profile,
+        latency_stress_profile=latency_stress_profile,
+        safety_wrapper=safety_wrapper,
+        cbf_safety_filter=cbf_safety_filter,
+        record_planner_decision_trace=record_planner_decision_trace,
+        record_simulation_step_trace=record_simulation_step_trace,
+        multiprocessing_context=multiprocessing_context,
+        workers=workers,
+        resume=resume,
+        circuit_breaker_threshold=normalize_circuit_breaker_threshold(circuit_breaker_threshold),
+    )
+    _normalize_pedestrian_impact_context(ctx)
+    return ctx
+
+
+def _normalize_pedestrian_impact_context(ctx: _BatchContext) -> None:
+    """Normalize pedestrian-impact controls without changing validation precedence."""
+    ctx.ped_impact_radius_m, ctx.ped_impact_window_steps = _normalize_pedestrian_impact_controls(
+        experimental_ped_impact=ctx.experimental_ped_impact,
+        ped_impact_radius_m=ctx.ped_impact_radius_m,
+        ped_impact_window_steps=ctx.ped_impact_window_steps,
+    )
+
+
+def _normalize_batch_specs(ctx: _BatchContext) -> None:
+    """Normalize specs that historically followed scenario validation in-place."""
+    ctx.noise_spec = normalize_observation_noise_spec(ctx.observation_noise)
+    ctx.noise_hash = observation_noise_hash(ctx.noise_spec)
+    ctx.tracking_precision_spec = normalize_tracking_precision_spec(ctx.tracking_precision)
+    ctx.tracking_precision_spec_hash = tracking_precision_hash(ctx.tracking_precision_spec)
+    ctx.actuation_profile = _load_synthetic_actuation_profile(ctx.synthetic_actuation_profile)
+    ctx.latency_profile = _load_latency_stress_profile(ctx.latency_stress_profile)
+    ctx.latency_metadata_dt = float(ctx.dt) if ctx.dt is not None and float(ctx.dt) > 0.0 else 0.1
+    ctx.benchmark_track = normalize_track_field(ctx.benchmark_track, field_name="benchmark_track")
+    ctx.track_schema_version = normalize_track_field(
+        ctx.track_schema_version, field_name="track_schema_version"
+    )
+
+
+def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
+    """Load scenarios, validate, and filter unsupported entries."""
+    if isinstance(ctx.scenarios_or_path, (str, Path)):
+        ctx.scenario_path = Path(ctx.scenarios_or_path)
+        ctx.scenarios = cast("list[dict[str, Any]]", load_scenarios(ctx.scenario_path))
+    else:
+        ctx.scenario_path = (
+            Path(ctx.scenario_path_arg) if ctx.scenario_path_arg is not None else Path(".")
+        )
+        ctx.scenarios = list(ctx.scenarios_or_path)
+
+    errors = validate_scenario_list([dict(s) for s in ctx.scenarios])
+    if errors:
+        raise ValueError(f"Scenario validation failed: {errors[:3]} (total {len(errors)})")
+
+    ctx.suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
+    ctx.suite_key = _suite_key(ctx.scenario_path)
+    _normalize_batch_specs(ctx)
+
+    filtered: list[dict[str, Any]] = []
+    for scenario in ctx.scenarios:
+        if (
+            scenario.get("supported") is False
+            or scenario.get("metadata", {}).get("supported") is False
+        ):
+            continue
+        sanity_errors = _validate_behavior_sanity(scenario)
+        if sanity_errors:
+            logger.warning("Skipping scenario '{}': {}", scenario.get("name"), sanity_errors)
+            continue
+        filtered.append(scenario)
+    ctx.filtered = filtered
+    ctx.metric_affecting_config = _representative_metric_affecting_config(
+        filtered, scenario_path=ctx.scenario_path
+    )
+
+
+def _resolve_algorithm_contract(ctx: _BatchContext) -> None:
+    """Resolve algorithm metadata, observation contract, and seed jobs."""
+    ctx.kinematics_tag, ctx.scenario_kinematics = _resolve_batch_kinematics_tag(ctx.filtered)
+    ctx.batch_observation_mode = (
+        str(ctx.observation_mode).strip() if ctx.observation_mode is not None else None
+    )
+    ctx.raw_policy_cfg = _parse_algo_config(ctx.algo_config_path)
+    _, ctx.policy_cfg = _resolve_policy_search_candidate_runtime(
+        default_algo=ctx.algo,
+        algo_config_path=ctx.algo_config_path,
+        algo_config=ctx.raw_policy_cfg,
+        scenario={},
+    )
+    learned_observation_contract = resolve_learned_checkpoint_observation_contract(
+        ctx.algo,
+        ctx.policy_cfg,
+        observation_mode=ctx.batch_observation_mode,
+        observation_level=ctx.observation_level,
+    )
+    ctx.active_observation_mode = str(learned_observation_contract["active_observation_mode"])
+    resolved_observation_level = ctx.observation_level
+    if resolved_observation_level is None:
+        resolved_observation_level = learned_observation_contract.get("observation_level_key")
+    ctx.algo_contract = enrich_algorithm_metadata(
+        algo=ctx.algo,
+        metadata={},
+        robot_kinematics=ctx.kinematics_tag,
+        adapter_impact_requested=ctx.adapter_impact_eval,
+        observation_mode=ctx.active_observation_mode,
+        observation_level=resolved_observation_level,
+    )
+    ctx.algo_contract["learned_checkpoint_observation_contract"] = learned_observation_contract
+    ctx.active_observation_level = str(ctx.algo_contract["observation_level"]["key"])
+    attach_track_metadata(
+        ctx.algo_contract,
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+        observation_level=ctx.active_observation_level,
+        observation_mode=ctx.active_observation_mode,
+    )
+    planner_meta = ctx.algo_contract.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["scenario_kinematics"] = ctx.scenario_kinematics
+    ctx.jobs = _build_seed_jobs(ctx.filtered, suite_seeds=ctx.suite_seeds, suite_key=ctx.suite_key)
+
+
+def _run_preflight_pipeline(ctx: _BatchContext) -> None:
+    """Run all preflight checks: readiness, compatibility, and profile gates."""
+    ctx.out_path = Path(ctx.out_path_arg)
+    ctx.out_path.parent.mkdir(parents=True, exist_ok=True)
+    ctx.schema = load_schema(ctx.schema_path)
+    ctx.robot_command_mode = None
+    for scenario in ctx.filtered:
+        robot_cfg = scenario.get("robot_config")
+        if not isinstance(robot_cfg, dict):
+            continue
+        raw_mode = robot_cfg.get("command_mode")
+        if raw_mode is None:
+            continue
+        ctx.robot_command_mode = str(raw_mode).strip().lower()
+        break
+    ppo_paper_ready, _paper_reason = (
+        _ppo_paper_gate_status(ctx.policy_cfg)
+        if ctx.algo.strip().lower() == "ppo"
+        else (False, None)
+    )
+    ctx.readiness = require_algorithm_allowed(
+        algo=ctx.algo,
+        benchmark_profile=ctx.benchmark_profile,
+        ppo_paper_ready=ppo_paper_ready,
+        allow_testing_algorithms=bool(ctx.policy_cfg.get("allow_testing_algorithms", False)),
+    )
+    ctx.policy_cfg, ctx.preflight = _preflight_policy(
+        algo=ctx.algo,
+        algo_config=ctx.policy_cfg,
+        benchmark_profile=ctx.benchmark_profile,
+        missing_prereq_policy=ctx.socnav_missing_prereq_policy,
+        robot_kinematics=ctx.kinematics_tag,
+    )
+    if ctx.algo.strip().lower() == "prediction_planner":
+        ctx.algo_contract.update(_prediction_planner_metadata_overrides(ctx.policy_cfg))
+    _validate_per_scenario_compatibility(ctx)
+    _check_kinematics_and_profile_gates(ctx)
+
+
+def _validate_per_scenario_compatibility(ctx: _BatchContext) -> None:
+    """Validate planner contract per scenario and filter incompatible jobs."""
+    incompatible_kinematics: dict[str, str] = {}
+    incompatible_scenarios: dict[str, str] = {}
+    compatible_contract: dict[str, Any] | None = None
+    for scenario in ctx.filtered:
+        scenario_id = _scenario_id(scenario)
+        validation_kinematics = _scenario_robot_kinematics_label(scenario)
+        try:
+            validation_algo, validation_cfg = _resolve_policy_search_candidate_runtime(
+                default_algo=ctx.algo,
+                algo_config_path=ctx.algo_config_path,
+                algo_config=ctx.raw_policy_cfg,
+                scenario=scenario,
+            )
+            validation_cfg = _apply_scenario_uncertainty_envelope_config(
+                validation_algo, validation_cfg, scenario
+            )
+            validation_observation_contract = resolve_learned_checkpoint_observation_contract(
+                validation_algo,
+                validation_cfg,
+                observation_mode=ctx.batch_observation_mode,
+                observation_level=ctx.observation_level,
+            )
+            validation_observation_mode = str(
+                validation_observation_contract["active_observation_mode"]
+            )
+            compatible_contract = _validate_planner_contract(
+                algo=validation_algo,
+                robot_kinematics=validation_kinematics,
+                algo_config=validation_cfg,
+                observation_mode=validation_observation_mode,
+                observation_level=ctx.observation_level,
+            )
+            ctx.algo_contract["planner_contract"] = compatible_contract
+        except planner_commands.PlannerContractValidationError as exc:
+            incompatible_scenarios[scenario_id] = str(exc)
+            incompatible_kinematics[validation_kinematics] = str(exc)
+    if not incompatible_kinematics:
+        return
+    ctx.preflight["incompatible_scenario_kinematics"] = dict(
+        sorted(incompatible_kinematics.items())
+    )
+    ctx.preflight["incompatible_scenarios"] = dict(sorted(incompatible_scenarios.items()))
+    if compatible_contract is None:
+        ctx.preflight["status"] = "skipped"
+        ctx.preflight["compatibility_status"] = "incompatible"
+        ctx.preflight["compatibility_reason"] = "; ".join(
+            f"{sid}: {reason}" for sid, reason in sorted(incompatible_scenarios.items())
+        )
+    else:
+        runnable: list[tuple[dict[str, Any], int]] = []
+        for scenario, seed in ctx.jobs:
+            if _scenario_id(scenario) in incompatible_scenarios:
+                ctx.preflight_skipped_jobs += 1
+                continue
+            runnable.append((scenario, seed))
+        ctx.jobs = runnable
+        ctx.preflight["status"] = "partial"
+        ctx.preflight["compatibility_status"] = "partial"
+        ctx.preflight["skipped_jobs"] = ctx.preflight_skipped_jobs
+
+
+def _check_kinematics_and_profile_gates(ctx: _BatchContext) -> None:
+    """Check kinematics compatibility and actuation/latency profile gates."""
+    compatible, incompatible_reason = _planner_kinematics_compatibility(
+        algo=ctx.algo,
+        robot_kinematics=ctx.kinematics_tag,
+        algo_config=ctx.policy_cfg,
+    )
+    if not compatible:
+        ctx.preflight["status"] = "skipped"
+        ctx.preflight["compatibility_status"] = "incompatible"
+        ctx.preflight["compatibility_reason"] = incompatible_reason
+    if ctx.actuation_profile is not None:
+        if ctx.kinematics_tag != _DEFAULT_KINEMATICS:
+            ctx.preflight["status"] = "skipped"
+            ctx.preflight["compatibility_status"] = "incompatible"
+            ctx.preflight["compatibility_reason"] = (
+                "synthetic_actuation_profile requires differential_drive-only scenarios"
+            )
+        ctx.preflight["synthetic_actuation_profile"] = ctx.actuation_profile.to_metadata()
+    if ctx.latency_profile is not None:
+        latency_metadata = ctx.latency_profile.to_metadata(dt=ctx.latency_metadata_dt)
+        if ctx.latency_profile.action_delay_steps > 0 and ctx.kinematics_tag != _DEFAULT_KINEMATICS:
+            ctx.preflight["status"] = "skipped"
+            ctx.preflight["compatibility_status"] = "incompatible"
+            ctx.preflight["compatibility_reason"] = (
+                "latency_stress_profile.action_delay_steps requires "
+                "differential_drive-only scenarios"
+            )
+        ctx.preflight["latency_stress_profile"] = latency_metadata
+        ctx.preflight["latency_stress_metrics"] = not_available_latency_metrics()
+    ctx.preflight["algorithm_metadata_contract"] = ctx.algo_contract
+
+
+def _build_skipped_summary(ctx: _BatchContext) -> dict[str, Any]:
+    """Build the summary payload for a batch skipped at preflight.
+
+    Returns:
+        Summary dict with skipped-status metadata and provenance.
+    """
+    summary: dict[str, Any] = {
+        "total_jobs": 0,
+        "written": 0,
+        "successful_jobs": 0,
+        "failed_jobs": 0,
+        "skipped_jobs": len(ctx.jobs),
+        "failures": [],
+        "out_path": str(ctx.out_path),
+        "algorithm_readiness": {
+            "name": ctx.readiness.canonical_name if ctx.readiness is not None else ctx.algo,
+            "tier": ctx.readiness.tier if ctx.readiness is not None else "unknown",
+            "profile": ctx.benchmark_profile,
+        },
+        "algorithm_metadata_contract": ctx.algo_contract,
+        "preflight": ctx.preflight,
+        "observation_noise": ctx.noise_spec,
+        "observation_noise_hash": ctx.noise_hash,
+        "tracking_precision": ctx.tracking_precision_spec,
+        "tracking_precision_hash": ctx.tracking_precision_spec_hash,
+        "metrics": summarize_collision_metrics([]),
+        "latency_stress_profile": (
+            ctx.latency_profile.to_metadata(dt=ctx.latency_metadata_dt)
+            if ctx.latency_profile is not None
+            else None
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if ctx.latency_profile is not None else None
+        ),
+    }
+    if ctx.benchmark_track is not None:
+        summary["benchmark_track"] = ctx.benchmark_track
+    if ctx.track_schema_version is not None:
+        summary["track_schema_version"] = ctx.track_schema_version
+    summary["provenance"] = _map_result_provenance(
+        schema_path=ctx.schema_path,
+        scenario_path=ctx.scenario_path,
+        scenarios=ctx.filtered,
+        algo=ctx.algo,
+        algo_config_path=ctx.algo_config_path,
+        benchmark_profile=ctx.benchmark_profile,
+        suite_key=ctx.suite_key,
+        total_jobs=len(ctx.jobs),
+        written=0,
+        artifact_pointer_status="not_available",
+        metric_affecting_config=ctx.metric_affecting_config,
+    )
+    summary["benchmark_availability"] = availability_payload(summary)
+    _record_result_provenance_manifest(
+        summary=summary,
+        out_path=ctx.out_path,
+        episode_records=[],
+        schema_path=ctx.schema_path,
+        scenario_path=ctx.scenario_path,
+        scenarios=ctx.filtered,
+        algo=ctx.algo,
+        algo_config_path=ctx.algo_config_path,
+        benchmark_profile=ctx.benchmark_profile,
+        suite_key=ctx.suite_key,
+        total_jobs=0,
+        written=0,
+        horizon=ctx.horizon,
+        dt=ctx.dt,
+        record_forces=ctx.record_forces,
+        active_observation_mode=ctx.active_observation_mode,
+        active_observation_level=ctx.active_observation_level,
+        noise_hash=ctx.noise_hash,
+        tracking_precision_hash=ctx.tracking_precision_spec_hash,
+    )
+    return summary
+
+
+def _compute_resume_identity_payload(
+    ctx: _BatchContext,
+    sc: dict[str, Any],
+    seed: int,
+) -> dict[str, Any]:
+    """Compute the episode identity payload for one job during resume filtering.
+
+    Returns:
+        Identity payload dict used to compute the episode ID for deduplication.
+    """
+    identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
+    identity_algo, identity_cfg = _resolve_policy_search_candidate_runtime(
+        default_algo=ctx.algo,
+        algo_config_path=ctx.algo_config_path,
+        algo_config=ctx.raw_policy_cfg,
+        scenario=identity_scenario,
+    )
+    identity_cfg = _apply_planner_selector_v2_context(
+        identity_algo, identity_cfg, scenario=identity_scenario, seed=int(seed)
+    )
+    identity_cfg = _apply_scenario_uncertainty_envelope_config(
+        identity_algo, identity_cfg, identity_scenario
+    )
+    identity_observation_contract = resolve_learned_checkpoint_observation_contract(
+        identity_algo,
+        identity_cfg,
+        observation_mode=ctx.batch_observation_mode,
+        observation_level=ctx.observation_level,
+    )
+    identity_observation_mode = str(identity_observation_contract["active_observation_mode"])
+    identity_observation_level = ctx.observation_level
+    if identity_observation_level is None:
+        identity_observation_level = identity_observation_contract.get("observation_level_key")
+    identity_contract = enrich_algorithm_metadata(
+        algo=identity_algo,
+        metadata={},
+        observation_mode=identity_observation_mode,
+        observation_level=identity_observation_level,
+    )
+    identity_observation_level = str(identity_contract["observation_level"]["key"])
+    return _scenario_identity_payload(
+        identity_scenario,
+        algo=identity_algo,
+        algo_config=identity_cfg,
+        horizon=ctx.horizon,
+        dt=ctx.dt,
+        record_forces=ctx.record_forces,
+        observation_mode=identity_observation_mode,
+        observation_level=identity_observation_level,
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+        observation_noise=ctx.noise_spec,
+        tracking_precision=ctx.tracking_precision_spec,
+        synthetic_actuation_profile=(
+            ctx.actuation_profile.to_metadata() if ctx.actuation_profile is not None else None
+        ),
+        latency_stress_profile=(
+            ctx.latency_profile.to_metadata(dt=ctx.latency_metadata_dt)
+            if ctx.latency_profile is not None
+            else None
+        ),
+        safety_wrapper=dict(ctx.safety_wrapper) if ctx.safety_wrapper is not None else None,
+        cbf_safety_filter=dict(ctx.cbf_safety_filter)
+        if ctx.cbf_safety_filter is not None
+        else None,
+        record_planner_decision_trace=ctx.record_planner_decision_trace,
+        record_simulation_step_trace=ctx.record_simulation_step_trace,
+    )
+
+
+def _filter_resumed_jobs(ctx: _BatchContext) -> None:
+    """Filter already-completed jobs when resuming a batch."""
+    existing = index_existing(ctx.out_path)
+    if not existing:
+        return
+    filtered_jobs: list[tuple[dict[str, Any], int]] = []
+    for sc, seed in ctx.jobs:
+        identity_payload = _compute_resume_identity_payload(ctx, sc, seed)
+        if _compute_map_episode_id(identity_payload, seed) not in existing:
+            filtered_jobs.append((sc, seed))
+    ctx.jobs = filtered_jobs
+
+
+def _dispatch_batch_execution(ctx: _BatchContext) -> Any:
+    """Build worker params and dispatch batch execution.
+
+    Returns:
+        BatchExecutionResult with counters, records, and metadata.
+    """
+    noise_spec = cast("dict[str, Any]", ctx.noise_spec)
+    tracking_precision_spec = cast("dict[str, Any]", ctx.tracking_precision_spec)
+    fixed_params = _build_worker_fixed_params(
+        horizon=ctx.horizon,
+        dt=ctx.dt,
+        record_forces=ctx.record_forces,
+        snqi_weights=ctx.snqi_weights,
+        snqi_baseline=ctx.snqi_baseline,
+        algo=ctx.algo,
+        raw_policy_cfg=ctx.raw_policy_cfg,
+        algo_config_path=ctx.algo_config_path,
+        scenario_path=ctx.scenario_path,
+        adapter_impact_eval=ctx.adapter_impact_eval,
+        experimental_ped_impact=ctx.experimental_ped_impact,
+        ped_impact_radius_m=ctx.ped_impact_radius_m,
+        ped_impact_window_steps=ctx.ped_impact_window_steps,
+        noise_spec=noise_spec,
+        tracking_precision_spec=tracking_precision_spec,
+        batch_observation_mode=ctx.batch_observation_mode,
+        observation_level=ctx.observation_level,
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+        actuation_profile_metadata=(
+            ctx.actuation_profile.to_metadata() if ctx.actuation_profile is not None else None
+        ),
+        latency_profile_metadata=(
+            ctx.latency_profile.to_metadata(dt=ctx.latency_metadata_dt)
+            if ctx.latency_profile is not None
+            else None
+        ),
+        latency_stress_metrics=(
+            not_available_latency_metrics() if ctx.latency_profile is not None else None
+        ),
+        safety_wrapper=dict(ctx.safety_wrapper) if ctx.safety_wrapper is not None else None,
+        cbf_safety_filter=dict(ctx.cbf_safety_filter)
+        if ctx.cbf_safety_filter is not None
+        else None,
+        record_planner_decision_trace=ctx.record_planner_decision_trace,
+        record_simulation_step_trace=ctx.record_simulation_step_trace,
+    )
+    if (
+        ctx.workers <= 1
+        and ctx.algo_config_path is not None
+        and ctx.algo.strip().lower() in {"ppo", "sac", "guarded_ppo"}
+    ):
+        return _run_map_jobs_with_policy_cache(
+            jobs=ctx.jobs,
+            fixed_params=fixed_params,
+            out_path=ctx.out_path,
+            schema=ctx.schema,
+            workers=ctx.workers,
+            circuit_breaker_threshold=ctx.circuit_breaker_threshold,
+        )
+    return _execute_map_jobs(
+        jobs=ctx.jobs,
+        fixed_params=fixed_params,
+        out_path=ctx.out_path,
+        schema=ctx.schema,
+        workers=ctx.workers,
+        run_map_job=_run_map_job_worker,
+        write_validated_to_handle=_write_validated_to_handle,
+        apply_worker_metadata_bridge=_apply_worker_metadata_bridge,
+        scenario_id=_scenario_id,
+        executor_cls=ProcessPoolExecutor,
+        as_completed_fn=as_completed,
+        multiprocessing_context=ctx.multiprocessing_context,
+        circuit_breaker_threshold=ctx.circuit_breaker_threshold,
+    )
+
+
+def _build_final_summary(ctx: _BatchContext, batch_execution: Any) -> dict[str, Any]:
+    """Build the completed batch summary and record provenance.
+
+    Returns:
+        Final summary dict with metrics, provenance, and availability.
+    """
+    noise_spec = cast("dict[str, Any]", ctx.noise_spec)
+    noise_hash = cast("str", ctx.noise_hash)
+    tracking_precision_spec = cast("dict[str, Any]", ctx.tracking_precision_spec)
+    tracking_precision_hash = cast("str", ctx.tracking_precision_spec_hash)
+    total_jobs = len(ctx.jobs)
+    summary = _build_completed_batch_summary(
+        algo_contract=ctx.algo_contract,
+        runtime_algorithm_contract=batch_execution.runtime_algorithm_contract,
+        preflight=ctx.preflight,
+        feasibility_totals=batch_execution.feasibility_totals,
+        adapter_samples_seen=batch_execution.adapter_samples_seen,
+        adapter_native_steps=batch_execution.adapter_native_steps,
+        adapter_adapted_steps=batch_execution.adapter_adapted_steps,
+        planner_command_space_fallback=_default_robot_command_space(
+            ctx.kinematics_tag, ctx.policy_cfg, robot_command_mode=ctx.robot_command_mode
+        ),
+        total_jobs=total_jobs,
+        workers=ctx.workers,
+        batch_runtime_sec=batch_execution.batch_runtime_sec,
+        wrote=batch_execution.wrote,
+        failures=batch_execution.failures,
+        episode_records=batch_execution.episode_records,
+        preflight_skipped_jobs=ctx.preflight_skipped_jobs,
+        out_path=ctx.out_path,
+        readiness=ctx.readiness,
+        algo=ctx.algo,
+        benchmark_profile=ctx.benchmark_profile,
+        noise_spec=noise_spec,
+        noise_hash=noise_hash,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_hash=tracking_precision_hash,
+        active_observation_mode=ctx.active_observation_mode,
+        active_observation_level=ctx.active_observation_level,
+        actuation_profile_metadata=(
+            ctx.actuation_profile.to_metadata() if ctx.actuation_profile is not None else None
+        ),
+        latency_profile_metadata=(
+            ctx.latency_profile.to_metadata(dt=ctx.latency_metadata_dt)
+            if ctx.latency_profile is not None
+            else None
+        ),
+        benchmark_track=ctx.benchmark_track,
+        track_schema_version=ctx.track_schema_version,
+        schema_path=ctx.schema_path,
+        scenario_path=ctx.scenario_path,
+        scenarios=ctx.filtered,
+        algo_config_path=ctx.algo_config_path,
+        suite_key=ctx.suite_key,
+        kinematics_tag=ctx.kinematics_tag,
+        metric_affecting_config=ctx.metric_affecting_config,
+        abort_metadata=batch_execution.abort_metadata,
+    )
+    _record_result_provenance_manifest(
+        summary=summary,
+        out_path=ctx.out_path,
+        episode_records=batch_execution.episode_records,
+        schema_path=ctx.schema_path,
+        scenario_path=ctx.scenario_path,
+        scenarios=ctx.filtered,
+        algo=ctx.algo,
+        algo_config_path=ctx.algo_config_path,
+        benchmark_profile=ctx.benchmark_profile,
+        suite_key=ctx.suite_key,
+        total_jobs=total_jobs,
+        written=batch_execution.wrote,
+        horizon=ctx.horizon,
+        dt=ctx.dt,
+        record_forces=ctx.record_forces,
+        active_observation_mode=ctx.active_observation_mode,
+        active_observation_level=ctx.active_observation_level,
+        noise_hash=ctx.noise_hash,
+        tracking_precision_hash=ctx.tracking_precision_spec_hash,
+    )
+    return summary
+
+
+def _execute_and_summarize(ctx: _BatchContext) -> dict[str, Any]:
+    """Dispatch batch execution and build the final summary.
+
+    Returns:
+        Final summary dict from the completed batch.
+    """
+    batch_execution = _dispatch_batch_execution(ctx)
+    return _build_final_summary(ctx, batch_execution)
+
+
+def run_map_batch(  # noqa: PLR0913
+    scenarios_or_path: list[dict[str, object]] | str | Path,
     out_path: str | Path,
     schema_path: str | Path,
     *,
+    batch_config: MapBatchConfig | None = None,
     scenario_path: str | Path | None = None,
     horizon: int | None = None,
     dt: float | None = None,
@@ -2796,537 +3412,93 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     observation_level: str | None = None,
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
-    observation_noise: dict[str, Any] | None = None,
-    tracking_precision: dict[str, Any] | None = None,
-    synthetic_actuation_profile: dict[str, Any] | None = None,
-    latency_stress_profile: dict[str, Any] | None = None,
-    safety_wrapper: dict[str, Any] | None = None,
-    cbf_safety_filter: dict[str, Any] | None = None,
+    observation_noise: NoiseSpec | None = None,
+    tracking_precision: TrackingPrecisionSpec | None = None,
+    synthetic_actuation_profile: dict[str, object] | None = None,
+    latency_stress_profile: dict[str, object] | None = None,
+    safety_wrapper: dict[str, object] | None = None,
+    cbf_safety_filter: dict[str, object] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
-    multiprocessing_context: Any | None = None,
+    multiprocessing_context: BaseContext | None = None,
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Run map-based scenarios and append episode records.
 
     Returns:
         Summary payload with counts and failure details.
     """
-    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
-    ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
-        experimental_ped_impact=experimental_ped_impact,
-        ped_impact_radius_m=ped_impact_radius_m,
-        ped_impact_window_steps=ped_impact_window_steps,
-    )
-    scenarios_is_path = isinstance(scenarios_or_path, (str, Path))
-    if scenarios_is_path:
-        scenario_path = Path(scenarios_or_path)
-        scenarios = load_scenarios(scenario_path)
-    else:
-        scenario_path = Path(scenario_path) if scenario_path is not None else Path(".")
-        scenarios = list(scenarios_or_path)
+    if batch_config is not None:
+        scenario_path = batch_config.scenario_path
+        horizon = batch_config.horizon
+        dt = batch_config.dt
+        record_forces = batch_config.record_forces
+        snqi_weights = batch_config.snqi_weights
+        snqi_baseline = batch_config.snqi_baseline
+        algo = batch_config.algo
+        algo_config_path = batch_config.algo_config_path
+        benchmark_profile = batch_config.benchmark_profile
+        socnav_missing_prereq_policy = batch_config.socnav_missing_prereq_policy
+        adapter_impact_eval = batch_config.adapter_impact_eval
+        experimental_ped_impact = batch_config.experimental_ped_impact
+        ped_impact_radius_m = batch_config.ped_impact_radius_m
+        ped_impact_window_steps = batch_config.ped_impact_window_steps
+        observation_mode = batch_config.observation_mode
+        observation_level = batch_config.observation_level
+        benchmark_track = batch_config.benchmark_track
+        track_schema_version = batch_config.track_schema_version
+        observation_noise = batch_config.observation_noise
+        tracking_precision = batch_config.tracking_precision
+        synthetic_actuation_profile = batch_config.synthetic_actuation_profile
+        latency_stress_profile = batch_config.latency_stress_profile
+        safety_wrapper = batch_config.safety_wrapper
+        cbf_safety_filter = batch_config.cbf_safety_filter
+        record_planner_decision_trace = batch_config.record_planner_decision_trace
+        record_simulation_step_trace = batch_config.record_simulation_step_trace
+        multiprocessing_context = batch_config.multiprocessing_context
+        workers = batch_config.workers
+        resume = batch_config.resume
+        circuit_breaker_threshold = batch_config.circuit_breaker_threshold
 
-    errors = validate_scenario_list([dict(s) for s in scenarios])
-    if errors:
-        raise ValueError(f"Scenario validation failed: {errors[:3]} (total {len(errors)})")
-
-    suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
-    suite_key = _suite_key(scenario_path)
-    noise_spec = normalize_observation_noise_spec(observation_noise)
-    noise_hash = observation_noise_hash(noise_spec)
-    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
-    tracking_precision_spec_hash = tracking_precision_hash(tracking_precision_spec)
-    actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
-    latency_profile = _load_latency_stress_profile(latency_stress_profile)
-    latency_metadata_dt = float(dt) if dt is not None and float(dt) > 0.0 else 0.1
-    benchmark_track = normalize_track_field(benchmark_track, field_name="benchmark_track")
-    track_schema_version = normalize_track_field(
-        track_schema_version,
-        field_name="track_schema_version",
-    )
-
-    filtered: list[dict[str, Any]] = []
-    for scenario in scenarios:
-        if (
-            scenario.get("supported") is False
-            or scenario.get("metadata", {}).get("supported") is False
-        ):
-            continue
-        errors = _validate_behavior_sanity(scenario)
-        if errors:
-            logger.warning("Skipping scenario '{}': {}", scenario.get("name"), errors)
-            continue
-        filtered.append(scenario)
-
-    # Record the metric-affecting run config (scan_noise, collision regime) once so
-    # the emitted result manifest is self-describing about settings that change
-    # metric semantics (issue #3701). Fail-soft: never blocks a run.
-    metric_affecting_config = _representative_metric_affecting_config(
-        filtered, scenario_path=scenario_path
-    )
-
-    kinematics_tag, scenario_kinematics = _resolve_batch_kinematics_tag(filtered)
-    batch_observation_mode = str(observation_mode).strip() if observation_mode is not None else None
-    raw_policy_cfg = _parse_algo_config(algo_config_path)
-    _, policy_cfg = _resolve_policy_search_candidate_runtime(
-        default_algo=algo,
-        algo_config_path=algo_config_path,
-        algo_config=raw_policy_cfg,
-        scenario={},
-    )
-    learned_observation_contract = resolve_learned_checkpoint_observation_contract(
-        algo,
-        policy_cfg,
-        observation_mode=batch_observation_mode,
-        observation_level=observation_level,
-    )
-    active_observation_mode = str(learned_observation_contract["active_observation_mode"])
-    resolved_observation_level = observation_level
-    if resolved_observation_level is None:
-        resolved_observation_level = learned_observation_contract.get("observation_level_key")
-    algo_contract = enrich_algorithm_metadata(
-        algo=algo,
-        metadata={},
-        robot_kinematics=kinematics_tag,
-        adapter_impact_requested=adapter_impact_eval,
-        observation_mode=active_observation_mode,
-        observation_level=resolved_observation_level,
-    )
-    algo_contract["learned_checkpoint_observation_contract"] = learned_observation_contract
-    active_observation_level = str(algo_contract["observation_level"]["key"])
-    attach_track_metadata(
-        algo_contract,
-        benchmark_track=benchmark_track,
-        track_schema_version=track_schema_version,
-        observation_level=active_observation_level,
-        observation_mode=active_observation_mode,
-    )
-    planner_meta = algo_contract.get("planner_kinematics")
-    if isinstance(planner_meta, dict):
-        planner_meta["scenario_kinematics"] = scenario_kinematics
-    jobs = _build_seed_jobs(filtered, suite_seeds=suite_seeds, suite_key=suite_key)
-    preflight_skipped_jobs = 0
-
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    schema = load_schema(schema_path)
-    robot_command_mode: str | None = None
-    for scenario in filtered:
-        robot_cfg = scenario.get("robot_config")
-        if not isinstance(robot_cfg, dict):
-            continue
-        raw_mode = robot_cfg.get("command_mode")
-        if raw_mode is None:
-            continue
-        robot_command_mode = str(raw_mode).strip().lower()
-        break
-    ppo_paper_ready, _paper_reason = (
-        _ppo_paper_gate_status(policy_cfg) if algo.strip().lower() == "ppo" else (False, None)
-    )
-    readiness = require_algorithm_allowed(
-        algo=algo,
+    # fmt: off
+    ctx = _init_batch_context(
+        scenarios_or_path, scenario_path, out_path, schema_path,
+        horizon=horizon, dt=dt, record_forces=record_forces,
+        snqi_weights=snqi_weights, snqi_baseline=snqi_baseline,
+        algo=algo, algo_config_path=algo_config_path,
         benchmark_profile=benchmark_profile,
-        ppo_paper_ready=ppo_paper_ready,
-        allow_testing_algorithms=bool(policy_cfg.get("allow_testing_algorithms", False)),
-    )
-    policy_cfg, preflight = _preflight_policy(
-        algo=algo,
-        algo_config=policy_cfg,
-        benchmark_profile=benchmark_profile,
-        missing_prereq_policy=socnav_missing_prereq_policy,
-        robot_kinematics=kinematics_tag,
-    )
-    if algo.strip().lower() == "prediction_planner":
-        algo_contract.update(_prediction_planner_metadata_overrides(policy_cfg))
-    incompatible_kinematics: dict[str, str] = {}
-    incompatible_scenarios: dict[str, str] = {}
-    compatible_contract: dict[str, Any] | None = None
-    for scenario in filtered:
-        scenario_id = _scenario_id(scenario)
-        validation_kinematics = _scenario_robot_kinematics_label(scenario)
-        try:
-            validation_algo, validation_cfg = _resolve_policy_search_candidate_runtime(
-                default_algo=algo,
-                algo_config_path=algo_config_path,
-                algo_config=raw_policy_cfg,
-                scenario=scenario,
-            )
-            validation_cfg = _apply_scenario_uncertainty_envelope_config(
-                validation_algo,
-                validation_cfg,
-                scenario,
-            )
-            validation_observation_contract = resolve_learned_checkpoint_observation_contract(
-                validation_algo,
-                validation_cfg,
-                observation_mode=batch_observation_mode,
-                observation_level=observation_level,
-            )
-            validation_observation_mode = str(
-                validation_observation_contract["active_observation_mode"]
-            )
-            compatible_contract = _validate_planner_contract(
-                algo=validation_algo,
-                robot_kinematics=validation_kinematics,
-                algo_config=validation_cfg,
-                observation_mode=validation_observation_mode,
-                observation_level=observation_level,
-            )
-            algo_contract["planner_contract"] = compatible_contract
-        except planner_commands.PlannerContractValidationError as exc:
-            incompatible_scenarios[scenario_id] = str(exc)
-            incompatible_kinematics[validation_kinematics] = str(exc)
-    if incompatible_kinematics:
-        preflight["incompatible_scenario_kinematics"] = dict(
-            sorted(incompatible_kinematics.items())
-        )
-        preflight["incompatible_scenarios"] = dict(sorted(incompatible_scenarios.items()))
-        if compatible_contract is None:
-            preflight["status"] = "skipped"
-            preflight["compatibility_status"] = "incompatible"
-            preflight["compatibility_reason"] = "; ".join(
-                f"{scenario_id}: {reason}"
-                for scenario_id, reason in sorted(incompatible_scenarios.items())
-            )
-        else:
-            runnable_jobs: list[tuple[dict[str, Any], int]] = []
-            for scenario, seed in jobs:
-                if _scenario_id(scenario) in incompatible_scenarios:
-                    preflight_skipped_jobs += 1
-                    continue
-                runnable_jobs.append((scenario, seed))
-            jobs = runnable_jobs
-            preflight["status"] = "partial"
-            preflight["compatibility_status"] = "partial"
-            preflight["skipped_jobs"] = preflight_skipped_jobs
-    compatible, incompatible_reason = _planner_kinematics_compatibility(
-        algo=algo,
-        robot_kinematics=kinematics_tag,
-        algo_config=policy_cfg,
-    )
-    if not compatible:
-        preflight["status"] = "skipped"
-        preflight["compatibility_status"] = "incompatible"
-        preflight["compatibility_reason"] = incompatible_reason
-    if actuation_profile is not None:
-        if kinematics_tag != _DEFAULT_KINEMATICS:
-            preflight["status"] = "skipped"
-            preflight["compatibility_status"] = "incompatible"
-            preflight["compatibility_reason"] = (
-                "synthetic_actuation_profile requires differential_drive-only scenarios"
-            )
-        preflight["synthetic_actuation_profile"] = actuation_profile.to_metadata()
-    if latency_profile is not None:
-        latency_metadata = latency_profile.to_metadata(dt=latency_metadata_dt)
-        if latency_profile.action_delay_steps > 0 and kinematics_tag != _DEFAULT_KINEMATICS:
-            preflight["status"] = "skipped"
-            preflight["compatibility_status"] = "incompatible"
-            preflight["compatibility_reason"] = (
-                "latency_stress_profile.action_delay_steps requires "
-                "differential_drive-only scenarios"
-            )
-        preflight["latency_stress_profile"] = latency_metadata
-        preflight["latency_stress_metrics"] = not_available_latency_metrics()
-    preflight["algorithm_metadata_contract"] = algo_contract
-    if preflight.get("status") == "skipped":
-        summary = {
-            "total_jobs": 0,
-            "written": 0,
-            "successful_jobs": 0,
-            "failed_jobs": 0,
-            "skipped_jobs": len(jobs),
-            "failures": [],
-            "out_path": str(out_path),
-            "algorithm_readiness": {
-                "name": readiness.canonical_name if readiness is not None else algo,
-                "tier": readiness.tier if readiness is not None else "unknown",
-                "profile": benchmark_profile,
-            },
-            "algorithm_metadata_contract": algo_contract,
-            "preflight": preflight,
-            "observation_noise": noise_spec,
-            "observation_noise_hash": noise_hash,
-            "tracking_precision": tracking_precision_spec,
-            "tracking_precision_hash": tracking_precision_spec_hash,
-            "metrics": summarize_collision_metrics([]),
-            "latency_stress_profile": (
-                latency_profile.to_metadata(dt=latency_metadata_dt)
-                if latency_profile is not None
-                else None
-            ),
-            "latency_stress_metrics": (
-                not_available_latency_metrics() if latency_profile is not None else None
-            ),
-        }
-        if benchmark_track is not None:
-            summary["benchmark_track"] = benchmark_track
-        if track_schema_version is not None:
-            summary["track_schema_version"] = track_schema_version
-        summary["provenance"] = _map_result_provenance(
-            schema_path=schema_path,
-            scenario_path=scenario_path,
-            scenarios=filtered,
-            algo=algo,
-            algo_config_path=algo_config_path,
-            benchmark_profile=benchmark_profile,
-            suite_key=suite_key,
-            total_jobs=len(jobs),
-            written=0,
-            artifact_pointer_status="not_available",
-            metric_affecting_config=metric_affecting_config,
-        )
-        summary["benchmark_availability"] = availability_payload(summary)
-        # Write not_applicable provenance manifest for skipped preflight path.
-        _record_result_provenance_manifest(
-            summary=summary,
-            out_path=out_path,
-            episode_records=[],
-            schema_path=schema_path,
-            scenario_path=scenario_path,
-            scenarios=filtered,
-            algo=algo,
-            algo_config_path=algo_config_path,
-            benchmark_profile=benchmark_profile,
-            suite_key=suite_key,
-            total_jobs=0,
-            written=0,
-            horizon=horizon,
-            dt=dt,
-            record_forces=record_forces,
-            active_observation_mode=active_observation_mode,
-            active_observation_level=active_observation_level,
-            noise_hash=noise_hash,
-            tracking_precision_hash=tracking_precision_spec_hash,
-        )
-        return summary
-
-    if resume and out_path.exists():
-        existing = index_existing(out_path)
-        if existing:
-            filtered_jobs: list[tuple[dict[str, Any], int]] = []
-            for sc, seed in jobs:
-                identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
-                identity_algo, identity_cfg = _resolve_policy_search_candidate_runtime(
-                    default_algo=algo,
-                    algo_config_path=algo_config_path,
-                    algo_config=raw_policy_cfg,
-                    scenario=identity_scenario,
-                )
-                identity_cfg = _apply_planner_selector_v2_context(
-                    identity_algo,
-                    identity_cfg,
-                    scenario=identity_scenario,
-                    seed=int(seed),
-                )
-                identity_cfg = _apply_scenario_uncertainty_envelope_config(
-                    identity_algo,
-                    identity_cfg,
-                    identity_scenario,
-                )
-                identity_observation_contract = resolve_learned_checkpoint_observation_contract(
-                    identity_algo,
-                    identity_cfg,
-                    observation_mode=batch_observation_mode,
-                    observation_level=observation_level,
-                )
-                identity_observation_mode = str(
-                    identity_observation_contract["active_observation_mode"]
-                )
-                identity_observation_level = observation_level
-                if identity_observation_level is None:
-                    identity_observation_level = identity_observation_contract.get(
-                        "observation_level_key"
-                    )
-                identity_contract = enrich_algorithm_metadata(
-                    algo=identity_algo,
-                    metadata={},
-                    observation_mode=identity_observation_mode,
-                    observation_level=identity_observation_level,
-                )
-                identity_observation_level = str(identity_contract["observation_level"]["key"])
-                identity_payload = _scenario_identity_payload(
-                    identity_scenario,
-                    algo=identity_algo,
-                    algo_config=identity_cfg,
-                    horizon=horizon,
-                    dt=dt,
-                    record_forces=record_forces,
-                    observation_mode=identity_observation_mode,
-                    observation_level=identity_observation_level,
-                    benchmark_track=benchmark_track,
-                    track_schema_version=track_schema_version,
-                    observation_noise=noise_spec,
-                    tracking_precision=tracking_precision_spec,
-                    synthetic_actuation_profile=(
-                        actuation_profile.to_metadata() if actuation_profile is not None else None
-                    ),
-                    latency_stress_profile=(
-                        latency_profile.to_metadata(dt=latency_metadata_dt)
-                        if latency_profile is not None
-                        else None
-                    ),
-                    safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
-                    cbf_safety_filter=dict(cbf_safety_filter)
-                    if cbf_safety_filter is not None
-                    else None,
-                    record_planner_decision_trace=record_planner_decision_trace,
-                    record_simulation_step_trace=record_simulation_step_trace,
-                )
-                if _compute_map_episode_id(identity_payload, seed) not in existing:
-                    filtered_jobs.append((sc, seed))
-            jobs = filtered_jobs
-
-    fixed_params = _build_worker_fixed_params(
-        horizon=horizon,
-        dt=dt,
-        record_forces=record_forces,
-        snqi_weights=snqi_weights,
-        snqi_baseline=snqi_baseline,
-        algo=algo,
-        raw_policy_cfg=raw_policy_cfg,
-        algo_config_path=algo_config_path,
-        scenario_path=scenario_path,
+        socnav_missing_prereq_policy=socnav_missing_prereq_policy,
         adapter_impact_eval=adapter_impact_eval,
         experimental_ped_impact=experimental_ped_impact,
         ped_impact_radius_m=ped_impact_radius_m,
         ped_impact_window_steps=ped_impact_window_steps,
-        noise_spec=noise_spec,
-        tracking_precision_spec=tracking_precision_spec,
-        batch_observation_mode=batch_observation_mode,
+        observation_mode=observation_mode,
         observation_level=observation_level,
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
-        actuation_profile_metadata=(
-            actuation_profile.to_metadata() if actuation_profile is not None else None
-        ),
-        latency_profile_metadata=(
-            latency_profile.to_metadata(dt=latency_metadata_dt)
-            if latency_profile is not None
-            else None
-        ),
-        latency_stress_metrics=(
-            not_available_latency_metrics() if latency_profile is not None else None
-        ),
-        safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
-        cbf_safety_filter=dict(cbf_safety_filter) if cbf_safety_filter is not None else None,
+        observation_noise=cast("dict[str, Any] | None", observation_noise),
+        tracking_precision=cast("dict[str, Any] | None", tracking_precision),
+        synthetic_actuation_profile=synthetic_actuation_profile,
+        latency_stress_profile=latency_stress_profile,
+        safety_wrapper=safety_wrapper,
+        cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        multiprocessing_context=multiprocessing_context,
+        workers=workers, resume=resume,
+        circuit_breaker_threshold=circuit_breaker_threshold,
     )
-
-    total_jobs = len(jobs)
-    batch_execution = (
-        _run_map_jobs_with_policy_cache(
-            jobs=jobs,
-            fixed_params=fixed_params,
-            out_path=out_path,
-            schema=schema,
-            workers=workers,
-            circuit_breaker_threshold=circuit_breaker_threshold,
-        )
-        if (
-            workers <= 1
-            and algo_config_path is not None
-            and algo.strip().lower() in {"ppo", "sac", "guarded_ppo"}
-        )
-        else _execute_map_jobs(
-            jobs=jobs,
-            fixed_params=fixed_params,
-            out_path=out_path,
-            schema=schema,
-            workers=workers,
-            run_map_job=_run_map_job_worker,
-            write_validated_to_handle=_write_validated_to_handle,
-            apply_worker_metadata_bridge=_apply_worker_metadata_bridge,
-            scenario_id=_scenario_id,
-            executor_cls=ProcessPoolExecutor,
-            as_completed_fn=as_completed,
-            multiprocessing_context=multiprocessing_context,
-            circuit_breaker_threshold=circuit_breaker_threshold,
-        )
-    )
-    wrote = batch_execution.wrote
-    episode_records = batch_execution.episode_records
-    failures = batch_execution.failures
-    adapter_native_steps = batch_execution.adapter_native_steps
-    adapter_adapted_steps = batch_execution.adapter_adapted_steps
-    adapter_samples_seen = batch_execution.adapter_samples_seen
-    runtime_algorithm_contract = batch_execution.runtime_algorithm_contract
-    feasibility_totals = batch_execution.feasibility_totals
-
-    summary = _build_completed_batch_summary(
-        algo_contract=algo_contract,
-        runtime_algorithm_contract=runtime_algorithm_contract,
-        preflight=preflight,
-        feasibility_totals=feasibility_totals,
-        adapter_samples_seen=adapter_samples_seen,
-        adapter_native_steps=adapter_native_steps,
-        adapter_adapted_steps=adapter_adapted_steps,
-        planner_command_space_fallback=_default_robot_command_space(
-            kinematics_tag,
-            policy_cfg,
-            robot_command_mode=robot_command_mode,
-        ),
-        total_jobs=total_jobs,
-        workers=workers,
-        batch_runtime_sec=batch_execution.batch_runtime_sec,
-        wrote=wrote,
-        failures=failures,
-        episode_records=episode_records,
-        preflight_skipped_jobs=preflight_skipped_jobs,
-        out_path=out_path,
-        readiness=readiness,
-        algo=algo,
-        benchmark_profile=benchmark_profile,
-        noise_spec=noise_spec,
-        noise_hash=noise_hash,
-        tracking_precision_spec=tracking_precision_spec,
-        tracking_precision_hash=tracking_precision_spec_hash,
-        active_observation_mode=active_observation_mode,
-        active_observation_level=active_observation_level,
-        actuation_profile_metadata=(
-            actuation_profile.to_metadata() if actuation_profile is not None else None
-        ),
-        latency_profile_metadata=(
-            latency_profile.to_metadata(dt=latency_metadata_dt)
-            if latency_profile is not None
-            else None
-        ),
-        benchmark_track=benchmark_track,
-        track_schema_version=track_schema_version,
-        schema_path=schema_path,
-        scenario_path=scenario_path,
-        scenarios=filtered,
-        algo_config_path=algo_config_path,
-        suite_key=suite_key,
-        kinematics_tag=kinematics_tag,
-        metric_affecting_config=metric_affecting_config,
-        abort_metadata=batch_execution.abort_metadata,
-    )
-    # Emit provenance manifest alongside the JSONL output.
-    _record_result_provenance_manifest(
-        summary=summary,
-        out_path=out_path,
-        episode_records=episode_records,
-        schema_path=schema_path,
-        scenario_path=scenario_path,
-        scenarios=filtered,
-        algo=algo,
-        algo_config_path=algo_config_path,
-        benchmark_profile=benchmark_profile,
-        suite_key=suite_key,
-        total_jobs=total_jobs,
-        written=wrote,
-        horizon=horizon,
-        dt=dt,
-        record_forces=record_forces,
-        active_observation_mode=active_observation_mode,
-        active_observation_level=active_observation_level,
-        noise_hash=noise_hash,
-        tracking_precision_hash=tracking_precision_spec_hash,
-    )
-    return summary
+    # fmt: on
+    _load_and_filter_scenarios(ctx)
+    _resolve_algorithm_contract(ctx)
+    _run_preflight_pipeline(ctx)
+    if ctx.preflight.get("status") == "skipped":
+        return _build_skipped_summary(ctx)
+    if resume and ctx.out_path.exists():
+        _filter_resumed_jobs(ctx)
+    return _execute_and_summarize(ctx)
 
 
 __all__ = ["build_map_policy", "run_map_batch"]

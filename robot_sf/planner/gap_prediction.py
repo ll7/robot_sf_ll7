@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from robot_sf.planner.constants import (
+    DEFAULT_STREAM_GAP_COMMIT_HOLD_STEPS,
     DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M,
     DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED,
     DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED,
@@ -58,6 +59,10 @@ class GapAwarePredictionAdapter:
 
         return float(pred_v), float(pred_w)
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "GapAwarePredictionAdapter"}
+
 
 def build_gap_prediction_config(cfg: dict[str, Any] | None) -> GapPredictionConfig:
     """Build :class:`GapPredictionConfig` from a mapping payload.
@@ -94,7 +99,9 @@ def build_gap_prediction_config(cfg: dict[str, Any] | None) -> GapPredictionConf
         creep_speed=float(gap_raw.get("creep_speed", 0.12)),
         approach_speed=float(gap_raw.get("approach_speed", 0.35)),
         commit_speed=float(gap_raw.get("commit_speed", 0.95)),
-        commit_hold_steps=int(gap_raw.get("commit_hold_steps", 6)),
+        commit_hold_steps=int(
+            gap_raw.get("commit_hold_steps", DEFAULT_STREAM_GAP_COMMIT_HOLD_STEPS)
+        ),
     )
     return GapPredictionConfig(
         stream_gap=gap_cfg,

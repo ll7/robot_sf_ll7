@@ -25,6 +25,9 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 
+_DEFAULT_DENSE_PED_COUNT = 6
+_DEFAULT_HYSTERESIS_STEPS = 6
+
 
 @dataclass
 class HybridPortfolioConfig:
@@ -32,9 +35,9 @@ class HybridPortfolioConfig:
 
     emergency_clearance: float = 0.55
     caution_clearance: float = 1.0
-    dense_ped_count: int = 6
+    dense_ped_count: int = _DEFAULT_DENSE_PED_COUNT
     near_field_distance: float = 2.5
-    hysteresis_steps: int = 6
+    hysteresis_steps: int = _DEFAULT_HYSTERESIS_STEPS
     fallback_on_exception: bool = True
     adaptive_switching_enabled: bool = True
 
@@ -163,8 +166,9 @@ class HybridPortfolioAdapter:
             "hold_remaining": int(self._hold_remaining),
         }
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear portfolio hysteresis and reset any stateful child heads."""
+        del seed
         self._active_head = "risk_dwa"
         self._hold_remaining = 0
         self._selected_head_counts.clear()
@@ -185,7 +189,7 @@ class HybridPortfolioAdapter:
             command = self._call_head(selected, observation)
             self._record_decision(desired_head=desired, selected_head=selected)
             return command
-        except Exception as exc:
+        except Exception as exc:  # broad catch: head surface unknown; fall back to ORCA
             if not bool(self.config.fallback_on_exception):
                 raise
             logger.warning(
@@ -262,9 +266,9 @@ def build_hybrid_portfolio_build_config(cfg: dict[str, Any] | None) -> HybridPor
     hybrid = HybridPortfolioConfig(
         emergency_clearance=float(hybrid_raw.get("emergency_clearance", 0.55)),
         caution_clearance=float(hybrid_raw.get("caution_clearance", 1.0)),
-        dense_ped_count=int(hybrid_raw.get("dense_ped_count", 6)),
+        dense_ped_count=int(hybrid_raw.get("dense_ped_count", _DEFAULT_DENSE_PED_COUNT)),
         near_field_distance=float(hybrid_raw.get("near_field_distance", 2.5)),
-        hysteresis_steps=int(hybrid_raw.get("hysteresis_steps", 6)),
+        hysteresis_steps=int(hybrid_raw.get("hysteresis_steps", _DEFAULT_HYSTERESIS_STEPS)),
         fallback_on_exception=bool(hybrid_raw.get("fallback_on_exception", True)),
         adaptive_switching_enabled=bool(hybrid_raw.get("adaptive_switching_enabled", True)),
     )

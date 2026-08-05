@@ -16,7 +16,6 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -1012,7 +1011,7 @@ class RobotEnv(BaseEnv):
         reward_terms["rollover_proxy_penalty"] = penalty
         return reward + penalty
 
-    def step(self, action):
+    def step(self, action) -> tuple[Any, float, bool, bool, dict[str, Any]]:
         """Execute one environment step.
 
         Args:
@@ -1031,7 +1030,7 @@ class RobotEnv(BaseEnv):
         # Perform simulation step
         self.simulator.step_once([action])
         # Get updated observation
-        obs = self.state.step()
+        obs: Any = self.state.step()
 
         # T044: Wrap observation as dict if observation space was converted for grid inclusion
         if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
@@ -1046,16 +1045,15 @@ class RobotEnv(BaseEnv):
             ped_positions = step_ped_positions
             ped_radii = getattr(self.simulator, "ped_radii", None)
             if ped_radii is None:
-                ped_radii = [0.35] * len(ped_positions)
-            pedestrians = [
-                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=True)
-            ]
+                ped_radii = np.full(len(ped_positions), 0.35)
+            else:
+                ped_radii = np.asarray(ped_radii, dtype=float)
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
             # Regenerate grid (allow grid config to opt into ego frame)
             self.occupancy_grid.generate(
                 obstacles=obstacles,
-                pedestrians=pedestrians,
+                pedestrians=(np.asarray(ped_positions, dtype=float), ped_radii),
                 robot_pose=robot_pose,
                 ego_frame=False,
                 obstacle_polygons=obstacle_polygons,
@@ -1134,7 +1132,7 @@ class RobotEnv(BaseEnv):
             info,
         )
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None) -> tuple[Any, dict[str, Any]]:
         """Reset the environment and start a new episode.
 
         Args:
@@ -1157,7 +1155,7 @@ class RobotEnv(BaseEnv):
             self.simulator.reset_state()
             # Reset the environment's state and return the initial observation
             reset_episode_counter_for_seed(self.state, seed)
-            obs = self.state.reset()
+            obs: Any = self.state.reset()
             self._prime_snqi_proxy_state()
 
             # T044: Wrap observation as dict if observation space was converted for grid inclusion
@@ -1172,18 +1170,15 @@ class RobotEnv(BaseEnv):
                 ped_positions = self.simulator.ped_pos
                 ped_radii = getattr(self.simulator, "ped_radii", None)
                 if ped_radii is None:
-                    # Default pedestrian radius if not available
-                    ped_radii = [0.35] * len(ped_positions)
-                pedestrians = [
-                    (tuple(pos), radius)
-                    for pos, radius in zip(ped_positions, ped_radii, strict=True)
-                ]
+                    ped_radii = np.full(len(ped_positions), 0.35)
+                else:
+                    ped_radii = np.asarray(ped_radii, dtype=float)
                 # Get robot pose (already in RobotPose format: ((x, y), theta))
                 robot_pose = self.simulator.robot_poses[0]
                 # Generate grid (allow grid config to opt into ego frame)
                 self.occupancy_grid.generate(
                     obstacles=obstacles,
-                    pedestrians=pedestrians,
+                    pedestrians=(np.asarray(ped_positions, dtype=float), ped_radii),
                     robot_pose=robot_pose,
                     ego_frame=False,
                     obstacle_polygons=obstacle_polygons,
@@ -1196,8 +1191,9 @@ class RobotEnv(BaseEnv):
                         _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
                     )
                     logger.debug(
-                        f"Initial occupancy grid generated: "
-                        f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
+                        "Initial occupancy grid generated: obstacles={}, pedestrians={}",
+                        len(obstacles),
+                        len(ped_positions),
                     )
             obs = self._attach_asymmetric_critic_state(obs)
             self._latest_observation = obs
@@ -1414,7 +1410,8 @@ class RobotEnv(BaseEnv):
             timestep=self.state.timestep,
             robot_action=action,
             robot_pose=self.simulator.robot_poses[0],
-            pedestrian_positions=deepcopy(self.simulator.ped_pos),
+            # NumPy-native copy avoids deepcopy's pickle overhead (issue #6460)
+            pedestrian_positions=np.asarray(self.simulator.ped_pos).copy(),
             ray_vecs=ray_vecs_np,
             ped_actions=ped_actions_np,
             time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,
@@ -1424,7 +1421,7 @@ class RobotEnv(BaseEnv):
 
         return state
 
-    def render(self):
+    def render(self) -> None:
         """
         Render the environment visually if in debug mode.
 
@@ -1444,7 +1441,7 @@ class RobotEnv(BaseEnv):
         # Execute rendering of the state through the simulation UI
         self.sim_ui.render(state)
 
-    def record(self):
+    def record(self) -> None:
         """
         Records the current state as visualizable state and stores it in the list.
         """
@@ -1453,7 +1450,7 @@ class RobotEnv(BaseEnv):
         # Use the new unified recording method
         self.record_simulation_step(state)
 
-    def set_pedestrian_velocity_scale(self, scale: float = 1.0):
+    def set_pedestrian_velocity_scale(self, scale: float = 1.0) -> None:
         """
         Set the pedestrian velocity visualization scaling factor.
 
@@ -1466,7 +1463,7 @@ class RobotEnv(BaseEnv):
         else:
             logger.warning("Cannot set velocity scale: debug mode not enabled")
 
-    def get_telemetry_session(self):
+    def get_telemetry_session(self) -> TelemetrySession | None:
         """
         Get the telemetry session for accessing recorded metrics and artifacts.
 

@@ -119,6 +119,20 @@ def test_fallback_predictor_marks_constant_velocity_non_evidence() -> None:
     assert predictor.diagnostics()["diagnostic_only"] is True
 
 
+def test_learned_predictor_reset_accepts_seed_and_clears_diagnostics() -> None:
+    """Keyword seed is accepted while reset clears episode-local predictor diagnostics."""
+    predictor = LearnedShortHorizonPedestrianPredictor(
+        LearnedShortHorizonPredictorConfig(fallback_to_constant_velocity=True)
+    )
+    predictor.predict(_obs(), horizon_steps=1, dt=0.5)
+
+    predictor.reset(seed=123)
+
+    diagnostics = predictor.diagnostics()
+    assert diagnostics["calls"] == 0
+    assert diagnostics["last_source"] == "not_run"
+
+
 def test_learned_prediction_mpc_adapter_exposes_predictor_diagnostics() -> None:
     """Learned MPC adapter wires predictor into existing prediction-MPC constraints."""
 

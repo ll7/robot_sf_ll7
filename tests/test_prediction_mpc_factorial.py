@@ -396,9 +396,9 @@ class TestPreregistrationHarness:
 class TestDependencyStateReconciliationIssue5483:
     """Regression coverage that the pinned factorial config stays reconciled (#5483).
 
-    #5353 (matched-capability fairness contract) is resolved, while #5351
-    (hierarchical paired analysis) remains open. The consistency guard protects the
-    reconciled #5353 state from silently drifting back to ``open``.
+    #5353 (matched-capability fairness contract) and #5351 (hierarchical paired
+    analysis) are resolved. The consistency guard protects both closed states from
+    silently drifting back to ``open``.
     """
 
     CONFIG_PATH = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
@@ -408,14 +408,14 @@ class TestDependencyStateReconciliationIssue5483:
         / "preregistration_config_registry.json"
     )
 
-    def test_landed_config_declares_5351_open_and_5353_resolved(self):
+    def test_landed_config_declares_5351_and_5353_resolved(self):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
             load_factorial_preregistration_config,
         )
 
         config = load_factorial_preregistration_config(self.CONFIG_PATH)
         by_issue = {int(d["issue"]): d for d in config.get("dependencies", [])}
-        assert by_issue[5351]["status"] == "open"
+        assert by_issue[5351]["status"] == "resolved"
         assert by_issue[5353]["status"] == "resolved"
 
     def test_landed_config_passes_dependency_consistency_guard(self):
@@ -440,6 +440,7 @@ class TestDependencyStateReconciliationIssue5483:
         ]
         report = check_dependency_state_consistency(drifted)
         assert report["consistent"] is False
+        assert any("#5351" in item for item in report["inconsistent"])
         assert any("#5353" in item for item in report["inconsistent"])
 
     def test_registry_digest_matches_landed_config(self):
@@ -447,14 +448,15 @@ class TestDependencyStateReconciliationIssue5483:
         registry = json.loads(self.REGISTRY_PATH.read_text(encoding="utf-8"))
         assert registry["config_sha256"] == hashlib.sha256(config_bytes).hexdigest()
 
-    def test_readiness_gate_still_blocks_on_5351_after_reconciliation(self):
+    def test_readiness_gate_accepts_closed_dependencies_without_claim_promotion(self):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
             assess_campaign_readiness,
         )
 
         report = assess_campaign_readiness(self.CONFIG_PATH)
-        assert report["criteria"]["dependencies_resolved"]["ready"] is False
-        assert any("#5351" in blocker for blocker in report["blockers"])
+        assert report["criteria"]["dependencies_resolved"]["ready"] is True
+        assert report["ready"] is True
+        assert report["blockers"] == []
 
     def test_readiness_gate_consumes_consistency_guard(self, tmp_path):
         """A non-blocking drift on reconciled #5353 still fails the gate."""
@@ -550,27 +552,20 @@ class TestCampaignReadinessGate:
 
     CONFIG_PATH = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
 
-    def test_real_config_is_blocked_only_on_open_dependencies(self):
-        """After #5483 reconciliation the packet is campaign-ready except for #5351.
-
-        #5353 (capability-matrix contract) is resolved; #5351 (hierarchical
-        paired analysis) remains the sole open dependency blocker.
-        """
+    def test_real_config_is_ready_without_claim_promotion(self):
+        """Closed dependencies pass while #5351 claim review remains separate."""
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
             assess_campaign_readiness,
         )
 
         report = assess_campaign_readiness(self.CONFIG_PATH)
-        assert report["ready"] is False
+        assert report["ready"] is True
         criteria = report["criteria"]
         assert criteria["preregistration_config_valid"]["ready"] is True
         assert criteria["arm_configs_valid"]["ready"] is True
         assert criteria["evidence_registry_pinned"]["ready"] is True
-        # ...and the sole remaining gate is the single declared open dependency (#5351).
-        assert criteria["dependencies_resolved"]["ready"] is False
-        joined = " ".join(report["blockers"])
-        assert "#5351" in joined
-        assert "#5353" not in joined
+        assert criteria["dependencies_resolved"]["ready"] is True
+        assert report["blockers"] == []
 
     def test_missing_registry_blocks_readiness(self, tmp_path):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
@@ -646,7 +641,8 @@ class TestHierarchicalInputGateReconciliationIssue5776:
     """After #5776, the readiness gate verifies the #5351 input contract is delivered.
 
     The input-gate deliverable (manifest + checker) and successor-release rows are present.
-    The real config remains fail-closed on its explicitly open #5351 dependency.
+    The real config no longer blocks on closed #5351, while its report remains
+    human-review-gated for claim promotion.
     """
 
     CONFIG_PATH = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
@@ -662,16 +658,16 @@ class TestHierarchicalInputGateReconciliationIssue5776:
         # The #5776 input-gate deliverable is present and evaluates the contract.
         assert "#5776 input-gate present" in criterion["detail"]
 
-    def test_open_dependency_remains_the_only_campaign_blocker(self):
+    def test_closed_dependencies_do_not_remain_campaign_blockers(self):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
             assess_campaign_readiness,
         )
 
         report = assess_campaign_readiness(self.CONFIG_PATH)
         joined = " ".join(report["blockers"])
-        assert "#5351" in joined
+        assert "#5351" not in joined
         assert "#4364" not in joined
-        assert "successor-release typed-ledger rows" in joined
+        assert joined == ""
 
     def test_gate_still_fails_closed_with_input_gate_present(self):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
@@ -679,8 +675,8 @@ class TestHierarchicalInputGateReconciliationIssue5776:
         )
 
         report = assess_campaign_readiness(self.CONFIG_PATH)
-        assert report["ready"] is False
-        assert report["criteria"]["dependencies_resolved"]["ready"] is False
+        assert report["ready"] is True
+        assert report["criteria"]["dependencies_resolved"]["ready"] is True
         assert report["criteria"]["hierarchical_input_gate_reconciled"]["ready"] is True
 
     def test_assess_hierarchical_input_gate_function(self):
@@ -690,7 +686,7 @@ class TestHierarchicalInputGateReconciliationIssue5776:
 
         report = assess_hierarchical_input_gate(REPO_ROOT)
         assert report["input_gate_delivered"] is True
-        assert report["input_gate_status"] == "inputs_ready_analysis_not_run"
+        assert report["input_gate_status"] == "analysis_delivered_review_pending"
 
     def test_assess_hierarchical_input_gate_missing_manifest(self, tmp_path):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
@@ -710,14 +706,15 @@ class TestFreezeReadinessReceipt:
 
         receipt = freeze_receipt(REPO_ROOT)
         assert receipt["issue"] == 5355
-        assert receipt["ready"] is False
+        assert receipt["ready"] is True
         assert receipt["hierarchical_input_gate"]["present"] is True
-        assert receipt["hierarchical_input_gate"]["status"] == "inputs_ready_analysis_not_run"
-        assert receipt["input_gate_consistent_with_audit"] is False
+        assert receipt["hierarchical_input_gate"]["status"] == "analysis_delivered_review_pending"
+        assert receipt["input_gate_consistent_with_audit"] is True
         assert receipt["campaign_run_status"] == "not_run"
         joined = " ".join(receipt["readiness_blockers"])
-        assert "#5351" in joined
+        assert "#5351" not in joined
         assert "#4364" not in joined
+        assert receipt["analysis_claim_gate"]["status"] == "blocked_review_pending"
 
     def test_receipt_writes_deterministic_artifact(self, tmp_path):
         from scripts.validation.freeze_issue_5355_factorial_readiness_receipt import (

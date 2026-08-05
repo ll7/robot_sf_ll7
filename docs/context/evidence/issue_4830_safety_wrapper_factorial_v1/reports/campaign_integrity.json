@@ -1,0 +1,9 @@
+{
+  "schema_version": "benchmark-camera-ready-integrity.v1",
+  "status": "valid",
+  "benchmark_success_allowed": true,
+  "expected_identity_count": 144,
+  "checked_arm_count": 6,
+  "blockers": [],
+  "claim_boundary": "A derived clean slice is diagnostic-only unless it was predeclared and provenance-complete."
+}

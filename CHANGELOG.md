@@ -9,6 +9,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #6154 release 0.0.5 evidence bundle.** Assembled the draft release
+  evidence bundle from the three reverified frozen candidates (Issue #6153):
+  Issue #5034 control-action-latency metric evidence, Issue #5305 certified
+  adversarial archive (17 entries), and Issue #5592 cross-matrix preregistration.
+  Issue #5416 is excluded because its current acceptance checker is blocked. The bundle
+  includes per-candidate reference manifests, SHA-256 checksums, release
+  checksum manifest (`configs/releases/release_0_0_5_checksum_manifest.yaml`),
+  preflight checklist (`configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml`),
+  and catalog registration. Zenodo concept DOI: 10.5281/zenodo.19482025. See
+  `docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md` for
+  plain-language summary and verification commands. It does not publish a tag,
+  GitHub Release, or Zenodo version.
+
+* **repo-hygiene #6321: publish and register legacy `model/` checkpoints as durable
+  artifacts (Phase A of #6268, additive).** Every tracked legacy binary checkpoint under `model/`
+  that previously had no durable registry/release provenance is now published as a byte-identical
+  GitHub Release asset under the dated, checksum-pinned tag
+  `artifact/legacy-models-2026-07-registry-v1`, and registered in `model/registry.yaml` with an
+  `version: v1` registry pin, SHA-256 checksum, `size_bytes`, a `github_release` pointer, and
+  `benchmark_promotion.claim_boundary: legacy_non_track`. Scope: 9 single-file PPO/Stable-Baselines3
+  zip checkpoints plus the GA3C-CADRL (IROS18) TensorFlow triplet published as one coherent
+  `.tar.gz` bundle = 10 checkpoints (12 binary files). Nothing is deleted, moved, renamed, or
+  byte-modified. Single-file registry `local_path` values name ignored `output/model_cache/`
+  release-cache targets; GA3C retains its existing in-tree `.meta` checkpoint path because
+  SA-CADRL requires the adjacent TensorFlow checkpoint files. Existing hardcoded in-tree load paths
+  (`configs/baselines/ppo.yaml`,
+  `robot_sf/baselines/ppo.py`, `robot_sf/planner/socnav.py`, `robot_sf/benchmark/doctor.py`) stay
+  unchanged in this Phase-A publication slice.
+  `scripts/validation/check_legacy_ppo_snapshot_parity.py` resolves durable single-file checkpoints
+  through `resolve_model_path` during the explicit release-hydration check, downloads the GA3C
+  bundle separately to preserve its checkpoint-prefix resolver contract, and byte-matches recorded
+  checksums; the default inventory remains cheap and validates in-tree sources. The four root-local
+  PPO snapshots that were previously
+  `unsupported_local_only` flip to `supported`/verified (the guard mechanism is retained, not
+  bypassed). Byte-identity was verified by downloading each published asset and confirming its
+  SHA-256 equals the in-tree blob SHA-256. These are non-benchmark legacy checkpoints retained for
+  traceability and local debugging; they are **not benchmark evidence**.
+* **issue #6158 topology-parallel nonlinear model predictive control (NMPC) offline verdict
+  (#5310 analysis child).** New
+  `scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py`
+  diagnostic validator that exercises the merged #6152 prototype
+  (`robot_sf/planner/topology_parallel_nmpc.py`, executed unchanged) against the eight
+  required gates and records exactly one of the four issue verdicts to
+  `docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md`.
+  Recorded verdict: `invalid_regression`. Gate 1 (K=1 legacy parity) failed: open-space
+  commands match exactly, but the pedestrian-conflict fixture returns an angular command
+  of approximately `-6.6e-8` rad/s for topology default versus `-2.47e-2` rad/s for
+  legacy, exceeding the 1e-6 tolerance. Gate 2 (materially distinct x-y-t rollouts) also
+  failed: across a diverse suite of controlled conflict fixtures, no fixture
+  separated every feasible hypothesis pair above epsilon (best minimum pairwise separation
+  ~1.9e-4 m vs epsilon 1e-3 m). Some individual pairs exceeded epsilon, but the shared
+  objective and only a weak +/-0.1 rad/s initial-guess bias did not produce a fully
+  materially distinct hypothesis set on the tested fixtures. Gate 3 (objective
+  invariance), 4 (deterministic ordering / feasible-first selection / two-tick
+  hysteresis), 6 (registration guard + builder), 7 (per-hypothesis p50/p95/max latency),
+  and 8 (PR #6170 +1238/-9, net +1229 audit) all pass. Gate 5 fails: infeasible,
+  deadline-exceeded, and solver error-status paths stop correctly, but a solver exception
+  propagates instead of returning the fail-closed stop command. The prototype's
+  `control_period_s` is 2.0 s (~20x the 100 ms real-time gate), so it is offline-only
+  and blocks downstream
+  real-time use. Diagnostic-only: no real-time, safety, benchmark-superiority,
+  default-planner-promotion, or #5423/STKP-eligibility claim. Parent #5310 state updated
+  as an offline prototype. The prototype, config, registration, and tests are unchanged.
+
 * **issue #6152 topology-parallel NMPC prototype (#5310 child).** New
   `robot_sf/planner/topology_parallel_nmpc.py` with
   `TopologyParallelNMPCPlannerAdapter` that evaluates 2-4 deterministic x-y-t

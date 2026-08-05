@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.evidence.writers import write_json, write_text
 
 DEFAULT_DECLARATIONS = Path("configs/validation/issue_4366_manuscript_asserted_numbers.yaml")
 DEFAULT_REPORT = Path("docs/context/evidence/issue_4366_manuscript_asserted_numbers_report.md")
@@ -361,7 +362,9 @@ def write_markdown_report(report: dict[str, Any], path: Path) -> None:
             )
         )
     lines.extend(["", "<!-- /AI-GENERATED -->", ""])
-    path.write_text("\n".join(lines), encoding="utf-8")
+    # The content already starts with the pinned 2026-07-04 review marker, so the
+    # shared writer passes it through byte-for-byte instead of prepending a new one.
+    write_text(path, "\n".join(lines))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -381,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
         write_markdown_report(report, args.report)
         if args.json_output is not None:
             args.json_output.parent.mkdir(parents=True, exist_ok=True)
-            args.json_output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+            write_json(args.json_output, report)
     except VerificationError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

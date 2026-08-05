@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
+from robot_sf.common.validation import _require_finite_coerce as _require_finite
+
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -181,24 +183,6 @@ class ActuatorFeasibilityReport:
 # ---------------------------------------------------------------------------
 # Input validation helpers
 # ---------------------------------------------------------------------------
-
-
-def _require_finite(value: float, *, key: str) -> float:
-    """Raise ``ValueError`` if ``value`` is non-finite (NaN/inf).
-
-    Non-finite limits would silently corrupt threshold comparisons and could cause an
-    infeasible maneuver to be reported feasible. Reject them at the input boundary.
-
-    Returns:
-        The validated finite float value.
-    """
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{key} must be numeric") from exc
-    if not math.isfinite(numeric):
-        raise ValueError(f"{key} must be finite; got {value}")
-    return numeric
 
 
 def _as_float2d(name: str, array: NDArray[np.floating] | object) -> NDArray[np.floating]:

@@ -13,13 +13,14 @@ from typing import TYPE_CHECKING, Any
 
 import gymnasium
 import numpy as np
-import torch
 from gymnasium import spaces
 
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_angle
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    import torch
 
 
 _DEFAULT_REPO_ROOT = Path("output/repos/SoNIC-Social-Nav")
@@ -302,6 +303,8 @@ class SonicCrowdNavAdapter:
                 f"{self.checkpoint_path}. Download or select an available upstream checkpoint."
             )
 
+        import torch  # noqa: PLC0415
+
         self._device = torch.device(self.config.device)
         with _sonic_import_context(self.repo_root):
             _args_mod, config_mod, model_mod, args = _load_model_modules(self.model_name)
@@ -398,9 +401,11 @@ class SonicCrowdNavAdapter:
             }
         )
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset recurrent state and masks for one deterministic rollout."""
         del seed
+        import torch  # noqa: PLC0415
+
         self._hidden_state = {
             "human_node_rnn": torch.zeros(
                 (1, 1, self._policy.base.human_node_rnn_size),
@@ -502,6 +507,8 @@ class SonicCrowdNavAdapter:
             "detected_human_num": np.asarray([float(detected_human_num)], dtype=np.float32),
             "aggressiveness_factor": np.zeros((1, 1), dtype=np.float32),
         }
+        import torch  # noqa: PLC0415
+
         tensors = {
             key: torch.from_numpy(value).unsqueeze(0).to(self._device)
             for key, value in payload.items()
@@ -531,6 +538,8 @@ class SonicCrowdNavAdapter:
         if not math.isfinite(time_step) or time_step <= 0.0:
             raise ValueError(f"Invalid SoNIC time_step: {time_step}")
         obs_tensors, meta = self._build_model_inputs(observation, time_step=float(time_step))
+        import torch  # noqa: PLC0415
+
         # Hidden state must be initialized after reset()
         assert self._hidden_state is not None
         with torch.no_grad():
@@ -628,6 +637,10 @@ class SonicCrowdNavAdapter:
                 "SoNIC wrapper expected upstream_action_xy metadata with two components."
             )
         return float(velocity_world[0]), float(velocity_world[1])
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "SonicCrowdNavAdapter"}
 
 
 __all__ = [

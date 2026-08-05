@@ -15,6 +15,7 @@ _REQUIRED_CANDIDATES = (
     "proxemic_conservative",
     "fast_progress_static_escape",
 )
+_DEFAULT_DENSE_PED_COUNT = 4
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ class PlannerSelectorV2DiagnosticConfig:
         "docs/context/issue_1608_seed_sensitivity_analysis.md",
         "docs/context/issue_1692_topology_hypothesis_probe.md",
     )
-    dense_ped_count: int = 4
+    dense_ped_count: int = _DEFAULT_DENSE_PED_COUNT
     near_field_distance_m: float = 2.3
     comfort_distance_m: float = 1.05
     baseline_candidate: str = "baseline"
@@ -122,7 +123,7 @@ def build_planner_selector_v2_diagnostic_config(
                 "docs/context/issue_1692_topology_hypothesis_probe.md",
             ),
         ),
-        dense_ped_count=int(selector_raw.get("dense_ped_count", 4)),
+        dense_ped_count=int(selector_raw.get("dense_ped_count", _DEFAULT_DENSE_PED_COUNT)),
         near_field_distance_m=float(selector_raw.get("near_field_distance_m", 2.3)),
         comfort_distance_m=float(selector_raw.get("comfort_distance_m", 1.05)),
         baseline_candidate=str(selector_raw.get("baseline_candidate", "baseline")),
@@ -167,8 +168,9 @@ class PlannerSelectorV2DiagnosticAdapter:
             if callable(bind):
                 bind(env)
 
-    def reset(self) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear selector diagnostics and reset all child planners."""
+        del seed
         self._selected_candidate_counts.clear()
         self._trigger_reason_counts.clear()
         self._steps = 0

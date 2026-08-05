@@ -15,11 +15,12 @@ from typing import TYPE_CHECKING, Any
 
 import gymnasium
 import numpy as np
-import torch
 from gymnasium import spaces
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    import torch
 
 
 _DEFAULT_MODEL_DIR = Path("output/external_checkpoints/crowdnav_height_extracted/HEIGHT/HEIGHT")
@@ -183,214 +184,309 @@ def _load_config_class(config_path: Path) -> Any:
     return config_class
 
 
+_HEIGHT_IMPORT_PREFIXES = ("crowd_nav", "crowd_sim", "training")
+
+
+def _is_height_prefixed_module(name: str, prefixes: tuple[str, ...]) -> bool:
+    """Return ``True`` when a module name belongs to the upstream checkout namespace."""
+    return any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes)
+
+
+def _clear_height_prefixed_modules(prefixes: tuple[str, ...]) -> None:
+    """Drop cached upstream modules so the checkout re-imports cleanly."""
+    for name in list(sys.modules):
+        if _is_height_prefixed_module(name, prefixes):
+            sys.modules.pop(name, None)
+
+
+def _inject_gym_aliases(injected_modules: set[str]) -> None:
+    """Alias ``gymnasium`` as legacy ``gym`` so upstream imports resolve."""
+    if "gym" in sys.modules:
+        return
+    sys.modules["gym"] = gymnasium
+    sys.modules["gym.spaces"] = gymnasium.spaces
+    sys.modules["gym.spaces.box"] = importlib.import_module("gymnasium.spaces.box")
+    sys.modules["gym.spaces.dict"] = importlib.import_module("gymnasium.spaces.dict")
+    injected_modules.update({"gym", "gym.spaces", "gym.spaces.box", "gym.spaces.dict"})
+
+
+def _make_baselines_bench_module() -> ModuleType:
+    """Create the ``baselines.bench`` shim with a minimal Monitor.
+
+    Returns:
+        The ``baselines.bench`` shim module.
+    """
+    bench = ModuleType("baselines.bench")
+
+    class _Monitor:
+        """Minimal OpenAI Baselines Monitor shim for upstream imports."""
+
+        def __init__(self, env, *_args, **_kwargs):
+            """Store wrapped environment while accepting unused Monitor args."""
+            self.env = env
+
+        def __getattr__(self, name):
+            """Forward unknown attributes to the wrapped environment.
+
+            Returns:
+                Attribute value from the wrapped environment.
+            """
+            return getattr(self.env, name)
+
+    bench.Monitor = _Monitor
+    return bench
+
+
+def _make_baselines_atari_wrappers_module() -> ModuleType:
+    """Create the ``baselines.common.atari_wrappers`` shim.
+
+    Returns:
+        The ``baselines.common.atari_wrappers`` shim module.
+    """
+    atari_wrappers = ModuleType("baselines.common.atari_wrappers")
+    atari_wrappers.make_atari = lambda env_id: env_id
+    atari_wrappers.wrap_deepmind = lambda env: env
+    return atari_wrappers
+
+
+def _make_baselines_vec_env_module() -> tuple[ModuleType, ModuleType]:
+    """Create the ``baselines.common.vec_env`` shim and its nested dummy-vec-env shim.
+
+    Returns:
+        The ``vec_env`` shim module and its nested ``dummy_vec_env`` shim module.
+    """
+    vec_env = ModuleType("baselines.common.vec_env")
+
+    class _VecEnvWrapper:
+        """Minimal VecEnvWrapper shim carrying the wrapped vector env."""
+
+        def __init__(self, venv, observation_space=None):
+            """Store vector env and optional observation space metadata."""
+            self.venv = venv
+            self.observation_space = observation_space
+
+    class _VecEnv:
+        """Minimal VecEnv shim exposing space and environment-count fields."""
+
+        def __init__(self, num_envs, observation_space, action_space):
+            """Store vector-env sizing and space metadata."""
+            self.num_envs = num_envs
+            self.observation_space = observation_space
+            self.action_space = action_space
+
+    class _CloudpickleWrapper:
+        """Compatibility wrapper matching Baselines' constructor shape."""
+
+        def __init__(self, x):
+            """Store the wrapped callable/object for upstream code paths."""
+            self.x = x
+
+    def _clear_mpi_env_vars():
+        """Return a no-op context manager for Baselines MPI cleanup hooks."""
+        return nullcontext()
+
+    class _DummyVecEnv:
+        """Single-process vector-env shim sufficient for CrowdNav imports."""
+
+        def __init__(self, env_fns):
+            """Instantiate wrapped environments from callables."""
+            self.envs = [fn() for fn in env_fns]
+            self.num_envs = len(self.envs)
+            self.observation_space = self.envs[0].observation_space
+            self.action_space = self.envs[0].action_space
+
+        def reset(self) -> Any:
+            """Reset the first wrapped environment.
+
+            Returns:
+                Observation returned by the wrapped environment.
+            """
+            return self.envs[0].reset()
+
+        def step_async(self, _actions) -> None:
+            """Accept asynchronous-step calls without scheduling work."""
+            return None
+
+        def step_wait(self) -> None:
+            """Raise because the import shim does not execute vector steps."""
+            raise NotImplementedError
+
+    vec_env.VecEnvWrapper = _VecEnvWrapper
+    vec_env.VecEnv = _VecEnv
+    vec_env.CloudpickleWrapper = _CloudpickleWrapper
+    vec_env.clear_mpi_env_vars = _clear_mpi_env_vars
+    dummy_vec_env = ModuleType("baselines.common.vec_env.dummy_vec_env")
+    dummy_vec_env.DummyVecEnv = _DummyVecEnv
+    vec_env.dummy_vec_env = dummy_vec_env
+    return vec_env, dummy_vec_env
+
+
+def _make_baselines_vec_normalize_module() -> ModuleType:
+    """Create the ``baselines.common.vec_env.vec_normalize`` shim.
+
+    Returns:
+        The ``baselines.common.vec_env.vec_normalize`` shim module.
+    """
+    vec_normalize = ModuleType("baselines.common.vec_env.vec_normalize")
+
+    class _VecNormalize:
+        """Minimal VecNormalize shim exposing the training flag."""
+
+        def __init__(self, *args, **kwargs):
+            """Accept unused constructor args and default to training mode."""
+            del args, kwargs
+            self.training = True
+
+    vec_normalize.VecNormalize = _VecNormalize
+    return vec_normalize
+
+
+def _make_baselines_vec_env_util_module() -> ModuleType:
+    """Create the ``baselines.common.vec_env.util`` shim.
+
+    Returns:
+        The ``baselines.common.vec_env.util`` shim module.
+    """
+    util = ModuleType("baselines.common.vec_env.util")
+
+    def _obs_to_dict(obs):
+        """Pass through observations for Baselines utility compatibility.
+
+        Returns:
+            Original observation payload.
+        """
+        return obs
+
+    def _dict_to_obs(obs):
+        """Pass through dict observations for Baselines utility compatibility.
+
+        Returns:
+            Original observation payload.
+        """
+        return obs
+
+    def _obs_space_info(space):
+        """Extract keys, shapes, and dtypes from dict-like spaces.
+
+        Returns:
+            tuple[list, dict, dict]: Space keys, shape mapping, and dtype mapping.
+        """
+        if hasattr(space, "spaces"):
+            keys = list(space.spaces.keys())
+            shapes = {k: space.spaces[k].shape for k in keys}
+            dtypes = {k: space.spaces[k].dtype for k in keys}
+            return keys, shapes, dtypes
+        return [], {}, {}
+
+    util.obs_to_dict = _obs_to_dict
+    util.dict_to_obs = _dict_to_obs
+    util.obs_space_info = _obs_space_info
+    return util
+
+
+def _make_baselines_logger_module() -> ModuleType:
+    """Create the ``baselines.logger`` shim with no-op logging hooks.
+
+    Returns:
+        The ``baselines.logger`` shim module.
+    """
+    logger = ModuleType("baselines.logger")
+    logger.log = lambda *args, **kwargs: None
+    logger.warn = lambda *args, **kwargs: None
+    logger.scoped_configure = lambda *args, **kwargs: nullcontext()
+    return logger
+
+
+def _inject_baselines_shims(injected_modules: set[str]) -> None:
+    """Build and register the OpenAI Baselines shim tree for upstream imports."""
+    if "baselines" in sys.modules:
+        return
+    baselines = ModuleType("baselines")
+    bench = _make_baselines_bench_module()
+    common = ModuleType("baselines.common")
+    atari_wrappers = _make_baselines_atari_wrappers_module()
+    vec_env, dummy_vec_env = _make_baselines_vec_env_module()
+    vec_normalize = _make_baselines_vec_normalize_module()
+    util = _make_baselines_vec_env_util_module()
+    common.atari_wrappers = atari_wrappers
+    common.vec_env = vec_env
+    baselines.bench = bench
+    baselines.common = common
+    baselines.logger = _make_baselines_logger_module()
+    sys.modules["baselines"] = baselines
+    sys.modules["baselines.bench"] = bench
+    sys.modules["baselines.common"] = common
+    sys.modules["baselines.common.atari_wrappers"] = atari_wrappers
+    sys.modules["baselines.common.vec_env"] = vec_env
+    sys.modules["baselines.common.vec_env.dummy_vec_env"] = dummy_vec_env
+    sys.modules["baselines.common.vec_env.vec_normalize"] = vec_normalize
+    sys.modules["baselines.common.vec_env.vec_env"] = vec_env
+    sys.modules["baselines.common.vec_env.util"] = util
+    sys.modules["baselines.logger"] = baselines.logger
+    injected_modules.update(
+        {
+            "baselines",
+            "baselines.bench",
+            "baselines.common",
+            "baselines.common.atari_wrappers",
+            "baselines.common.vec_env",
+            "baselines.common.vec_env.dummy_vec_env",
+            "baselines.common.vec_env.vec_normalize",
+            "baselines.common.vec_env.vec_env",
+            "baselines.common.vec_env.util",
+            "baselines.logger",
+        }
+    )
+
+
+def _inject_torchvision_shims(injected_modules: set[str]) -> None:
+    """Provide a stub ``torchvision.models`` so upstream imports resolve."""
+    if "torchvision" in sys.modules:
+        return
+    torchvision = ModuleType("torchvision")
+    torchvision_models = ModuleType("torchvision.models")
+    torchvision.models = torchvision_models  # type: ignore[attr-defined]
+    torchvision_models.resnet18 = lambda *args, **kwargs: None
+    torchvision_models.resnet34 = lambda *args, **kwargs: None
+    torchvision_models.resnet50 = lambda *args, **kwargs: None
+    sys.modules["torchvision"] = torchvision
+    sys.modules["torchvision.models"] = torchvision_models
+    injected_modules.update({"torchvision", "torchvision.models"})
+
+
+def _inject_training_package(repo_root: Path, injected_modules: set[str]) -> None:
+    """Register the upstream ``training`` package when the checkout provides it."""
+    training_root = repo_root / "training"
+    if not training_root.exists() or "training" in sys.modules:
+        return
+    training_pkg = ModuleType("training")
+    training_pkg.__path__ = [str(training_root)]  # type: ignore[attr-defined]
+    sys.modules["training"] = training_pkg
+    injected_modules.add("training")
+
+
 @contextmanager
-def _height_import_context(repo_root: Path) -> Iterator[None]:  # noqa: C901, PLR0915
+def _height_import_context(repo_root: Path) -> Iterator[None]:
     """Temporarily expose the upstream checkout and clear conflicting cached modules."""
     repo_str = str(repo_root)
     original_path = list(sys.path)
-    prefixes = ("crowd_nav", "crowd_sim", "training")
+    prefixes = _HEIGHT_IMPORT_PREFIXES
     injected_modules: set[str] = set()
     original_modules = {
         name: module
         for name, module in sys.modules.items()
-        if any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes)
+        if _is_height_prefixed_module(name, prefixes)
     }
     sys.path.insert(0, repo_str)
     try:
-        for name in list(sys.modules):
-            if any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes):
-                sys.modules.pop(name, None)
-        if "gym" not in sys.modules:
-            sys.modules["gym"] = gymnasium
-            sys.modules["gym.spaces"] = gymnasium.spaces
-            sys.modules["gym.spaces.box"] = importlib.import_module("gymnasium.spaces.box")
-            sys.modules["gym.spaces.dict"] = importlib.import_module("gymnasium.spaces.dict")
-            injected_modules.update({"gym", "gym.spaces", "gym.spaces.box", "gym.spaces.dict"})
-        if "baselines" not in sys.modules:
-            baselines = ModuleType("baselines")
-            bench = ModuleType("baselines.bench")
-
-            class _Monitor:
-                """Minimal OpenAI Baselines Monitor shim for upstream imports."""
-
-                def __init__(self, env, *_args, **_kwargs):
-                    """Store wrapped environment while accepting unused Monitor args."""
-                    self.env = env
-
-                def __getattr__(self, name):
-                    """Forward unknown attributes to the wrapped environment.
-
-                    Returns:
-                        Attribute value from the wrapped environment.
-                    """
-                    return getattr(self.env, name)
-
-            bench.Monitor = _Monitor
-            common = ModuleType("baselines.common")
-            atari_wrappers = ModuleType("baselines.common.atari_wrappers")
-            atari_wrappers.make_atari = lambda env_id: env_id
-            atari_wrappers.wrap_deepmind = lambda env: env
-            vec_env = ModuleType("baselines.common.vec_env")
-
-            class _VecEnvWrapper:
-                """Minimal VecEnvWrapper shim carrying the wrapped vector env."""
-
-                def __init__(self, venv, observation_space=None):
-                    """Store vector env and optional observation space metadata."""
-                    self.venv = venv
-                    self.observation_space = observation_space
-
-            class _VecEnv:
-                """Minimal VecEnv shim exposing space and environment-count fields."""
-
-                def __init__(self, num_envs, observation_space, action_space):
-                    """Store vector-env sizing and space metadata."""
-                    self.num_envs = num_envs
-                    self.observation_space = observation_space
-                    self.action_space = action_space
-
-            class _CloudpickleWrapper:
-                """Compatibility wrapper matching Baselines' constructor shape."""
-
-                def __init__(self, x):
-                    """Store the wrapped callable/object for upstream code paths."""
-                    self.x = x
-
-            def _clear_mpi_env_vars():
-                """Return a no-op context manager for Baselines MPI cleanup hooks."""
-                return nullcontext()
-
-            class _DummyVecEnv:
-                """Single-process vector-env shim sufficient for CrowdNav imports."""
-
-                def __init__(self, env_fns):
-                    """Instantiate wrapped environments from callables."""
-                    self.envs = [fn() for fn in env_fns]
-                    self.num_envs = len(self.envs)
-                    self.observation_space = self.envs[0].observation_space
-                    self.action_space = self.envs[0].action_space
-
-                def reset(self):
-                    """Reset the first wrapped environment.
-
-                    Returns:
-                        Observation returned by the wrapped environment.
-                    """
-                    return self.envs[0].reset()
-
-                def step_async(self, _actions):
-                    """Accept asynchronous-step calls without scheduling work."""
-                    return None
-
-                def step_wait(self):
-                    """Raise because the import shim does not execute vector steps."""
-                    raise NotImplementedError
-
-            vec_env.VecEnvWrapper = _VecEnvWrapper
-            vec_env.VecEnv = _VecEnv
-            vec_env.CloudpickleWrapper = _CloudpickleWrapper
-            vec_env.clear_mpi_env_vars = _clear_mpi_env_vars
-            dummy_vec_env = ModuleType("baselines.common.vec_env.dummy_vec_env")
-            dummy_vec_env.DummyVecEnv = _DummyVecEnv
-            vec_env.dummy_vec_env = dummy_vec_env
-            vec_normalize = ModuleType("baselines.common.vec_env.vec_normalize")
-
-            class _VecNormalize:
-                """Minimal VecNormalize shim exposing the training flag."""
-
-                def __init__(self, *args, **kwargs):
-                    """Accept unused constructor args and default to training mode."""
-                    del args, kwargs
-                    self.training = True
-
-            vec_normalize.VecNormalize = _VecNormalize
-            util = ModuleType("baselines.common.vec_env.util")
-
-            def _obs_to_dict(obs):
-                """Pass through observations for Baselines utility compatibility.
-
-                Returns:
-                    Original observation payload.
-                """
-                return obs
-
-            def _dict_to_obs(obs):
-                """Pass through dict observations for Baselines utility compatibility.
-
-                Returns:
-                    Original observation payload.
-                """
-                return obs
-
-            def _obs_space_info(space):
-                """Extract keys, shapes, and dtypes from dict-like spaces.
-
-                Returns:
-                    tuple[list, dict, dict]: Space keys, shape mapping, and dtype mapping.
-                """
-                if hasattr(space, "spaces"):
-                    keys = list(space.spaces.keys())
-                    shapes = {k: space.spaces[k].shape for k in keys}
-                    dtypes = {k: space.spaces[k].dtype for k in keys}
-                    return keys, shapes, dtypes
-                return [], {}, {}
-
-            util.obs_to_dict = _obs_to_dict
-            util.dict_to_obs = _dict_to_obs
-            util.obs_space_info = _obs_space_info
-            common.atari_wrappers = atari_wrappers
-            common.vec_env = vec_env
-            baselines.bench = bench
-            baselines.common = common
-            baselines.logger = ModuleType("baselines.logger")
-            baselines.logger.log = lambda *args, **kwargs: None
-            baselines.logger.warn = lambda *args, **kwargs: None
-            baselines.logger.scoped_configure = lambda *args, **kwargs: nullcontext()
-            sys.modules["baselines"] = baselines
-            sys.modules["baselines.bench"] = bench
-            sys.modules["baselines.common"] = common
-            sys.modules["baselines.common.atari_wrappers"] = atari_wrappers
-            sys.modules["baselines.common.vec_env"] = vec_env
-            sys.modules["baselines.common.vec_env.dummy_vec_env"] = dummy_vec_env
-            sys.modules["baselines.common.vec_env.vec_normalize"] = vec_normalize
-            sys.modules["baselines.common.vec_env.vec_env"] = vec_env
-            sys.modules["baselines.common.vec_env.util"] = util
-            sys.modules["baselines.logger"] = baselines.logger
-            injected_modules.update(
-                {
-                    "baselines",
-                    "baselines.bench",
-                    "baselines.common",
-                    "baselines.common.atari_wrappers",
-                    "baselines.common.vec_env",
-                    "baselines.common.vec_env.dummy_vec_env",
-                    "baselines.common.vec_env.vec_normalize",
-                    "baselines.common.vec_env.vec_env",
-                    "baselines.common.vec_env.util",
-                    "baselines.logger",
-                }
-            )
-        if "torchvision" not in sys.modules:
-            torchvision = ModuleType("torchvision")
-            torchvision_models = ModuleType("torchvision.models")
-            torchvision.models = torchvision_models  # type: ignore[attr-defined]
-            torchvision_models.resnet18 = lambda *args, **kwargs: None
-            torchvision_models.resnet34 = lambda *args, **kwargs: None
-            torchvision_models.resnet50 = lambda *args, **kwargs: None
-            sys.modules["torchvision"] = torchvision
-            sys.modules["torchvision.models"] = torchvision_models
-            injected_modules.update({"torchvision", "torchvision.models"})
-        training_root = repo_root / "training"
-        if training_root.exists() and "training" not in sys.modules:
-            training_pkg = ModuleType("training")
-            training_pkg.__path__ = [str(training_root)]  # type: ignore[attr-defined]
-            sys.modules["training"] = training_pkg
-            injected_modules.add("training")
+        _clear_height_prefixed_modules(prefixes)
+        _inject_gym_aliases(injected_modules)
+        _inject_baselines_shims(injected_modules)
+        _inject_torchvision_shims(injected_modules)
+        _inject_training_package(repo_root, injected_modules)
         yield
     finally:
-        for name in list(sys.modules):
-            if any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes):
-                sys.modules.pop(name, None)
+        _clear_height_prefixed_modules(prefixes)
         for name in injected_modules:
             sys.modules.pop(name, None)
         sys.modules.update(original_modules)
@@ -407,6 +503,8 @@ class CrowdNavHeightAdapter:
 
     def __init__(self, config: CrowdNavHeightConfig | None = None) -> None:
         """Initialize the adapter and load the upstream checkpoint."""
+        import torch  # noqa: PLC0415
+
         self.config = config or CrowdNavHeightConfig()
         self.repo_root = self.config.repo_root.resolve()
         self.model_dir = self.config.model_dir.resolve()
@@ -554,9 +652,11 @@ class CrowdNavHeightAdapter:
             return
         self._obstacle_segments = arr.reshape(-1, 4)[:, :4]
 
-    def reset(self, seed: int | None = None) -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Reset recurrent state and upstream Turtlebot desired velocities."""
         del seed
+        import torch  # noqa: PLC0415
+
         hidden_size = int(self._checkpoint_config.SRNN.human_node_rnn_size)
         self._hidden_state = {
             "rnn": torch.zeros((1, 1, hidden_size), dtype=torch.float32, device=self._device)
@@ -873,6 +973,8 @@ class CrowdNavHeightAdapter:
             "obstacle_num": np.asarray([float(obstacle_num)], dtype=np.float32),
             "point_clouds": np.asarray([point_clouds], dtype=np.float32),
         }
+        import torch  # noqa: PLC0415
+
         self._last_model_inputs = {
             key: np.array(value, copy=True) for key, value in payload.items()
         }
@@ -907,6 +1009,8 @@ class CrowdNavHeightAdapter:
                 f"of {expected_time_step:.6f}s, got {float(time_step):.6f}s"
             )
         obs_tensors, meta = self._build_model_inputs(observation)
+        import torch  # noqa: PLC0415
+
         # Hidden state must be initialized after reset()
         assert self._hidden_state is not None
         with torch.no_grad():
@@ -984,6 +1088,10 @@ class CrowdNavHeightAdapter:
         dt = float(np.asarray(dt_source, dtype=float).reshape(-1)[0])
         linear, angular, _meta = self.act(observation, time_step=dt)
         return linear, angular
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "CrowdNavHeightAdapter"}
 
 
 __all__ = [

@@ -8,6 +8,7 @@ command. The executed control is the first action of the best sampled sequence.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from typing import Any
 
 import numpy as np
 
@@ -17,6 +18,11 @@ from robot_sf.planner.socnav import (
     PredictionPlannerAdapter,
     SocNavPlannerConfig,
 )
+
+_DEFAULT_ITERATIONS = 4
+_DEFAULT_GOAL_PROGRESS_WEIGHT = 6.0
+_DEFAULT_CLEARANCE_WEIGHT = 3.0
+_DEFAULT_PROGRESS_ESCAPE_DISTANCE_M = 1.2
 
 
 def _wrap_angle_batch(angle: np.ndarray) -> np.ndarray:
@@ -37,7 +43,7 @@ class PredictiveMPPIConfig:
     horizon_steps: int = 12
     rollout_dt: float = 0.2
     sample_count: int = 128
-    iterations: int = 4
+    iterations: int = _DEFAULT_ITERATIONS
     elite_fraction: float = 0.2
     init_linear_std: float = 0.35
     init_angular_std: float = 0.65
@@ -54,16 +60,16 @@ class PredictiveMPPIConfig:
     first_step_ped_clearance: float = 0.75
     first_step_obstacle_clearance: float = 0.35
     invalid_sequence_cost: float = 1e6
-    goal_progress_weight: float = 6.0
+    goal_progress_weight: float = _DEFAULT_GOAL_PROGRESS_WEIGHT
     heading_weight: float = 0.8
-    clearance_weight: float = 3.0
+    clearance_weight: float = _DEFAULT_CLEARANCE_WEIGHT
     obstacle_weight: float = 1.6
     smoothness_weight: float = 0.2
     ttc_weight: float = 0.45
     occupancy_weight: float = 0.35
     anchor_bias_weight: float = 0.08
     progress_escape_enabled: bool = True
-    progress_escape_distance: float = 1.2
+    progress_escape_distance: float = _DEFAULT_PROGRESS_ESCAPE_DISTANCE_M
     progress_escape_speed: float = 0.55
     progress_escape_heading_gain: float = 1.5
 
@@ -647,6 +653,10 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     action = forced_action
         return float(action[0]), float(action[1])
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "PredictiveMPPIAdapter"}
+
 
 def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPPIConfig:
     """Build :class:`PredictiveMPPIConfig` from a root mapping payload.
@@ -664,7 +674,7 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
         horizon_steps=int(cfg.get("horizon_steps", 12)),
         rollout_dt=float(cfg.get("rollout_dt", socnav.predictive_rollout_dt)),
         sample_count=int(cfg.get("sample_count", 128)),
-        iterations=int(cfg.get("iterations", 4)),
+        iterations=int(cfg.get("iterations", _DEFAULT_ITERATIONS)),
         elite_fraction=float(cfg.get("elite_fraction", 0.2)),
         init_linear_std=float(cfg.get("init_linear_std", 0.35)),
         init_angular_std=float(cfg.get("init_angular_std", 0.65)),
@@ -681,16 +691,18 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
         first_step_ped_clearance=float(cfg.get("first_step_ped_clearance", 0.75)),
         first_step_obstacle_clearance=float(cfg.get("first_step_obstacle_clearance", 0.35)),
         invalid_sequence_cost=float(cfg.get("invalid_sequence_cost", 1e6)),
-        goal_progress_weight=float(cfg.get("goal_progress_weight", 6.0)),
+        goal_progress_weight=float(cfg.get("goal_progress_weight", _DEFAULT_GOAL_PROGRESS_WEIGHT)),
         heading_weight=float(cfg.get("heading_weight", 0.8)),
-        clearance_weight=float(cfg.get("clearance_weight", 3.0)),
+        clearance_weight=float(cfg.get("clearance_weight", _DEFAULT_CLEARANCE_WEIGHT)),
         obstacle_weight=float(cfg.get("obstacle_weight", 1.6)),
         smoothness_weight=float(cfg.get("smoothness_weight", 0.2)),
         ttc_weight=float(cfg.get("ttc_weight", 0.45)),
         occupancy_weight=float(cfg.get("occupancy_weight", 0.35)),
         anchor_bias_weight=float(cfg.get("anchor_bias_weight", 0.08)),
         progress_escape_enabled=bool(cfg.get("progress_escape_enabled", True)),
-        progress_escape_distance=float(cfg.get("progress_escape_distance", 1.2)),
+        progress_escape_distance=float(
+            cfg.get("progress_escape_distance", _DEFAULT_PROGRESS_ESCAPE_DISTANCE_M)
+        ),
         progress_escape_speed=float(cfg.get("progress_escape_speed", 0.55)),
         progress_escape_heading_gain=float(cfg.get("progress_escape_heading_gain", 1.5)),
     )

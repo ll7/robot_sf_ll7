@@ -18,6 +18,7 @@ from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
 _DEFAULT_MAX_ANGULAR_SPEED = 1.2
 _DEFAULT_MAX_LINEAR_SPEED = 1.2
+_DEFAULT_OBSTACLE_CLEARANCE_WEIGHT = 1.2
 
 
 def _safe_mean(values: np.ndarray) -> float:
@@ -44,7 +45,7 @@ class RiskDWAPlannerConfig:
     goal_progress_weight: float = _DEFAULT_GOAL_PROGRESS_WEIGHT
     heading_weight: float = 0.8
     ped_clearance_weight: float = 1.6
-    obstacle_clearance_weight: float = 1.2
+    obstacle_clearance_weight: float = _DEFAULT_OBSTACLE_CLEARANCE_WEIGHT
     smoothness_weight: float = 0.15
     ttc_weight: float = 0.3
 
@@ -402,8 +403,11 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                 if escape_score > best_score:
                     best_score = escape_score
                     best_cmd = (escape_v, escape_w)
-
         return best_cmd
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return execution diagnostics."""
+        return {"planner_type": "RiskDWAPlannerAdapter"}
 
 
 def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
@@ -439,7 +443,9 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         goal_progress_weight=float(cfg.get("goal_progress_weight", _DEFAULT_GOAL_PROGRESS_WEIGHT)),
         heading_weight=float(cfg.get("heading_weight", 0.8)),
         ped_clearance_weight=float(cfg.get("ped_clearance_weight", 1.6)),
-        obstacle_clearance_weight=float(cfg.get("obstacle_clearance_weight", 1.2)),
+        obstacle_clearance_weight=float(
+            cfg.get("obstacle_clearance_weight", _DEFAULT_OBSTACLE_CLEARANCE_WEIGHT)
+        ),
         smoothness_weight=float(cfg.get("smoothness_weight", 0.15)),
         ttc_weight=float(cfg.get("ttc_weight", 0.3)),
         safe_distance=float(cfg.get("safe_distance", 0.35)),

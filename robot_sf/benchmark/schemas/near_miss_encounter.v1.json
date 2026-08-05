@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/near_miss_encounter.v1.json",
+  "title": "RobotSF Near-Miss Encounter Diagnostic (v1)",
+  "description": "Temporal grouping of explicitly qualified trace samples. This is diagnostic output, not calibrated safety evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "evidence_status",
+    "claim_boundary",
+    "profile",
+    "units",
+    "denominator",
+    "encounters",
+    "exclusions",
+    "missingness",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "near_miss_encounter.v1"
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "unavailable",
+        "no-qualifying-samples"
+      ]
+    },
+    "evidence_status": {
+      "const": "diagnostic-only"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "$ref": "#/$defs/profile"
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "time",
+        "distance",
+        "speed",
+        "encounter_duration",
+        "valid_exposure_duration"
+      ],
+      "properties": {
+        "time": {
+          "const": "s"
+        },
+        "distance": {
+          "const": "m"
+        },
+        "speed": {
+          "const": "m/s"
+        },
+        "encounter_duration": {
+          "const": "s"
+        },
+        "valid_exposure_duration": {
+          "const": "s"
+        }
+      }
+    },
+    "denominator": {
+      "$ref": "#/$defs/denominator"
+    },
+    "encounters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/encounter"
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/exclusion"
+      }
+    },
+    "missingness": {
+      "$ref": "#/$defs/missingness"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    }
+  },
+  "$defs": {
+    "non_negative_integer": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "non_negative_number_or_null": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "profile_id",
+        "qualification_rule",
+        "continuity_gap_s",
+        "distance_threshold_m",
+        "ttc_threshold_s",
+        "units"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "NearMissEncounterProfile.v1"
+        },
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "qualification_rule": {
+          "enum": [
+            "distance",
+            "ttc",
+            "distance_or_ttc"
+          ]
+        },
+        "continuity_gap_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "distance_threshold_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "ttc_threshold_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "units": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "distance",
+            "time",
+            "speed"
+          ],
+          "properties": {
+            "distance": {
+              "const": "m"
+            },
+            "time": {
+              "const": "s"
+            },
+            "speed": {
+              "const": "m/s"
+            }
+          }
+        }
+      }
+    },
+    "denominator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_unit",
+        "encounter_unit",
+        "input_sample_count",
+        "actor_count",
+        "qualifying_sample_count",
+        "encounter_count",
+        "valid_exposure_duration_s"
+      ],
+      "properties": {
+        "sample_unit": {
+          "const": "trace_sample"
+        },
+        "encounter_unit": {
+          "const": "encounter"
+        },
+        "input_sample_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "actor_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "qualifying_sample_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "encounter_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "valid_exposure_duration_s": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "encounter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "encounter_id",
+        "actor_id",
+        "start_time_s",
+        "end_time_s",
+        "duration_s",
+        "minimum_clearance_m",
+        "minimum_ttc_s",
+        "maximum_closing_speed_mps",
+        "minimum_pet_s",
+        "sample_count",
+        "valid_exposure_duration_s",
+        "termination_reason",
+        "contact_terminated",
+        "contact_status",
+        "contact_time_s",
+        "unavailable_fields",
+        "evidence_status"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "near_miss_encounter.v1"
+        },
+        "encounter_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actor_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_time_s": {
+          "type": "number"
+        },
+        "end_time_s": {
+          "type": "number"
+        },
+        "duration_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minimum_clearance_m": {
+          "$ref": "#/$defs/non_negative_number_or_null"
+        },
+        "minimum_ttc_s": {
+          "$ref": "#/$defs/non_negative_number_or_null"
+        },
+        "maximum_closing_speed_mps": {
+          "$ref": "#/$defs/non_negative_number_or_null"
+        },
+        "minimum_pet_s": {
+          "$ref": "#/$defs/non_negative_number_or_null"
+        },
+        "sample_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "valid_exposure_duration_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "termination_reason": {
+          "enum": [
+            "gap",
+            "invalid_exposure",
+            "contact",
+            "missing_qualification_fields",
+            "non_qualifying",
+            "trace_end"
+          ]
+        },
+        "contact_terminated": {
+          "type": "boolean"
+        },
+        "contact_status": {
+          "enum": [
+            "observed",
+            "not-observed",
+            "unavailable"
+          ]
+        },
+        "contact_time_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unavailable_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "evidence_status": {
+          "const": "diagnostic-only"
+        }
+      }
+    },
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actor_id",
+        "timestamp_s",
+        "source_index",
+        "reason",
+        "unavailable_fields"
+      ],
+      "properties": {
+        "actor_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestamp_s": {
+          "type": "number"
+        },
+        "source_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unavailable_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "missingness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field_counts",
+        "sample_exclusion_counts"
+      ],
+      "properties": {
+        "field_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/non_negative_integer"
+          }
+        },
+        "sample_exclusion_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/non_negative_integer"
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_commit",
+        "release_id",
+        "bundle_id",
+        "input_checksums",
+        "input_checksum_digest"
+      ],
+      "properties": {
+        "source_commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "release_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bundle_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_checksums": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "input_checksum_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

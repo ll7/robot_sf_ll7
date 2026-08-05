@@ -747,6 +747,176 @@ def test_stall_duration_requires_qualifying_contiguous_run() -> None:
     assert stall["speed_coverage"]["status"] == "complete"
 
 
+def test_zero_frame_canonical_interval_marks_derived_diagnostics_unavailable() -> None:
+    """A canonical interval with no sampled frames must not emit zero-valued diagnostics."""
+
+    trace_payload = _trace_payload()
+    encounter_report = _encounter_report(start_time_s=10.0, end_time_s=11.0)
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload),
+        encounter_report=encounter_report,
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    assert payload["diagnostics"]["coverage"]["frame_count"] == 0
+    assert payload["diagnostics"]["coverage"]["relative_interaction"]["status"] == "unavailable"
+    assert payload["diagnostics"]["threshold_exposure"]["status"] == "unavailable"
+    assert payload["diagnostics"]["threshold_exposure"]["duration_s"] is None
+    assert payload["diagnostics"]["stall"]["status"] == "unavailable"
+    assert payload["diagnostics"]["stall"]["speed_coverage"]["status"] == "unavailable"
+    assert payload["diagnostics"]["reversal_counts"]["status"] == "unavailable"
+    assert payload["diagnostics"]["reversal_counts"]["heading_reversal_count"] is None
+
+
+def test_reversal_counts_require_complete_heading_and_route_velocity() -> None:
+    """Reversal diagnostics should abstain when required route or heading signals are absent."""
+
+    missing_heading = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(nonfinite_heading_step=1))
+    )
+    assert missing_heading["diagnostics"]["reversal_counts"] == {
+        "profile_version": "worked_example_reversal_profile.v1",
+        "direction_semantics": "robot_heading_and_velocity_projection",
+        "status": "unavailable",
+        "reason": "missing_robot_heading",
+        "heading_reversal_count": None,
+        "velocity_reversal_count": None,
+    }
+
+    missing_route_velocity = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(missing_velocity_step=1)),
+        route=RouteSpec(
+            "r-main",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-fixture.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
+    )
+    assert missing_route_velocity["diagnostics"]["reversal_counts"]["status"] == "unavailable"
+    assert missing_route_velocity["diagnostics"]["reversal_counts"]["reason"] == (
+        "missing_robot_velocity"
+    )
+
+
+def test_focal_collision_scan_uses_declared_interval_not_sample_span() -> None:
+    """Later focal collisions inside declared bounds should beat earlier unrelated collisions."""
+
+    trace_payload = _trace_payload(collision_mode="ledger_unrelated_then_focal")
+    encounter_report = _encounter_report(start_time_s=0.10, end_time_s=0.17)
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload),
+        encounter_report=encounter_report,
+        encounter_report_input_checksum="0" * 64,
+    )
+    collision = next(
+        event
+        for event in payload["event_anchors"]
+        if event["event_type"] == "exact_collision_event"
+    )
+
+    assert collision["status"] == "available"
+    assert collision["collision_partner_id"] == "ped-a"
+    assert collision["time_s"] == pytest.approx(0.15)
+    assert collision["step"] == 1
+
+
+def test_route_frames_project_only_selected_focal_actor() -> None:
+    """Public route frames should carry selected focal projection, not contextual actors."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(actor_switch=True)),
+        route=RouteSpec(
+            "r-main",
+            (0.0, 0.0),
+            (10.0, 0.0),
+            "route-fixture.v1",
+            _route_checksum((0.0, 0.0), (10.0, 0.0)),
+        ),
+    )
+    route = payload["frames"][0]["route"]
+
+    assert route["focal_actor_status"] == "available"
+    assert route["focal_actor_s_m"] == pytest.approx(1.0)
+    assert route["focal_actor_n_m"] == pytest.approx(0.0)
+    assert "contextual_actors" not in route
+
+
+def test_source_and_pair_provenance_bind_trace_content_and_time_step() -> None:
+    """Process and pair records should expose deterministic raw-content receipts."""
+
+    left_payload = _trace_payload(trace_id="pair-left", planner_id="planner-a", seed=7)
+    right_payload = _trace_payload(trace_id="pair-right", planner_id="planner-b", seed=7)
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(left_payload),
+        pair_trace=simulation_trace_export_from_dict(right_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )
+
+    assert payload["source_trace"]["content_sha256"] == _canonical_trace_checksum(left_payload)
+    assert payload["source_trace"]["run_config_contract"]["status"] == "available"
+    assert payload["source_trace"]["run_config_contract"]["time_step_s"] == pytest.approx(0.1)
+    assert payload["pair_compatibility"]["provenance_gate"]["left_content_sha256"] == (
+        _canonical_trace_checksum(left_payload)
+    )
+    assert payload["pair_compatibility"]["provenance_gate"]["right_content_sha256"] == (
+        _canonical_trace_checksum(right_payload)
+    )
+
+    missing_step = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(time_step_s=None))
+    )
+    assert missing_step["source_trace"]["run_config_contract"] == {
+        "status": "unavailable",
+        "reason": "run_config_time_step_unavailable",
+    }
+
+
+def test_semantic_validator_rejects_forged_event_pair_and_source_records() -> None:
+    """Validator should reject forged inventory, terminal, pair anchor, and source receipts."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-left", planner_id="a", seed=7)
+        ),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(trace_id="pair-right", planner_id="b", seed=7)
+        ),
+        pair_comparison_grain="matched_planner_pair",
+    )
+
+    probes = [
+        (["event_anchors", 0, "event_type"], "terminal_event", "/event_anchors"),
+        (["event_anchors", 9, "status"], "available", "/event_anchors/9/status"),
+        (["event_anchors", 9, "time_s"], 0.4, "/event_anchors/9/time_s"),
+        (
+            ["event_anchors", 4, "collision_partner_id"],
+            "ped-b",
+            "/event_anchors/4/collision_partner_id",
+        ),
+        (["source_trace", "content_sha256"], "0" * 63, "/source_trace/content_sha256"),
+        (
+            ["pair_compatibility", "provenance_gate", "left_content_sha256"],
+            "0" * 63,
+            "/pair_compatibility/provenance_gate/left_content_sha256",
+        ),
+    ]
+    for target_path, value, expected_path in probes:
+        forged = deepcopy(payload)
+        _set_path(forged, target_path, value)
+        with pytest.raises(Exception, match=expected_path):
+            validate_worked_example_process_trace(forged)
+
+    forged_anchor = deepcopy(payload)
+    if not forged_anchor["pair_compatibility"]["valid_common_event_anchors"]:
+        pytest.skip("fixture did not produce common anchors")
+    forged_anchor["pair_compatibility"]["valid_common_event_anchors"][0]["left_event_id"] = (
+        "missing-event"
+    )
+    with pytest.raises(Exception, match="/pair_compatibility/valid_common_event_anchors/0"):
+        validate_worked_example_process_trace(forged_anchor)
+
+
 def test_semantic_validator_rejects_available_event_without_coordinates() -> None:
     """Available semantic anchors require step/time and non-empty records."""
 
@@ -984,6 +1154,30 @@ def _set_path(payload: dict[str, object], path: list[object], value: object) -> 
         cursor[last] = value  # type: ignore[index]
 
 
+def _canonical_trace_checksum(payload: dict[str, object]) -> str:
+    contract = {
+        "schema_version": payload["schema_version"],
+        "trace_id": payload["trace_id"],
+        "source": payload["source"],
+        "evidence_boundary": payload["evidence_boundary"],
+        "coordinate_frame": payload["coordinate_frame"],
+        "units": payload["units"],
+        "frames": [
+            {
+                "step": frame["step"],
+                "time_s": frame["time_s"],
+                "robot": frame["robot"],
+                "pedestrians": list(frame["pedestrians"]),
+                "planner": frame["planner"],
+            }
+            for frame in payload["frames"]  # type: ignore[index]
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def _trace_payload(  # noqa: C901, PLR0912, PLR0913
     *,
     trace_id: str = "process-trace-fixture",
@@ -998,6 +1192,7 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
     planner_id: str = "ppo",
     include_run_config: bool = True,
     config_digest: str = "a" * 64,
+    time_step_s: float | None = 0.1,
     collision_mode: str | None = None,
     missing_actor_radius_step: int | None = None,
     nonfinite_heading_step: int | None = None,
@@ -1070,6 +1265,8 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
                 "horizon": 4,
                 "config_digest": config_digest,
             }
+            if time_step_s is not None:
+                planner["run_config"]["time_step_s"] = time_step_s
         if collision_mode == "outcome_boolean" and step == 1:
             planner["outcome"] = {"collision_event": True}
         if collision_mode == "ledger_typed" and step == 1:
@@ -1098,6 +1295,28 @@ def _trace_payload(  # noqa: C901, PLR0912, PLR0913
                         "clearance_series_source": "simulator.contact",
                         "exact_event_source": "simulator.collision",
                     }
+                ],
+            }
+        if collision_mode == "ledger_unrelated_then_focal" and step == 1:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [
+                    {
+                        "collision_partner_type": "pedestrian",
+                        "collision_partner_id": "ped-b",
+                        "collision_time": 0.12,
+                        "relative_speed_at_contact": 1.0,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
+                    },
+                    {
+                        "collision_partner_type": "pedestrian",
+                        "collision_partner_id": "ped-a",
+                        "collision_time": 0.15,
+                        "relative_speed_at_contact": 1.0,
+                        "clearance_series_source": "simulator.contact",
+                        "exact_event_source": "simulator.collision",
+                    },
                 ],
             }
         if collision_mode == "ledger_collision_late" and step == 3:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from typing import TYPE_CHECKING, Any
 
@@ -214,6 +216,8 @@ def _provenance_gate(
         "comparison_grain": comparison_grain,
         "left_trace_id": left.trace_id,
         "right_trace_id": right.trace_id,
+        "left_content_sha256": _trace_content_sha256(left),
+        "right_content_sha256": _trace_content_sha256(right),
     }
 
 
@@ -457,6 +461,40 @@ def _meta(trace: SimulationTraceExport, key: str) -> object:
         if isinstance(run_config, dict) and key in run_config:
             return run_config[key]
     return None
+
+
+def _trace_content_sha256(trace: SimulationTraceExport) -> str:
+    return _json_sha256_digest(
+        {
+            "schema_version": "simulation_trace_export.v1",
+            "trace_id": trace.trace_id,
+            "source": {
+                "scenario_id": trace.source.scenario_id,
+                "seed": trace.source.seed,
+                "planner_id": trace.source.planner_id,
+                "episode_id": trace.source.episode_id,
+                "generated_by": trace.source.generated_by,
+            },
+            "evidence_boundary": trace.evidence_boundary,
+            "coordinate_frame": trace.coordinate_frame,
+            "units": trace.units,
+            "frames": [
+                {
+                    "step": frame.step,
+                    "time_s": frame.time_s,
+                    "robot": frame.robot,
+                    "pedestrians": list(frame.pedestrians),
+                    "planner": frame.planner,
+                }
+                for frame in trace.frames
+            ],
+        }
+    )
+
+
+def _json_sha256_digest(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _common_event_anchors(

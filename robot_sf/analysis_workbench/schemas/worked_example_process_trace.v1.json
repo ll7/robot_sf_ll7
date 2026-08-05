@@ -27,12 +27,45 @@
     "source_trace": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "trace_id", "coordinate_frame", "units", "source"],
+      "required": [
+        "schema_version",
+        "trace_id",
+        "coordinate_frame",
+        "units",
+        "content_sha256",
+        "run_config_contract",
+        "source"
+      ],
       "properties": {
         "schema_version": {"const": "simulation_trace_export.v1"},
         "trace_id": {"type": "string", "minLength": 1},
         "coordinate_frame": {"type": "string", "minLength": 1},
         "units": {"type": "object"},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "run_config_contract": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "reason"],
+              "properties": {
+                "status": {"const": "unavailable"},
+                "reason": {"type": "string"}
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "time_step_s", "config_digest", "source"],
+              "properties": {
+                "status": {"const": "available"},
+                "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+                "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "source": {"const": "planner.run_config"}
+              }
+            }
+          ]
+        },
         "source": {
           "type": "object",
           "additionalProperties": false,
@@ -309,7 +342,14 @@
             "grain_id": {"enum": ["matched_planner_pair", "matched_realization_pair", "undeclared"]}
           }
         },
-        "provenance_gate": {"type": "object", "minProperties": 1},
+        "provenance_gate": {
+          "type": "object",
+          "minProperties": 1,
+          "properties": {
+            "left_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "right_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
         "initial_state_equivalence": {"type": "object"},
         "route_spawn_separation": {"type": "object"},
         "shared_prefix": {"type": "object"},
@@ -380,7 +420,8 @@
       "additionalProperties": true,
       "required": ["status", "available_frame_count", "missing_frame_count"],
       "properties": {
-        "status": {"enum": ["complete", "partial"]},
+        "status": {"enum": ["complete", "partial", "unavailable"]},
+        "frame_count": {"type": "integer", "minimum": 0},
         "available_frame_count": {"type": "integer", "minimum": 0},
         "missing_frame_count": {"type": "integer", "minimum": 0},
         "reason": {"type": "string"}
@@ -458,6 +499,7 @@
           "properties": {
             "status": {"const": "unavailable"},
             "reason": {"type": "string"},
+            "source_coordinate_frame": {"type": "string"},
             "geometry_checksum": {"type": "string"}
           }
         },
@@ -472,7 +514,11 @@
             "geometry",
             "s_m",
             "n_m",
-            "progress_rate_mps"
+            "progress_rate_mps",
+            "focal_actor_status",
+            "focal_actor_s_m",
+            "focal_actor_n_m",
+            "focal_actor_progress_rate_mps"
           ],
           "properties": {
             "status": {"const": "available"},
@@ -484,7 +530,12 @@
             "geometry_checksum": {"type": "string"},
             "s_m": {"type": "number"},
             "n_m": {"type": "number"},
-            "progress_rate_mps": {"type": ["number", "null"]}
+            "progress_rate_mps": {"type": ["number", "null"]},
+            "focal_actor_status": {"enum": ["available", "unavailable"]},
+            "focal_actor_reason": {"type": "string"},
+            "focal_actor_s_m": {"type": ["number", "null"]},
+            "focal_actor_n_m": {"type": ["number", "null"]},
+            "focal_actor_progress_rate_mps": {"type": ["number", "null"]}
           }
         }
       ]
@@ -498,6 +549,7 @@
           "properties": {
             "status": {"const": "unavailable"},
             "reason": {"type": "string"},
+            "source_coordinate_frame": {"type": "string"},
             "geometry_checksum": {"type": "string"}
           }
         },
@@ -686,14 +738,18 @@
       "required": [
         "profile_version",
         "direction_semantics",
+        "status",
+        "reason",
         "heading_reversal_count",
         "velocity_reversal_count"
       ],
       "properties": {
         "profile_version": {"type": "string"},
         "direction_semantics": {"type": "string"},
-        "heading_reversal_count": {"type": "integer", "minimum": 0},
-        "velocity_reversal_count": {"type": "integer", "minimum": 0}
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "heading_reversal_count": {"type": ["integer", "null"], "minimum": 0},
+        "velocity_reversal_count": {"type": ["integer", "null"], "minimum": 0}
       }
     },
     "common_event_anchor": {

@@ -137,12 +137,12 @@ def test_process_trace_event_anchors_are_versioned_and_profiled() -> None:
     assert events["first_material_turn_response"]["step"] == 2
     assert events["conflict_zone_entry"]["status"] == "unavailable"
     assert events["first_safety_predicate_breach"]["status"] == "available"
-    assert "terminal_event" not in events
-    assert events["trace_end_boundary"]["status"] == "available"
-    assert events["trace_end_boundary"]["event_relative_time"]["status"] == "available"
-    assert events["trace_end_boundary"]["visual_anchor_eligibility"] == {
+    assert "trace_end_boundary" not in events
+    assert events["terminal_event"]["status"] == "unavailable"
+    assert events["terminal_event"]["event_relative_time"]["status"] == "unavailable"
+    assert events["terminal_event"]["visual_anchor_eligibility"] == {
         "eligible": False,
-        "reason": "trace_end_boundary_requires_alignment",
+        "reason": "event_unavailable",
     }
     assert payload["event_anchor_hierarchy"]["selected_anchor"]["event_type"] in {
         "exact_collision_event",
@@ -225,10 +225,12 @@ def test_pair_compatibility_matched_start_common_anchors_without_duration_normal
 
 
 def test_pair_grain_fail_closed_requires_declared_relationship_and_metadata() -> None:
-    """Pair gates should require explicit grain relationships and config metadata."""
+    """Pair gates should require grain-specific relationships and metadata."""
 
     left = simulation_trace_export_from_dict(_trace_payload(planner_id="planner-a", seed=7))
-    right = simulation_trace_export_from_dict(_trace_payload(planner_id="planner-b", seed=7))
+    right = simulation_trace_export_from_dict(
+        _trace_payload(planner_id="planner-b", seed=7, config_digest="b" * 64)
+    )
 
     planner_pair = build_worked_example_process_trace_from_export(
         left,
@@ -238,6 +240,7 @@ def test_pair_grain_fail_closed_requires_declared_relationship_and_metadata() ->
     assert planner_pair["status"] == "available"
     assert planner_pair["provenance_gate"]["checks"]["seed_equal"] is True
     assert planner_pair["provenance_gate"]["checks"]["planner_id_different"] is True
+    assert planner_pair["provenance_gate"]["checks"]["config_digest_equal"] is False
 
     wrong_grain = build_worked_example_process_trace_from_export(
         left,
@@ -247,15 +250,28 @@ def test_pair_grain_fail_closed_requires_declared_relationship_and_metadata() ->
     assert wrong_grain["status"] == "incompatible"
     assert wrong_grain["provenance_gate"]["checks"]["planner_id_equal"] is False
 
-    missing_meta_payload = _trace_payload(include_run_config=False)
+    missing_meta_payload = _trace_payload(include_run_config=False, planner_id="planner-a", seed=7)
     missing_meta = simulation_trace_export_from_dict(missing_meta_payload)
+    missing_meta_pair = simulation_trace_export_from_dict(
+        _trace_payload(include_run_config=False, planner_id="planner-b", seed=7)
+    )
     pair = build_worked_example_process_trace_from_export(
         missing_meta,
-        pair_trace=missing_meta,
+        pair_trace=missing_meta_pair,
         pair_comparison_grain="matched_planner_pair",
     )["pair_compatibility"]
     assert pair["status"] == "incompatible"
     assert pair["provenance_gate"]["checks"]["map_id_present"] is False
+
+    realization_config_mismatch = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(planner_id="ppo", seed=7)),
+        pair_trace=simulation_trace_export_from_dict(
+            _trace_payload(planner_id="ppo", seed=8, config_digest="b" * 64)
+        ),
+        pair_comparison_grain="matched_realization_pair",
+    )["pair_compatibility"]
+    assert realization_config_mismatch["status"] == "incompatible"
+    assert realization_config_mismatch["provenance_gate"]["checks"]["config_digest_equal"] is False
 
 
 def test_process_trace_cli_is_deterministic(tmp_path: Path) -> None:
@@ -508,8 +524,8 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
     ]
     assert typed_event["status"] == "available"
     assert typed_event["time_s"] == pytest.approx(0.15)
-    assert typed_event["partner_actor_id"] == "ped-a"
-    assert typed_event["partner_actor_type"] == "pedestrian"
+    assert typed_event["collision_partner_id"] == "ped-a"
+    assert typed_event["collision_partner_type"] == "pedestrian"
 
     invented_payload = _trace_payload(collision_mode="invented_events")
     invented = build_worked_example_process_trace_from_export(
@@ -529,6 +545,58 @@ def test_canonical_collision_shapes_and_timing_are_respected() -> None:
         "exact_collision_event"
     ]
     assert legacy_event["status"] == "unavailable"
+
+    time_only_payload = _trace_payload(collision_mode="time_only_collision_record")
+    time_only = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(time_only_payload)
+    )
+    assert {event["event_type"]: event for event in time_only["event_anchors"]}[
+        "exact_collision_event"
+    ]["status"] == "unavailable"
+
+    outside = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(collision_mode="ledger_collision_late")),
+        encounter_report=_encounter_report(start_time_s=0.0, end_time_s=0.2),
+        encounter_report_input_checksum="0" * 64,
+    )
+    outside_event = {event["event_type"]: event for event in outside["event_anchors"]}[
+        "exact_collision_event"
+    ]
+    assert outside_event["status"] == "unavailable"
+    assert outside_event["reason"] == "collision_time_outside_encounter_interval"
+
+
+def test_terminal_event_requires_typed_provenance() -> None:
+    """Terminal fallback must come from typed terminal evidence, not the last frame."""
+
+    no_terminal = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    no_terminal_event = {event["event_type"]: event for event in no_terminal["event_anchors"]}[
+        "terminal_event"
+    ]
+    assert no_terminal_event["status"] == "unavailable"
+
+    typed_terminal = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_typed"))
+    )
+    terminal_event = {event["event_type"]: event for event in typed_terminal["event_anchors"]}[
+        "terminal_event"
+    ]
+    assert terminal_event["status"] == "available"
+    assert terminal_event["time_s"] == pytest.approx(0.3)
+    assert terminal_event["terminal_reason"] == "trace_end"
+
+    outside = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_late")),
+        encounter_report=_encounter_report(start_time_s=0.0, end_time_s=0.2),
+        encounter_report_input_checksum="0" * 64,
+    )
+    outside_terminal = {event["event_type"]: event for event in outside["event_anchors"]}[
+        "terminal_event"
+    ]
+    assert outside_terminal["status"] == "unavailable"
+    assert outside_terminal["reason"] == "terminal_time_outside_encounter_interval"
 
 
 def test_partial_radius_and_nonfinite_heading_fail_closed() -> None:
@@ -568,7 +636,7 @@ def test_threshold_breach_uses_declared_diagnostic_threshold() -> None:
         "minimum_clearance",
         "first_safety_predicate_breach",
         "sustained_stall_onset",
-        "trace_end_boundary",
+        "terminal_event",
     ]
 
 
@@ -592,6 +660,25 @@ def test_nonfinite_command_and_missing_stall_speed_fail_closed() -> None:
     assert stall["status"] == "unavailable"
     assert stall["sustained_stall_duration_s"] is None
     assert stall["sustained_stall_onset_step"] is None
+    assert {event["event_type"]: event for event in missing_speed["event_anchors"]}[
+        "sustained_stall_onset"
+    ]["status"] == "unavailable"
+
+    command_gap = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(
+            _trace_payload(turn_and_decelerate=True, nan_command_step=1)
+        )
+    )
+    assert {event["event_type"]: event for event in command_gap["event_anchors"]}[
+        "first_material_deceleration"
+    ]["status"] == "unavailable"
+
+    relative_gap = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(nonfinite_heading_step=1))
+    )
+    relative_events = {event["event_type"]: event for event in relative_gap["event_anchors"]}
+    assert relative_events["minimum_clearance"]["status"] == "unavailable"
+    assert relative_events["first_safety_predicate_breach"]["status"] == "unavailable"
 
 
 def test_registry_checksum_must_bind_geometry() -> None:
@@ -649,6 +736,27 @@ def test_semantic_validator_rejects_available_event_without_coordinates() -> Non
         validate_worked_example_process_trace(payload)
 
 
+def test_semantic_validator_rejects_bogus_nested_records_and_hierarchy_selection() -> None:
+    """Nested schema and semantic checks should reject bogus replacement records."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_typed"))
+    )
+    payload["frames"][0]["commands"] = {"status": "available", "commanded": "banana"}
+    with pytest.raises(Exception, match="/frames/0/commands"):
+        validate_worked_example_process_trace(payload)
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload(terminal_mode="ledger_typed"))
+    )
+    anchors = payload["event_anchor_hierarchy"]["available_anchors"]
+    assert len(anchors) >= 2
+    payload["event_anchor_hierarchy"]["selected_anchor"] = anchors[-1]
+    payload["event_anchor_hierarchy"]["anchor_time_s"] = anchors[-1]["time_s"]
+    with pytest.raises(Exception, match="/event_anchor_hierarchy/selected_anchor"):
+        validate_worked_example_process_trace(payload)
+
+
 def _trace_payload(  # noqa: C901, PLR0913
     *,
     trace_id: str = "process-trace-fixture",
@@ -662,7 +770,9 @@ def _trace_payload(  # noqa: C901, PLR0913
     actor_start_offset: float = 0.0,
     planner_id: str = "ppo",
     include_run_config: bool = True,
+    config_digest: str = "a" * 64,
     collision_mode: str | None = None,
+    terminal_mode: str | None = None,
     missing_actor_radius_step: int | None = None,
     nonfinite_heading_step: int | None = None,
     stall_pattern: list[float] | None = None,
@@ -718,7 +828,7 @@ def _trace_payload(  # noqa: C901, PLR0913
             planner["run_config"] = {
                 "map_id": "fixture-map",
                 "horizon": 4,
-                "config_digest": "a" * 64,
+                "config_digest": config_digest,
             }
         if collision_mode == "outcome_boolean" and step == 1:
             planner["outcome"] = {"collision_event": True}
@@ -729,10 +839,27 @@ def _trace_payload(  # noqa: C901, PLR0913
                     {
                         "collision_time": 0.15,
                         "actor_id": "robot",
-                        "partner_actor_id": "ped-a",
-                        "partner_actor_type": "pedestrian",
+                        "collision_partner_id": "ped-a",
+                        "collision_partner_type": "pedestrian",
                     }
                 ],
+            }
+        if collision_mode == "ledger_collision_late" and step == 3:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [
+                    {
+                        "collision_time": 0.35,
+                        "actor_id": "robot",
+                        "collision_partner_id": "ped-a",
+                        "collision_partner_type": "pedestrian",
+                    }
+                ],
+            }
+        if collision_mode == "time_only_collision_record" and step == 1:
+            planner["event_ledger"] = {
+                "schema_version": "EpisodeEventLedger.v2",
+                "collision_events": [{"collision_time": 0.15}],
             }
         if collision_mode == "legacy_collision_time_s" and step == 1:
             planner["event_ledger"] = {
@@ -741,6 +868,16 @@ def _trace_payload(  # noqa: C901, PLR0913
             }
         if collision_mode == "invented_events" and step == 1:
             planner["event_ledger"] = {"events": [{"event_type": "collision", "time_s": 0.15}]}
+        if terminal_mode == "ledger_typed" and step == 3:
+            planner["event_ledger"] = {
+                **planner.get("event_ledger", {"schema_version": "EpisodeEventLedger.v2"}),
+                "terminal_events": [{"terminal_time": 0.3, "terminal_reason": "trace_end"}],
+            }
+        if terminal_mode == "ledger_late" and step == 3:
+            planner["event_ledger"] = {
+                **planner.get("event_ledger", {"schema_version": "EpisodeEventLedger.v2"}),
+                "terminal_events": [{"terminal_time": 0.35, "terminal_reason": "trace_end"}],
+            }
         velocity = [float(stall_pattern[step]), 0.0] if stall_pattern is not None else robot_vel
         robot = {
             "position": position,

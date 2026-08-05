@@ -233,7 +233,7 @@
               "proxy_overlap_event",
               "sustained_stall_onset",
               "recovery_onset",
-              "trace_end_boundary"
+              "terminal_event"
             ]
           },
           "detector_profile_version": {"type": "string"},
@@ -245,8 +245,10 @@
           "zone_id": {"type": ["string", "null"]},
           "reason": {"type": "string"},
           "collision_observed": {"type": "boolean"},
-          "partner_actor_id": {"type": ["string", "null"]},
-          "partner_actor_type": {"type": ["string", "null"]},
+          "collision_partner_id": {"type": ["string", "null"]},
+          "collision_partner_type": {"type": ["string", "null"]},
+          "terminal_observed": {"type": "boolean"},
+          "terminal_reason": {"type": "string"},
           "source_fields": {"type": "array", "items": {"type": "string"}},
           "event_relative_time": {
             "type": "object",

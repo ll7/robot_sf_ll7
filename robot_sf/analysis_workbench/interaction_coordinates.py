@@ -143,6 +143,7 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
                 value = frame.get(key)
                 if isinstance(value, Mapping) and not value:
                     errors.append(f"/frames/{index}/{key}: expected non-empty record")
+            errors.extend(_validate_frame_record(frame, index))
             relative = frame.get("relative_interaction")
             if isinstance(relative, Mapping) and relative.get("status") == "available":
                 for key in (
@@ -168,11 +169,12 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
                     )
                 if not isinstance(event.get("step"), int):
                     errors.append(f"/event_anchors/{index}/step: required when status is available")
-            if event.get("event_type") == "terminal_event":
-                errors.append(f"/event_anchors/{index}/event_type: terminal_event is not emitted")
     hierarchy = payload.get("event_anchor_hierarchy")
     if isinstance(hierarchy, Mapping):
         errors.extend(_validate_event_anchor_hierarchy(hierarchy, events, frames))
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        errors.extend(_validate_diagnostics_record(diagnostics))
     focal = (
         payload.get("encounters", {}).get("focal")
         if isinstance(payload.get("encounters"), Mapping)
@@ -208,6 +210,174 @@ def _semantic_validation_errors(payload: Mapping[str, Any]) -> list[str]:  # noq
     return errors
 
 
+def _validate_frame_record(frame: Mapping[str, Any], index: int) -> list[str]:
+    errors: list[str] = []
+    errors.extend(
+        _require_keys(
+            frame.get("source_coordinates"),
+            f"/frames/{index}/source_coordinates",
+            required={"coordinate_frame", "robot", "focal_actor"},
+            allowed={"coordinate_frame", "robot", "focal_actor"},
+        )
+    )
+    errors.extend(
+        _validate_actor_state(
+            frame.get("source_coordinates", {}).get("robot")
+            if isinstance(frame.get("source_coordinates"), Mapping)
+            else None,
+            f"/frames/{index}/source_coordinates/robot",
+            nullable=False,
+        )
+    )
+    errors.extend(
+        _require_keys(
+            frame.get("world"),
+            f"/frames/{index}/world",
+            required={"status", "reason", "robot", "focal_actor"},
+            allowed={"status", "reason", "robot", "focal_actor"},
+        )
+    )
+    errors.extend(
+        _require_keys(
+            frame.get("global_minimum_actor"),
+            f"/frames/{index}/global_minimum_actor",
+            required={"status", "reason"}
+            if frame.get("global_minimum_actor", {}).get("status") == "unavailable"
+            else {"status", "actor_id", "center_distance_m"},
+            allowed={"status", "reason", "actor_id", "center_distance_m"},
+        )
+    )
+    errors.extend(_validate_commands_record(frame.get("commands"), f"/frames/{index}/commands"))
+    return errors
+
+
+def _validate_commands_record(value: object, path: str) -> list[str]:
+    errors = _require_keys(
+        value,
+        path,
+        required={"status", "reason"}
+        if _status(value) == "unavailable"
+        else {"status", "commanded", "executed", "executed_status"},
+        allowed={"status", "reason", "commanded", "executed", "executed_status"},
+    )
+    if not isinstance(value, Mapping) or value.get("status") != "available":
+        return errors
+    if not isinstance(value.get("commanded"), Mapping):
+        errors.append(f"{path}/commanded: expected command mapping")
+    elif not all(_json_scalar(item) for item in value["commanded"].values()):
+        errors.append(f"{path}/commanded: expected JSON scalar command values")
+    executed = value.get("executed")
+    if executed is not None and not isinstance(executed, Mapping):
+        errors.append(f"{path}/executed: expected command mapping or null")
+    if value.get("executed_status") not in {"available", "unavailable"}:
+        errors.append(f"{path}/executed_status: expected available or unavailable")
+    return errors
+
+
+def _validate_actor_state(value: object, path: str, *, nullable: bool) -> list[str]:
+    if value is None and nullable:
+        return []
+    errors = _require_keys(
+        value,
+        path,
+        required={"position", "heading", "velocity", "radius_m"},
+        allowed={"position", "heading", "velocity", "radius_m"},
+    )
+    if not isinstance(value, Mapping):
+        return errors
+    for key in ("position", "velocity"):
+        item = value.get(key)
+        if not (
+            isinstance(item, list)
+            and len(item) in {0, 2}
+            and all(_finite_json_number(number) for number in item)
+        ):
+            errors.append(f"{path}/{key}: expected empty or finite 2-vector")
+    for key in ("heading", "radius_m"):
+        if value.get(key) is not None and not _finite_json_number(value.get(key)):
+            errors.append(f"{path}/{key}: expected finite number or null")
+    return errors
+
+
+def _validate_diagnostics_record(diagnostics: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    errors.extend(
+        _require_keys(
+            diagnostics.get("route_progress"),
+            "/diagnostics/route_progress",
+            required={"status", "reason"}
+            if _status(diagnostics.get("route_progress")) == "unavailable"
+            else {"status", "start_s_m", "end_s_m", "delta_s_m"},
+            allowed={"status", "reason", "start_s_m", "end_s_m", "delta_s_m"},
+        )
+    )
+    errors.extend(
+        _require_keys(
+            diagnostics.get("stall"),
+            "/diagnostics/stall",
+            required={
+                "profile_version",
+                "status",
+                "reason",
+                "stall_min_duration_s",
+                "sustained_stall_duration_s",
+                "speed_coverage",
+                "sustained_stall_onset_step",
+            },
+            allowed={
+                "profile_version",
+                "status",
+                "reason",
+                "stall_min_duration_s",
+                "sustained_stall_duration_s",
+                "speed_coverage",
+                "sustained_stall_onset_step",
+            },
+        )
+    )
+    errors.extend(
+        _require_keys(
+            diagnostics.get("reversal_counts"),
+            "/diagnostics/reversal_counts",
+            required={
+                "profile_version",
+                "direction_semantics",
+                "heading_reversal_count",
+                "velocity_reversal_count",
+            },
+            allowed={
+                "profile_version",
+                "direction_semantics",
+                "heading_reversal_count",
+                "velocity_reversal_count",
+            },
+        )
+    )
+    return errors
+
+
+def _require_keys(
+    value: object,
+    path: str,
+    *,
+    required: set[str],
+    allowed: set[str],
+) -> list[str]:
+    if not isinstance(value, Mapping):
+        return [f"{path}: expected object"]
+    errors = [f"{path}/{key}: required" for key in sorted(required - set(value))]
+    errors.extend(f"{path}/{key}: unexpected field" for key in sorted(set(value) - allowed))
+    return errors
+
+
+def _status(value: object) -> object:
+    return value.get("status") if isinstance(value, Mapping) else None
+
+
+def _json_scalar(value: object) -> bool:
+    return value is None or isinstance(value, str | bool) or _finite_json_number(value)
+
+
 def _validate_event_anchor_hierarchy(  # noqa: C901
     hierarchy: Mapping[str, Any],
     events: object,
@@ -219,7 +389,7 @@ def _validate_event_anchor_hierarchy(  # noqa: C901
         "minimum_clearance",
         "first_safety_predicate_breach",
         "sustained_stall_onset",
-        "trace_end_boundary",
+        "terminal_event",
     ]
     if hierarchy.get("fallback_order") != expected_fallback_order:
         errors.append("/event_anchor_hierarchy/fallback_order: unexpected fallback order")
@@ -230,6 +400,19 @@ def _validate_event_anchor_hierarchy(  # noqa: C901
             return errors
         if selected not in hierarchy.get("available_anchors", []):
             errors.append("/event_anchor_hierarchy/selected_anchor: must be one available anchor")
+        available_anchors = hierarchy.get("available_anchors")
+        if isinstance(available_anchors, list) and available_anchors:
+            best = min(
+                (
+                    anchor
+                    for anchor in available_anchors
+                    if isinstance(anchor, Mapping) and isinstance(anchor.get("rank"), int)
+                ),
+                key=lambda anchor: int(anchor["rank"]),
+                default=None,
+            )
+            if best is not None and selected != best:
+                errors.append("/event_anchor_hierarchy/selected_anchor: must be lowest-rank anchor")
         anchor_time = hierarchy.get("anchor_time_s")
         if not _finite_json_number(anchor_time) or anchor_time != selected.get("time_s"):
             errors.append("/event_anchor_hierarchy/anchor_time_s: must match selected anchor time")
@@ -286,7 +469,10 @@ def _validate_pair_semantics(pair: Mapping[str, Any]) -> list[str]:
     if isinstance(provenance, Mapping):
         checks = provenance.get("checks")
         if isinstance(checks, Mapping):
-            for key in ("map_id_present", "horizon_present", "config_digest_present"):
+            required = ["map_id_present", "horizon_present"]
+            if pair.get("comparison_grain", {}).get("grain_id") == "matched_realization_pair":
+                required.append("config_digest_present")
+            for key in required:
                 if pair.get("status") == "available" and checks.get(key) is not True:
                     errors.append(f"/pair_compatibility/provenance_gate/checks/{key}: required")
     return errors
@@ -1394,9 +1580,7 @@ def _event_anchors(
             _first_deceleration_frame(frames),
             actor_id=focal_actor_id,
             source_fields=["commands.commanded.linear_velocity"],
-            absent_status="not_observed"
-            if _has_command_signal(frames, "linear_velocity")
-            else "unavailable",
+            absent_status=_absent_status_for_command_signal(frames, "linear_velocity"),
             zone_id=None,
         ),
         _event_from_condition(
@@ -1404,9 +1588,7 @@ def _event_anchors(
             _first_turn_frame(frames),
             actor_id=focal_actor_id,
             source_fields=["commands.commanded.angular_velocity"],
-            absent_status="not_observed"
-            if _has_command_signal(frames, "angular_velocity")
-            else "unavailable",
+            absent_status=_absent_status_for_command_signal(frames, "angular_velocity"),
             zone_id=None,
         ),
         _event_from_condition(
@@ -1423,7 +1605,7 @@ def _event_anchors(
             _first_safety_predicate_breach_frame(frames),
             actor_id=focal_actor_id,
             source_fields=["relative_interaction.proxy_surface_clearance_m"],
-            absent_status="not_observed" if _has_proxy_clearance_signal(frames) else "unavailable",
+            absent_status=_absent_status_for_proxy_clearance(frames),
             zone_id=None,
         ),
         _event_from_condition(
@@ -1431,7 +1613,7 @@ def _event_anchors(
             _first_proxy_overlap_frame(frames),
             actor_id=focal_actor_id,
             source_fields=["relative_interaction.proxy_surface_clearance_m"],
-            absent_status="not_observed" if _has_proxy_clearance_signal(frames) else "unavailable",
+            absent_status=_absent_status_for_proxy_clearance(frames),
             zone_id=None,
         ),
         _event_from_condition(
@@ -1439,7 +1621,7 @@ def _event_anchors(
             _first_stall_frame(frames),
             actor_id=focal_actor_id,
             source_fields=["robot.velocity"],
-            absent_status="not_observed" if _has_robot_velocity_signal(frames) else "unavailable",
+            absent_status=_absent_status_for_robot_velocity(frames),
             zone_id=None,
         ),
         _event_from_condition(
@@ -1447,17 +1629,10 @@ def _event_anchors(
             _first_recovery_frame(frames),
             actor_id=focal_actor_id,
             source_fields=["robot.velocity"],
-            absent_status="not_observed" if _has_robot_velocity_signal(frames) else "unavailable",
+            absent_status=_absent_status_for_robot_velocity(frames),
             zone_id=None,
         ),
-        _event_from_condition(
-            "trace_end_boundary",
-            frames[-1] if frames else None,
-            actor_id=focal_actor_id,
-            source_fields=["trace.frames[-1]"],
-            absent_status="unavailable",
-            zone_id=None,
-        ),
+        _terminal_event_anchor(trace, frames=frames, focal_actor_id=focal_actor_id),
     ]
     return events
 
@@ -1494,7 +1669,7 @@ def _event_from_condition(
             },
         }
     event_relative = _event_relative_time(float(frame["time_s"]), float(frame["time_s"]))
-    visual_eligible = event_type != "trace_end_boundary"
+    visual_eligible = event_type != "terminal_event"
     return {
         "event_id": f"step-{int(frame['step']):04d}-{_slug(event_type)}",
         "event_type": event_type,
@@ -1511,7 +1686,7 @@ def _event_from_condition(
             "eligible": visual_eligible,
             "reason": "deterministic_trace_event"
             if visual_eligible
-            else "trace_end_boundary_requires_alignment",
+            else "terminal_event_requires_provenance",
         },
     }
 
@@ -1530,7 +1705,7 @@ def _event_anchor_hierarchy(events: Sequence[Mapping[str, Any]]) -> dict[str, An
         "minimum_clearance",
         "first_safety_predicate_breach",
         "sustained_stall_onset",
-        "trace_end_boundary",
+        "terminal_event",
     ]
     available = {
         str(event["event_type"]): event for event in events if event.get("status") == "available"
@@ -1589,8 +1764,8 @@ def _frames_with_event_alignment(
 
 def _minimum_clearance_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
     if any(
-        frame["relative_interaction"].get("status") == "available"
-        and frame["relative_interaction"].get("proxy_surface_clearance_status") != "available"
+        frame["relative_interaction"].get("status") != "available"
+        or frame["relative_interaction"].get("proxy_surface_clearance_status") != "available"
         for frame in frames
     ):
         return None
@@ -1613,6 +1788,8 @@ def _minimum_clearance_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str
 
 
 def _first_deceleration_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    if _has_command_gap(frames, "linear_velocity"):
+        return None
     previous: float | None = None
     threshold = _profiles()["event_anchor_profile"]["material_deceleration_drop_mps"]
     for frame in frames:
@@ -1627,6 +1804,8 @@ def _first_deceleration_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[st
 
 
 def _first_turn_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    if _has_command_gap(frames, "angular_velocity"):
+        return None
     threshold = _profiles()["event_anchor_profile"]["material_turn_response_rad_s"]
     for frame in frames:
         command = frame["commands"].get("commanded")
@@ -1656,6 +1835,23 @@ def _has_command_signal(frames: Sequence[Mapping[str, Any]], key: str) -> bool:
     )
 
 
+def _has_command_gap(frames: Sequence[Mapping[str, Any]], key: str) -> bool:
+    return any(
+        not (
+            isinstance(command := frame["commands"].get("commanded"), Mapping)
+            and isinstance(command.get(key), int | float)
+            and math.isfinite(float(command[key]))
+        )
+        for frame in frames
+    )
+
+
+def _absent_status_for_command_signal(frames: Sequence[Mapping[str, Any]], key: str) -> str:
+    if _has_command_gap(frames, key):
+        return "unavailable"
+    return "not_observed" if _has_command_signal(frames, key) else "unavailable"
+
+
 def _has_conflict_signal(frames: Sequence[Mapping[str, Any]]) -> bool:
     return any(frame["conflict"].get("status") == "available" for frame in frames)
 
@@ -1682,8 +1878,36 @@ def _has_proxy_clearance_signal(frames: Sequence[Mapping[str, Any]]) -> bool:
     )
 
 
+def _has_proxy_clearance_gap(frames: Sequence[Mapping[str, Any]]) -> bool:
+    return any(
+        not (
+            isinstance(frame["relative_interaction"].get("proxy_surface_clearance_m"), int | float)
+            and math.isfinite(float(frame["relative_interaction"]["proxy_surface_clearance_m"]))
+            and frame["relative_interaction"].get("status") == "available"
+            and frame["relative_interaction"].get("proxy_surface_clearance_status") == "available"
+        )
+        for frame in frames
+    )
+
+
+def _absent_status_for_proxy_clearance(frames: Sequence[Mapping[str, Any]]) -> str:
+    if _has_proxy_clearance_gap(frames):
+        return "unavailable"
+    return "not_observed" if _has_proxy_clearance_signal(frames) else "unavailable"
+
+
 def _has_robot_velocity_signal(frames: Sequence[Mapping[str, Any]]) -> bool:
     return any(_speed_from_frame(frame) is not None for frame in frames)
+
+
+def _has_robot_velocity_gap(frames: Sequence[Mapping[str, Any]]) -> bool:
+    return any(_speed_from_frame(frame) is None for frame in frames)
+
+
+def _absent_status_for_robot_velocity(frames: Sequence[Mapping[str, Any]]) -> str:
+    if _has_robot_velocity_gap(frames):
+        return "unavailable"
+    return "not_observed" if _has_robot_velocity_signal(frames) else "unavailable"
 
 
 def _collision_event_anchor(
@@ -1704,8 +1928,8 @@ def _collision_event_anchor(
         )
         event["time_s"] = float(state["collision_time"])
         event["actor_id"] = state.get("actor_id")
-        event["partner_actor_id"] = state.get("partner_actor_id")
-        event["partner_actor_type"] = state.get("partner_actor_type")
+        event["collision_partner_id"] = state.get("collision_partner_id")
+        event["collision_partner_type"] = state.get("collision_partner_type")
         event["event_relative_time"] = _event_relative_time(
             float(state["collision_time"]),
             float(state["collision_time"]),
@@ -1720,8 +1944,45 @@ def _collision_event_anchor(
         zone_id=None,
     )
     if state["observed"]:
-        event["reason"] = "collision_observed_time_unavailable"
+        event["reason"] = str(state.get("reason", "collision_observed_time_unavailable"))
         event["collision_observed"] = True
+    return event
+
+
+def _terminal_event_anchor(
+    trace: SimulationTraceExport,
+    *,
+    frames: Sequence[Mapping[str, Any]],
+    focal_actor_id: object,
+) -> dict[str, Any]:
+    state = _terminal_anchor_state(trace, frames)
+    if state["status"] == "available":
+        event = _event_from_condition(
+            "terminal_event",
+            state["frame"],
+            actor_id=focal_actor_id,
+            source_fields=[str(state["source_field"])],
+            absent_status="unavailable",
+            zone_id=None,
+        )
+        event["time_s"] = float(state["terminal_time"])
+        event["terminal_reason"] = str(state["terminal_reason"])
+        event["event_relative_time"] = _event_relative_time(
+            float(state["terminal_time"]),
+            float(state["terminal_time"]),
+        )
+        return event
+    event = _event_from_condition(
+        "terminal_event",
+        None,
+        actor_id=focal_actor_id,
+        source_fields=["planner.event_ledger.terminal_events", "planner.outcome.terminal_event"],
+        absent_status="unavailable",
+        zone_id=None,
+    )
+    if state["observed"]:
+        event["reason"] = str(state.get("reason", "terminal_observed_time_unavailable"))
+        event["terminal_observed"] = True
     return event
 
 
@@ -1743,19 +2004,56 @@ def _collision_anchor_state(
                     "frame": frame,
                     "collision_time": float(collision_time),
                     "actor_id": signal.get("actor_id"),
-                    "partner_actor_id": signal.get("partner_actor_id"),
-                    "partner_actor_type": signal.get("partner_actor_type"),
+                    "collision_partner_id": signal.get("collision_partner_id"),
+                    "collision_partner_type": signal.get("collision_partner_type"),
                 }
+            return {
+                "status": "unavailable",
+                "observed": True,
+                "reason": "collision_time_outside_encounter_interval",
+            }
     return {"status": "unavailable", "observed": boolean_observed}
+
+
+def _terminal_anchor_state(
+    trace: SimulationTraceExport,
+    frames: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    observed = False
+    for trace_frame in trace.frames:
+        signal = _canonical_terminal_signal(trace_frame.planner)
+        observed = observed or signal["observed"]
+        terminal_time = signal.get("terminal_time")
+        if isinstance(terminal_time, int | float) and math.isfinite(float(terminal_time)):
+            frame = _frame_at_or_after_time(frames, float(terminal_time))
+            if frame is not None:
+                return {
+                    "status": "available",
+                    "observed": True,
+                    "frame": frame,
+                    "terminal_time": float(terminal_time),
+                    "terminal_reason": signal.get("terminal_reason", "terminal"),
+                    "source_field": signal.get("source", "terminal_signal"),
+                }
+            return {
+                "status": "unavailable",
+                "observed": True,
+                "reason": "terminal_time_outside_encounter_interval",
+            }
+    return {"status": "unavailable", "observed": observed}
 
 
 def _frame_at_or_after_time(
     frames: Sequence[Mapping[str, Any]],
     collision_time: float,
 ) -> Mapping[str, Any] | None:
+    if not frames:
+        return None
+    if collision_time < float(frames[0]["time_s"]) or collision_time > float(frames[-1]["time_s"]):
+        return None
     return next(
         (frame for frame in frames if float(frame["time_s"]) >= collision_time),
-        frames[-1] if frames else None,
+        None,
     )
 
 
@@ -1790,6 +2088,37 @@ def _canonical_collision_signal(planner: Mapping[str, Any]) -> dict[str, Any]:
     return {"observed": False, "source": "no_canonical_collision_signal"}
 
 
+def _canonical_terminal_signal(planner: Mapping[str, Any]) -> dict[str, Any]:
+    ledger_signal = _ledger_terminal_signal(planner.get("event_ledger"))
+    if ledger_signal.get("terminal_time") is not None or ledger_signal.get("source") == (
+        "invalid_terminal_event_record_shape"
+    ):
+        return ledger_signal
+    outcome = planner.get("outcome")
+    if isinstance(outcome, Mapping):
+        terminal = outcome.get("terminal_event")
+        terminal_time = outcome.get("terminal_time")
+        terminal_reason = outcome.get("terminal_reason", outcome.get("termination_reason"))
+        if (
+            terminal is True
+            and _finite_json_number(terminal_time)
+            and isinstance(terminal_reason, str)
+        ):
+            return {
+                "observed": True,
+                "source": "outcome.terminal_event",
+                "terminal_time": float(terminal_time),
+                "terminal_reason": terminal_reason,
+            }
+        if terminal is True:
+            return {"observed": True, "source": "outcome.terminal_event"}
+        if terminal not in (False, None):
+            return {"observed": False, "source": "invalid_outcome_terminal_shape"}
+    if ledger_signal["observed"]:
+        return ledger_signal
+    return {"observed": False, "source": "no_canonical_terminal_signal"}
+
+
 def _ledger_collision_signal(ledger: object) -> dict[str, Any]:
     if not (
         isinstance(ledger, Mapping) and ledger.get("schema_version") == "EpisodeEventLedger.v2"
@@ -1801,41 +2130,70 @@ def _ledger_collision_signal(ledger: object) -> dict[str, Any]:
     for record in records:
         if not isinstance(record, Mapping):
             continue
-        if "collision_time_s" in record or "time_s" in record:
+        if not _valid_collision_record(record):
             return {"observed": False, "source": "invalid_collision_event_record_shape"}
         collision_time = record.get("collision_time")
-        if isinstance(collision_time, int | float) and math.isfinite(float(collision_time)):
-            return {
-                "observed": True,
-                "source": "event_ledger.collision_events",
-                "collision_time": float(collision_time),
-                "actor_id": _collision_record_actor_id(record),
-                "partner_actor_id": _collision_record_partner_id(record),
-                "partner_actor_type": _collision_record_partner_type(record),
-            }
+        return {
+            "observed": True,
+            "source": "event_ledger.collision_events",
+            "collision_time": float(collision_time),
+            "actor_id": str(record["actor_id"]),
+            "collision_partner_id": str(record["collision_partner_id"]),
+            "collision_partner_type": str(record["collision_partner_type"]),
+        }
     return {"observed": bool(records), "source": "event_ledger.collision_events"}
 
 
-def _collision_record_actor_id(record: Mapping[str, Any]) -> str | None:
-    actor_id = record.get("actor_id") or record.get("focal_actor_id") or record.get("robot_id")
-    return str(actor_id) if actor_id is not None else None
+def _ledger_terminal_signal(ledger: object) -> dict[str, Any]:
+    if not (
+        isinstance(ledger, Mapping) and ledger.get("schema_version") == "EpisodeEventLedger.v2"
+    ):
+        return {"observed": False, "source": "event_ledger_unavailable"}
+    records = ledger.get("terminal_events")
+    if not (isinstance(records, Sequence) and not isinstance(records, str | bytes)):
+        return {"observed": False, "source": "event_ledger_terminal_events_unavailable"}
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        if not _valid_terminal_record(record):
+            return {"observed": False, "source": "invalid_terminal_event_record_shape"}
+        return {
+            "observed": True,
+            "source": "event_ledger.terminal_events",
+            "terminal_time": float(record["terminal_time"]),
+            "terminal_reason": str(record["terminal_reason"]),
+        }
+    return {"observed": bool(records), "source": "event_ledger.terminal_events"}
 
 
-def _collision_record_partner_id(record: Mapping[str, Any]) -> str | None:
-    partner_id = (
-        record.get("partner_actor_id")
-        or record.get("other_actor_id")
-        or record.get("pedestrian_id")
+def _valid_collision_record(record: Mapping[str, Any]) -> bool:
+    allowed = {"collision_time", "actor_id", "collision_partner_id", "collision_partner_type"}
+    if set(record) != allowed:
+        return False
+    return (
+        _finite_json_number(record.get("collision_time"))
+        and isinstance(record.get("actor_id"), str)
+        and isinstance(record.get("collision_partner_id"), str)
+        and isinstance(record.get("collision_partner_type"), str)
+        and bool(record["actor_id"])
+        and bool(record["collision_partner_id"])
+        and bool(record["collision_partner_type"])
     )
-    return str(partner_id) if partner_id is not None else None
 
 
-def _collision_record_partner_type(record: Mapping[str, Any]) -> str | None:
-    partner_type = record.get("partner_actor_type") or record.get("other_actor_type")
-    return str(partner_type) if partner_type is not None else None
+def _valid_terminal_record(record: Mapping[str, Any]) -> bool:
+    allowed = {"terminal_time", "terminal_reason"}
+    return (
+        set(record) == allowed
+        and _finite_json_number(record.get("terminal_time"))
+        and isinstance(record.get("terminal_reason"), str)
+        and bool(record["terminal_reason"])
+    )
 
 
 def _first_proxy_overlap_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    if _has_proxy_clearance_gap(frames):
+        return None
     return next(
         (
             frame
@@ -1852,6 +2210,8 @@ def _first_proxy_overlap_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[s
 def _first_safety_predicate_breach_frame(
     frames: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any] | None:
+    if _has_proxy_clearance_gap(frames):
+        return None
     threshold = _profiles()["threshold_profile"]["proxy_surface_clearance_threshold_m"]
     return next(
         (
@@ -1867,6 +2227,8 @@ def _first_safety_predicate_breach_frame(
 
 
 def _first_stall_frame(frames: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    if _has_robot_velocity_gap(frames):
+        return None
     profile = _profiles()["phase_profile"]
     return first_sustained_stall_frame(
         frames,
@@ -2014,7 +2376,11 @@ def _speed_from_frame(frame: Mapping[str, Any]) -> float | None:
     velocity = robot.get("velocity") if isinstance(robot, Mapping) else None
     if not isinstance(velocity, list | tuple) or len(velocity) != 2:
         return None
-    return math.hypot(float(velocity[0]), float(velocity[1]))
+    try:
+        speed = math.hypot(float(velocity[0]), float(velocity[1]))
+    except (TypeError, ValueError):
+        return None
+    return speed if math.isfinite(speed) else None
 
 
 def _vector2(value: Any) -> tuple[float, float] | None:

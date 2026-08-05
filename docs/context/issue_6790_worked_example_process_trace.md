@@ -48,10 +48,11 @@ reported as unavailable or not observed instead of zero-filled.
 Pair compatibility requires an explicit comparison grain:
 
 - `matched_planner_pair`: different planners on the same seed/realization, required
-  initial-state equality, and equal map/horizon/config metadata.
-- `matched_realization_pair`: the same planner on different seeds/realizations; start/spawn
+  initial-state equality, and equal map/horizon metadata. Planner config digests may differ.
+- `matched_realization_pair`: the same planner/config on different seeds/realizations; start/spawn
   may differ and `shared_prefix=false` is allowed, with equal map/horizon/config metadata.
 
 Event alignment selects the first available anchor from the declared fallback order and writes
-`anchor_time_s` plus per-frame `tau_s = t - anchor_time_s`. Trace end is a boundary fallback,
-not a standalone visual anchor without alignment.
+`anchor_time_s` plus per-frame `tau_s = t - anchor_time_s`. The terminal fallback is available
+only from typed terminal outcome or `EpisodeEventLedger.v2` evidence with a known in-interval
+time; the builder does not fabricate a terminal anchor from the final frame.

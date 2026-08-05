@@ -129,10 +129,11 @@ def _comparison_grain(comparison_grain: str | None) -> dict[str, Any]:
         "units",
         "map_id",
         "horizon",
-        "config_digest",
     ]
     if comparison_grain == "matched_planner_pair":
         required_gate_fields.append("initial_state")
+    if comparison_grain == "matched_realization_pair":
+        required_gate_fields.append("config_digest")
     return {
         "grain_id": comparison_grain or "undeclared",
         "left_role": "primary_trace",
@@ -146,7 +147,7 @@ def _comparison_grain(comparison_grain: str | None) -> dict[str, Any]:
 
 def _planner_seed_rule(comparison_grain: str | None) -> str:
     if comparison_grain == "matched_planner_pair":
-        return "planner_id_different_seed_equal_initial_state_equal_required"
+        return "planner_id_different_seed_equal_initial_state_equal_config_may_differ"
     if comparison_grain == "matched_realization_pair":
         return "planner_id_equal_seed_different_start_spawn_may_differ"
     return "unsupported_grain"
@@ -190,10 +191,13 @@ def _provenance_gate(
     }
     if comparison_grain == "matched_planner_pair":
         grain_specific = checks["planner_id_different"] and checks["seed_equal"]
+        config_compatible = True
     elif comparison_grain == "matched_realization_pair":
         grain_specific = checks["planner_id_equal"] and checks["seed_different"]
+        config_compatible = checks["config_digest_equal"]
     else:
         grain_specific = False
+        config_compatible = False
     return {
         "status": "available",
         "compatible": bool(
@@ -202,7 +206,7 @@ def _provenance_gate(
             and checks["units_equal"]
             and checks["map_id_equal"]
             and checks["horizon_equal"]
-            and checks["config_digest_equal"]
+            and config_compatible
             and grain_specific
         ),
         "checks": checks,

@@ -17,6 +17,9 @@ The metric is pure CPU aggregation: it never runs a campaign, Slurm job, or trai
 run. It is the artifact-first gap-filler between campaign episode rows and the
 cross-matrix agreement table.
 
+Invalid inputs remain fail-closed, but the CLI emits a prominent warning with the exact
+reason and a required remediation checklist instead of an opaque one-line error.
+
 Scoring semantics (constraints-first ordering): a structural class is ranked better
 when its planners complete routes more often (higher success rate), collide less
 (lower collision event rate), cause fewer near-miss events, time out less, and
@@ -47,6 +50,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+
+from scripts.validation.issue_5592_diagnostics import format_fail_closed_warning
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -452,7 +457,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_path=args.output,
         )
     except (OSError, RankingMetricError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(
+            format_fail_closed_warning(
+                tool="compute_issue_5592_structural_ranking",
+                reason=str(exc),
+                input_paths=[args.packet, args.episode_rows],
+                output_path=args.output,
+            ),
+            file=sys.stderr,
+        )
         return 2
     print(f"matrix_ranking: {args.output}")
     for klass in STRUCTURAL_CLASS_ORDER:

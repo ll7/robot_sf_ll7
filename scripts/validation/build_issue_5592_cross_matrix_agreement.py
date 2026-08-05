@@ -13,6 +13,8 @@ builder fails closed and emits ``blocked_missing_matrix`` rows rather than
 inventing a ranking; when a supplied ranking contains shared ranks it emits
 ``tie_not_identifiable`` rows rather than losing the diagnostic. This keeps the
 generator honest under the cheap-lane constraint that no campaign is run here.
+Malformed or incomparable inputs remain fail-closed, but the CLI emits a prominent warning
+with the exact reason and a required remediation checklist instead of an opaque one-line error.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+
+from scripts.validation.issue_5592_diagnostics import format_fail_closed_warning
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -661,8 +665,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output_dir,
             generated_at=generated_at,
         )
-    except BuildError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except (BuildError, OSError) as exc:
+        input_paths = [args.packet]
+        input_paths.extend(
+            path for path in (args.reference_ranking, args.candidate_ranking) if path is not None
+        )
+        print(
+            format_fail_closed_warning(
+                tool="build_issue_5592_cross_matrix_agreement",
+                reason=str(exc),
+                input_paths=input_paths,
+                output_path=args.output_dir,
+            ),
+            file=sys.stderr,
+        )
         return 2
     if args.json:
         print(json.dumps(summary, sort_keys=True))

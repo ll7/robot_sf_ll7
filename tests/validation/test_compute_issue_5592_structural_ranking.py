@@ -512,3 +512,32 @@ def test_rejects_row_missing_required_metric_field(tmp_path: Path) -> None:
         assert "missing required metric field" in str(exc)
     else:
         raise AssertionError("missing required metric field must fail closed")
+
+
+def test_cli_rejection_is_prominent_and_actionable(tmp_path: Path, capsys) -> None:
+    """A rejected CLI input explains the safety boundary and the required repair path."""
+    rows = _rows_with_success({})
+    rows[0]["execution_mode"] = "fallback"
+    episode_rows = _write_rows(tmp_path, "fallback_rows.csv", rows)
+    output = tmp_path / "ranking.csv"
+
+    exit_code = metric.main(
+        [
+            "--packet",
+            str(PACKET),
+            "--episode-rows",
+            str(episode_rows),
+            "--output",
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "WARNING: ISSUE #5592 ARTIFACT REJECTED - NOT ELIGIBLE FOR EVIDENCE" in captured.err
+    assert "fallback" in captured.err
+    assert "RECOMMENDED FIX - REQUIRED BEFORE RERUN:" in captured.err
+    assert "do not hand-edit a rank" in captured.err
+    assert "Exit code remains non-zero by design" in captured.err
+    assert not output.exists()

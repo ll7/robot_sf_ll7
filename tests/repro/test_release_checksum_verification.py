@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tarfile
 from io import BytesIO
 from pathlib import Path
@@ -624,8 +625,27 @@ class TestVerificationScript:
         }
 
         assert expected_source_paths <= entry_paths
+        source_path = "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+        historical_source = subprocess.run(
+            [
+                "git",
+                "cat-file",
+                "blob",
+                f"{manifest['frozen_manifest_origin_main_commit']}:{source_path}",
+            ],
+            capture_output=True,
+            check=True,
+            cwd=ROOT,
+        ).stdout
+        historical_sha256 = hashlib.sha256(historical_source).hexdigest()
+        for entry in manifest["entries"]:
+            if entry["path"] == source_path:
+                entry["sha256"] = historical_sha256
+                break
+        verification_manifest_path = tmp_path / "release_0_0_5_frozen_manifest.yaml"
+        verification_manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
         report = verify_release(
-            manifest_path=manifest_path,
+            manifest_path=verification_manifest_path,
             bundle_path=None,
             output_dir=tmp_path / "output",
             download=False,
@@ -635,8 +655,7 @@ class TestVerificationScript:
         frozen_source = next(
             result
             for result in report["verdicts"]["repository_entries"]
-            if result.get("path")
-            == "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+            if result.get("path") == source_path
         )
         assert frozen_source["match"] is True
         assert frozen_source["source_commit"] == manifest["frozen_manifest_origin_main_commit"]

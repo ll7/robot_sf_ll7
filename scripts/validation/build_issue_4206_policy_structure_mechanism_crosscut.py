@@ -93,6 +93,19 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _read_declared_sidecar_csv(path: Path) -> list[dict[str, str]]:
+    """Read a declared sidecar CSV, skipping shared-writer review-marker comment lines.
+
+    Declared sidecars live under ``docs/context/evidence/``, whose shared writers
+    prepend a ``# AI-GENERATED NEEDS-REVIEW`` marker line (#6512 migration of the
+    #4242 backfill writer); unmarked legacy sidecars carry no comment lines and
+    read identically.
+    """
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        data_lines = [line for line in handle if not line.startswith("#")]
+    return list(csv.DictReader(data_lines))
+
+
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -310,7 +323,7 @@ def _load_declared_sidecars(
         if path.suffix == ".jsonl":
             rows.extend(_read_jsonl(path))
         else:
-            rows.extend(_read_csv(path))
+            rows.extend(_read_declared_sidecar_csv(path))
     return _index_sidecars(rows), provenance
 
 

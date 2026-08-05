@@ -250,6 +250,18 @@ def test_success_and_time_to_goal_norm_success_case():
     assert np.isclose(vals["path_efficiency"], 1.0)
 
 
+def test_time_to_goal_metrics_fail_closed_when_success_metadata_is_inconsistent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Successful status without a goal step raises explicitly instead of relying on ``assert``."""
+    ep = _make_episode(T=4, K=0)
+    monkeypatch.setattr(metrics_mod, "success_rate", lambda *_args, **_kwargs: 1.0)
+
+    for time_metric in (metrics_mod.time_to_goal_norm, metrics_mod.time_to_goal_norm_success_only):
+        with pytest.raises(RuntimeError, match="successful episode has no recorded goal step"):
+            time_metric(ep, horizon=10)
+
+
 def test_time_to_goal_nan_when_goal_not_reached():
     """TODO docstring. Document this function."""
     ep = _make_episode(T=4, K=0)

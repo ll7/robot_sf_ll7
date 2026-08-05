@@ -13,7 +13,6 @@ convergence:
   collision_rate: 0.1
   plateau_window: 512
 evaluation:
-  frequency_episodes: 0
   evaluation_episodes: 3
   randomize_seeds: false
   step_schedule:

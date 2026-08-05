@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
+import pytest
 
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
@@ -768,28 +767,208 @@ def test_guarded_ppo_no_peds_and_stop_best_effort_branch() -> None:
     assert decision == "stop_best_effort"
 
 
-def test_guarded_ppo_degenerate_blend_weight_never_emits_nan_command() -> None:
-    """A NaN blend weight must skip blending instead of failing open on a NaN command."""
-    guard = GuardedPPOAdapter(
-        config=GuardedPPOConfig(prior_blend_weight=float("nan")),
-        fallback_adapter=_FallbackAdapter((0.1, 0.0)),
-        prior_adapter=_PriorAdapter((0.3, 0.4)),
+def test_guarded_ppo_config_rejects_nan_blend_weight() -> None:
+    """A NaN blend weight must fail construction instead of reaching the decision path."""
+    with pytest.raises(ValueError, match="prior_blend_weight.*finite"):
+        GuardedPPOConfig(prior_blend_weight=float("nan"))
+
+
+def test_guarded_ppo_config_rejects_nan_goal_tolerance() -> None:
+    """A NaN goal tolerance must fail construction instead of reaching the decision path."""
+    with pytest.raises(ValueError, match="goal_tolerance.*finite"):
+        GuardedPPOConfig(goal_tolerance=float("nan"))
+
+
+_FIELD_TO_CONFIG_KEY = {
+    "rollout_dt": "guard_rollout_dt",
+    "rollout_steps": "guard_rollout_steps",
+    "goal_tolerance": "goal_tolerance",
+    "near_field_distance": "guard_near_field_distance",
+    "hard_ped_clearance": "guard_hard_ped_clearance",
+    "first_step_ped_clearance": "guard_first_step_ped_clearance",
+    "hard_obstacle_clearance": "guard_hard_obstacle_clearance",
+    "min_ttc": "guard_min_ttc",
+    "obstacle_threshold": "guard_obstacle_threshold",
+    "obstacle_search_cells": "guard_obstacle_search_cells",
+    "prior_blend_weight": "prior_blend_weight",
+    "prior_progress_margin": "prior_progress_margin",
+    "prior_residual_max_linear_delta": "prior_residual_max_linear_delta",
+    "prior_residual_max_angular_delta": "prior_residual_max_angular_delta",
+    "uncertainty_base_radius_m": "uncertainty_base_radius_m",
+    "uncertainty_conformal_radius_m": "uncertainty_conformal_radius_m",
+    "uncertainty_buffer_intrusion_threshold": "uncertainty_buffer_intrusion_threshold",
+    "uncertainty_collision_probability_threshold": "uncertainty_collision_probability_threshold",
+    "uncertainty_min_ttc_threshold_s": "uncertainty_min_ttc_threshold_s",
+    "uncertainty_slow_down_speed_m_s": "uncertainty_slow_down_speed_m_s",
+}
+
+_FINITE_FIELDS = (
+    "rollout_dt",
+    "goal_tolerance",
+    "near_field_distance",
+    "hard_ped_clearance",
+    "first_step_ped_clearance",
+    "hard_obstacle_clearance",
+    "min_ttc",
+    "obstacle_threshold",
+    "prior_blend_weight",
+    "prior_progress_margin",
+    "prior_residual_max_linear_delta",
+    "prior_residual_max_angular_delta",
+    "uncertainty_base_radius_m",
+    "uncertainty_conformal_radius_m",
+    "uncertainty_buffer_intrusion_threshold",
+    "uncertainty_collision_probability_threshold",
+    "uncertainty_min_ttc_threshold_s",
+    "uncertainty_slow_down_speed_m_s",
+)
+
+_NON_FINITE_VALUES = (float("nan"), float("inf"), float("-inf"))
+
+_POSITIVE_FIELDS = (
+    "rollout_dt",
+    "rollout_steps",
+    "obstacle_search_cells",
+    "uncertainty_base_radius_m",
+)
+
+_NON_NEGATIVE_FIELDS = (
+    "goal_tolerance",
+    "near_field_distance",
+    "hard_ped_clearance",
+    "first_step_ped_clearance",
+    "hard_obstacle_clearance",
+    "min_ttc",
+    "prior_progress_margin",
+    "prior_residual_max_linear_delta",
+    "prior_residual_max_angular_delta",
+    "uncertainty_conformal_radius_m",
+    "uncertainty_slow_down_speed_m_s",
+    "uncertainty_min_ttc_threshold_s",
+)
+
+_UNIT_INTERVAL_FIELDS = (
+    "obstacle_threshold",
+    "prior_blend_weight",
+    "uncertainty_buffer_intrusion_threshold",
+    "uncertainty_collision_probability_threshold",
+)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [(field, value) for field in _FINITE_FIELDS for value in _NON_FINITE_VALUES],
+)
+def test_guarded_ppo_config_rejects_non_finite(field: str, value: float) -> None:
+    """Non-finite guard parameters must fail direct construction."""
+    with pytest.raises(ValueError, match=f"{field}.*finite"):
+        GuardedPPOConfig(**{field: value})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [(field, value) for field in _FINITE_FIELDS for value in _NON_FINITE_VALUES],
+)
+def test_guarded_ppo_build_config_rejects_non_finite(field: str, value: float) -> None:
+    """Non-finite guard parameters must fail mapping-based parsing naming the field."""
+    with pytest.raises(ValueError, match=f"{field}.*finite"):
+        build_guarded_ppo_config({_FIELD_TO_CONFIG_KEY[field]: value})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [(field, value) for field in _POSITIVE_FIELDS for value in (0, -1)],
+)
+def test_guarded_ppo_config_rejects_non_positive_counts(field: str, value: int) -> None:
+    """Zero or negative timestep/count fields must fail direct construction."""
+    with pytest.raises(ValueError, match=f"{field}.*positive"):
+        GuardedPPOConfig(**{field: value})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [(field, value) for field in _POSITIVE_FIELDS for value in (0, -1)],
+)
+def test_guarded_ppo_build_config_rejects_non_positive_counts(field: str, value: int) -> None:
+    """Zero or negative timestep/count fields must fail mapping-based parsing."""
+    with pytest.raises(ValueError, match=f"{field}.*positive"):
+        build_guarded_ppo_config({_FIELD_TO_CONFIG_KEY[field]: value})
+
+
+@pytest.mark.parametrize("field", _NON_NEGATIVE_FIELDS)
+def test_guarded_ppo_config_rejects_negative_clearance_like_fields(field: str) -> None:
+    """Negative distance/clearance/margin/delta/speed/TTC fields must fail construction."""
+    with pytest.raises(ValueError, match=f"{field}.*non-negative"):
+        GuardedPPOConfig(**{field: -0.1})
+
+
+@pytest.mark.parametrize("field", _NON_NEGATIVE_FIELDS)
+def test_guarded_ppo_build_config_rejects_negative_clearance_like_fields(field: str) -> None:
+    """Negative distance/clearance/margin/delta/speed/TTC fields must fail parsing."""
+    with pytest.raises(ValueError, match=f"{field}.*non-negative"):
+        build_guarded_ppo_config({_FIELD_TO_CONFIG_KEY[field]: -0.1})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [(field, value) for field in _UNIT_INTERVAL_FIELDS for value in (-0.01, 1.01)],
+)
+def test_guarded_ppo_config_rejects_out_of_unit_interval(field: str, value: float) -> None:
+    """Probability and blend-weight fields outside [0.0, 1.0] must fail construction."""
+    with pytest.raises(ValueError, match=rf"{field}.*\[0\.0, 1\.0\]"):
+        GuardedPPOConfig(**{field: value})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [(field, value) for field in _UNIT_INTERVAL_FIELDS for value in (-0.01, 1.01)],
+)
+def test_guarded_ppo_build_config_rejects_out_of_unit_interval(field: str, value: float) -> None:
+    """Probability and blend-weight fields outside [0.0, 1.0] must fail parsing."""
+    with pytest.raises(ValueError, match=rf"{field}.*\[0\.0, 1\.0\]"):
+        build_guarded_ppo_config({_FIELD_TO_CONFIG_KEY[field]: value})
+
+
+def test_guarded_ppo_config_accepts_shipped_style_values() -> None:
+    """Shipped camera-ready guard values must parse without error."""
+    config = build_guarded_ppo_config(
+        {
+            "guard_rollout_dt": 0.2,
+            "guard_rollout_steps": 6,
+            "goal_tolerance": 0.25,
+            "guard_near_field_distance": 2.0,
+            "guard_hard_ped_clearance": 0.58,
+            "guard_first_step_ped_clearance": 0.72,
+            "guard_hard_obstacle_clearance": 0.30,
+            "guard_min_ttc": 0.70,
+            "guard_obstacle_threshold": 0.5,
+            "guard_obstacle_search_cells": 12,
+            "prior_blend_weight": 0.0,
+            "prior_progress_margin": 0.05,
+            "prior_residual_max_linear_delta": 0.25,
+            "prior_residual_max_angular_delta": 0.35,
+            "uncertainty_base_radius_m": 0.58,
+            "uncertainty_conformal_radius_m": 0.25,
+            "uncertainty_buffer_intrusion_threshold": 0.0,
+            "uncertainty_collision_probability_threshold": 0.5,
+            "uncertainty_slow_down_speed_m_s": 0.2,
+        }
     )
-    command, decision = guard.choose_command(
-        _obs(ped_positions=[(0.6, 0.0)], ped_velocities=[(-0.5, 0.0)]),
-        (1.0, 0.0),
+    assert config.rollout_dt == 0.2
+    assert config.goal_tolerance == 0.25
+    assert config.obstacle_search_cells == 12
+
+
+def test_guarded_ppo_config_accepts_boundary_values() -> None:
+    """Zero for distance-like fields and unit-interval boundaries remain valid."""
+    config = GuardedPPOConfig(
+        goal_tolerance=0.0,
+        near_field_distance=0.0,
+        min_ttc=0.0,
+        prior_blend_weight=1.0,
+        obstacle_threshold=1.0,
+        uncertainty_min_ttc_threshold_s=0.0,
     )
-    assert not any(math.isnan(value) for value in command)
-    assert decision != "prior_blend_safe"
-
-
-def test_guarded_ppo_nan_goal_tolerance_preserves_normal_safety_selection() -> None:
-    """A NaN goal tolerance must not turn an unverified goal into a stop decision."""
-    guard = GuardedPPOAdapter(
-        config=GuardedPPOConfig(goal_tolerance=float("nan")),
-        fallback_adapter=_FallbackAdapter((0.1, 0.0)),
-    )
-
-    decision = guard.choose_command_decision(_obs(), (0.4, 0.1))
-
-    assert decision.decision_label == "ppo_clear"
+    assert config.prior_blend_weight == 1.0
+    assert config.obstacle_threshold == 1.0
+    assert config.goal_tolerance == 0.0

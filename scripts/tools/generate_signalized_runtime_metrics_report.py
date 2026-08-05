@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.evidence.writers import write_json, write_text
+
 _DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_2799_signalized_runtime")
 
 
@@ -241,12 +243,9 @@ def generate(
     rows = [_row(record) for record in records]
     summary = _summary(rows)
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "summary.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (output_dir / "report.md").write_text(_report(summary, rows), encoding="utf-8")
-    (output_dir / "README.md").write_text(_readme(source_command), encoding="utf-8")
+    write_json(output_dir / "summary.json", summary)
+    write_text(output_dir / "report.md", _report(summary, rows), issue_ref="robot_sf#2799")
+    write_text(output_dir / "README.md", _readme(source_command), issue_ref="robot_sf#2799")
     return {
         "summary": output_dir / "summary.json",
         "report": output_dir / "report.md",

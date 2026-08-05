@@ -29,3 +29,6 @@ def fast_pysf_factory(env_config: EnvSettings, map_def: MapDefinition, peds: boo
     return init_simulators(
         env_config, map_def, random_start_pos=True, peds_have_obstacle_forces=peds
     )[0]
+
+
+__all__ = ["fast_pysf_factory"]

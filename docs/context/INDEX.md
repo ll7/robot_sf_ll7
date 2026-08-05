@@ -1,11 +1,37 @@
 # Context Retrieval Index
 
+Issue #5303 step 2 frozen TPE-versus-random diagnostic preregistration (proposal/preflight only): the side-effect-free three-seed contract, hash manifest, and check command for `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`. The parent issue's 2026-07-28 domain ruling supersedes this design for promotion with a new six-seed preregistration; this historical packet remains an inconclusive-only diagnostic handoff and cannot authorize the #6145 campaign:
+[README.md](evidence/issue_5303_search_promotion_preregistration/README.md).
+
+Issue #6644 oracle-first narrow-doorway geometry-family preflight for the #6600
+collision-envelope campaign: versioned manifest
+(`issue_6644_narrow_doorway_geometry_family.v1`) over a 15-cell
+`gap_width_m` x `constriction_depth_m` matrix around the authored 2.0 m opening, margin derived
+as `gap_width_m - 2 * envelope_radius_m`, planner-free envelope-sensitivity oracle runs before
+any planner path, planner lanes stay `not_run` until a separately approved issue-owned campaign
+packet, diagnostic within-simulator geometry evidence only:
+[issue_6644_narrow_doorway_geometry_family.md](issue_6644_narrow_doorway_geometry_family.md).
+
 Issue #6641 Gate 1 runtime radius-binding canary for the #6600 collision-envelope campaign:
 prove a declared `robot_config.radius` propagates consistently to simulator collision geometry,
 obstacle/pedestrian contact logic, feasibility/oracle, metric metadata and output rows, and
 planner inputs, with a fail-closed machine-readable go/no-go verdict per binding surface
 (`radius_binding_canary.v1`):
 [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
+
+Issue #6642 collision-envelope radius sweep admission (Gate 2 of #6600): manifest and three
+arm configs pin the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the
+48-cell classic_interactions_francis2023 matrix at one immutable campaign commit, with
+fail-closed cross-arm non-radius consistency checks. Gate 1 runtime binding is admitted;
+the configs are still not benchmark evidence and production compute remains blocked by
+the remaining campaign gates:
+[issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
+
+Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
+`robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
+groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this
+issue):
+[issue_6469_benchmark_reorganization_plan.md](issue_6469_benchmark_reorganization_plan.md).
 
 Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
 upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the
@@ -14,6 +40,10 @@ adapted) unless and until a formal license or explicit permission is obtained an
 the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier `idea`, no policy
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
+
+Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
+preflight configuration and its explicit no-result boundary:
+[issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).
 
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
@@ -29,6 +59,11 @@ Issue #5579 MPC tuning-budget archaeology and completed bounded sensitivity diag
 prediction-MPC arms, 20-point shared grid, fixed paired slice, and blocked fail-closed read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
 
+Issue #6700 SLURM compute run for the preregistered two-phase matched-budget MPC tuning-sensitivity
+campaign — blocked on this lane (not authorized to submit, no SLURM tooling, two-phase packet
+refreeze and passed native canary not yet on main); blocker and enabling gate:
+[issue_6700_mpc_tuning_campaign_compute_blocker.md](issue_6700_mpc_tuning_campaign_compute_blocker.md).
+
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7
 scenario discovery research program:
 [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).
@@ -36,6 +71,15 @@ scenario discovery research program:
 Issue #5574 planner-free feasibility oracle and collision-envelope sensitivity evidence for the
 Francis 2023 zero-success candidate cells:
 [README.md](evidence/issue_5574_feasibility_oracle_2026-07-14/README.md).
+
+Issue #6640 Gate 0 post-hoc feasibility audit of the frozen 0.0.3.post1 release rows for the
+collision-envelope radius campaign (parent #6600): machine-readable decision
+(`radius_sensitivity_gate0_decision.v1`) classifying each radius-sensitivity outcome as
+re-derivable-from-retained-fields or replay-required; no outcome is currently re-derivable because
+the effective radius and map-asset provenance are not retained/pinned, every collision/contact/
+feasibility/planner/trajectory outcome is replay-required, and a radius-default inconsistency
+(`metrics.py` 1.0 m vs `runner.py` 0.3 m) is recorded as a Gate 1 input:
+[radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md).
 
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).

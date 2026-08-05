@@ -15,6 +15,7 @@ from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
+from robot_sf.evidence.writers import write_json, write_text
 
 SCHEMA_VERSION = "s20-s30-evidence-gap-packet.v1"
 DEFAULT_JOB_ID = "13175"
@@ -413,15 +414,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(rendered, encoding="utf-8")
+        if args.json:
+            write_json(args.output, packet)
+        else:
+            write_text(args.output, rendered, issue_ref="robot_sf#3798")
     else:
         print(rendered, end="")
     if args.packet_output is not None:
         args.packet_output.parent.mkdir(parents=True, exist_ok=True)
-        args.packet_output.write_text(
-            json.dumps(packet, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        write_json(args.packet_output, packet)
     return 1 if packet["status"] == "blocked_missing_retrieved_metadata" else 0
 
 

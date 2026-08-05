@@ -33,6 +33,18 @@ _TUNING_SOURCES = (TUNING_SOURCE_DECLARED, TUNING_SOURCE_BACKFILLED, TUNING_SOUR
 _TUNING_EFFORT_ENFORCEMENT = ("off", "warn", "error")
 _CHECKPOINT_PROVENANCE_ENFORCEMENT = ("off", "error")
 
+# Radius-sweep runtime-binding contract (issues #6600, #6641, and #6642). The
+# pending status is deliberately retained in preparation configs, but it must
+# fail closed before a campaign can execute. A bound arm carries the Gate 1
+# receipt and source commit so the binding admission is auditable.
+RADIUS_BINDING_STATUS_PENDING_GATE1 = "pending_gate1_canary"
+RADIUS_BINDING_STATUS_BOUND_RUNTIME = "bound_runtime"
+RADIUS_BINDING_CONTRACT_VERSION = "radius_binding_canary.v1"
+_RADIUS_BINDING_STATUSES = (
+    RADIUS_BINDING_STATUS_PENDING_GATE1,
+    RADIUS_BINDING_STATUS_BOUND_RUNTIME,
+)
+
 
 @dataclass(frozen=True)
 class AmvProfileConfig:
@@ -138,6 +150,29 @@ class SnqiContractConfig:
 
 
 @dataclass(frozen=True)
+class RadiusSweepConfig:
+    """Issue-scoped radius treatment and runtime-binding provenance.
+
+    ``pending_gate1_canary`` is preparation metadata only. The camera-ready
+    scenario loader rejects that status before preflight or episode execution.
+    ``bound_runtime`` is accepted only with a Gate 1 receipt and source commit
+    so a production arm cannot silently run at the default radius.
+    """
+
+    issue: int
+    parent_issue: int
+    arm_key: str
+    radius_m: float
+    baseline_arm: bool
+    runtime_binding_status: str
+    binding_contract_version: str | None = None
+    gate1_canary_issue: int | None = None
+    gate1_receipt_sha256: str | None = None
+    gate1_source_commit: str | None = None
+    runtime_binding_note: str | None = None
+
+
+@dataclass(frozen=True)
 class CampaignConfig:
     """Top-level camera-ready benchmark campaign config."""
 
@@ -148,6 +183,9 @@ class CampaignConfig:
         default_factory=ScenarioCandidateSelection
     )
     scenario_amv_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    # Optional issue #6642 treatment metadata. Absent blocks preserve the
+    # legacy campaign behavior; pending blocks fail closed in scenario loading.
+    radius_sweep: RadiusSweepConfig | None = None
     seed_policy: SeedPolicy = SeedPolicy()
     scenario_horizons_path: Path | None = None
     workers: int = 1
@@ -199,3 +237,8 @@ class CampaignConfig:
     # as per-arm overrides). Raw mapping consumed by ``runtime_config_from_mapping``; ``None`` keeps
     # the wrapper off.
     safety_wrapper: dict[str, Any] | None = None
+    # The immutable campaign YAML that produced this object.  The digest is captured from the
+    # exact bytes parsed by ``load_campaign_config`` so preflight never rehashes a potentially
+    # changed path after loading.
+    source_config_path: Path | None = None
+    source_config_sha256: str | None = None

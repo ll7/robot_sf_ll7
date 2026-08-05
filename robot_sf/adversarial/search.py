@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from robot_sf.adversarial.attribution import (
     FailureAttribution,
@@ -32,6 +33,10 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
+from robot_sf.benchmark.fallback_policy import (
+    resolve_execution_mode,
+    summarize_benchmark_availability,
+)
 from robot_sf.benchmark.runner import run_batch
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
@@ -41,6 +46,106 @@ ProductionCandidateEvaluator = Callable[[SearchConfig, CandidateSpec, int], Cand
 DEFAULT_SCHEMA_PATH = (
     Path(__file__).parent.parent / "benchmark" / "schemas" / "episode.schema.v1.json"
 )
+
+
+def _mark_missing_provenance(enriched: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Mark a run unavailable when its execution provenance is incomplete."""
+    preflight = enriched.get("preflight")
+    preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
+    preflight_status = str(preflight_payload.get("status", "")).strip().lower()
+    if preflight_status not in {"fallback", "skipped"}:
+        preflight_payload["status"] = "skipped"
+        preflight_payload.setdefault("compatibility_reason", reason)
+        enriched["preflight"] = preflight_payload
+    return enriched
+
+
+def _validate_preflight_status(enriched: dict[str, Any]) -> str | None:
+    """Reject explicit non-terminal preflight statuses before availability scoring."""
+    preflight = enriched.get("preflight")
+    if "preflight" in enriched and not isinstance(preflight, dict):
+        return "episode preflight metadata was missing or malformed"
+    if isinstance(preflight, dict):
+        preflight_status = str(preflight.get("status", "")).strip().lower()
+        if preflight_status not in {"ok", "fallback", "skipped"}:
+            return f"episode preflight status was non-terminal: {preflight_status or 'missing'}"
+    return None
+
+
+def _validate_episode_provenance(
+    enriched: dict[str, Any], record: dict[str, Any] | None
+) -> str | None:
+    """Return a missing-provenance reason and enrich direct-runner summaries."""
+    if not isinstance(record, dict) or not record:
+        return "episode record was missing or malformed"
+
+    metadata_present = "algorithm_metadata" in record
+    metadata = record.get("algorithm_metadata")
+    if metadata_present and (not isinstance(metadata, dict) or not metadata):
+        return "episode algorithm metadata was missing or malformed"
+    if isinstance(metadata, dict) and not isinstance(
+        enriched.get("algorithm_metadata_contract"), dict
+    ):
+        enriched["algorithm_metadata_contract"] = metadata
+
+    effective_metadata = enriched.get("algorithm_metadata_contract")
+    if not isinstance(effective_metadata, dict) or not effective_metadata:
+        return "episode algorithm metadata contract was missing"
+
+    metadata_statuses = [
+        str(payload.get("status", "")).strip().lower()
+        for payload in (metadata, effective_metadata)
+        if isinstance(payload, dict) and str(payload.get("status", "")).strip()
+    ]
+    if not metadata_statuses:
+        return "episode algorithm metadata status was missing"
+    non_ok_statuses = [status for status in metadata_statuses if status != "ok"]
+    if non_ok_statuses:
+        metadata_status = non_ok_statuses[0]
+        preflight = enriched.get("preflight")
+        preflight_payload = dict(preflight) if isinstance(preflight, dict) else {}
+        preflight_status = str(preflight_payload.get("status", "")).strip().lower()
+        if preflight_status not in {"fallback", "skipped"}:
+            preflight_payload["status"] = (
+                "fallback"
+                if "fallback" in metadata_status or "unavailable" in metadata_status
+                else "skipped"
+            )
+            preflight_payload.setdefault(
+                "compatibility_reason",
+                f"episode algorithm metadata status: {metadata_status}",
+            )
+            enriched["preflight"] = preflight_payload
+    else:
+        episode_mode = resolve_execution_mode(metadata)
+        summary_mode = resolve_execution_mode(effective_metadata)
+        if episode_mode == "unknown" or summary_mode == "unknown":
+            return "episode algorithm metadata execution mode was missing or malformed"
+        if episode_mode != summary_mode:
+            return "episode and summary algorithm metadata execution modes disagree"
+
+    # A direct runner may omit the preflight block entirely, in which case the
+    # validated episode metadata is the authoritative provenance source.  When
+    # a preflight block is present, only terminal statuses are safe to carry
+    # forward; failed/partial/unknown states cannot become available because an
+    # episode was written.
+    return _validate_preflight_status(enriched)
+
+
+def _availability_summary(summary: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:
+    """Complete a batch summary with per-episode execution provenance.
+
+    The direct benchmark runner returns episode counts and failures but does not
+    include the algorithm metadata contract that the map runner places in its
+    summary. Use the written episode record as the authoritative fallback, and
+    surface non-``ok`` algorithm statuses as a preflight failure so fallback or
+    degraded execution cannot be reported as available.
+    """
+    enriched = dict(summary)
+    reason = _validate_episode_provenance(enriched, record)
+    if reason:
+        return _mark_missing_provenance(enriched, reason)
+    return enriched
 
 
 def _default_evaluator(
@@ -73,6 +178,16 @@ def _default_evaluator(
     record = read_first_jsonl_record(episode_path)
     trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
     attribution = attribution_from_episode_record(record or {})
+    availability = summarize_benchmark_availability(_availability_summary(summary, record))
+    attribution = replace(
+        attribution,
+        details={
+            **attribution.details,
+            "execution_mode": availability.execution_mode,
+            "readiness_status": availability.readiness_status,
+            "availability_status": availability.availability_status,
+        },
+    )
     write_json(candidate_dir / "failure_attribution.json", attribution.to_json())
     return CandidateEvaluation(
         candidate=candidate,

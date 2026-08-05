@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/collision_pressure_report.v1.json",
+  "title": "RobotSF Typed-Ledger Collision Pressure Report (v1)",
+  "description": "Descriptive exact collision-event counts over a declared EpisodeEventLedger.v2 slice. This is not a probability, causal, severity, or physical-risk metric.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "claim_boundary",
+    "selection",
+    "denominator",
+    "counts",
+    "family_counts",
+    "missingness",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "collision_pressure_report.v1"
+    },
+    "status": {
+      "const": "complete"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "selection": {
+      "$ref": "#/$defs/selection"
+    },
+    "denominator": {
+      "$ref": "#/$defs/denominator"
+    },
+    "counts": {
+      "$ref": "#/$defs/counts"
+    },
+    "family_counts": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/family_count"
+      }
+    },
+    "missingness": {
+      "$ref": "#/$defs/missingness"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    }
+  },
+  "$defs": {
+    "non_negative_integer": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "string_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eligible_families",
+        "family_field",
+        "input_row_count",
+        "excluded_row_count",
+        "exclusions",
+        "exclusion_counts"
+      ],
+      "properties": {
+        "eligible_families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "family_field": {
+          "const": "scenario_family"
+        },
+        "input_row_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "excluded_row_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/exclusion"
+          }
+        },
+        "exclusion_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/non_negative_integer"
+          }
+        }
+      }
+    },
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "row_index",
+        "episode_key",
+        "reason"
+      ],
+      "properties": {
+        "row_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "episode_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "denominator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "eligible_episode_count",
+        "eligible_episode_key_sha256",
+        "eligible_episode_keys"
+      ],
+      "properties": {
+        "unit": {
+          "const": "episode"
+        },
+        "eligible_episode_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "eligible_episode_key_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "eligible_episode_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contact_episode_count",
+        "collision_event_count",
+        "partner_type_episode_counts",
+        "obstacle_rollup_episode_count",
+        "pedestrian_obstacle_overlap_episode_counts"
+      ],
+      "properties": {
+        "contact_episode_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "collision_event_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "partner_type_episode_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pedestrian",
+            "static_geometry",
+            "boundary",
+            "goal_artifact"
+          ],
+          "properties": {
+            "pedestrian": {
+              "$ref": "#/$defs/non_negative_integer"
+            },
+            "static_geometry": {
+              "$ref": "#/$defs/non_negative_integer"
+            },
+            "boundary": {
+              "$ref": "#/$defs/non_negative_integer"
+            },
+            "goal_artifact": {
+              "$ref": "#/$defs/non_negative_integer"
+            }
+          }
+        },
+        "obstacle_rollup_episode_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "pedestrian_obstacle_overlap_episode_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pedestrian_only",
+            "obstacle_only",
+            "pedestrian_and_obstacle"
+          ],
+          "properties": {
+            "pedestrian_only": {
+              "$ref": "#/$defs/non_negative_integer"
+            },
+            "obstacle_only": {
+              "$ref": "#/$defs/non_negative_integer"
+            },
+            "pedestrian_and_obstacle": {
+              "$ref": "#/$defs/non_negative_integer"
+            }
+          }
+        }
+      }
+    },
+    "family_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eligible_episode_count",
+        "contact_episode_count"
+      ],
+      "properties": {
+        "eligible_episode_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        },
+        "contact_episode_count": {
+          "$ref": "#/$defs/non_negative_integer"
+        }
+      }
+    },
+    "missingness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "optional_collision_event_fields",
+        "excluded_rows_by_reason"
+      ],
+      "properties": {
+        "optional_collision_event_fields": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/non_negative_integer"
+          }
+        },
+        "excluded_rows_by_reason": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/non_negative_integer"
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_commit",
+        "release_id",
+        "bundle_id",
+        "input_checksums"
+      ],
+      "properties": {
+        "source_commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "release_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bundle_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_checksums": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

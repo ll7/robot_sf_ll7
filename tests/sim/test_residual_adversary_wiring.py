@@ -66,6 +66,9 @@ def _build_simulator(residual_active: bool):
         time_per_step_in_secs=0.1,
         difficulty=0,
         ped_density_by_difficulty=[0.02, 0.02, 0.02, 0.02],
+        population_size=1,
+        route_spawn_distribution="spread",
+        route_spawn_seed=0,
         residual_adversary=ResidualAdversaryConfig(
             is_active=residual_active,
             target_ped_idx=-1,

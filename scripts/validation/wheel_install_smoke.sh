@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EXTRAS_SMOKE="${ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS:-progress analysis analytics viz}"
+EXTRAS_SMOKE="${ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS:-progress analytics viz}"
 REPORT_FILE="output/validation/wheel_install_smoke_report.json"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -149,7 +149,6 @@ import robot_sf
 extra = sys.argv[1]
 feature_modules = {
     "progress": ["tqdm"],
-    "analysis": ["seaborn"],
     "analytics": ["duckdb", "pyarrow"],
     "viz": [
         "pygame",

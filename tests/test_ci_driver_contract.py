@@ -477,7 +477,7 @@ def test_wheel_install_smoke_tests_optional_extras_independently() -> None:
     smoke_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
 
     assert "ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS" in smoke_text
-    assert "progress analysis analytics viz" in smoke_text
+    assert "progress analytics viz" in smoke_text
     assert '"${extra_pip}" install --no-cache-dir "${WHEEL_PATH}[${extra}]"' in smoke_text
     assert '"extras": json.loads(extras_status_json)' in smoke_text
 

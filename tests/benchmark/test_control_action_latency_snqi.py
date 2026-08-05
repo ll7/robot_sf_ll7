@@ -7,6 +7,8 @@ packet under the reproducibility tolerance contract, and CSV / raw-row inputs
 round-trip consistently.
 """
 
+# evidence-writer-exempt: negative tests intentionally write malformed tmp_path fixtures.
+
 from __future__ import annotations
 
 import json
@@ -41,6 +43,7 @@ from robot_sf.benchmark.control_action_latency_snqi import (
     verify_against_reference,
     write_input_provenance,
     write_input_rows,
+    write_snqi_analysis,
     write_uncertainty_reissue,
 )
 
@@ -365,6 +368,61 @@ def test_csv_round_trip_preserves_inputs(tmp_path: Path) -> None:
     assert first.latency_step == 0 or first.latency_step in STEPS
     # Every reloaded row is a valid result.
     assert all(entry.classification == "result" for entry in reloaded)
+
+
+def test_write_snqi_analysis_preserves_public_packet_order(tmp_path: Path) -> None:
+    """The diagnostic writer preserves its established JSON order and review marker."""
+    packet = {
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
+        "schema_version": ANALYSIS_SCHEMA_VERSION,
+        "issue": 5892,
+        "_unit_keys": {"orca": ["scenario_00:111"]},
+        "point_estimate_robustness_ranking": [
+            {
+                "planner_group": "orca",
+                "planner": "orca",
+                "execution_mode": "adapter",
+                "paired_units": 1,
+                "snqi_mean_at_0_steps": 0.3,
+                "snqi_mean_at_1_step": 0.2,
+                "snqi_mean_at_3_steps": 0.1,
+                "snqi_slope_per_100ms": -0.1,
+                "snqi_slope_95pct_ci": [-0.2, 0.0],
+                "rank": 1,
+            }
+        ],
+    }
+
+    analysis_path, csv_path = write_snqi_analysis(packet, tmp_path)
+
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    assert analysis["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert list(analysis)[:3] == ["review_marker", "schema_version", "issue"]
+    assert "_unit_keys" not in analysis
+    csv_lines = csv_path.read_text(encoding="utf-8").splitlines()
+    assert csv_lines[0] == "# AI-GENERATED NEEDS-REVIEW"
+    assert len(csv_lines) == 5  # marker, header, and one row per latency step
+
+
+def test_write_snqi_analysis_empty_ranking_preserves_csv_header(tmp_path: Path) -> None:
+    """An empty ranking still emits the marked CSV schema header without raising."""
+    write_snqi_analysis(
+        {
+            "schema_version": ANALYSIS_SCHEMA_VERSION,
+            "point_estimate_robustness_ranking": [],
+        },
+        tmp_path,
+    )
+
+    csv_lines = (tmp_path / "snqi_by_latency.csv").read_text(encoding="utf-8").splitlines()
+    assert csv_lines == [
+        "# AI-GENERATED NEEDS-REVIEW",
+        (
+            "planner_group,planner,execution_mode,latency_steps,latency_ms_equivalent,"
+            "paired_units,snqi_mean,snqi_delta_vs_zero,snqi_slope_per_100ms,"
+            "snqi_slope_ci_low,snqi_slope_ci_high,point_estimate_robustness_rank"
+        ),
+    ]
 
 
 def test_load_input_rows_rejects_missing_columns(tmp_path: Path) -> None:

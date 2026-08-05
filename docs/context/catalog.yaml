@@ -4800,6 +4800,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6676_risk_aware_trajectory_ranker_smoke
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6412_real_reexport_package
   status: evidence
   freshness: evidence

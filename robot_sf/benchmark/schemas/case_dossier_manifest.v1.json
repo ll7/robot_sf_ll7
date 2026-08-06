@@ -23,6 +23,32 @@
     "outputs",
     "content_sha256"
   ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {"comparison_grammar": {"const": "matched_start_planner"}},
+        "required": ["comparison_grammar"]
+      },
+      "then": {
+        "properties": {
+          "claim_template_id": {"const": "matched_start_descriptive.v1"},
+          "claim_fields": {"$ref": "#/$defs/matchedClaimFields"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"comparison_grammar": {"const": "same_cell_seed_sensitivity"}},
+        "required": ["comparison_grammar"]
+      },
+      "then": {
+        "properties": {
+          "claim_template_id": {"const": "same_cell_distinct_start_abstention.v1"},
+          "claim_fields": {"$ref": "#/$defs/sameCellClaimFields"}
+        }
+      }
+    }
+  ],
   "properties": {
     "schema_version": {"const": "case_dossier_manifest.v1"},
     "dossier_id": {"type": "string", "minLength": 1},
@@ -38,16 +64,7 @@
       ]
     },
     "scientific_admission": {"const": false},
-    "comparison": {
-      "type": "object",
-      "required": [
-        "shared_prefix",
-        "recorded_start_separation",
-        "divergence_interpretation",
-        "prohibited_semantics"
-      ],
-      "additionalProperties": true
-    },
+    "comparison": {"$ref": "#/$defs/comparisonProjection"},
     "selection": {
       "type": "object",
       "required": [
@@ -81,52 +98,997 @@
       },
       "additionalProperties": false
     },
-    "renderer": {
-      "type": "object",
-      "required": ["renderer_version", "style_version", "input_schema_version", "manifest_schema_version"],
-      "additionalProperties": true
+    "renderer": {"$ref": "#/$defs/rendererProjection"},
+    "source_bindings": {"$ref": "#/$defs/sourceBindingsProjection"},
+    "shared_scales": {"$ref": "#/$defs/sharedScalesProjection"},
+    "panel_status": {"$ref": "#/$defs/panelStatusProjection"},
+    "semantic_events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/semanticEventProjection"},
+      "uniqueItems": true
     },
-    "source_bindings": {
-      "type": "object",
-      "required": ["portfolio", "process_traces", "campaign_atlas", "source_classes"],
-      "properties": {
-        "campaign_atlas": {
-          "type": "object",
-          "required": ["release_cells"],
-          "properties": {
-            "release_cells": {
-              "type": "array",
-              "items": {"$ref": "#/$defs/atlasCellProjection"}
-            }
-          },
-          "additionalProperties": true
-        }
-      },
-      "additionalProperties": true
-    },
-    "shared_scales": {"type": "object"},
-    "panel_status": {"type": "object"},
-    "semantic_events": {"type": "array"},
     "claim_fields": {
-      "type": "object",
-      "required": ["observed_signature", "competing_explanation", "causal_status", "generalization_limit"],
-      "properties": {
-        "observed_signature": {"type": "string", "minLength": 1},
-        "competing_explanation": {"type": "string", "minLength": 1},
-        "causal_status": {"enum": ["observational_only", "causal_abstention"]},
-        "generalization_limit": {"type": "string", "minLength": 1}
-      },
-      "additionalProperties": false
+      "oneOf": [
+        {"$ref": "#/$defs/matchedClaimFields"},
+        {"$ref": "#/$defs/sameCellClaimFields"}
+      ]
     },
     "outputs": {
       "type": "object",
       "required": ["svg", "pdf", "caption", "sidecar"],
-      "additionalProperties": {"$ref": "#/$defs/fileRef"}
+      "properties": {
+        "svg": {"$ref": "#/$defs/fileRef"},
+        "pdf": {"$ref": "#/$defs/fileRef"},
+        "caption": {"$ref": "#/$defs/fileRef"},
+        "sidecar": {"$ref": "#/$defs/fileRef"}
+      },
+      "additionalProperties": false
     },
     "content_sha256": {"$ref": "#/$defs/sha256"}
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "matchedClaimFields": {
+      "type": "object",
+      "required": [
+        "observed_signature",
+        "competing_explanation",
+        "causal_status",
+        "generalization_limit"
+      ],
+      "properties": {
+        "observed_signature": {
+          "const": "Different executed planner stacks show different observed processes and terminal outcomes under the matched recorded start."
+        },
+        "competing_explanation": {
+          "const": "Recorded command and encounter-geometry differences are documented; attribution is not estimated."
+        },
+        "causal_status": {"const": "observational_only"},
+        "generalization_limit": {
+          "const": "This selected comparison is descriptive only and supports no mechanistic or population inference."
+        }
+      },
+      "additionalProperties": false
+    },
+    "sameCellClaimFields": {
+      "type": "object",
+      "required": [
+        "observed_signature",
+        "competing_explanation",
+        "causal_status",
+        "generalization_limit"
+      ],
+      "properties": {
+        "observed_signature": {
+          "const": "The recorded traces show distinct observed paths and terminal outcomes from different recorded starts."
+        },
+        "competing_explanation": {
+          "const": "The different recorded starts preclude attribution to seed choice."
+        },
+        "causal_status": {"const": "causal_abstention"},
+        "generalization_limit": {
+          "const": "This selected comparison is descriptive only and supports no mechanistic or population inference."
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparisonProjection": {
+      "type": "object",
+      "required": [
+        "shared_prefix",
+        "recorded_start_separation",
+        "divergence_interpretation",
+        "prohibited_semantics"
+      ],
+      "properties": {
+        "shared_prefix": {"$ref": "#/$defs/sharedPrefixProjection"},
+        "recorded_start_separation": {"$ref": "#/$defs/startSeparationProjection"},
+        "divergence_interpretation": {"$ref": "#/$defs/divergenceProjection"},
+        "prohibited_semantics": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "adjacent_seed_significance",
+              "causal_hinge",
+              "difference_curve",
+              "divergence_point",
+              "pivot_time"
+            ]
+          },
+          "uniqueItems": true,
+          "maxItems": 5
+        }
+      },
+      "additionalProperties": false
+    },
+    "sharedPrefixProjection": {
+      "type": "object",
+      "required": [
+        "heading_tolerance_rad",
+        "matched_steps",
+        "position_tolerance_m",
+        "required_steps",
+        "shared_prefix",
+        "status"
+      ],
+      "properties": {
+        "heading_tolerance_rad": {"type": "number", "minimum": 0},
+        "matched_steps": {"type": "integer", "minimum": 0},
+        "position_tolerance_m": {"type": "number", "minimum": 0},
+        "reason": {"$ref": "#/$defs/identityToken"},
+        "required_steps": {"type": "integer", "minimum": 0},
+        "shared_prefix": {"type": "boolean"},
+        "status": {"const": "available"}
+      },
+      "additionalProperties": false
+    },
+    "startSeparationProjection": {
+      "type": "object",
+      "required": [
+        "initial_robot_separation_m",
+        "max_initial_actor_separation_m",
+        "planner_id_left",
+        "planner_id_right",
+        "scenario_id_equal",
+        "scenario_provenance_compatible",
+        "seed_left",
+        "seed_right",
+        "status"
+      ],
+      "properties": {
+        "initial_robot_separation_m": {
+          "anyOf": [
+            {"type": "number", "minimum": 0},
+            {"type": "null"}
+          ]
+        },
+        "max_initial_actor_separation_m": {
+          "anyOf": [
+            {"type": "number", "minimum": 0},
+            {"type": "null"}
+          ]
+        },
+        "planner_id_left": {"$ref": "#/$defs/identityToken"},
+        "planner_id_right": {"$ref": "#/$defs/identityToken"},
+        "scenario_id_equal": {"type": "boolean"},
+        "scenario_provenance_compatible": {"type": "boolean"},
+        "seed_left": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "seed_right": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "status": {"const": "available"}
+      },
+      "additionalProperties": false
+    },
+    "divergenceProjection": {
+      "type": "object",
+      "required": ["allowed", "reason"],
+      "properties": {
+        "allowed": {"type": "boolean"},
+        "reason": {
+          "enum": ["shared_prefix_available", "no_shared_prefix_reject_divergence_output"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "rendererProjection": {
+      "type": "object",
+      "required": [
+        "renderer_version",
+        "style_version",
+        "input_schema_version",
+        "manifest_schema_version",
+        "matplotlib_version",
+        "final_width_in",
+        "base_font_pt",
+        "minimum_visible_font_pt",
+        "svg_hashsalt",
+        "generation_commit",
+        "header_line_contract",
+        "canvas_text_bounds_checked",
+        "cross_axes_text_overlap_checked",
+        "structural_panel_text_bounds_checked",
+        "panel_tick_label_overlap_checked",
+        "route_title_band_in",
+        "turn_title_band_in"
+      ],
+      "properties": {
+        "renderer_version": {"const": "case_dossier_figure.v1"},
+        "style_version": {"const": "case_dossier_final_width.v1"},
+        "input_schema_version": {"const": "case_dossier_input.v1"},
+        "manifest_schema_version": {"const": "case_dossier_manifest.v1"},
+        "matplotlib_version": {"$ref": "#/$defs/identityToken"},
+        "final_width_in": {"type": "number", "minimum": 5.9, "maximum": 5.91},
+        "base_font_pt": {"const": 9.0},
+        "minimum_visible_font_pt": {"const": 8.25},
+        "svg_hashsalt": {"const": "case-dossier-figure-v1"},
+        "generation_commit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40,64}|unknown)$"
+        },
+        "header_line_contract": {"const": "wrapped_left_aligned.v1"},
+        "canvas_text_bounds_checked": {"const": true},
+        "cross_axes_text_overlap_checked": {"const": true},
+        "structural_panel_text_bounds_checked": {"const": true},
+        "panel_tick_label_overlap_checked": {"const": true},
+        "route_title_band_in": {"const": 0.44},
+        "turn_title_band_in": {"const": 0.36}
+      },
+      "additionalProperties": false
+    },
+    "sourceBindingsProjection": {
+      "type": "object",
+      "required": ["portfolio", "process_traces", "campaign_atlas", "source_classes"],
+      "properties": {
+        "portfolio": {"$ref": "#/$defs/portfolioBinding"},
+        "process_traces": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/processTraceBinding"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "campaign_atlas": {"$ref": "#/$defs/campaignAtlasBinding"},
+        "source_classes": {"$ref": "#/$defs/sourceClassesProjection"}
+      },
+      "additionalProperties": false
+    },
+    "portfolioBinding": {
+      "type": "object",
+      "required": ["path", "sha256", "schema_version"],
+      "properties": {
+        "path": {"$ref": "#/$defs/sourcePath"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "schema_version": {"const": "ch7_case_portfolio.v2"}
+      },
+      "additionalProperties": false
+    },
+    "processTraceBinding": {
+      "type": "object",
+      "required": [
+        "role",
+        "path",
+        "sha256",
+        "schema_version",
+        "source_content_sha256",
+        "recorded_outcome",
+        "run"
+      ],
+      "properties": {
+        "role": {"enum": ["left", "right"]},
+        "path": {"$ref": "#/$defs/sourcePath"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "schema_version": {"const": "worked_example_process_trace.v1"},
+        "source_content_sha256": {"$ref": "#/$defs/sha256"},
+        "recorded_outcome": {"$ref": "#/$defs/recordedOutcomeProjection"},
+        "run": {"$ref": "#/$defs/runProjection"}
+      },
+      "additionalProperties": false
+    },
+    "recordedOutcomeProjection": {
+      "type": "object",
+      "required": [
+        "status",
+        "value",
+        "source",
+        "authority",
+        "atlas_outcome_key_validated",
+        "atlas_cell_binding"
+      ],
+      "properties": {
+        "status": {"const": "available"},
+        "value": {"enum": ["success", "collision", "timeout"]},
+        "source": {"type": "string", "minLength": 1},
+        "authority": {
+          "enum": [
+            "typed_terminal_trace_evidence",
+            "non_authoritative_synthetic_fixture_declaration"
+          ]
+        },
+        "atlas_outcome_key_validated": {"const": true},
+        "atlas_cell_binding": {"$ref": "#/$defs/atlasCellBinding"}
+      },
+      "additionalProperties": false
+    },
+    "runProjection": {
+      "type": "object",
+      "required": [
+        "scenario_id",
+        "planner_id",
+        "seed",
+        "episode_id",
+        "horizon_steps",
+        "time_step_s"
+      ],
+      "properties": {
+        "scenario_id": {"$ref": "#/$defs/identityToken"},
+        "planner_id": {"$ref": "#/$defs/identityToken"},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "episode_id": {"$ref": "#/$defs/identityToken"},
+        "horizon_steps": {"type": "integer", "minimum": 1},
+        "time_step_s": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "campaignAtlasBinding": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "schema_version",
+        "release_cells",
+        "resolved_cell_bindings",
+        "uncertainty"
+      ],
+      "properties": {
+        "path": {"$ref": "#/$defs/sourcePath"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "schema_version": {"const": "campaign_atlas.v2"},
+        "release_cells": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/atlasCellProjection"},
+          "minItems": 1
+        },
+        "resolved_cell_bindings": {
+          "type": "object",
+          "required": ["left", "right"],
+          "properties": {
+            "left": {"$ref": "#/$defs/atlasCellBinding"},
+            "right": {"$ref": "#/$defs/atlasCellBinding"}
+          },
+          "additionalProperties": false
+        },
+        "uncertainty": {"$ref": "#/$defs/uncertaintyProjection"}
+      },
+      "additionalProperties": false
+    },
+    "atlasCellBinding": {
+      "type": "object",
+      "required": [
+        "status",
+        "scenario_family",
+        "planner",
+        "release_arm_id",
+        "resolution",
+        "authority_source"
+      ],
+      "properties": {
+        "status": {"const": "resolved"},
+        "scenario_family": {"$ref": "#/$defs/identityToken"},
+        "planner": {"$ref": "#/$defs/identityToken"},
+        "release_arm_id": {"$ref": "#/$defs/releaseArmId"},
+        "resolution": {
+          "enum": ["authoritative_release_arm_id", "unique_scenario_planner_cell"]
+        },
+        "authority_source": {
+          "anyOf": [
+            {"type": "null"},
+            {"type": "string", "minLength": 1}
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "uncertaintyProjection": {
+      "type": "object",
+      "required": ["status", "source", "method", "cells"],
+      "properties": {
+        "status": {"const": "available"},
+        "source": {"const": "campaign_atlas.v2.cells[].outcome_ci"},
+        "method": {"const": "campaign_atlas_outcome_ci_validated_and_consumed"},
+        "cells": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/uncertaintyCellProjection"},
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "uncertaintyCellProjection": {
+      "type": "object",
+      "required": ["scenario_family", "planner", "release_arm_id", "n_total", "outcomes"],
+      "properties": {
+        "scenario_family": {"$ref": "#/$defs/identityToken"},
+        "planner": {"$ref": "#/$defs/identityToken"},
+        "release_arm_id": {"$ref": "#/$defs/releaseArmId"},
+        "n_total": {"type": "integer", "minimum": 1},
+        "outcomes": {"$ref": "#/$defs/uncertaintyOutcomes"}
+      },
+      "additionalProperties": false
+    },
+    "uncertaintyOutcomes": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "success": {"$ref": "#/$defs/outcomeUncertainty"},
+        "collision": {"$ref": "#/$defs/outcomeUncertainty"},
+        "timeout": {"$ref": "#/$defs/outcomeUncertainty"}
+      },
+      "additionalProperties": false
+    },
+    "outcomeUncertainty": {
+      "type": "object",
+      "required": ["count", "estimate", "interval"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "estimate": {"type": "number", "minimum": 0, "maximum": 1},
+        "interval": {"$ref": "#/$defs/interval2"}
+      },
+      "additionalProperties": false
+    },
+    "sourceClassesProjection": {
+      "type": "object",
+      "required": ["release_statistics", "visualization_diagnostics"],
+      "properties": {
+        "release_statistics": {"const": "campaign_atlas.v2"},
+        "visualization_diagnostics": {"const": "visualization_only_rerun_diagnostics"}
+      },
+      "additionalProperties": false
+    },
+    "sourcePath": {"type": "string", "minLength": 1},
+    "semanticEventType": {
+      "enum": [
+        "minimum_clearance",
+        "first_material_deceleration",
+        "first_material_turn_response",
+        "conflict_zone_entry",
+        "exact_collision_event",
+        "first_safety_predicate_breach",
+        "proxy_overlap_event",
+        "sustained_stall_onset",
+        "recovery_onset",
+        "terminal_event"
+      ]
+    },
+    "semanticEventProjection": {
+      "type": "object",
+      "required": ["event_type", "absolute_time_s"],
+      "properties": {
+        "event_type": {"$ref": "#/$defs/semanticEventType"},
+        "absolute_time_s": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "sharedScalesProjection": {
+      "type": "object",
+      "required": [
+        "final_width_in",
+        "final_height_in",
+        "minimum_font_pt",
+        "world_crop_m",
+        "metre_scale_m",
+        "time_range_s",
+        "clearance_range_m",
+        "speed_range_mps",
+        "turn_rate_range_rad_s",
+        "palette_id",
+        "threshold_profile"
+      ],
+      "properties": {
+        "final_width_in": {"type": "number", "minimum": 5.9, "maximum": 5.91},
+        "final_height_in": {"type": "number", "minimum": 7, "maximum": 11},
+        "minimum_font_pt": {"type": "number", "minimum": 8.25},
+        "world_crop_m": {"$ref": "#/$defs/range4"},
+        "metre_scale_m": {"type": "number", "exclusiveMinimum": 0},
+        "time_range_s": {"$ref": "#/$defs/range2"},
+        "clearance_range_m": {"$ref": "#/$defs/range2"},
+        "speed_range_mps": {"$ref": "#/$defs/range2"},
+        "turn_rate_range_rad_s": {"$ref": "#/$defs/range2"},
+        "palette_id": {"const": "case_dossier_colorblind.v1"},
+        "threshold_profile": {"const": "worked_example_threshold_profile.diagnostic.v1"}
+      },
+      "additionalProperties": false
+    },
+    "panelStatusProjection": {
+      "type": "object",
+      "required": [
+        "world_left",
+        "world_right",
+        "time_space",
+        "surface_clearance",
+        "radial_closing_speed",
+        "commanded_speed",
+        "turn_rate",
+        "progress_stall",
+        "controller_state",
+        "semantic_style_key",
+        "cell_context",
+        "ensemble_context"
+      ],
+      "properties": {
+        "world_left": {"$ref": "#/$defs/worldPanelStatus"},
+        "world_right": {"$ref": "#/$defs/worldPanelStatus"},
+        "time_space": {"$ref": "#/$defs/timeSpaceStatus"},
+        "surface_clearance": {"$ref": "#/$defs/surfaceClearanceStatus"},
+        "radial_closing_speed": {"$ref": "#/$defs/radialClosingSpeedStatus"},
+        "commanded_speed": {"$ref": "#/$defs/commandedSpeedStatus"},
+        "turn_rate": {"$ref": "#/$defs/turnRateStatus"},
+        "progress_stall": {"$ref": "#/$defs/progressStallStatus"},
+        "controller_state": {"$ref": "#/$defs/controllerStateStatus"},
+        "semantic_style_key": {"$ref": "#/$defs/semanticStyleKeyStatus"},
+        "cell_context": {"$ref": "#/$defs/cellContextStatus"},
+        "ensemble_context": {"$ref": "#/$defs/ensembleContextStatus"}
+      },
+      "additionalProperties": false
+    },
+    "worldPanelStatus": {
+      "oneOf": [
+        {"$ref": "#/$defs/worldAvailableStatus"},
+        {"$ref": "#/$defs/worldUnavailableStatus"}
+      ]
+    },
+    "worldAvailableStatus": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "semantic_event_count",
+        "semantic_event_anchor_count",
+        "unique_anchor_frame_count",
+        "anchor_treatment"
+      ],
+      "properties": {
+        "status": {"const": "available"},
+        "reason": {"const": "source_trace_world_frame"},
+        "semantic_event_count": {"type": "integer", "minimum": 0},
+        "semantic_event_anchor_count": {"type": "integer", "minimum": 0},
+        "unique_anchor_frame_count": {"type": "integer", "minimum": 0},
+        "anchor_treatment": {
+          "const": "proxy_footprints_velocity_arrows_and_redundant_markers"
+        }
+      },
+      "additionalProperties": false
+    },
+    "worldUnavailableStatus": {
+      "type": "object",
+      "required": ["status", "reason", "semantic_event_count", "semantic_event_anchor_count"],
+      "properties": {
+        "status": {"const": "unavailable"},
+        "reason": {"const": "source_trace_world_frame_unavailable"},
+        "semantic_event_count": {"const": 0},
+        "semantic_event_anchor_count": {"const": 0}
+      },
+      "additionalProperties": false
+    },
+    "timeSpaceStatus": {
+      "type": "object",
+      "required": ["status", "reason", "occupancy_ribbon", "tick_label_overlap_checked"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": [
+            "route_projection",
+            "conflict_projection",
+            "route_and_conflict_projection_unavailable"
+          ]
+        },
+        "semantic_event_cursors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/eventCursorProjection"}
+        },
+        "occupancy_ribbon": {"$ref": "#/$defs/occupancyRibbonStatus"},
+        "tick_label_overlap_checked": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "eventCursorProjection": {
+      "type": "object",
+      "required": ["time_s", "event_types", "label"],
+      "properties": {
+        "time_s": {"type": "number"},
+        "event_types": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/semanticEventType"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "label": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "occupancyRibbonStatus": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": [
+            "recorded_proxy_radius_envelope",
+            "recorded_proxy_radius_unavailable",
+            "route_and_conflict_projection_unavailable"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "surfaceClearanceStatus": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"enum": ["proxy_surface_clearance", "proxy_surface_clearance_unavailable"]}
+      },
+      "additionalProperties": false
+    },
+    "radialClosingSpeedStatus": {
+      "type": "object",
+      "required": ["status", "reason", "closest_approach"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"enum": ["relative_velocity", "relative_velocity_unavailable"]},
+        "closest_approach": {
+          "type": "object",
+          "required": ["left", "right"],
+          "properties": {
+            "left": {"$ref": "#/$defs/closestApproachStatus"},
+            "right": {"$ref": "#/$defs/closestApproachStatus"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "closestApproachStatus": {
+      "oneOf": [
+        {"$ref": "#/$defs/closestApproachAvailable"},
+        {"$ref": "#/$defs/closestApproachUnavailable"}
+      ]
+    },
+    "closestApproachAvailable": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "source_time_s",
+        "time_to_closest_approach_s",
+        "proxy_surface_clearance_at_closest_approach_m",
+        "model",
+        "profile_version"
+      ],
+      "properties": {
+        "status": {"const": "available"},
+        "reason": {"const": "valid_local_closest_approach_diagnostic"},
+        "source_time_s": {"type": "number"},
+        "time_to_closest_approach_s": {"type": "number"},
+        "proxy_surface_clearance_at_closest_approach_m": {"type": "number"},
+        "model": {"$ref": "#/$defs/identityToken"},
+        "profile_version": {"$ref": "#/$defs/identityToken"}
+      },
+      "additionalProperties": false
+    },
+    "closestApproachUnavailable": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"const": "unavailable"},
+        "reason": {
+          "enum": [
+            "semantic_anchor_unavailable",
+            "closest_approach_diagnostic_unavailable",
+            "closest_approach_values_unavailable"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "commandedSpeedStatus": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"enum": ["commanded_speed", "commanded_speed_unavailable"]}
+      },
+      "additionalProperties": false
+    },
+    "turnRateStatus": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "commanded",
+        "executed",
+        "executed_unavailable_note",
+        "tick_label_overlap_checked"
+      ],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": [
+            "recorded_commanded_angular_velocity",
+            "commanded_angular_velocity_unavailable"
+          ]
+        },
+        "commanded": {"$ref": "#/$defs/commandedTurnRoles"},
+        "executed": {"$ref": "#/$defs/executedTurnRoles"},
+        "executed_unavailable_note": {"$ref": "#/$defs/executedTurnNote"},
+        "tick_label_overlap_checked": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "commandedTurnRoles": {
+      "type": "object",
+      "required": ["left", "right"],
+      "properties": {
+        "left": {"$ref": "#/$defs/commandedTurnRole"},
+        "right": {"$ref": "#/$defs/commandedTurnRole"}
+      },
+      "additionalProperties": false
+    },
+    "commandedTurnRole": {
+      "type": "object",
+      "required": ["status", "reason", "artist_count", "nonzero_observed"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": [
+            "recorded_commanded_angular_velocity",
+            "commanded_angular_velocity_unavailable"
+          ]
+        },
+        "artist_count": {"type": "integer", "minimum": 0},
+        "nonzero_observed": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "executedTurnRoles": {
+      "type": "object",
+      "required": ["left", "right"],
+      "properties": {
+        "left": {"$ref": "#/$defs/executedTurnRole"},
+        "right": {"$ref": "#/$defs/executedTurnRole"}
+      },
+      "additionalProperties": false
+    },
+    "executedTurnRole": {
+      "type": "object",
+      "required": ["status", "reason", "source", "artist_count", "nonzero_observed"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": [
+            "explicit_executed_angular_velocity",
+            "explicit_executed_angular_velocity_unavailable"
+          ]
+        },
+        "source": {
+          "const": "source_trace.content_receipt.content_contract.frames[].planner.executed_action.angular_velocity"
+        },
+        "artist_count": {"type": "integer", "minimum": 0},
+        "nonzero_observed": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "executedTurnNote": {
+      "type": "object",
+      "required": ["status", "reason", "roles", "artist_count"],
+      "properties": {
+        "status": {"enum": ["available", "not_applicable"]},
+        "reason": {
+          "enum": [
+            "explicit_executed_angular_velocity_unavailable",
+            "executed_angular_velocity_available"
+          ]
+        },
+        "roles": {
+          "type": "array",
+          "items": {"enum": ["left", "right"]},
+          "uniqueItems": true,
+          "maxItems": 2
+        },
+        "artist_count": {"type": "integer", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "progressStallStatus": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"enum": ["route_progress_rate", "route_progress_unavailable"]}
+      },
+      "additionalProperties": false
+    },
+    "controllerStateStatus": {
+      "oneOf": [
+        {"$ref": "#/$defs/controllerStateAvailable"},
+        {"$ref": "#/$defs/controllerStateUnavailable"}
+      ]
+    },
+    "controllerStateAvailable": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "signals",
+        "artist_count",
+        "label_artist_count",
+        "semantic_event_cursor_count",
+        "signal_row_count",
+        "layout",
+        "decoding",
+        "text_bounds_checked",
+        "text_overlap_checked",
+        "tick_label_overlap_checked"
+      ],
+      "properties": {
+        "status": {"const": "available"},
+        "reason": {"const": "source_planner_categorical_signals"},
+        "signals": {"$ref": "#/$defs/controllerSignalsProjection"},
+        "artist_count": {"type": "integer", "minimum": 0},
+        "label_artist_count": {"type": "integer", "minimum": 0},
+        "semantic_event_cursor_count": {"type": "integer", "minimum": 0},
+        "signal_row_count": {"const": 4},
+        "layout": {"const": "four_signal_rows_with_left_right_sublanes.v1"},
+        "decoding": {"$ref": "#/$defs/controllerDecodingAvailable"},
+        "text_bounds_checked": {"const": true},
+        "text_overlap_checked": {"const": true},
+        "tick_label_overlap_checked": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "controllerStateUnavailable": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "signals",
+        "artist_count",
+        "signal_row_count",
+        "layout",
+        "decoding",
+        "text_bounds_checked",
+        "text_overlap_checked",
+        "tick_label_overlap_checked"
+      ],
+      "properties": {
+        "status": {"const": "unavailable"},
+        "reason": {"const": "controller_state_signal_absent"},
+        "signals": {"$ref": "#/$defs/controllerSignalsProjection"},
+        "artist_count": {"const": 0},
+        "signal_row_count": {"const": 4},
+        "layout": {"const": "unavailable_summary.v1"},
+        "decoding": {"$ref": "#/$defs/controllerDecodingUnavailable"},
+        "text_bounds_checked": {"const": true},
+        "text_overlap_checked": {"const": true},
+        "tick_label_overlap_checked": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "controllerSignalsProjection": {
+      "type": "object",
+      "required": ["controller_state", "command_source", "guard_state", "fallback_state"],
+      "properties": {
+        "controller_state": {"$ref": "#/$defs/controllerSignalProjection"},
+        "command_source": {"$ref": "#/$defs/controllerSignalProjection"},
+        "guard_state": {"$ref": "#/$defs/controllerSignalProjection"},
+        "fallback_state": {"$ref": "#/$defs/controllerSignalProjection"}
+      },
+      "additionalProperties": false
+    },
+    "controllerSignalProjection": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "source",
+        "roles",
+        "artist_count",
+        "label_artist_count",
+        "row_index",
+        "value_styles"
+      ],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": ["source_planner_categorical_signal", "source_planner_signal_absent"]
+        },
+        "source": {"type": "string", "minLength": 1},
+        "roles": {"$ref": "#/$defs/controllerSignalRoles"},
+        "artist_count": {"type": "integer", "minimum": 0},
+        "label_artist_count": {"type": "integer", "minimum": 0},
+        "row_index": {"type": "integer", "minimum": 0, "maximum": 3},
+        "value_styles": {"$ref": "#/$defs/controllerValueStyles"}
+      },
+      "additionalProperties": false
+    },
+    "controllerSignalRoles": {
+      "type": "object",
+      "required": ["left", "right"],
+      "properties": {
+        "left": {"$ref": "#/$defs/controllerSignalRole"},
+        "right": {"$ref": "#/$defs/controllerSignalRole"}
+      },
+      "additionalProperties": false
+    },
+    "controllerSignalRole": {
+      "type": "object",
+      "required": ["status", "values", "artist_count", "sublane"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "values": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identityToken"},
+          "uniqueItems": true
+        },
+        "artist_count": {"type": "integer", "minimum": 0},
+        "label_artist_count": {"type": "integer", "minimum": 0},
+        "sublane": {"enum": ["left", "right"]}
+      },
+      "additionalProperties": false
+    },
+    "controllerValueStyles": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/identityToken"},
+      "additionalProperties": {"$ref": "#/$defs/controllerValueStyle"}
+    },
+    "controllerValueStyle": {
+      "type": "object",
+      "required": ["color", "label_rendered"],
+      "properties": {
+        "color": {"type": "string", "pattern": "^#[0-9A-F]{6}$"},
+        "label_rendered": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "controllerDecodingAvailable": {
+      "type": "object",
+      "required": ["method", "role_encoding", "all_values_labelled"],
+      "properties": {
+        "method": {"const": "direct_segment_labels"},
+        "role_encoding": {"const": "labelled_left_right_sublanes"},
+        "all_values_labelled": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "controllerDecodingUnavailable": {
+      "type": "object",
+      "required": ["method", "role_encoding", "all_values_labelled"],
+      "properties": {
+        "method": {"const": "explicit_unavailable_text"},
+        "role_encoding": {"const": "not_applicable"},
+        "all_values_labelled": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "semanticStyleKeyStatus": {
+      "type": "object",
+      "required": ["status", "reason", "labels", "artist_count"],
+      "properties": {
+        "status": {"const": "available"},
+        "reason": {"const": "complete_semantic_style_key"},
+        "labels": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 12,
+          "maxItems": 12,
+          "uniqueItems": true
+        },
+        "artist_count": {"const": 12}
+      },
+      "additionalProperties": false
+    },
+    "cellContextStatus": {
+      "type": "object",
+      "required": ["status", "reason", "uncertainty"],
+      "properties": {
+        "status": {"const": "available"},
+        "reason": {"const": "campaign_atlas_cell"},
+        "uncertainty": {"$ref": "#/$defs/uncertaintyProjection"}
+      },
+      "additionalProperties": false
+    },
+    "ensembleContextStatus": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": [
+            "synthetic_fixture_no_ensemble_inventory",
+            "production_ensemble_inventory_unavailable",
+            "ensemble_inventory_complete"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "identityToken": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"
@@ -250,6 +1212,35 @@
         "timeout": {"$ref": "#/$defs/interval3"}
       },
       "additionalProperties": false
+    },
+    "interval2": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "number", "minimum": 0, "maximum": 1}
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "range2": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "range4": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number"},
+        {"type": "number"},
+        {"type": "number"},
+        {"type": "number"}
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
     },
     "interval3": {
       "type": "array",

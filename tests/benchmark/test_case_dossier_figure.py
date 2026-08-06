@@ -43,6 +43,15 @@ GEOMETRY_REGISTRY = (
     / "fixture_registry.json"
 )
 DOSSIER_FIXTURES = REPO_ROOT / "tests/fixtures/benchmark/case_dossier_v1"
+DOSSIER_MANIFEST_SCHEMA = REPO_ROOT / "robot_sf/benchmark/schemas/case_dossier_manifest.v1.json"
+
+
+def test_case_dossier_manifest_schema_is_valid_draft_2020_12() -> None:
+    """The durable contract remains a valid Draft 2020-12 schema."""
+
+    schema = json.loads(DOSSIER_MANIFEST_SCHEMA.read_text(encoding="utf-8"))
+
+    dossier_module.Draft202012Validator.check_schema(schema)
 
 
 def test_benchmark_package_lazily_exports_case_dossier_renderer() -> None:
@@ -129,6 +138,178 @@ def test_matched_start_public_renderer_writes_fixture_only_bundle(tmp_path: Path
         tmp_path / "goal-process.json"
     )
     assert validate_case_dossier_manifest(bundle.manifest) == []
+
+
+def test_manifest_validator_rejects_coherently_rehashed_claim_injection(
+    tmp_path: Path,
+) -> None:
+    """A valid content hash cannot authorize caller prose in controlled claim fields."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "claim-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["claim_fields"]["observed_signature"] = "This planner is scientifically superior."
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("claim_fields" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("claim_template_id", "same_cell_distinct_start_abstention.v1"),
+        ("comparison_grammar", "same_cell_seed_sensitivity"),
+    ),
+)
+def test_manifest_validator_binds_claim_fields_to_grammar_and_template(
+    tmp_path: Path,
+    field: str,
+    value: str,
+) -> None:
+    """A coherent rehash cannot detach controlled claim prose from its grammar."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "claim-binding")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated[field] = value
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any(field in error or "claim_fields" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_comparison_injection(
+    tmp_path: Path,
+) -> None:
+    """Unknown comparison metadata cannot survive a coherent content rehash."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "comparison-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["comparison"]["claim_note"] = "This planner is scientifically superior."
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("comparison" in error and "claim_note" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_renderer_injection(
+    tmp_path: Path,
+) -> None:
+    """Unknown renderer metadata cannot survive a coherent content rehash."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "renderer-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["renderer"]["claim_note"] = "This planner is scientifically superior."
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("renderer" in error and "claim_note" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_source_bindings_injection(
+    tmp_path: Path,
+) -> None:
+    """Unknown source-binding metadata cannot survive a coherent content rehash."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "source-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["source_bindings"]["claim_note"] = "This planner is scientifically superior."
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("source_bindings" in error and "claim_note" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_campaign_atlas_injection(
+    tmp_path: Path,
+) -> None:
+    """Unknown campaign-atlas metadata cannot survive a coherent content rehash."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "atlas-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["source_bindings"]["campaign_atlas"]["claim_note"] = (
+        "This planner is scientifically superior."
+    )
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("campaign_atlas" in error and "claim_note" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_shared_scales_injection(
+    tmp_path: Path,
+) -> None:
+    """Unknown shared-scale metadata cannot survive a coherent content rehash."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "scale-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["shared_scales"]["claim_note"] = "This planner is scientifically superior."
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("shared_scales" in error and "claim_note" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_panel_status_injection(
+    tmp_path: Path,
+) -> None:
+    """Unknown panel-status metadata cannot survive a coherent content rehash."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "panel-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["panel_status"]["claim_note"] = "This planner is scientifically superior."
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("panel_status" in error and "claim_note" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_semantic_event_injection(
+    tmp_path: Path,
+) -> None:
+    """Unknown semantic-event metadata cannot survive a coherent content rehash."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "event-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    assert mutated["semantic_events"]
+    mutated["semantic_events"][0]["claim_note"] = "This planner is scientifically superior."
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("semantic_events" in error and "claim_note" in error for error in errors)
+
+
+def test_manifest_validator_rejects_coherently_rehashed_output_slot_injection(
+    tmp_path: Path,
+) -> None:
+    """Only the four renderer-owned output slots belong in the manifest."""
+
+    bundle = render_case_dossier(_write_matched_input(tmp_path), tmp_path / "output-contract")
+    mutated = copy.deepcopy(bundle.manifest)
+    mutated["outputs"]["claim_note"] = {"path": "claim.txt", "sha256": "0" * 64}
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any("outputs" in error and "claim_note" in error for error in errors)
 
 
 def test_same_cell_seed_sensitivity_records_no_shared_prefix_without_difference_curve(
@@ -1979,6 +2160,21 @@ def _atlas_cell(scenario_id: str, planner: str, counts: dict[str, int]) -> dict[
 def _write_json(path: Path, payload: Any) -> Path:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def _rehash_case_dossier_manifest(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a coherently canonical-rehashed dossier manifest for adversarial tests."""
+
+    result = copy.deepcopy(payload)
+    result["content_sha256"] = ""
+    encoded = json.dumps(
+        result,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    result["content_sha256"] = hashlib.sha256(encoded).hexdigest()
+    return result
 
 
 def _file_ref(path: Path) -> dict[str, str]:

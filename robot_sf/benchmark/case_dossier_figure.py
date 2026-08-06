@@ -44,6 +44,8 @@ BASE_FONT_PT = 9.0
 MINIMUM_VISIBLE_FONT_PT = 8.25
 ROUTE_TITLE_BAND_IN = 0.48
 PROCESS_TITLE_BAND_IN = 0.14
+TURN_TITLE_BAND_IN = 0.36
+CONTEXT_BOTTOM_MARGIN_IN = 0.08
 # ``campaign_atlas._wilson_ci`` publishes point estimates rounded to six decimals.
 ATLAS_ESTIMATE_ABS_TOL = 0.5e-6 + 1e-12
 _NO_SHARED_PREFIX_NARRATIVE_PATTERNS = {
@@ -1015,7 +1017,7 @@ def _draw_time_space(
             va="center",
             transform=ax.transAxes,
         )
-        ax.set(xlim=tuple(time_range), xlabel="absolute time (s)")
+        ax.set(xlim=tuple(time_range), xlabel="")
         return {
             "status": "unavailable",
             "reason": "route_and_conflict_projection_unavailable",
@@ -1104,8 +1106,11 @@ def _draw_time_space(
     _draw_event_cursors(ax, traces)
     ylabel = "route progress s (m)" if route_available else "signed distance to conflict zone (m)"
     title = "Route occupancy" if route_available else "Conflict-zone approach"
-    ax.set(xlim=tuple(time_range), xlabel="absolute time (s)", ylabel=ylabel)
-    ax.set_title(f"{title} · no duration normalization\n{_event_identity_caption(traces)}")
+    ax.set(xlim=tuple(time_range), xlabel="", ylabel=ylabel)
+    ax.set_title(
+        f"{title} over absolute time (s) · no duration normalization\n"
+        f"{_event_identity_caption(traces)}"
+    )
     return {
         "status": "available",
         "reason": "route_projection" if route_available else "conflict_projection",
@@ -1188,7 +1193,7 @@ def _draw_clearance(
     ax.set(
         xlim=tuple(time_range),
         ylim=tuple(clearance_range),
-        xlabel="absolute time (s)",
+        xlabel="",
         ylabel="distance (m)",
     )
     ax.set_title("Surface clearance · primary")
@@ -1289,7 +1294,7 @@ def _draw_closing_speed(
     ax.set(
         xlim=tuple(time_range),
         ylim=tuple(speed_range),
-        xlabel="absolute time (s)",
+        xlabel="",
         ylabel="closing speed (m/s)",
     )
     cpa_available = any(record["status"] == "available" for record in closest_records.values())
@@ -1369,7 +1374,7 @@ def _draw_speed(
     ax.set(
         xlim=tuple(time_range),
         ylim=tuple(speed_range),
-        xlabel="absolute time (s)",
+        xlabel="",
         ylabel="speed (m/s)",
     )
     ax.set_title("Commanded and executed speed")
@@ -1470,20 +1475,22 @@ def _draw_turn_rate(
             va="center",
             transform=ax.transAxes,
         )
-    unavailable_note = (
-        "\nEXECUTED TURN UNAVAILABLE — " + "/".join(executed_unavailable_roles)
-        if executed_unavailable_roles
-        else ""
-    )
     ax.set(
         xlim=tuple(time_range),
         ylim=tuple(turn_rate_range),
-        xlabel="absolute time (s)",
+        xlabel="",
         ylabel="turn rate (rad/s)",
     )
+    executed_note = (
+        "EXECUTED UNAVAILABLE — "
+        + "/".join("L" if role == "left" else "R" for role in executed_unavailable_roles)
+        if executed_unavailable_roles
+        else ""
+    )
     ax.set_title(
-        f"Commanded and executed turn rate{unavailable_note}",
+        "Commanded / executed turn rate" + (f"\n{executed_note}" if executed_note else ""),
         loc="right",
+        fontsize=MINIMUM_VISIBLE_FONT_PT,
     )
     return {
         "status": "available" if commanded_available else "unavailable",
@@ -1494,6 +1501,16 @@ def _draw_turn_rate(
         ),
         "commanded": commanded_status,
         "executed": executed_status,
+        "executed_unavailable_note": {
+            "status": "available" if executed_unavailable_roles else "not_applicable",
+            "reason": (
+                "explicit_executed_angular_velocity_unavailable"
+                if executed_unavailable_roles
+                else "executed_angular_velocity_available"
+            ),
+            "roles": executed_unavailable_roles,
+            "artist_count": 1 if executed_unavailable_roles else 0,
+        },
     }
 
 
@@ -1751,7 +1768,7 @@ def _draw_cell_context(
     )
     ax.text(
         0.02,
-        0.90,
+        0.95,
         "\n".join(lines),
         transform=ax.transAxes,
         va="top",
@@ -1782,6 +1799,61 @@ def _assert_text_within_canvas(figure: Any) -> None:
     if violations:
         raise CaseDossierError(
             "figure_text_outside_canvas",
+            "; ".join(sorted(violations)),
+        )
+
+
+def _assert_structural_panel_text_containment(panels: dict[str, Any]) -> None:
+    """Fail closed when body text escapes a structural panel's axes box."""
+
+    violations: list[str] = []
+    for panel_name, axes in panels.items():
+        renderer = axes.figure.canvas.get_renderer()
+        axes_bounds = axes.get_window_extent(renderer=renderer)
+        for artist in axes.texts:
+            if not artist.get_visible() or not artist.get_text().strip():
+                continue
+            text_bounds = artist.get_window_extent(renderer=renderer)
+            if (
+                text_bounds.x0 < axes_bounds.x0 - 0.5
+                or text_bounds.y0 < axes_bounds.y0 - 0.5
+                or text_bounds.x1 > axes_bounds.x1 + 0.5
+                or text_bounds.y1 > axes_bounds.y1 + 0.5
+            ):
+                text = artist.get_text().replace("\n", " / ")
+                violations.append(f"{panel_name}: {text}")
+    if violations:
+        raise CaseDossierError(
+            "structural_panel_text_outside_axes",
+            "; ".join(sorted(violations)),
+        )
+
+
+def _assert_reserved_title_containment(
+    figure: Any,
+    panels: dict[str, tuple[Any, Any]],
+) -> None:
+    """Fail closed when a title escapes its original reserved panel box."""
+
+    renderer = figure.canvas.get_renderer()
+    violations: list[str] = []
+    for panel_name, (axes, reserved_position) in panels.items():
+        reserved_bounds = reserved_position.transformed(figure.transFigure)
+        for artist in (axes.title, axes._left_title, axes._right_title):
+            if not artist.get_visible() or not artist.get_text().strip():
+                continue
+            title_bounds = artist.get_window_extent(renderer=renderer)
+            if (
+                title_bounds.x0 < reserved_bounds.x0 - 0.5
+                or title_bounds.y0 < reserved_bounds.y0 - 0.5
+                or title_bounds.x1 > reserved_bounds.x1 + 0.5
+                or title_bounds.y1 > reserved_bounds.y1 + 0.5
+            ):
+                title = artist.get_text().replace("\n", " / ")
+                violations.append(f"{panel_name}: {title}")
+    if violations:
+        raise CaseDossierError(
+            "structural_panel_title_outside_reserved_band",
             "; ".join(sorted(violations)),
         )
 
@@ -1850,7 +1922,7 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         grid = figure.add_gridspec(
             9,
             2,
-            height_ratios=(2.50, 1.55, 1.85, 2.00, 1.10, 1.10, 0.95, 1.55, 1.45),
+            height_ratios=(2.50, 1.55, 1.85, 2.00, 1.10, 1.80, 0.95, 1.55, 2.00),
         )
         header = figure.add_subplot(grid[0, :])
         style_key = figure.add_subplot(grid[1, :])
@@ -2001,9 +2073,12 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             right=0.97,
             bottom=0.045,
             top=0.985,
-            hspace=1.30,
+            hspace=1.10,
             wspace=0.46,
         )
+        reserved_title_panels = {
+            "turn_rate": (turn_rate, turn_rate.get_position().frozen()),
+        }
         route_position = route.get_position()
         route_title_band = ROUTE_TITLE_BAND_IN / float(layout["final_height_in"])
         if route_position.height <= route_title_band:
@@ -2022,21 +2097,43 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         process_title_band = PROCESS_TITLE_BAND_IN / float(layout["final_height_in"])
         for process_axis in (clearance, closing, speed, turn_rate, controller):
             process_position = process_axis.get_position()
-            if process_position.height <= process_title_band:
+            title_band = (
+                TURN_TITLE_BAND_IN / float(layout["final_height_in"])
+                if process_axis is turn_rate
+                else process_title_band
+            )
+            if process_position.height <= title_band:
                 raise CaseDossierError(
                     "process_title_band_unavailable",
-                    f"required={PROCESS_TITLE_BAND_IN:.3f}in",
+                    f"required={title_band * float(layout['final_height_in']):.3f}in",
                 )
             process_axis.set_position(
                 (
                     process_position.x0,
                     process_position.y0,
                     process_position.width,
-                    process_position.height - process_title_band,
+                    process_position.height - title_band,
                 )
             )
+        context_position = context.get_position()
+        context_bottom = CONTEXT_BOTTOM_MARGIN_IN / float(layout["final_height_in"])
+        if context_position.y1 <= context_bottom:
+            raise CaseDossierError(
+                "cell_context_body_band_unavailable",
+                f"bottom_margin={CONTEXT_BOTTOM_MARGIN_IN:.3f}in",
+            )
+        context.set_position(
+            (
+                context_position.x0,
+                context_bottom,
+                context_position.width,
+                context_position.y1 - context_bottom,
+            )
+        )
         figure.canvas.draw()
         _assert_text_within_canvas(figure)
+        _assert_structural_panel_text_containment({"turn_rate": turn_rate, "cell_context": context})
+        _assert_reserved_title_containment(figure, reserved_title_panels)
         _assert_cross_axes_text_separation(figure)
         assert_clean(figure)
     return figure, panel_status
@@ -2261,7 +2358,9 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                 "header_line_contract": "wrapped_left_aligned.v1",
                 "canvas_text_bounds_checked": True,
                 "cross_axes_text_overlap_checked": True,
+                "structural_panel_text_bounds_checked": True,
                 "route_title_band_in": ROUTE_TITLE_BAND_IN,
+                "turn_title_band_in": TURN_TITLE_BAND_IN,
             },
             "source_bindings": {
                 "portfolio": {

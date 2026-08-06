@@ -188,6 +188,23 @@ def test_cross_axes_structural_text_overlap_fails_closed() -> None:
         dossier_module.plt.close(figure)
 
 
+def test_structural_panel_body_text_must_remain_inside_its_axes() -> None:
+    """Turn notes and context bodies may not consume neighboring panel space."""
+
+    figure = dossier_module.plt.figure(figsize=(2.0, 2.0))
+    panel = figure.add_axes((0.1, 0.1, 0.8, 0.8))
+    panel.text(0.5, -0.1, "escaped body", transform=panel.transAxes)
+    figure.canvas.draw()
+    try:
+        with pytest.raises(
+            dossier_module.CaseDossierError,
+            match="structural_panel_text_outside_axes",
+        ):
+            dossier_module._assert_structural_panel_text_containment({"fixture_panel": panel})
+    finally:
+        dossier_module.plt.close(figure)
+
+
 def test_input_tree_copies_produce_portable_byte_identical_bundles(tmp_path: Path) -> None:
     """Durable outputs use input-relative refs and do not bind checkout paths."""
 
@@ -499,7 +516,27 @@ def test_nonzero_commanded_turn_renders_a_separate_aligned_panel(tmp_path: Path)
     assert status["status"] == "available"
     assert status["commanded"]["left"]["nonzero_observed"] is True
     assert status["commanded"]["right"]["nonzero_observed"] is True
-    assert "Commanded and executed turn rate" in bundle.svg_path.read_text(encoding="utf-8")
+    assert "Commanded / executed turn rate" in bundle.svg_path.read_text(encoding="utf-8")
+
+
+def test_negative_commanded_turn_keeps_execution_status_out_of_the_data_region(
+    tmp_path: Path,
+) -> None:
+    """A negative turn cannot collide with the execution-availability annotation."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        nonzero_turn=True,
+        negative_turn=True,
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "negative-turn-render")
+
+    status = bundle.manifest["panel_status"]["turn_rate"]
+    assert status["commanded"]["left"]["nonzero_observed"] is True
+    assert status["commanded"]["right"]["nonzero_observed"] is True
+    assert "EXECUTED UNAVAILABLE — L/R" in bundle.svg_path.read_text(encoding="utf-8")
 
 
 def test_missing_executed_turn_is_explicitly_unavailable(tmp_path: Path) -> None:
@@ -520,7 +557,11 @@ def test_missing_executed_turn_is_explicitly_unavailable(tmp_path: Path) -> None
             "reason": "explicit_executed_angular_velocity_unavailable",
             "artist_count": 0,
         }
-    assert "EXECUTED TURN UNAVAILABLE" in bundle.svg_path.read_text(encoding="utf-8")
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    assert "Commanded / executed turn rate" in svg
+    assert "EXECUTED UNAVAILABLE — L/R" in svg
+    assert status["executed_unavailable_note"]["artist_count"] == 1
+    assert bundle.manifest["renderer"]["structural_panel_text_bounds_checked"] is True
 
 
 def test_source_controller_signals_render_categorical_strip(tmp_path: Path) -> None:
@@ -825,13 +866,14 @@ def _write_doorway_input(tmp_path: Path) -> Path:
     return _write_input(tmp_path, grammar="same_cell_seed_sensitivity")
 
 
-def _write_input(
+def _write_input(  # noqa: PLR0913 - fixture controls independently pin render contracts
     tmp_path: Path,
     *,
     grammar: str,
     with_geometry: bool = True,
     missing_velocity: bool = False,
     nonzero_turn: bool = False,
+    negative_turn: bool = False,
     controller_signals: bool = False,
     mode: str = "synthetic_fixture",
     terminal_outcomes: tuple[str | None, str | None] = (None, None),
@@ -854,6 +896,7 @@ def _write_input(
         final_position=(0.8, 0.0),
         missing_velocity=missing_velocity,
         nonzero_turn=nonzero_turn,
+        negative_turn=negative_turn,
         controller_signals=controller_signals,
         terminal_outcome=terminal_outcomes[0],
     )
@@ -866,6 +909,7 @@ def _write_input(
         final_position=(0.6, 0.2),
         missing_velocity=missing_velocity,
         nonzero_turn=nonzero_turn,
+        negative_turn=negative_turn,
         controller_signals=controller_signals,
         terminal_outcome=terminal_outcomes[1],
     )
@@ -997,6 +1041,7 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
     start_offset: tuple[float, float] = (0.0, 0.0),
     missing_velocity: bool = False,
     nonzero_turn: bool = False,
+    negative_turn: bool = False,
     controller_signals: bool = False,
     terminal_outcome: str | None = None,
 ) -> dict[str, Any]:
@@ -1009,7 +1054,9 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
         planner = {
             "selected_action": {
                 "linear_velocity": 1.0 if step < 3 else 0.5,
-                "angular_velocity": 0.3 if nonzero_turn and step in {1, 2} else 0.0,
+                "angular_velocity": (-0.3 if negative_turn else 0.3)
+                if nonzero_turn and step in {1, 2}
+                else 0.0,
             },
             "encounter": {
                 "actor_id": "ped-a",

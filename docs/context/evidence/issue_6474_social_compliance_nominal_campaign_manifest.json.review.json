@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json",
+  "artifact_sha256": "10c45f44ec5679144671c6247644a7e88b1444fdf9b25a7373b343bbf732e1bc",
+  "preserved_exact_bytes": true,
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ]
+}

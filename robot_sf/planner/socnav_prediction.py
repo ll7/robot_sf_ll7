@@ -1800,3 +1800,10 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
         return {"planner_type": "SocNavBenchSamplingAdapter"}
+
+
+__all__ = [
+    "PredictionPlannerAdapter",
+    "SocNavBenchSamplingAdapter",
+    "make_prediction_policy",
+]

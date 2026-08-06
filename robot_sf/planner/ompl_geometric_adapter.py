@@ -313,3 +313,11 @@ class OmplGeometricAdapter:
             waypoints=waypoints,
             exact_solution=exact,
         )
+
+
+__all__ = [
+    "OmplGeometricAdapter",
+    "OmplGeometricConfig",
+    "OmplGeometricResult",
+    "OmplPlannerChoice",
+]

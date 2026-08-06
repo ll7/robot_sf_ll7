@@ -368,3 +368,12 @@ def compare_with_classic_route(
         "classic_length_m": round(classic_length, 3),
         "max_lateral_deviation_m": round(max_deviation, 4),
     }
+
+
+__all__ = [
+    "OmplSmokeConfig",
+    "OmplSmokeResult",
+    "check_ompl_available",
+    "compare_with_classic_route",
+    "smoke_plan",
+]

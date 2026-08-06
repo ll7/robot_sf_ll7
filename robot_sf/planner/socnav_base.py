@@ -819,3 +819,12 @@ class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
             allow_fallback=allow_fallback,
         )
         super().__init__(adapter=adapter)
+
+
+__all__ = [
+    "SamplingPlannerAdapter",
+    "SocNavBenchComplexPolicy",
+    "SocNavPlannerConfig",
+    "SocNavPlannerPolicy",
+    "TrivialReferencePlannerAdapter",
+]

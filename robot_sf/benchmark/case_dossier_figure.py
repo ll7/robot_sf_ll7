@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from itertools import pairwise
@@ -48,9 +49,30 @@ CONTROLLER_TITLE_BAND_IN = 0.20
 CONTEXT_BOTTOM_MARGIN_IN = 0.08
 # ``campaign_atlas._wilson_ci`` publishes point estimates rounded to six decimals.
 ATLAS_ESTIMATE_ABS_TOL = 0.5e-6 + 1e-12
+IDENTITY_TOKEN_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"
+_IDENTITY_TOKEN_RE = re.compile(IDENTITY_TOKEN_PATTERN)
+_OUTCOME_TOKENS = frozenset(("success", "collision", "timeout"))
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _NARRATIVE_TEMPLATE_BY_GRAMMAR = {
     "matched_start_planner": "matched_start_descriptive.v1",
     "same_cell_seed_sensitivity": "same_cell_distinct_start_abstention.v1",
+}
+_ENSEMBLE_REASON_CONTRACT = {
+    "synthetic_fixture_no_ensemble_inventory": {
+        "mode": "synthetic_fixture",
+        "status": "unavailable",
+        "display": "synthetic fixture; no ensemble inventory",
+    },
+    "production_ensemble_inventory_unavailable": {
+        "mode": "production",
+        "status": "unavailable",
+        "display": "production ensemble inventory unavailable",
+    },
+    "ensemble_inventory_complete": {
+        "mode": None,
+        "status": "available",
+        "display": "ensemble inventory complete",
+    },
 }
 _NARRATIVE_CLAIM_FIELDS = {
     "matched_start_descriptive.v1": {
@@ -263,7 +285,221 @@ def _controlled_narrative(payload: dict[str, Any]) -> dict[str, str]:
     return dict(_NARRATIVE_CLAIM_FIELDS[expected])
 
 
+def _validate_selected_claim_contract(
+    payload: dict[str, Any],
+    selected_case: dict[str, Any],
+) -> None:
+    """Bind both portfolio claim fields to the grammar-owned renderer contract."""
+
+    expected = _controlled_narrative(payload)["observed_signature"]
+    claim = selected_case.get("claim")
+    if (
+        selected_case.get("allowed_claim") != expected
+        or not isinstance(claim, dict)
+        or claim.get("allowed") != [expected]
+    ):
+        raise CaseDossierError(
+            "selected_claim_contract_mismatch",
+            f"{payload['comparison_grammar']}: expected controlled observed_signature",
+        )
+
+
+def _validated_identity_token(value: Any, *, path: str) -> str:
+    """Return one bounded stable identifier, rejecting prose and coercion."""
+
+    if not isinstance(value, str) or _IDENTITY_TOKEN_RE.fullmatch(value) is None:
+        raise CaseDossierError(
+            "identity_token_invalid",
+            f"{path}: expected {IDENTITY_TOKEN_PATTERN}",
+        )
+    return value
+
+
+def _validated_release_arm_id(value: Any, *, path: str) -> str | None:
+    """Validate an optional release-arm identity without coercion.
+
+    Returns:
+        A validated identity token or ``None``.
+    """
+
+    if value is None:
+        return None
+    if not isinstance(value, str) or _IDENTITY_TOKEN_RE.fullmatch(value) is None:
+        raise CaseDossierError(
+            "release_arm_id_invalid",
+            f"{path}: expected null or {IDENTITY_TOKEN_PATTERN}",
+        )
+    return value
+
+
+def _validated_sha256(value: Any, *, path: str) -> str:
+    """Return a canonical SHA-256 identity without string coercion."""
+
+    if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+        raise CaseDossierError("selection_projection_invalid", f"{path}: expected sha256")
+    return value
+
+
+def _selection_projection(
+    selected_case: dict[str, Any],
+    *,
+    portfolio_hash: str,
+    atlas_cell_bindings: dict[str, dict[str, Any]],
+    controlled_allowed_claim: str,
+) -> dict[str, Any]:
+    """Build the exact durable whitelist for selection and source provenance.
+
+    Returns:
+        A controlled selection projection safe for durable outputs.
+    """
+
+    eligibility = selected_case.get("eligibility")
+    if not isinstance(eligibility, dict):
+        raise CaseDossierError("selection_projection_invalid", "eligibility: expected object")
+    eligibility_projection = {
+        "eligible": eligibility.get("eligible"),
+        "status": eligibility.get("status"),
+        "execution_mode": eligibility.get("execution_mode"),
+        "telemetry_grade": eligibility.get("telemetry_grade"),
+        "typed_outcome_semantics": eligibility.get("typed_outcome_semantics"),
+        "initial_state_match": eligibility.get("initial_state_match"),
+        "outcome_match": eligibility.get("outcome_match"),
+    }
+    if (
+        eligibility_projection["eligible"] is not True
+        or eligibility_projection["status"] != "admitted"
+        or eligibility_projection["execution_mode"] not in {"native", "adapter_disclosed"}
+        or eligibility_projection["telemetry_grade"]
+        not in {"geometry", "kinematics", "controller", "counterfactual"}
+        or not isinstance(eligibility_projection["typed_outcome_semantics"], bool)
+        or eligibility_projection["initial_state_match"] not in {"pass", "fail", "unavailable"}
+        or eligibility_projection["outcome_match"] not in {"pass", "fail", "unavailable"}
+    ):
+        raise CaseDossierError(
+            "selection_projection_invalid",
+            "eligibility: invalid selected status or grade",
+        )
+
+    boundary = selected_case.get("source_boundary")
+    if not isinstance(boundary, dict):
+        raise CaseDossierError("selection_projection_invalid", "source_boundary: expected object")
+    synthetic_fixture = boundary.get("synthetic_fixture")
+    visualization_only = boundary.get("visualization_only_reexecution")
+    if not isinstance(synthetic_fixture, bool) or not isinstance(visualization_only, bool):
+        raise CaseDossierError(
+            "selection_projection_invalid",
+            "source_boundary: expected provenance booleans",
+        )
+    release_observed = _validated_sha256(
+        boundary.get("release_rows_sha256"), path="source_boundary.release_rows_sha256"
+    )
+    release_expected = _validated_sha256(
+        boundary.get("expected_release_rows_sha256"),
+        path="source_boundary.expected_release_rows_sha256",
+    )
+    trace_observed = _validated_sha256(
+        boundary.get("trace_package_sha256"), path="source_boundary.trace_package_sha256"
+    )
+    trace_expected = _validated_sha256(
+        boundary.get("expected_trace_package_sha256"),
+        path="source_boundary.expected_trace_package_sha256",
+    )
+    telemetry_grade = boundary.get("telemetry_grade")
+    if telemetry_grade not in {"geometry", "kinematics", "controller", "counterfactual"}:
+        raise CaseDossierError(
+            "selection_projection_invalid",
+            "source_boundary.telemetry_grade: invalid grade",
+        )
+    source_provenance = {
+        "synthetic_fixture": synthetic_fixture,
+        "visualization_only_reexecution": visualization_only,
+        "release_id": _validated_identity_token(
+            boundary.get("release_id"), path="source_boundary.release_id"
+        ),
+        "telemetry_grade": telemetry_grade,
+        "hashes": {
+            "release_rows": {
+                "observed_sha256": release_observed,
+                "expected_sha256": release_expected,
+                "matches_expected": release_observed == release_expected,
+            },
+            "trace_package": {
+                "observed_sha256": trace_observed,
+                "expected_sha256": trace_expected,
+                "matches_expected": trace_observed == trace_expected,
+            },
+        },
+        "release_arm_bindings": {
+            role: atlas_cell_bindings[role]["release_arm_id"] for role in ("left", "right")
+        },
+    }
+    evidence_grade = selected_case.get("dimensions", {}).get("evidence_grade")
+    if (
+        not isinstance(evidence_grade, int | float)
+        or isinstance(evidence_grade, bool)
+        or not math.isfinite(float(evidence_grade))
+    ):
+        raise CaseDossierError("selection_projection_invalid", "evidence_grade: expected finite")
+    return {
+        "case_id": _validated_identity_token(
+            selected_case.get("case_id"), path="selection.case_id"
+        ),
+        "selected": True,
+        "selection_manifest_sha256": _validated_sha256(
+            portfolio_hash, path="selection.selection_manifest_sha256"
+        ),
+        "grain": _validated_identity_token(selected_case.get("grain"), path="selection.grain"),
+        "primary_role": _validated_identity_token(
+            selected_case.get("primary_role"), path="selection.primary_role"
+        ),
+        "allowed_claim": controlled_allowed_claim,
+        "claim_grade": "descriptive",
+        "evidence_grade": float(evidence_grade),
+        "eligibility": eligibility_projection,
+        "source_provenance": source_provenance,
+    }
+
+
+def _validate_trace_identity_tokens(traces: dict[str, dict[str, Any]]) -> None:
+    """Validate every trace identity and controller categorical value before display."""
+
+    for role in ("left", "right"):
+        source_trace = traces[role]["source_trace"]
+        for source_path, source in (
+            ("source_trace.source", source_trace.get("source")),
+            (
+                "source_trace.content_receipt.content_contract.source",
+                source_trace.get("content_receipt", {}).get("content_contract", {}).get("source"),
+            ),
+        ):
+            if not isinstance(source, dict):
+                continue
+            for field in ("scenario_id", "planner_id", "episode_id"):
+                _validated_identity_token(
+                    source.get(field),
+                    path=f"{role}.{source_path}.{field}",
+                )
+            seed = source.get("seed")
+            if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed <= 2**31 - 1:
+                raise CaseDossierError(
+                    "identity_token_invalid",
+                    f"{role}.{source_path}.seed: expected non-negative 32-bit integer",
+                )
+        content = source_trace.get("content_receipt", {}).get("content_contract", {})
+        for frame_index, frame in enumerate(content.get("frames", [])):
+            planner = frame.get("planner") if isinstance(frame, dict) else None
+            if not isinstance(planner, dict):
+                continue
+            for signal in _CONTROLLER_SIGNALS:
+                if signal in planner:
+                    _validated_identity_token(
+                        planner[signal],
+                        path=f"{role}.frames[{frame_index}].planner.{signal}",
+                    )
+
+
 def _validate_input_semantics(payload: dict[str, Any]) -> None:
+    _validated_identity_token(payload["case_id"], path="case_dossier_input.case_id")
     layout = payload["layout"]
     if not math.isclose(float(layout["final_width_in"]), FINAL_WIDTH_IN, abs_tol=1e-9):
         raise CaseDossierError(
@@ -289,6 +525,15 @@ def _validate_input_semantics(payload: dict[str, Any]) -> None:
         raise CaseDossierError("process_trace_roles_invalid", repr(roles))
     if payload["mode"] == "synthetic_fixture" and payload["scientific_admission"] is not False:
         raise CaseDossierError("synthetic_scientific_admission_forbidden", "must be false")
+    ensemble = payload["ensemble_context"]
+    ensemble_contract = _ENSEMBLE_REASON_CONTRACT[ensemble["reason"]]
+    if ensemble["status"] != ensemble_contract["status"] or (
+        ensemble_contract["mode"] is not None and payload["mode"] != ensemble_contract["mode"]
+    ):
+        raise CaseDossierError(
+            "ensemble_context_mode_reason_mismatch",
+            f"mode={payload['mode']}, status={ensemble['status']}, reason={ensemble['reason']}",
+        )
     options = payload["comparison_options"]
     if payload["comparison_grammar"] == "same_cell_seed_sensitivity" and (
         options["difference_curve"]
@@ -322,11 +567,16 @@ def _validated_atlas_counts(cell: dict[str, Any]) -> tuple[str, int, dict[str, i
         Planner identity, positive denominator, and validated outcome counts.
     """
 
-    planner = str(cell.get("planner"))
+    planner = _validated_identity_token(cell.get("planner"), path="campaign_atlas.cell.planner")
     if cell.get("eligible") is not True:
         raise CaseDossierError("campaign_atlas_cell_ineligible", planner)
     denominator = cell.get("n_total")
     counts = cell.get("outcome_counts")
+    if isinstance(counts, dict) and any(name not in _OUTCOME_TOKENS for name in counts):
+        raise CaseDossierError(
+            "campaign_atlas_outcome_key_invalid",
+            f"{planner}: {sorted(str(name) for name in counts if name not in _OUTCOME_TOKENS)}",
+        )
     if (
         not isinstance(denominator, int)
         or isinstance(denominator, bool)
@@ -393,6 +643,56 @@ def _validate_atlas_outcome_ci(
             )
 
 
+def _project_atlas_cell(
+    cell: dict[str, Any],
+    *,
+    planner: str,
+    denominator: int,
+    counts: dict[str, int],
+) -> dict[str, Any]:
+    """Return only validated atlas fields admitted to display and durable outputs."""
+
+    return {
+        "scenario_family": _validated_identity_token(
+            cell.get("scenario_family"), path="campaign_atlas.cell.scenario_family"
+        ),
+        "planner": planner,
+        "release_arm_id": _validated_release_arm_id(
+            cell.get("release_arm_id"), path="campaign_atlas.cell.release_arm_id"
+        ),
+        "eligible": True,
+        "n_total": denominator,
+        "outcome_counts": {outcome: counts[outcome] for outcome in sorted(counts)},
+        "outcome_ci": {
+            outcome: [float(value) for value in cell["outcome_ci"][outcome]]
+            for outcome in sorted(counts)
+        },
+    }
+
+
+def _validate_atlas_cell_identities(cells: list[Any]) -> None:
+    """Validate atlas identity slots before matching or constructing tuple keys."""
+
+    for index, cell in enumerate(cells):
+        if not isinstance(cell, dict):
+            raise CaseDossierError(
+                "campaign_atlas_cells_invalid",
+                f"cells[{index}]: expected object",
+            )
+        _validated_identity_token(
+            cell.get("scenario_family"),
+            path=f"campaign_atlas.cells[{index}].scenario_family",
+        )
+        _validated_identity_token(
+            cell.get("planner"),
+            path=f"campaign_atlas.cells[{index}].planner",
+        )
+        _validated_release_arm_id(
+            cell.get("release_arm_id"),
+            path=f"campaign_atlas.cells[{index}].release_arm_id",
+        )
+
+
 def _validate_atlas(
     atlas: dict[str, Any],
     *,
@@ -407,6 +707,7 @@ def _validate_atlas(
     cells = atlas.get("cells")
     if not isinstance(cells, list):
         raise CaseDossierError("campaign_atlas_cells_invalid", "cells must be an array")
+    _validate_atlas_cell_identities(cells)
     resolved_cells: dict[tuple[str, str, str | None], dict[str, Any]] = {}
     bindings: dict[str, dict[str, Any]] = {}
     for role in ("left", "right"):
@@ -445,13 +746,19 @@ def _validate_atlas(
         cell = matches[0]
         planner, denominator, counts = _validated_atlas_counts(cell)
         _validate_atlas_outcome_ci(cell, planner, denominator, counts)
-        key = (scenario, planner, cell.get("release_arm_id"))
-        resolved_cells[key] = cell
+        projected_cell = _project_atlas_cell(
+            cell,
+            planner=planner,
+            denominator=denominator,
+            counts=counts,
+        )
+        key = (scenario, planner, projected_cell["release_arm_id"])
+        resolved_cells[key] = projected_cell
         bindings[role] = {
             "status": "resolved",
             "scenario_family": scenario,
             "planner": planner,
-            "release_arm_id": cell.get("release_arm_id"),
+            "release_arm_id": projected_cell["release_arm_id"],
             "resolution": resolution,
             "authority_source": authority_source,
         }
@@ -545,12 +852,9 @@ def _authoritative_release_arm(
 
     normalized: list[tuple[str, str]] = []
     for source, value in _release_arm_candidates(trace, selected_case, role=role):
-        if not isinstance(value, str) or not value.strip():
-            raise CaseDossierError(
-                "release_arm_provenance_invalid",
-                f"{source}: expected non-empty string",
-            )
-        normalized.append((source, value))
+        validated = _validated_release_arm_id(value, path=source)
+        if validated is not None:
+            normalized.append((source, validated))
     values = {value for _, value in normalized}
     if len(values) > 1:
         raise CaseDossierError(
@@ -796,6 +1100,7 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
     portfolio_path = _resolve_ref(input_path, sources["portfolio"])
     portfolio = _read_mapping(portfolio_path, code="portfolio_manifest_invalid")
     selected_case = _selected_case(portfolio, payload["case_id"])
+    _validate_selected_claim_contract(payload, selected_case)
     if payload["mode"] == "synthetic_fixture" and not bool(
         selected_case.get("source_boundary", {}).get("synthetic_fixture")
     ):
@@ -817,6 +1122,7 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
             raise CaseDossierError("process_trace_invalid", str(exc)) from exc
         traces[role] = trace
         trace_paths[role] = path
+    _validate_trace_identity_tokens(traces)
     _validate_shared_trace_contract(payload, traces)
     pair = _validate_pair(payload["comparison_grammar"], traces)
     atlas_path = _resolve_ref(input_path, sources["campaign_atlas"])
@@ -828,6 +1134,13 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
         selected_case=selected_case,
     )
     uncertainty = _bind_atlas_uncertainty(cells)
+    narrative = _controlled_narrative(payload)
+    selection_projection = _selection_projection(
+        selected_case,
+        portfolio_hash=portfolio["content_sha256"],
+        atlas_cell_bindings=atlas_cell_bindings,
+        controlled_allowed_claim=narrative["observed_signature"],
+    )
     outcomes = _bind_recorded_outcomes(
         payload,
         trace_refs,
@@ -841,7 +1154,11 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
         "portfolio": portfolio,
         "portfolio_path": portfolio_path,
         "selected_case": selected_case,
+        "selection_projection": selection_projection,
         "trace_refs": trace_refs,
+        "trace_labels": {
+            role: _derived_trace_label(role, traces[role]) for role in ("left", "right")
+        },
         "trace_paths": trace_paths,
         "traces": traces,
         "pair": pair,
@@ -851,7 +1168,7 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
         "atlas_cell_bindings": atlas_cell_bindings,
         "uncertainty": uncertainty,
         "outcomes": outcomes,
-        "narrative": _controlled_narrative(payload),
+        "narrative": narrative,
         "narrative_template_id": payload["narrative"]["template_id"],
     }
 
@@ -863,6 +1180,17 @@ def _available_events(trace: dict[str, Any]) -> list[dict[str, Any]]:
         if event.get("status") == "available"
         and event.get("visual_anchor_eligibility", {}).get("eligible") is True
     ]
+
+
+def _derived_trace_label(role: str, trace: dict[str, Any]) -> str:
+    """Build the only admitted trace display label from validated identity fields.
+
+    Returns:
+        A compact renderer-owned role/planner/seed identity label.
+    """
+
+    source = trace["source_trace"]["source"]
+    return f"{role[0].upper()} ID · {source['planner_id']}/{source['seed']}"
 
 
 _EVENT_LABELS = {
@@ -972,7 +1300,7 @@ def _semantic_style_handles(bound: dict[str, Any]) -> list[Any]:
             color=PALETTE[role],
             linestyle=LINESTYLES[role],
             marker=MARKERS[role],
-            label=bound["trace_refs"][role]["label"],
+            label=bound["trace_labels"][role],
         )
         for role in ("left", "right")
     ]
@@ -1197,7 +1525,7 @@ def _draw_world(
     bar_y = ymin + 0.06 * (ymax - ymin)
     bar_x = xmin + 0.08 * (xmax - xmin)
     ax.plot([bar_x, bar_x + scale_m], [bar_y, bar_y], color="#222222", linewidth=2.0)
-    ax.set_title(trace["source_trace"]["source"]["planner_id"])
+    ax.set_title(f"planner_id={trace['source_trace']['source']['planner_id']}")
     return {
         "status": "available",
         "reason": "source_trace_world_frame",
@@ -2073,14 +2401,14 @@ def _draw_cell_context(
             f"CI[{cell['outcome_ci'][name][1]:.2f},{cell['outcome_ci'][name][2]:.2f}]"
             for name, count in sorted(cell["outcome_counts"].items())
         )
-        lines.append(f"{cell['planner']}: {counts}")
+        lines.append(f"planner ID {cell['planner']}: {counts}")
     lines.extend(
         (
-            "Trace outcomes (atlas-key checked): "
-            + " · ".join(
-                f"{traces[role]['source_trace']['source']['planner_id']} {outcomes[role]['value']}"
-                for role in ("left", "right")
-            ),
+            "Trace IDs (planner/outcome; atlas-key checked): "
+            f"L {traces['left']['source_trace']['source']['planner_id']}/"
+            f"{outcomes['left']['value']} · "
+            f"R {traces['right']['source_trace']['source']['planner_id']}/"
+            f"{outcomes['right']['value']}",
             (
                 "Authority: NON-AUTHORITATIVE synthetic declaration"
                 if all(
@@ -2096,10 +2424,10 @@ def _draw_cell_context(
             "Uncertainty: atlas interval bounds consumed; not recomputed",
             (
                 f"Ensemble: {ensemble_context['status'].upper()} — "
-                f"{ensemble_context['reason'].replace('_', ' ')}"
+                f"{_ENSEMBLE_REASON_CONTRACT[ensemble_context['reason']]['display']}"
             ),
             (
-                "Trace inventory: "
+                "Trace inventory IDs: "
                 f"missing={','.join(ensemble_context['missing_trace_ids']) or 'none'} · "
                 f"ineligible={','.join(ensemble_context['ineligible_trace_ids']) or 'none'} · "
                 f"excluded={','.join(ensemble_context['excluded_trace_ids']) or 'none'}"
@@ -2306,15 +2634,15 @@ def _dossier_header_title(bound: dict[str, Any]) -> str:
         .get("horizon", "unavailable")
     )
     trace_title = (
-        f"{sources[0]['planner_id']} / {sources[1]['planner_id']} · "
-        f"seed {sources[0]['seed']} / {sources[1]['seed']} · "
-        f"horizon {horizon} steps · Δt {run_contract.get('time_step_s', 'unavailable')} s"
+        f"planner_id={sources[0]['planner_id']}/{sources[1]['planner_id']} · "
+        f"seed={sources[0]['seed']}/{sources[1]['seed']} · "
+        f"horizon={horizon} · Δt_s={run_contract.get('time_step_s', 'unavailable')}"
     )
-    selection_title = f"{selected['grain']} · {selected['primary_role']}"
-    if payload["comparison_grammar"] == "same_cell_seed_sensitivity":
-        selection_title += f" · {sources[0]['scenario_id']}"
-        return f"{payload['case_id']}\n{selection_title}\n{trace_title}"
-    return f"{payload['case_id']}\n{selection_title}\n{sources[0]['scenario_id']}\n{trace_title}"
+    selection_title = f"grain_id={selected['grain']} · role_id={selected['primary_role']}"
+    return (
+        f"case_id={payload['case_id']}\n{selection_title}\n"
+        f"scenario_id={sources[0]['scenario_id']}\n{trace_title}"
+    )
 
 
 def _dossier_header_boundary(bound: dict[str, Any]) -> str:
@@ -2325,15 +2653,18 @@ def _dossier_header_boundary(bound: dict[str, Any]) -> str:
     """
 
     payload = bound["input"]
+    boundary = (
+        SYNTHETIC_FIXTURE_LABEL
+        if payload["mode"] == "synthetic_fixture"
+        else "RENDERING DOES NOT ADMIT SCIENTIFIC EVIDENCE"
+    )
     if payload["comparison_grammar"] == "same_cell_seed_sensitivity":
         return (
-            f"{SYNTHETIC_FIXTURE_LABEL} · shared_prefix=false\n"
+            f"{boundary} · shared_prefix=false\n"
             "recorded start separation = "
             f"{_recorded_start_separation_text(bound['pair'])}"
         )
-    if payload["mode"] == "synthetic_fixture":
-        return SYNTHETIC_FIXTURE_LABEL
-    return "RENDERING DOES NOT ADMIT SCIENTIFIC EVIDENCE"
+    return boundary
 
 
 def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
@@ -2346,7 +2677,7 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         grid = figure.add_gridspec(
             9,
             2,
-            height_ratios=(2.50, 1.40, 1.75, 2.35, 1.10, 2.00, 0.95, 4.50, 2.00),
+            height_ratios=(3.00, 1.40, 1.75, 2.35, 1.10, 2.00, 0.95, 4.70, 2.00),
         )
         header = figure.add_subplot(grid[0, :])
         style_key = figure.add_subplot(grid[1, :])
@@ -2582,7 +2913,7 @@ def _save_figure(figure: Any, path: Path) -> None:
 def _caption(bound: dict[str, Any]) -> str:
     narrative = bound["narrative"]
     return (
-        f"# {bound['input']['case_id']} case dossier\n\n"
+        f"# Case dossier · case_id={bound['input']['case_id']}\n\n"
         f"**Claim boundary:** Renderer-integrity proof only; scientific_admission=false.\n\n"
         f"- **observed_signature:** {narrative['observed_signature']}\n"
         f"- **competing_explanation:** {narrative['competing_explanation']}\n"
@@ -2644,7 +2975,7 @@ def _artifact_catalog(
         "pdf": _file_ref_for_output(outputs["pdf"]),
     }
     caption_file = _file_ref_for_output(outputs["caption"])
-    legend_series = [item["label"] for item in bound["input"]["sources"]["process_traces"]] + list(
+    legend_series = [bound["trace_labels"][role] for role in ("left", "right")] + list(
         SEMANTIC_STYLE_LABELS
     )
     generation_command = (
@@ -2792,18 +3123,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                 "divergence_interpretation": pair["divergence_interpretation"],
                 "prohibited_semantics": _prohibited_semantics(bound["input"]["comparison_grammar"]),
             },
-            "selection": {
-                "case_id": bound["selected_case"]["case_id"],
-                "selected": True,
-                "selection_manifest_sha256": bound["portfolio"]["content_sha256"],
-                "grain": bound["selected_case"]["grain"],
-                "primary_role": bound["selected_case"]["primary_role"],
-                "allowed_claim": bound["selected_case"]["allowed_claim"],
-                "claim_grade": bound["selected_case"]["claim"]["grade"],
-                "evidence_grade": bound["selected_case"]["dimensions"]["evidence_grade"],
-                "eligibility": bound["selected_case"]["eligibility"],
-                "source_boundary": bound["selected_case"]["source_boundary"],
-            },
+            "selection": bound["selection_projection"],
             "renderer": {
                 "renderer_version": CASE_DOSSIER_RENDERER_VERSION,
                 "style_version": CASE_DOSSIER_STYLE_VERSION,

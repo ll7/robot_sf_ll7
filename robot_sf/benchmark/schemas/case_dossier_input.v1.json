@@ -20,7 +20,10 @@
   "properties": {
     "schema_version": {"const": "case_dossier_input.v1"},
     "dossier_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$"},
-    "case_id": {"type": "string", "minLength": 1},
+    "case_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"
+    },
     "mode": {"enum": ["production", "synthetic_fixture"]},
     "scientific_admission": {"const": false},
     "comparison_grammar": {
@@ -54,10 +57,25 @@
       ],
       "properties": {
         "status": {"enum": ["available", "unavailable"]},
-        "reason": {"type": "string", "minLength": 1},
-        "missing_trace_ids": {"type": "array", "items": {"type": "string"}},
-        "ineligible_trace_ids": {"type": "array", "items": {"type": "string"}},
-        "excluded_trace_ids": {"type": "array", "items": {"type": "string"}}
+        "reason": {
+          "enum": [
+            "synthetic_fixture_no_ensemble_inventory",
+            "production_ensemble_inventory_unavailable",
+            "ensemble_inventory_complete"
+          ]
+        },
+        "missing_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"}
+        },
+        "ineligible_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"}
+        },
+        "excluded_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"}
+        }
       }
     },
     "sources": {
@@ -136,19 +154,16 @@
       }
     },
     "processTraceRef": {
-      "allOf": [
-        {"$ref": "#/$defs/fileRef"},
-        {
-          "type": "object",
-          "required": ["role", "label", "recorded_outcome", "source_class"],
-          "properties": {
-            "role": {"enum": ["left", "right"]},
-            "label": {"type": "string", "minLength": 1},
-            "recorded_outcome": {"type": "string", "minLength": 1},
-            "source_class": {"const": "visualization_only_rerun_diagnostics"}
-          }
-        }
-      ]
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "role", "recorded_outcome", "source_class"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "role": {"enum": ["left", "right"]},
+        "recorded_outcome": {"enum": ["success", "collision", "timeout"]},
+        "source_class": {"const": "visualization_only_rerun_diagnostics"}
+      }
     },
     "range2": {
       "type": "array",

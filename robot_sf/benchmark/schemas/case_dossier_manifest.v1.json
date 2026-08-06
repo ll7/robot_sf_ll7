@@ -50,13 +50,36 @@
     },
     "selection": {
       "type": "object",
-      "required": ["case_id", "selected", "selection_manifest_sha256"],
+      "required": [
+        "case_id",
+        "selected",
+        "selection_manifest_sha256",
+        "grain",
+        "primary_role",
+        "allowed_claim",
+        "claim_grade",
+        "evidence_grade",
+        "eligibility",
+        "source_provenance"
+      ],
       "properties": {
-        "case_id": {"type": "string"},
+        "case_id": {"$ref": "#/$defs/identityToken"},
         "selected": {"const": true},
-        "selection_manifest_sha256": {"$ref": "#/$defs/sha256"}
+        "selection_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "grain": {"$ref": "#/$defs/identityToken"},
+        "primary_role": {"$ref": "#/$defs/identityToken"},
+        "allowed_claim": {
+          "enum": [
+            "Different executed planner stacks show different observed processes and terminal outcomes under the matched recorded start.",
+            "The recorded traces show distinct observed paths and terminal outcomes from different recorded starts."
+          ]
+        },
+        "claim_grade": {"const": "descriptive"},
+        "evidence_grade": {"type": "number"},
+        "eligibility": {"$ref": "#/$defs/selectionEligibility"},
+        "source_provenance": {"$ref": "#/$defs/sourceProvenance"}
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "renderer": {
       "type": "object",
@@ -66,6 +89,19 @@
     "source_bindings": {
       "type": "object",
       "required": ["portfolio", "process_traces", "campaign_atlas", "source_classes"],
+      "properties": {
+        "campaign_atlas": {
+          "type": "object",
+          "required": ["release_cells"],
+          "properties": {
+            "release_cells": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/atlasCellProjection"}
+            }
+          },
+          "additionalProperties": true
+        }
+      },
       "additionalProperties": true
     },
     "shared_scales": {"type": "object"},
@@ -91,6 +127,141 @@
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "identityToken": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"
+    },
+    "releaseArmId": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/identityToken"}
+      ]
+    },
+    "selectionEligibility": {
+      "type": "object",
+      "required": [
+        "eligible",
+        "status",
+        "execution_mode",
+        "telemetry_grade",
+        "typed_outcome_semantics",
+        "initial_state_match",
+        "outcome_match"
+      ],
+      "properties": {
+        "eligible": {"const": true},
+        "status": {"const": "admitted"},
+        "execution_mode": {"enum": ["native", "adapter_disclosed"]},
+        "telemetry_grade": {
+          "enum": ["geometry", "kinematics", "controller", "counterfactual"]
+        },
+        "typed_outcome_semantics": {"type": "boolean"},
+        "initial_state_match": {"enum": ["pass", "fail", "unavailable"]},
+        "outcome_match": {"enum": ["pass", "fail", "unavailable"]}
+      },
+      "additionalProperties": false
+    },
+    "sourceProvenance": {
+      "type": "object",
+      "required": [
+        "synthetic_fixture",
+        "visualization_only_reexecution",
+        "release_id",
+        "telemetry_grade",
+        "hashes",
+        "release_arm_bindings"
+      ],
+      "properties": {
+        "synthetic_fixture": {"type": "boolean"},
+        "visualization_only_reexecution": {"type": "boolean"},
+        "release_id": {"$ref": "#/$defs/identityToken"},
+        "telemetry_grade": {
+          "enum": ["geometry", "kinematics", "controller", "counterfactual"]
+        },
+        "hashes": {
+          "type": "object",
+          "required": ["release_rows", "trace_package"],
+          "properties": {
+            "release_rows": {"$ref": "#/$defs/hashBinding"},
+            "trace_package": {"$ref": "#/$defs/hashBinding"}
+          },
+          "additionalProperties": false
+        },
+        "release_arm_bindings": {
+          "type": "object",
+          "required": ["left", "right"],
+          "properties": {
+            "left": {"$ref": "#/$defs/releaseArmId"},
+            "right": {"$ref": "#/$defs/releaseArmId"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "hashBinding": {
+      "type": "object",
+      "required": ["observed_sha256", "expected_sha256", "matches_expected"],
+      "properties": {
+        "observed_sha256": {"$ref": "#/$defs/sha256"},
+        "expected_sha256": {"$ref": "#/$defs/sha256"},
+        "matches_expected": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "atlasCellProjection": {
+      "type": "object",
+      "required": [
+        "scenario_family",
+        "planner",
+        "release_arm_id",
+        "eligible",
+        "n_total",
+        "outcome_counts",
+        "outcome_ci"
+      ],
+      "properties": {
+        "scenario_family": {"$ref": "#/$defs/identityToken"},
+        "planner": {"$ref": "#/$defs/identityToken"},
+        "release_arm_id": {"$ref": "#/$defs/releaseArmId"},
+        "eligible": {"const": true},
+        "n_total": {"type": "integer", "minimum": 1},
+        "outcome_counts": {"$ref": "#/$defs/outcomeCounts"},
+        "outcome_ci": {"$ref": "#/$defs/outcomeIntervals"}
+      },
+      "additionalProperties": false
+    },
+    "outcomeCounts": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "success": {"type": "integer", "minimum": 0},
+        "collision": {"type": "integer", "minimum": 0},
+        "timeout": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "outcomeIntervals": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "success": {"$ref": "#/$defs/interval3"},
+        "collision": {"$ref": "#/$defs/interval3"},
+        "timeout": {"$ref": "#/$defs/interval3"}
+      },
+      "additionalProperties": false
+    },
+    "interval3": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number"},
+        {"type": "number"},
+        {"type": "number"}
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
     "fileRef": {
       "type": "object",
       "required": ["path", "sha256"],

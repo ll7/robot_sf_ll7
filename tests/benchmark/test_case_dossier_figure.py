@@ -158,7 +158,7 @@ def test_same_cell_seed_sensitivity_records_no_shared_prefix_without_difference_
     svg = bundle.svg_path.read_text(encoding="utf-8")
     assert "shared_prefix=false" in svg
     assert "recorded start separation = 0.050 m" in svg
-    assert ">fixture-doorway-seeds-113-114</text>" in svg
+    assert ">case_id=fixture-doorway-seeds-113-114</text>" in svg
     assert "minimum clearance" in svg
     assert "safety breach" in svg
     assert "difference curve" not in svg.lower()
@@ -175,6 +175,122 @@ def test_same_cell_seed_sensitivity_records_no_shared_prefix_without_difference_
     assert closest["left"]["time_to_closest_approach_s"] == pytest.approx(0.15)
     for role in ("left", "right"):
         assert bundle.manifest["panel_status"][f"world_{role}"]["semantic_event_anchor_count"] > 1
+
+
+@pytest.mark.parametrize(
+    ("mode", "grammar", "expected_first_line"),
+    (
+        ("synthetic_fixture", "matched_start_planner", SYNTHETIC_FIXTURE_LABEL),
+        (
+            "synthetic_fixture",
+            "same_cell_seed_sensitivity",
+            f"{SYNTHETIC_FIXTURE_LABEL} · shared_prefix=false",
+        ),
+        (
+            "production",
+            "matched_start_planner",
+            "RENDERING DOES NOT ADMIT SCIENTIFIC EVIDENCE",
+        ),
+        (
+            "production",
+            "same_cell_seed_sensitivity",
+            "RENDERING DOES NOT ADMIT SCIENTIFIC EVIDENCE · shared_prefix=false",
+        ),
+    ),
+)
+def test_header_boundary_is_mode_and_grammar_owned(
+    tmp_path: Path,
+    mode: str,
+    grammar: str,
+    expected_first_line: str,
+) -> None:
+    """All mode×grammar headers expose the right controlled evidence boundary."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar=grammar,
+        mode=mode,
+        terminal_outcomes=("success", "collision") if mode == "production" else (None, None),
+    )
+
+    boundary = dossier_module._dossier_header_boundary(dossier_module._load_bound_input(input_path))
+
+    assert boundary.splitlines()[0] == expected_first_line
+    assert (SYNTHETIC_FIXTURE_LABEL in boundary) is (mode == "synthetic_fixture")
+    if grammar == "same_cell_seed_sensitivity":
+        assert "shared_prefix=false" in boundary
+        assert "recorded start separation = 0.050 m" in boundary
+
+
+def test_production_same_cell_outputs_never_claim_synthetic(tmp_path: Path) -> None:
+    """No production same-cell output surface may inherit synthetic fixture wording."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="same_cell_seed_sensitivity",
+        mode="production",
+        terminal_outcomes=("success", "collision"),
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "production-same-cell")
+
+    for path in (
+        bundle.svg_path,
+        bundle.caption_path,
+        bundle.sidecar_path,
+        bundle.manifest_path,
+        bundle.catalog_path,
+    ):
+        output = path.read_text(encoding="utf-8").lower()
+        assert "synthetic fixture" not in output
+        assert "synthetic-fixture" not in output
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    assert "RENDERING DOES NOT ADMIT SCIENTIFIC EVIDENCE · shared_prefix=false" in svg
+    assert "production ensemble inventory unavailable" in svg
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_reason", "forbidden_reason"),
+    (
+        (
+            "synthetic_fixture",
+            "synthetic_fixture_no_ensemble_inventory",
+            "production_ensemble_inventory_unavailable",
+        ),
+        (
+            "production",
+            "production_ensemble_inventory_unavailable",
+            "synthetic_fixture_no_ensemble_inventory",
+        ),
+    ),
+)
+def test_ensemble_reason_is_closed_and_mode_consistent(
+    tmp_path: Path,
+    mode: str,
+    expected_reason: str,
+    forbidden_reason: str,
+) -> None:
+    """Fixture builders and semantic validation cannot cross production boundaries."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        mode=mode,
+        terminal_outcomes=("success", "collision") if mode == "production" else (None, None),
+    )
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    assert payload["ensemble_context"] == {
+        "status": "unavailable",
+        "reason": expected_reason,
+        "missing_trace_ids": [],
+        "ineligible_trace_ids": [],
+        "excluded_trace_ids": [],
+    }
+
+    payload["ensemble_context"]["reason"] = forbidden_reason
+    _write_json(input_path, payload)
+    with pytest.raises(Exception, match="ensemble_context_mode_reason_mismatch"):
+        render_case_dossier(input_path, tmp_path / "forbidden-ensemble-reason")
 
 
 def test_cross_axes_structural_text_overlap_fails_closed() -> None:
@@ -341,6 +457,106 @@ def test_controlled_narrative_rejects_all_free_form_reviewer_examples(
         render_case_dossier(input_path, tmp_path / "forbidden-narrative")
 
 
+def test_process_trace_display_labels_are_renderer_owned(tmp_path: Path) -> None:
+    """Caller-authored trace prose is not part of the dossier input contract."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    payload["sources"]["process_traces"][0]["label"] = "Reviewer says this planner decisively wins."
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="case_dossier_input_invalid"):
+        render_case_dossier(input_path, tmp_path / "forbidden-trace-label")
+
+
+@pytest.mark.parametrize(
+    ("identity_overrides", "controller_signals", "error_code"),
+    (
+        (
+            {"case_id": "reviewer says this case proves superiority"},
+            False,
+            "case_dossier_input_invalid",
+        ),
+        ({"scenario_id": "reviewer supplied scenario sentence"}, False, "identity_token_invalid"),
+        ({"planner_id": "planner wins decisively"}, False, "identity_token_invalid"),
+        (
+            {"episode_id": "episode selected because it proves the claim"},
+            False,
+            "identity_token_invalid",
+        ),
+        (
+            {"controller_state": "controller proves the planner is safer"},
+            True,
+            "identity_token_invalid",
+        ),
+    ),
+)
+def test_sentence_like_identity_values_fail_before_rendering(
+    tmp_path: Path,
+    identity_overrides: dict[str, str],
+    controller_signals: bool,
+    error_code: str,
+) -> None:
+    """Identity and categorical slots admit bounded tokens, never prose."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        controller_signals=controller_signals,
+        identity_overrides=identity_overrides,
+    )
+
+    with pytest.raises(Exception, match=error_code):
+        render_case_dossier(input_path, tmp_path / "forbidden-identity")
+
+
+@pytest.mark.parametrize(
+    ("slot", "value"),
+    (
+        ("recorded_outcome", "reviewer_declares_a_win"),
+        ("missing_trace_ids", "trace missing because this method is unsafe"),
+    ),
+)
+def test_input_vocabularies_reject_semantic_injection(
+    tmp_path: Path,
+    slot: str,
+    value: str,
+) -> None:
+    """Outcome vocabularies and inventory identity slots are schema closed."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    if slot == "recorded_outcome":
+        payload["sources"]["process_traces"][0][slot] = value
+    else:
+        payload["ensemble_context"][slot] = [value]
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="case_dossier_input_invalid"):
+        render_case_dossier(input_path, tmp_path / "forbidden-vocabulary")
+
+
+def test_campaign_atlas_outcome_keys_use_closed_vocabulary(tmp_path: Path) -> None:
+    """Atlas outcome names cannot become caller-authored prose in the context panel."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    atlas["cells"][0]["outcome_counts"]["reviewer_claim"] = atlas["cells"][0]["outcome_counts"].pop(
+        "success"
+    )
+    atlas["cells"][0]["outcome_ci"]["reviewer_claim"] = atlas["cells"][0]["outcome_ci"].pop(
+        "success"
+    )
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="campaign_atlas_outcome_key_invalid"):
+        render_case_dossier(input_path, tmp_path / "forbidden-atlas-outcome")
+
+
 def test_narrative_rejects_arbitrary_semantic_mutation(tmp_path: Path) -> None:
     """Only the controlled grammar template may reach dossier claim surfaces."""
 
@@ -384,6 +600,77 @@ def test_same_cell_claim_surfaces_use_exact_controlled_abstention_template(
     assert all(value in caption for value in expected.values())
 
 
+@pytest.mark.parametrize(
+    ("grammar", "expected_allowed_claim"),
+    (
+        (
+            "matched_start_planner",
+            "Different executed planner stacks show different observed processes and "
+            "terminal outcomes under the matched recorded start.",
+        ),
+        (
+            "same_cell_seed_sensitivity",
+            "The recorded traces show distinct observed paths and terminal outcomes "
+            "from different recorded starts.",
+        ),
+    ),
+)
+def test_selected_portfolio_claim_is_the_grammar_owned_controlled_claim(
+    tmp_path: Path,
+    grammar: str,
+    expected_allowed_claim: str,
+) -> None:
+    """Selection prose must be byte-equal to the renderer's controlled claim contract."""
+
+    input_path = _write_input(tmp_path, grammar=grammar)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    portfolio = json.loads(Path(payload["sources"]["portfolio"]["path"]).read_text("utf-8"))
+    selected = portfolio["selected"][0]
+
+    assert selected["allowed_claim"] == expected_allowed_claim
+    assert selected["claim"]["allowed"] == [expected_allowed_claim]
+
+
+@pytest.mark.parametrize(
+    "mutated_claim",
+    (
+        "Reviewer-authored superiority claim.",
+        "This selected planner is safer than the other planner.",
+    ),
+)
+def test_selected_portfolio_cannot_override_the_controlled_claim(
+    tmp_path: Path,
+    mutated_claim: str,
+) -> None:
+    """A validly hashed portfolio still cannot inject selection prose."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    portfolio_path = Path(payload["sources"]["portfolio"]["path"])
+    portfolio = json.loads(portfolio_path.read_text(encoding="utf-8"))
+    portfolio["selected"][0]["allowed_claim"] = mutated_claim
+    portfolio["selected"][0]["claim"]["allowed"] = [mutated_claim]
+    ledger_record = next(
+        item
+        for item in portfolio["ledger"]
+        if item["case_id"] == portfolio["selected"][0]["case_id"]
+    )
+    ledger_record["allowed_claim"] = mutated_claim
+    portfolio = finalize_manifest(portfolio)
+    _write_json(portfolio_path, portfolio)
+    payload["sources"]["portfolio"]["sha256"] = _sha256(portfolio_path)
+
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    atlas["selection_manifest_hash"] = portfolio["content_sha256"]
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="selected_claim_contract_mismatch"):
+        render_case_dossier(input_path, tmp_path / "forbidden-selected-claim")
+
+
 def test_current_production_portfolio_fails_when_requested_case_is_not_selected(
     tmp_path: Path,
 ) -> None:
@@ -407,6 +694,7 @@ def test_current_production_portfolio_fails_when_requested_case_is_not_selected(
     assert manifest["selected"] == []
     payload = json.loads(input_path.read_text(encoding="utf-8"))
     payload["mode"] = "production"
+    payload["ensemble_context"]["reason"] = "production_ensemble_inventory_unavailable"
     payload["case_id"] = (
         "ch7-role-planner-upset--classic-realworld-double-bottleneck-high--goal-vs-ppo--seed-118"
     )
@@ -474,7 +762,7 @@ def test_recorded_outcome_must_be_a_key_in_its_bound_atlas_cell(tmp_path: Path) 
     payload["sources"]["process_traces"][0]["recorded_outcome"] = "near_miss"
     _write_json(input_path, payload)
 
-    with pytest.raises(Exception, match="recorded_outcome_not_in_atlas_cell"):
+    with pytest.raises(Exception, match="case_dossier_input_invalid"):
         render_case_dossier(input_path, tmp_path / "unknown-outcome")
 
 
@@ -778,7 +1066,7 @@ def test_semantic_style_key_is_complete_and_matches_catalog_legend(tmp_path: Pat
         "controller states (direct L/R labels)",
     }
     assert expected_semantics <= set(legend_series)
-    assert {"goal seed 118", "ppo seed 118"} <= set(legend_series)
+    assert {"L ID · goal/118", "R ID · ppo/118"} <= set(legend_series)
     assert catalog["artifacts"][0]["figure_semantics"]["legend_complete"] is True
     svg = bundle.svg_path.read_text(encoding="utf-8")
     for label in expected_semantics - {"controller states (direct L/R labels)"}:
@@ -817,6 +1105,77 @@ def test_validated_atlas_intervals_are_bound_displayed_and_catalogued(tmp_path: 
     svg = bundle.svg_path.read_text(encoding="utf-8")
     assert "collision 6/15 CI[0.00,1.00]" in svg
     assert "success 9/15 CI[0.00,1.00]" in svg
+
+
+def test_durable_outputs_whitelist_selection_provenance_and_atlas_cells(
+    tmp_path: Path,
+) -> None:
+    """Unknown source/atlas prose never crosses a durable or visible output boundary."""
+
+    forbidden = "Reviewer claim_note: this planner is scientifically superior."
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    portfolio_path = Path(payload["sources"]["portfolio"]["path"])
+    portfolio = json.loads(portfolio_path.read_text(encoding="utf-8"))
+    selected = portfolio["selected"][0]
+    ledger_record = next(
+        item for item in portfolio["ledger"] if item["case_id"] == selected["case_id"]
+    )
+    for record in (selected, ledger_record):
+        record["source_boundary"]["claim_note"] = forbidden
+        record["source"]["boundary"]["claim_note"] = forbidden
+    portfolio = finalize_manifest(portfolio)
+    _write_json(portfolio_path, portfolio)
+    payload["sources"]["portfolio"]["sha256"] = _sha256(portfolio_path)
+
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    atlas["selection_manifest_hash"] = portfolio["content_sha256"]
+    atlas["cells"][0]["claim_note"] = forbidden
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    bundle = render_case_dossier(input_path, tmp_path / "projection-whitelist")
+
+    for path in (
+        bundle.svg_path,
+        bundle.pdf_path,
+        bundle.caption_path,
+        bundle.sidecar_path,
+        bundle.manifest_path,
+        bundle.catalog_path,
+    ):
+        assert forbidden.encode("utf-8") not in path.read_bytes()
+    selection = bundle.manifest["selection"]
+    assert set(selection["eligibility"]) == {
+        "eligible",
+        "status",
+        "execution_mode",
+        "telemetry_grade",
+        "typed_outcome_semantics",
+        "initial_state_match",
+        "outcome_match",
+    }
+    assert "source_boundary" not in selection
+    assert set(selection["source_provenance"]) == {
+        "synthetic_fixture",
+        "visualization_only_reexecution",
+        "release_id",
+        "telemetry_grade",
+        "hashes",
+        "release_arm_bindings",
+    }
+    for cell in bundle.manifest["source_bindings"]["campaign_atlas"]["release_cells"]:
+        assert set(cell) == {
+            "scenario_family",
+            "planner",
+            "release_arm_id",
+            "eligible",
+            "n_total",
+            "outcome_counts",
+            "outcome_ci",
+        }
 
 
 def test_catalog_separates_two_trace_diagnostic_support_from_release_context(
@@ -896,6 +1255,29 @@ def test_atlas_duplicate_release_arms_without_provenance_fail_closed(
         render_case_dossier(input_path, tmp_path / "ambiguous-atlas-arm")
 
 
+@pytest.mark.parametrize(
+    "release_arm_id",
+    ("", {"id": "goal__native"}, "arm selected because it proves the claim"),
+)
+def test_atlas_release_arm_id_has_stable_identity_grammar(
+    tmp_path: Path,
+    release_arm_id: object,
+) -> None:
+    """Malformed arm values fail before candidate keys or durable bindings are built."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    atlas["cells"][0]["release_arm_id"] = release_arm_id
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="release_arm_id_invalid"):
+        render_case_dossier(input_path, tmp_path / "invalid-atlas-arm")
+
+
 def test_authoritative_selection_release_arm_resolves_and_is_bound_durably(
     tmp_path: Path,
 ) -> None:
@@ -937,6 +1319,23 @@ def test_authoritative_selection_release_arm_resolves_and_is_bound_durably(
     assert left_outcome["atlas_cell_binding"] == binding
     sidecar = json.loads(bundle.sidecar_path.read_text(encoding="utf-8"))
     assert sidecar["atlas_cell_bindings"]["left"] == binding
+
+
+@pytest.mark.parametrize("release_arm_id", ("", "arm chosen because this planner is safer"))
+def test_authoritative_release_arm_uses_the_same_identity_grammar(
+    tmp_path: Path,
+    release_arm_id: str,
+) -> None:
+    """Selection-side release-arm provenance cannot carry caller prose."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        release_arm_bindings={"left": release_arm_id},
+    )
+
+    with pytest.raises(Exception, match="release_arm_id_invalid"):
+        render_case_dossier(input_path, tmp_path / "invalid-authoritative-arm")
 
 
 @pytest.mark.parametrize(
@@ -1144,13 +1543,19 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
     mode: str = "synthetic_fixture",
     terminal_outcomes: tuple[str | None, str | None] = (None, None),
     release_arm_bindings: dict[str, str] | None = None,
+    identity_overrides: dict[str, str] | None = None,
 ) -> Path:
+    identity_overrides = identity_overrides or {}
     matched = grammar == "matched_start_planner"
-    scenario_id = (
-        "classic_realworld_double_bottleneck_high" if matched else "classic_doorway_medium"
+    scenario_id = identity_overrides.get(
+        "scenario_id",
+        "classic_realworld_double_bottleneck_high" if matched else "classic_doorway_medium",
     )
-    case_id = "fixture-seed-118-planner-upset" if matched else "fixture-doorway-seeds-113-114"
-    left_planner = "goal" if matched else "ppo"
+    case_id = identity_overrides.get(
+        "case_id",
+        "fixture-seed-118-planner-upset" if matched else "fixture-doorway-seeds-113-114",
+    )
+    left_planner = identity_overrides.get("planner_id", "goal" if matched else "ppo")
     right_planner = "ppo"
     left_seed = 118 if matched else 113
     right_seed = 118 if matched else 114
@@ -1167,6 +1572,8 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
         executed_turn=executed_turn,
         controller_signals=controller_signals,
         terminal_outcome=terminal_outcomes[0],
+        episode_id=identity_overrides.get("episode_id"),
+        controller_state=identity_overrides.get("controller_state"),
     )
     right = _trace_payload(
         trace_id=f"fixture-{scenario_id}-{right_planner}-seed-{right_seed}",
@@ -1222,7 +1629,11 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
     portfolio_path = _write_json(tmp_path / "portfolio.json", portfolio)
     atlas = {
         "schema_version": "campaign_atlas.v2",
-        "campaign_id": "synthetic-fixture-release",
+        "campaign_id": (
+            "synthetic-fixture-release"
+            if mode == "synthetic_fixture"
+            else "production-controlled-release"
+        ),
         "scenario_families": [scenario_id],
         "planners": sorted({left_planner, right_planner}),
         "event_anchor": "minimum_clearance",
@@ -1240,7 +1651,7 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
     atlas_path = _write_json(tmp_path / "atlas.json", atlas)
     payload = {
         "schema_version": "case_dossier_input.v1",
-        "dossier_id": f"{case_id}-dossier",
+        "dossier_id": "fixture-matched-dossier" if matched else "fixture-doorway-dossier",
         "case_id": case_id,
         "mode": mode,
         "scientific_admission": False,
@@ -1253,7 +1664,11 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
         },
         "ensemble_context": {
             "status": "unavailable",
-            "reason": "synthetic_fixture_no_ensemble_inventory",
+            "reason": (
+                "synthetic_fixture_no_ensemble_inventory"
+                if mode == "synthetic_fixture"
+                else "production_ensemble_inventory_unavailable"
+            ),
             "missing_trace_ids": [],
             "ineligible_trace_ids": [],
             "excluded_trace_ids": [],
@@ -1263,14 +1678,12 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
             "process_traces": [
                 {
                     "role": "left",
-                    "label": f"{left_planner} seed {left_seed}",
                     "recorded_outcome": "success",
                     "source_class": "visualization_only_rerun_diagnostics",
                     **_file_ref(left_path),
                 },
                 {
                     "role": "right",
-                    "label": f"{right_planner} seed {right_seed}",
                     "recorded_outcome": "collision",
                     "source_class": "visualization_only_rerun_diagnostics",
                     **_file_ref(right_path),
@@ -1316,6 +1729,8 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
     executed_turn: bool = False,
     controller_signals: bool = False,
     terminal_outcome: str | None = None,
+    episode_id: str | None = None,
+    controller_state: str | None = None,
 ) -> dict[str, Any]:
     positions = [(0.0, 0.0), (0.2, 0.0), (0.4, 0.0), (0.6, 0.0), final_position]
     positions = [
@@ -1345,7 +1760,13 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
         if controller_signals:
             planner.update(
                 {
-                    "controller_state": "tracking" if step < 3 else "braking",
+                    "controller_state": (
+                        controller_state
+                        if controller_state is not None
+                        else "tracking"
+                        if step < 3
+                        else "braking"
+                    ),
                     "command_source": "planner",
                     "guard_state": "clear" if step < 3 else "active",
                     "fallback_state": "inactive",
@@ -1398,7 +1819,7 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
             "scenario_id": scenario_id,
             "seed": seed,
             "planner_id": planner_id,
-            "episode_id": f"{trace_id}-episode",
+            "episode_id": episode_id or f"{trace_id}-episode",
             "generated_by": "issue-6791 synthetic fixture",
         },
         "evidence_boundary": "analysis_workbench_only",
@@ -1422,8 +1843,18 @@ def _portfolio_config(
     process_class = "matched_planner_process" if matched else "matched_seed_process"
     release_ref = "configs/scenarios/single/francis2023_narrow_doorway.yaml"
     trace_ref = "robot_sf/benchmark/trace_reexport_packaging.py"
+    release_id = (
+        "synthetic-fixture-release" if synthetic_fixture else "production-controlled-release"
+    )
     release_sha = _sha256(REPO_ROOT / release_ref)
     trace_sha = _sha256(REPO_ROOT / trace_ref)
+    allowed_claim = (
+        "Different executed planner stacks show different observed processes and "
+        "terminal outcomes under the matched recorded start."
+        if matched
+        else "The recorded traces show distinct observed paths and terminal outcomes "
+        "from different recorded starts."
+    )
     checks = dict.fromkeys(
         (
             "release_campaign_identity",
@@ -1452,7 +1883,7 @@ def _portfolio_config(
     }
     source_boundary = {
         "synthetic_fixture": synthetic_fixture,
-        "release_id": "synthetic-fixture-release",
+        "release_id": release_id,
         "release_rows_sha256": release_sha,
         "expected_release_rows_sha256": release_sha,
         "trace_package_sha256": trace_sha,
@@ -1470,7 +1901,7 @@ def _portfolio_config(
         "primary_role": role,
         "claim_grade": "descriptive",
         "secondary_descriptors": ["synthetic_fixture"],
-        "allowed_claim": "Different executed fixture planners show different observed processes.",
+        "allowed_claim": allowed_claim,
         "forbidden_claims": ["causal planner superiority"],
         "event_anchor": {
             "type": "min_clearance",

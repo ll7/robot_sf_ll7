@@ -23,8 +23,8 @@ PROJECT_ROOT="$(
 )"
 cd "${PROJECT_ROOT}"
 
-CONFIG_PATH="${CONFIG_PATH:-configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml}"
-OUT_DIR="${OUT_DIR:-output/benchmarks/issue_5579_mpc_tuning_sensitivity}"
+CONFIG_PATH="${CONFIG_PATH:-configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml}"
+OUT_DIR="${OUT_DIR:-output/benchmarks/issue_5579_mpc_tuning_sensitivity_v2}"
 CANARY_DIR="${OUT_DIR}/canary"
 
 echo "== [issue-5579/6699] MPC Tuning Sensitivity Campaign =="

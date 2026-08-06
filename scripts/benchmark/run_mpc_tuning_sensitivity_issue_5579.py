@@ -32,9 +32,9 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = REPO_ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml"
+DEFAULT_CONFIG = REPO_ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml"
 SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
-DEFAULT_OUT_DIR = REPO_ROOT / "output/benchmarks/issue_5579_mpc_tuning_sensitivity"
+DEFAULT_OUT_DIR = REPO_ROOT / "output/benchmarks/issue_5579_mpc_tuning_sensitivity_v2"
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -208,9 +208,9 @@ def run_study(
         run_commit=_git_head(),
         reproduction_command=(
             "uv run python scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py "
-            "--config configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml "
+            f"--config {_display_path(config_path)} "
             f"--phase {phase} "
-            "--out-dir output/benchmarks/issue_5579_mpc_tuning_sensitivity"
+            "--out-dir output/benchmarks/issue_5579_mpc_tuning_sensitivity_v2"
         ),
         raw_artifact_root=_display_path(raw_dir),
         scope_name=scope_name,

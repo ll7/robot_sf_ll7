@@ -21,8 +21,9 @@ import yaml
 from robot_sf.planner.prediction_mpc import build_prediction_mpc_config
 from robot_sf.training.scenario_loader import load_scenarios
 
-CONFIG_SCHEMA = "issue_5579_mpc_tuning_sensitivity.v1"
+CONFIG_SCHEMA = "issue_5579_mpc_tuning_sensitivity.v2"
 REPORT_SCHEMA = "issue_5579_mpc_tuning_sensitivity_report.v1"
+STUDY_ID = "issue_5579_mpc_tuning_budget_sensitivity_v2"
 TARGET_ARM_KEYS = ("prediction_mpc", "prediction_mpc_cbf")
 INCUMBENT_ARM_KEYS = (
     "scenario_adaptive_hybrid_orca_v1",
@@ -68,6 +69,8 @@ def validate_sensitivity_config(
         raise ValueError(f"schema_version must be {CONFIG_SCHEMA!r}")
     if int(config.get("issue", 0)) != 5579:
         raise ValueError("issue must be 5579")
+    if config.get("study_id") != STUDY_ID:
+        raise ValueError(f"study_id must be {STUDY_ID!r}")
     claim_boundary = str(config.get("claim_boundary", ""))
     normalized_claim_boundary = claim_boundary.lower()
     if (
@@ -862,7 +865,7 @@ def _build_read(
     if not all_rows_eligible or len(target_rates) != len(TARGET_ARM_KEYS) or not incumbent_rates:
         return {
             "decision": "blocked",
-            "detail": "Complete native/adapter rows are required before the pre-registered read.",
+            "detail": "Complete native solver/provenance-valid rows are required before the pre-registered read.",
         }
     if max(target_rates) < min(incumbent_rates):
         decision = "structural_reading_strengthens_on_tested_slice"
@@ -1161,10 +1164,10 @@ def _canary_availability_reasons(row: Mapping[str, Any]) -> list[str]:
 
 def _canary_solver_reasons(row: Mapping[str, Any]) -> list[str]:
     """Return native solver, provenance, finite-command, and update failures."""
-    return _canary_solver_identity_reasons(row) + _canary_solver_runtime_reasons(row)
+    return _native_solver_identity_reasons(row) + _native_solver_runtime_reasons(row)
 
 
-def _canary_solver_identity_reasons(row: Mapping[str, Any]) -> list[str]:
+def _native_solver_identity_reasons(row: Mapping[str, Any]) -> list[str]:
     """Return native solver mode and provenance failures."""
     reasons: list[str] = []
     if row.get("native_solver_eligible") is not True:
@@ -1178,7 +1181,7 @@ def _canary_solver_identity_reasons(row: Mapping[str, Any]) -> list[str]:
     return reasons
 
 
-def _canary_solver_runtime_reasons(row: Mapping[str, Any]) -> list[str]:
+def _native_solver_runtime_reasons(row: Mapping[str, Any]) -> list[str]:
     """Return solver counter and control-update failures."""
     reasons: list[str] = []
     if not _is_int(row.get("solver_successes")) or int(row["solver_successes"]) < 1:
@@ -1212,6 +1215,9 @@ def _eligible(row: Mapping[str, Any]) -> bool:
         and str(row.get("availability_status", "")).strip().lower() == "available"
         and row.get("benchmark_success") is True
         and row.get("planner_runtime_status") == "eligible"
+        and not _native_solver_identity_reasons(row)
+        and not _native_solver_runtime_reasons(row)
+        and not row.get("native_solver_exclusion_reasons")
     )
 
 

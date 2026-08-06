@@ -1,6 +1,6 @@
-schema_version: issue_5579_mpc_tuning_sensitivity.v1
+schema_version: issue_5579_mpc_tuning_sensitivity.v2
 issue: 5579
-study_id: issue_5579_mpc_tuning_budget_sensitivity_v1
+study_id: issue_5579_mpc_tuning_budget_sensitivity_v2
 status: preregistration
 
 # This packet makes the under-tuning test reproducible without changing the
@@ -24,10 +24,112 @@ scenario_scope:
     - classic_bottleneck_medium
     - classic_cross_trap_high
     - francis2023_intersection_wait
-  seeds: [111, 112, 113]
+  seeds: [101, 102, 103]
   horizon: 100
   dt: 0.1
   workers: 1
+
+tuning_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_ids:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+  seeds: [101, 102, 103]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+  scenario_list_hash: 113e8f7e23948d12aaf453a8d05c1d48b870d5cbace6b07714df24df782e9490
+
+held_out_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  seed_set: paper_eval_s10
+  seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+  # Frozen eligible matrix (48 source scenarios minus the three tuning IDs).
+  scenario_ids:
+    - classic_bottleneck_high
+    - classic_bottleneck_low
+    - classic_cross_trap_low
+    - classic_cross_trap_medium
+    - classic_doorway_high
+    - classic_doorway_low
+    - classic_doorway_medium
+    - classic_group_crossing_high
+    - classic_group_crossing_low
+    - classic_group_crossing_medium
+    - classic_head_on_corridor_low
+    - classic_head_on_corridor_medium
+    - classic_merging_low
+    - classic_merging_medium
+    - classic_overtaking_low
+    - classic_overtaking_medium
+    - classic_realworld_double_bottleneck_high
+    - classic_station_platform_medium
+    - classic_t_intersection_low
+    - classic_t_intersection_medium
+    - classic_urban_crossing_medium
+    - francis2023_accompanying_peer
+    - francis2023_blind_corner
+    - francis2023_circular_crossing
+    - francis2023_crowd_navigation
+    - francis2023_down_path
+    - francis2023_entering_elevator
+    - francis2023_entering_room
+    - francis2023_exiting_elevator
+    - francis2023_exiting_room
+    - francis2023_following_human
+    - francis2023_frontal_approach
+    - francis2023_intersection_no_gesture
+    - francis2023_intersection_proceed
+    - francis2023_join_group
+    - francis2023_leading_human
+    - francis2023_leave_group
+    - francis2023_narrow_doorway
+    - francis2023_narrow_hallway
+    - francis2023_parallel_traffic
+    - francis2023_pedestrian_obstruction
+    - francis2023_pedestrian_overtaking
+    - francis2023_perpendicular_traffic
+    - francis2023_robot_crowding
+    - francis2023_robot_overtaking
+  scenario_list_hash: 316cc6bfd0fb8e55dc2a5dc8467f9239db599edef5840427b1083185b470cbc2
+  excluded_scenarios:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+
+canary:
+  seed: 101
+  required_eligible_episodes: 6
+  target_eligible_ratio: "6/6"
+  stop_on_ineligible: true
+
+inference:
+  inference_population: fixed_declared_held_out_suite
+  estimand: paired_delta
+  primary_metric: route_complete_and_collision_free
+  resampling_unit: paired_seed_block
+  bootstrap:
+    method: paired_seed_block_percentile_bootstrap
+    confidence_level: 0.95
+    replicates: 2000
+  multiplicity:
+    method: holm_bonferroni
+    family: target_arm_vs_incumbent_arm
+    familywise_alpha: 0.05
+    contrast_count: 8
+    contrasts:
+      - {target_arm: prediction_mpc, incumbent_arm: scenario_adaptive_hybrid_orca_v1}
+      - {target_arm: prediction_mpc, incumbent_arm: scenario_adaptive_hybrid_orca_v2_collision_guard}
+      - {target_arm: prediction_mpc, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape}
+      - {target_arm: prediction_mpc, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape_continuous}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: scenario_adaptive_hybrid_orca_v1}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: scenario_adaptive_hybrid_orca_v2_collision_guard}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape_continuous}
 
 # The target arms are the two prediction-aware MPC rows added to the h600
 # extended roster. Every sensitivity point is applied to both base configs.
@@ -119,5 +221,5 @@ comparison:
   fallback_degraded_policy: exclude_from_success_evidence
 
 artifacts:
-  raw_output_root: output/benchmarks/issue_5579_mpc_tuning_sensitivity
-  durable_evidence_root: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14
+  raw_output_root: output/benchmarks/issue_5579_mpc_tuning_sensitivity_v2
+  durable_evidence_root: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-08-03

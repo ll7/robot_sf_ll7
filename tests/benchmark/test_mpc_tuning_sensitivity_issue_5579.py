@@ -25,7 +25,7 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
 from scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 import _display_path
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml"
+CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml"
 
 
 def test_packet_freezes_two_target_arms_three_parameters_and_twenty_points() -> None:
@@ -65,6 +65,18 @@ def test_packet_freezes_two_target_arms_three_parameters_and_twenty_points() -> 
     assert inference["bootstrap"]["confidence_level"] == 0.95
     assert inference["multiplicity"]["method"] == "holm_bonferroni"
     assert inference["multiplicity"]["contrast_count"] == 8
+
+
+def test_packet_identity_is_versioned_and_rejects_legacy_study_id() -> None:
+    """The active two-phase packet cannot reuse the historical v1 study identity."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    assert config["schema_version"] == "issue_5579_mpc_tuning_sensitivity.v2"
+    assert config["study_id"] == "issue_5579_mpc_tuning_budget_sensitivity_v2"
+
+    legacy_identity = deepcopy(config)
+    legacy_identity["study_id"] = "issue_5579_mpc_tuning_budget_sensitivity_v1"
+    with pytest.raises(ValueError, match="study_id must be"):
+        validate_sensitivity_config(legacy_identity, repo_root=ROOT)
 
 
 def test_phase_contract_is_required_and_held_out_drift_fails_closed() -> None:
@@ -281,6 +293,15 @@ def test_report_applies_preregistered_read_to_best_found_configs(tmp_path: Path)
                         "availability_status": "available",
                         "benchmark_success": True,
                         "planner_runtime_status": "eligible",
+                        "solver_execution_mode": "native",
+                        "valid_solver_provenance": True,
+                        "finite_commands": True,
+                        "solver_successes": 1,
+                        "solver_failures": 0,
+                        "fallback_stop_count": 0,
+                        "control_updates": 1,
+                        "native_solver_eligible": True,
+                        "native_solver_exclusion_reasons": [],
                     }
                 )
     report = analyze_results(
@@ -298,6 +319,44 @@ def test_report_applies_preregistered_read_to_best_found_configs(tmp_path: Path)
     paths = write_report(report, tmp_path)
     assert json.loads(Path(paths["json"]).read_text(encoding="utf-8"))["issue"] == 5579
     assert "Claim boundary" in Path(paths["markdown"]).read_text(encoding="utf-8")
+
+
+def test_analysis_excludes_target_rows_with_invalid_solver_provenance() -> None:
+    """Normal analysis cannot count target rows that fail native solver provenance."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    rows = _fixture_rows(config, plan)
+    for row in rows:
+        if row["arm_key"] in TARGET_ARM_KEYS:
+            row.update(
+                {
+                    "solver_execution_mode": "adapter",
+                    "valid_solver_provenance": False,
+                    "finite_commands": False,
+                    "solver_successes": 0,
+                    "solver_failures": 1,
+                    "fallback_stop_count": 1,
+                    "control_updates": 0,
+                    "native_solver_eligible": False,
+                    "native_solver_exclusion_reasons": ["solver_provenance_invalid"],
+                }
+            )
+
+    report = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+    )
+
+    target_rows = [row for row in report["candidate_rows"] if row["target"]]
+    assert report["status"] == "blocked"
+    assert report["read"]["decision"] == "blocked"
+    assert sum(row["eligible_episodes"] for row in target_rows) == 0
+    assert sum(row["excluded_episodes"] for row in target_rows) == 360
 
 
 def test_fallback_row_blocks_read_and_is_not_counted(tmp_path: Path) -> None:
@@ -456,6 +515,15 @@ def _fixture_rows(config: dict, plan: list[dict]) -> list[dict]:
                         "availability_status": "available",
                         "benchmark_success": True,
                         "planner_runtime_status": "eligible",
+                        "solver_execution_mode": "native",
+                        "valid_solver_provenance": True,
+                        "finite_commands": True,
+                        "solver_successes": 1,
+                        "solver_failures": 0,
+                        "fallback_stop_count": 0,
+                        "control_updates": 1,
+                        "native_solver_eligible": True,
+                        "native_solver_exclusion_reasons": [],
                     }
                 )
     return rows

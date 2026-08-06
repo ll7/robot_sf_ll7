@@ -1161,17 +1161,13 @@ def _evaluate_case(
             actuator_config=actuator_config,
             measure_timing=measure_timing,
         )
-        repeated = (
-            rank_trajectories(
-                candidates,
-                pedestrians,
-                risk_config=risk_config,
-                weights=weights,
-                verifier_config=verifier_config,
-                actuator_config=actuator_config,
-            )
-            if measure_timing
-            else rankings
+        repeated = rank_trajectories(
+            candidates,
+            pedestrians,
+            risk_config=risk_config,
+            weights=weights,
+            verifier_config=verifier_config,
+            actuator_config=actuator_config,
         )
         gates = _gate_summary(rankings)
         reliability = _reliability_diagnostic(

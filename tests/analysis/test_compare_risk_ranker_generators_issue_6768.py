@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import copy
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -277,11 +278,37 @@ class TestReportSchema:
 class TestDeterminism:
     """Prove the report is deterministic for a pinned generation timestamp."""
 
-    def test_metric_content_deterministic(self, cmp_module):
+    def test_metric_content_deterministic(self, cmp_module, monkeypatch):
         """Two real runs with a pinned timestamp share identical metric content."""
         first = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
         second = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
         assert _deterministic_view(first) == _deterministic_view(second)
+
+        original_rank_trajectories = cmp_module.rank_trajectories
+        call_count = 0
+
+        def return_non_repeatable_scores(*args, **kwargs):
+            nonlocal call_count
+            result = original_rank_trajectories(*args, **kwargs)
+            call_count += 1
+            if call_count == 2:
+                result[0] = replace(
+                    result[0], joint_contact_probability=result[0].joint_contact_probability + 0.01
+                )
+            return result
+
+        monkeypatch.setattr(cmp_module, "rank_trajectories", return_non_repeatable_scores)
+        non_repeatable = cmp_module.build_report(
+            _DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT
+        )
+        primitive_reliability = non_repeatable["model_risk_reliability"]["by_generator"][
+            "deterministic_primitive"
+        ]
+        assert (
+            primitive_reliability["repeatable_risk_scores"]
+            < primitive_reliability["candidate_count"]
+        )
+        assert primitive_reliability["model_score_status"] == "inconclusive"
 
     def test_full_report_byte_deterministic_with_pinned_timestamp(self, cmp_module, monkeypatch):
         """A pinned timestamp suppresses wall timing so the full report is byte-identical."""

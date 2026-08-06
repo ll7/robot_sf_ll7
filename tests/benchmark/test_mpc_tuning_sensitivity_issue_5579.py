@@ -359,6 +359,55 @@ def test_analysis_excludes_target_rows_with_invalid_solver_provenance() -> None:
     assert sum(row["excluded_episodes"] for row in target_rows) == 360
 
 
+def test_incumbent_adapter_rows_remain_eligible_without_mpc_solver_evidence() -> None:
+    """Frozen hybrid incumbents run via their declared adapter and must stay eligible.
+
+    The strict native-solver evidence gate targets the prediction-aware MPC arms only.
+    Incumbent ``hybrid_rule_local_planner`` arms cannot carry ``PredictionMPCPlannerAdapter``
+    solver metadata, so excluding them on solver evidence would strand every target versus
+    incumbent comparison and force the held-out production read to block forever.
+    """
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    rows = _fixture_rows(config, plan)
+    # Strip the MPC solver evidence from every incumbent row so they look like real
+    # hybrid-rule adapter rows; keep the strict native-solver evidence on target arms.
+    incumbent_solver_profile = {
+        "solver_execution_mode": "unknown",
+        "valid_solver_provenance": False,
+        "finite_commands": False,
+        "solver_successes": None,
+        "solver_failures": None,
+        "fallback_stop_count": None,
+        "control_updates": None,
+        "native_solver_eligible": False,
+        "native_solver_exclusion_reasons": ["unexpected_solver_planner"],
+    }
+    for row in rows:
+        if row["arm_key"] not in TARGET_ARM_KEYS:
+            row["execution_mode"] = "adapter"
+            row["readiness_status"] = "adapter"
+            row.update(incumbent_solver_profile)
+
+    report = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+    )
+
+    incumbent_rows = [row for row in report["candidate_rows"] if not row["target"]]
+    assert len(incumbent_rows) == len(config["incumbent_arms"])
+    assert all(row["excluded_episodes"] == 0 for row in incumbent_rows)
+    assert {row["arm_key"] for row in incumbent_rows} == {
+        arm["key"] for arm in config["incumbent_arms"]
+    }
+    assert report["read"]["incumbent_rates"], "incumbent rates must be available for the read"
+
+
 def test_fallback_row_blocks_read_and_is_not_counted(tmp_path: Path) -> None:
     """Fallback/degraded provenance remains visible but cannot enter the success comparison."""
     config = load_sensitivity_config(CONFIG, repo_root=ROOT)

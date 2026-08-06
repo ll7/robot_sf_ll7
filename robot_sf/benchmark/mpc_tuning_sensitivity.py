@@ -1206,16 +1206,29 @@ def _native_solver_runtime_reasons(row: Mapping[str, Any]) -> list[str]:
 def _eligible(row: Mapping[str, Any]) -> bool:
     """Report whether a row meets every fail-closed eligibility requirement.
 
+    The shared availability/runtime contract applies to every arm. The strict
+    native-solver, provenance, finite-command, and control-update evidence is
+    required only for the prediction-aware MPC target arms: incumbents are frozen
+    hybrid-rule arms that legitimately execute via their declared adapter, so they
+    cannot carry ``PredictionMPCPlannerAdapter`` solver evidence and are gated by
+    the outer availability/runtime predicates alone.
+
     Returns:
         True when the row satisfies every fail-closed eligibility requirement.
     """
-    return (
+    base_eligible = (
         str(row.get("execution_mode", "")).strip().lower() in VALID_EXECUTION_MODES
         and str(row.get("readiness_status", "")).strip().lower() in VALID_READINESS_STATUSES
         and str(row.get("availability_status", "")).strip().lower() == "available"
         and row.get("benchmark_success") is True
         and row.get("planner_runtime_status") == "eligible"
-        and not _native_solver_identity_reasons(row)
+    )
+    if not base_eligible:
+        return False
+    if str(row.get("arm_key", "")) not in TARGET_ARM_KEYS:
+        return True
+    return (
+        not _native_solver_identity_reasons(row)
         and not _native_solver_runtime_reasons(row)
         and not row.get("native_solver_exclusion_reasons")
     )

@@ -28,6 +28,7 @@ from robot_sf.analysis_workbench.interaction_coordinates import (
     load_worked_example_process_trace_schema,
     validate_worked_example_process_trace,
 )
+from robot_sf.analysis_workbench.process_trace_receipt import simulation_trace_receipt_sha256
 from robot_sf.analysis_workbench.simulation_trace_export import simulation_trace_export_from_dict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -338,6 +339,77 @@ def test_public_serializer_rejects_values_outside_exact_json_domain() -> None:
             analysis_workbench.serialize_worked_example_process_trace(malformed)  # type: ignore[arg-type]
         with pytest.raises(WorkedExampleProcessTraceValidationError):
             analysis_workbench.worked_example_process_trace_artifact_sha256(malformed)  # type: ignore[arg-type]
+
+
+def test_source_receipt_rejects_tuple_json_lookalike() -> None:
+    """A malformed tuple cannot share a source receipt with its JSON-list lookalike."""
+
+    list_payload = _trace_payload()
+    list_payload["frames"][0]["planner"]["receipt_probe"] = [1, 2]
+    build_worked_example_process_trace_from_export(simulation_trace_export_from_dict(list_payload))
+
+    tuple_payload = deepcopy(list_payload)
+    tuple_payload["frames"][0]["planner"]["receipt_probe"] = (1, 2)
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        build_worked_example_process_trace_from_export(
+            simulation_trace_export_from_dict(tuple_payload)
+        )
+
+
+def test_source_receipt_digest_rejects_tuple_json_lookalike() -> None:
+    """The receipt digest itself must reject tuple-to-list canonicalization."""
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload())
+    )
+    malformed_receipt = deepcopy(payload["source_trace"]["content_receipt"])
+    malformed_receipt["content_contract"]["frames"][0]["planner"]["receipt_probe"] = (1, 2)
+
+    with pytest.raises(TypeError):
+        simulation_trace_receipt_sha256(malformed_receipt)
+
+
+def test_pair_receipt_rejects_tuple_json_lookalike() -> None:
+    """A malformed pair tuple cannot share its content and analysis receipt with a list."""
+
+    left = simulation_trace_export_from_dict(_trace_payload(trace_id="pair-tuple-left"))
+    list_payload = _trace_payload(trace_id="pair-tuple-right", planner_id="planner-b")
+    list_payload["frames"][0]["planner"]["receipt_probe"] = [1, 2]
+    build_worked_example_process_trace_from_export(
+        left,
+        pair_trace=simulation_trace_export_from_dict(list_payload),
+        pair_comparison_grain="matched_planner_pair",
+    )
+
+    tuple_payload = deepcopy(list_payload)
+    tuple_payload["frames"][0]["planner"]["receipt_probe"] = (1, 2)
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        build_worked_example_process_trace_from_export(
+            left,
+            pair_trace=simulation_trace_export_from_dict(tuple_payload),
+            pair_comparison_grain="matched_planner_pair",
+        )
+
+
+def test_report_receipt_rejects_tuple_json_lookalike() -> None:
+    """A malformed report tuple cannot share receipt, analysis, or writer SHA with a list."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+    list_report = _encounter_report(start_time_s=0.1, end_time_s=0.2)
+    build_worked_example_process_trace_from_export(
+        trace,
+        encounter_report=list_report,
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    tuple_report = deepcopy(list_report)
+    tuple_report["exclusions"] = ()
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        build_worked_example_process_trace_from_export(
+            trace,
+            encounter_report=tuple_report,
+            encounter_report_input_checksum="0" * 64,
+        )
 
 
 def test_direct_geometry_inputs_cannot_coerce_nonfinite_values_or_keys() -> None:
@@ -1080,6 +1152,53 @@ def test_canonical_encounter_id_cannot_name_another_actor() -> None:
     assert payload["encounters"]["focal"]["reason"] == "canonical_encounter_id_actor_mismatch"
 
 
+def test_planner_encounter_identity_supports_actor_ids_containing_colons() -> None:
+    """Actor prefixes remain exact when the actor ID itself contains the delimiter."""
+
+    actor_id = "group:ped-a"
+    encounter_id = f"{actor_id}:encounter-0001"
+    trace_payload = _trace_payload(trace_id="colon-actor-planner-hint")
+    for frame in trace_payload["frames"]:
+        frame["pedestrians"][0]["id"] = actor_id
+        frame["planner"]["encounter"] = {
+            "actor_id": actor_id,
+            "encounter_id": encounter_id,
+        }
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload)
+    )
+
+    assert payload["encounters"]["focal"]["status"] == "available"
+    assert payload["encounters"]["focal"]["actor_id"] == actor_id
+    assert payload["encounters"]["focal"]["encounter_id"] == encounter_id
+    validate_worked_example_process_trace(payload)
+
+
+def test_canonical_encounter_identity_supports_actor_ids_containing_colons() -> None:
+    """Canonical report binding uses the complete actor ID as its encounter prefix."""
+
+    actor_id = "group:ped-a"
+    encounter_id = f"{actor_id}:encounter-0001"
+    trace_payload = _trace_payload(trace_id="colon-actor-canonical-report")
+    for frame in trace_payload["frames"]:
+        frame["pedestrians"][0]["id"] = actor_id
+    report = _encounter_report(start_time_s=0.1, end_time_s=0.2)
+    report["encounters"][0]["actor_id"] = actor_id
+    report["encounters"][0]["encounter_id"] = encounter_id
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(trace_payload),
+        encounter_report=report,
+        encounter_report_input_checksum="0" * 64,
+    )
+
+    assert payload["encounters"]["focal"]["status"] == "available"
+    assert payload["encounters"]["focal"]["actor_id"] == actor_id
+    assert payload["encounters"]["focal"]["encounter_id"] == encounter_id
+    validate_worked_example_process_trace(payload)
+
+
 @pytest.mark.parametrize(
     ("mode", "expected_reason"),
     (
@@ -1770,6 +1889,65 @@ def test_geometry_owner_validates_entire_envelope_before_selector_scan(
         coordinates.load_process_trace_geometry_owner(owner_path)
 
 
+@pytest.mark.parametrize("overflow_token", ["1e400", "1e999"])
+def test_geometry_owner_rejects_numeric_overflow_anywhere(
+    tmp_path: Path,
+    overflow_token: str,
+) -> None:
+    """An unrelated overflowing JSON number cannot be ignored while one owner matches."""
+
+    registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    route_entry = next(entry for entry in registry["routes"] if entry["entry_id"] == "r-main")
+    selector = {"map_id": "fixture-map", "spawn_id": 1, "goal_id": 2}
+    owner_ref = "owners/overflow-owner.json"
+    owner_path = tmp_path / "overflow-owner.json"
+    owner_payload = {
+        "schema_version": "process_trace_geometry_owner.v1",
+        "geometry_bindings": [
+            {
+                "selector": {"unrelated_overflow": 0.0},
+                "geometry": {
+                    "type": "line_segment",
+                    "start": [0.0, 0.0],
+                    "end": [1.0, 0.0],
+                },
+            },
+            {"selector": selector, "geometry": route_entry["geometry"]},
+        ],
+    }
+    owner_text = json.dumps(owner_payload).replace(
+        '"unrelated_overflow": 0.0',
+        f'"unrelated_overflow": {overflow_token}',
+    )
+    owner_path.write_text(owner_text, encoding="utf-8")
+    route_entry["upstream_binding"] = {
+        "kind": "canonical_source",
+        "source_artifact_ref": owner_ref,
+        "source_content_sha256": hashlib.sha256(owner_path.read_bytes()).hexdigest(),
+        "selector": selector,
+    }
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+    route = load_registered_route_spec(
+        registry_path,
+        "r-main",
+        geometry_owner_paths={owner_ref: owner_path},
+    )
+
+    payload = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=route,
+    )
+
+    assert payload["coordinate_frames"]["route"] == {
+        "status": "unavailable",
+        "reason": "registered_route_owner_artifact_invalid_json",
+        "input_contract": payload["coordinate_frames"]["route"]["input_contract"],
+    }
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        coordinates.load_process_trace_geometry_owner(owner_path)
+
+
 def test_canonical_geometry_owner_must_resolve_digest_and_exact_selector_geometry(
     tmp_path: Path,
 ) -> None:
@@ -1869,6 +2047,9 @@ def test_canonical_geometry_owner_must_resolve_digest_and_exact_selector_geometr
         "C:/maps/registry.yaml",
         "c:/maps/registry.yaml",
         "C:\\maps\\registry.yaml",
+        "C:registry.json",
+        "C:owners/map.json",
+        "c:owners/map.json",
     ],
 )
 def test_canonical_upstream_binding_rejects_machine_local_or_unstable_references(
@@ -1889,6 +2070,30 @@ def test_canonical_upstream_binding_rejects_machine_local_or_unstable_references
 
     with pytest.raises(Exception, match="invalid process-trace geometry registry envelope"):
         load_registered_route_spec(registry_path, "r-main")
+
+
+@pytest.mark.parametrize("artifact_ref", ["C:registry.json", "C:owners/map.json"])
+def test_geometry_registry_rejects_windows_drive_relative_artifact_refs(
+    tmp_path: Path,
+    artifact_ref: str,
+) -> None:
+    """The registry's own public identity cannot use Windows drive-relative syntax."""
+
+    registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    registry["artifact_ref"] = artifact_ref
+    registry_path = tmp_path / "drive-relative-registry-ref.json"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    with pytest.raises(Exception, match="invalid process-trace geometry registry envelope"):
+        load_registered_route_spec(registry_path, "r-main")
+    replayed = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=replace(_registered_route("r-main"), registry_artifact_ref=artifact_ref),
+    )
+    assert replayed["coordinate_frames"]["route"]["status"] == "unavailable"
+    assert replayed["coordinate_frames"]["route"]["reason"] == (
+        "registered_route_registry_receipt_invalid"
+    )
 
 
 def test_geometry_registry_missing_and_duplicate_entries_fail_closed(tmp_path: Path) -> None:
@@ -1934,6 +2139,49 @@ def test_geometry_registry_missing_and_duplicate_entries_fail_closed(tmp_path: P
     non_world_path.write_text(json.dumps(non_world_payload), encoding="utf-8")
     with pytest.raises(Exception, match="invalid process-trace geometry registry envelope"):
         load_registered_route_spec(non_world_path, "route-b")
+
+
+@pytest.mark.parametrize("poison", ["NaN", "Infinity", "1e400", "duplicate_key"])
+def test_geometry_registry_load_and_replay_reject_entire_document_poison(
+    tmp_path: Path,
+    poison: str,
+) -> None:
+    """Unselected poison must fail both initial registry loading and later receipt replay."""
+
+    registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
+    marker = 12345.6789
+    unrelated_circle = next(
+        entry for entry in registry["conflict_zones"] if entry["geometry"]["type"] == "circle"
+    )
+    unrelated_circle["geometry"]["center"][0] = marker
+    raw_text = json.dumps(registry, sort_keys=True)
+    if poison == "duplicate_key":
+        registry_id_field = f'"registry_id": "{registry["registry_id"]}"'
+        raw_text = raw_text.replace(
+            registry_id_field,
+            f"{registry_id_field}, {registry_id_field}",
+            1,
+        )
+    else:
+        raw_text = raw_text.replace(str(marker), poison, 1)
+    registry_path = tmp_path / f"poison-{poison}.json"
+    registry_path.write_text(raw_text, encoding="utf-8")
+
+    with pytest.raises(WorkedExampleProcessTraceValidationError):
+        load_registered_route_spec(registry_path, "r-main")
+
+    pristine_route = load_registered_route_spec(GEOMETRY_REGISTRY_FIXTURE_PATH, "r-main")
+    replay_route = replace(
+        pristine_route,
+        registry_path=str(registry_path),
+        registry_content_sha256=hashlib.sha256(registry_path.read_bytes()).hexdigest(),
+    )
+    replayed = build_worked_example_process_trace_from_export(
+        simulation_trace_export_from_dict(_trace_payload()),
+        route=replay_route,
+    )
+    assert replayed["coordinate_frames"]["route"]["status"] == "unavailable"
+    assert replayed["coordinate_frames"]["route"]["reason"] == ("registered_route_registry_invalid")
 
 
 @pytest.mark.parametrize("entry_id", ["point-owner", "polygon-owner"])

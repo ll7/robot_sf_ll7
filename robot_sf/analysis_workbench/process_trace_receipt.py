@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
@@ -60,6 +60,7 @@ def build_simulation_trace_receipt(trace: SimulationTraceExport) -> dict[str, An
 def simulation_trace_receipt_sha256(receipt: object) -> str:
     """Return the canonical internal digest of a strict source receipt."""
 
+    _assert_exact_json_value(receipt)
     encoded = json.dumps(
         receipt,
         sort_keys=True,
@@ -76,6 +77,7 @@ def decode_simulation_trace_receipt(receipt: object) -> dict[str, Any]:  # noqa:
         Reconstructed simulation-trace mapping for strict source validation.
     """
 
+    _assert_exact_json_value(receipt)
     if not isinstance(receipt, Mapping) or set(receipt) != {
         "schema_version",
         "content_contract",
@@ -132,7 +134,7 @@ def _strict_json_value(
             return value
         ledger.append({"path": path, "value": _nonfinite_label(value)})
         return None
-    if isinstance(value, Mapping):
+    if type(value) is dict:
         result: dict[str, Any] = {}
         for key, item in value.items():
             if type(key) is not str:
@@ -143,12 +145,32 @@ def _strict_json_value(
                 ledger=ledger,
             )
         return result
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+    if type(value) is list:
         return [
             _strict_json_value(item, path=f"{path}/{index}", ledger=ledger)
             for index, item in enumerate(value)
         ]
     raise TypeError(f"unsupported receipt value at {path or '/'}: {type(value).__name__}")
+
+
+def _assert_exact_json_value(value: object, *, path: str = "") -> None:
+    if value is None or type(value) in {bool, str, int}:
+        return
+    if type(value) is float:
+        if math.isfinite(value):
+            return
+        raise TypeError(f"nonfinite JSON number at {path or '/'}")
+    if type(value) is list:
+        for index, item in enumerate(value):
+            _assert_exact_json_value(item, path=f"{path}/{index}")
+        return
+    if type(value) is dict:
+        for key, item in value.items():
+            if type(key) is not str:
+                raise TypeError(f"non-string JSON key at {path or '/'}")
+            _assert_exact_json_value(item, path=f"{path}/{_escape_json_pointer_token(key)}")
+        return
+    raise TypeError(f"non-JSON receipt value at {path or '/'}: {type(value).__name__}")
 
 
 def _escape_json_pointer_token(token: str) -> str:

@@ -3055,11 +3055,7 @@ def load_process_trace_geometry_owner(path: Path) -> dict[str, Any]:
 
 def _geometry_owner_payload_from_bytes(raw: bytes, *, source: Path) -> dict[str, Any]:
     try:
-        payload = json.loads(
-            raw,
-            parse_constant=_reject_nonstandard_json_constant,
-            object_pairs_hook=_strict_json_object,
-        )
+        payload = _strict_json_document(raw)
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise WorkedExampleProcessTraceValidationError(
             ["/: expected strict process_trace_geometry_owner.v1 JSON"],
@@ -3087,6 +3083,13 @@ def _reject_nonstandard_json_constant(value: str) -> None:
     raise ValueError(f"non-standard JSON constant {value}")
 
 
+def _strict_json_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"non-finite JSON number {value}")
+    return number
+
+
 def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -3094,6 +3097,15 @@ def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValueError(f"duplicate JSON object key {key!r}")
         result[key] = value
     return result
+
+
+def _strict_json_document(raw: str | bytes | bytearray) -> Any:
+    return json.loads(
+        raw,
+        parse_constant=_reject_nonstandard_json_constant,
+        parse_float=_strict_json_float,
+        object_pairs_hook=_strict_json_object,
+    )
 
 
 def load_registered_conflict_zone_spec(
@@ -3140,8 +3152,8 @@ def _load_geometry_registry(path: Path) -> tuple[dict[str, Any], str, Path]:
     resolved = path.resolve()
     try:
         raw = resolved.read_bytes()
-        payload = json.loads(raw)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        payload = _strict_json_document(raw)
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise WorkedExampleProcessTraceValidationError(
             ["expected readable process_trace_geometry_registry.v1 JSON"], source=resolved
         ) from exc
@@ -3189,7 +3201,7 @@ def _stable_geometry_registry_artifact_ref(value: object) -> bool:
 
     if not isinstance(value, str) or not value or value != value.strip():
         return False
-    if re.match(r"^[A-Za-z]:[/\\]", value):
+    if re.match(r"^[A-Za-z]:", value):
         return False
     if "\\" in value or "~" in value:
         return False
@@ -3280,8 +3292,8 @@ def _registry_entry_owner_from_path(
     if registry_path is None or entry_id is None:
         return None, None
     try:
-        payload = json.loads(registry_path.read_bytes())
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        payload = _strict_json_document(registry_path.read_bytes())
+    except (OSError, UnicodeDecodeError, ValueError):
         return None, None
     entries = payload.get(collection) if isinstance(payload, Mapping) else None
     matches = (
@@ -3714,19 +3726,17 @@ def _duplicate_pedestrian_identity_errors(
 
 
 def _strict_json_value(value: Any) -> Any:
-    if isinstance(value, bool) or value is None or isinstance(value, str):
+    if value is None or type(value) in {bool, str, int}:
         return value
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
+    if type(value) is float:
         if not math.isfinite(value):
             raise TypeError("strict JSON numbers must be finite")
         return value
-    if isinstance(value, Mapping):
+    if type(value) is dict:
         if any(type(key) is not str for key in value):
             raise TypeError("strict JSON object keys must be strings")
         return {key: _strict_json_value(item) for key, item in value.items()}
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+    if type(value) is list:
         return [_strict_json_value(item) for item in value]
     raise TypeError(f"unsupported strict JSON value: {type(value).__name__}")
 
@@ -4258,8 +4268,8 @@ def _registry_binding(  # noqa: C901, PLR0913
     if hashlib.sha256(raw).hexdigest() != content_sha256:
         return {"status": "unavailable", "reason": f"{reason_prefix}_registry_content_mismatch"}
     try:
-        payload = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = _strict_json_document(raw)
+    except (UnicodeDecodeError, ValueError):
         return {"status": "unavailable", "reason": f"{reason_prefix}_registry_invalid"}
     if not isinstance(payload, Mapping) or (
         payload.get("schema_version") != GEOMETRY_REGISTRY_SCHEMA_VERSION
@@ -4613,11 +4623,7 @@ def _declared_encounter(  # noqa: C901
             "actor_id": actor_ids[0],
             "hint_encounter_ids": encounter_ids,
         }
-    if (
-        encounter_ids
-        and ":" in encounter_ids[0]
-        and encounter_ids[0].split(":", 1)[0] != actor_ids[0]
-    ):
+    if encounter_ids and not _encounter_id_actor_binding_valid(encounter_ids[0], actor_ids[0]):
         return {
             "status": "unavailable",
             "reason": "planner_encounter_id_actor_mismatch",
@@ -4688,8 +4694,10 @@ def _select_canonical_encounter(  # noqa: C901
     mismatched_ids = sorted(
         str(encounter.get("encounter_id"))
         for encounter in valid
-        if ":" in str(encounter.get("encounter_id"))
-        and str(encounter.get("encounter_id")).split(":", 1)[0] != str(encounter.get("actor_id"))
+        if not _encounter_id_actor_binding_valid(
+            str(encounter.get("encounter_id")),
+            str(encounter.get("actor_id")),
+        )
     )
     if mismatched_ids:
         return {
@@ -4821,7 +4829,18 @@ def _encounter_report_checksum_status(
     }
 
 
+def _encounter_id_actor_binding_valid(encounter_id: str, actor_id: str) -> bool:
+    """Check an optional actor prefix without treating actor-ID colons as delimiters.
+
+    Returns:
+        Whether the encounter ID is unprefixed or starts with the complete actor ID.
+    """
+
+    return ":" not in encounter_id or encounter_id.startswith(f"{actor_id}:")
+
+
 def _json_sha256_digest(value: object) -> str:
+    _assert_exact_json_value(value)
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
         "utf-8"
     )

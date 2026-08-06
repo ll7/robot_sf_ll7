@@ -1,0 +1,31 @@
+schema_version: "issue_6768_risk_ranker_generator_comparison_fixture.v1"
+split: "calibration"
+claim_boundary: "diagnostic_only; calibration rows are named for split integrity and are never scored"
+provenance:
+  fixture_source: "hand-authored disjoint calibration rows for issue #6768 split-integrity provenance"
+  generated_by: "robot_sf issue #6768 risk-ranker generator comparison"
+  disjoint_from: "tests/fixtures/risk_ranker/issue_6768_risk_ranker_held_out_v1.yaml"
+
+cases:
+  - case_id: "calibration_corridor_actor"
+    split: "calibration"
+    status: "valid"
+    provenance:
+      source: "issue #5445 matched-calibration style corridor row"
+      geometry_note: "used only for split-disjointness provenance; never scored"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians:
+      - id: 201
+        position: [0.8, 0.0]
+        velocity: [0.0, 0.0]
+
+  - case_id: "calibration_clear_lane"
+    split: "calibration"
+    status: "valid"
+    provenance:
+      source: "issue #5445 matched-calibration style clear lane row"
+      geometry_note: "used only for split-disjointness provenance; never scored"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians: []

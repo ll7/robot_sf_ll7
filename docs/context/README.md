@@ -132,6 +132,8 @@ knowledge, not every transient iteration detail.
   [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
 * Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600):
   [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
+* Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle (Gate 3 of #6600):
+  [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 

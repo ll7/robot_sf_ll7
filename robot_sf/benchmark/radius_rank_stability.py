@@ -1649,7 +1649,7 @@ class EvidenceProvenance:
     config_path: str
     config_sha256: str | None
     command: str
-    campaign_commit: str
+    campaign_commit: str | None
     analysis_commit: str
     seed_roster: tuple[int, ...]
     radii_m: tuple[float, ...]
@@ -1688,7 +1688,7 @@ def build_evidence_provenance(
     *,
     config_path: str,
     command: str,
-    campaign_commit: str,
+    campaign_commit: str | None,
     analysis_commit: str | None = None,
     config_sha256: str | None = None,
     input_paths: Mapping[str, Path] | None = None,
@@ -1696,9 +1696,14 @@ def build_evidence_provenance(
 ) -> EvidenceProvenance:
     """Assemble immutable provenance, checksumming any supplied input artifacts.
 
+    Blocked Gate 3 reports do not have a campaign commit. Normalize that field here so
+    programmatic bundle writers preserve the same fail-closed boundary as the CLI.
+
     Returns:
         The immutable provenance record for the durable evidence bundle.
     """
+    if report.verdict.verdict == ANALYSIS_BLOCKED_PENDING_GATE2:
+        campaign_commit = None
     if config_sha256 is None:
         config_file = Path(config_path)
         if config_file.is_file():
@@ -1960,7 +1965,9 @@ def render_readme(report: RadiusSensitivityReport, provenance: EvidenceProvenanc
         "",
         "## Provenance",
         "",
-        f"- Campaign commit: `{provenance.campaign_commit}`",
+        f"- Campaign commit: `{provenance.campaign_commit}`"
+        if provenance.campaign_commit
+        else "- Campaign commit: `not available (Gate 2 pending)`",
         f"- Analysis commit: `{provenance.analysis_commit}`",
         f"- Config: `{provenance.config_path}`",
     ]

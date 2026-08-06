@@ -365,12 +365,29 @@ class TestFailClosed:
         with pytest.raises(cmp_module.ComparisonError, match="claim_boundary"):
             cmp_module._load_fixture(missing)
 
+    def test_malformed_fixture_claim_boundary_fails_closed(self, cmp_module, tmp_path):
+        payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
+        payload["claim_boundary"] = "diagnostic_onlyness"
+        malformed = tmp_path / "malformed_claim_boundary.yaml"
+        malformed.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        with pytest.raises(cmp_module.ComparisonError, match="claim_boundary"):
+            cmp_module._load_fixture(malformed)
+
     def test_missing_case_status_fails_closed(self, cmp_module, tmp_path):
         payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
         del payload["cases"][0]["status"]
         missing = tmp_path / "no_case_status.yaml"
         missing.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
         with pytest.raises(cmp_module.ComparisonError, match="not a valid evidence row"):
+            cmp_module._load_fixture(missing)
+
+    def test_missing_known_outcome_role_fails_closed(self, cmp_module, tmp_path):
+        payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
+        target_case = next(case for case in payload["cases"] if "known_contact_outcome" in case)
+        del target_case["known_contact_outcome"]["candidate_role"]
+        missing = tmp_path / "no_known_outcome_role.yaml"
+        missing.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        with pytest.raises(cmp_module.ComparisonError, match="candidate_role"):
             cmp_module._load_fixture(missing)
 
     def test_non_finite_risk_config_fails_closed(self, cmp_module, tmp_path):

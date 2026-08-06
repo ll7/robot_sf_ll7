@@ -272,14 +272,14 @@ def _parse_known_contact_outcome(case_id: str, raw: Any) -> dict[str, Any]:
         raise ComparisonError(
             f"fixture case {case_id!r}.known_contact_outcome.reason must be non-empty"
         )
-    candidate_role = str(outcome.get("candidate_role") or "straight")
-    if not candidate_role:
+    candidate_role = outcome.get("candidate_role")
+    if not isinstance(candidate_role, str) or not candidate_role.strip():
         raise ComparisonError(
             f"fixture case {case_id!r}.known_contact_outcome.candidate_role must be non-empty"
         )
     return {
         "contact_certain": bool(outcome["contact_certain"]),
-        "candidate_role": candidate_role,
+        "candidate_role": candidate_role.strip(),
         "reason": str(outcome["reason"]),
     }
 
@@ -357,8 +357,9 @@ def _load_fixture(path: Path) -> list[dict[str, Any]]:
             f"fixture split must be {EVALUATION_SPLIT!r} or {CALIBRATION_SPLIT!r}"
         )
     claim_boundary = payload.get("claim_boundary")
-    if not isinstance(claim_boundary, str) or not claim_boundary.strip().startswith(
-        "diagnostic_only"
+    normalized_claim_boundary = claim_boundary.strip() if isinstance(claim_boundary, str) else ""
+    if normalized_claim_boundary != "diagnostic_only" and not normalized_claim_boundary.startswith(
+        ("diagnostic_only:", "diagnostic_only;")
     ):
         raise ComparisonError(
             "fixture claim_boundary must explicitly declare the diagnostic_only boundary"

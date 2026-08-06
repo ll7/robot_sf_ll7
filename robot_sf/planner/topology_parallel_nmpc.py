@@ -448,3 +448,11 @@ def build_topology_parallel_nmpc_config(
         ),
         nmpc_config=nmpc_cfg,
     )
+
+
+__all__ = [
+    "HypothesisDiagnostics",
+    "TopologyParallelNMPCConfig",
+    "TopologyParallelNMPCPlannerAdapter",
+    "build_topology_parallel_nmpc_config",
+]

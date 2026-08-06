@@ -469,3 +469,14 @@ def _as_xy_matrix(value: Any) -> np.ndarray:
     if arr.ndim != 2 or arr.shape[-1] != 2:
         return np.zeros((0, 2), dtype=float)
     return arr.astype(float)
+
+
+__all__ = [
+    "LearnedShortHorizonPedestrianPredictor",
+    "LearnedShortHorizonPredictorConfig",
+    "build_learned_short_horizon_predictor_config",
+    "build_predictor_module",
+    "encode_predictor_features",
+    "pedestrian_world_state",
+    "predictor_io_dims",
+]

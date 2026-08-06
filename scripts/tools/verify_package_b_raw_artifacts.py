@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: verification gate that only reads the docs/context/evidence bundle
+# tree and, when --output is given, persists a caller-supplied report JSON for the pipeline
+# run, not a committed evidence-tree serialization path.
 """Verify Package B raw candidate/replay artifact inventory and file digests.
 
 Provides a deterministic verification and retrieval status check for the 4,761-entry

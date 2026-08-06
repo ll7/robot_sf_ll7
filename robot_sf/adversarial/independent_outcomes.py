@@ -1,21 +1,123 @@
-"""Independent planner-outcome packet contract for issue #3275.
+"""Independent planner-outcome packet contract for issue #3275 (v2, row-level).
 
-This module validates the small artifact shape that a future planner-execution
-runner must produce before the proposal-vs-random report can move beyond
-circular archive-nearness plumbing. It deliberately does not execute planners.
+This module owns the frozen ``adversarial_independent_outcomes.v2`` contract: one
+row per candidate x execution seed, binding every outcome to its candidate
+manifest, selection arm, target planner/config, scenario family/seed, execution
+commit/command/config lineage, native/fallback/degraded status, termination
+reason and independent failure outcome, scenario and candidate certification
+status, replay/confirmation lineage and record hash, and an exclusion reason
+when inadmissible.
+
+The v2 contract replaces the deprecated flat-array v1 contract. Aggregate
+arrays (proposal/random/ranked outcomes) are DERIVED from admitted rows only and
+are never supplied independently of them. Rows that are missing, malformed,
+mismatched, fallback, degraded, or lineage-incomplete fail closed: they can never
+open the held-out gate or drive a verdict. The candidate manifest hash,
+candidate-pool index, scenario seed, and outcome record hash must also match an
+external, frozen per-manifest binding; the packet cannot self-attest that
+lineage. A candidate manifest ID may appear in one arm only.
+
+When valid v2 rows are available, the top-level proposal/random metrics, the
+comparison, and the issue #2921 stop rule are computed EXCLUSIVELY from those
+independent native execution outcomes. Archive-nearness is intentionally absent
+from this module: it lives in a diagnostic-only namespace in the runner and can
+never drive a verdict.
+
+This module does not execute planners and produces no new empirical outcome.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from robot_sf.adversarial.disjoint_evaluation import (
+    binary_yield_min_detectable_difference,
+    classify_issue_3275_decision,
+    fisher_exact_two_sided_table,
+    newcombe_wilson_difference_interval,
     ranking_permutation_test,
     shuffled_outcome_null_test,
 )
+
+#: Frozen row-level outcome schema for the #3275 contract.
+OUTCOME_SCHEMA_VERSION = "adversarial_independent_outcomes.v2"
+
+#: Frozen objective represented by each admitted candidate-level outcome.
+OUTCOME_OBJECTIVE = "certified_failure_outcome"
+
+#: Selection arms admitted by the contract.
+_ARMS = ("proposal", "random")
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    """Return whether ``value`` is a complete SHA-256 hex digest."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
+
+
+#: Every field that an ADMITTED row must carry, well-typed and consistent. Rows
+#: whose ``admission_status`` is ``"excluded"`` only need ``row_id``,
+#: ``candidate_manifest_id``, ``selection_arm``, ``admission_status`` and a
+#: non-empty ``exclusion_reason`` (they were never executed).
+REQUIRED_ADMITTED_ROW_FIELDS = (
+    "row_id",
+    "candidate_manifest_id",
+    "candidate_manifest_sha256",
+    "selection_arm",
+    "selection_rank",
+    "candidate_pool_seed",
+    "candidate_pool_index",
+    "target_planner_id",
+    "target_planner_config_sha256",
+    "scenario_family",
+    "scenario_seed",
+    "execution_seed",
+    "execution_commit",
+    "execution_command",
+    "execution_config_lineage",
+    "execution_mode",
+    "primary_failure",
+    "termination_reason",
+    "independent_failure_outcome",
+    "scenario_certification_status",
+    "candidate_certification_status",
+    "replay_lineage",
+    "confirmation_lineage",
+    "record_sha256",
+    "admission_status",
+    "exclusion_reason",
+)
+
+#: Confirmation thresholds accepted by the contract and their numeric rule.
+_CONFIRMATION_THRESHOLDS = {
+    "3_of_5": {"min_confirmed": 3, "attempt_count": 5},
+    "4_of_5": {"min_confirmed": 4, "attempt_count": 5},
+}
+
+
+@dataclass(frozen=True)
+class AdmissionSpec:
+    """Frozen admission parameters for the v2 row contract."""
+
+    expected_target_planner_id: str
+    expected_eval_family: str
+    confirmation_threshold: str = "3_of_5"
+    expected_target_planner_config_sha256: str | None = None
+    expected_candidate_manifest_sha256_by_id: dict[str, str] | None = None
+    expected_candidate_pool_index_by_manifest_id: dict[str, int] | None = None
+    expected_scenario_seed_by_manifest_id: dict[str, int] | None = None
+    expected_record_sha256_by_manifest: dict[str, str] | None = None
+    expected_candidate_manifest_ids_by_arm: dict[str, tuple[str, ...]] | None = None
+    expected_execution_seeds_by_manifest_id: dict[str, tuple[int, ...]] | None = None
+    expected_candidate_pool_seed: int | None = None
+    expected_execution_commit: str | None = None
 
 
 def payload_sha256(payload: dict[str, Any]) -> str:
@@ -24,7 +126,7 @@ def payload_sha256(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def load_independent_outcomes(path: Path | None) -> tuple[str, str, dict[str, Any] | None]:
+def load_independent_outcomes(path: Any) -> tuple[str, str, dict[str, Any] | None]:
     """Load an independent planner-outcome payload.
 
     Returns:
@@ -38,13 +140,13 @@ def load_independent_outcomes(path: Path | None) -> tuple[str, str, dict[str, An
             "No independent outcome path provided; held-out evidence remains fail-closed.",
             None,
         )
-    if not path.exists():
+    p = Path(path)
+    if not p.exists():
         return "blocked", f"Independent outcome path {path} does not exist.", None
-    if path.stat().st_size == 0:
+    if p.stat().st_size == 0:
         return "blocked", f"Independent outcome file {path} is empty.", None
-
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(p, encoding="utf-8") as f:
             payload = json.load(f)
     except (ValueError, TypeError, json.JSONDecodeError, OSError) as exc:
         return "blocked", f"Failed to load independent outcomes: {exc}.", None
@@ -53,151 +155,893 @@ def load_independent_outcomes(path: Path | None) -> tuple[str, str, dict[str, An
     return "active", "Independent planner-execution outcomes loaded successfully.", payload
 
 
-def _float_list(payload: dict[str, Any], key: str) -> list[float]:
-    """Return a list of numeric values from ``payload[key]``."""
-    values = payload.get(key)
-    if not isinstance(values, list):
-        raise ValueError(f"{key} must be a list")
-    return [float(value) for value in values]
+def _blocked(reason: str, **extra: Any) -> dict[str, Any]:
+    """Build a fail-closed blocked evaluation result."""
+    result: dict[str, Any] = {
+        "schema_version": OUTCOME_SCHEMA_VERSION,
+        "status": "blocked",
+        "independent_outcomes_available": False,
+        "certification_available": False,
+        "admitted_row_count": 0,
+        "excluded_row_count": 0,
+        "null_tests_reject_null": False,
+        "reason": reason,
+    }
+    result.update(extra)
+    return result
 
 
-def _certification_available(payload: dict[str, Any], expected_count: int) -> bool:
-    """Return whether every expected row has passed certification."""
-    statuses = payload.get("certification_statuses")
-    if not isinstance(statuses, list) or len(statuses) < expected_count:
-        return False
-    return all(status == "passed" for status in statuses)
-
-
-def _metadata_allows_independent_outcomes(payload: dict[str, Any]) -> tuple[bool, str]:
-    """Reject known circular, fallback, degraded, or unavailable packet metadata."""
+def _validate_packet_metadata(payload: dict[str, Any], spec: AdmissionSpec) -> str | None:
+    """Reject circular, deprecated, mismatched, or non-execution packet metadata."""
+    if payload.get("schema_version") != OUTCOME_SCHEMA_VERSION:
+        return (
+            f"deprecated or unknown outcome schema: {payload.get('schema_version')!r}; "
+            f"only {OUTCOME_SCHEMA_VERSION!r} (row-level) is admitted"
+        )
     if payload.get("outcome_source") != "planner_execution":
-        return False, "outcome_source must be planner_execution"
-    if payload.get("objective") in {"archive_nearness", "objective_distance", "nearest_archive"}:
-        return False, "archive-nearness outcomes are circular for issue #3275"
-    row_statuses = payload.get("row_statuses", [])
-    if not isinstance(row_statuses, list):
-        return False, "row_statuses must be a list when provided"
-    bad_statuses = {"fallback", "degraded", "not_available", "failed", "blocked"}
-    observed_bad = sorted({status for status in row_statuses if status in bad_statuses})
-    if observed_bad:
-        return False, f"non-success planner rows present: {observed_bad}"
+        return "outcome_source must be planner_execution"
+    if payload.get("objective") != OUTCOME_OBJECTIVE:
+        return f"objective must be {OUTCOME_OBJECTIVE!r}; got {payload.get('objective')!r}"
+    if payload.get("target_planner_id") != spec.expected_target_planner_id:
+        return (
+            f"target_planner_id mismatch: packet={payload.get('target_planner_id')!r} "
+            f"expected={spec.expected_target_planner_id!r}"
+        )
+    if (
+        spec.expected_target_planner_config_sha256 is not None
+        and payload.get("target_planner_config_sha256")
+        != spec.expected_target_planner_config_sha256
+    ):
+        return "target_planner_config_sha256 mismatch in packet metadata"
+    return None
+
+
+def _expected_ids_for_arm(spec: AdmissionSpec, arm: str) -> tuple[str, ...]:
+    """Return the normalized predeclared manifest IDs for one selection arm."""
+    expected = spec.expected_candidate_manifest_ids_by_arm or {}
+    raw_ids = expected.get(arm, ())
+    return tuple(str(manifest_id) for manifest_id in raw_ids)
+
+
+def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
+    spec: AdmissionSpec, *, budget_per_arm: int
+) -> str | None:
+    """Validate all externally predeclared membership and execution lineage.
+
+    An outcome packet is not allowed to choose its own denominator. Before any
+    row can be admitted, the caller must supply exact per-arm manifest sets,
+    their external SHA-256, pool-index, and scenario-seed bindings,
+    execution-seed lineage, and the shared pool seed. This prevents a larger
+    post-hoc packet from manufacturing power or mixing scenarios under a
+    manifest ID.
+    """
+    if not isinstance(budget_per_arm, int) or isinstance(budget_per_arm, bool):
+        return "budget_per_arm must be an integer"
+    if budget_per_arm <= 0:
+        return "budget_per_arm must be positive for a complete outcome evaluation"
+    expected_by_arm = spec.expected_candidate_manifest_ids_by_arm
+    if not isinstance(expected_by_arm, dict) or set(expected_by_arm) != set(_ARMS):
+        return "expected candidate manifest IDs must define exactly proposal and random arms"
+    normalized_by_arm: dict[str, tuple[str, ...]] = {}
+    for arm in _ARMS:
+        raw_ids = expected_by_arm.get(arm)
+        if not isinstance(raw_ids, (list, tuple)):
+            return f"expected {arm} manifest IDs must be a list or tuple"
+        if any(not isinstance(manifest_id, str) or not manifest_id for manifest_id in raw_ids):
+            return f"expected {arm} manifest IDs must be non-empty strings"
+        ids = tuple(raw_ids)
+        if len(ids) != budget_per_arm:
+            return (
+                f"predeclared {arm} manifest count {len(ids)} != frozen candidate budget "
+                f"{budget_per_arm}"
+            )
+        if len(set(ids)) != len(ids):
+            return f"predeclared {arm} manifest IDs are not unique"
+        normalized_by_arm[arm] = ids
+    overlap = sorted(set(normalized_by_arm["proposal"]) & set(normalized_by_arm["random"]))
+    if overlap:
+        return "predeclared manifest IDs overlap across arms: " + ", ".join(overlap)
+
+    expected_ids = set(normalized_by_arm["proposal"]) | set(normalized_by_arm["random"])
+    expected_hashes = spec.expected_candidate_manifest_sha256_by_id
+    if not isinstance(expected_hashes, dict) or set(expected_hashes) != expected_ids:
+        return "manifest SHA-256 binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str) or not manifest_id or not _is_sha256_hex(digest)
+        for manifest_id, digest in expected_hashes.items()
+    ):
+        return "manifest SHA-256 binding keys and values must be non-empty strings and SHA-256 hex"
+
+    expected_pool_indices = spec.expected_candidate_pool_index_by_manifest_id
+    if not isinstance(expected_pool_indices, dict) or set(expected_pool_indices) != expected_ids:
+        return "candidate-pool index binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(pool_index, int)
+        or isinstance(pool_index, bool)
+        or pool_index < 0
+        for manifest_id, pool_index in expected_pool_indices.items()
+    ):
+        return "candidate-pool index binding keys must be strings and values non-negative integers"
+    if len(set(expected_pool_indices.values())) != len(expected_ids):
+        return "candidate-pool index binding must assign unique indices to manifest IDs"
+
+    expected_scenario_seeds = spec.expected_scenario_seed_by_manifest_id
+    if (
+        not isinstance(expected_scenario_seeds, dict)
+        or set(expected_scenario_seeds) != expected_ids
+    ):
+        return "scenario-seed binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(scenario_seed, int)
+        or isinstance(scenario_seed, bool)
+        for manifest_id, scenario_seed in expected_scenario_seeds.items()
+    ):
+        return "scenario-seed binding keys must be strings and values integers"
+
+    expected_record_hashes = spec.expected_record_sha256_by_manifest
+    if not isinstance(expected_record_hashes, dict) or set(expected_record_hashes) != expected_ids:
+        return "record SHA-256 binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str) or not manifest_id or not _is_sha256_hex(digest)
+        for manifest_id, digest in expected_record_hashes.items()
+    ):
+        return "record SHA-256 binding keys and values must be non-empty strings and SHA-256 hex"
+
+    expected_seeds = spec.expected_execution_seeds_by_manifest_id
+    if not isinstance(expected_seeds, dict) or set(expected_seeds) != expected_ids:
+        return "execution-seed lineage must cover exactly the predeclared arm manifest IDs"
+    threshold_rule = _CONFIRMATION_THRESHOLDS.get(spec.confirmation_threshold)
+    if threshold_rule is None:
+        return f"unsupported confirmation threshold: {spec.confirmation_threshold!r}"
+    expected_attempt_count = int(threshold_rule["attempt_count"])
+    for manifest_id, raw_seeds in expected_seeds.items():
+        if not isinstance(raw_seeds, (list, tuple)) or not raw_seeds:
+            return f"execution-seed lineage for {manifest_id} must be a non-empty list or tuple"
+        if any(not isinstance(seed, int) or isinstance(seed, bool) for seed in raw_seeds):
+            return f"execution-seed lineage for {manifest_id} must contain integers"
+        if len(set(raw_seeds)) != len(raw_seeds):
+            return f"execution-seed lineage for {manifest_id} contains duplicate seeds"
+        if len(raw_seeds) != expected_attempt_count:
+            return (
+                f"execution-seed lineage for {manifest_id} must contain exactly "
+                f"{expected_attempt_count} seeds for confirmation threshold "
+                f"{spec.confirmation_threshold}"
+            )
+    pool_seed = spec.expected_candidate_pool_seed
+    if not isinstance(pool_seed, int) or isinstance(pool_seed, bool):
+        return "expected candidate_pool_seed must be an integer"
+    if spec.expected_execution_commit is not None and (
+        not isinstance(spec.expected_execution_commit, str) or not spec.expected_execution_commit
+    ):
+        return "expected execution_commit must be a non-empty string when supplied"
+    return None
+
+
+def _confirmation_ok(confirmation_lineage: Any, *, threshold: str) -> tuple[bool, str]:
+    """Validate the shape and bounds of independent-seed confirmation lineage."""
+    if not isinstance(confirmation_lineage, dict):
+        return False, "confirmation_lineage must be an object"
+    rule = _CONFIRMATION_THRESHOLDS.get(threshold)
+    if rule is None:
+        return False, f"unsupported confirmation threshold: {threshold!r}"
+    confirmed = confirmation_lineage.get("confirmed_count")
+    attempts = confirmation_lineage.get("attempt_count")
+    stable = confirmation_lineage.get("stable_attribution")
+    if (
+        not isinstance(confirmed, int)
+        or isinstance(confirmed, bool)
+        or not isinstance(attempts, int)
+        or isinstance(attempts, bool)
+    ):
+        return False, "confirmation_lineage.confirmed_count/attempt_count must be integers"
+    if attempts != rule["attempt_count"]:
+        return False, f"confirmation attempt_count={attempts} != frozen {rule['attempt_count']}"
+    if confirmed < 0 or confirmed > attempts:
+        return False, "confirmation confirmed_count must be between zero and attempt_count"
+    if not isinstance(stable, bool):
+        return False, "confirmation_lineage.stable_attribution must be boolean"
+    if confirmed >= rule["min_confirmed"] and stable is not True:
+        return False, "confirmation_lineage.stable_attribution must be true"
     return True, "ok"
 
 
-def compute_metrics(values: list[float]) -> dict[str, Any]:
-    """Compute the small outcome summary used by the comparison report."""
-    return {
-        "mean_objective": round(sum(values) / len(values), 4) if values else 0.0,
-        "max_objective": round(max(values), 4) if values else 0.0,
-        "failure_count": sum(1 for value in values if value >= 8.0),
-    }
+def _replay_ok(replay_lineage: Any) -> tuple[bool, str]:
+    """Validate deterministic-replay lineage for one admitted row."""
+    if not isinstance(replay_lineage, dict):
+        return False, "replay_lineage must be an object"
+    if replay_lineage.get("exact_signature_match") is not True:
+        return False, "replay_lineage.exact_signature_match must be true"
+    replay_sig = replay_lineage.get("replay_signature_sha256")
+    original_sig = replay_lineage.get("original_signature_sha256")
+    if not _is_sha256_hex(replay_sig):
+        return False, "replay_lineage.replay_signature_sha256 must be SHA-256 hex"
+    if not _is_sha256_hex(original_sig):
+        return False, "replay_lineage.original_signature_sha256 must be SHA-256 hex"
+    if replay_sig != original_sig:
+        return False, "replay signature SHA-256 does not match original signature SHA-256"
+    return True, "ok"
 
 
-def build_independent_outcome_evaluation(
-    payload: dict[str, Any] | None,
+def _row_missing_fields(  # noqa: C901, PLR0912
+    row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec
+) -> str | None:
+    """Check required-field presence and well-typedness for an admitted row."""
+    for field_name in REQUIRED_ADMITTED_ROW_FIELDS:
+        if field_name not in row:
+            return f"missing required field {field_name!r}"
+    if not isinstance(row.get("row_id"), str) or not row["row_id"].strip():
+        return "row_id must be a non-empty string"
+    if (
+        not isinstance(row.get("candidate_manifest_id"), str)
+        or not row["candidate_manifest_id"].strip()
+    ):
+        return "candidate_manifest_id must be a non-empty string"
+    if row.get("selection_arm") not in _ARMS:
+        return f"invalid selection_arm {row.get('selection_arm')!r}"
+    selection_rank = row.get("selection_rank")
+    if (
+        not isinstance(selection_rank, int)
+        or isinstance(selection_rank, bool)
+        or selection_rank <= 0
+    ):
+        return "selection_rank must be a positive integer"
+    if not isinstance(row.get("independent_failure_outcome"), bool):
+        return "independent_failure_outcome must be bool"
+    if not isinstance(row.get("candidate_manifest_sha256"), str) or not row.get(
+        "candidate_manifest_sha256"
+    ):
+        return "candidate_manifest_sha256 must be a non-empty string"
+    execution_command = row.get("execution_command")
+    if (
+        not isinstance(execution_command, list)
+        or not execution_command
+        or any(not isinstance(part, str) or not part.strip() for part in execution_command)
+    ):
+        return "execution_command must be a non-empty list of non-empty strings"
+    execution_config_lineage = row.get("execution_config_lineage")
+    if not isinstance(execution_config_lineage, dict) or not execution_config_lineage:
+        return "execution_config_lineage must be a non-empty object"
+    scenario_seed = row.get("scenario_seed")
+    if not isinstance(scenario_seed, int) or isinstance(scenario_seed, bool):
+        return "scenario_seed must be an integer"
+    execution_seed = row.get("execution_seed")
+    if not isinstance(execution_seed, int) or isinstance(execution_seed, bool):
+        return "execution_seed must be an integer"
+    candidate_pool_seed = row.get("candidate_pool_seed")
+    if not isinstance(candidate_pool_seed, int) or isinstance(candidate_pool_seed, bool):
+        return "candidate_pool_seed must be an integer"
+    if not isinstance(row.get("termination_reason"), str) or not row["termination_reason"].strip():
+        return "termination_reason must be a non-empty string"
+    if not isinstance(row.get("primary_failure"), str) or not row["primary_failure"].strip():
+        return "primary_failure must be a non-empty string"
+    if not isinstance(row.get("record_sha256"), str) or not row.get("record_sha256"):
+        return "record_sha256 missing"
+    return None
+
+
+def _row_planner_family_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -> str | None:
+    """Check the frozen target planner, config SHA, and evaluation family."""
+    if row.get("target_planner_id") != spec.expected_target_planner_id:
+        return f"target_planner_id mismatch {row.get('target_planner_id')!r}"
+    if (
+        spec.expected_target_planner_config_sha256 is not None
+        and row.get("target_planner_config_sha256") != spec.expected_target_planner_config_sha256
+    ):
+        return "target_planner_config_sha256 mismatch"
+    if row.get("scenario_family") != spec.expected_eval_family:
+        return (
+            f"scenario_family {row.get('scenario_family')!r} != held-out eval family "
+            f"{spec.expected_eval_family!r}"
+        )
+    return None
+
+
+def _row_execution_drift(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec) -> str | None:
+    """Reject non-native (fallback/degraded) execution rows."""
+    if row.get("execution_mode") != "native":
+        return (
+            f"execution_mode {row.get('execution_mode')!r} is not native "
+            "(fallback/degraded fail closed)"
+        )
+    return None
+
+
+def _row_certification_drift(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec) -> str | None:
+    """Require passed scenario and candidate certification."""
+    if row.get("scenario_certification_status") != "passed":
+        return (
+            f"scenario_certification_status {row.get('scenario_certification_status')!r} != passed"
+        )
+    if row.get("candidate_certification_status") != "passed":
+        return f"candidate_certification_status {row.get('candidate_certification_status')!r} != passed"
+    return None
+
+
+def _row_lineage_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -> str | None:
+    """Validate deterministic-replay and confirmation lineage."""
+    replay_ok, replay_reason = _replay_ok(row.get("replay_lineage"))
+    if not replay_ok:
+        return replay_reason
+    confirm_ok, confirm_reason = _confirmation_ok(
+        row.get("confirmation_lineage"), threshold=spec.confirmation_threshold
+    )
+    if not confirm_ok:
+        return confirm_reason
+    return None
+
+
+def _row_candidate_manifest_hash_drift(
+    row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
+) -> str | None:
+    """Require each row's manifest hash to match a frozen external binding."""
+    expected_hashes = spec.expected_candidate_manifest_sha256_by_id
+    if not expected_hashes:
+        return "expected candidate_manifest_sha256 binding is unavailable"
+    manifest_id = str(row["candidate_manifest_id"])
+    expected = expected_hashes.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected manifest-hash binding"
+    if row["candidate_manifest_sha256"] != expected:
+        return "candidate_manifest_sha256 mismatch for manifest"
+    return None
+
+
+def _row_record_hash_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -> str | None:
+    """Require each row's record hash to match a frozen external binding."""
+    expected_hashes = spec.expected_record_sha256_by_manifest
+    if not expected_hashes:
+        return "expected record_sha256 binding is unavailable"
+    manifest_id = str(row["candidate_manifest_id"])
+    expected = expected_hashes.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected record-hash binding"
+    if row["record_sha256"] != expected:
+        return "record_sha256 mismatch for manifest"
+    return None
+
+
+def _row_candidate_pool_index_drift(
+    row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
+) -> str | None:
+    """Require each row's pool index to match the frozen external binding."""
+    expected_indices = spec.expected_candidate_pool_index_by_manifest_id
+    if not expected_indices:
+        return "expected candidate_pool_index binding is unavailable"
+    candidate_pool_index = row["candidate_pool_index"]
+    if (
+        not isinstance(candidate_pool_index, int)
+        or isinstance(candidate_pool_index, bool)
+        or candidate_pool_index < 0
+    ):
+        return "candidate_pool_index must be a non-negative integer"
+    manifest_id = str(row["candidate_manifest_id"])
+    expected = expected_indices.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected candidate-pool index binding"
+    if candidate_pool_index != expected:
+        return "candidate_pool_index mismatch for manifest"
+    return None
+
+
+def _row_scenario_seed_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -> str | None:
+    """Require each row's scenario seed to match its frozen candidate manifest."""
+    expected_seeds = spec.expected_scenario_seed_by_manifest_id
+    if not expected_seeds:
+        return "expected scenario_seed binding is unavailable"
+    manifest_id = str(row["candidate_manifest_id"])
+    expected = expected_seeds.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected scenario-seed binding"
+    if row["scenario_seed"] != expected:
+        return "scenario_seed mismatch for manifest"
+    return None
+
+
+def _row_predeclared_selection_drift(
+    row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
+) -> str | None:
+    """Require each row to match its frozen arm, rank, pool, and execution seed."""
+    arm = str(row["selection_arm"])
+    manifest_id = str(row["candidate_manifest_id"])
+    expected_ids = _expected_ids_for_arm(spec, arm)
+    if manifest_id not in expected_ids:
+        opposite_arm = "random" if arm == "proposal" else "proposal"
+        if manifest_id in _expected_ids_for_arm(spec, opposite_arm):
+            return f"candidate_manifest_id is predeclared for {opposite_arm}, not {arm}"
+        return f"candidate_manifest_id is not in the predeclared {arm} arm"
+    expected_rank = expected_ids.index(manifest_id) + 1
+    if row.get("selection_rank") != expected_rank:
+        return (
+            f"selection_rank {row.get('selection_rank')!r} != predeclared rank {expected_rank} "
+            f"for manifest {manifest_id}"
+        )
+    if row.get("candidate_pool_seed") != spec.expected_candidate_pool_seed:
+        return "candidate_pool_seed does not match the frozen manifest binding"
+    expected_seeds = spec.expected_execution_seeds_by_manifest_id or {}
+    if row["execution_seed"] not in expected_seeds.get(manifest_id, ()):
+        return f"execution_seed is not predeclared for manifest {manifest_id}"
+    if (
+        spec.expected_execution_commit is not None
+        and row.get("execution_commit") != spec.expected_execution_commit
+    ):
+        return "execution_commit does not match the frozen contract"
+    return None
+
+
+def _row_exclusion_state_drift(
+    row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec
+) -> str | None:
+    """Reject an admitted row that simultaneously declares an exclusion."""
+    if row.get("exclusion_reason") is not None:
+        return "admitted row exclusion_reason must be null"
+    return None
+
+
+_ROW_CHECKERS = (
+    _row_missing_fields,
+    _row_exclusion_state_drift,
+    _row_planner_family_drift,
+    _row_execution_drift,
+    _row_certification_drift,
+    _row_lineage_drift,
+    _row_candidate_manifest_hash_drift,
+    _row_candidate_pool_index_drift,
+    _row_scenario_seed_drift,
+    _row_record_hash_drift,
+    _row_predeclared_selection_drift,
+)
+
+
+def _excluded_row_error(row: dict[str, Any], row_id: Any) -> str | None:
+    """Validate the compact provenance required for a non-executed row."""
+    if not isinstance(row_id, str) or not row_id.strip():
+        return "excluded row_id must be a non-empty string"
+    candidate_manifest_id = row.get("candidate_manifest_id")
+    if not isinstance(candidate_manifest_id, str) or not candidate_manifest_id.strip():
+        return "excluded candidate_manifest_id must be a non-empty string"
+    exclusion_reason = row.get("exclusion_reason")
+    if not isinstance(exclusion_reason, str) or not exclusion_reason.strip():
+        return "excluded row missing non-empty exclusion_reason"
+    if row.get("selection_arm") not in _ARMS:
+        return "excluded row has invalid selection_arm"
+    return None
+
+
+def _admit_row(
+    row: Any,
     *,
-    budget: int,
+    row_index: int,
+    spec: AdmissionSpec,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Admit one row fail-closed, or return ``(None, reason)`` to block."""
+    if not isinstance(row, dict):
+        return None, f"row[{row_index}]: not an object"
+    row_id = row.get("row_id")
+    prefix = f"row[{row_index}] ({row_id}): "
+    if "admission_status" not in row:
+        return None, prefix + "missing required field 'admission_status'"
+    admission_status = row["admission_status"]
+    if admission_status == "excluded":
+        excluded_error = _excluded_row_error(row, row_id)
+        if excluded_error is not None:
+            return None, prefix + excluded_error
+        return {"_excluded": True, "row_id": row_id}, None
+    if admission_status != "admitted":
+        return None, prefix + f"unsupported admission_status {admission_status!r}"
+    for checker in _ROW_CHECKERS:
+        reason = checker(row, row_id, spec)
+        if reason is not None:
+            return None, prefix + reason
+    return row, None
+
+
+def _candidate_outcome_from_seed_rows(
+    seed_rows: dict[int, dict[str, Any]],
+    *,
+    manifest_id: str,
+    arm: str,
+    expected_seeds: set[int],
+    min_confirmed: int,
+) -> tuple[bool | None, str | None]:
+    """Derive one candidate outcome while retaining the frozen confirmation rule."""
+    observed_seeds = set(seed_rows)
+    if observed_seeds != expected_seeds:
+        return None, (
+            f"execution-seed lineage mismatch for candidate {manifest_id} in arm {arm}: "
+            f"observed={sorted(observed_seeds)} expected={sorted(expected_seeds)}"
+        )
+    confirming_rows = [row for row in seed_rows.values() if row["independent_failure_outcome"]]
+    confirmed_count = len(confirming_rows)
+    for row in seed_rows.values():
+        confirmation_lineage = row["confirmation_lineage"]
+        if confirmation_lineage["confirmed_count"] != confirmed_count:
+            return None, (
+                f"confirmation count mismatch for candidate {manifest_id} in arm {arm}: "
+                f"row reports {confirmation_lineage['confirmed_count']} but observed "
+                f"{confirmed_count} confirming execution seeds"
+            )
+        if confirmation_lineage["attempt_count"] != len(expected_seeds):
+            return None, (
+                f"confirmation attempt count mismatch for candidate {manifest_id} in arm {arm}: "
+                f"row reports {confirmation_lineage['attempt_count']} but binding contains "
+                f"{len(expected_seeds)} execution seeds"
+            )
+    if confirmed_count < min_confirmed:
+        return False, None
+    attributions = {
+        (str(row["primary_failure"]), str(row["termination_reason"])) for row in confirming_rows
+    }
+    if len(attributions) != 1:
+        return None, (
+            f"unstable attribution: candidate {manifest_id} in arm {arm} has "
+            "different primary_failure/termination_reason pairs across confirming seeds"
+        )
+    return True, None
+
+
+def _candidate_level_outcomes(
+    admitted_rows: list[dict[str, Any]],
+    *,
+    admission_spec: AdmissionSpec,
+) -> tuple[dict[str, dict[str, Any]] | None, str | None]:
+    """Cluster admitted rows by (arm, candidate) and return candidate outcomes.
+
+    A candidate is a failure when its predeclared confirmation threshold is met.
+    Non-confirming seeds may legitimately be non-failures under the frozen
+    3-of-5 rule, so their outcome must not turn that rule into an accidental
+    5-of-5 requirement. The termination attribution must nevertheless agree
+    across the confirming failure seeds. Returns a dict keyed by arm with
+    ``{"count": n, "failures": k, "outcomes": [...], "ids": [...]}`` or
+    ``(None, reason)`` to block.
+    """
+    threshold_rule = _CONFIRMATION_THRESHOLDS.get(admission_spec.confirmation_threshold)
+    if threshold_rule is None:
+        return (
+            None,
+            f"unsupported confirmation threshold: {admission_spec.confirmation_threshold!r}",
+        )
+    min_confirmed = int(threshold_rule["min_confirmed"])
+
+    by_arm_candidate: dict[str, dict[str, dict[int, dict[str, Any]]]] = {
+        "proposal": {},
+        "random": {},
+    }
+    for row in admitted_rows:
+        arm = row["selection_arm"]
+        manifest_id = str(row["candidate_manifest_id"])
+        execution_seed = int(row["execution_seed"])
+        seed_outcomes = by_arm_candidate[arm].setdefault(manifest_id, {})
+        if execution_seed in seed_outcomes:
+            return None, (
+                f"duplicate execution_seed {execution_seed} for candidate {manifest_id} "
+                f"in arm {arm}"
+            )
+        seed_outcomes[execution_seed] = row
+
+    overlap_ids = sorted(set(by_arm_candidate["proposal"]) & set(by_arm_candidate["random"]))
+    if overlap_ids:
+        return None, (
+            "candidate_manifest_id appears in both proposal and random arms: "
+            f"{', '.join(overlap_ids)}"
+        )
+
+    result: dict[str, dict[str, Any]] = {}
+    for arm in _ARMS:
+        candidate_map = by_arm_candidate[arm]
+        outcomes: list[bool] = []
+        ids: list[str] = []
+        for manifest_id, seed_outcomes_by_id in sorted(candidate_map.items()):
+            expected_seeds = set(
+                (admission_spec.expected_execution_seeds_by_manifest_id or {}).get(manifest_id, ())
+            )
+            candidate_outcome, reason = _candidate_outcome_from_seed_rows(
+                seed_outcomes_by_id,
+                manifest_id=manifest_id,
+                arm=arm,
+                expected_seeds=expected_seeds,
+                min_confirmed=min_confirmed,
+            )
+            if reason is not None or candidate_outcome is None:
+                return None, reason or "candidate outcome aggregation failed"
+            outcomes.append(candidate_outcome)
+            ids.append(manifest_id)
+        result[arm] = {
+            "count": len(outcomes),
+            "failures": int(sum(1 for o in outcomes if o)),
+            "outcomes": outcomes,
+            "ids": ids,
+            "execution_seeds_by_manifest_id": {
+                manifest_id: sorted(seed_outcomes_by_id)
+                for manifest_id, seed_outcomes_by_id in sorted(candidate_map.items())
+            },
+        }
+    return result, None
+
+
+def _complete_predeclared_arm_reason(
+    candidate_outcomes: dict[str, dict[str, Any]],
+    *,
+    budget_per_arm: int,
+    admission_spec: AdmissionSpec,
+) -> str | None:
+    """Return a fail-closed reason unless both exact frozen arms are present."""
+    for arm in _ARMS:
+        expected_ids = set(_expected_ids_for_arm(admission_spec, arm))
+        observed_ids = set(candidate_outcomes[arm]["ids"])
+        if observed_ids != expected_ids:
+            missing = sorted(expected_ids - observed_ids)
+            unexpected = sorted(observed_ids - expected_ids)
+            return (
+                f"{arm} arm does not match the complete predeclared manifest set: "
+                f"missing={missing} unexpected={unexpected}"
+            )
+        if candidate_outcomes[arm]["count"] != budget_per_arm:
+            return (
+                f"{arm} candidate count {candidate_outcomes[arm]['count']} != frozen candidate budget "
+                f"{budget_per_arm}"
+            )
+    return None
+
+
+def _summarize_admitted_rows(  # noqa: PLR0913
+    admitted_rows: list[dict[str, Any]],
+    excluded_count: int,
+    payload: dict[str, Any],
+    *,
+    budget_per_arm: int,
+    admission_spec: AdmissionSpec,
+    minimally_important: float,
+    alpha: float,
     n_permutations: int,
     seed: int,
-    expected_eval_archive_sha256: str | None = None,
 ) -> dict[str, Any]:
-    """Summarize an independent-outcome packet and its null-test readiness."""
-    if payload is None:
-        return {
-            "status": "not_available",
-            "independent_outcomes_available": False,
-            "certification_available": False,
-            "null_tests_reject_null": False,
-            "reason": "no_independent_outcome_payload",
-        }
+    """Compute candidate-level yields, comparison, null tests, and the decision."""
+    candidate_outcomes, cluster_reason = _candidate_level_outcomes(
+        admitted_rows, admission_spec=admission_spec
+    )
+    if candidate_outcomes is None:
+        return _blocked(
+            cluster_reason or "clustering_failed", payload_sha256=payload_sha256(payload)
+        )
 
-    metadata_ok, metadata_reason = _metadata_allows_independent_outcomes(payload)
-    if not metadata_ok:
-        return {
-            "status": "blocked_invalid_independent_outcomes",
-            "independent_outcomes_available": False,
-            "certification_available": False,
-            "null_tests_reject_null": False,
-            "reason": metadata_reason,
-            "payload_sha256": payload_sha256(payload),
-        }
-    if expected_eval_archive_sha256 is not None:
-        observed_eval_hash = payload.get("eval_archive_sha256")
-        if observed_eval_hash != expected_eval_archive_sha256:
-            return {
-                "status": "blocked_eval_archive_hash_mismatch",
-                "independent_outcomes_available": False,
-                "certification_available": False,
-                "null_tests_reject_null": False,
-                "reason": "independent outcome packet does not match the eval split hash",
-                "expected_eval_archive_sha256": expected_eval_archive_sha256,
-                "observed_eval_archive_sha256": observed_eval_hash,
-                "payload_sha256": payload_sha256(payload),
-            }
+    complete_arm_reason = _complete_predeclared_arm_reason(
+        candidate_outcomes, budget_per_arm=budget_per_arm, admission_spec=admission_spec
+    )
+    if complete_arm_reason is not None:
+        return _blocked(complete_arm_reason, payload_sha256=payload_sha256(payload))
 
-    try:
-        proposal_outcomes = _float_list(payload, "proposal_outcomes")
-        random_outcomes = _float_list(payload, "random_outcomes")
-        ranked_outcomes = _float_list(payload, "ranked_outcomes")
-    except (TypeError, ValueError) as exc:
+    proposal = candidate_outcomes["proposal"]
+    random_arm = candidate_outcomes["random"]
+    if proposal["count"] == 0 or random_arm["count"] == 0:
         return {
-            "status": "blocked_malformed_outcomes",
-            "independent_outcomes_available": False,
-            "certification_available": False,
-            "null_tests_reject_null": False,
-            "reason": str(exc),
-            "payload_sha256": payload_sha256(payload),
-        }
-
-    expected_count = len(proposal_outcomes) + len(random_outcomes)
-    certification_available = _certification_available(payload, expected_count)
-    independent_available = bool(proposal_outcomes and random_outcomes and ranked_outcomes)
-    if not independent_available:
-        return {
+            "schema_version": OUTCOME_SCHEMA_VERSION,
             "status": "not_available_empty_outcomes",
             "independent_outcomes_available": False,
-            "certification_available": certification_available,
+            "certification_available": True,
+            "admitted_row_count": len(admitted_rows),
+            "excluded_row_count": excluded_count,
             "null_tests_reject_null": False,
-            "reason": "proposal, random, and ranked outcomes must all be non-empty",
+            "reason": "proposal and random arms must both have at least one admitted candidate",
+            "proposal_candidate_count": proposal["count"],
+            "random_candidate_count": random_arm["count"],
             "payload_sha256": payload_sha256(payload),
         }
 
-    shuffled = shuffled_outcome_null_test(
-        proposal_outcomes,
-        random_outcomes,
+    proposal_yield = proposal["failures"] / proposal["count"]
+    random_yield = random_arm["failures"] / random_arm["count"]
+    fisher_p = fisher_exact_two_sided_table(
+        proposal["failures"],
+        proposal["count"] - proposal["failures"],
+        random_arm["failures"],
+        random_arm["count"] - random_arm["failures"],
+    )
+    yield_interval = newcombe_wilson_difference_interval(
+        proposal["failures"], proposal["count"], random_arm["failures"], random_arm["count"]
+    )
+    null_rejected = bool(fisher_p <= alpha)
+    binding_k = budget_per_arm
+    min_detectable = binary_yield_min_detectable_difference(binding_k, alpha=alpha)
+    powered = bool(min_detectable <= float(minimally_important))
+    shuffled_null = shuffled_outcome_null_test(
+        [float(o) for o in proposal["outcomes"]],
+        [float(o) for o in random_arm["outcomes"]],
         n_permutations=n_permutations,
         seed=seed,
     )
-    ranking = ranking_permutation_test(
-        ranked_outcomes,
-        selection_size=min(budget, len(ranked_outcomes)),
+    ranking_null = ranking_permutation_test(
+        [
+            *[float(o) for o in proposal["outcomes"]],
+            *[float(o) for o in random_arm["outcomes"]],
+        ],
+        selection_size=proposal["count"],
         n_permutations=n_permutations,
-        seed=seed + 1,
+        seed=seed,
     )
-    nulls_reject = (
-        shuffled.get("status") == "complete"
-        and ranking.get("status") == "complete"
-        and float(shuffled.get("p_value", 1.0)) <= 0.05
-        and float(ranking.get("p_value", 1.0)) <= 0.05
+    decision = classify_issue_3275_decision(
+        proposal_yield=proposal_yield,
+        random_yield=random_yield,
+        minimally_important=minimally_important,
+        null_rejected=null_rejected,
+        powered=powered,
+        independent_available=True,
     )
     return {
-        "schema_version": payload.get("schema_version"),
+        "schema_version": OUTCOME_SCHEMA_VERSION,
         "status": "complete",
         "source": payload.get("source", "unspecified"),
-        "objective": payload.get("objective", "unspecified"),
         "artifact": payload.get("artifact"),
         "eval_archive_sha256": payload.get("eval_archive_sha256"),
         "outcome_source": payload.get("outcome_source"),
+        "objective": payload.get("objective"),
+        "target_planner_id": payload.get("target_planner_id"),
         "independent_outcomes_available": True,
-        "certification_available": certification_available,
-        "null_tests_reject_null": nulls_reject,
-        "proposal_metrics": compute_metrics(proposal_outcomes),
-        "random_metrics": compute_metrics(random_outcomes),
-        "null_tests": {
-            "shuffled_archive_outcomes": shuffled,
-            "proposal_ranking_permutation": ranking,
-            "required_for_held_out_claim": True,
+        "certification_available": True,
+        "admitted_row_count": len(admitted_rows),
+        "excluded_row_count": excluded_count,
+        "frozen_candidate_budget_per_arm": budget_per_arm,
+        "predeclared_manifest_ids_by_arm": {
+            arm: list(_expected_ids_for_arm(admission_spec, arm)) for arm in _ARMS
         },
+        "proposal": proposal,
+        "random": random_arm,
+        "proposal_failure_yield": round(proposal_yield, 6),
+        "random_failure_yield": round(random_yield, 6),
+        "comparison": {
+            "estimand": "proposal_minus_random_candidate_level_certified_failure_yield",
+            "yield_improvement": round(proposal_yield - random_yield, 6),
+            "yield_improvement_95pct_ci": [
+                round(yield_interval[0], 6),
+                round(yield_interval[1], 6),
+            ],
+            "yield_improvement_ci_method": "newcombe_unpooled_wilson_95pct",
+            "fisher_exact_two_sided_p_value": round(fisher_p, 6),
+            "alpha_two_sided": alpha,
+            "null_rejected": null_rejected,
+            "powered": powered,
+            "min_detectable_yield_difference_at_binding_k": min_detectable,
+            "binding_k": binding_k,
+            "minimally_important_absolute_yield_improvement": float(minimally_important),
+        },
+        "null_tests": {
+            "fisher_exact_two_sided": {
+                "p_value": round(fisher_p, 6),
+                "alpha": alpha,
+                "status": "complete",
+                "required_for_held_out_claim": True,
+                "primary": True,
+            },
+            "shuffled_outcome_label_permutation": {
+                **shuffled_null,
+                "seed": seed,
+                "required_for_held_out_claim": True,
+                "primary": False,
+            },
+            "ranking_permutation": {
+                **ranking_null,
+                "seed": seed,
+                "required_for_held_out_claim": True,
+                "primary": False,
+            },
+        },
+        "null_tests_reject_null": null_rejected,
+        "decision": decision,
         "payload_sha256": payload_sha256(payload),
     }
+
+
+def build_independent_outcome_evaluation(  # noqa: C901
+    payload: dict[str, Any] | None,
+    *,
+    budget_per_arm: int,
+    minimally_important: float,
+    admission_spec: AdmissionSpec,
+    alpha: float = 0.05,
+    expected_eval_archive_sha256: str | None = None,
+    n_permutations: int = 1000,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Evaluate a v2 row-level independent-outcome packet and the #3275 decision.
+
+    Admits rows fail-closed, derives candidate-level certified failure yields per
+    arm from admitted rows only, computes the Fisher-exact two-sided null and the
+    frozen power/sensitivity verdict, and returns the
+    ``continue | stop | inconclusive`` decision. Archive-nearness never reaches
+    this function.
+
+    Args:
+        payload: Parsed v2 outcome packet (or ``None``).
+        budget_per_arm: Frozen candidate budget per arm. A packet is complete
+            only when it contains exactly this many predeclared candidates in
+            each arm.
+        minimally_important: Frozen minimally important absolute yield improvement.
+        admission_spec: Frozen admission parameters (planner, family, threshold...).
+        alpha: Two-sided alpha for the Fisher-exact null.
+        expected_eval_archive_sha256: Optional eval-split hash binding.
+        n_permutations: Permutations for the diagnostic shuffled-outcome null.
+        seed: Deterministic seed for the diagnostic permutation null.
+
+    Returns:
+        A JSON-safe evaluation dict. ``status`` is ``complete`` only when valid
+        admitted rows from both arms produce candidate-level yields; otherwise it
+        is ``not_available_*`` or ``blocked_*``.
+    """
+    if payload is None:
+        return {
+            "schema_version": OUTCOME_SCHEMA_VERSION,
+            "status": "not_available",
+            "independent_outcomes_available": False,
+            "certification_available": False,
+            "admitted_row_count": 0,
+            "excluded_row_count": 0,
+            "null_tests_reject_null": False,
+            "reason": "no_independent_outcome_payload",
+            "decision": classify_issue_3275_decision(
+                proposal_yield=0.0,
+                random_yield=0.0,
+                minimally_important=minimally_important,
+                null_rejected=False,
+                powered=False,
+                independent_available=False,
+            ),
+            "payload_sha256": None,
+        }
+
+    metadata_reason = _validate_packet_metadata(payload, admission_spec)
+    if metadata_reason is not None:
+        return _blocked(metadata_reason, payload_sha256=payload_sha256(payload))
+
+    admission_spec_reason = _validate_frozen_admission_spec(
+        admission_spec, budget_per_arm=budget_per_arm
+    )
+    if admission_spec_reason is not None:
+        return _blocked(admission_spec_reason, payload_sha256=payload_sha256(payload))
+    if expected_eval_archive_sha256 is not None:
+        observed = payload.get("eval_archive_sha256")
+        if observed != expected_eval_archive_sha256:
+            return _blocked(
+                "independent outcome packet does not match the eval split hash",
+                expected_eval_archive_sha256=expected_eval_archive_sha256,
+                observed_eval_archive_sha256=observed,
+                payload_sha256=payload_sha256(payload),
+            )
+
+    rows = payload.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return _blocked("packet has no rows list", payload_sha256=payload_sha256(payload))
+
+    admitted_rows: list[dict[str, Any]] = []
+    excluded_count = 0
+    seen_row_ids: set[str] = set()
+    for index, row in enumerate(rows):
+        admitted, reason = _admit_row(row, row_index=index, spec=admission_spec)
+        if reason is not None:
+            return _blocked(reason, payload_sha256=payload_sha256(payload))
+        if admitted is None:
+            continue
+        row_id = str(admitted["row_id"])
+        if row_id in seen_row_ids:
+            return _blocked(
+                f"duplicate row_id {row_id!r} in outcome packet",
+                payload_sha256=payload_sha256(payload),
+            )
+        seen_row_ids.add(row_id)
+        if admitted.get("_excluded"):
+            excluded_count += 1
+        else:
+            admitted_rows.append(admitted)
+
+    return _summarize_admitted_rows(
+        admitted_rows,
+        excluded_count,
+        payload,
+        budget_per_arm=budget_per_arm,
+        admission_spec=admission_spec,
+        minimally_important=minimally_important,
+        alpha=alpha,
+        n_permutations=n_permutations,
+        seed=seed,
+    )

@@ -404,6 +404,9 @@ class OccupancyGrid:
         """
         self.config = config
         self._grid_data: np.ndarray | None = None
+        # Private reusable rasterization buffer (issue #6460). Kept separate from
+        # ``_grid_data`` so ``is_initialized`` stays False until the first generate().
+        self._grid_buffer: np.ndarray | None = None
         self._last_robot_pose: RobotPoseRecord | None = None
         self._grid_origin: tuple[float, float] | None = None
         self._last_use_ego_frame: bool = False
@@ -911,11 +914,22 @@ class OccupancyGrid:
         )
         if not all(dim > 0 for dim in shape):
             raise ValueError(f"Invalid grid shape: {shape}")
-        self._grid_data = np.zeros(shape, dtype=self.config.dtype)
+        # Reuse a pre-allocated buffer across steps; the grid shape is fixed for
+        # the instance lifetime, so only the first call allocates (issue #6460).
+        if (
+            self._grid_buffer is None
+            or self._grid_buffer.shape != shape
+            or self._grid_buffer.dtype != self.config.dtype
+        ):
+            self._grid_buffer = np.zeros(shape, dtype=self.config.dtype)
+        else:
+            self._grid_buffer.fill(0)
+        self._grid_data = self._grid_buffer
 
         num_peds = pedestrians[0].shape[0] if isinstance(pedestrians, tuple) else len(pedestrians)
         logger.debug(
-            "Generating grid: shape={}, obstacles={}, pedestrians={}, ego_frame={}, origin=({:.2f}, {:.2f})",
+            "Generating grid: shape={}, obstacles={}, pedestrians={}, "
+            "ego_frame={}, origin=({:.2f}, {:.2f})",
             shape,
             len(obstacles),
             num_peds,
@@ -1269,8 +1283,8 @@ class OccupancyGrid:
     def reset(self) -> None:
         """Reset the occupancy grid.
 
-        Clears grid data and stored poses. Next call to generate() will create
-        a new grid.
+        Clears grid data and stored poses. Next call to generate() will
+        regenerate the grid (reusing the pre-allocated buffer).
         """
         self._grid_data = None
         self._last_robot_pose = None

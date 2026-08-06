@@ -26,6 +26,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.evidence.writers import write_json, write_text
 from robot_sf.planner.policy_stack_v1 import (
     PolicyStackV1Adapter,
     PolicyStackV1Config,
@@ -483,15 +484,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.out_dir is not None:
         args.out_dir.mkdir(parents=True, exist_ok=True)
-        (args.out_dir / "report.json").write_text(
-            json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
-        )
-        (args.out_dir / "report.md").write_text(_render_markdown(report), encoding="utf-8")
-        (args.out_dir / "summary.json").write_text(
-            json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        write_json(args.out_dir / "report.json", report)
+        write_text(args.out_dir / "report.md", _render_markdown(report), issue_ref="robot_sf#2869")
+        write_json(args.out_dir / "summary.json", summary)
         readme = _render_readme(report)
-        (args.out_dir / "README.md").write_text(readme, encoding="utf-8")
+        write_text(args.out_dir / "README.md", readme, issue_ref="robot_sf#2869")
     return 0
 
 

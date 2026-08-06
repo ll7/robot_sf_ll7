@@ -3,7 +3,7 @@ repos:
     # Ruff version. Keep in sync with `ruff` in pyproject.toml `[tool.ruff]`
     # required-version and the dev dependency pin; a mismatch fails the hook with
     # "Required version does not match the running version".
-    rev: v0.16.0
+    rev: v0.16.1
     hooks:
       # Run the linter.
       - id: ruff

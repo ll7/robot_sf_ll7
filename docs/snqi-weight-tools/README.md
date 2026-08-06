@@ -263,8 +263,8 @@ uv sync --all-extras
 For pure compute (no plots) you can use the core installation without extras. The SNQI tooling and CLI will run headless by default. Optional plotting and richer analysis require extras:
 
 - `--extra progress` for progress bars (tqdm)
-- `--extra viz` for plotting only (matplotlib + seaborn)
-- `--extra analysis` for full plotting/analysis (seaborn + matplotlib + pandas)
+- `--extra viz` for plotting (matplotlib + seaborn)
+- `--extra benchmark` for pandas-based analysis
 
 If visualization is requested without the required extras, commands will emit a clear message and exit with a distinct code. To stay minimal, omit extras entirely and avoid plot flags.
 

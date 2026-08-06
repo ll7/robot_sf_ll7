@@ -45,6 +45,7 @@ stability. The preflight artifact states prominently:
 ``NOT BENCHMARK EVIDENCE -- DISJOINT-SEED ACTIVATION CHECK ONLY``.
 """
 
+# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
 from __future__ import annotations
 
 import argparse
@@ -1846,7 +1847,7 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
         report["finished_at_utc"] = _utc_timestamp()
         _write_json_object(root / "runtime_preflight_report.json", report)
         raise
-    except Exception as exc:
+    except Exception as exc:  # campaign fail-closed boundary: record failure, re-raise (#6690)
         report["status"] = "failed"
         report["error"] = f"{type(exc).__name__}: {exc}"
         report["finished_at_utc"] = _utc_timestamp()
@@ -2203,7 +2204,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
             report["finished_at_utc"] = _utc_timestamp()
             _write_json_object(report_file, report)
         raise
-    except Exception as exc:
+    except Exception as exc:  # campaign fail-closed boundary: record failure, re-raise (#6690)
         report["status"] = "failed"
         report["error"] = f"{type(exc).__name__}: {exc}"
         report["finished_at_utc"] = _utc_timestamp()

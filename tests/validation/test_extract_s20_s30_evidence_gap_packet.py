@@ -1,5 +1,10 @@
 """Tests for the issue #3798 post-job S20/S30 evidence-gap packet extractor."""
 
+# evidence-writer-exempt: fixtures write throwaway tmp_path retrieval artifacts and
+# intentionally drifted packet fixtures (claim promotion, S30 authorization, stale counts)
+# that must stay unmarked to prove load_packet_fixture fails closed. Production writes
+# in the extractor itself are migrated to robot_sf.evidence.writers (#6512).
+
 from __future__ import annotations
 
 import csv
@@ -274,3 +279,34 @@ def test_packet_output_argument_writes_compact_json(tmp_path: Path) -> None:
     assert raw == json.dumps(loaded, indent=2, sort_keys=True) + "\n"
     assert loaded["schema_version"] == "s20-s30-evidence-gap-packet.v1"
     assert loaded["job_id"] == "13175"
+    assert loaded["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+
+
+def test_markdown_output_argument_writes_marked_packet(tmp_path: Path) -> None:
+    """The rendered --output path routes through the shared marked text writer."""
+    root = _write_complete_artifact_root(tmp_path / "13175")
+    output = tmp_path / "packet.md"
+
+    exit_code = extractor.main(
+        ["--artifact-root", str(root), "--job-id", "13175", "--output", str(output)]
+    )
+
+    assert exit_code == 0
+    text = output.read_text(encoding="utf-8")
+    assert text.splitlines()[0] == "<!-- AI-GENERATED (robot_sf#3798) - NEEDS-REVIEW -->"
+    assert "# Job 13175 S20/S30 Evidence-Gap Packet" in text
+
+
+def test_json_output_argument_writes_marked_json(tmp_path: Path) -> None:
+    """The --output --json path routes through the shared marked JSON writer."""
+    root = _write_complete_artifact_root(tmp_path / "13175")
+    output = tmp_path / "packet.json"
+
+    exit_code = extractor.main(
+        ["--artifact-root", str(root), "--job-id", "13175", "--json", "--output", str(output)]
+    )
+
+    assert exit_code == 0
+    loaded = json.loads(output.read_text(encoding="utf-8"))
+    assert loaded["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert loaded["schema_version"] == "s20-s30-evidence-gap-packet.v1"

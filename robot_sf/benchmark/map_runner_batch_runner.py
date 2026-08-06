@@ -149,7 +149,7 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
                 last_signature = None
                 consecutive_failures = 0
                 first_fail_index = None
-            except Exception as exc:  # pragma: no cover - error path
+            except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation
                 logger.exception(
                     "Map batch worker failed in serial execution: scenario={} seed={}",
                     scenario_id(scenario),
@@ -262,7 +262,7 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
                     adapter_adapted_steps=adapter_adapted_steps,
                 )
                 results_by_idx[idx] = rec
-            except Exception as exc:  # pragma: no cover
+            except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation
                 logger.exception(
                     "Map batch worker failed in parallel execution: scenario={} seed={}",
                     scenario_id(scenario),
@@ -282,7 +282,7 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
                 write_validated_to_handle(handle, schema, results_by_idx[idx])
                 wrote += 1
                 episode_records.append(results_by_idx[idx])
-            except Exception as exc:  # pragma: no cover - write/validate path
+            except Exception as exc:  # pragma: no cover  # noqa: BLE001 - fail-closed write path
                 rec = results_by_idx[idx]
                 logger.exception(
                     (

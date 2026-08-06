@@ -68,6 +68,8 @@ from robot_sf.benchmark.social_compliance import build_social_compliance_episode
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from robot_sf.benchmark.passing_clearance import PassingClearanceContract
+
 
 ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
@@ -743,7 +745,8 @@ def time_to_goal_norm(data: EpisodeData, horizon: int) -> float:
         Normalized time to goal (0.0-1.0), or 1.0 if not successful.
     """
     if success_rate(data, horizon=horizon) == 1.0:
-        assert data.reached_goal_step is not None
+        if data.reached_goal_step is None:
+            raise RuntimeError("successful episode has no recorded goal step")
         return float(data.reached_goal_step) / float(horizon)
     return 1.0
 
@@ -756,7 +759,8 @@ def time_to_goal_norm_success_only(data: EpisodeData, horizon: int) -> float:
     """
     if success_rate(data, horizon=horizon) != 1.0:
         return float("nan")
-    assert data.reached_goal_step is not None
+    if data.reached_goal_step is None:
+        raise RuntimeError("successful episode has no recorded goal step")
     return float(data.reached_goal_step) / float(horizon)
 
 
@@ -3120,6 +3124,7 @@ def compute_all_metrics(  # noqa: PLR0913
     social_proxemic_radius_m: float = 1.2,
     human_proxy_yield_speed_mps: float = 0.15,
     social_compliance_comfort_radius_m: float = 1.2,
+    passing_clearance_contract: PassingClearanceContract | dict[str, Any] | None = None,
     control_data: EpisodeData | None = None,
 ) -> dict[str, Any]:
     """Compute all defined metrics for an episode and return them as a mapping.
@@ -3177,6 +3182,7 @@ def compute_all_metrics(  # noqa: PLR0913
     values["social_compliance"] = build_social_compliance_episode_block(
         data,
         comfort_radius_m=social_compliance_comfort_radius_m,
+        passing_clearance_contract=passing_clearance_contract,
     )
     return values
 

@@ -26,6 +26,9 @@ pin_thread_env_for_determinism()
 
 from loguru import logger  # noqa: E402
 
+from robot_sf.benchmark.camera_ready._config import (  # noqa: E402
+    RadiusSweepBindingPreflightError,
+)
 from robot_sf.benchmark.camera_ready_campaign import (  # noqa: E402
     load_campaign_config,
     prepare_campaign_preflight,
@@ -199,8 +202,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "fallback_or_degraded_rows": 0,
             },
         }
+    except RadiusSweepBindingPreflightError as exc:
+        result = {
+            "mode": args.mode,
+            "status": "radius_binding_preflight_failed",
+            "status_reason": str(exc),
+            "benchmark_success": False,
+            "exit_code": 2,
+            "campaign_execution_status": "failed",
+            "evidence_status": "blocked",
+            "row_status_summary": {
+                "successful_evidence_rows": 0,
+                "accepted_unavailable_rows": 0,
+                "unexpected_failed_rows": 0,
+                "fallback_or_degraded_rows": 0,
+            },
+        }
     print(json.dumps(result, indent=2))
-    if args.mode == "preflight" and result.get("status") != "orca_preflight_failed":
+    if args.mode == "preflight" and result.get("status") not in {
+        "orca_preflight_failed",
+        "radius_binding_preflight_failed",
+    }:
         return 0
     exit_code = campaign_exit_code(result)
     # Issue #5244: emit the post-campaign stage-status envelope so downstream

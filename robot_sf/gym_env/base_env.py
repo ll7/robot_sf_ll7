@@ -31,6 +31,8 @@ if TYPE_CHECKING:
     from robot_sf.render.jsonl_recording import JSONLRecorder
     from robot_sf.render.sim_view import SimulationView
 
+__all__ = ["BaseEnv", "attach_planner_to_map"]
+
 
 def _make_jsonl_recorder(**kwargs):
     """Create a JSONL recorder without importing recording/render modules on normal env startup.

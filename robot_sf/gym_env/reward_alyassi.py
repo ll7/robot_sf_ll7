@@ -21,6 +21,13 @@ if TYPE_CHECKING:
 
 _DENOMINATOR_GUARD_EPSILON: float = 1e-6
 
+__all__ = [
+    "AlyassiRewardWeights",
+    "alyassi_component_citations",
+    "alyassi_component_scores",
+    "alyassi_reward",
+]
+
 
 @dataclass(frozen=True)
 class AlyassiRewardWeights:

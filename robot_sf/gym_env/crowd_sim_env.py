@@ -23,6 +23,8 @@ from robot_sf.sim.simulator import Simulator
 if TYPE_CHECKING:
     from robot_sf.render.sim_view import SimulationView
 
+__all__ = ["CrowdSimEnv", "CrowdSimulationConfig"]
+
 
 @dataclass
 class CrowdSimulationConfig:

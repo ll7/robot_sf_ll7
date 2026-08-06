@@ -878,3 +878,10 @@ def _parse_bool(value: Any, *, name: str) -> bool:
         if normalized in {"false", "0", "no", "off"}:
             return False
     raise ValueError(f"{name} must be a boolean")
+
+
+__all__ = [
+    "DWAPlannerAdapter",
+    "DWAPlannerConfig",
+    "build_dwa_config",
+]

@@ -5,7 +5,7 @@
 # 1. Runs preflight config check.
 # 2. Runs canary check (seed 101, 6/6 target arm eligibility).
 # 3. Stops immediately if canary eligibility fails.
-# 4. Runs full production compute campaign only after canary succeeds.
+# 4. Runs only the frozen held-out production phase after canary succeeds.
 #
 #SBATCH --job-name=mpc-tuning-sensitivity
 #SBATCH --nodes=1
@@ -74,10 +74,11 @@ if [[ ${CANARY_EXIT} -ne 0 ]]; then
   exit "${CANARY_EXIT}"
 fi
 
-# --- Phase 3: Production Compute Campaign ---
-echo "== Phase 3: Launching Production Compute Campaign =="
+# --- Phase 3: Held-Out Production Compute Campaign ---
+echo "== Phase 3: Launching Frozen Held-Out Production Campaign =="
 uv run python scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py \
   --config "${CONFIG_PATH}" \
+  --phase held_out \
   --out-dir "${OUT_DIR}"
 
 echo "== Campaign Completed Successfully =="

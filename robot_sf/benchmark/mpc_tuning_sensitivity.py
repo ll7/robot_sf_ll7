@@ -24,9 +24,16 @@ from robot_sf.training.scenario_loader import load_scenarios
 CONFIG_SCHEMA = "issue_5579_mpc_tuning_sensitivity.v1"
 REPORT_SCHEMA = "issue_5579_mpc_tuning_sensitivity_report.v1"
 TARGET_ARM_KEYS = ("prediction_mpc", "prediction_mpc_cbf")
+INCUMBENT_ARM_KEYS = (
+    "scenario_adaptive_hybrid_orca_v1",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard",
+    "hybrid_rule_v3_fast_progress_static_escape",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous",
+)
 TOP_PARAMETERS = ("max_linear_speed", "horizon_steps", "pedestrian_safety_margin")
 VALID_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 VALID_READINESS_STATUSES = frozenset({"native", "adapter"})
+NATIVE_SOLVER_PLANNER = "PredictionMPCPlannerAdapter"
 
 
 def load_sensitivity_config(path: str | Path, *, repo_root: Path | None = None) -> dict[str, Any]:
@@ -65,31 +72,36 @@ def validate_sensitivity_config(
         raise ValueError("claim_boundary must retain the diagnostic/no-ranking boundary")
     _validate_execution_boundary(config.get("execution_boundary"))
     _validate_scenario_scope(config.get("scenario_scope"), repo_root=root)
-    if "tuning_scope" in config:
-        _validate_tuning_scope(config.get("tuning_scope"), repo_root=root)
-    if "held_out_scope" in config:
-        _validate_held_out_scope(config.get("held_out_scope"), repo_root=root)
-    if "canary" in config:
-        _validate_canary(config.get("canary"))
+    for required_section in ("tuning_scope", "held_out_scope", "canary", "inference"):
+        if required_section not in config:
+            raise ValueError(f"{required_section} section is required")
+    _validate_tuning_scope(
+        config.get("tuning_scope"), repo_root=root, scenario_scope=config["scenario_scope"]
+    )
+    _validate_held_out_scope(
+        config.get("held_out_scope"),
+        repo_root=root,
+        scenario_scope=config["scenario_scope"],
+        tuning_scope=config["tuning_scope"],
+    )
+    _validate_canary(config.get("canary"))
     _validate_arm_list(config.get("target_arms"), expected=TARGET_ARM_KEYS, repo_root=root)
     _validate_arm_list(
         config.get("incumbent_arms"),
-        expected=(
-            "scenario_adaptive_hybrid_orca_v1",
-            "scenario_adaptive_hybrid_orca_v2_collision_guard",
-            "hybrid_rule_v3_fast_progress_static_escape",
-            "hybrid_rule_v3_fast_progress_static_escape_continuous",
-        ),
+        expected=INCUMBENT_ARM_KEYS,
         repo_root=root,
     )
     _validate_search(config.get("search"))
     _validate_comparison(config.get("comparison"))
+    _validate_inference(config.get("inference"))
     return config
 
 
-def selected_scenarios(config: Mapping[str, Any], *, repo_root: Path) -> list[dict[str, Any]]:
-    """Return the exact fixed scenario subset with paired seeds materialized."""
-    scope = _mapping(config.get("scenario_scope"), "scenario_scope")
+def selected_scenarios(
+    config: Mapping[str, Any], *, repo_root: Path, scope_name: str = "scenario_scope"
+) -> list[dict[str, Any]]:
+    """Return one declared fixed scenario scope with paired seeds materialized."""
+    scope = _mapping(config.get(scope_name), scope_name)
     source = _repo_path(str(scope["source_matrix"]), repo_root)
     rows = load_scenarios(source, base_dir=source)
     by_name = {str(row.get("name")): dict(row) for row in rows}
@@ -157,7 +169,11 @@ def config_hash(config: Mapping[str, Any]) -> str:
 
 
 def normalize_episode_record(
-    record: Mapping[str, Any], *, arm_key: str, candidate_id: str
+    record: Mapping[str, Any],
+    *,
+    arm_key: str,
+    candidate_id: str,
+    expected_config_hash: str | None = None,
 ) -> dict[str, Any]:
     """Normalize one runner row while preserving explicit availability provenance.
 
@@ -191,6 +207,9 @@ def normalize_episode_record(
         if isinstance(algorithm_metadata, Mapping)
         else None
     )
+    solver_evidence = _native_solver_evidence(
+        algorithm_metadata, expected_config_hash=expected_config_hash
+    )
     return {
         "arm_key": arm_key,
         "candidate_id": candidate_id,
@@ -208,6 +227,15 @@ def normalize_episode_record(
             availability["benchmark_success"], field="benchmark_success"
         ),
         "planner_runtime_status": _planner_runtime_status(planner_runtime),
+        "solver_execution_mode": solver_evidence["solver_execution_mode"],
+        "valid_solver_provenance": solver_evidence["valid_solver_provenance"],
+        "finite_commands": solver_evidence["finite_commands"],
+        "solver_successes": solver_evidence["solver_successes"],
+        "solver_failures": solver_evidence["solver_failures"],
+        "fallback_stop_count": solver_evidence["fallback_stop_count"],
+        "control_updates": solver_evidence["control_updates"],
+        "native_solver_eligible": solver_evidence["native_solver_eligible"],
+        "native_solver_exclusion_reasons": solver_evidence["exclusion_reasons"],
     }
 
 
@@ -220,6 +248,7 @@ def analyze_results(
     run_commit: str,
     reproduction_command: str,
     raw_artifact_root: str,
+    scope_name: str = "scenario_scope",
 ) -> dict[str, Any]:
     """Build a fail-closed best-of-20 report from normalized episode rows.
 
@@ -228,7 +257,7 @@ def analyze_results(
     """
     validated = validate_sensitivity_config(config, repo_root=repo_root)
     plan = build_candidate_plan(validated, repo_root=repo_root)
-    scenario_scope = validated["scenario_scope"]
+    scenario_scope = _mapping(validated.get(scope_name), scope_name)
     expected_keys = {
         (entry["arm_key"], entry["candidate_id"], scenario_id, int(seed))
         for entry in plan
@@ -299,6 +328,7 @@ def analyze_results(
         "run_commit": run_commit,
         "reproduction_command": reproduction_command,
         "raw_artifact_root": raw_artifact_root,
+        "execution_scope_name": scope_name,
         "scenario_scope": deepcopy(dict(scenario_scope)),
         "candidate_count": int(validated["search"]["candidate_count"]),
         "target_arm_count": len(validated["target_arms"]),
@@ -455,12 +485,28 @@ def compute_scenario_list_hash(scenario_ids: Sequence[str]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _validate_tuning_scope(value: Any, *, repo_root: Path) -> None:
-    """Validate tuning_scope containing 3 scenario IDs, seeds [101, 102, 103], and scenario_list_hash."""
+def _source_scenario_ids(source: Path) -> list[str]:
+    """Return sorted unique scenario IDs from a declared source matrix."""
+    rows = load_scenarios(source, base_dir=source)
+    scenario_ids = [str(row.get("name", "")) for row in rows]
+    if not scenario_ids or any(not scenario_id for scenario_id in scenario_ids):
+        raise ValueError(f"scenario source has missing scenario IDs: {source}")
+    if len(set(scenario_ids)) != len(scenario_ids):
+        raise ValueError(f"scenario source has duplicate scenario IDs: {source}")
+    return sorted(scenario_ids)
+
+
+def _validate_tuning_scope(
+    value: Any, *, repo_root: Path, scenario_scope: Mapping[str, Any]
+) -> None:
+    """Validate the frozen tuning scope against the primary three-scenario scope."""
     scope = _mapping(value, "tuning_scope")
     source = _repo_path(str(scope.get("source_matrix", "")), repo_root)
     if not source.is_file():
         raise ValueError(f"tuning_scope.source_matrix does not exist: {source}")
+    scenario_source = _repo_path(str(scenario_scope.get("source_matrix", "")), repo_root)
+    if source.resolve() != scenario_source.resolve():
+        raise ValueError("tuning_scope.source_matrix must match scenario_scope.source_matrix")
     scenario_ids = scope.get("scenario_ids")
     if not isinstance(scenario_ids, list) or len(scenario_ids) != 3:
         raise ValueError("tuning_scope.scenario_ids must contain exactly three scenarios")
@@ -468,9 +514,17 @@ def _validate_tuning_scope(value: Any, *, repo_root: Path) -> None:
         isinstance(item, str) and item.strip() for item in scenario_ids
     ):
         raise ValueError("tuning_scope.scenario_ids must be unique non-empty strings")
+    if scenario_ids != scenario_scope.get("scenario_ids"):
+        raise ValueError("tuning_scope.scenario_ids must exactly match scenario_scope.scenario_ids")
     seeds = scope.get("seeds")
     if seeds != [101, 102, 103]:
         raise ValueError("tuning_scope.seeds must be [101, 102, 103]")
+    if seeds != scenario_scope.get("seeds"):
+        raise ValueError("tuning_scope.seeds must exactly match scenario_scope.seeds")
+    source_ids = _source_scenario_ids(source)
+    missing = sorted(set(scenario_ids) - set(source_ids))
+    if missing:
+        raise ValueError(f"tuning_scope.scenario_ids are absent from source matrix: {missing}")
     scenario_list_hash = str(scope.get("scenario_list_hash", "")).strip()
     expected_hash = compute_scenario_list_hash(scenario_ids)
     if scenario_list_hash != expected_hash:
@@ -480,20 +534,67 @@ def _validate_tuning_scope(value: Any, *, repo_root: Path) -> None:
         )
 
 
-def _validate_held_out_scope(value: Any, *, repo_root: Path) -> None:
-    """Validate held_out_scope with seeds [111..120] and frozen scenario exclusion list."""
+def _validate_held_out_scope(
+    value: Any,
+    *,
+    repo_root: Path,
+    scenario_scope: Mapping[str, Any],
+    tuning_scope: Mapping[str, Any],
+) -> None:
+    """Validate the literal held-out matrix and its frozen exclusion/hash contract."""
     scope = _mapping(value, "held_out_scope")
     source = _repo_path(str(scope.get("source_matrix", "")), repo_root)
     if not source.is_file():
         raise ValueError(f"held_out_scope.source_matrix does not exist: {source}")
+    scenario_source = _repo_path(str(scenario_scope.get("source_matrix", "")), repo_root)
+    if source.resolve() != scenario_source.resolve():
+        raise ValueError("held_out_scope.source_matrix must match scenario_scope.source_matrix")
+    if str(scope.get("seed_set", "")) != "paper_eval_s10":
+        raise ValueError("held_out_scope.seed_set must be 'paper_eval_s10'")
     seeds = scope.get("seeds")
     expected_seeds = list(range(111, 121))
     if seeds != expected_seeds:
         raise ValueError(f"held_out_scope.seeds must be {expected_seeds}")
+    _validate_scope_execution_settings(scope, scenario_scope)
+    _validate_held_out_matrix(scope, source, tuning_scope)
+
+
+def _validate_scope_execution_settings(
+    scope: Mapping[str, Any], scenario_scope: Mapping[str, Any]
+) -> None:
+    """Require held-out execution settings to match the declared tuning settings."""
+    if int(scope.get("horizon", 0)) != int(scenario_scope.get("horizon", 0)):
+        raise ValueError("held_out_scope.horizon must match scenario_scope.horizon")
+    if float(scope.get("dt", 0.0)) != float(scenario_scope.get("dt", 0.0)):
+        raise ValueError("held_out_scope.dt must match scenario_scope.dt")
+    if int(scope.get("workers", 0)) != int(scenario_scope.get("workers", 0)):
+        raise ValueError("held_out_scope.workers must match scenario_scope.workers")
+
+
+def _validate_held_out_matrix(
+    scope: Mapping[str, Any], source: Path, tuning_scope: Mapping[str, Any]
+) -> None:
+    """Require the held-out IDs and hash to equal the source minus tuning IDs."""
     excluded = scope.get("excluded_scenarios")
-    if not isinstance(excluded, list) or len(excluded) == 0:
+    expected_excluded = list(tuning_scope.get("scenario_ids", []))
+    if excluded != expected_excluded:
         raise ValueError(
-            "held_out_scope.excluded_scenarios must be a non-empty list of scenario IDs"
+            "held_out_scope.excluded_scenarios must exactly match tuning_scope.scenario_ids"
+        )
+    source_ids = _source_scenario_ids(source)
+    expected_held_out = sorted(set(source_ids) - set(expected_excluded))
+    scenario_ids = scope.get("scenario_ids")
+    if scenario_ids != expected_held_out:
+        raise ValueError(
+            "held_out_scope.scenario_ids must exactly match the source matrix minus "
+            "tuning_scope.scenario_ids"
+        )
+    scenario_list_hash = str(scope.get("scenario_list_hash", "")).strip()
+    expected_hash = compute_scenario_list_hash(expected_held_out)
+    if scenario_list_hash != expected_hash:
+        raise ValueError(
+            f"held_out_scope.scenario_list_hash ({scenario_list_hash!r}) does not match "
+            f"the frozen eligible matrix hash ({expected_hash!r})"
         )
 
 
@@ -504,6 +605,61 @@ def _validate_canary(value: Any) -> None:
         raise ValueError("canary.seed must be 101")
     if canary.get("required_eligible_episodes") != 6:
         raise ValueError("canary.required_eligible_episodes must be 6")
+    if canary.get("target_eligible_ratio") != "6/6":
+        raise ValueError("canary.target_eligible_ratio must be '6/6'")
+    if canary.get("stop_on_ineligible") is not True:
+        raise ValueError("canary.stop_on_ineligible must be true")
+
+
+def _validate_inference(value: Any) -> None:
+    """Validate the paired held-out bootstrap and eight-contrast correction contract."""
+    inference = _mapping(value, "inference")
+    if inference.get("inference_population") != "fixed_declared_held_out_suite":
+        raise ValueError("inference.inference_population must be fixed_declared_held_out_suite")
+    if inference.get("estimand") != "paired_delta":
+        raise ValueError("inference.estimand must be paired_delta")
+    if inference.get("primary_metric") != "route_complete_and_collision_free":
+        raise ValueError("inference.primary_metric must match comparison.primary_metric")
+    if inference.get("resampling_unit") != "paired_seed_block":
+        raise ValueError("inference.resampling_unit must be paired_seed_block")
+    _validate_bootstrap(inference.get("bootstrap"))
+    _validate_multiplicity(inference.get("multiplicity"))
+
+
+def _validate_bootstrap(value: Any) -> None:
+    """Validate the paired seed-block percentile bootstrap settings."""
+    bootstrap = _mapping(value, "inference.bootstrap")
+    if bootstrap.get("method") != "paired_seed_block_percentile_bootstrap":
+        raise ValueError(
+            "inference.bootstrap.method must be paired_seed_block_percentile_bootstrap"
+        )
+    if bootstrap.get("confidence_level") != 0.95:
+        raise ValueError("inference.bootstrap.confidence_level must be 0.95")
+    if not _is_int(bootstrap.get("replicates")) or int(bootstrap["replicates"]) <= 0:
+        raise ValueError("inference.bootstrap.replicates must be a positive integer")
+
+
+def _validate_multiplicity(value: Any) -> None:
+    """Validate Holm-Bonferroni correction across the eight declared contrasts."""
+    multiplicity = _mapping(value, "inference.multiplicity")
+    if multiplicity.get("method") != "holm_bonferroni":
+        raise ValueError("inference.multiplicity.method must be holm_bonferroni")
+    if multiplicity.get("family") != "target_arm_vs_incumbent_arm":
+        raise ValueError("inference.multiplicity.family must be target_arm_vs_incumbent_arm")
+    if multiplicity.get("familywise_alpha") != 0.05:
+        raise ValueError("inference.multiplicity.familywise_alpha must be 0.05")
+    if multiplicity.get("contrast_count") != 8:
+        raise ValueError("inference.multiplicity.contrast_count must be 8")
+    contrasts = multiplicity.get("contrasts")
+    expected_contrasts = [
+        {"target_arm": target_arm, "incumbent_arm": incumbent_arm}
+        for target_arm in TARGET_ARM_KEYS
+        for incumbent_arm in INCUMBENT_ARM_KEYS
+    ]
+    if contrasts != expected_contrasts:
+        raise ValueError(
+            "inference.multiplicity.contrasts must declare each target/incumbent pair exactly once"
+        )
 
 
 def _validate_arm_list(value: Any, *, expected: Sequence[str], repo_root: Path) -> None:
@@ -716,6 +872,315 @@ def _build_read(
     }
 
 
+def _native_solver_evidence(value: Any, *, expected_config_hash: str | None) -> dict[str, Any]:
+    """Extract strict native-solver evidence from one raw algorithm metadata mapping.
+
+    Returns:
+        A normalized strict-evidence mapping used by the canary gate.
+    """
+    if not isinstance(value, Mapping):
+        return _missing_solver_evidence()
+    kinematics = value.get("planner_kinematics")
+    runtime = value.get("planner_runtime")
+    kinematics = kinematics if isinstance(kinematics, Mapping) else {}
+    runtime = runtime if isinstance(runtime, Mapping) else {}
+    solver_execution_mode, identity_reasons = _solver_identity(value, kinematics, runtime)
+    valid_provenance, provenance_reasons = _solver_provenance(value, expected_config_hash)
+    runtime_evidence = _solver_runtime_evidence(runtime)
+    reasons = identity_reasons + provenance_reasons + runtime_evidence["exclusion_reasons"]
+    return {
+        "solver_execution_mode": solver_execution_mode,
+        "valid_solver_provenance": valid_provenance,
+        "finite_commands": runtime_evidence["finite_commands"],
+        "solver_successes": runtime_evidence["solver_successes"],
+        "solver_failures": runtime_evidence["solver_failures"],
+        "fallback_stop_count": runtime_evidence["fallback_stop_count"],
+        "control_updates": runtime_evidence["control_updates"],
+        "native_solver_eligible": not reasons,
+        "exclusion_reasons": sorted(set(reasons)),
+    }
+
+
+def _missing_solver_evidence() -> dict[str, Any]:
+    """Return the fail-closed evidence shape for missing algorithm metadata."""
+    return {
+        "solver_execution_mode": "unknown",
+        "valid_solver_provenance": False,
+        "finite_commands": False,
+        "solver_successes": None,
+        "solver_failures": None,
+        "fallback_stop_count": None,
+        "control_updates": None,
+        "native_solver_eligible": False,
+        "exclusion_reasons": ["algorithm_metadata_missing"],
+    }
+
+
+def _solver_identity(
+    value: Mapping[str, Any],
+    kinematics: Mapping[str, Any],
+    runtime: Mapping[str, Any],
+) -> tuple[str, list[str]]:
+    """Validate the declared planner identity and native solver execution mode.
+
+    Returns:
+        The normalized solver mode and any identity exclusion reasons.
+    """
+    adapter_name = str(kinematics.get("adapter_name", "")).strip()
+    solver_mode = (
+        str(
+            runtime.get("solver_execution_mode")
+            or kinematics.get("solver_execution_mode")
+            or value.get("solver_execution_mode")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
+    if not solver_mode and adapter_name == NATIVE_SOLVER_PLANNER:
+        solver_mode = "native"
+    reasons: list[str] = []
+    if solver_mode != "native":
+        reasons.append("native_solver_execution_missing")
+    if adapter_name != NATIVE_SOLVER_PLANNER:
+        reasons.append("unexpected_solver_planner")
+    if kinematics.get("supports_native_commands") is not True:
+        reasons.append("native_commands_unsupported")
+    if str(kinematics.get("execution_mode", "")).strip().lower() == "mixed":
+        reasons.append("mixed_execution")
+    return solver_mode or "unknown", reasons
+
+
+def _solver_provenance(
+    value: Mapping[str, Any], expected_config_hash: str | None
+) -> tuple[bool, list[str]]:
+    """Validate effective algorithm config identity and the expected candidate hash.
+
+    Returns:
+        A validity flag and any provenance exclusion reasons.
+    """
+    effective_config = value.get("config")
+    metadata_hash = value.get("config_hash")
+    valid = (
+        isinstance(effective_config, Mapping)
+        and isinstance(metadata_hash, str)
+        and bool(metadata_hash)
+        and config_hash(effective_config) == metadata_hash
+    )
+    if expected_config_hash is not None and metadata_hash != expected_config_hash:
+        valid = False
+    return valid, [] if valid else ["solver_provenance_invalid"]
+
+
+def _solver_runtime_evidence(runtime: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate solver counters, finite commands, and a successful control update.
+
+    Returns:
+        Normalized counters, command evidence, and exclusion reasons.
+    """
+    solver_successes = _optional_counter(runtime.get("solver_successes"))
+    solver_failures = _optional_counter(runtime.get("solver_failures"))
+    fallback_stop_count = _optional_counter(runtime.get("fallback_stop_count"))
+    control_updates = _control_update_count(runtime)
+    finite_commands = _finite_command_evidence(runtime)
+    reasons = _solver_counter_reasons(
+        solver_successes, solver_failures, fallback_stop_count, runtime
+    )
+    if not finite_commands:
+        reasons.append("commands_not_finite")
+    if control_updates is None or control_updates < 1:
+        reasons.append("control_update_missing")
+    return {
+        "finite_commands": finite_commands,
+        "solver_successes": solver_successes,
+        "solver_failures": solver_failures,
+        "fallback_stop_count": fallback_stop_count,
+        "control_updates": control_updates,
+        "exclusion_reasons": reasons,
+    }
+
+
+def _solver_counter_reasons(
+    solver_successes: int | None,
+    solver_failures: int | None,
+    fallback_stop_count: int | None,
+    runtime: Mapping[str, Any],
+) -> list[str]:
+    """Return counter and fallback exclusion reasons for strict solver evidence."""
+    reasons: list[str] = []
+    if solver_successes is None:
+        reasons.append("solver_successes_missing")
+    elif solver_successes < 1:
+        reasons.append("solver_update_missing")
+    if solver_failures is None:
+        reasons.append("solver_failures_missing")
+    elif solver_failures > 0:
+        reasons.append("solver_failure")
+    if fallback_stop_count is None:
+        reasons.append("fallback_stop_count_missing")
+    elif fallback_stop_count > 0:
+        reasons.append("fallback")
+    fallback_count = _optional_counter(runtime.get("fallback_count"))
+    if fallback_count is not None and fallback_count > 0:
+        reasons.append("fallback")
+    if runtime.get("fallback_triggered") is True:
+        reasons.append("fallback")
+    return reasons
+
+
+def _finite_command_evidence(runtime: Mapping[str, Any]) -> bool:
+    """Require finite linear and angular command summaries.
+
+    Returns:
+        True when both command summaries are finite and no explicit false marker is present.
+    """
+    finite = all(
+        _finite_number(runtime.get(field)) for field in ("mean_abs_linear", "mean_abs_angular")
+    )
+    return finite and runtime.get("commands_finite") is not False
+
+
+def _control_update_count(runtime: Mapping[str, Any]) -> int | None:
+    """Return successful control updates, using the runner's nonzero-command counter fallback."""
+    count = _optional_counter(
+        runtime.get("successful_control_updates", runtime.get("control_updates"))
+    )
+    return count if count is not None else _optional_counter(runtime.get("nonzero_command_count"))
+
+
+def validate_canary_rows(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    scenario_ids: Sequence[str],
+    seed: int,
+    required_eligible: int,
+    target_arm_keys: Sequence[str] = TARGET_ARM_KEYS,
+    candidate_id: str = "incumbent",
+) -> dict[str, Any]:
+    """Apply the exact native-solver canary gate to normalized rows.
+
+    The outer benchmark execution may be an adapter, but an adapter label alone is never
+    sufficient. Each row must carry native solver evidence, valid effective-config provenance,
+    finite commands, and a successful solver/control update. The expected two-arm by three-
+    scenario key set is closed before any production phase can proceed.
+
+    Returns:
+        A status mapping containing exact-key, eligibility, and exclusion diagnostics.
+    """
+    expected_keys = {
+        (str(arm_key), str(candidate_id), str(scenario_id), int(seed))
+        for arm_key in target_arm_keys
+        for scenario_id in scenario_ids
+    }
+    seen: set[tuple[str, str, str, int]] = set()
+    duplicate_keys: list[tuple[str, str, str, int]] = []
+    unexpected_keys: list[tuple[str, str, str, int]] = []
+    invalid_rows: list[dict[str, Any]] = []
+    eligible_keys: set[tuple[str, str, str, int]] = set()
+    for raw_row in rows:
+        row = dict(raw_row)
+        key = (
+            str(row.get("arm_key", "")),
+            str(row.get("candidate_id", "")),
+            str(row.get("scenario_id", "")),
+            int(row["seed"]) if _is_int(row.get("seed")) else -1,
+        )
+        if key in seen:
+            duplicate_keys.append(key)
+            continue
+        seen.add(key)
+        if key not in expected_keys:
+            unexpected_keys.append(key)
+            continue
+        reasons = _canary_exclusion_reasons(row)
+        if reasons:
+            invalid_rows.append({"key": key, "reasons": reasons})
+        else:
+            eligible_keys.add(key)
+
+    missing_keys = sorted(expected_keys - seen)
+    expected_count_mismatch = len(expected_keys) != int(required_eligible)
+    status = (
+        "ok"
+        if not expected_count_mismatch
+        and len(rows) == len(expected_keys)
+        and not duplicate_keys
+        and not unexpected_keys
+        and not missing_keys
+        and len(eligible_keys) == int(required_eligible)
+        else "failed"
+    )
+    return {
+        "status": status,
+        "eligible_episodes": len(eligible_keys),
+        "total_episodes": len(rows),
+        "required_eligible": int(required_eligible),
+        "expected_episodes": len(expected_keys),
+        "missing_keys": [list(key) for key in missing_keys],
+        "duplicate_keys": [list(key) for key in sorted(set(duplicate_keys))],
+        "unexpected_keys": [list(key) for key in sorted(set(unexpected_keys))],
+        "invalid_rows": invalid_rows,
+        "target_eligible_ratio": f"{len(eligible_keys)}/{len(rows)}",
+    }
+
+
+def _canary_exclusion_reasons(row: Mapping[str, Any]) -> list[str]:
+    """Return every strict canary predicate that a row fails."""
+    reasons = _canary_availability_reasons(row) + _canary_solver_reasons(row)
+    if row.get("native_solver_exclusion_reasons"):
+        reasons.extend(str(reason) for reason in row["native_solver_exclusion_reasons"])
+    return sorted(set(reasons))
+
+
+def _canary_availability_reasons(row: Mapping[str, Any]) -> list[str]:
+    """Return outer native-execution and availability canary failures."""
+    reasons: list[str] = []
+    if not _eligible(row):
+        reasons.append("availability_or_runtime_ineligible")
+    if str(row.get("execution_mode", "")).strip().lower() != "native":
+        reasons.append("execution_mode_not_native")
+    if str(row.get("readiness_status", "")).strip().lower() != "native":
+        reasons.append("readiness_status_not_native")
+    return reasons
+
+
+def _canary_solver_reasons(row: Mapping[str, Any]) -> list[str]:
+    """Return native solver, provenance, finite-command, and update failures."""
+    return _canary_solver_identity_reasons(row) + _canary_solver_runtime_reasons(row)
+
+
+def _canary_solver_identity_reasons(row: Mapping[str, Any]) -> list[str]:
+    """Return native solver mode and provenance failures."""
+    reasons: list[str] = []
+    if row.get("native_solver_eligible") is not True:
+        reasons.append("native_solver_evidence_ineligible")
+    if row.get("solver_execution_mode") != "native":
+        reasons.append("native_solver_execution_missing")
+    if row.get("valid_solver_provenance") is not True:
+        reasons.append("solver_provenance_invalid")
+    if row.get("finite_commands") is not True:
+        reasons.append("commands_not_finite")
+    return reasons
+
+
+def _canary_solver_runtime_reasons(row: Mapping[str, Any]) -> list[str]:
+    """Return solver counter and control-update failures."""
+    reasons: list[str] = []
+    if not _is_int(row.get("solver_successes")) or int(row["solver_successes"]) < 1:
+        reasons.append("solver_update_missing")
+    if not _is_int(row.get("control_updates")) or int(row["control_updates"]) < 1:
+        reasons.append("control_update_missing")
+    if not _is_int(row.get("solver_failures")):
+        reasons.append("solver_failures_missing")
+    elif int(row["solver_failures"]) > 0:
+        reasons.append("solver_failure")
+    if not _is_int(row.get("fallback_stop_count")):
+        reasons.append("fallback_stop_count_missing")
+    elif int(row["fallback_stop_count"]) > 0:
+        reasons.append("fallback")
+    return reasons
+
+
 def _eligible(row: Mapping[str, Any]) -> bool:
     """Report whether a row meets every fail-closed eligibility requirement.
 
@@ -807,6 +1272,13 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _optional_counter(value: Any) -> int | None:
+    """Return a non-negative integer counter, or None when evidence is absent/invalid."""
+    if not _is_int(value) or int(value) < 0:
+        return None
+    return int(value)
+
+
 def _finite_number(value: Any) -> bool:
     """Report whether a value is a finite integer or float, excluding booleans.
 
@@ -841,6 +1313,8 @@ def _format_rate(value: Any) -> str:
 
 __all__ = [
     "CONFIG_SCHEMA",
+    "INCUMBENT_ARM_KEYS",
+    "NATIVE_SOLVER_PLANNER",
     "REPORT_SCHEMA",
     "TARGET_ARM_KEYS",
     "TOP_PARAMETERS",
@@ -852,6 +1326,7 @@ __all__ = [
     "load_sensitivity_config",
     "normalize_episode_record",
     "selected_scenarios",
+    "validate_canary_rows",
     "validate_sensitivity_config",
     "write_report",
 ]

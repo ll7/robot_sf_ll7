@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -12,9 +13,12 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     analyze_results,
     build_candidate_plan,
     compute_scenario_list_hash,
+    config_hash,
     load_sensitivity_config,
     normalize_episode_record,
     selected_scenarios,
+    validate_canary_rows,
+    validate_sensitivity_config,
     write_report,
 )
 from scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 import _display_path
@@ -44,11 +48,43 @@ def test_packet_freezes_two_target_arms_three_parameters_and_twenty_points() -> 
 
     held_out = config["held_out_scope"]
     assert held_out["seeds"] == list(range(111, 121))
+    assert len(held_out["scenario_ids"]) == 45
+    assert held_out["scenario_ids"] == sorted(held_out["scenario_ids"])
+    assert held_out["scenario_list_hash"] == compute_scenario_list_hash(held_out["scenario_ids"])
     assert held_out["excluded_scenarios"] == tuning["scenario_ids"]
+    assert len(selected_scenarios(config, repo_root=ROOT, scope_name="held_out_scope")) == 45
 
     canary = config["canary"]
     assert canary["seed"] == 101
     assert canary["required_eligible_episodes"] == 6
+    assert canary["stop_on_ineligible"] is True
+
+    inference = config["inference"]
+    assert inference["resampling_unit"] == "paired_seed_block"
+    assert inference["bootstrap"]["confidence_level"] == 0.95
+    assert inference["multiplicity"]["method"] == "holm_bonferroni"
+    assert inference["multiplicity"]["contrast_count"] == 8
+
+
+def test_phase_contract_is_required_and_held_out_drift_fails_closed() -> None:
+    """The validator cannot silently fall back to the old tuning-only packet."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    missing_inference = deepcopy(config)
+    missing_inference.pop("inference")
+    with pytest.raises(ValueError, match="inference section is required"):
+        validate_sensitivity_config(missing_inference, repo_root=ROOT)
+
+    drifted_split = deepcopy(config)
+    drifted_split["held_out_scope"]["scenario_ids"] = drifted_split["held_out_scope"][
+        "scenario_ids"
+    ][1:]
+    with pytest.raises(ValueError, match="must exactly match the source matrix"):
+        validate_sensitivity_config(drifted_split, repo_root=ROOT)
+
+    drifted_inference = deepcopy(config)
+    drifted_inference["inference"]["multiplicity"]["contrast_count"] = 7
+    with pytest.raises(ValueError, match="contrast_count must be 8"):
+        validate_sensitivity_config(drifted_inference, repo_root=ROOT)
 
 
 def test_candidate_plan_preserves_arm_specific_base_and_only_varies_declared_axes() -> None:
@@ -91,6 +127,83 @@ def test_normalization_requires_explicit_outcome_and_availability_provenance() -
             arm_key="prediction_mpc",
             candidate_id="incumbent",
         )
+
+
+def test_normalization_extracts_native_solver_provenance_and_update_evidence() -> None:
+    """Raw target metadata is converted into the strict canary predicates."""
+    record = _raw_record(route_complete=True, collision_event=False)
+    effective_config = {"predictor_backend": "constant_velocity", "fallback_to_stop": False}
+    metadata = record["algorithm_metadata"]
+    assert isinstance(metadata, dict)
+    metadata["config"] = effective_config
+    metadata["config_hash"] = config_hash(effective_config)
+    metadata["planner_kinematics"] = {
+        "execution_mode": "adapter",
+        "adapter_name": "PredictionMPCPlannerAdapter",
+        "supports_native_commands": True,
+    }
+    runtime = metadata["planner_runtime"]
+    assert isinstance(runtime, dict)
+    runtime.update(
+        {
+            "solver_successes": 1,
+            "nonzero_command_count": 1,
+            "mean_abs_linear": 0.2,
+            "mean_abs_angular": 0.1,
+        }
+    )
+    row = normalize_episode_record(
+        record,
+        arm_key="prediction_mpc",
+        candidate_id="incumbent",
+        expected_config_hash=config_hash(effective_config),
+    )
+    assert row["solver_execution_mode"] == "native"
+    assert row["valid_solver_provenance"] is True
+    assert row["finite_commands"] is True
+    assert row["native_solver_eligible"] is True
+
+
+def test_canary_requires_exact_native_solver_evidence_and_key_coverage() -> None:
+    """Adapter availability alone cannot authorize the six-row production gate."""
+    scenarios = [
+        "classic_bottleneck_medium",
+        "classic_cross_trap_high",
+        "francis2023_intersection_wait",
+    ]
+    rows = [
+        _strict_canary_row(arm_key=arm_key, scenario_id=scenario_id)
+        for arm_key in TARGET_ARM_KEYS
+        for scenario_id in scenarios
+    ]
+    result = validate_canary_rows(
+        rows,
+        scenario_ids=scenarios,
+        seed=101,
+        required_eligible=6,
+    )
+    assert result["status"] == "ok"
+    assert result["eligible_episodes"] == 6
+
+    adapter_only = deepcopy(rows)
+    adapter_only[0]["execution_mode"] = "adapter"
+    failed = validate_canary_rows(
+        adapter_only,
+        scenario_ids=scenarios,
+        seed=101,
+        required_eligible=6,
+    )
+    assert failed["status"] == "failed"
+    assert "execution_mode_not_native" in failed["invalid_rows"][0]["reasons"]
+
+    duplicate = validate_canary_rows(
+        rows + [rows[0]],
+        scenario_ids=scenarios,
+        seed=101,
+        required_eligible=6,
+    )
+    assert duplicate["status"] == "failed"
+    assert duplicate["duplicate_keys"]
 
 
 def test_report_applies_preregistered_read_to_best_found_configs(tmp_path: Path) -> None:
@@ -262,4 +375,28 @@ def _raw_record(*, route_complete: bool, collision_event: bool) -> dict[str, obj
                 "fallback_stop_count": 0,
             }
         },
+    }
+
+
+def _strict_canary_row(*, arm_key: str, scenario_id: str) -> dict[str, object]:
+    """Build a normalized row with every strict native-solver canary predicate satisfied."""
+    return {
+        "arm_key": arm_key,
+        "candidate_id": "incumbent",
+        "scenario_id": scenario_id,
+        "seed": 101,
+        "execution_mode": "native",
+        "readiness_status": "native",
+        "availability_status": "available",
+        "benchmark_success": True,
+        "planner_runtime_status": "eligible",
+        "solver_execution_mode": "native",
+        "valid_solver_provenance": True,
+        "finite_commands": True,
+        "solver_successes": 1,
+        "solver_failures": 0,
+        "fallback_stop_count": 0,
+        "control_updates": 1,
+        "native_solver_eligible": True,
+        "native_solver_exclusion_reasons": [],
     }

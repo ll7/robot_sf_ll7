@@ -2,9 +2,10 @@
 """Run the bounded CPU sensitivity study for issue #5579.
 
 The default path is a no-submit config check. The optional run evaluates the two target MPC arms
-at the 20 pre-registered points and the four incumbent hybrid arms on the same fixed scenario and
-seed slice. Raw episode output stays under ``output/``; only compact derived reports should be
-promoted into ``docs/context/evidence/``.
+at the 20 pre-registered points and the four incumbent hybrid arms on the declared held-out
+scenario and seed slice. The tuning phase remains available explicitly for bounded local work;
+production callers must use the held-out phase. Raw episode output stays under ``output/``; only
+compact derived reports should be promoted into ``docs/context/evidence/``.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     load_sensitivity_config,
     normalize_episode_record,
     selected_scenarios,
+    validate_canary_rows,
     write_report,
 )
 
@@ -42,6 +44,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--check", action="store_true", help="Validate without running episodes")
     parser.add_argument(
         "--canary", action="store_true", help="Run canary check (seed 101, 6/6 eligibility)"
+    )
+    parser.add_argument(
+        "--phase",
+        choices=("tuning", "held_out"),
+        default="held_out",
+        help="Execution scope for a study run; production defaults to the frozen held-out phase",
     )
     return parser.parse_args(argv)
 
@@ -74,46 +82,70 @@ def _write_effective_config(path: Path, config: dict[str, Any]) -> None:
 
 
 def _check_summary(config: dict[str, Any]) -> dict[str, Any]:
-    scenarios = selected_scenarios(config, repo_root=REPO_ROOT)
+    tuning_scenarios = selected_scenarios(config, repo_root=REPO_ROOT, scope_name="tuning_scope")
+    held_out_scenarios = selected_scenarios(
+        config, repo_root=REPO_ROOT, scope_name="held_out_scope"
+    )
     plan = build_candidate_plan(config, repo_root=REPO_ROOT)
     target_points = [entry for entry in plan if entry["target"]]
     incumbents = [entry for entry in plan if not entry["target"]]
     res: dict[str, Any] = {
         "status": "ok",
         "issue": 5579,
-        "scenario_count": len(scenarios),
-        "seed_count": len(config["scenario_scope"]["seeds"]),
+        "scenario_count": len(tuning_scenarios),
+        "seed_count": len(config["tuning_scope"]["seeds"]),
         "target_arm_count": len(config["target_arms"]),
         "candidate_count": len(config["search"]["candidate_points"]),
         "target_execution_rows": len(target_points),
         "incumbent_execution_rows": len(incumbents),
-        "episode_row_bound": len(plan) * len(scenarios) * len(config["scenario_scope"]["seeds"]),
+        "episode_row_bound": len(plan)
+        * len(tuning_scenarios)
+        * len(config["tuning_scope"]["seeds"]),
+        "held_out_scenario_count": len(held_out_scenarios),
+        "held_out_seed_count": len(config["held_out_scope"]["seeds"]),
+        "held_out_episode_row_bound": len(plan)
+        * len(held_out_scenarios)
+        * len(config["held_out_scope"]["seeds"]),
     }
-    if "tuning_scope" in config:
-        res["tuning_scope"] = {
-            "scenario_ids": config["tuning_scope"]["scenario_ids"],
-            "seeds": config["tuning_scope"]["seeds"],
-            "scenario_list_hash": config["tuning_scope"]["scenario_list_hash"],
-        }
-    if "held_out_scope" in config:
-        res["held_out_scope"] = {
-            "seeds": config["held_out_scope"]["seeds"],
-            "excluded_scenarios": config["held_out_scope"]["excluded_scenarios"],
-        }
-    if "canary" in config:
-        res["canary"] = {
-            "seed": config["canary"]["seed"],
-            "required_eligible_episodes": config["canary"]["required_eligible_episodes"],
-            "target_eligible_ratio": config["canary"].get("target_eligible_ratio", "6/6"),
-        }
+    res["tuning_scope"] = {
+        "scenario_ids": config["tuning_scope"]["scenario_ids"],
+        "seeds": config["tuning_scope"]["seeds"],
+        "scenario_list_hash": config["tuning_scope"]["scenario_list_hash"],
+    }
+    res["held_out_scope"] = {
+        "scenario_count": len(config["held_out_scope"]["scenario_ids"]),
+        "scenario_ids": config["held_out_scope"]["scenario_ids"],
+        "seeds": config["held_out_scope"]["seeds"],
+        "scenario_list_hash": config["held_out_scope"]["scenario_list_hash"],
+        "excluded_scenarios": config["held_out_scope"]["excluded_scenarios"],
+    }
+    res["canary"] = {
+        "seed": config["canary"]["seed"],
+        "required_eligible_episodes": config["canary"]["required_eligible_episodes"],
+        "target_eligible_ratio": config["canary"]["target_eligible_ratio"],
+        "native_solver_required": True,
+    }
+    res["inference"] = {
+        "inference_population": config["inference"]["inference_population"],
+        "resampling_unit": config["inference"]["resampling_unit"],
+        "bootstrap_confidence": config["inference"]["bootstrap"]["confidence_level"],
+        "bootstrap_replicates": config["inference"]["bootstrap"]["replicates"],
+        "multiplicity_method": config["inference"]["multiplicity"]["method"],
+        "contrast_count": config["inference"]["multiplicity"]["contrast_count"],
+    }
     return res
 
 
-def run_study(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> dict[str, Any]:
-    """Execute every declared arm and build the compact diagnostic report."""
-    scenarios = selected_scenarios(config, repo_root=REPO_ROOT)
+def run_study(
+    config: dict[str, Any], *, out_dir: Path, config_path: Path, phase: str = "held_out"
+) -> dict[str, Any]:
+    """Execute every declared arm for one frozen phase and build the compact report."""
+    if phase not in {"tuning", "held_out"}:
+        raise ValueError(f"unsupported sensitivity phase: {phase}")
+    scope_name = "tuning_scope" if phase == "tuning" else "held_out_scope"
+    scenarios = selected_scenarios(config, repo_root=REPO_ROOT, scope_name=scope_name)
     plan = build_candidate_plan(config, repo_root=REPO_ROOT)
-    scope = config["scenario_scope"]
+    scope = config[scope_name]
     source_matrix = REPO_ROOT / scope["source_matrix"]
     raw_dir = out_dir / "raw"
     configs_dir = out_dir / "configs"
@@ -154,6 +186,7 @@ def run_study(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> di
                     decorated,
                     arm_key=arm_key,
                     candidate_id=candidate_id,
+                    expected_config_hash=str(entry["config_sha256_16"]),
                 )
             )
 
@@ -171,10 +204,13 @@ def run_study(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> di
         reproduction_command=(
             "uv run python scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py "
             "--config configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml "
+            f"--phase {phase} "
             "--out-dir output/benchmarks/issue_5579_mpc_tuning_sensitivity"
         ),
         raw_artifact_root=_display_path(raw_dir),
+        scope_name=scope_name,
     )
+    report["phase"] = phase
     report["normalized_episode_rows"] = _display_path(normalized_path)
     write_report(report, out_dir)
     return report
@@ -190,10 +226,8 @@ def _display_path(path: Path) -> str:
 
 
 def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> dict[str, Any]:
-    """Execute the canary phase (6 target arm episodes at seed 101) to verify eligibility."""
-    from robot_sf.benchmark.mpc_tuning_sensitivity import _eligible
-
-    scenarios = selected_scenarios(config, repo_root=REPO_ROOT)
+    """Execute and strictly validate the six target canary rows at seed 101."""
+    scenarios = selected_scenarios(config, repo_root=REPO_ROOT, scope_name="tuning_scope")
     canary_cfg = config.get("canary", {})
     canary_seed = int(canary_cfg.get("seed", 101))
     required_eligible = int(canary_cfg.get("required_eligible_episodes", 6))
@@ -205,7 +239,7 @@ def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path
     canary_plan = [
         entry for entry in plan if entry["target"] and entry["candidate_id"] == "incumbent"
     ]
-    scope = config["scenario_scope"]
+    scope = config["tuning_scope"]
     source_matrix = REPO_ROOT / scope["source_matrix"]
     raw_dir = out_dir / "raw"
     configs_dir = out_dir / "configs"
@@ -244,23 +278,33 @@ def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path
                     decorated,
                     arm_key=arm_key,
                     candidate_id=candidate_id,
+                    expected_config_hash=str(entry["config_sha256_16"]),
                 )
             )
+        if canary_cfg.get("stop_on_ineligible") is True:
+            partial = validate_canary_rows(
+                all_rows,
+                scenario_ids=config["tuning_scope"]["scenario_ids"],
+                seed=canary_seed,
+                required_eligible=required_eligible,
+            )
+            if partial["invalid_rows"] or partial["duplicate_keys"] or partial["unexpected_keys"]:
+                partial["canary_seed"] = canary_seed
+                partial["scope_name"] = "tuning_scope"
+                partial["config_path"] = _display_path(config_path)
+                partial["stop_reason"] = "ineligible_row"
+                return partial
 
-    eligible_count = sum(1 for row in all_rows if _eligible(row))
-    status = (
-        "ok"
-        if eligible_count >= required_eligible and len(all_rows) == required_eligible
-        else "failed"
+    result = validate_canary_rows(
+        all_rows,
+        scenario_ids=config["tuning_scope"]["scenario_ids"],
+        seed=canary_seed,
+        required_eligible=required_eligible,
     )
-    return {
-        "status": status,
-        "canary_seed": canary_seed,
-        "eligible_episodes": eligible_count,
-        "total_episodes": len(all_rows),
-        "required_eligible": required_eligible,
-        "target_eligible_ratio": f"{eligible_count}/{len(all_rows)}",
-    }
+    result["canary_seed"] = canary_seed
+    result["scope_name"] = "tuning_scope"
+    result["config_path"] = _display_path(config_path)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -274,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         canary_res = run_canary_check(config, out_dir=args.out_dir, config_path=args.config)
         print(json.dumps(canary_res, sort_keys=True))
         return 0 if canary_res["status"] == "ok" else 1
-    report = run_study(config, out_dir=args.out_dir, config_path=args.config)
+    report = run_study(config, out_dir=args.out_dir, config_path=args.config, phase=str(args.phase))
     print(
         json.dumps(
             {

@@ -729,7 +729,7 @@ def _portfolio_score(
         -_pairwise_descriptor_diversity(portfolio),
         -min(evidence_grades) if evidence_grades else 0.0,
         sum(page_costs) if page_costs else FINITE_MISSING_PAGE_COST,
-        tuple(sorted(_case_id(item) for item in portfolio)),
+        sorted(_case_id(item) for item in portfolio),
     )
 
 

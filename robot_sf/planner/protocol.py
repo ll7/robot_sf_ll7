@@ -17,7 +17,7 @@ planner to any benchmark, fallback, metric, or performance claim.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from inspect import Parameter, Signature, signature
 from typing import Any, Protocol, runtime_checkable
 
@@ -259,6 +259,26 @@ def _reset_with_optional_seed(reset: Any, *, seed: int | None) -> None:
     raise TypeError("reset hook accepts neither an optional seed nor a seedless call")
 
 
+# Injection-point contracts (#6771): let benchmark callers reuse the canonical adapter's
+# lifecycle and diagnostics while supplying their own step execution (e.g. process-isolated) and
+# action projection (e.g. heading-aware unicycle). Defaults below preserve the current behavior.
+BaselineStepExecutor = Callable[[Any, dict[str, Any]], Any]
+BaselineActionProjector = Callable[[Any, str], tuple[float, float]]
+
+
+def _default_baseline_step(planner: Any, observation: dict[str, Any]) -> Any:
+    """Return the wrapped planner's ``step`` result (default injected step executor).
+
+    Args:
+        planner: Baseline planner whose ``step`` is delegated to.
+        observation: Observation forwarded to ``planner.step``.
+
+    Returns:
+        The baseline action returned by ``planner.step(observation)``.
+    """
+    return planner.step(observation)
+
+
 class BaselineStepToLocalAdapter:
     """Wrap a baseline ``step() -> dict`` planner as a ``LocalPlannerProtocol``.
 
@@ -273,7 +293,14 @@ class BaselineStepToLocalAdapter:
     to parent #6487 for full holonomic support.
     """
 
-    def __init__(self, planner: Any, *, planner_type: str | None = None) -> None:
+    def __init__(
+        self,
+        planner: Any,
+        *,
+        planner_type: str | None = None,
+        step_executor: BaselineStepExecutor | None = None,
+        action_projector: BaselineActionProjector | None = None,
+    ) -> None:
         """Initialize the adapter with a concrete baseline planner.
 
         Args:
@@ -281,10 +308,24 @@ class BaselineStepToLocalAdapter:
                 expose ``reset`` and ``close`` when supported.
             planner_type: Optional explicit ``planner_type`` for diagnostics.
                 Defaults to the wrapped planner's class name.
+            step_executor: Optional ``(planner, observation) -> action`` override
+                for the wrapped planner's ``step`` call. Defaults to a direct
+                ``planner.step(observation)`` delegation so current behavior is
+                unchanged; benchmark callers can inject a process-isolated or
+                timeout-bounded executor without altering this adapter's defaults.
+            action_projector: Optional ``(action, planner_type) -> (linear, angular)``
+                override for the dict-to-command projection. Defaults to
+                :func:`_action_dict_to_command` so current unicycle/holonomic
+                projection is unchanged; callers can inject heading-aware or
+                learned/MPC projection without forking the adapter.
         """
         self.planner = planner
         self._planner_type = planner_type or type(planner).__name__
         self._closed = False
+        self._step_executor: BaselineStepExecutor = step_executor or _default_baseline_step
+        self._action_projector: BaselineActionProjector = (
+            action_projector or _action_dict_to_command
+        )
 
     def reset(self, *, seed: int | None = None) -> None:
         """Forward reset to the wrapped planner, tolerating seedless signatures.
@@ -307,8 +348,8 @@ class BaselineStepToLocalAdapter:
         Returns:
             The ``(linear_speed, angular_rate)`` command tuple.
         """
-        action = self.planner.step(observation)
-        return _action_dict_to_command(action, self._planner_type)
+        action = self._step_executor(self.planner, observation)
+        return self._action_projector(action, self._planner_type)
 
     def diagnostics(self) -> dict[str, Any]:
         """Return protocol-normalized diagnostics, fail-closed when unavailable."""

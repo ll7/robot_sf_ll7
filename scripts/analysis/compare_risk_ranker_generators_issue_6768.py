@@ -20,9 +20,10 @@ For each generator and fixture the report separately records:
 - generation time, ranking time, and total time;
 - unavailable denominators and their reasons.
 
-The script fails closed on calibration/evaluation split overlap, missing
-fixture provenance, non-finite values, unequal candidate budgets, duplicate
-candidate trajectories, or a generator/config hash mismatch. The JSON and
+The script fails closed on calibration/evaluation split overlap, a missing
+diagnostic-only fixture boundary or valid case status, missing fixture
+provenance, non-finite values, unequal candidate budgets, duplicate candidate
+trajectories, or a generator/config hash mismatch. The JSON and
 Markdown reports are deterministic for a valid pinned generation timestamp;
 when the timestamp is pinned, wall-clock timing is intentionally not measured.
 Unpinned runs report measured local offline timing separately and caveat it as
@@ -295,7 +296,7 @@ def _normalize_fixture_case(raw_case: Any, *, index: int, seen_ids: set[str]) ->
             f"fixture case {case_id!r} split must be {EVALUATION_SPLIT!r} or "
             f"{CALIBRATION_SPLIT!r}, got {split!r}"
         )
-    if case.get("status", "valid") != "valid":
+    if case.get("status") != "valid":
         raise ComparisonError(f"fixture case {case_id!r} is not a valid evidence row")
     case_provenance = case.get("provenance")
     case_provenance = _mapping(case_provenance, f"fixture case {case_id}.provenance")
@@ -354,6 +355,13 @@ def _load_fixture(path: Path) -> list[dict[str, Any]]:
     if str(payload.get("split") or "") not in {EVALUATION_SPLIT, CALIBRATION_SPLIT}:
         raise ComparisonError(
             f"fixture split must be {EVALUATION_SPLIT!r} or {CALIBRATION_SPLIT!r}"
+        )
+    claim_boundary = payload.get("claim_boundary")
+    if not isinstance(claim_boundary, str) or not claim_boundary.strip().startswith(
+        "diagnostic_only"
+    ):
+        raise ComparisonError(
+            "fixture claim_boundary must explicitly declare the diagnostic_only boundary"
         )
     _require_fixture_provenance(payload, name=_display_path(path))
     raw_cases = payload.get("cases")

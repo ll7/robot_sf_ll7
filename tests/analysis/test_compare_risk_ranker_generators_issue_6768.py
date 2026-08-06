@@ -357,6 +357,22 @@ class TestFailClosed:
         with pytest.raises(cmp_module.ComparisonError, match="provenance is incomplete"):
             cmp_module._load_fixture(missing)
 
+    def test_missing_fixture_claim_boundary_fails_closed(self, cmp_module, tmp_path):
+        payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
+        del payload["claim_boundary"]
+        missing = tmp_path / "no_claim_boundary.yaml"
+        missing.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        with pytest.raises(cmp_module.ComparisonError, match="claim_boundary"):
+            cmp_module._load_fixture(missing)
+
+    def test_missing_case_status_fails_closed(self, cmp_module, tmp_path):
+        payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
+        del payload["cases"][0]["status"]
+        missing = tmp_path / "no_case_status.yaml"
+        missing.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        with pytest.raises(cmp_module.ComparisonError, match="not a valid evidence row"):
+            cmp_module._load_fixture(missing)
+
     def test_non_finite_risk_config_fails_closed(self, cmp_module, tmp_path):
         config_path = _nested_config_overrides(
             tmp_path,

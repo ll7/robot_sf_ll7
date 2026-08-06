@@ -33,8 +33,9 @@ case id and split label:
 - Evaluation (held out): `tests/fixtures/risk_ranker/issue_6768_risk_ranker_held_out_v1.yaml`
 - Calibration: `tests/fixtures/risk_ranker/issue_6768_risk_ranker_calibration_v1.yaml`
 
-The script fails closed on split overlap, missing fixture provenance, non-finite values,
-unequal candidate budgets, or a generator/config hash mismatch.
+The script fails closed on split overlap, a missing `diagnostic_only` fixture claim boundary,
+missing or non-valid case status, missing fixture provenance, non-finite values, unequal candidate
+budgets, or a generator/config hash mismatch.
 
 ## Reproduction
 

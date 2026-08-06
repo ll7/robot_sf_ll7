@@ -955,12 +955,60 @@
       "type": "object",
       "required": ["controller_state", "command_source", "guard_state", "fallback_state"],
       "properties": {
-        "controller_state": {"$ref": "#/$defs/controllerSignalProjection"},
-        "command_source": {"$ref": "#/$defs/controllerSignalProjection"},
-        "guard_state": {"$ref": "#/$defs/controllerSignalProjection"},
-        "fallback_state": {"$ref": "#/$defs/controllerSignalProjection"}
+        "controller_state": {"$ref": "#/$defs/controllerStateSignalProjection"},
+        "command_source": {"$ref": "#/$defs/commandSourceSignalProjection"},
+        "guard_state": {"$ref": "#/$defs/guardStateSignalProjection"},
+        "fallback_state": {"$ref": "#/$defs/fallbackStateSignalProjection"}
       },
       "additionalProperties": false
+    },
+    "controllerStateSignalProjection": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalProjection"},
+        {
+          "type": "object",
+          "properties": {
+            "roles": {"$ref": "#/$defs/controllerStateSignalRoles"},
+            "value_styles": {"$ref": "#/$defs/controllerStateValueStyles"}
+          }
+        }
+      ]
+    },
+    "commandSourceSignalProjection": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalProjection"},
+        {
+          "type": "object",
+          "properties": {
+            "roles": {"$ref": "#/$defs/commandSourceSignalRoles"},
+            "value_styles": {"$ref": "#/$defs/commandSourceValueStyles"}
+          }
+        }
+      ]
+    },
+    "guardStateSignalProjection": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalProjection"},
+        {
+          "type": "object",
+          "properties": {
+            "roles": {"$ref": "#/$defs/guardStateSignalRoles"},
+            "value_styles": {"$ref": "#/$defs/guardStateValueStyles"}
+          }
+        }
+      ]
+    },
+    "fallbackStateSignalProjection": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalProjection"},
+        {
+          "type": "object",
+          "properties": {
+            "roles": {"$ref": "#/$defs/fallbackStateSignalRoles"},
+            "value_styles": {"$ref": "#/$defs/fallbackStateValueStyles"}
+          }
+        }
+      ]
     },
     "controllerSignalProjection": {
       "type": "object",
@@ -1013,14 +1061,130 @@
       },
       "additionalProperties": false
     },
+    "controllerStateSignalRoles": {
+      "type": "object",
+      "required": ["left", "right"],
+      "properties": {
+        "left": {"$ref": "#/$defs/controllerStateSignalRole"},
+        "right": {"$ref": "#/$defs/controllerStateSignalRole"}
+      },
+      "additionalProperties": false
+    },
+    "controllerStateSignalRole": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalRole"},
+        {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/controllerStateValue"}
+            }
+          }
+        }
+      ]
+    },
+    "commandSourceSignalRoles": {
+      "type": "object",
+      "required": ["left", "right"],
+      "properties": {
+        "left": {"$ref": "#/$defs/commandSourceSignalRole"},
+        "right": {"$ref": "#/$defs/commandSourceSignalRole"}
+      },
+      "additionalProperties": false
+    },
+    "commandSourceSignalRole": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalRole"},
+        {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/commandSourceValue"}
+            }
+          }
+        }
+      ]
+    },
+    "guardStateSignalRoles": {
+      "type": "object",
+      "required": ["left", "right"],
+      "properties": {
+        "left": {"$ref": "#/$defs/guardStateSignalRole"},
+        "right": {"$ref": "#/$defs/guardStateSignalRole"}
+      },
+      "additionalProperties": false
+    },
+    "guardStateSignalRole": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalRole"},
+        {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/guardStateValue"}
+            }
+          }
+        }
+      ]
+    },
+    "fallbackStateSignalRoles": {
+      "type": "object",
+      "required": ["left", "right"],
+      "properties": {
+        "left": {"$ref": "#/$defs/fallbackStateSignalRole"},
+        "right": {"$ref": "#/$defs/fallbackStateSignalRole"}
+      },
+      "additionalProperties": false
+    },
+    "fallbackStateSignalRole": {
+      "allOf": [
+        {"$ref": "#/$defs/controllerSignalRole"},
+        {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/fallbackStateValue"}
+            }
+          }
+        }
+      ]
+    },
     "controllerValueStyles": {
       "type": "object",
       "propertyNames": {"$ref": "#/$defs/controllerCategoricalValue"},
       "additionalProperties": {"$ref": "#/$defs/controllerValueStyle"}
     },
+    "controllerStateValueStyles": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/controllerStateValue"},
+      "additionalProperties": {"$ref": "#/$defs/controllerValueStyle"}
+    },
+    "commandSourceValueStyles": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/commandSourceValue"},
+      "additionalProperties": {"$ref": "#/$defs/controllerValueStyle"}
+    },
+    "guardStateValueStyles": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/guardStateValue"},
+      "additionalProperties": {"$ref": "#/$defs/controllerValueStyle"}
+    },
+    "fallbackStateValueStyles": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/fallbackStateValue"},
+      "additionalProperties": {"$ref": "#/$defs/controllerValueStyle"}
+    },
     "controllerCategoricalValue": {
       "enum": ["tracking", "braking", "planner", "clear", "active", "inactive"]
     },
+    "controllerStateValue": {"enum": ["tracking", "braking"]},
+    "commandSourceValue": {"const": "planner"},
+    "guardStateValue": {"enum": ["clear", "active"]},
+    "fallbackStateValue": {"const": "inactive"},
     "controllerValueStyle": {
       "type": "object",
       "required": ["color", "label_rendered"],

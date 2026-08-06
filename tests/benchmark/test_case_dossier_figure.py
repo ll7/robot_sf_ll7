@@ -757,6 +757,38 @@ def test_manifest_schema_rejects_semantic_controller_value_keys_and_outputs_are_
 
 
 @pytest.mark.parametrize(
+    ("signal", "wrong_value"),
+    (
+        ("controller_state", "planner"),
+        ("command_source", "tracking"),
+        ("guard_state", "inactive"),
+        ("fallback_state", "active"),
+    ),
+)
+def test_manifest_schema_rejects_cross_signal_controller_values(
+    tmp_path: Path,
+    signal: str,
+    wrong_value: str,
+) -> None:
+    """Each controller signal owns its values, including dynamic style keys."""
+
+    bundle = render_case_dossier(
+        _write_input(tmp_path, grammar="matched_start_planner", controller_signals=True),
+        tmp_path / "cross-signal-controller-vocabulary",
+    )
+    mutated = copy.deepcopy(bundle.manifest)
+    signal_record = mutated["panel_status"]["controller_state"]["signals"][signal]
+    signal_record["roles"]["left"]["values"] = [wrong_value]
+    signal_record["value_styles"] = {wrong_value: {"color": "#56B4E9", "label_rendered": True}}
+    mutated = _rehash_case_dossier_manifest(mutated)
+
+    errors = validate_case_dossier_manifest(mutated)
+
+    assert errors
+    assert any(signal in error for error in errors)
+
+
+@pytest.mark.parametrize(
     ("slot", "value"),
     (
         ("recorded_outcome", "reviewer_declares_a_win"),

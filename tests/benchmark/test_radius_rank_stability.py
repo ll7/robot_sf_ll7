@@ -1002,7 +1002,13 @@ def test_load_sweep_summary_fails_closed(tmp_path: Path) -> None:
 
 
 def test_cli_blocked_exits_nonzero(tmp_path: Path) -> None:
-    """Blocked mode keeps campaign provenance absent and analysis provenance distinct."""
+    """Verify the blocked exit status and separate provenance.
+
+    The blocked bundle must keep ``campaign_commit`` null and record the
+    40-character ``analysis_commit`` independently, so an explicitly supplied
+    ``--campaign-commit`` is not persisted when ``--sweep-summary`` is omitted
+    and campaign provenance cannot be inferred from the analysis commit.
+    """
     cli = _load_cli()
     exit_code = cli.main(
         [

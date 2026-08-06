@@ -576,3 +576,12 @@ class SimulationSettings:
             Pedestrians per square meter selected from ``ped_density_by_difficulty``.
         """
         return self.ped_density_by_difficulty[self.difficulty]
+
+
+__all__ = [
+    "AlignmentTorqueConfig",
+    "AnisotropicFovConfig",
+    "SimulationSettings",
+    "TtcPredictiveForceConfig",
+    "ZanlungoCollisionPredictionConfig",
+]

@@ -1556,3 +1556,15 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         single_pedestrians,
         infrastructure_zones=infrastructure_zones,
     )
+
+
+__all__ = [
+    "InfrastructureZone",
+    "MapDefinition",
+    "MapDefinitionPool",
+    "PedestrianWaitRule",
+    "SinglePedestrianDefinition",
+    "SocialGroupDefinition",
+    "parse_social_group_definitions",
+    "serialize_map",
+]

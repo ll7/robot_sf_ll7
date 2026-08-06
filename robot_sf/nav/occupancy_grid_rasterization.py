@@ -596,3 +596,16 @@ def _points_in_polygon(
     flat_y = mesh_y.ravel()
     flat_mask = _shp_contains_xy(poly, flat_x, flat_y)
     return flat_mask.reshape(mesh_x.shape)
+
+
+__all__ = [
+    "_bresenham_line",
+    "rasterize_circle",
+    "rasterize_circle_fast",
+    "rasterize_line_segment",
+    "rasterize_obstacles",
+    "rasterize_pedestrians",
+    "rasterize_pedestrians_array",
+    "rasterize_polygon",
+    "rasterize_robot",
+]

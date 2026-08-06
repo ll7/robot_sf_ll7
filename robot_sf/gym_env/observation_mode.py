@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+__all__ = ["ObservationMode"]
+
 
 class ObservationMode(StrEnum):
     """Selectable observation encodings for Gym environments."""

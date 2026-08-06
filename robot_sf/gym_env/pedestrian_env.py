@@ -49,6 +49,8 @@ if TYPE_CHECKING:
 
 logger = loguru.logger
 
+__all__ = ["PedestrianEnv", "_reward_function_name"]
+
 
 def _adapt_legacy_pedestrian_config(env_config: PedEnvSettings) -> PedestrianSimulationConfig:
     """Convert legacy ``PedEnvSettings`` into the unified pedestrian config type.

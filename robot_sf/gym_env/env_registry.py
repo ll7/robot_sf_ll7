@@ -37,6 +37,18 @@ _STABILITY_ORDER = {STABLE: 0, BETA: 1, EXPERIMENTAL: 2}
 
 _REGISTRY: dict[str, EnvEntry] = {}
 
+__all__ = [
+    "BETA",
+    "EXPERIMENTAL",
+    "STABLE",
+    "EnvEntry",
+    "describe_env",
+    "env_ids",
+    "get_env",
+    "list_envs",
+    "register_env",
+]
+
 
 @dataclass(frozen=True)
 class EnvEntry:

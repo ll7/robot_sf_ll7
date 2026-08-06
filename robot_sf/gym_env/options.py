@@ -28,6 +28,13 @@ from dataclasses import dataclass, field, replace
 
 from robot_sf.telemetry import DEFAULT_TELEMETRY_METRICS
 
+__all__ = [
+    "JsonlRecordingOptions",
+    "RecordingOptions",
+    "RenderOptions",
+    "TelemetryOptions",
+]
+
 
 @dataclass(slots=True)
 class RenderOptions:

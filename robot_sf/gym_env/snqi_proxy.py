@@ -17,6 +17,17 @@ _DEFAULT_COMFORT_FORCE_THRESHOLD = 2.0
 _DEFAULT_PED_RADIUS = 0.4
 _SNQI_THRESHOLD_CACHE: tuple[float, float, float] | None = None
 
+__all__ = [
+    "DEFAULT_ROBOT_RADIUS",
+    "StepSNQIProxy",
+    "StepSNQIProxyState",
+    "_resolve_robot_radius",
+    "coerce_xy_rows",
+    "compute_snqi_step_proxies",
+    "extract_robot_xy",
+    "resolve_snqi_thresholds",
+]
+
 
 @dataclass(slots=True)
 class StepSNQIProxyState:

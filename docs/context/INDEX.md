@@ -33,6 +33,13 @@ the configs are still not benchmark evidence and production compute remains bloc
 the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
 
+Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle for #6600:
+the analysis tooling is merged and fails closed, while the scientific analysis remains
+blocked until Gate 2 supplies complete row identities or a fail-closed missingness ledger.
+The current diagnostic-only handoff, exact reproduction command, and no-verdict boundary are
+recorded here:
+[issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md).
+
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
 groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this

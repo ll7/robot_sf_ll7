@@ -21,10 +21,12 @@ For each generator and fixture the report separately records:
 - unavailable denominators and their reasons.
 
 The script fails closed on calibration/evaluation split overlap, missing
-fixture provenance, non-finite values, unequal candidate budgets, or a
-generator/config hash mismatch. The JSON and Markdown reports are deterministic
-for a pinned generation timestamp; wall-clock timing is reported separately and
-caveated as measured local offline time.
+fixture provenance, non-finite values, unequal candidate budgets, duplicate
+candidate trajectories, or a generator/config hash mismatch. The JSON and
+Markdown reports are deterministic for a valid pinned generation timestamp;
+when the timestamp is pinned, wall-clock timing is intentionally not measured.
+Unpinned runs report measured local offline timing separately and caveat it as
+non-performance evidence.
 
 Claim boundary: ``diagnostic_only``. This is not planner-improvement, calibrated
 real-world probability, safety, or online-readiness evidence.
@@ -172,6 +174,51 @@ def _git_status() -> list[str]:
     if result.returncode != 0:
         return ["git status failed"]
     return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _normalize_generated_at(value: Any) -> str:
+    """Validate and normalize a pinned UTC ISO-8601 generation timestamp."""
+    if not isinstance(value, str) or not value.strip():
+        raise ComparisonError("generated_at_utc must be a non-empty UTC ISO-8601 timestamp")
+    candidate = value.strip()
+    try:
+        parsed = dt.datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ComparisonError("generated_at_utc must be a valid UTC ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() != dt.timedelta(0):
+        raise ComparisonError("generated_at_utc must include a UTC timezone")
+    return parsed.astimezone(dt.UTC).isoformat()
+
+
+def _generation_mode(config: Mapping[str, Any], generated_at_utc: str | None) -> tuple[str, bool]:
+    """Resolve report timestamp and whether wall-clock timing is allowed."""
+    requested = (
+        generated_at_utc if generated_at_utc is not None else config.get("pinned_generated_at_utc")
+    )
+    if requested is None:
+        return dt.datetime.now(dt.UTC).isoformat(), False
+    return _normalize_generated_at(requested), True
+
+
+def _provenance_command(*, pinned: bool) -> str:
+    """Return the invocation, normalizing output destinations in pinned reports."""
+    arguments = list(sys.argv)
+    if pinned:
+        normalized: list[str] = []
+        consume_output_path = False
+        for argument in arguments:
+            if consume_output_path:
+                normalized.append("<external-output>")
+                consume_output_path = False
+            elif argument in {"--output", "--output-md"}:
+                normalized.append(argument)
+                consume_output_path = True
+            elif argument.startswith("--output=") or argument.startswith("--output-md="):
+                normalized.append(f"{argument.split('=', 1)[0]}=<external-output>")
+            else:
+                normalized.append(argument)
+        arguments = normalized
+    return " ".join(shlex.quote(argument) for argument in arguments)
 
 
 def _require_finite(value: Any, *, field: str) -> None:
@@ -483,6 +530,13 @@ def _case_digest(case: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
+def _waypoint_sequence_sha256(waypoints: np.ndarray) -> str:
+    """Hash a trajectory after canonicalizing signed zero representations."""
+    canonical = np.ascontiguousarray(waypoints, dtype=np.float64).copy()
+    canonical[canonical == 0.0] = 0.0
+    return hashlib.sha256(canonical.tobytes()).hexdigest()
+
+
 def _validate_candidates(
     candidates: Sequence[CandidateAction],
     *,
@@ -503,6 +557,8 @@ def _validate_candidates(
     shape_count = 0
     start_count = 0
     stable_count = 0
+    waypoint_signatures: list[str] = []
+    signature_to_action_ids: dict[str, list[str]] = {}
     for candidate in candidates:
         if isinstance(candidate.action_id, str) and candidate.action_id:
             stable_count += 1
@@ -518,6 +574,10 @@ def _validate_candidates(
         finite_count += int(bool(np.all(np.isfinite(waypoints))))
         if shape_valid:
             start_count += int(bool(np.allclose(waypoints[0], start, atol=1.0e-12, rtol=0.0)))
+        if shape_valid and np.all(np.isfinite(waypoints)):
+            signature = _waypoint_sequence_sha256(waypoints)
+            waypoint_signatures.append(signature)
+            signature_to_action_ids.setdefault(signature, []).append(str(candidate.action_id))
     valid_action_ids = [action_id for action_id in action_ids if isinstance(action_id, str)]
     unique_action_ids = len(set(valid_action_ids))
     duplicate_ids = sorted(
@@ -525,16 +585,26 @@ def _validate_candidates(
     )
     if duplicate_ids:
         invalid.append(f"duplicate_action_ids={duplicate_ids}")
+    duplicate_waypoint_sequences = sorted(
+        sorted(action_ids_for_signature)
+        for action_ids_for_signature in signature_to_action_ids.values()
+        if len(action_ids_for_signature) > 1
+    )
+    if duplicate_waypoint_sequences:
+        invalid.append(f"duplicate_waypoint_sequences={duplicate_waypoint_sequences}")
     if len(invalid) > 0 or shape_count != budget or finite_count != budget or start_count != budget:
         raise ComparisonError(f"{case['case_id']}: invalid candidate contract: {invalid}")
     finite_validity_rate = finite_count / budget
-    unique_validity_rate = unique_action_ids / budget
+    unique_waypoint_sequences = len(set(waypoint_signatures))
+    unique_validity_rate = unique_waypoint_sequences / budget
     return {
         "expected_budget": budget,
         "candidate_count": len(candidates),
         "valid_count": budget,
         "invalid_count": 0,
         "unique_action_ids": unique_action_ids,
+        "unique_waypoint_sequences": unique_waypoint_sequences,
+        "duplicate_waypoint_sequences": [],
         "finite_waypoint_sequences": finite_count,
         "shape_valid_sequences": shape_count,
         "start_state_valid_sequences": start_count,
@@ -554,9 +624,10 @@ def _rank_with_timing(
     weights: RankingWeights,
     verifier_config: TrajectoryVerifierConfig,
     actuator_config: ActuatorLimitsConfig,
-) -> tuple[list[CandidateRanking], float, list[dict[str, Any]]]:
+    measure_timing: bool,
+) -> tuple[list[CandidateRanking], float | None, list[dict[str, Any]]]:
     """Rank a matched set and measure isolated per-candidate wall time."""
-    started = _perf_counter_ns()
+    started = _perf_counter_ns() if measure_timing else None
     rankings = rank_trajectories(
         candidates,
         pedestrians,
@@ -565,6 +636,16 @@ def _rank_with_timing(
         verifier_config=verifier_config,
         actuator_config=actuator_config,
     )
+    if not measure_timing:
+        return (
+            rankings,
+            None,
+            [
+                {"action_id": candidate.action_id, "ranking_and_gate_ms": None}
+                for candidate in candidates
+            ],
+        )
+    assert started is not None
     total_ms = (_perf_counter_ns() - started) / 1.0e6
     per_candidate: list[dict[str, Any]] = []
     for candidate in candidates:
@@ -710,9 +791,12 @@ def _role(action_id: str) -> str:
 
 
 def _selection_payload(
-    rankings: Sequence[CandidateRanking], candidates: Sequence[CandidateAction]
+    rankings: Sequence[CandidateRanking],
+    candidates: Sequence[CandidateAction],
+    *,
+    horizon_steps: int,
 ) -> dict[str, Any]:
-    """Serialize selected-candidate identity without treating ids as shared."""
+    """Serialize selected identity and a generator-independent trajectory digest."""
     selected = _selected_record(rankings)
     if selected is None:
         return {
@@ -720,16 +804,20 @@ def _selection_payload(
             "selected_action_id": None,
             "selected_slot": None,
             "selected_role": None,
+            "selected_trajectory_sha256": None,
         }
+    selected_slot = next(
+        index
+        for index, candidate in enumerate(candidates)
+        if candidate.action_id == selected.action_id
+    )
+    selected_waypoints = candidates[selected_slot].as_array(horizon_steps=horizon_steps)
     return {
         "selected": True,
         "selected_action_id": selected.action_id,
-        "selected_slot": next(
-            index
-            for index, candidate in enumerate(candidates)
-            if candidate.action_id == selected.action_id
-        ),
+        "selected_slot": selected_slot,
         "selected_role": _role(selected.action_id),
+        "selected_trajectory_sha256": _waypoint_sequence_sha256(selected_waypoints),
         "selected_risk_score": float(selected.joint_contact_probability),
     }
 
@@ -886,7 +974,13 @@ def _reliability_diagnostic(
             "disagreeing_candidates": [],
             "status": "not_applicable",
         }
+    overall_status = (
+        "pass"
+        if model_status == "pass" and outcome_summary["status"] in {"pass", "not_applicable"}
+        else "inconclusive"
+    )
     return {
+        "status": overall_status,
         "model_score_checks": {
             "candidate_count": len(rankings),
             "finite_risk_scores": finite_count,
@@ -922,6 +1016,28 @@ def _unavailable_denominators(
                 "reason": "no held-out fixture declares a known contact outcome",
             }
         )
+    for generator_name in ("deterministic_primitive", "rbf"):
+        unavailable_cases = [
+            row["by_generator"][generator_name]
+            for row in reliability_rows
+            if row["by_generator"][generator_name]["declared_outcome_present"]
+            and (
+                row["by_generator"][generator_name]["candidates_with_declared_outcome"] == 0
+                or row["by_generator"][generator_name]["reliable_candidates_with_declared_outcome"]
+                == 0
+            )
+        ]
+        if unavailable_cases:
+            unavailable.append(
+                {
+                    "metric": f"model_risk_{generator_name}_declared_outcome_agreement",
+                    "denominator": None,
+                    "reason": (
+                        f"{len(unavailable_cases)} declared outcome case(s) had no reliable "
+                        "role-matched candidate; outcome agreement is unavailable"
+                    ),
+                }
+            )
     no_eligible_primitive = sum(
         int(not row["deterministic_primitive"]["selected"]) for row in selection_rows
     )
@@ -959,6 +1075,7 @@ def _aggregate_validity(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "valid_count",
             "invalid_count",
             "unique_action_ids",
+            "unique_waypoint_sequences",
             "finite_waypoint_sequences",
             "shape_valid_sequences",
             "start_state_valid_sequences",
@@ -967,7 +1084,7 @@ def _aggregate_validity(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     if result["candidate_count"] <= 0:
         raise ComparisonError("candidate validity denominator must be positive")
     result["finite_validity_rate"] = result["finite_waypoint_sequences"] / result["candidate_count"]
-    result["unique_validity_rate"] = result["unique_action_ids"] / result["candidate_count"]
+    result["unique_validity_rate"] = result["unique_waypoint_sequences"] / result["candidate_count"]
     return result
 
 
@@ -997,6 +1114,7 @@ def _evaluate_case(
     verifier_config: TrajectoryVerifierConfig,
     actuator_config: ActuatorLimitsConfig,
     candidate_budget: int,
+    measure_timing: bool,
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     """Evaluate every generator arm for one fixture case.
 
@@ -1015,7 +1133,7 @@ def _evaluate_case(
     }
     arm_timing: dict[str, dict[str, Any]] = {}
     for generator_name, (generator, generator_config) in generators.items():
-        started = _perf_counter_ns()
+        started = _perf_counter_ns() if measure_timing else None
         candidates = generator(
             case["start_position"],
             case["local_goal"],
@@ -1023,7 +1141,11 @@ def _evaluate_case(
             dt_s=risk_config.dt_s,
             config=generator_config,
         )
-        generation_ms = (_perf_counter_ns() - started) / 1.0e6
+        generation_ms = (
+            (_perf_counter_ns() - started) / 1.0e6
+            if measure_timing and started is not None
+            else None
+        )
         validity = _validate_candidates(
             candidates,
             case=case,
@@ -1037,20 +1159,27 @@ def _evaluate_case(
             weights=weights,
             verifier_config=verifier_config,
             actuator_config=actuator_config,
+            measure_timing=measure_timing,
         )
-        repeated = rank_trajectories(
-            candidates,
-            pedestrians,
-            risk_config=risk_config,
-            weights=weights,
-            verifier_config=verifier_config,
-            actuator_config=actuator_config,
+        repeated = (
+            rank_trajectories(
+                candidates,
+                pedestrians,
+                risk_config=risk_config,
+                weights=weights,
+                verifier_config=verifier_config,
+                actuator_config=actuator_config,
+            )
+            if measure_timing
+            else rankings
         )
         gates = _gate_summary(rankings)
         reliability = _reliability_diagnostic(
             rankings, repeated, declared_outcome=case["known_contact_outcome"]
         )
-        selection = _selection_payload(rankings, candidates)
+        selection = _selection_payload(
+            rankings, candidates, horizon_steps=risk_config.horizon_steps
+        )
         case_payload["arms"][generator_name] = {
             "candidate_validity": validity,
             "hard_gate_rejection": gates,
@@ -1058,9 +1187,17 @@ def _evaluate_case(
             "decomposed_candidates": [_candidate_payload(record) for record in rankings],
             "risk_score_reliability": reliability,
             "timing": {
-                "generation_ms": round(generation_ms, _TIMING_DECIMALS),
-                "ranking_and_gates_ms": round(ranking_ms, _TIMING_DECIMALS),
-                "total_ms": round(generation_ms + ranking_ms, _TIMING_DECIMALS),
+                "generation_ms": (
+                    round(generation_ms, _TIMING_DECIMALS) if generation_ms is not None else None
+                ),
+                "ranking_and_gates_ms": (
+                    round(ranking_ms, _TIMING_DECIMALS) if ranking_ms is not None else None
+                ),
+                "total_ms": (
+                    round(generation_ms + ranking_ms, _TIMING_DECIMALS)
+                    if generation_ms is not None and ranking_ms is not None
+                    else None
+                ),
             },
         }
         arm_timing[generator_name] = {
@@ -1088,9 +1225,16 @@ def _build_selection_rows(case_payloads: Sequence[Mapping[str, Any]]) -> list[di
                 "selected_role_changed": primitive_selection["selected_role"]
                 != rbf_selection["selected_role"],
                 "generator_choice_changes_selection": (
-                    primitive_selection["selected"]
-                    and rbf_selection["selected"]
-                    and primitive_selection["selected_slot"] != rbf_selection["selected_slot"]
+                    primitive_selection["selected"] != rbf_selection["selected"]
+                    or (
+                        primitive_selection["selected"]
+                        and rbf_selection["selected"]
+                        and (
+                            primitive_selection["selected_role"] != rbf_selection["selected_role"]
+                            or primitive_selection["selected_trajectory_sha256"]
+                            != rbf_selection["selected_trajectory_sha256"]
+                        )
+                    )
                 ),
             }
         )
@@ -1099,17 +1243,21 @@ def _build_selection_rows(case_payloads: Sequence[Mapping[str, Any]]) -> list[di
 
 def _build_reliability_rows(case_payloads: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Build per-case reliability summary rows across the two generator arms."""
-    reliability_rows: list[Mapping[str, Any]] = []
+    reliability_rows: list[dict[str, Any]] = []
     for case_payload in case_payloads:
-        primitive_reliability = case_payload["arms"]["deterministic_primitive"][
-            "risk_score_reliability"
-        ]
+        by_generator = {
+            generator_name: case_payload["arms"][generator_name]["risk_score_reliability"][
+                "declared_outcome_check"
+            ]
+            for generator_name in ("deterministic_primitive", "rbf")
+        }
         reliability_rows.append(
             {
                 "case_id": case_payload["case_id"],
-                "declared_outcome_present": primitive_reliability["declared_outcome_check"][
+                "declared_outcome_present": by_generator["deterministic_primitive"][
                     "declared_outcome_present"
                 ],
+                "by_generator": by_generator,
             }
         )
     return reliability_rows
@@ -1124,6 +1272,9 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
         )
     if config.get("evidence_status") != "diagnostic_only":
         raise ComparisonError("config evidence_status must be diagnostic_only")
+
+    resolved_generated_at, pinned = _generation_mode(config, generated_at_utc)
+    measure_timing = not pinned
 
     evaluation_path = _resolve_repo_path(config.get("fixture_path"), field="fixture_path")
     calibration_path = _resolve_repo_path(
@@ -1167,10 +1318,20 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
     per_generator_gates: dict[str, list[dict[str, Any]]] = {name: [] for name in generators}
     per_generator_reliability: dict[str, list[dict[str, Any]]] = {name: [] for name in generators}
     timing_generation: dict[str, dict[str, Any]] = {
-        name: {"total_ms": 0.0, "total_candidates": 0, "per_case": []} for name in generators
+        name: {
+            "total_ms": 0.0 if measure_timing else None,
+            "total_candidates": 0,
+            "per_case": [],
+        }
+        for name in generators
     }
     timing_ranking: dict[str, dict[str, Any]] = {
-        name: {"total_ms": 0.0, "total_candidates": 0, "per_case": []} for name in generators
+        name: {
+            "total_ms": 0.0 if measure_timing else None,
+            "total_candidates": 0,
+            "per_case": [],
+        }
+        for name in generators
     }
 
     for case in evaluation_cases:
@@ -1182,6 +1343,7 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
             verifier_config=verifier_config,
             actuator_config=actuator_config,
             candidate_budget=candidate_budget,
+            measure_timing=measure_timing,
         )
         case_payloads.append(case_payload)
         for generator_name, timing in arm_timing.items():
@@ -1191,32 +1353,54 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
             per_generator_validity[generator_name].append(validity)
             per_generator_gates[generator_name].append(gates)
             per_generator_reliability[generator_name].append(reliability)
-            timing_generation[generator_name]["total_ms"] += timing["generation_ms"]
+            if timing["generation_ms"] is not None:
+                timing_generation[generator_name]["total_ms"] += timing["generation_ms"]
             timing_generation[generator_name]["total_candidates"] += timing["candidate_count"]
             timing_generation[generator_name]["per_case"].append(
                 {
                     "case_id": case["case_id"],
                     "candidate_count": timing["candidate_count"],
-                    "generation_ms": round(timing["generation_ms"], _TIMING_DECIMALS),
-                    "generation_ms_per_candidate": round(
-                        timing["generation_ms"] / timing["candidate_count"], _TIMING_DECIMALS
+                    "generation_ms": (
+                        round(timing["generation_ms"], _TIMING_DECIMALS)
+                        if timing["generation_ms"] is not None
+                        else None
+                    ),
+                    "generation_ms_per_candidate": (
+                        round(
+                            timing["generation_ms"] / timing["candidate_count"],
+                            _TIMING_DECIMALS,
+                        )
+                        if timing["generation_ms"] is not None
+                        else None
                     ),
                 }
             )
-            timing_ranking[generator_name]["total_ms"] += timing["ranking_ms"]
+            if timing["ranking_ms"] is not None:
+                timing_ranking[generator_name]["total_ms"] += timing["ranking_ms"]
             timing_ranking[generator_name]["total_candidates"] += timing["candidate_count"]
             timing_ranking[generator_name]["per_case"].append(
                 {
                     "case_id": case["case_id"],
-                    "ranking_and_gates_ms": round(timing["ranking_ms"], _TIMING_DECIMALS),
-                    "ranking_and_gates_ms_per_candidate": round(
-                        timing["ranking_ms"] / timing["candidate_count"], _TIMING_DECIMALS
+                    "ranking_and_gates_ms": (
+                        round(timing["ranking_ms"], _TIMING_DECIMALS)
+                        if timing["ranking_ms"] is not None
+                        else None
+                    ),
+                    "ranking_and_gates_ms_per_candidate": (
+                        round(
+                            timing["ranking_ms"] / timing["candidate_count"],
+                            _TIMING_DECIMALS,
+                        )
+                        if timing["ranking_ms"] is not None
+                        else None
                     ),
                     "per_candidate": [
                         {
                             "action_id": row["action_id"],
-                            "ranking_and_gate_ms": round(
-                                row["ranking_and_gate_ms"], _TIMING_DECIMALS
+                            "ranking_and_gate_ms": (
+                                round(row["ranking_and_gate_ms"], _TIMING_DECIMALS)
+                                if row["ranking_and_gate_ms"] is not None
+                                else None
                             ),
                         }
                         for row in timing["per_candidate"]
@@ -1227,12 +1411,14 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
     selection_rows = _build_selection_rows(case_payloads)
     reliability_rows = _build_reliability_rows(case_payloads)
 
-    timing_total_ms: dict[str, float] = {}
+    timing_total_ms: dict[str, float | None] = {}
     for generator_name in generators:
-        timing_total_ms[generator_name] = round(
-            timing_generation[generator_name]["total_ms"]
-            + timing_ranking[generator_name]["total_ms"],
-            _TIMING_DECIMALS,
+        generation_total = timing_generation[generator_name]["total_ms"]
+        ranking_total = timing_ranking[generator_name]["total_ms"]
+        timing_total_ms[generator_name] = (
+            round(generation_total + ranking_total, _TIMING_DECIMALS)
+            if generation_total is not None and ranking_total is not None
+            else None
         )
 
     unavailable = _unavailable_denominators(
@@ -1250,13 +1436,6 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
         int(reliability["degraded_rows"]) for reliability in reliability_by_generator.values()
     )
 
-    resolved_generated_at = generated_at_utc or str(config.get("pinned_generated_at_utc") or "")
-    if resolved_generated_at:
-        pinned = True
-    else:
-        pinned = False
-        resolved_generated_at = dt.datetime.now(dt.UTC).isoformat()
-
     report = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "evidence_status": "diagnostic_only",
@@ -1265,7 +1444,8 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
         "caveats": [
             "RBF is a deterministic radial-basis-function proposal, not a trained policy.",
             "Risk scores are constant-velocity model scores; calibration is not evaluated.",
-            "Timing is measured local offline wall time and is not an online performance claim.",
+            "Timing is measured local offline wall time when requested and is not an online "
+            "performance claim; pinned deterministic reports omit wall-clock timing.",
             "Hard-gate rejections are reported as exclusions from selection, not success evidence.",
             "Planner-loop wiring, online adaptation, nominal benchmark execution, safety, and "
             "real-world claims are deferred.",
@@ -1277,7 +1457,7 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
             "selection_difference_interpretation": "descriptive on a small held-out fixture split",
         },
         "provenance": {
-            "command": " ".join(shlex.quote(argument) for argument in sys.argv),
+            "command": _provenance_command(pinned=pinned),
             "config_path": _display_path(config_path),
             "config_sha256": _sha256_file(config_path),
             "config_schema_version": CONFIG_SCHEMA_VERSION,
@@ -1289,7 +1469,7 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
             "generator_config_hash": generator_config_hash,
             "expected_generator_config_hash": expected_hash.strip(),
             "git_commit_sha": _git_head(),
-            "git_status_short": _git_status(),
+            "git_status_short": (["omitted_for_pinned_determinism"] if pinned else _git_status()),
             "generated_at_utc": resolved_generated_at,
             "pinned_generated_at_utc": pinned,
         },
@@ -1383,10 +1563,17 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
         },
         "timing": {
             "measurement_boundary": "offline local wall-clock diagnostic; not an online performance claim",
+            "measurement_status": (
+                "measured_local_wall_clock"
+                if measure_timing
+                else "not_measured_for_pinned_determinism"
+            ),
             "generation": {
                 generator_name: {
-                    "total_ms": round(
-                        timing_generation[generator_name]["total_ms"], _TIMING_DECIMALS
+                    "total_ms": (
+                        round(timing_generation[generator_name]["total_ms"], _TIMING_DECIMALS)
+                        if timing_generation[generator_name]["total_ms"] is not None
+                        else None
                     ),
                     "total_candidates": timing_generation[generator_name]["total_candidates"],
                     "per_case": timing_generation[generator_name]["per_case"],
@@ -1395,7 +1582,11 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
             },
             "ranking_and_hard_gates": {
                 generator_name: {
-                    "total_ms": round(timing_ranking[generator_name]["total_ms"], _TIMING_DECIMALS),
+                    "total_ms": (
+                        round(timing_ranking[generator_name]["total_ms"], _TIMING_DECIMALS)
+                        if timing_ranking[generator_name]["total_ms"] is not None
+                        else None
+                    ),
                     "total_candidates": timing_ranking[generator_name]["total_candidates"],
                     "per_case": timing_ranking[generator_name]["per_case"],
                 }
@@ -1424,7 +1615,7 @@ def _aggregate_reliability(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     )
     result = _aggregate_counts(checks, keys)
     result["calibration_status"] = "not_evaluated; model score reliability checks only"
-    result["status"] = (
+    model_status = (
         "pass"
         if result["finite_risk_scores"] == result["candidate_count"]
         and result["in_range_risk_scores"] == result["candidate_count"]
@@ -1433,6 +1624,7 @@ def _aggregate_reliability(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         and result["degraded_rows"] == 0
         else "inconclusive"
     )
+    result["model_score_status"] = model_status
     declared_cases = [row["declared_outcome_check"] for row in rows]
     present = [row for row in declared_cases if row["declared_outcome_present"]]
     result["declared_outcome_cases"] = len(present)
@@ -1447,6 +1639,12 @@ def _aggregate_reliability(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "not_applicable"
         if not present
         else ("pass" if all(status == "pass" for status in declared_statuses) else "inconclusive")
+    )
+    result["status"] = (
+        "pass"
+        if model_status == "pass"
+        and result["declared_outcome_status"] in {"pass", "not_applicable"}
+        else "inconclusive"
     )
     return result
 
@@ -1490,7 +1688,8 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         lines.append(
             f"- `{name}`: {row['valid_count']}/{row['candidate_count']} valid candidate rows; "
             f"finite={row['finite_waypoint_sequences']} ({row['finite_validity_rate']:.3f}), "
-            f"unique={row['unique_action_ids']} ({row['unique_validity_rate']:.3f}), "
+            f"unique trajectories={row['unique_waypoint_sequences']} "
+            f"({row['unique_validity_rate']:.3f}); unique action IDs={row['unique_action_ids']}, "
             f"shape-valid={row['shape_valid_sequences']}."
         )
     lines.extend(["", "## Hard-gate rejection", ""])
@@ -1522,7 +1721,8 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     )
     for name, row in reliability.items():
         lines.append(
-            f"- `{name}`: model-score status=`{row['status']}`, "
+            f"- `{name}`: model-score status=`{row['model_score_status']}`; "
+            f"overall reliability status=`{row['status']}`, "
             f"finite/in-range/provenance/repeatable="
             f"{row['finite_risk_scores']}/{row['in_range_risk_scores']}/"
             f"{row['complete_provenance_rows']}/{row['repeatable_risk_scores']}; "
@@ -1538,13 +1738,23 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             "Timing is measured offline wall-clock time and is not an online performance claim.",
         ]
     )
+    if report["timing"]["measurement_status"] != "measured_local_wall_clock":
+        lines.append(
+            "Wall-clock timing was not measured because this report pins the generation timestamp "
+            "for deterministic output; omit `--generated-at` to collect timing."
+        )
+
+    def format_ms(value: Any) -> str:
+        """Format measured milliseconds or the deterministic-mode sentinel."""
+        return "not measured" if value is None else f"{value:.3f} ms"
+
     for name, row in report["timing"]["generation"].items():
         lines.append(
-            f"- `{name}` generation: total={row['total_ms']:.3f} ms; "
+            f"- `{name}` generation: total={format_ms(row['total_ms'])}; "
             f"candidates={row['total_candidates']}."
         )
     for name, row in report["timing"]["ranking_and_hard_gates"].items():
-        lines.append(f"- `{name}` ranking+hard-gates: total={row['total_ms']:.3f} ms.")
+        lines.append(f"- `{name}` ranking+hard-gates: total={format_ms(row['total_ms'])}.")
     lines.extend(["", "## Unavailable denominators", ""])
     if unavailable:
         for entry in unavailable:

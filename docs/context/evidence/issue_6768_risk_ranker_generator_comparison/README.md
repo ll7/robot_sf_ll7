@@ -13,13 +13,15 @@ hard-gate configuration. It never wires either generator into a planner loop.
 - Evidence status: `diagnostic_only`.
 - Baseline: `deterministic_primitive` from `generate_primitive_candidates`.
 - Variant: opt-in deterministic RBF proposals from `generate_rbf_candidates`; this is not a trained policy.
-- The report separately records candidate validity, `verify_trajectory` fallback-brake
+- The report separately records candidate validity (including unique waypoint-sequence checks), `verify_trajectory` fallback-brake
   rejection, actuator-gate rejection, eligible/selected-candidate identity and whether
   generator choice changes selection, decomposed risk/time/jerk/path-length/clearance
   components, a model-risk reliability diagnostic where a fixture declares a known contact
   outcome, generation/ranking/total timing, and unavailable denominators with reasons.
 - Risk scores are constant-velocity model scores, not calibrated real-world collision
-  probabilities. Timing is local offline wall time, not online performance evidence.
+  probabilities. Declared contact outcomes check deterministic geometry agreement; they are not
+  independent calibration or reliability evidence. Timing is measured local offline wall time
+  when requested, not online performance evidence; pinned deterministic reports omit it.
 - Planner-loop wiring, online adaptation, nominal benchmark execution, planner improvement,
   safety, and real-world claims remain deferred.
 
@@ -54,9 +56,10 @@ uv run python scripts/analysis/compare_risk_ranker_generators_issue_6768.py \
 
 The JSON report records the command, config and fixture SHA-256 digests, calibration/evaluation
 split integrity, seed, exact commit SHA, matched-comparison policy, generator/config hash,
-fallback/degraded exclusions, and unavailable denominators. The report is deterministic for a
-pinned generation timestamp (`--generated-at`); wall-clock timing is reported as measured
-offline time. Keep generated reports outside the worktree or promote only a small
+fallback/degraded exclusions, and unavailable denominators. A valid pinned generation timestamp
+(`--generated-at`) produces byte-stable JSON and Markdown; in that mode the timing section is
+explicitly marked `not_measured_for_pinned_determinism`. Omit `--generated-at` when measured local
+wall-clock timing is needed. Keep generated reports outside the worktree or promote only a small
 provenance-bearing manifest; do not commit raw timing logs.
 
 The report is diagnostic evidence for issue

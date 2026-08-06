@@ -19,7 +19,6 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -205,9 +204,11 @@ class TestReportSchema:
         assert primitive["candidate_count"] == 16
         assert primitive["valid_count"] == 16
         assert primitive["invalid_count"] == 0
+        assert primitive["unique_waypoint_sequences"] == 16
         assert rbf["candidate_count"] == primitive["candidate_count"]
         assert primitive["finite_validity_rate"] == 1.0
         assert primitive["unique_validity_rate"] == 1.0
+        assert rbf["unique_waypoint_sequences"] == 16
         assert rbf["finite_validity_rate"] == 1.0
         assert rbf["unique_validity_rate"] == 1.0
 
@@ -261,6 +262,11 @@ class TestReportSchema:
                 assert "selected" in selection
                 assert "selected_action_id" in selection
                 assert "selected_role" in selection
+                assert "selected_trajectory_sha256" in selection
+                if selection["selected"]:
+                    assert len(selection["selected_trajectory_sha256"]) == 64
+                else:
+                    assert selection["selected_trajectory_sha256"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -277,12 +283,22 @@ class TestDeterminism:
         second = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
         assert _deterministic_view(first) == _deterministic_view(second)
 
-    def test_full_report_byte_deterministic_with_pinned_clock(self, cmp_module):
-        """With a pinned wall clock, the full report is byte-identical."""
-        with patch.object(cmp_module, "_perf_counter_ns", return_value=1_000_000_000):
-            first = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
-            second = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
+    def test_full_report_byte_deterministic_with_pinned_timestamp(self, cmp_module, monkeypatch):
+        """A pinned timestamp suppresses wall timing so the full report is byte-identical."""
+        original_argv = list(cmp_module.sys.argv)
+        monkeypatch.setattr(cmp_module.sys, "argv", [*original_argv, "--output", "/tmp/first.json"])
+        first = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
+        monkeypatch.setattr(
+            cmp_module.sys, "argv", [*original_argv, "--output", "/tmp/second.json"]
+        )
+        second = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
         assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+        assert first["timing"]["measurement_status"] == "not_measured_for_pinned_determinism"
+        assert first["timing"]["total"] == {
+            "deterministic_primitive": None,
+            "rbf": None,
+        }
+        assert first["provenance"]["git_status_short"] == ["omitted_for_pinned_determinism"]
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +388,45 @@ class TestFailClosed:
                 budget=1,
             )
 
+    def test_candidate_validation_rejects_duplicate_waypoint_sequences(self, cmp_module):
+        """Distinct IDs must not hide duplicate candidate trajectories."""
+        waypoints = np.zeros((3, 2), dtype=float)
+        duplicate_waypoints = waypoints.copy()
+        duplicate_waypoints[1, 0] = -0.0
+        candidates = [
+            CandidateAction(action_id="candidate_a", waypoints=waypoints),
+            CandidateAction(action_id="candidate_b", waypoints=duplicate_waypoints),
+        ]
+        with pytest.raises(cmp_module.ComparisonError, match="duplicate_waypoint_sequences"):
+            cmp_module._validate_candidates(
+                candidates,
+                case={"case_id": "duplicate_trajectory", "start_position": [0.0, 0.0]},
+                horizon_steps=2,
+                budget=2,
+            )
+
+    def test_aggregate_unique_rate_uses_waypoint_sequences(self, cmp_module):
+        rows = [
+            {
+                "expected_budget": 2,
+                "candidate_count": 2,
+                "valid_count": 2,
+                "invalid_count": 0,
+                "unique_action_ids": 2,
+                "unique_waypoint_sequences": 1,
+                "finite_waypoint_sequences": 2,
+                "shape_valid_sequences": 2,
+                "start_state_valid_sequences": 2,
+            }
+        ]
+        aggregate = cmp_module._aggregate_validity(rows)
+        assert aggregate["unique_validity_rate"] == 0.5
+
+    def test_invalid_pinned_timestamp_fails_closed(self, cmp_module):
+        """A provenance timestamp must be a valid UTC ISO-8601 value."""
+        with pytest.raises(cmp_module.ComparisonError, match="UTC ISO-8601"):
+            cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc="not-a-timestamp")
+
     def test_declared_outcome_without_matching_role_is_inconclusive(self, cmp_module, tmp_path):
         payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
         target_case = next(case for case in payload["cases"] if "known_contact_outcome" in case)
@@ -388,10 +443,16 @@ class TestFailClosed:
         for generator_name in ("deterministic_primitive", "rbf"):
             aggregate = report["model_risk_reliability"]["by_generator"][generator_name]
             assert aggregate["declared_outcome_status"] == "inconclusive"
+            assert aggregate["status"] == "inconclusive"
             per_case = report["model_risk_reliability"]["per_case"][target_case["case_id"]][
                 generator_name
             ]
             assert per_case["declared_outcome_check"]["status"] == "inconclusive"
+        unavailable_metrics = {entry["metric"] for entry in report["unavailable_denominators"]}
+        assert "model_risk_deterministic_primitive_declared_outcome_agreement" in (
+            unavailable_metrics
+        )
+        assert "model_risk_rbf_declared_outcome_agreement" in unavailable_metrics
 
     def test_degraded_risk_rows_do_not_pass_reliability(self, cmp_module, tmp_path):
         config_path = _nested_config_overrides(

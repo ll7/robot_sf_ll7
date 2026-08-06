@@ -150,3 +150,9 @@ class PlannerActionAdapter:
         d_angular = target_angular - current_angular
         action = np.array([d_linear, d_angular], dtype=np.float32)
         return np.clip(action, self.action_space.low, self.action_space.high)
+
+
+__all__ = [
+    "PlannerActionAdapter",
+    "attach_classic_global_planner",
+]

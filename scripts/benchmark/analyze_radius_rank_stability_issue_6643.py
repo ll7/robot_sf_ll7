@@ -138,7 +138,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--campaign-commit",
         default=None,
-        help="Expected immutable Gate 2 campaign commit SHA; must match every summary arm.",
+        help=(
+            "Expected immutable Gate 2 campaign commit SHA; must match every summary arm. "
+            "Ignored when --sweep-summary is omitted."
+        ),
     )
     parser.add_argument(
         "--gate1-canary-receipt",

@@ -1003,7 +1003,7 @@ def test_load_sweep_summary_fails_closed(tmp_path: Path) -> None:
 # --- CLI -------------------------------------------------------------------
 
 
-def test_cli_blocked_exits_nonzero(tmp_path: Path) -> None:
+def test_cli_blocked_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify the blocked exit status and separate provenance.
 
     The blocked bundle must keep ``campaign_commit`` null and record the
@@ -1012,6 +1012,7 @@ def test_cli_blocked_exits_nonzero(tmp_path: Path) -> None:
     and campaign provenance cannot be inferred from the analysis commit.
     """
     cli = _load_cli()
+    monkeypatch.setattr(cli, "current_git_sha", lambda: "b" * 40)
     exit_code = cli.main(
         [
             "--output-dir",
@@ -1028,7 +1029,7 @@ def test_cli_blocked_exits_nonzero(tmp_path: Path) -> None:
         "provenance"
     ]
     assert provenance["campaign_commit"] is None
-    assert len(provenance["analysis_commit"]) == 40
+    assert provenance["analysis_commit"] == "b" * 40
 
 
 def test_cli_verdict_exits_zero(tmp_path: Path) -> None:

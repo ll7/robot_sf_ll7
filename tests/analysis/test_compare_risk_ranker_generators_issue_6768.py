@@ -21,9 +21,11 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 import yaml
 
+from robot_sf.research.collision_risk import CandidateAction
 from tests.support.script_loader import load_script_module
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -204,6 +206,10 @@ class TestReportSchema:
         assert primitive["valid_count"] == 16
         assert primitive["invalid_count"] == 0
         assert rbf["candidate_count"] == primitive["candidate_count"]
+        assert primitive["finite_validity_rate"] == 1.0
+        assert primitive["unique_validity_rate"] == 1.0
+        assert rbf["finite_validity_rate"] == 1.0
+        assert rbf["unique_validity_rate"] == 1.0
 
     def test_decomposed_components_reported_per_candidate(self, report):
         for case in report["cases"]:
@@ -318,6 +324,21 @@ class TestFailClosed:
         with pytest.raises(cmp_module.ComparisonError, match="must be finite"):
             cmp_module.build_report(config_path)
 
+    def test_non_finite_unused_risk_config_fails_closed(self, cmp_module, tmp_path):
+        config_path = _nested_config_overrides(
+            tmp_path,
+            fixture_path=_HELD_OUT_FIXTURE,
+            calibration_path=_CALIBRATION_FIXTURE,
+            risk_estimator={"deadline_ms": float("nan")},
+        )
+        with pytest.raises(cmp_module.ComparisonError, match="deadline_ms must be finite"):
+            cmp_module.build_report(config_path)
+
+    def test_fractional_candidate_budget_fails_closed(self, cmp_module, tmp_path):
+        config_path = _config_overrides(tmp_path, candidate_budget=4.5)
+        with pytest.raises(cmp_module.ComparisonError, match="candidate_budget must be an integer"):
+            cmp_module.build_report(config_path)
+
     def test_unequal_budget_fails_closed(self, cmp_module, tmp_path, monkeypatch):
         monkeypatch.setattr(cmp_module, "generate_rbf_candidates", lambda *args, **kwargs: [])
         config_path = _config_overrides(tmp_path, candidate_budget=4)
@@ -333,6 +354,79 @@ class TestFailClosed:
         config_path = _config_overrides(tmp_path, expected_generator_config_hash=None)
         with pytest.raises(cmp_module.ComparisonError, match="expected_generator_config_hash"):
             cmp_module.build_report(config_path)
+
+    def test_candidate_validation_requires_exact_start_state(self, cmp_module):
+        candidate = CandidateAction(
+            action_id="primitive_test_0",
+            waypoints=np.asarray(
+                [[1_000_000.01, 0.0], [1_000_000.01, 0.0], [1_000_000.01, 0.0]],
+                dtype=float,
+            ),
+            representation="test",
+        )
+        with pytest.raises(cmp_module.ComparisonError, match="invalid candidate contract"):
+            cmp_module._validate_candidates(
+                [candidate],
+                case={"case_id": "exact_start", "start_position": [1_000_000.0, 0.0]},
+                horizon_steps=2,
+                budget=1,
+            )
+
+    def test_declared_outcome_without_matching_role_is_inconclusive(self, cmp_module, tmp_path):
+        payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
+        target_case = next(case for case in payload["cases"] if "known_contact_outcome" in case)
+        target_case["known_contact_outcome"]["candidate_role"] = "not_generated"
+        evaluation = tmp_path / "held_out_missing_role.yaml"
+        evaluation.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        config_path = _nested_config_overrides(
+            tmp_path,
+            fixture_path=evaluation,
+            calibration_path=_CALIBRATION_FIXTURE,
+        )
+
+        report = cmp_module.build_report(config_path, generated_at_utc=PINNED_GENERATED_AT)
+        for generator_name in ("deterministic_primitive", "rbf"):
+            aggregate = report["model_risk_reliability"]["by_generator"][generator_name]
+            assert aggregate["declared_outcome_status"] == "inconclusive"
+            per_case = report["model_risk_reliability"]["per_case"][target_case["case_id"]][
+                generator_name
+            ]
+            assert per_case["declared_outcome_check"]["status"] == "inconclusive"
+
+    def test_degraded_risk_rows_do_not_pass_reliability(self, cmp_module, tmp_path):
+        config_path = _nested_config_overrides(
+            tmp_path,
+            fixture_path=_HELD_OUT_FIXTURE,
+            calibration_path=_CALIBRATION_FIXTURE,
+            risk_estimator={"min_samples_for_estimate": 999},
+        )
+        payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        (
+            risk_config,
+            weights,
+            verifier_config,
+            actuator_config,
+            primitive_config,
+            rbf_config,
+            candidate_budget,
+        ) = cmp_module._build_configs(payload)
+        payload["expected_generator_config_hash"] = cmp_module._generator_config_hash(
+            candidate_budget=candidate_budget,
+            risk_config=risk_config,
+            weights=weights,
+            verifier_config=verifier_config,
+            actuator_config=actuator_config,
+            primitive_config=primitive_config,
+            rbf_config=rbf_config,
+        )
+        config_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+        report = cmp_module.build_report(config_path, generated_at_utc=PINNED_GENERATED_AT)
+        assert report["fallback_degraded_exclusions"]["degraded_rows_excluded"] == 32
+        for generator_name in ("deterministic_primitive", "rbf"):
+            reliability = report["model_risk_reliability"]["by_generator"][generator_name]
+            assert reliability["degraded_rows"] == 16
+            assert reliability["status"] == "inconclusive"
 
     def test_check_config_passes_on_committed_config(self, cmp_module):
         exit_code = cmp_module.main(["--check-config", str(_DEFAULT_CONFIG)])

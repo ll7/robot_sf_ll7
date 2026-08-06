@@ -50,6 +50,7 @@ import sys
 import time
 from collections import Counter
 from dataclasses import asdict
+from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -181,6 +182,13 @@ def _require_finite(value: Any, *, field: str) -> None:
         raise ComparisonError(f"{field} must be numeric, got {value!r}") from exc
     if not math.isfinite(numeric):
         raise ComparisonError(f"{field} must be finite, got {value!r}")
+
+
+def _require_integer(value: Any, *, field: str) -> int:
+    """Return an integer config value without silently truncating fractions."""
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ComparisonError(f"{field} must be an integer, got {value!r}")
+    return int(value)
 
 
 def _finite_vector(value: Any, *, field: str) -> list[float]:
@@ -362,9 +370,20 @@ def _dataclass_from_config(config_class: Any, raw: Any, *, name: str) -> Any:
             raise ComparisonError(f"{name}.lateral_offsets_m must be a list")
         values["lateral_offsets_m"] = tuple(float(item) for item in offsets)
     try:
-        return config_class(**values)
+        config = config_class(**values)
     except (TypeError, ValueError) as exc:
         raise ComparisonError(f"invalid {name}: {exc}") from exc
+    for field_name, value in asdict(config).items():
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                if isinstance(item, bool):
+                    continue
+                _require_finite(item, field=f"{name}.{field_name}[{index}]")
+        else:
+            _require_finite(value, field=f"{name}.{field_name}")
+    return config
 
 
 def _build_configs(
@@ -385,20 +404,28 @@ def _build_configs(
     risk_values = _mapping(payload.get("risk_estimator"), "risk_estimator")
     if "seed" in risk_values and risk_values["seed"] != seed:
         raise ComparisonError("top-level seed and risk_estimator.seed must match")
-    for field in ("horizon_steps", "dt_s", "n_samples", "velocity_std_m_s", "robot_radius_m"):
-        if field in risk_values:
-            _require_finite(risk_values[field], field=f"risk_estimator.{field}")
-    if int(risk_values.get("horizon_steps", 0)) <= 0:
-        raise ComparisonError("risk_estimator.horizon_steps must be positive")
     risk_values["seed"] = seed
+    risk_config = _dataclass_from_config(RiskEstimatorConfig, risk_values, name="risk_estimator")
+    for field in ("horizon_steps", "n_samples", "min_samples_for_estimate"):
+        _require_integer(getattr(risk_config, field), field=f"risk_estimator.{field}")
+    if risk_config.horizon_steps <= 0:
+        raise ComparisonError("risk_estimator.horizon_steps must be positive")
+
+    verifier_config = _dataclass_from_config(
+        TrajectoryVerifierConfig, payload.get("verifier", {}), name="verifier"
+    )
+    _require_integer(
+        verifier_config.max_heading_oscillation_count,
+        field="verifier.max_heading_oscillation_count",
+    )
+
+    candidate_budget = _require_integer(payload.get("candidate_budget"), field="candidate_budget")
     return (
-        _dataclass_from_config(RiskEstimatorConfig, risk_values, name="risk_estimator"),
+        risk_config,
         _dataclass_from_config(
             RankingWeights, payload.get("ranking_weights", {}), name="ranking_weights"
         ),
-        _dataclass_from_config(
-            TrajectoryVerifierConfig, payload.get("verifier", {}), name="verifier"
-        ),
+        verifier_config,
         _dataclass_from_config(
             ActuatorLimitsConfig, payload.get("actuator_limits", {}), name="actuator_limits"
         ),
@@ -410,7 +437,7 @@ def _build_configs(
         _dataclass_from_config(
             RBFGeneratorConfig, payload.get("rbf_generator", {}), name="rbf_generator"
         ),
-        int(payload.get("candidate_budget", 0)),
+        candidate_budget,
     )
 
 
@@ -483,27 +510,36 @@ def _validate_candidates(
             invalid.append("missing_action_id")
         try:
             waypoints = candidate.as_array(horizon_steps=horizon_steps)
-        except (TypeError, ValueError) as exc:
+        except (IndexError, TypeError, ValueError) as exc:
             invalid.append(f"{candidate.action_id}: {exc}")
             continue
-        shape_count += int(waypoints.shape == (horizon_steps + 1, 2))
+        shape_valid = waypoints.shape == (horizon_steps + 1, 2)
+        shape_count += int(shape_valid)
         finite_count += int(bool(np.all(np.isfinite(waypoints))))
-        start_count += int(bool(np.allclose(waypoints[0], start, atol=1.0e-12)))
+        if shape_valid:
+            start_count += int(bool(np.allclose(waypoints[0], start, atol=1.0e-12, rtol=0.0)))
+    valid_action_ids = [action_id for action_id in action_ids if isinstance(action_id, str)]
+    unique_action_ids = len(set(valid_action_ids))
     duplicate_ids = sorted(
-        action_id for action_id, count in Counter(action_ids).items() if count > 1
+        action_id for action_id, count in Counter(valid_action_ids).items() if count > 1
     )
     if duplicate_ids:
         invalid.append(f"duplicate_action_ids={duplicate_ids}")
     if len(invalid) > 0 or shape_count != budget or finite_count != budget or start_count != budget:
         raise ComparisonError(f"{case['case_id']}: invalid candidate contract: {invalid}")
+    finite_validity_rate = finite_count / budget
+    unique_validity_rate = unique_action_ids / budget
     return {
         "expected_budget": budget,
         "candidate_count": len(candidates),
         "valid_count": budget,
         "invalid_count": 0,
+        "unique_action_ids": unique_action_ids,
         "finite_waypoint_sequences": finite_count,
         "shape_valid_sequences": shape_count,
         "start_state_valid_sequences": start_count,
+        "finite_validity_rate": finite_validity_rate,
+        "unique_validity_rate": unique_validity_rate,
         "stable_unique_action_ids": stable_count == budget and not duplicate_ids,
         "action_ids": action_ids,
         "status": "pass",
@@ -594,6 +630,11 @@ def _candidate_payload(record: CandidateRanking) -> dict[str, Any]:
         _require_finite(value, field=f"candidate {record.action_id} {field}")
     _clearance_json(record.components.min_clearance_m)
     uncertainty = record.estimate.uncertainty
+    for field, value in (
+        ("mc_standard_error", uncertainty.mc_standard_error),
+        ("ci95_halfwidth", uncertainty.ci95_halfwidth),
+    ):
+        _require_finite(value, field=f"candidate {record.action_id} {field}")
     return {
         "action_id": record.action_id,
         "rank": int(record.rank),
@@ -713,10 +754,14 @@ def _reliability_diagnostic(
     in_range_count = 0
     provenance_count = 0
     repeatable_count = 0
+    abstained_count = 0
+    ood_count = 0
+    degraded_count = 0
     role_candidates: list[CandidateRanking] = []
     if declared_outcome is not None:
         role = str(declared_outcome["candidate_role"])
         role_candidates = [record for record in rankings if _role(record.action_id) == role]
+    role_action_ids = {record.action_id for record in role_candidates}
     agreeing_count = 0
     disagreeing: list[str] = []
     for record in rankings:
@@ -746,8 +791,15 @@ def _reliability_diagnostic(
                 abs_tol=1.0e-15,
             )
         )
+        uncertainty = record.estimate.uncertainty
+        abstained = bool(uncertainty.abstained)
+        ood = any(uncertainty.ood_actor_flags)
+        degraded = abstained or ood
+        abstained_count += int(abstained)
+        ood_count += int(ood)
+        degraded_count += int(degraded)
         model_contact_certain = bool(record.estimate.deterministic.contact_certain)
-        if record in role_candidates:
+        if record.action_id in role_action_ids and not degraded:
             agrees = model_contact_certain == declared_outcome["contact_certain"]
             agreeing_count += int(agrees)
             if not agrees:
@@ -769,6 +821,11 @@ def _reliability_diagnostic(
                         abs_tol=1.0e-15,
                     )
                 ),
+                "mc_standard_error": float(uncertainty.mc_standard_error),
+                "ci95_halfwidth": float(uncertainty.ci95_halfwidth),
+                "abstained": abstained,
+                "ood_actor": ood,
+                "degraded": degraded,
             }
         )
     model_status = (
@@ -777,16 +834,41 @@ def _reliability_diagnostic(
         and in_range_count == len(rankings)
         and provenance_count == len(rankings)
         and repeatable_count == len(rankings)
+        and degraded_count == 0
         else "inconclusive"
     )
     if declared_outcome is not None:
-        outcome_status = "pass" if not disagreeing else "inconclusive"
+        reliable_role_count = len(role_candidates) - sum(
+            int(
+                next(
+                    row["degraded"] for row in per_candidate if row["action_id"] == record.action_id
+                )
+            )
+            for record in role_candidates
+        )
+        if not role_candidates:
+            outcome_status = "inconclusive"
+            outcome_reason = (
+                "no generated candidate matched the declared candidate role; "
+                "outcome agreement is unavailable"
+            )
+        elif reliable_role_count == 0:
+            outcome_status = "inconclusive"
+            outcome_reason = (
+                "all role-matched candidates were abstained or out of model range; "
+                "outcome agreement is unavailable"
+            )
+        else:
+            outcome_status = "pass" if not disagreeing else "inconclusive"
+            outcome_reason = str(declared_outcome.get("reason") or "")
         outcome_summary: dict[str, Any] = {
             "declared_outcome_present": True,
             "declared_contact_certain": bool(declared_outcome["contact_certain"]),
             "candidate_role": str(declared_outcome["candidate_role"]),
-            "reason": str(declared_outcome.get("reason") or ""),
+            "reason": outcome_reason,
             "candidates_with_declared_outcome": len(role_candidates),
+            "reliable_candidates_with_declared_outcome": reliable_role_count,
+            "degraded_candidates_excluded": len(role_candidates) - reliable_role_count,
             "agreeing_candidates": agreeing_count,
             "disagreeing_candidates": disagreeing,
             "status": outcome_status,
@@ -798,6 +880,8 @@ def _reliability_diagnostic(
             "candidate_role": None,
             "reason": "no known contact outcome declared for this fixture",
             "candidates_with_declared_outcome": 0,
+            "reliable_candidates_with_declared_outcome": 0,
+            "degraded_candidates_excluded": 0,
             "agreeing_candidates": 0,
             "disagreeing_candidates": [],
             "status": "not_applicable",
@@ -809,6 +893,9 @@ def _reliability_diagnostic(
             "in_range_risk_scores": in_range_count,
             "complete_provenance_rows": provenance_count,
             "repeatable_risk_scores": repeatable_count,
+            "abstained_rows": abstained_count,
+            "ood_actor_rows": ood_count,
+            "degraded_rows": degraded_count,
             "calibration_status": "not_evaluated; model score reliability checks only",
             "status": model_status,
         },
@@ -859,6 +946,28 @@ def _aggregate_counts(rows: Sequence[Mapping[str, Any]], keys: Sequence[str]) ->
     """Sum integer fields across fixture cases."""
     result: dict[str, Any] = {key: sum(int(row[key]) for row in rows) for key in keys}
     result["case_count"] = len(rows)
+    return result
+
+
+def _aggregate_validity(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Aggregate candidate validity counts and expose finite/unique rates."""
+    result = _aggregate_counts(
+        rows,
+        (
+            "expected_budget",
+            "candidate_count",
+            "valid_count",
+            "invalid_count",
+            "unique_action_ids",
+            "finite_waypoint_sequences",
+            "shape_valid_sequences",
+            "start_state_valid_sequences",
+        ),
+    )
+    if result["candidate_count"] <= 0:
+        raise ComparisonError("candidate validity denominator must be positive")
+    result["finite_validity_rate"] = result["finite_waypoint_sequences"] / result["candidate_count"]
+    result["unique_validity_rate"] = result["unique_action_ids"] / result["candidate_count"]
     return result
 
 
@@ -1129,6 +1238,17 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
     unavailable = _unavailable_denominators(
         reliability_rows=reliability_rows, selection_rows=selection_rows
     )
+    validity_by_generator = {
+        generator_name: _aggregate_validity(per_generator_validity[generator_name])
+        for generator_name in generators
+    }
+    reliability_by_generator = {
+        generator_name: _aggregate_reliability(per_generator_reliability[generator_name])
+        for generator_name in generators
+    }
+    degraded_rows_excluded = sum(
+        int(reliability["degraded_rows"]) for reliability in reliability_by_generator.values()
+    )
 
     resolved_generated_at = generated_at_utc or str(config.get("pinned_generated_at_utc") or "")
     if resolved_generated_at:
@@ -1191,7 +1311,7 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
         },
         "fallback_degraded_exclusions": {
             "fallback_rows_excluded": 0,
-            "degraded_rows_excluded": 0,
+            "degraded_rows_excluded": degraded_rows_excluded,
             "provenance_incomplete_rows_excluded": 0,
             "invalid_rows_excluded": 0,
             "non_finite_rows_excluded": 0,
@@ -1199,21 +1319,7 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
             "fallback row contributes to a success denominator",
         },
         "candidate_validity": {
-            "by_generator": {
-                generator_name: _aggregate_counts(
-                    per_generator_validity[generator_name],
-                    (
-                        "expected_budget",
-                        "candidate_count",
-                        "valid_count",
-                        "invalid_count",
-                        "finite_waypoint_sequences",
-                        "shape_valid_sequences",
-                        "start_state_valid_sequences",
-                    ),
-                )
-                for generator_name in generators
-            },
+            "by_generator": validity_by_generator,
             "per_case": {
                 case_payload["case_id"]: {
                     generator_name: case_payload["arms"][generator_name]["candidate_validity"]
@@ -1266,10 +1372,7 @@ def build_report(config_path: Path, *, generated_at_utc: str | None = None) -> d
                 int(bool(row["declared_outcome_present"])) for row in reliability_rows
             ),
             "calibration_status": "not_evaluated; model score reliability checks only",
-            "by_generator": {
-                generator_name: _aggregate_reliability(per_generator_reliability[generator_name])
-                for generator_name in generators
-            },
+            "by_generator": reliability_by_generator,
             "per_case": {
                 case_payload["case_id"]: {
                     generator_name: case_payload["arms"][generator_name]["risk_score_reliability"]
@@ -1315,6 +1418,9 @@ def _aggregate_reliability(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "in_range_risk_scores",
         "complete_provenance_rows",
         "repeatable_risk_scores",
+        "abstained_rows",
+        "ood_actor_rows",
+        "degraded_rows",
     )
     result = _aggregate_counts(checks, keys)
     result["calibration_status"] = "not_evaluated; model score reliability checks only"
@@ -1324,6 +1430,7 @@ def _aggregate_reliability(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         and result["in_range_risk_scores"] == result["candidate_count"]
         and result["complete_provenance_rows"] == result["candidate_count"]
         and result["repeatable_risk_scores"] == result["candidate_count"]
+        and result["degraded_rows"] == 0
         else "inconclusive"
     )
     declared_cases = [row["declared_outcome_check"] for row in rows]
@@ -1335,10 +1442,11 @@ def _aggregate_reliability(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     result["declared_outcome_disagreeing_candidates"] = sorted(
         {action_id for row in present for action_id in row["disagreeing_candidates"]}
     )
+    declared_statuses = [row["status"] for row in present]
     result["declared_outcome_status"] = (
         "not_applicable"
         if not present
-        else ("pass" if not result["declared_outcome_disagreeing_candidates"] else "inconclusive")
+        else ("pass" if all(status == "pass" for status in declared_statuses) else "inconclusive")
     )
     return result
 
@@ -1381,7 +1489,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     for name, row in validity.items():
         lines.append(
             f"- `{name}`: {row['valid_count']}/{row['candidate_count']} valid candidate rows; "
-            f"finite={row['finite_waypoint_sequences']}, shape-valid={row['shape_valid_sequences']}."
+            f"finite={row['finite_waypoint_sequences']} ({row['finite_validity_rate']:.3f}), "
+            f"unique={row['unique_action_ids']} ({row['unique_validity_rate']:.3f}), "
+            f"shape-valid={row['shape_valid_sequences']}."
         )
     lines.extend(["", "## Hard-gate rejection", ""])
     for name, row in gates.items():
@@ -1416,6 +1526,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             f"finite/in-range/provenance/repeatable="
             f"{row['finite_risk_scores']}/{row['in_range_risk_scores']}/"
             f"{row['complete_provenance_rows']}/{row['repeatable_risk_scores']}; "
+            f"degraded={row['degraded_rows']}; "
             f"declared-outcome status=`{row['declared_outcome_status']}`, "
             f"agreeing={row['declared_outcome_agreeing_candidates']}."
         )

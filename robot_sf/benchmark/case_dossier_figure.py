@@ -40,7 +40,8 @@ SYNTHETIC_FIXTURE_LABEL = "SYNTHETIC FIXTURE — RENDERER PROOF ONLY"
 FINAL_WIDTH_IN = 426.79135 / 72.27
 BASE_FONT_PT = 9.0
 MINIMUM_VISIBLE_FONT_PT = 8.25
-ROUTE_TITLE_BAND_IN = 0.20
+ROUTE_TITLE_BAND_IN = 0.48
+PROCESS_TITLE_BAND_IN = 0.14
 
 PALETTE = {
     "left": "#0072B2",
@@ -212,7 +213,12 @@ def _validate_input_semantics(payload: dict[str, Any]) -> None:
         )
     if float(layout["minimum_font_pt"]) != MINIMUM_VISIBLE_FONT_PT:
         raise CaseDossierError("minimum_font_mismatch", f"expected {MINIMUM_VISIBLE_FONT_PT}pt")
-    for key in ("time_range_s", "clearance_range_m", "speed_range_mps"):
+    for key in (
+        "time_range_s",
+        "clearance_range_m",
+        "speed_range_mps",
+        "turn_rate_range_rad_s",
+    ):
         lower, upper = layout[key]
         if not lower < upper:
             raise CaseDossierError("invalid_shared_scale", key)
@@ -466,6 +472,27 @@ _EVENT_LABELS = {
 }
 _EVENT_LINESTYLES = ((0, (2, 2)), (0, (4, 2)), (0, (1, 1)), (0, (5, 1, 1, 1)))
 _EVENT_MARKERS = ("o", "s", "D", "P", "^", "v")
+_CONTROLLER_SIGNALS = (
+    "controller_state",
+    "command_source",
+    "guard_state",
+    "fallback_state",
+)
+_CONTROLLER_SIGNAL_LABELS = {
+    "controller_state": "ctrl",
+    "command_source": "src",
+    "guard_state": "guard",
+    "fallback_state": "fb",
+}
+_CATEGORICAL_COLORS = (
+    "#56B4E9",
+    "#E69F00",
+    "#009E73",
+    "#CC79A7",
+    "#F0E442",
+    "#0072B2",
+    "#D55E00",
+)
 
 
 def _event_groups(traces: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1044,6 +1071,124 @@ def _draw_speed(
     }
 
 
+def _draw_turn_rate(
+    ax: Any,
+    traces: dict[str, dict[str, Any]],
+    time_range: list[float],
+    turn_rate_range: list[float],
+) -> dict[str, Any]:
+    commanded_status: dict[str, dict[str, Any]] = {}
+    executed_status: dict[str, dict[str, Any]] = {}
+    commanded_available = False
+    executed_unavailable_roles: list[str] = []
+    for role, trace in traces.items():
+        commanded: list[tuple[float, float]] = []
+        executed: list[tuple[float, float]] = []
+        for frame in trace["frames"]:
+            commands = frame.get("commands", {})
+            commanded_record = commands.get("commanded")
+            commanded_value = (
+                commanded_record.get("angular_velocity")
+                if isinstance(commanded_record, dict)
+                else None
+            )
+            if isinstance(commanded_value, int | float) and math.isfinite(float(commanded_value)):
+                commanded.append((float(frame["time_s"]), float(commanded_value)))
+            executed_record = commands.get("executed")
+            executed_value = (
+                executed_record.get("angular_velocity")
+                if isinstance(executed_record, dict)
+                else None
+            )
+            if isinstance(executed_value, int | float) and math.isfinite(float(executed_value)):
+                executed.append((float(frame["time_s"]), float(executed_value)))
+        if commanded:
+            commanded_available = True
+            ax.plot(
+                [point[0] for point in commanded],
+                [point[1] for point in commanded],
+                color=PALETTE[role],
+                linestyle=LINESTYLES[role],
+                marker=MARKERS[role],
+                markersize=2.8,
+                linewidth=1.5,
+                label=f"{role} commanded turn",
+            )
+            commanded_status[role] = {
+                "status": "available",
+                "reason": "recorded_commanded_angular_velocity",
+                "artist_count": 1,
+                "nonzero_observed": any(abs(value) > 0.0 for _, value in commanded),
+            }
+        else:
+            commanded_status[role] = {
+                "status": "unavailable",
+                "reason": "commanded_angular_velocity_unavailable",
+                "artist_count": 0,
+                "nonzero_observed": False,
+            }
+        if executed:
+            ax.plot(
+                [point[0] for point in executed],
+                [point[1] for point in executed],
+                color=PALETTE[role],
+                linestyle=":",
+                marker=MARKERS[role],
+                markersize=2.4,
+                linewidth=1.0,
+                alpha=0.75,
+                label=f"{role} executed turn",
+            )
+            executed_status[role] = {
+                "status": "available",
+                "reason": "explicit_executed_angular_velocity",
+                "artist_count": 1,
+            }
+        else:
+            executed_unavailable_roles.append(role)
+            executed_status[role] = {
+                "status": "unavailable",
+                "reason": "explicit_executed_angular_velocity_unavailable",
+                "artist_count": 0,
+            }
+    if commanded_available:
+        _draw_event_cursors(ax, traces)
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "COMMANDED TURN UNAVAILABLE",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+    unavailable_note = (
+        "\nEXECUTED TURN UNAVAILABLE — " + "/".join(executed_unavailable_roles)
+        if executed_unavailable_roles
+        else ""
+    )
+    ax.set(
+        xlim=tuple(time_range),
+        ylim=tuple(turn_rate_range),
+        xlabel="absolute time (s)",
+        ylabel="turn rate (rad/s)",
+    )
+    ax.set_title(
+        f"Commanded and executed turn rate{unavailable_note}",
+        loc="right",
+    )
+    return {
+        "status": "available" if commanded_available else "unavailable",
+        "reason": (
+            "recorded_commanded_angular_velocity"
+            if commanded_available
+            else "commanded_angular_velocity_unavailable"
+        ),
+        "commanded": commanded_status,
+        "executed": executed_status,
+    }
+
+
 def _draw_progress(
     ax: Any,
     traces: dict[str, dict[str, Any]],
@@ -1090,15 +1235,152 @@ def _draw_progress(
     }
 
 
-def _controller_state_status(traces: dict[str, dict[str, Any]]) -> dict[str, str]:
-    signal_names = ("controller_state", "command_source", "guard_state", "fallback_state")
-    for trace in traces.values():
+def _categorical_color(value: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).digest()
+    return _CATEGORICAL_COLORS[digest[0] % len(_CATEGORICAL_COLORS)]
+
+
+def _draw_controller_state_strip(  # noqa: C901 - four signals require explicit per-role states
+    ax: Any,
+    traces: dict[str, dict[str, Any]],
+    time_range: list[float],
+) -> dict[str, Any]:
+    collected: dict[str, dict[str, list[tuple[float, str]]]] = {
+        signal: {role: [] for role in ("left", "right")} for signal in _CONTROLLER_SIGNALS
+    }
+    for role, trace in traces.items():
         contract = trace["source_trace"]["content_receipt"]["content_contract"]
         for frame in contract["frames"]:
             planner = frame.get("planner", {})
-            if any(planner.get(name) is not None for name in signal_names):
-                return {"status": "available", "reason": "controller_state_signal"}
-    return {"status": "unavailable", "reason": "controller_state_signal_absent"}
+            for signal in _CONTROLLER_SIGNALS:
+                value = planner.get(signal)
+                if isinstance(value, str | int | float | bool) and not (
+                    isinstance(value, float) and not math.isfinite(value)
+                ):
+                    collected[signal][role].append((float(frame["time_s"]), str(value)))
+
+    any_available = any(
+        values for role_values in collected.values() for values in role_values.values()
+    )
+    signal_status: dict[str, dict[str, Any]] = {}
+    total_artists = 0
+    if not any_available:
+        ax.text(
+            0.5,
+            0.5,
+            "CONTROLLER / GUARD / FALLBACK / COMMAND SOURCE\nUNAVAILABLE — source signals absent",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        for signal in _CONTROLLER_SIGNALS:
+            signal_status[signal] = {
+                "status": "unavailable",
+                "reason": "source_planner_signal_absent",
+                "source": f"source_trace.content_receipt.frames[].planner.{signal}",
+                "roles": {
+                    role: {
+                        "status": "unavailable",
+                        "values": [],
+                        "artist_count": 0,
+                    }
+                    for role in ("left", "right")
+                },
+                "artist_count": 0,
+            }
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title("Controller / guard / fallback / command source")
+        return {
+            "status": "unavailable",
+            "reason": "controller_state_signal_absent",
+            "signals": signal_status,
+            "artist_count": 0,
+        }
+
+    row_labels: list[str] = []
+    row_positions: list[int] = []
+    row = 0
+    time_min, time_max = (float(value) for value in time_range)
+    for signal in _CONTROLLER_SIGNALS:
+        role_status: dict[str, dict[str, Any]] = {}
+        signal_artists = 0
+        for role in ("left", "right"):
+            observations = collected[signal][role]
+            values = sorted({value for _, value in observations})
+            row_positions.append(row)
+            role_prefix = "L" if role == "left" else "R"
+            if observations:
+                for index, (start, value) in enumerate(observations):
+                    stop = observations[index + 1][0] if index + 1 < len(observations) else time_max
+                    width = max(stop - start, (time_max - time_min) * 0.01)
+                    ax.broken_barh(
+                        [(start, width)],
+                        (row - 0.34, 0.68),
+                        facecolors=_categorical_color(f"{signal}:{value}"),
+                        edgecolors=PALETTE[role],
+                        linewidth=0.8,
+                    )
+                    signal_artists += 1
+                row_labels.append(f"{role_prefix} {_CONTROLLER_SIGNAL_LABELS[signal]}")
+                role_status[role] = {
+                    "status": "available",
+                    "values": values,
+                    "artist_count": len(observations),
+                }
+            else:
+                ax.broken_barh(
+                    [(time_min, time_max - time_min)],
+                    (row - 0.34, 0.68),
+                    facecolors="#F2F2F2",
+                    edgecolors=PALETTE["context"],
+                    linewidth=0.6,
+                    hatch="//",
+                )
+                signal_artists += 1
+                row_labels.append(f"{role_prefix} {_CONTROLLER_SIGNAL_LABELS[signal]}")
+                role_status[role] = {
+                    "status": "unavailable",
+                    "values": [],
+                    "artist_count": 1,
+                }
+            row += 1
+        total_artists += signal_artists
+        signal_status[signal] = {
+            "status": (
+                "available"
+                if any(record["status"] == "available" for record in role_status.values())
+                else "unavailable"
+            ),
+            "reason": "source_planner_categorical_signal",
+            "source": f"source_trace.content_receipt.frames[].planner.{signal}",
+            "roles": role_status,
+            "artist_count": signal_artists,
+        }
+    ax.set(
+        xlim=(time_min, time_max),
+        ylim=(-0.65, row - 0.35),
+        xlabel="absolute time (s)",
+    )
+    ax.set_yticks(row_positions, row_labels)
+    ax.invert_yaxis()
+    value_labels = [
+        f"{_CONTROLLER_SIGNAL_LABELS[signal]} "
+        + "/".join(
+            sorted(
+                {value for role_values in collected[signal].values() for _, value in role_values}
+            )
+        )
+        for signal in _CONTROLLER_SIGNALS
+        if any(collected[signal].values())
+    ]
+    ax.set_title("Controller / guard / fallback / command source\n" + " · ".join(value_labels))
+    return {
+        "status": "available",
+        "reason": "source_planner_categorical_signals",
+        "signals": signal_status,
+        "artist_count": total_artists,
+    }
 
 
 def _recorded_start_separation_text(pair: dict[str, Any]) -> str:
@@ -1239,9 +1521,9 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             figsize=(layout["final_width_in"], layout["final_height_in"]),
         )
         grid = figure.add_gridspec(
-            6,
+            8,
             2,
-            height_ratios=(1.30, 1.85, 1.10, 1.10, 1.10, 1.30),
+            height_ratios=(2.00, 1.85, 1.10, 1.10, 1.10, 0.95, 1.55, 1.45),
         )
         header = figure.add_subplot(grid[0, :])
         world_left = figure.add_subplot(grid[1, 0])
@@ -1250,8 +1532,10 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         clearance = figure.add_subplot(grid[3, 0])
         closing = figure.add_subplot(grid[3, 1])
         speed = figure.add_subplot(grid[4, 0])
-        progress = figure.add_subplot(grid[4, 1])
-        context = figure.add_subplot(grid[5, :])
+        turn_rate = figure.add_subplot(grid[4, 1])
+        progress = figure.add_subplot(grid[5, :])
+        controller = figure.add_subplot(grid[6, :])
+        context = figure.add_subplot(grid[7, :])
         header.axis("off")
         title = (
             f"{payload['case_id']}\n"
@@ -1336,8 +1620,18 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             "commanded_speed": _draw_speed(
                 speed, bound["traces"], layout["time_range_s"], layout["speed_range_mps"]
             ),
+            "turn_rate": _draw_turn_rate(
+                turn_rate,
+                bound["traces"],
+                layout["time_range_s"],
+                layout["turn_rate_range_rad_s"],
+            ),
             "progress_stall": _draw_progress(progress, bound["traces"], layout["time_range_s"]),
-            "controller_state": _controller_state_status(bound["traces"]),
+            "controller_state": _draw_controller_state_strip(
+                controller,
+                bound["traces"],
+                layout["time_range_s"],
+            ),
             "cell_context": {"status": "available", "reason": "campaign_atlas_cell"},
             "ensemble_context": {
                 "status": ensemble["status"],
@@ -1345,14 +1639,24 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             },
         }
         _draw_cell_context(context, bound["cells"], ensemble, selected)
-        for ax in (world_left, world_right, route, clearance, closing, speed, progress):
+        for ax in (
+            world_left,
+            world_right,
+            route,
+            clearance,
+            closing,
+            speed,
+            turn_rate,
+            progress,
+            controller,
+        ):
             ax.grid(True, color="#DDDDDD", linewidth=0.45)
         figure.subplots_adjust(
             left=0.10,
             right=0.97,
             bottom=0.045,
             top=0.985,
-            hspace=0.85,
+            hspace=0.95,
             wspace=0.46,
         )
         route_position = route.get_position()
@@ -1370,6 +1674,22 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
                 route_position.height - route_title_band,
             )
         )
+        process_title_band = PROCESS_TITLE_BAND_IN / float(layout["final_height_in"])
+        for process_axis in (clearance, closing, speed, turn_rate, controller):
+            process_position = process_axis.get_position()
+            if process_position.height <= process_title_band:
+                raise CaseDossierError(
+                    "process_title_band_unavailable",
+                    f"required={PROCESS_TITLE_BAND_IN:.3f}in",
+                )
+            process_axis.set_position(
+                (
+                    process_position.x0,
+                    process_position.y0,
+                    process_position.width,
+                    process_position.height - process_title_band,
+                )
+            )
         figure.canvas.draw()
         _assert_text_within_canvas(figure)
         _assert_cross_axes_text_separation(figure)

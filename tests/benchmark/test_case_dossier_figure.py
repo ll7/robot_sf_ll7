@@ -312,10 +312,17 @@ def test_missing_optional_signals_render_explicit_unavailable_panels(tmp_path: P
     assert status["radial_closing_speed"]["status"] == "unavailable"
     assert status["radial_closing_speed"]["reason"] == "relative_velocity_unavailable"
     assert status["radial_closing_speed"]["closest_approach"]["left"]["status"] == "unavailable"
-    assert status["controller_state"] == {
-        "status": "unavailable",
-        "reason": "controller_state_signal_absent",
+    controller = status["controller_state"]
+    assert controller["status"] == "unavailable"
+    assert controller["reason"] == "controller_state_signal_absent"
+    assert controller["artist_count"] == 0
+    assert set(controller["signals"]) == {
+        "command_source",
+        "controller_state",
+        "fallback_state",
+        "guard_state",
     }
+    assert all(record["status"] == "unavailable" for record in controller["signals"].values())
     assert status["ensemble_context"] == {
         "status": "unavailable",
         "reason": "synthetic_fixture_no_ensemble_inventory",
@@ -323,6 +330,72 @@ def test_missing_optional_signals_render_explicit_unavailable_panels(tmp_path: P
     svg = bundle.svg_path.read_text(encoding="utf-8")
     assert "ROUTE / CONFLICT TIME–SPACE" in svg
     assert "UNAVAILABLE" in svg
+
+
+def test_nonzero_commanded_turn_renders_a_separate_aligned_panel(tmp_path: Path) -> None:
+    """Recorded commanded angular velocity is visible as its own process view."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        nonzero_turn=True,
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "turn-render")
+
+    status = bundle.manifest["panel_status"]["turn_rate"]
+    assert status["status"] == "available"
+    assert status["commanded"]["left"]["nonzero_observed"] is True
+    assert status["commanded"]["right"]["nonzero_observed"] is True
+    assert "Commanded and executed turn rate" in bundle.svg_path.read_text(encoding="utf-8")
+
+
+def test_missing_executed_turn_is_explicitly_unavailable(tmp_path: Path) -> None:
+    """The renderer never derives executed turn from headings or commands."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        nonzero_turn=True,
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "missing-executed-turn")
+
+    status = bundle.manifest["panel_status"]["turn_rate"]
+    for role in ("left", "right"):
+        assert status["executed"][role] == {
+            "status": "unavailable",
+            "reason": "explicit_executed_angular_velocity_unavailable",
+            "artist_count": 0,
+        }
+    assert "EXECUTED TURN UNAVAILABLE" in bundle.svg_path.read_text(encoding="utf-8")
+
+
+def test_source_controller_signals_render_categorical_strip(tmp_path: Path) -> None:
+    """Recorded controller, guard, fallback, and command-source values become artists."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        controller_signals=True,
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "controller-strip")
+
+    status = bundle.manifest["panel_status"]["controller_state"]
+    assert status["status"] == "available"
+    assert status["artist_count"] > 0
+    assert set(status["signals"]) == {
+        "command_source",
+        "controller_state",
+        "fallback_state",
+        "guard_state",
+    }
+    assert all(record["status"] == "available" for record in status["signals"].values())
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    assert "Controller / guard / fallback / command source" in svg
+    assert "tracking" in svg
+    assert "planner" in svg
 
 
 @pytest.mark.parametrize(
@@ -476,6 +549,8 @@ def _write_input(
     grammar: str,
     with_geometry: bool = True,
     missing_velocity: bool = False,
+    nonzero_turn: bool = False,
+    controller_signals: bool = False,
 ) -> Path:
     matched = grammar == "matched_start_planner"
     scenario_id = (
@@ -494,6 +569,8 @@ def _write_input(
         scenario_id=scenario_id,
         final_position=(0.8, 0.0),
         missing_velocity=missing_velocity,
+        nonzero_turn=nonzero_turn,
+        controller_signals=controller_signals,
     )
     right = _trace_payload(
         trace_id=f"fixture-{scenario_id}-{right_planner}-seed-{right_seed}",
@@ -503,6 +580,8 @@ def _write_input(
         start_offset=right_offset,
         final_position=(0.6, 0.2),
         missing_velocity=missing_velocity,
+        nonzero_turn=nonzero_turn,
+        controller_signals=controller_signals,
     )
     left_trace = simulation_trace_export_from_dict(left)
     right_trace = simulation_trace_export_from_dict(right)
@@ -595,13 +674,14 @@ def _write_input(
         },
         "layout": {
             "final_width_in": 426.79135 / 72.27,
-            "final_height_in": 9.8,
+            "final_height_in": 10.8,
             "minimum_font_pt": 8.25,
             "world_crop_m": [-0.2, 1.4, -0.55, 0.55],
             "metre_scale_m": 0.5,
             "time_range_s": [0.0, 0.4],
             "clearance_range_m": [-0.2, 1.2],
             "speed_range_mps": [-0.2, 1.2],
+            "turn_rate_range_rad_s": [-0.5, 0.5],
             "palette_id": "case_dossier_colorblind.v1",
             "threshold_profile": "worked_example_threshold_profile.diagnostic.v1",
         },
@@ -615,7 +695,7 @@ def _write_input(
     return _write_json(tmp_path / "matched-input.json", payload)
 
 
-def _trace_payload(
+def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal contracts
     *,
     trace_id: str,
     planner_id: str,
@@ -624,6 +704,8 @@ def _trace_payload(
     final_position: tuple[float, float],
     start_offset: tuple[float, float] = (0.0, 0.0),
     missing_velocity: bool = False,
+    nonzero_turn: bool = False,
+    controller_signals: bool = False,
 ) -> dict[str, Any]:
     positions = [(0.0, 0.0), (0.2, 0.0), (0.4, 0.0), (0.6, 0.0), final_position]
     positions = [
@@ -631,6 +713,32 @@ def _trace_payload(
     ]
     frames: list[dict[str, Any]] = []
     for step, position in enumerate(positions):
+        planner = {
+            "selected_action": {
+                "linear_velocity": 1.0 if step < 3 else 0.5,
+                "angular_velocity": 0.3 if nonzero_turn and step in {1, 2} else 0.0,
+            },
+            "encounter": {
+                "actor_id": "ped-a",
+                "encounter_id": "ped-a:encounter-0001",
+            },
+            "event": "step",
+            "run_config": {
+                "map_id": "fixture-double-bottleneck",
+                "horizon": 4,
+                "config_digest": ("a" if planner_id == "goal" else "b") * 64,
+                "time_step_s": 0.1,
+            },
+        }
+        if controller_signals:
+            planner.update(
+                {
+                    "controller_state": "tracking" if step < 3 else "braking",
+                    "command_source": "planner",
+                    "guard_state": "clear" if step < 3 else "active",
+                    "fallback_state": "inactive",
+                }
+            )
         frames.append(
             {
                 "step": step,
@@ -657,23 +765,7 @@ def _trace_payload(
                         "radius": 0.2,
                     },
                 ],
-                "planner": {
-                    "selected_action": {
-                        "linear_velocity": 1.0 if step < 3 else 0.5,
-                        "angular_velocity": 0.0,
-                    },
-                    "encounter": {
-                        "actor_id": "ped-a",
-                        "encounter_id": "ped-a:encounter-0001",
-                    },
-                    "event": "step",
-                    "run_config": {
-                        "map_id": "fixture-double-bottleneck",
-                        "horizon": 4,
-                        "config_digest": ("a" if planner_id == "goal" else "b") * 64,
-                        "time_step_s": 0.1,
-                    },
-                },
+                "planner": planner,
             }
         )
     return {

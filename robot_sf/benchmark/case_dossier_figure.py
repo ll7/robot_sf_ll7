@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 from jsonschema import Draft202012Validator
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle
+from matplotlib.text import Text
 
 from robot_sf.analysis_workbench.interaction_coordinates import (
     validate_worked_example_process_trace,
@@ -168,6 +169,16 @@ def _resolve_ref(input_path: Path, ref: dict[str, Any]) -> Path:
     return path
 
 
+def _portable_source_path(input_path: Path, resolved_path: Path) -> str:
+    """Represent a validated source relative to its dossier input tree.
+
+    Returns:
+        A POSIX path relative to the dossier input directory.
+    """
+
+    return Path(os.path.relpath(resolved_path, start=input_path.parent)).as_posix()
+
+
 def _read_mapping(path: Path, *, code: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -294,6 +305,33 @@ def _validate_pair(
             raise CaseDossierError("comparison_grammar_mismatch", expected_grain)
         if pair.get("status") != "available":
             raise CaseDossierError("pair_compatibility_unavailable", str(pair.get("status")))
+    route_symmetric_fields = (
+        "status",
+        "initial_robot_separation_m",
+        "max_initial_actor_separation_m",
+        "scenario_id_equal",
+        "scenario_provenance_compatible",
+    )
+    reciprocal_projections = []
+    for pair in (left_pair, right_pair):
+        route_spawn = pair.get("route_spawn_separation", {})
+        reciprocal_projections.append(
+            {
+                "status": pair.get("status"),
+                "comparison_grain": pair.get("comparison_grain"),
+                "initial_state_equivalence": pair.get("initial_state_equivalence"),
+                "shared_prefix": pair.get("shared_prefix"),
+                "route_spawn_separation": {
+                    key: route_spawn.get(key) for key in route_symmetric_fields
+                },
+                "divergence_interpretation": pair.get("divergence_interpretation"),
+            }
+        )
+    if _canonical_sha256(reciprocal_projections[0]) != _canonical_sha256(reciprocal_projections[1]):
+        raise CaseDossierError(
+            "reciprocal_pair_contract_disagreement",
+            "grain/status/start/prefix/separation/divergence",
+        )
     left_source = left["source_trace"]["source"]
     right_source = right["source_trace"]["source"]
     if grammar == "matched_start_planner":
@@ -413,23 +451,97 @@ def _available_events(trace: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _draw_event_cursors(ax: Any, traces: dict[str, dict[str, Any]]) -> None:
-    seen: set[tuple[str, float]] = set()
-    for role, trace in traces.items():
+_EVENT_LABELS = {
+    "minimum_clearance": "minimum clearance",
+    "first_material_deceleration": "deceleration",
+    "first_material_turn_response": "turn response",
+    "conflict_zone_entry": "zone entry",
+    "exact_collision_event": "exact collision",
+    "first_safety_predicate_breach": "safety breach",
+    "proxy_overlap_event": "proxy overlap",
+    "sustained_stall_onset": "stall onset",
+    "recovery_onset": "recovery onset",
+    "terminal_event": "terminal event",
+}
+_EVENT_LINESTYLES = ((0, (2, 2)), (0, (4, 2)), (0, (1, 1)), (0, (5, 1, 1, 1)))
+_EVENT_MARKERS = ("o", "s", "D", "P", "^", "v")
+
+
+def _event_groups(traces: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[float, set[str]] = {}
+    for trace in traces.values():
         for event in _available_events(trace):
-            key = (str(event["event_type"]), float(event["time_s"]))
-            if key in seen:
-                continue
-            seen.add(key)
-            collision = event["event_type"] == "exact_collision_event"
-            ax.axvline(
-                float(event["time_s"]),
-                color=PALETTE["collision"] if collision else PALETTE[role],
-                linestyle=":" if collision else (0, (2, 2)),
-                linewidth=1.0,
-                alpha=0.45,
-                zorder=0,
-            )
+            time_s = round(float(event["time_s"]), 9)
+            grouped.setdefault(time_s, set()).add(str(event["event_type"]))
+    return [
+        {
+            "time_s": time_s,
+            "event_types": sorted(event_types),
+            "label": " / ".join(_EVENT_LABELS[item] for item in sorted(event_types)),
+        }
+        for time_s, event_types in sorted(grouped.items())
+    ]
+
+
+def _event_identity_caption(traces: dict[str, dict[str, Any]]) -> str:
+    """Return a compact semantic key for the cursor styles outside plot data."""
+
+    available_types = {
+        str(event["event_type"]) for trace in traces.values() for event in _available_events(trace)
+    }
+    labels = [label for event_type, label in _EVENT_LABELS.items() if event_type in available_types]
+    if not labels:
+        return "Semantic cursors: none available"
+    lines = ["Semantic cursors:"]
+    for label in labels:
+        separator = " " if lines[-1].endswith(":") else " · "
+        candidate = f"{lines[-1]}{separator}{label}"
+        if len(candidate) <= 52:
+            lines[-1] = candidate
+        else:
+            lines.append(label)
+    return "\n".join(lines)
+
+
+def _draw_event_cursors(ax: Any, traces: dict[str, dict[str, Any]]) -> None:
+    groups = _event_groups(traces)
+    for index, group in enumerate(groups):
+        collision = "exact_collision_event" in group["event_types"]
+        ax.axvline(
+            group["time_s"],
+            color=PALETTE["collision"] if collision else PALETTE["context"],
+            linestyle=_EVENT_LINESTYLES[index % len(_EVENT_LINESTYLES)],
+            linewidth=1.0,
+            alpha=0.55,
+            zorder=0,
+        )
+
+
+def _draw_actor_event_anchor(ax: Any, actor: dict[str, Any], color: str) -> None:
+    position = actor.get("position")
+    radius = actor.get("radius_m")
+    velocity = actor.get("velocity")
+    if isinstance(position, list) and isinstance(radius, int | float):
+        ax.add_patch(Circle(position, float(radius), edgecolor=color, facecolor="none", lw=0.9))
+    if (
+        isinstance(position, list)
+        and isinstance(velocity, list)
+        and len(velocity) == 2
+        and all(
+            isinstance(value, int | float) and math.isfinite(float(value)) for value in velocity
+        )
+    ):
+        ax.quiver(
+            [position[0]],
+            [position[1]],
+            [velocity[0]],
+            [velocity[1]],
+            angles="xy",
+            scale_units="xy",
+            scale=2.0,
+            color=color,
+            width=0.008,
+        )
 
 
 def _draw_world_event_markers(
@@ -437,70 +549,47 @@ def _draw_world_event_markers(
     role: str,
     frames: list[dict[str, Any]],
     events: list[dict[str, Any]],
-) -> None:
-    if not events:
-        return
-    event = events[0]
-    index = min(range(len(frames)), key=lambda idx: abs(frames[idx]["time_s"] - event["time_s"]))
-    world = frames[index]["world"]
-    for key, color in (("robot", PALETTE[role]), ("focal_actor", PALETTE["focal"])):
-        actor = world.get(key, {})
-        position = actor.get("position")
-        radius = actor.get("radius_m")
-        velocity = actor.get("velocity")
-        if isinstance(position, list) and isinstance(radius, int | float):
-            ax.add_patch(Circle(position, float(radius), edgecolor=color, facecolor="none", lw=0.9))
-        if (
-            isinstance(position, list)
-            and isinstance(velocity, list)
-            and len(velocity) == 2
-            and all(
-                isinstance(value, int | float) and math.isfinite(float(value)) for value in velocity
-            )
-        ):
-            ax.quiver(
-                [position[0]],
-                [position[1]],
-                [velocity[0]],
-                [velocity[1]],
-                angles="xy",
-                scale_units="xy",
-                scale=2.0,
-                color=color,
-                width=0.008,
-            )
-    for collision_event in events:
-        if collision_event["event_type"] != "exact_collision_event":
-            continue
+) -> int:
+    groups = _event_groups({role: {"event_anchors": events}})
+    for group_index, group in enumerate(groups):
         index = min(
             range(len(frames)),
-            key=lambda idx: abs(frames[idx]["time_s"] - collision_event["time_s"]),
+            key=lambda idx: abs(frames[idx]["time_s"] - group["time_s"]),
         )
-        position = frames[index]["world"].get("robot", {}).get("position")
+        world = frames[index]["world"]
+        _draw_actor_event_anchor(ax, world.get("robot", {}), PALETTE[role])
+        _draw_actor_event_anchor(ax, world.get("focal_actor", {}), PALETTE["focal"])
+        position = world.get("robot", {}).get("position")
         if isinstance(position, list) and len(position) == 2:
+            collision = "exact_collision_event" in group["event_types"]
             ax.scatter(
                 [position[0]],
                 [position[1]],
-                marker="X",
-                s=38,
+                marker="X" if collision else _EVENT_MARKERS[group_index % len(_EVENT_MARKERS)],
+                s=38 if collision else 24,
                 facecolors="none",
-                edgecolors=PALETTE["collision"],
-                linewidths=1.2,
-                label="exact collision",
+                edgecolors=PALETTE["collision"] if collision else PALETTE[role],
+                linewidths=1.2 if collision else 0.9,
                 zorder=5,
             )
+    return len(groups)
 
 
 def _draw_world(
     ax: Any, role: str, trace: dict[str, Any], crop: list[float], scale_m: float
-) -> None:
+) -> dict[str, Any]:
     frames = trace["frames"]
     worlds = [frame["world"] for frame in frames if frame["world"].get("status") == "available"]
     if not worlds:
         ax.text(
             0.5, 0.5, "WORLD VIEW\nUNAVAILABLE", ha="center", va="center", transform=ax.transAxes
         )
-        return
+        return {
+            "status": "unavailable",
+            "reason": "source_trace_world_frame_unavailable",
+            "semantic_event_count": 0,
+            "semantic_event_anchor_count": 0,
+        }
     robot_xy = [world["robot"]["position"] for world in worlds]
     focal_xy = [world["focal_actor"]["position"] for world in worlds]
     ax.plot(
@@ -551,7 +640,8 @@ def _draw_world(
                 label="registered conflict zone",
             )
         )
-    _draw_world_event_markers(ax, role, frames, _available_events(trace))
+    events = _available_events(trace)
+    rendered_anchor_count = _draw_world_event_markers(ax, role, frames, events)
     xmin, xmax, ymin, ymax = crop
     ax.set(xlim=(xmin, xmax), ylim=(ymin, ymax), xlabel="world x (m)", ylabel="world y (m)")
     ax.set_aspect("equal", adjustable="box")
@@ -559,11 +649,19 @@ def _draw_world(
     bar_x = xmin + 0.08 * (xmax - xmin)
     ax.plot([bar_x, bar_x + scale_m], [bar_y, bar_y], color="#222222", linewidth=2.0)
     ax.set_title(trace["source_trace"]["source"]["planner_id"])
+    return {
+        "status": "available",
+        "reason": "source_trace_world_frame",
+        "semantic_event_count": len(events),
+        "semantic_event_anchor_count": len(events),
+        "unique_anchor_frame_count": rendered_anchor_count,
+        "anchor_treatment": "proxy_footprints_velocity_arrows_and_redundant_markers",
+    }
 
 
 def _draw_time_space(
     ax: Any, traces: dict[str, dict[str, Any]], time_range: list[float]
-) -> dict[str, str]:
+) -> dict[str, Any]:
     route_available = all(
         trace["coordinate_frames"]["route"].get("status") == "available"
         for trace in traces.values()
@@ -585,10 +683,15 @@ def _draw_time_space(
         return {
             "status": "unavailable",
             "reason": "route_and_conflict_projection_unavailable",
+            "occupancy_ribbon": {
+                "status": "unavailable",
+                "reason": "route_and_conflict_projection_unavailable",
+            },
         }
     frame_key = "route" if route_available else "conflict"
     robot_key = "s_m" if route_available else "robot_signed_distance_to_zone_m"
     actor_key = "focal_actor_s_m" if route_available else "focal_actor_signed_distance_to_zone_m"
+    ribbons_available = True
     for role, trace in traces.items():
         frames = [
             frame for frame in trace["frames"] if frame[frame_key].get("status") == "available"
@@ -596,11 +699,57 @@ def _draw_time_space(
         times = [frame["time_s"] for frame in frames]
         robot_s = [frame[frame_key][robot_key] for frame in frames]
         actor_s = [frame[frame_key][actor_key] for frame in frames]
+        robot_radii = [frame.get("world", {}).get("robot", {}).get("radius_m") for frame in frames]
+        actor_radii = [
+            frame.get("world", {}).get("focal_actor", {}).get("radius_m") for frame in frames
+        ]
+        radii_available = all(
+            isinstance(radius, int | float)
+            and math.isfinite(float(radius))
+            and float(radius) >= 0.0
+            for radius in (*robot_radii, *actor_radii)
+        )
+        if radii_available:
+            ax.fill_between(
+                times,
+                [
+                    float(value) - float(radius)
+                    for value, radius in zip(robot_s, robot_radii, strict=True)
+                ],
+                [
+                    float(value) + float(radius)
+                    for value, radius in zip(robot_s, robot_radii, strict=True)
+                ],
+                color=PALETTE[role],
+                alpha=0.10,
+                linewidth=0.0,
+                zorder=0,
+            )
+            ax.fill_between(
+                times,
+                [
+                    float(value) - float(radius)
+                    for value, radius in zip(actor_s, actor_radii, strict=True)
+                ],
+                [
+                    float(value) + float(radius)
+                    for value, radius in zip(actor_s, actor_radii, strict=True)
+                ],
+                color=PALETTE[role],
+                alpha=0.05,
+                linewidth=0.0,
+                zorder=0,
+            )
+        else:
+            ribbons_available = False
         ax.plot(
             times,
             robot_s,
             color=PALETTE[role],
             linestyle=LINESTYLES[role],
+            marker=MARKERS[role],
+            markevery=[0, len(times) - 1],
+            markersize=2.8,
             linewidth=1.6,
             label=f"{role} robot",
         )
@@ -609,6 +758,9 @@ def _draw_time_space(
             actor_s,
             color=PALETTE[role],
             linestyle=":",
+            marker=MARKERS[role],
+            markevery=[0, len(times) - 1],
+            markersize=2.4,
             linewidth=1.0,
             alpha=0.7,
             label=f"{role} focal actor",
@@ -617,10 +769,19 @@ def _draw_time_space(
     ylabel = "route progress s (m)" if route_available else "signed distance to conflict zone (m)"
     title = "Route occupancy" if route_available else "Conflict-zone approach"
     ax.set(xlim=tuple(time_range), xlabel="absolute time (s)", ylabel=ylabel)
-    ax.set_title(f"{title} · no duration normalization")
+    ax.set_title(f"{title} · no duration normalization\n{_event_identity_caption(traces)}")
     return {
         "status": "available",
         "reason": "route_projection" if route_available else "conflict_projection",
+        "semantic_event_cursors": _event_groups(traces),
+        "occupancy_ribbon": {
+            "status": "available" if ribbons_available else "unavailable",
+            "reason": (
+                "recorded_proxy_radius_envelope"
+                if ribbons_available
+                else "recorded_proxy_radius_unavailable"
+            ),
+        },
     }
 
 
@@ -701,27 +862,60 @@ def _draw_clearance(
     }
 
 
+def _closest_approach_record(trace: dict[str, Any]) -> dict[str, Any]:
+    anchor_time = trace.get("event_anchor_hierarchy", {}).get("anchor_time_s")
+    if not isinstance(anchor_time, int | float) or not math.isfinite(float(anchor_time)):
+        return {"status": "unavailable", "reason": "semantic_anchor_unavailable"}
+    frame = min(
+        trace["frames"],
+        key=lambda item: abs(float(item["time_s"]) - float(anchor_time)),
+    )
+    diagnostic = frame.get("relative_interaction", {}).get("closest_approach")
+    if not isinstance(diagnostic, dict) or diagnostic.get("status") != "available":
+        return {
+            "status": "unavailable",
+            "reason": "closest_approach_diagnostic_unavailable",
+        }
+    time_to = diagnostic.get("time_to_closest_approach_s")
+    clearance = diagnostic.get("proxy_surface_clearance_at_closest_approach_m")
+    if not (
+        isinstance(time_to, int | float)
+        and math.isfinite(float(time_to))
+        and isinstance(clearance, int | float)
+        and math.isfinite(float(clearance))
+    ):
+        return {
+            "status": "unavailable",
+            "reason": "closest_approach_values_unavailable",
+        }
+    return {
+        "status": "available",
+        "reason": "valid_local_closest_approach_diagnostic",
+        "source_time_s": float(frame["time_s"]),
+        "time_to_closest_approach_s": float(time_to),
+        "proxy_surface_clearance_at_closest_approach_m": float(clearance),
+        "model": diagnostic.get("model", "unavailable"),
+        "profile_version": diagnostic.get("profile_version", "unavailable"),
+    }
+
+
 def _draw_closing_speed(
     ax: Any,
     traces: dict[str, dict[str, Any]],
     time_range: list[float],
     speed_range: list[float],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     available = False
+    closest_records: dict[str, dict[str, Any]] = {}
     for role, trace in traces.items():
         points: list[tuple[float, float]] = []
-        closest: list[tuple[float, float]] = []
         for frame in trace["frames"]:
             relative = frame.get("relative_interaction", {})
             value = relative.get("radial_closing_speed_mps")
             if isinstance(value, int | float) and math.isfinite(float(value)):
                 points.append((float(frame["time_s"]), float(value)))
-            diagnostic = relative.get("closest_approach")
-            if isinstance(diagnostic, dict) and diagnostic.get("status") == "available":
-                time_to = diagnostic.get("time_to_closest_approach_s")
-                distance = diagnostic.get("proxy_surface_clearance_at_closest_approach_m")
-                if isinstance(time_to, int | float) and isinstance(distance, int | float):
-                    closest.append((float(time_to), float(distance)))
+        closest_record = _closest_approach_record(trace)
+        closest_records[role] = closest_record
         if points:
             available = True
             ax.plot(
@@ -732,6 +926,19 @@ def _draw_closing_speed(
                 linewidth=1.5,
                 label=f"{role} radial closing speed",
             )
+            if closest_record["status"] == "available":
+                source_time = float(closest_record["source_time_s"])
+                source_point = min(points, key=lambda item: abs(item[0] - source_time))
+                ax.scatter(
+                    [source_point[0]],
+                    [source_point[1]],
+                    marker="D",
+                    s=30,
+                    facecolors="white",
+                    edgecolors=PALETTE[role],
+                    linewidths=1.0,
+                    zorder=5,
+                )
     if not available:
         ax.text(
             0.5,
@@ -749,10 +956,15 @@ def _draw_closing_speed(
         xlabel="absolute time (s)",
         ylabel="closing speed (m/s)",
     )
-    ax.set_title("Radial closing speed")
+    cpa_available = any(record["status"] == "available" for record in closest_records.values())
+    ax.set_title(
+        "Radial closing speed\n"
+        + ("◇ local CPA diagnostic" if cpa_available else "local CPA diagnostic unavailable")
+    )
     return {
         "status": "available" if available else "unavailable",
         "reason": "relative_velocity" if available else "relative_velocity_unavailable",
+        "closest_approach": closest_records,
     }
 
 
@@ -940,7 +1152,31 @@ def _draw_cell_context(
     ax.set_yticks([])
 
 
-def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, str]]:
+def _assert_text_within_canvas(figure: Any) -> None:
+    """Fail closed when any visible text extends beyond the physical canvas."""
+
+    renderer = figure.canvas.get_renderer()
+    canvas = figure.bbox
+    violations: list[str] = []
+    for artist in figure.findobj(match=Text):
+        if not artist.get_visible() or not artist.get_text().strip():
+            continue
+        bounds = artist.get_window_extent(renderer=renderer)
+        if (
+            bounds.x0 < canvas.x0 - 0.5
+            or bounds.y0 < canvas.y0 - 0.5
+            or bounds.x1 > canvas.x1 + 0.5
+            or bounds.y1 > canvas.y1 + 0.5
+        ):
+            violations.append(artist.get_text().replace("\n", " / "))
+    if violations:
+        raise CaseDossierError(
+            "figure_text_outside_canvas",
+            "; ".join(sorted(violations)),
+        )
+
+
+def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
     payload = bound["input"]
     layout = payload["layout"]
     selected = bound["selected_case"]
@@ -973,7 +1209,8 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, str]]:
         context = figure.add_subplot(grid[5, :])
         header.axis("off")
         title = (
-            f"{payload['case_id']} · {selected['grain']} · {selected['primary_role']}\n"
+            f"{payload['case_id']}\n"
+            f"{selected['grain']} · {selected['primary_role']}\n"
             f"{sources[0]['scenario_id']}\n"
             f"{sources[0]['planner_id']} / {sources[1]['planner_id']} · "
             f"seed {sources[0]['seed']} / {sources[1]['seed']} · "
@@ -1023,14 +1260,14 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, str]]:
             weight="bold",
             fontsize=MINIMUM_VISIBLE_FONT_PT,
         )
-        _draw_world(
+        world_left_status = _draw_world(
             world_left,
             "left",
             bound["traces"]["left"],
             layout["world_crop_m"],
             layout["metre_scale_m"],
         )
-        _draw_world(
+        world_right_status = _draw_world(
             world_right,
             "right",
             bound["traces"]["right"],
@@ -1039,8 +1276,8 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, str]]:
         )
         ensemble = payload["ensemble_context"]
         panel_status = {
-            "world_left": {"status": "available", "reason": "source_trace_world_frame"},
-            "world_right": {"status": "available", "reason": "source_trace_world_frame"},
+            "world_left": world_left_status,
+            "world_right": world_right_status,
             "time_space": _draw_time_space(route, bound["traces"], layout["time_range_s"]),
             "surface_clearance": _draw_clearance(
                 clearance, bound["traces"], layout["time_range_s"], layout["clearance_range_m"]
@@ -1074,6 +1311,7 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, str]]:
             wspace=0.46,
         )
         figure.canvas.draw()
+        _assert_text_within_canvas(figure)
         assert_clean(figure)
     return figure, panel_status
 
@@ -1291,17 +1529,21 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                 "minimum_visible_font_pt": MINIMUM_VISIBLE_FONT_PT,
                 "svg_hashsalt": _RC["svg.hashsalt"],
                 "generation_commit": generation_commit,
+                "header_line_contract": "wrapped_left_aligned.v1",
+                "canvas_text_bounds_checked": True,
             },
             "source_bindings": {
                 "portfolio": {
-                    "path": str(bound["portfolio_path"]),
+                    "path": _portable_source_path(bound["input_path"], bound["portfolio_path"]),
                     "sha256": _file_sha256(bound["portfolio_path"]),
                     "schema_version": "ch7_case_portfolio.v2",
                 },
                 "process_traces": [
                     {
                         "role": role,
-                        "path": str(bound["trace_paths"][role]),
+                        "path": _portable_source_path(
+                            bound["input_path"], bound["trace_paths"][role]
+                        ),
                         "sha256": _file_sha256(bound["trace_paths"][role]),
                         "schema_version": "worked_example_process_trace.v1",
                         "source_content_sha256": bound["traces"][role]["source_trace"][
@@ -1312,7 +1554,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                     for role in ("left", "right")
                 ],
                 "campaign_atlas": {
-                    "path": str(bound["atlas_path"]),
+                    "path": _portable_source_path(bound["input_path"], bound["atlas_path"]),
                     "sha256": _file_sha256(bound["atlas_path"]),
                     "schema_version": "campaign_atlas.v2",
                     "release_cells": bound["cells"],

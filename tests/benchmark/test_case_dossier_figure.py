@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ from robot_sf.analysis_workbench.interaction_coordinates import (
     load_registered_route_spec,
 )
 from robot_sf.analysis_workbench.simulation_trace_export import simulation_trace_export_from_dict
+from robot_sf.benchmark import case_dossier_figure as dossier_module
 from robot_sf.benchmark.artifact_catalog import load_artifact_catalog
 from robot_sf.benchmark.case_dossier_figure import (
     SYNTHETIC_FIXTURE_LABEL,
@@ -147,7 +150,68 @@ def test_same_cell_seed_sensitivity_records_no_shared_prefix_without_difference_
     svg = bundle.svg_path.read_text(encoding="utf-8")
     assert "shared_prefix=false" in svg
     assert "recorded start separation = 0.050 m" in svg
+    assert ">fixture-doorway-seeds-113-114</text>" in svg
+    assert "minimum clearance" in svg
+    assert "safety breach" in svg
     assert "difference curve" not in svg.lower()
+    assert bundle.manifest["renderer"]["canvas_text_bounds_checked"] is True
+    assert bundle.manifest["panel_status"]["time_space"]["occupancy_ribbon"] == {
+        "status": "available",
+        "reason": "recorded_proxy_radius_envelope",
+    }
+    closest = bundle.manifest["panel_status"]["radial_closing_speed"]["closest_approach"]
+    assert closest["left"]["status"] == "available"
+    assert closest["left"]["model"] == "local_constant_velocity"
+    assert closest["left"]["time_to_closest_approach_s"] == pytest.approx(0.15)
+    for role in ("left", "right"):
+        assert bundle.manifest["panel_status"][f"world_{role}"]["semantic_event_anchor_count"] > 1
+
+
+def test_input_tree_copies_produce_portable_byte_identical_bundles(tmp_path: Path) -> None:
+    """Durable outputs use input-relative refs and do not bind checkout paths."""
+
+    packages = []
+    for name in ("copy-a", "copy-b"):
+        package = tmp_path / name / "matched"
+        shutil.copytree(DOSSIER_FIXTURES / "matched_seed118", package)
+        packages.append(package)
+
+    first = render_case_dossier(packages[0] / "input.json", tmp_path / "render-a")
+    second = render_case_dossier(packages[1] / "input.json", tmp_path / "render-b")
+
+    for attribute in (
+        "svg_path",
+        "pdf_path",
+        "caption_path",
+        "sidecar_path",
+        "manifest_path",
+        "catalog_path",
+    ):
+        assert getattr(first, attribute).read_bytes() == getattr(second, attribute).read_bytes()
+    source_bindings = first.manifest["source_bindings"]
+    declared_paths = [
+        source_bindings["portfolio"]["path"],
+        source_bindings["campaign_atlas"]["path"],
+        *(item["path"] for item in source_bindings["process_traces"]),
+    ]
+    assert all(not Path(path).is_absolute() for path in declared_paths)
+    assert str(tmp_path) not in first.manifest_path.read_text(encoding="utf-8")
+
+
+def test_reciprocal_pair_contracts_must_agree_on_admission_semantics() -> None:
+    """A contradictory right-hand prefix contract cannot pass the left-hand gate."""
+
+    fixture = DOSSIER_FIXTURES / "matched_seed118"
+    left = json.loads((fixture / "process_left.json").read_text(encoding="utf-8"))
+    right = json.loads((fixture / "process_right.json").read_text(encoding="utf-8"))
+    contradictory = copy.deepcopy(right)
+    contradictory["pair_compatibility"]["shared_prefix"]["shared_prefix"] = False
+
+    with pytest.raises(Exception, match="reciprocal_pair_contract_disagreement"):
+        dossier_module._validate_pair(
+            "matched_start_planner",
+            {"left": left, "right": contradictory},
+        )
 
 
 @pytest.mark.parametrize(
@@ -221,14 +285,12 @@ def test_missing_optional_signals_render_explicit_unavailable_panels(tmp_path: P
     bundle = render_case_dossier(input_path, tmp_path / "unavailable-render")
 
     status = bundle.manifest["panel_status"]
-    assert status["time_space"] == {
-        "status": "unavailable",
-        "reason": "route_and_conflict_projection_unavailable",
-    }
-    assert status["radial_closing_speed"] == {
-        "status": "unavailable",
-        "reason": "relative_velocity_unavailable",
-    }
+    assert status["time_space"]["status"] == "unavailable"
+    assert status["time_space"]["reason"] == "route_and_conflict_projection_unavailable"
+    assert status["time_space"]["occupancy_ribbon"]["status"] == "unavailable"
+    assert status["radial_closing_speed"]["status"] == "unavailable"
+    assert status["radial_closing_speed"]["reason"] == "relative_velocity_unavailable"
+    assert status["radial_closing_speed"]["closest_approach"]["left"]["status"] == "unavailable"
     assert status["controller_state"] == {
         "status": "unavailable",
         "reason": "controller_state_signal_absent",

@@ -40,6 +40,7 @@ SYNTHETIC_FIXTURE_LABEL = "SYNTHETIC FIXTURE — RENDERER PROOF ONLY"
 FINAL_WIDTH_IN = 426.79135 / 72.27
 BASE_FONT_PT = 9.0
 MINIMUM_VISIBLE_FONT_PT = 8.25
+ROUTE_TITLE_BAND_IN = 0.20
 
 PALETTE = {
     "left": "#0072B2",
@@ -1176,6 +1177,50 @@ def _assert_text_within_canvas(figure: Any) -> None:
         )
 
 
+def _assert_cross_axes_text_separation(figure: Any) -> None:
+    """Fail closed when structural text from adjacent axes overlaps."""
+
+    renderer = figure.canvas.get_renderer()
+    structural_text: list[tuple[int, Text, Any]] = []
+    for axes_index, axes in enumerate(figure.axes):
+        artists = (
+            *axes.texts,
+            axes.title,
+            axes._left_title,
+            axes._right_title,
+            axes.xaxis.label,
+            axes.yaxis.label,
+        )
+        for artist in artists:
+            if artist.get_visible() and artist.get_text().strip():
+                structural_text.append(
+                    (axes_index, artist, artist.get_window_extent(renderer=renderer))
+                )
+
+    violations: list[str] = []
+    for index, (left_axes, left_artist, left_bounds) in enumerate(structural_text):
+        for right_axes, right_artist, right_bounds in structural_text[index + 1 :]:
+            if left_axes == right_axes:
+                continue
+            overlap_width = min(left_bounds.x1, right_bounds.x1) - max(
+                left_bounds.x0, right_bounds.x0
+            )
+            overlap_height = min(left_bounds.y1, right_bounds.y1) - max(
+                left_bounds.y0, right_bounds.y0
+            )
+            if overlap_width > 0.5 and overlap_height > 0.5:
+                left_text = left_artist.get_text().replace("\n", " / ")
+                right_text = right_artist.get_text().replace("\n", " / ")
+                violations.append(
+                    f"axes[{left_axes}] {left_text!r} <> axes[{right_axes}] {right_text!r}"
+                )
+    if violations:
+        raise CaseDossierError(
+            "cross_axes_text_overlap",
+            "; ".join(sorted(violations)),
+        )
+
+
 def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
     payload = bound["input"]
     layout = payload["layout"]
@@ -1310,8 +1355,24 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             hspace=0.85,
             wspace=0.46,
         )
+        route_position = route.get_position()
+        route_title_band = ROUTE_TITLE_BAND_IN / float(layout["final_height_in"])
+        if route_position.height <= route_title_band:
+            raise CaseDossierError(
+                "route_title_band_unavailable",
+                f"required={ROUTE_TITLE_BAND_IN:.3f}in",
+            )
+        route.set_position(
+            (
+                route_position.x0,
+                route_position.y0,
+                route_position.width,
+                route_position.height - route_title_band,
+            )
+        )
         figure.canvas.draw()
         _assert_text_within_canvas(figure)
+        _assert_cross_axes_text_separation(figure)
         assert_clean(figure)
     return figure, panel_status
 
@@ -1531,6 +1592,8 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                 "generation_commit": generation_commit,
                 "header_line_contract": "wrapped_left_aligned.v1",
                 "canvas_text_bounds_checked": True,
+                "cross_axes_text_overlap_checked": True,
+                "route_title_band_in": ROUTE_TITLE_BAND_IN,
             },
             "source_bindings": {
                 "portfolio": {

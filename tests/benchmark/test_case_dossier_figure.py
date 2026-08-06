@@ -155,6 +155,7 @@ def test_same_cell_seed_sensitivity_records_no_shared_prefix_without_difference_
     assert "safety breach" in svg
     assert "difference curve" not in svg.lower()
     assert bundle.manifest["renderer"]["canvas_text_bounds_checked"] is True
+    assert bundle.manifest["renderer"]["cross_axes_text_overlap_checked"] is True
     assert bundle.manifest["panel_status"]["time_space"]["occupancy_ribbon"] == {
         "status": "available",
         "reason": "recorded_proxy_radius_envelope",
@@ -165,6 +166,26 @@ def test_same_cell_seed_sensitivity_records_no_shared_prefix_without_difference_
     assert closest["left"]["time_to_closest_approach_s"] == pytest.approx(0.15)
     for role in ("left", "right"):
         assert bundle.manifest["panel_status"][f"world_{role}"]["semantic_event_anchor_count"] > 1
+
+
+def test_cross_axes_structural_text_overlap_fails_closed() -> None:
+    """Adjacent panel labels and titles may not occupy the same rendered pixels."""
+
+    figure = dossier_module.plt.figure(figsize=(2.0, 2.0))
+    upper = figure.add_axes((0.1, 0.5, 0.8, 0.4))
+    lower = figure.add_axes((0.1, 0.1, 0.8, 0.38))
+    upper.set_xlabel("world x label")
+    upper.xaxis.set_label_coords(0.5, -0.05)
+    lower.set_title("route title", y=1.0, pad=0.0)
+    figure.canvas.draw()
+    try:
+        with pytest.raises(
+            dossier_module.CaseDossierError,
+            match="cross_axes_text_overlap",
+        ):
+            dossier_module._assert_cross_axes_text_separation(figure)
+    finally:
+        dossier_module.plt.close(figure)
 
 
 def test_input_tree_copies_produce_portable_byte_identical_bundles(tmp_path: Path) -> None:

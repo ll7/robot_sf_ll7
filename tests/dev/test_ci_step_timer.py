@@ -15,6 +15,26 @@ import pytest
 
 _HAS_TIMEOUT = shutil.which("timeout") is not None
 
+_NORMALIZE_SIGNALS_AND_EXEC = textwrap.dedent(
+    """
+    import os
+    import signal
+    import sys
+
+    termination_signals = (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
+    for signum in termination_signals:
+        signal.signal(signum, signal.SIG_DFL)
+    if hasattr(signal, "pthread_sigmask"):
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, termination_signals)
+    os.execv(sys.argv[1], sys.argv[1:])
+    """
+)
+
+
+def _with_normalized_termination_signals(command: list[str]) -> list[str]:
+    """Return a launcher command isolated from detached-runner signal state."""
+    return [sys.executable, "-c", _NORMALIZE_SIGNALS_AND_EXEC, *command]
+
 
 def _wait_for_nonempty_file(path: Path, timeout_seconds: float = 5) -> str:
     """Wait for a subprocess to publish a small readiness or audit file."""
@@ -510,19 +530,21 @@ def test_ci_step_timer_python_fallback_forwards_wrapper_signal_and_reaps_tree(
             stderr_path.open("w", encoding="utf-8") as stderr_file,
         ):
             wrapper = subprocess.Popen(
-                [
-                    bash_path,
-                    str(script),
-                    "python-fallback-wrapper-signal",
-                    sys.executable,
-                    "-c",
-                    command_code,
-                    descendant_code,
-                    str(command_signal_path),
-                    str(descendant_pid_path),
-                    str(descendant_signal_path),
-                    str(command_info_path),
-                ],
+                _with_normalized_termination_signals(
+                    [
+                        bash_path,
+                        str(script),
+                        "python-fallback-wrapper-signal",
+                        sys.executable,
+                        "-c",
+                        command_code,
+                        descendant_code,
+                        str(command_signal_path),
+                        str(descendant_pid_path),
+                        str(descendant_signal_path),
+                        str(command_info_path),
+                    ]
+                ),
                 stdout=stdout_file,
                 stderr=stderr_file,
                 text=True,
@@ -616,15 +638,17 @@ exec "$CI_TIMER_REAL_PYTHON" "$@"
     started_at = time.monotonic()
     try:
         wrapper = subprocess.Popen(
-            [
-                bash_path,
-                str(script),
-                "python-fallback-early-sigint",
-                sys.executable,
-                "-c",
-                command_code,
-                str(command_pid_path),
-            ],
+            _with_normalized_termination_signals(
+                [
+                    bash_path,
+                    str(script),
+                    "python-fallback-early-sigint",
+                    sys.executable,
+                    "-c",
+                    command_code,
+                    str(command_pid_path),
+                ]
+            ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -655,6 +679,42 @@ exec "$CI_TIMER_REAL_PYTHON" "$@"
                 os.kill(backend_pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+
+
+def test_ci_step_timer_signal_contract_survives_runner_ignored_sigint() -> None:
+    """Keep the wrapper signal contract deterministic under detached test runners."""
+    test_node = (
+        f"{Path(__file__).resolve()}::"
+        "test_ci_step_timer_python_fallback_replays_early_wrapper_sigint_after_backend_ready"
+    )
+    ignored_sigint_runner = textwrap.dedent(
+        """
+        import os
+        import signal
+        import sys
+
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
+        """
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            ignored_sigint_runner,
+            "-m",
+            "pytest",
+            "-q",
+            test_node,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=12,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_ci_step_timer_python_fallback_reaps_backend_after_readiness_interrupts_wait(
@@ -747,14 +807,16 @@ exec "$CI_TIMER_REAL_DATE" "$@"
     wrapper: subprocess.Popen[str] | None = None
     try:
         wrapper = subprocess.Popen(
-            [
-                bash_path,
-                str(script),
-                "python-fallback-footer-signal",
-                sys.executable,
-                "-c",
-                "print('footer-ready-command')",
-            ],
+            _with_normalized_termination_signals(
+                [
+                    bash_path,
+                    str(script),
+                    "python-fallback-footer-signal",
+                    sys.executable,
+                    "-c",
+                    "print('footer-ready-command')",
+                ]
+            ),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

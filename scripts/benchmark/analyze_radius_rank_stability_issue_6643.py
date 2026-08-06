@@ -90,11 +90,12 @@ def _write_bundle(
                 candidate = baseline_provenance.get("campaign_commit")
                 if isinstance(candidate, str):
                     declared_campaign_commit = candidate
+    campaign_commit = None if summary is None else args.campaign_commit or declared_campaign_commit
     provenance = build_evidence_provenance(
         report,
         config_path=args.config or "not supplied (blocked before Gate 2)",
         command=args.command or _default_command(),
-        campaign_commit=args.campaign_commit or declared_campaign_commit or current_git_sha(),
+        campaign_commit=campaign_commit,
         analysis_commit=current_git_sha(),
         config_sha256=config_sha256,
         input_paths=input_paths,
@@ -137,7 +138,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--campaign-commit",
         default=None,
-        help="Expected immutable Gate 2 campaign commit SHA; must match every summary arm.",
+        help=(
+            "Expected immutable Gate 2 campaign commit SHA; must match every summary arm. "
+            "Ignored when --sweep-summary is omitted."
+        ),
     )
     parser.add_argument(
         "--gate1-canary-receipt",

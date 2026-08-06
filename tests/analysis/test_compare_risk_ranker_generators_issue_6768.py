@@ -381,6 +381,14 @@ class TestFailClosed:
         with pytest.raises(cmp_module.ComparisonError, match="not a valid evidence row"):
             cmp_module._load_fixture(missing)
 
+    def test_fractional_pedestrian_id_fails_closed(self, cmp_module, tmp_path):
+        payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
+        payload["cases"][1]["pedestrians"][0]["id"] = 101.5
+        malformed = tmp_path / "fractional_pedestrian_id.yaml"
+        malformed.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        with pytest.raises(cmp_module.ComparisonError, match="id.*must be an integer"):
+            cmp_module._load_fixture(malformed)
+
     def test_missing_known_outcome_role_fails_closed(self, cmp_module, tmp_path):
         payload = yaml.safe_load(_HELD_OUT_FIXTURE.read_text(encoding="utf-8"))
         target_case = next(case for case in payload["cases"] if "known_contact_outcome" in case)
@@ -547,6 +555,31 @@ class TestFailClosed:
         for generator_name in ("deterministic_primitive", "rbf"):
             reliability = report["model_risk_reliability"]["by_generator"][generator_name]
             assert reliability["degraded_rows"] == 16
+            assert reliability["status"] == "inconclusive"
+
+    def test_incomplete_provenance_does_not_enter_outcome_denominator(
+        self, cmp_module, monkeypatch
+    ):
+        original_rank_trajectories = cmp_module.rank_trajectories
+
+        def return_incomplete_provenance(*args, **kwargs):
+            rankings = original_rank_trajectories(*args, **kwargs)
+            return [
+                replace(
+                    record,
+                    provenance=replace(record.provenance, config_hash=""),
+                )
+                for record in rankings
+            ]
+
+        monkeypatch.setattr(cmp_module, "rank_trajectories", return_incomplete_provenance)
+        report = cmp_module.build_report(_DEFAULT_CONFIG, generated_at_utc=PINNED_GENERATED_AT)
+
+        for generator_name in ("deterministic_primitive", "rbf"):
+            reliability = report["model_risk_reliability"]["by_generator"][generator_name]
+            assert reliability["complete_provenance_rows"] == 0
+            assert reliability["declared_outcome_agreeing_candidates"] == 0
+            assert reliability["declared_outcome_status"] == "inconclusive"
             assert reliability["status"] == "inconclusive"
 
     def test_check_config_passes_on_committed_config(self, cmp_module):

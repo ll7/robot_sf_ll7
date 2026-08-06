@@ -20,8 +20,10 @@ hard-gate configuration. It never wires either generator into a planner loop.
   outcome, generation/ranking/total timing, and unavailable denominators with reasons.
 - Risk scores are constant-velocity model scores, not calibrated real-world collision
   probabilities. Declared contact outcomes check deterministic geometry agreement; they are not
-  independent calibration or reliability evidence. Timing is measured local offline wall time
-  when requested, not online performance evidence; pinned deterministic reports omit it.
+  independent calibration or reliability evidence. Only finite, in-range, complete-provenance,
+  repeatable, non-degraded rows enter the declared-outcome denominator; otherwise that diagnostic
+  is reported as unavailable or inconclusive. Timing is measured local offline wall time when
+  requested, not online performance evidence; pinned deterministic reports omit it.
 - Planner-loop wiring, online adaptation, nominal benchmark execution, planner improvement,
   safety, and real-world claims remain deferred.
 

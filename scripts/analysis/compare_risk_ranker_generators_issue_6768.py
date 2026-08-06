@@ -312,7 +312,9 @@ def _normalize_fixture_case(raw_case: Any, *, index: int, seen_ids: set[str]) ->
     actor_ids: set[int] = set()
     for actor_index, raw_actor in enumerate(pedestrians):
         actor = _mapping(raw_actor, f"fixture case {case_id}.pedestrians[{actor_index}]")
-        actor_id = int(actor.get("id"))
+        actor_id = _require_integer(
+            actor.get("id"), field=f"{case_id}.pedestrians[{actor_index}].id"
+        )
         if actor_id in actor_ids:
             raise ComparisonError(f"fixture case {case_id!r} repeats pedestrian id {actor_id}")
         actor_ids.add(actor_id)
@@ -864,8 +866,9 @@ def _reliability_diagnostic(
     for record in rankings:
         score = float(record.joint_contact_probability)
         finite = math.isfinite(score)
+        in_range = finite and 0.0 <= score <= 1.0
         finite_count += int(finite)
-        in_range_count += int(finite and 0.0 <= score <= 1.0)
+        in_range_count += int(in_range)
         provenance = record.provenance
         provenance_complete = all(
             bool(value)
@@ -879,7 +882,7 @@ def _reliability_diagnostic(
             )
         )
         provenance_count += int(provenance_complete)
-        repeatable_count += int(
+        repeatable = bool(
             record.action_id in repeated_by_id
             and math.isclose(
                 score,
@@ -888,6 +891,7 @@ def _reliability_diagnostic(
                 abs_tol=1.0e-15,
             )
         )
+        repeatable_count += int(repeatable)
         uncertainty = record.estimate.uncertainty
         abstained = bool(uncertainty.abstained)
         ood = any(uncertainty.ood_actor_flags)
@@ -895,8 +899,9 @@ def _reliability_diagnostic(
         abstained_count += int(abstained)
         ood_count += int(ood)
         degraded_count += int(degraded)
+        reliable = finite and in_range and provenance_complete and repeatable and not degraded
         model_contact_certain = bool(record.estimate.deterministic.contact_certain)
-        if record.action_id in role_action_ids and not degraded:
+        if record.action_id in role_action_ids and reliable:
             agrees = model_contact_certain == declared_outcome["contact_certain"]
             agreeing_count += int(agrees)
             if not agrees:
@@ -907,17 +912,10 @@ def _reliability_diagnostic(
                 "model_contact_certain": model_contact_certain,
                 "risk_score": score,
                 "finite": finite,
-                "in_range": 0.0 <= score <= 1.0,
+                "in_range": in_range,
                 "provenance_complete": provenance_complete,
-                "repeatable": bool(
-                    record.action_id in repeated_by_id
-                    and math.isclose(
-                        score,
-                        repeated_by_id[record.action_id].joint_contact_probability,
-                        rel_tol=0.0,
-                        abs_tol=1.0e-15,
-                    )
-                ),
+                "repeatable": repeatable,
+                "reliable": reliable,
                 "mc_standard_error": float(uncertainty.mc_standard_error),
                 "ci95_halfwidth": float(uncertainty.ci95_halfwidth),
                 "abstained": abstained,
@@ -935,14 +933,9 @@ def _reliability_diagnostic(
         else "inconclusive"
     )
     if declared_outcome is not None:
-        reliable_role_count = len(role_candidates) - sum(
-            int(
-                next(
-                    row["degraded"] for row in per_candidate if row["action_id"] == record.action_id
-                )
-            )
-            for record in role_candidates
-        )
+        role_rows = [row for row in per_candidate if row["action_id"] in role_action_ids]
+        reliable_role_count = sum(int(row["reliable"]) for row in role_rows)
+        degraded_role_count = sum(int(row["degraded"]) for row in role_rows)
         if not role_candidates:
             outcome_status = "inconclusive"
             outcome_reason = (
@@ -952,7 +945,8 @@ def _reliability_diagnostic(
         elif reliable_role_count == 0:
             outcome_status = "inconclusive"
             outcome_reason = (
-                "all role-matched candidates were abstained or out of model range; "
+                "no reliable role-matched candidate remained after finite, range, provenance, "
+                "repeatability, and degraded-row checks; "
                 "outcome agreement is unavailable"
             )
         else:
@@ -965,7 +959,8 @@ def _reliability_diagnostic(
             "reason": outcome_reason,
             "candidates_with_declared_outcome": len(role_candidates),
             "reliable_candidates_with_declared_outcome": reliable_role_count,
-            "degraded_candidates_excluded": len(role_candidates) - reliable_role_count,
+            "degraded_candidates_excluded": degraded_role_count,
+            "unreliable_candidates_excluded": len(role_candidates) - reliable_role_count,
             "agreeing_candidates": agreeing_count,
             "disagreeing_candidates": disagreeing,
             "status": outcome_status,

@@ -2945,11 +2945,15 @@ def _validate_canonical_declared_encounter(  # noqa: C901, PLR0912
 
 
 def _finite_json_number(value: object) -> bool:
-    return (
-        isinstance(value, int | float)
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-    )
+    if type(value) is float:
+        return math.isfinite(value)
+    if type(value) is not int:
+        return False
+    try:
+        converted = float(value)
+    except (OverflowError, ValueError):
+        return False
+    return math.isfinite(converted) and int(converted) == value
 
 
 def _json_integer(value: object) -> bool:
@@ -2975,11 +2979,18 @@ def load_near_miss_encounter_report(path: Path) -> dict[str, Any]:
         Schema-valid report payload.
     """
 
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    resolved = path.resolve()
+    try:
+        payload = _strict_json_document(resolved.read_bytes())
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise WorkedExampleProcessTraceValidationError(
+            ["expected strict near_miss_encounter.v1 JSON"],
+            source=resolved,
+        ) from exc
     if not isinstance(payload, Mapping):
         raise WorkedExampleProcessTraceValidationError(
             ["expected a near_miss_encounter.v1 mapping payload"],
-            source=path,
+            source=resolved,
         )
     validator = Draft202012Validator(load_near_miss_encounter_schema())
     errors = [
@@ -2990,7 +3001,7 @@ def load_near_miss_encounter_report(path: Path) -> dict[str, Any]:
         )
     ]
     if errors:
-        raise WorkedExampleProcessTraceValidationError(errors, source=path)
+        raise WorkedExampleProcessTraceValidationError(errors, source=resolved)
     return dict(payload)
 
 
@@ -3074,6 +3085,7 @@ def _geometry_owner_payload_from_bytes(raw: bytes, *, source: Path) -> dict[str,
             key=lambda error: [str(part) for part in error.absolute_path],
         )
     ]
+    errors.extend(_geometry_owner_numeric_errors(payload))
     if errors:
         raise WorkedExampleProcessTraceValidationError(errors, source=source)
     return dict(payload)
@@ -3106,6 +3118,57 @@ def _strict_json_document(raw: str | bytes | bytearray) -> Any:
         parse_float=_strict_json_float,
         object_pairs_hook=_strict_json_object,
     )
+
+
+def _unsafe_geometry_number_errors(value: object, *, path: str) -> list[str]:
+    if type(value) in {int, float}:
+        return [] if _finite_json_number(value) else [f"{path}: unsafe numeric conversion"]
+    if isinstance(value, Mapping):
+        return [
+            error
+            for key, item in value.items()
+            for error in _unsafe_geometry_number_errors(item, path=f"{path}/{key}")
+        ]
+    if isinstance(value, list):
+        return [
+            error
+            for index, item in enumerate(value)
+            for error in _unsafe_geometry_number_errors(item, path=f"{path}/{index}")
+        ]
+    return []
+
+
+def _geometry_owner_numeric_errors(payload: Mapping[str, Any]) -> list[str]:
+    bindings = payload.get("geometry_bindings")
+    if not isinstance(bindings, list):
+        return []
+    return [
+        error
+        for index, binding in enumerate(bindings)
+        if isinstance(binding, Mapping)
+        for error in _unsafe_geometry_number_errors(
+            binding.get("geometry"),
+            path=f"/geometry_bindings/{index}/geometry",
+        )
+    ]
+
+
+def _geometry_registry_numeric_errors(payload: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for collection in ("routes", "conflict_zones"):
+        entries = payload.get(collection)
+        if not isinstance(entries, list):
+            continue
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, Mapping):
+                continue
+            errors.extend(
+                _unsafe_geometry_number_errors(
+                    entry.get("geometry"),
+                    path=f"/{collection}/{index}/geometry",
+                )
+            )
+    return errors
 
 
 def load_registered_conflict_zone_spec(
@@ -3191,6 +3254,7 @@ def _load_geometry_registry(path: Path) -> tuple[dict[str, Any], str, Path]:
         f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
+    errors.extend(_geometry_registry_numeric_errors(payload))
     if errors:
         raise WorkedExampleProcessTraceValidationError(errors, source=resolved)
     return dict(payload), hashlib.sha256(raw).hexdigest(), resolved
@@ -4277,6 +4341,7 @@ def _registry_binding(  # noqa: C901, PLR0913
         or payload.get("registry_id") != provenance_id
         or payload.get("artifact_ref") != artifact_ref
         or not _registry_upstream_bindings_are_portable(payload)
+        or bool(_geometry_registry_numeric_errors(payload))
     ):
         return {"status": "unavailable", "reason": f"{reason_prefix}_registry_invalid"}
     if not Draft202012Validator(load_process_trace_geometry_registry_schema()).is_valid(payload):

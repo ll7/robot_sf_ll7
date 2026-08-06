@@ -29,7 +29,10 @@ from robot_sf.analysis_workbench.interaction_coordinates import (
     validate_worked_example_process_trace,
 )
 from robot_sf.analysis_workbench.process_trace_receipt import simulation_trace_receipt_sha256
-from robot_sf.analysis_workbench.simulation_trace_export import simulation_trace_export_from_dict
+from robot_sf.analysis_workbench.simulation_trace_export import (
+    SimulationTraceExportValidationError,
+    simulation_trace_export_from_dict,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLI_PATH = REPO_ROOT / "scripts" / "analysis" / "build_worked_example_process_trace.py"
@@ -321,7 +324,7 @@ def test_public_validation_normalizes_malformed_json_types() -> None:
         trace.frames[0],
         planner={**trace.frames[0].planner, 1: "non-string-key"},
     )
-    malformed_trace = replace(trace, frames=(malformed_frame, *trace.frames[1:]))
+    malformed_trace = replace(trace, frames=[malformed_frame, *trace.frames[1:]])
     with pytest.raises(WorkedExampleProcessTraceValidationError):
         build_worked_example_process_trace_from_export(malformed_trace)
 
@@ -354,6 +357,24 @@ def test_source_receipt_rejects_tuple_json_lookalike() -> None:
         build_worked_example_process_trace_from_export(
             simulation_trace_export_from_dict(tuple_payload)
         )
+
+
+def test_typed_trace_export_rejects_tuple_frames_at_construction() -> None:
+    """The typed model cannot alias tuple frames to the contract's JSON array."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+
+    with pytest.raises(SimulationTraceExportValidationError, match="/frames"):
+        replace(trace, frames=tuple(trace.frames))
+
+
+def test_typed_trace_frame_rejects_tuple_pedestrians_at_construction() -> None:
+    """The typed frame cannot alias tuple pedestrians to the contract's JSON array."""
+
+    trace = simulation_trace_export_from_dict(_trace_payload())
+
+    with pytest.raises(SimulationTraceExportValidationError, match="/pedestrians"):
+        replace(trace.frames[0], pedestrians=tuple(trace.frames[0].pedestrians))
 
 
 def test_source_receipt_digest_rejects_tuple_json_lookalike() -> None:
@@ -1057,6 +1078,35 @@ def test_process_trace_binds_canonical_near_miss_encounter_interval() -> None:
     assert payload["diagnostics"]["coverage"]["relative_interaction"]["status"] == "complete"
     assert payload["diagnostics"]["coverage"]["relative_interaction"]["frame_count"] == 2
     assert payload["diagnostics"]["threshold_exposure"]["duration_s"] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("duplicate_field", ["top_level_schema_version", "nested_actor_id"])
+def test_canonical_report_path_rejects_duplicate_keys_across_entire_document(
+    tmp_path: Path,
+    duplicate_field: str,
+) -> None:
+    """Public report ingestion cannot collapse duplicate envelope or encounter keys."""
+
+    trace_checksum = hashlib.sha256(TRACE_FIXTURE_PATH.read_bytes()).hexdigest()
+    report = _encounter_report(start_time_s=0.1, end_time_s=0.2)
+    report["provenance"]["input_checksums"] = {"trace": trace_checksum}
+    report["provenance"]["input_checksum_digest"] = _input_checksum_digest(
+        {"trace": trace_checksum}
+    )
+    raw_text = json.dumps(report)
+    if duplicate_field == "top_level_schema_version":
+        marker = '"schema_version": "near_miss_encounter.v1"'
+    else:
+        marker = '"actor_id": "ped-a"'
+    raw_text = raw_text.replace(marker, f"{marker}, {marker}", 1)
+    report_path = tmp_path / f"duplicate-{duplicate_field}.json"
+    report_path.write_text(raw_text, encoding="utf-8")
+
+    with pytest.raises(WorkedExampleProcessTraceValidationError, match="strict"):
+        build_worked_example_process_trace(
+            TRACE_FIXTURE_PATH,
+            encounter_report_path=report_path,
+        )
 
 
 def test_canonical_encounter_selector_searches_all_report_encounters() -> None:
@@ -1838,6 +1888,17 @@ def test_geometry_owner_schema_is_public_and_strict() -> None:
             },
             "registered_route_owner_geometry_invalid",
         ),
+        (
+            {
+                "selector": {"unrelated": "huge-integer-geometry"},
+                "geometry": {
+                    "type": "line_segment",
+                    "start": [10**400, 0],
+                    "end": [1, 0],
+                },
+            },
+            "registered_route_owner_geometry_invalid",
+        ),
     ),
 )
 def test_geometry_owner_validates_entire_envelope_before_selector_scan(
@@ -1956,7 +2017,12 @@ def test_canonical_geometry_owner_must_resolve_digest_and_exact_selector_geometr
     owner_ref = "owners/fixture-map.json"
     owner_path = tmp_path / "fixture-map.json"
     route_geometry = {"type": "line_segment", "start": [0.0, 0.0], "end": [10.0, 0.0]}
-    selector = {"map_id": "fixture-map", "spawn_id": 1, "goal_id": 2}
+    selector = {
+        "map_id": "fixture-map",
+        "spawn_id": 1,
+        "goal_id": 2,
+        "identity_exact_integer": 10**400,
+    }
 
     def registry_with_owner_digest(owner_digest: str) -> Path:
         registry = json.loads(GEOMETRY_REGISTRY_FIXTURE_PATH.read_text(encoding="utf-8"))
@@ -2141,7 +2207,10 @@ def test_geometry_registry_missing_and_duplicate_entries_fail_closed(tmp_path: P
         load_registered_route_spec(non_world_path, "route-b")
 
 
-@pytest.mark.parametrize("poison", ["NaN", "Infinity", "1e400", "duplicate_key"])
+@pytest.mark.parametrize(
+    "poison",
+    ["NaN", "Infinity", "1e400", "huge_integer", "duplicate_key"],
+)
 def test_geometry_registry_load_and_replay_reject_entire_document_poison(
     tmp_path: Path,
     poison: str,
@@ -2163,7 +2232,8 @@ def test_geometry_registry_load_and_replay_reject_entire_document_poison(
             1,
         )
     else:
-        raw_text = raw_text.replace(str(marker), poison, 1)
+        poison_token = "1" + "0" * 400 if poison == "huge_integer" else poison
+        raw_text = raw_text.replace(str(marker), poison_token, 1)
     registry_path = tmp_path / f"poison-{poison}.json"
     registry_path.write_text(raw_text, encoding="utf-8")
 

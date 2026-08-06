@@ -41,6 +41,14 @@ class SimulationTraceFrame:
     pedestrians: list[dict[str, Any]]
     planner: dict[str, Any]
 
+    def __post_init__(self) -> None:
+        """Reject containers that only become equivalent after JSON coercion."""
+
+        if type(self.pedestrians) is not list:
+            raise SimulationTraceExportValidationError(
+                ["/pedestrians: expected exact JSON array list"]
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class SimulationTraceExport:
@@ -53,6 +61,12 @@ class SimulationTraceExport:
     coordinate_frame: str
     units: dict[str, str]
     frames: list[SimulationTraceFrame]
+
+    def __post_init__(self) -> None:
+        """Reject containers that only become equivalent after JSON coercion."""
+
+        if type(self.frames) is not list:
+            raise SimulationTraceExportValidationError(["/frames: expected exact JSON array list"])
 
     def to_dict(self) -> dict[str, Any]:
         """Convert the export to JSON-safe primitives.

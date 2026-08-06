@@ -365,6 +365,22 @@ def test_chapter7_portfolio_schema_validates_complete_manifest() -> None:
         }
 
 
+def test_finalized_portfolio_remains_valid_after_json_round_trip(tmp_path: Path) -> None:
+    """The stable case-ID tie break must preserve its JSON representation on replay."""
+
+    output = tmp_path / "portfolio.json"
+    manifest = finalize_manifest(build_ch7_worked_example_portfolio(_complete_config()))
+
+    write_deterministic_json(manifest, output)
+    reloaded = json.loads(output.read_text(encoding="utf-8"))
+
+    validation = validate_ch7_worked_example_portfolio(reloaded)
+    assert validation.ok, validation.structural_violations
+    assert (
+        reloaded["exact_enumeration"]["best_score"] == manifest["exact_enumeration"]["best_score"]
+    )
+
+
 def test_literal_role_aliases_are_mapped_before_public_v2_emission() -> None:
     """Legacy aliases can be accepted internally but never emitted as public v2 roles."""
     alias = _unit(

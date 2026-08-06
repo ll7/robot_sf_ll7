@@ -1,0 +1,69 @@
+schema_version: "issue_6768_risk_ranker_generator_comparison_fixture.v1"
+split: "held_out"
+claim_boundary: "diagnostic_only; held-out evaluation rows are not nominal benchmark evidence"
+provenance:
+  fixture_source: "hand-authored from issue #6676 smoke trace geometry; deterministic and offline"
+  generated_by: "robot_sf issue #6768 held-out risk-ranker generator comparison"
+  disjoint_from: "tests/fixtures/risk_ranker/issue_6768_risk_ranker_calibration_v1.yaml"
+
+cases:
+  - case_id: "clear_empty"
+    split: "held_out"
+    status: "valid"
+    provenance:
+      source: "issue #6676 smoke fixture clear_empty"
+      geometry_note: "no pedestrians; known contact outcome not declared"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians: []
+
+  - case_id: "distant_stationary_actor"
+    split: "held_out"
+    status: "valid"
+    provenance:
+      source: "issue #6676 smoke fixture distant_stationary_actor"
+      geometry_note: "stationary actor far outside the reachable path footprint"
+    known_contact_outcome:
+      contact_certain: false
+      candidate_role: straight
+      reason: "actor centre distance to the reachable path exceeds summed radii over the horizon"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians:
+      - id: 101
+        position: [4.0, 2.0]
+        velocity: [0.0, 0.0]
+
+  - case_id: "dead_ahead_actor"
+    split: "held_out"
+    status: "valid"
+    provenance:
+      source: "issue #6768 geometry probe dead_ahead_actor"
+      geometry_note: "stationary actor directly on the nominal straight path"
+    known_contact_outcome:
+      contact_certain: true
+      candidate_role: straight
+      reason: "stationary actor lies on the straight path and footprints touch within the horizon"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians:
+      - id: 102
+        position: [1.0, 0.0]
+        velocity: [0.0, 0.0]
+
+  - case_id: "wide_crossing_actor"
+    split: "held_out"
+    status: "valid"
+    provenance:
+      source: "issue #6768 geometry probe wide_crossing_actor"
+      geometry_note: "crossing actor stays outside the reachable path footprint within the horizon"
+    known_contact_outcome:
+      contact_certain: false
+      candidate_role: straight
+      reason: "crossing actor does not reach the path footprint within the horizon"
+    start_position: [0.0, 0.0]
+    local_goal: [2.0, 0.0]
+    pedestrians:
+      - id: 103
+        position: [1.0, 1.5]
+        velocity: [0.0, -0.5]

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Run the bounded CPU sensitivity study for issue #5579.
 
-The default path is a no-submit config check. The optional run evaluates the two target MPC arms
-at the 20 pre-registered points and the four incumbent hybrid arms on the declared held-out
-scenario and seed slice. The tuning phase remains available explicitly for bounded local work;
-production callers must use the held-out phase. Raw episode output stays under ``output/``; only
-compact derived reports should be promoted into ``docs/context/evidence/``.
+The default path is a no-submit config check. The tuning phase evaluates the two target MPC arms at
+the 20 pre-registered points and writes a validated candidate-selection artifact. The held-out
+phase requires that artifact and evaluates only the selected target candidates plus the four frozen
+incumbents on the declared held-out scenario and seed slice. Raw episode output stays under
+``output/``; only compact derived reports should be promoted into ``docs/context/evidence/``.
 """
 
 from __future__ import annotations
@@ -15,9 +15,12 @@ import json
 import subprocess
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.map_runner import run_map_batch
@@ -25,10 +28,12 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     analyze_results,
     build_candidate_plan,
     load_sensitivity_config,
+    load_tuning_selection,
     normalize_episode_record,
     selected_scenarios,
     validate_canary_rows,
     write_report,
+    write_tuning_selection,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +56,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=("tuning", "held_out"),
         default="held_out",
         help="Execution scope for a study run; production defaults to the frozen held-out phase",
+    )
+    parser.add_argument(
+        "--selection-artifact",
+        type=Path,
+        help=(
+            "Tuning selection JSON for held-out execution; tuning writes this artifact under "
+            "the output directory by default"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -111,6 +124,11 @@ def _check_summary(config: dict[str, Any]) -> dict[str, Any]:
         "held_out_episode_row_bound": len(plan)
         * len(held_out_scenarios)
         * len(config["held_out_scope"]["seeds"]),
+        "held_out_selected_episode_row_bound": (
+            len(config["target_arms"]) + len(config["incumbent_arms"])
+        )
+        * len(held_out_scenarios)
+        * len(config["held_out_scope"]["seeds"]),
     }
     res["tuning_scope"] = {
         "scenario_ids": config["tuning_scope"]["scenario_ids"],
@@ -142,18 +160,37 @@ def _check_summary(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_study(
-    config: dict[str, Any], *, out_dir: Path, config_path: Path, phase: str = "held_out"
+    config: dict[str, Any],
+    *,
+    out_dir: Path,
+    config_path: Path,
+    phase: str = "held_out",
+    target_candidate_ids: Mapping[str, str] | None = None,
+    selection_artifact: str | None = None,
 ) -> dict[str, Any]:
-    """Execute every declared arm for one frozen phase and build the compact report."""
+    """Execute one frozen phase and build the compact report.
+
+    Held-out execution is fail-closed unless it receives the target candidates selected from the
+    completed tuning phase.
+    """
     if phase not in {"tuning", "held_out"}:
         raise ValueError(f"unsupported sensitivity phase: {phase}")
+    if phase == "held_out" and target_candidate_ids is None:
+        raise ValueError("held_out phase requires a completed tuning selection artifact")
+    if phase == "tuning" and target_candidate_ids is not None:
+        raise ValueError("tuning phase cannot receive held-out target candidate selections")
     scope_name = "tuning_scope" if phase == "tuning" else "held_out_scope"
     scenarios = selected_scenarios(config, repo_root=REPO_ROOT, scope_name=scope_name)
-    plan = build_candidate_plan(config, repo_root=REPO_ROOT)
+    plan = build_candidate_plan(
+        config,
+        repo_root=REPO_ROOT,
+        target_candidate_ids=target_candidate_ids,
+    )
     scope = config[scope_name]
     source_matrix = REPO_ROOT / scope["source_matrix"]
-    raw_dir = out_dir / "raw"
-    configs_dir = out_dir / "configs"
+    phase_dir = out_dir / phase
+    raw_dir = phase_dir / "raw"
+    configs_dir = phase_dir / "configs"
     raw_dir.mkdir(parents=True, exist_ok=True)
     all_rows: list[dict[str, Any]] = []
     for entry in plan:
@@ -195,10 +232,13 @@ def run_study(
                 )
             )
 
-    normalized_path = out_dir / "normalized_episode_rows.jsonl"
+    normalized_path = phase_dir / "normalized_episode_rows.jsonl"
     normalized_path.write_text(
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in all_rows),
         encoding="utf-8",
+    )
+    selection_arg = (
+        f"--selection-artifact {selection_artifact} " if selection_artifact is not None else ""
     )
     report = analyze_results(
         config,
@@ -210,14 +250,17 @@ def run_study(
             "uv run python scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py "
             f"--config {_display_path(config_path)} "
             f"--phase {phase} "
+            f"{selection_arg}"
             "--out-dir output/benchmarks/issue_5579_mpc_tuning_sensitivity_v2"
         ),
         raw_artifact_root=_display_path(raw_dir),
         scope_name=scope_name,
+        target_candidate_ids=target_candidate_ids,
+        selection_artifact=selection_artifact,
     )
     report["phase"] = phase
     report["normalized_episode_rows"] = _display_path(normalized_path)
-    write_report(report, out_dir)
+    write_report(report, phase_dir)
     return report
 
 
@@ -338,19 +381,53 @@ def main(argv: list[str] | None = None) -> int:
         canary_res = run_canary_check(config, out_dir=args.out_dir, config_path=args.config)
         print(json.dumps(canary_res, sort_keys=True))
         return 0 if canary_res["status"] == "ok" else 1
-    report = run_study(config, out_dir=args.out_dir, config_path=args.config, phase=str(args.phase))
-    print(
-        json.dumps(
-            {
-                "status": report["status"],
-                "issue": report["issue"],
-                "read": report["read"]["decision"],
-                "eligible_episode_rows": report["eligible_episode_rows"],
-                "excluded_episode_rows": report["excluded_episode_rows"],
-            },
-            sort_keys=True,
+    phase = str(args.phase)
+    selection_payload: dict[str, Any] | None = None
+    if phase == "tuning":
+        report = run_study(
+            config,
+            out_dir=args.out_dir,
+            config_path=args.config,
+            phase=phase,
         )
-    )
+        if report.get("status") == "complete_diagnostic":
+            selection_path = args.selection_artifact or args.out_dir / "tuning_selection.json"
+            selection_payload = write_tuning_selection(
+                report,
+                config,
+                output_path=selection_path,
+                config_path=args.config,
+                repo_root=REPO_ROOT,
+                source_report=_display_path(args.out_dir / "tuning" / "sensitivity_report.json"),
+            )
+    else:
+        selection_path = args.selection_artifact or args.out_dir / "tuning_selection.json"
+        selected = load_tuning_selection(
+            selection_path,
+            config,
+            config_path=args.config,
+            repo_root=REPO_ROOT,
+        )
+        report = run_study(
+            config,
+            out_dir=args.out_dir,
+            config_path=args.config,
+            phase=phase,
+            target_candidate_ids=selected,
+            selection_artifact=_display_path(selection_path),
+        )
+        selection_payload = {"selection_artifact": _display_path(selection_path)}
+    result = {
+        "status": report["status"],
+        "issue": report["issue"],
+        "phase": phase,
+        "read": report["read"]["decision"],
+        "eligible_episode_rows": report["eligible_episode_rows"],
+        "excluded_episode_rows": report["excluded_episode_rows"],
+    }
+    if selection_payload is not None:
+        result.update(selection_payload)
+    print(json.dumps(result, sort_keys=True))
     return 0 if report.get("status") == "complete_diagnostic" else 1
 
 

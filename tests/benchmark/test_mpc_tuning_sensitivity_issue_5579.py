@@ -16,11 +16,13 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     compute_scenario_list_hash,
     config_hash,
     load_sensitivity_config,
+    load_tuning_selection,
     normalize_episode_record,
     selected_scenarios,
     validate_canary_rows,
     validate_sensitivity_config,
     write_report,
+    write_tuning_selection,
 )
 from scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 import _display_path
 
@@ -142,6 +144,90 @@ def test_candidate_plan_preserves_arm_specific_base_and_only_varies_declared_axe
     assert all(
         set(entry["overrides"]) <= set(config["search"]["top_parameters"]) for entry in targets
     )
+
+
+def test_held_out_plan_contains_only_tuning_selected_targets() -> None:
+    """Held-out execution cannot run or select any unselected target candidate."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    selected = {
+        "prediction_mpc": "speed_low",
+        "prediction_mpc_cbf": "horizon_high",
+    }
+    plan = build_candidate_plan(config, repo_root=ROOT, target_candidate_ids=selected)
+    targets = [entry for entry in plan if entry["target"]]
+    incumbents = [entry for entry in plan if not entry["target"]]
+    assert len(targets) == len(TARGET_ARM_KEYS)
+    assert {(entry["arm_key"], entry["candidate_id"]) for entry in targets} == set(selected.items())
+    assert len(incumbents) == 4
+    assert all(entry["candidate_id"] == "incumbent" for entry in incumbents)
+
+
+def test_tuning_selection_round_trip_and_fixed_held_out_report(tmp_path: Path) -> None:
+    """Selection is frozen from tuning rows and held-out reporting uses one target per arm."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    tuning_plan = build_candidate_plan(config, repo_root=ROOT)
+    tuning_report = analyze_results(
+        config,
+        _fixture_rows(config, tuning_plan),
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="tuning_scope",
+    )
+    selection_path = tmp_path / "tuning_selection.json"
+    payload = write_tuning_selection(
+        tuning_report,
+        config,
+        output_path=selection_path,
+        config_path=CONFIG,
+        repo_root=ROOT,
+    )
+    selected = load_tuning_selection(
+        selection_path,
+        config,
+        config_path=CONFIG,
+        repo_root=ROOT,
+    )
+    assert payload["selection_scope"] == "tuning_scope"
+    assert set(selected) == set(TARGET_ARM_KEYS)
+    assert selected == payload["selected_target_candidates"]
+
+    held_out_plan = build_candidate_plan(
+        config,
+        repo_root=ROOT,
+        target_candidate_ids=selected,
+    )
+    held_out_report = analyze_results(
+        config,
+        _fixture_rows(config, held_out_plan, scope_name="held_out_scope"),
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="held_out_scope",
+        target_candidate_ids=selected,
+        selection_artifact=str(selection_path),
+    )
+    assert held_out_report["selection_mode"] == "fixed_from_tuning"
+    assert held_out_report["executed_candidate_count"] == 6
+    assert held_out_report["total_episode_rows"] == 6 * 45 * 10
+    assert all(summary["candidate_count"] == 1 for summary in held_out_report["target_summary"])
+    assert held_out_report["read"]["selection_mode"] == "fixed_from_tuning"
+    assert "tuning-selected" in held_out_report["read"]["detail"]
+
+    tampered = json.loads(selection_path.read_text(encoding="utf-8"))
+    tampered["config_sha256"] = "tampered"
+    selection_path.write_text(json.dumps(tampered), encoding="utf-8")
+    with pytest.raises(ValueError, match="config provenance"):
+        load_tuning_selection(
+            selection_path,
+            config,
+            config_path=CONFIG,
+            repo_root=ROOT,
+        )
 
 
 def test_normalization_requires_explicit_outcome_and_availability_provenance() -> None:
@@ -479,6 +565,18 @@ def test_external_output_path_has_stable_display() -> None:
     assert _display_path(ROOT / "output") == "output"
 
 
+def test_runner_rejects_held_out_execution_without_selection(tmp_path: Path) -> None:
+    """The production runner fails before any episode work without tuning selection."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    with pytest.raises(ValueError, match="requires a completed tuning selection artifact"):
+        sensitivity_runner.run_study(
+            config,
+            out_dir=tmp_path,
+            config_path=CONFIG,
+            phase="held_out",
+        )
+
+
 def test_runner_returns_nonzero_for_blocked_study(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -494,6 +592,14 @@ def test_runner_returns_nonzero_for_blocked_study(
         }
 
     monkeypatch.setattr(sensitivity_runner, "run_study", blocked_study)
+    monkeypatch.setattr(
+        sensitivity_runner,
+        "load_tuning_selection",
+        lambda *_args, **_kwargs: {
+            "prediction_mpc": "speed_low",
+            "prediction_mpc_cbf": "horizon_high",
+        },
+    )
     assert (
         sensitivity_runner.main(
             ["--config", str(CONFIG), "--phase", "held_out", "--out-dir", str(tmp_path)]
@@ -549,12 +655,14 @@ def test_report_rejects_missing_paired_rows() -> None:
         )
 
 
-def _fixture_rows(config: dict, plan: list[dict]) -> list[dict]:
+def _fixture_rows(
+    config: dict, plan: list[dict], *, scope_name: str = "scenario_scope"
+) -> list[dict]:
     """Build complete eligible rows for report-contract tests."""
     rows = []
     for entry in plan:
-        for scenario_id in config["scenario_scope"]["scenario_ids"]:
-            for seed in config["scenario_scope"]["seeds"]:
+        for scenario_id in config[scope_name]["scenario_ids"]:
+            for seed in config[scope_name]["seeds"]:
                 rows.append(
                     {
                         "arm_key": entry["arm_key"],

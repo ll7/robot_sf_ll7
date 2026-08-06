@@ -23,6 +23,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 CONFIG_SCHEMA = "issue_5579_mpc_tuning_sensitivity.v2"
 REPORT_SCHEMA = "issue_5579_mpc_tuning_sensitivity_report.v1"
+SELECTION_SCHEMA = "issue_5579_mpc_tuning_selection.v1"
 STUDY_ID = "issue_5579_mpc_tuning_budget_sensitivity_v2"
 TARGET_ARM_KEYS = ("prediction_mpc", "prediction_mpc_cbf")
 INCUMBENT_ARM_KEYS = (
@@ -126,17 +127,29 @@ def selected_scenarios(
     return selected
 
 
-def build_candidate_plan(config: Mapping[str, Any], *, repo_root: Path) -> list[dict[str, Any]]:
+def build_candidate_plan(
+    config: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    target_candidate_ids: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """Build deterministic target-candidate and incumbent execution rows.
 
     Returns:
         Ordered target and incumbent execution entries.
     """
     validated = validate_sensitivity_config(config, repo_root=repo_root)
+    selected = _validate_target_candidate_ids(target_candidate_ids, validated)
     plan: list[dict[str, Any]] = []
     for arm in validated["target_arms"]:
         base = _load_yaml_mapping(_repo_path(str(arm["algo_config_path"]), repo_root))
-        for point in validated["search"]["candidate_points"]:
+        points = validated["search"]["candidate_points"]
+        if selected is not None:
+            selected_id = selected[str(arm["key"])]
+            points = [point for point in points if str(point["id"]) == selected_id]
+            if len(points) != 1:  # pragma: no cover - guarded by the helper above.
+                raise ValueError(f"selected candidate is not declared for arm {arm['key']}")
+        for point in points:
             effective = deepcopy(base)
             effective.update(point["overrides"])
             build_prediction_mpc_config(effective)
@@ -247,7 +260,7 @@ def normalize_episode_record(
     }
 
 
-def analyze_results(
+def analyze_results(  # noqa: PLR0913
     config: Mapping[str, Any],
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -257,14 +270,21 @@ def analyze_results(
     reproduction_command: str,
     raw_artifact_root: str,
     scope_name: str = "scenario_scope",
+    target_candidate_ids: Mapping[str, str] | None = None,
+    selection_artifact: str | None = None,
 ) -> dict[str, Any]:
-    """Build a fail-closed best-of-20 report from normalized episode rows.
+    """Build a fail-closed report for one declared scope from normalized episode rows.
 
     Returns:
         Diagnostic report with candidate-level rows and the preregistered read.
     """
     validated = validate_sensitivity_config(config, repo_root=repo_root)
-    plan = build_candidate_plan(validated, repo_root=repo_root)
+    selected = _validate_target_candidate_ids(target_candidate_ids, validated)
+    plan = build_candidate_plan(
+        validated,
+        repo_root=repo_root,
+        target_candidate_ids=selected,
+    )
     scenario_scope = _mapping(validated.get(scope_name), scope_name)
     expected_keys = {
         (entry["arm_key"], entry["candidate_id"], scenario_id, int(seed))
@@ -322,7 +342,13 @@ def analyze_results(
     all_rows_eligible = all(row["excluded_episodes"] == 0 for row in candidate_rows)
     target_summary = _summarize_targets(candidate_rows)
     incumbent_summary = _summarize_incumbents(candidate_rows)
-    read = _build_read(target_summary, incumbent_summary, all_rows_eligible)
+    selection_mode = "fixed_from_tuning" if selected is not None else "tuning_search"
+    read = _build_read(
+        target_summary,
+        incumbent_summary,
+        all_rows_eligible,
+        selection_mode=selection_mode,
+    )
     return {
         "schema_version": REPORT_SCHEMA,
         "issue": 5579,
@@ -337,8 +363,12 @@ def analyze_results(
         "reproduction_command": reproduction_command,
         "raw_artifact_root": raw_artifact_root,
         "execution_scope_name": scope_name,
+        "selection_mode": selection_mode,
+        "selected_target_candidates": deepcopy(dict(selected or {})),
+        "selection_artifact": selection_artifact,
         "scenario_scope": deepcopy(dict(scenario_scope)),
         "candidate_count": int(validated["search"]["candidate_count"]),
+        "executed_candidate_count": len(plan),
         "target_arm_count": len(validated["target_arms"]),
         "total_episode_rows": len(rows),
         "eligible_episode_rows": sum(row["eligible_episodes"] for row in candidate_rows),
@@ -354,6 +384,99 @@ def analyze_results(
             "the read."
         ),
     }
+
+
+def write_tuning_selection(
+    report: Mapping[str, Any],
+    config: Mapping[str, Any],
+    *,
+    output_path: str | Path,
+    config_path: str | Path,
+    repo_root: Path,
+    source_report: str | None = None,
+) -> dict[str, Any]:
+    """Persist the tuning-selected target candidates for the held-out phase.
+
+    The selection is deliberately a separate artifact so the held-out runner cannot silently
+    re-select a target candidate from held-out outcomes.
+
+    Returns:
+        The validated selection payload written to ``output_path``.
+    """
+    validated = validate_sensitivity_config(config, repo_root=repo_root)
+    if report.get("execution_scope_name") != "tuning_scope":
+        raise ValueError("tuning selection must be created from the tuning_scope report")
+    if report.get("status") != "complete_diagnostic":
+        raise ValueError("cannot create a held-out selection from a blocked tuning report")
+    summaries = {
+        str(summary.get("arm_key")): summary
+        for summary in report.get("target_summary", [])
+        if isinstance(summary, Mapping)
+    }
+    selected: dict[str, str] = {}
+    for arm_key in TARGET_ARM_KEYS:
+        best = summaries.get(arm_key, {}).get("best_candidate")
+        if not isinstance(best, Mapping) or not str(best.get("candidate_id", "")).strip():
+            raise ValueError(f"tuning report has no eligible selection for target arm {arm_key}")
+        selected[arm_key] = str(best["candidate_id"])
+    selected = dict(_validate_target_candidate_ids(selected, validated) or {})
+
+    config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
+    if config_sha256 is None:
+        raise ValueError(f"selection config does not exist: {config_path}")
+    payload: dict[str, Any] = {
+        "schema_version": SELECTION_SCHEMA,
+        "study_id": str(validated["study_id"]),
+        "selection_scope": "tuning_scope",
+        "selection_status": "complete",
+        "selection_rule": "highest eligible route-complete collision-free rate; candidate_id tie-break",
+        "config_sha256": config_sha256,
+        "selected_target_candidates": selected,
+    }
+    if source_report is not None:
+        payload["source_report"] = source_report
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
+def load_tuning_selection(
+    path: str | Path,
+    config: Mapping[str, Any],
+    *,
+    config_path: str | Path,
+    repo_root: Path,
+) -> dict[str, str]:
+    """Load and validate the tuning selection required by held-out execution.
+
+    Returns:
+        One declared candidate ID for each target arm.
+    """
+    selection_path = Path(path)
+    if not selection_path.is_file():
+        raise ValueError(f"held-out phase requires a tuning selection artifact: {selection_path}")
+    try:
+        payload = json.loads(selection_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid tuning selection artifact: {selection_path}") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError("tuning selection artifact must be a mapping")
+    if payload.get("schema_version") != SELECTION_SCHEMA:
+        raise ValueError(f"selection schema_version must be {SELECTION_SCHEMA!r}")
+    if payload.get("study_id") != STUDY_ID:
+        raise ValueError(f"selection study_id must be {STUDY_ID!r}")
+    if payload.get("selection_scope") != "tuning_scope":
+        raise ValueError("selection must be derived from tuning_scope")
+    if payload.get("selection_status") != "complete":
+        raise ValueError("selection status must be complete")
+    expected_config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
+    if expected_config_sha256 is None or payload.get("config_sha256") != expected_config_sha256:
+        raise ValueError("tuning selection config provenance does not match the active config")
+    validated = validate_sensitivity_config(config, repo_root=repo_root)
+    selected = payload.get("selected_target_candidates")
+    normalized = _validate_target_candidate_ids(selected, validated)
+    return dict(normalized or {})
 
 
 def write_report(report: Mapping[str, Any], output_dir: str | Path) -> dict[str, str]:
@@ -399,6 +522,15 @@ def format_report_markdown(report: Mapping[str, Any]) -> str:
     Returns:
         Markdown representation of the compact sensitivity report.
     """
+    selection_mode = str(report.get("selection_mode", "tuning_search"))
+    if selection_mode == "fixed_from_tuning":
+        target_heading = "## Tuning-selected target configurations"
+        target_selection = "fixed from the tuning-scope selection artifact"
+        candidate_heading = "Selected candidate"
+    else:
+        target_heading = "## Best-found target configurations"
+        target_selection = "selected within the tuning scope"
+        candidate_heading = "Best candidate"
     lines = [
         "# Issue #5579 MPC Tuning-Budget Sensitivity",
         "",
@@ -407,10 +539,11 @@ def format_report_markdown(report: Mapping[str, Any]) -> str:
         f"- Claim boundary: {report.get('claim_boundary')}",
         f"- Run commit: `{report.get('run_commit')}`",
         f"- Config: `{report.get('config_path')}`",
+        f"- Target selection: {target_selection}",
         "",
-        "## Best-found target configurations",
+        target_heading,
         "",
-        "| Arm | Best candidate | Success rate | Eligible episodes | Excluded episodes |",
+        f"| Arm | {candidate_heading} | Success rate | Eligible episodes | Excluded episodes |",
         "| --- | --- | ---: | ---: | ---: |",
     ]
     for arm in report.get("target_summary", []):
@@ -777,6 +910,38 @@ def _validate_candidate_points(value: Any, candidate_count: int, levels: Mapping
         raise ValueError("search must contain exactly one incumbent candidate point")
 
 
+def _validate_target_candidate_ids(value: Any, config: Mapping[str, Any]) -> dict[str, str] | None:
+    """Validate one tuning-selected candidate ID for each target arm.
+
+    Returns:
+        A normalized target-arm-to-candidate mapping, or ``None`` when no selection was supplied.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError("target_candidate_ids must be a mapping")
+    normalized: dict[str, str] = {}
+    for raw_arm, raw_candidate in value.items():
+        if not isinstance(raw_arm, str) or not isinstance(raw_candidate, str):
+            raise ValueError("target_candidate_ids keys and values must be strings")
+        normalized[raw_arm.strip()] = raw_candidate.strip()
+    if set(normalized) != set(TARGET_ARM_KEYS) or any(
+        not arm or not candidate for arm, candidate in normalized.items()
+    ):
+        raise ValueError(
+            "target_candidate_ids must contain exactly one non-empty candidate for each target arm"
+        )
+    candidate_ids = {
+        str(point["id"])
+        for point in _mapping(config.get("search"), "search").get("candidate_points", [])
+        if isinstance(point, Mapping) and "id" in point
+    }
+    invalid = sorted(set(normalized.values()) - candidate_ids)
+    if invalid:
+        raise ValueError(f"target_candidate_ids contain undeclared candidates: {invalid}")
+    return normalized
+
+
 def _validate_candidate_levels(
     point_id: str, overrides: Mapping[str, Any], levels: Mapping[str, Any]
 ) -> None:
@@ -846,6 +1011,8 @@ def _build_read(
     targets: Sequence[Mapping[str, Any]],
     incumbents: Sequence[Mapping[str, Any]],
     all_rows_eligible: bool,
+    *,
+    selection_mode: str,
 ) -> dict[str, Any]:
     """Produce the preregistered decision comparing target MPC rates to the incumbent band.
 
@@ -869,16 +1036,29 @@ def _build_read(
         }
     if max(target_rates) < min(incumbent_rates):
         decision = "structural_reading_strengthens_on_tested_slice"
-        detail = "Both best-of-20 MPC rates remain below every incumbent hybrid rate."
+        detail = (
+            "Both tuning-selected MPC rates remain below every incumbent hybrid rate."
+            if selection_mode == "fixed_from_tuning"
+            else "Both best-of-20 MPC rates remain below every incumbent hybrid rate."
+        )
     elif min(target_rates) >= max(incumbent_rates):
         decision = "budget_bound_reading_supported_on_tested_slice"
-        detail = "Both best-of-20 MPC rates meet or exceed every incumbent hybrid rate."
+        detail = (
+            "Both tuning-selected MPC rates meet or exceed every incumbent hybrid rate."
+            if selection_mode == "fixed_from_tuning"
+            else "Both best-of-20 MPC rates meet or exceed every incumbent hybrid rate."
+        )
     else:
         decision = "mixed_or_inconclusive"
-        detail = "The best-of-20 MPC rates overlap the incumbent hybrid band."
+        detail = (
+            "The tuning-selected MPC rates overlap the incumbent hybrid band."
+            if selection_mode == "fixed_from_tuning"
+            else "The best-of-20 MPC rates overlap the incumbent hybrid band."
+        )
     return {
         "decision": decision,
         "detail": detail,
+        "selection_mode": selection_mode,
         "best_mpc_rates": target_rates,
         "incumbent_rates": incumbent_rates,
         "incumbent_band": {"minimum": min(incumbent_rates), "maximum": max(incumbent_rates)},
@@ -1365,6 +1545,7 @@ __all__ = [
     "INCUMBENT_ARM_KEYS",
     "NATIVE_SOLVER_PLANNER",
     "REPORT_SCHEMA",
+    "SELECTION_SCHEMA",
     "TARGET_ARM_KEYS",
     "TOP_PARAMETERS",
     "TUNING_SCENARIO_IDS",
@@ -1374,9 +1555,11 @@ __all__ = [
     "config_hash",
     "format_report_markdown",
     "load_sensitivity_config",
+    "load_tuning_selection",
     "normalize_episode_record",
     "selected_scenarios",
     "validate_canary_rows",
     "validate_sensitivity_config",
     "write_report",
+    "write_tuning_selection",
 ]

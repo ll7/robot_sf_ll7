@@ -7,7 +7,7 @@ status: preregistration
 # benchmark runner, metric semantics, or paper-facing configuration.
 claim_boundary: >-
   Diagnostic bounded sensitivity contract. A completed run can describe the
-  tested fixed scenario slice and the observed best-found configuration, but it
+  tested fixed scenario slice and the tuning-selected configuration, but it
   cannot establish a benchmark ranking, structural planner superiority, or a
   paper/dissertation claim. Fallback, degraded, failed, and unavailable rows
   are excluded from the success comparison and keep the report blocked.
@@ -215,8 +215,8 @@ comparison:
   success_fields: [outcome.route_complete, outcome.collision_event]
   higher_is_better: true
   hybrid_band_read:
-    structural_if: both_best_mpc_rates_below_all_incumbent_rates
-    budget_bound_if: both_best_mpc_rates_at_or_above_all_incumbent_rates
+    structural_if: both_tuning_selected_mpc_rates_below_all_incumbent_rates
+    budget_bound_if: both_tuning_selected_mpc_rates_at_or_above_all_incumbent_rates
     otherwise: mixed_or_inconclusive
   fallback_degraded_policy: exclude_from_success_evidence
 

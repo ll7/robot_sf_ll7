@@ -12,10 +12,9 @@ import hashlib
 import json
 import math
 import os
-import re
 import subprocess
-import unicodedata
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -42,22 +41,47 @@ SYNTHETIC_FIXTURE_LABEL = "SYNTHETIC FIXTURE — RENDERER PROOF ONLY"
 FINAL_WIDTH_IN = 426.79135 / 72.27
 BASE_FONT_PT = 9.0
 MINIMUM_VISIBLE_FONT_PT = 8.25
-ROUTE_TITLE_BAND_IN = 0.48
+ROUTE_TITLE_BAND_IN = 0.44
 PROCESS_TITLE_BAND_IN = 0.14
 TURN_TITLE_BAND_IN = 0.36
+CONTROLLER_TITLE_BAND_IN = 0.20
 CONTEXT_BOTTOM_MARGIN_IN = 0.08
 # ``campaign_atlas._wilson_ci`` publishes point estimates rounded to six decimals.
 ATLAS_ESTIMATE_ABS_TOL = 0.5e-6 + 1e-12
-_NO_SHARED_PREFIX_NARRATIVE_PATTERNS = {
-    "difference_curve": r"\bdifference\s+curves?\b",
-    "pivot_time": r"\bpivot\s+time\b",
-    "causal_hinge": r"\bcausal\s+hinge\b",
-    "adjacent_seed_significance": (
-        r"\badjacent\s+seeds?\s+(?:"
-        r"(?:(?:is|are)\s+)?statistically\s+significant|"
-        r"statistical\s+significance|significance)\b"
-    ),
-    "divergence_point": r"\b(?:divergence\s+point|locali[sz]ed\s+divergence)\b",
+_NARRATIVE_TEMPLATE_BY_GRAMMAR = {
+    "matched_start_planner": "matched_start_descriptive.v1",
+    "same_cell_seed_sensitivity": "same_cell_distinct_start_abstention.v1",
+}
+_NARRATIVE_CLAIM_FIELDS = {
+    "matched_start_descriptive.v1": {
+        "observed_signature": (
+            "Different executed planner stacks show different observed processes and "
+            "terminal outcomes under the matched recorded start."
+        ),
+        "competing_explanation": (
+            "Recorded command and encounter-geometry differences are documented; "
+            "attribution is not estimated."
+        ),
+        "causal_status": "observational_only",
+        "generalization_limit": (
+            "This selected comparison is descriptive only and supports no mechanistic "
+            "or population inference."
+        ),
+    },
+    "same_cell_distinct_start_abstention.v1": {
+        "observed_signature": (
+            "The recorded traces show distinct observed paths and terminal outcomes "
+            "from different recorded starts."
+        ),
+        "competing_explanation": (
+            "The different recorded starts preclude attribution to seed choice."
+        ),
+        "causal_status": "causal_abstention",
+        "generalization_limit": (
+            "This selected comparison is descriptive only and supports no mechanistic "
+            "or population inference."
+        ),
+    },
 }
 
 PALETTE = {
@@ -221,21 +245,22 @@ def _selected_case(portfolio: dict[str, Any], case_id: str) -> dict[str, Any]:
     return selected[0]
 
 
-def _validate_no_shared_prefix_narrative(payload: dict[str, Any]) -> None:
-    if payload["comparison_grammar"] != "same_cell_seed_sensitivity":
-        return
-    for field, raw_value in payload["narrative"].items():
-        normalized = re.sub(
-            r"[\W_]+",
-            " ",
-            unicodedata.normalize("NFKC", str(raw_value)).casefold(),
-        ).strip()
-        for semantic, pattern in _NO_SHARED_PREFIX_NARRATIVE_PATTERNS.items():
-            if re.search(pattern, normalized):
-                raise CaseDossierError(
-                    "no_shared_prefix_narrative_forbidden",
-                    f"{field}: {semantic}",
-                )
+def _controlled_narrative(payload: dict[str, Any]) -> dict[str, str]:
+    """Resolve the only claim template admitted for the selected grammar.
+
+    Returns:
+        A renderer-owned copy of the exact claim fields.
+    """
+
+    grammar = str(payload["comparison_grammar"])
+    expected = _NARRATIVE_TEMPLATE_BY_GRAMMAR[grammar]
+    observed = str(payload["narrative"]["template_id"])
+    if observed != expected:
+        raise CaseDossierError(
+            "narrative_template_invalid",
+            f"{grammar}: expected {expected}, observed {observed}",
+        )
+    return dict(_NARRATIVE_CLAIM_FIELDS[expected])
 
 
 def _validate_input_semantics(payload: dict[str, Any]) -> None:
@@ -275,7 +300,7 @@ def _validate_input_semantics(payload: dict[str, Any]) -> None:
             "no_shared_prefix_forbidden_mode",
             "difference curves, pivot time, causal hinge, and adjacent-seed significance are forbidden",
         )
-    _validate_no_shared_prefix_narrative(payload)
+    _controlled_narrative(payload)
 
 
 def _prohibited_semantics(grammar: str) -> list[str]:
@@ -373,7 +398,8 @@ def _validate_atlas(
     *,
     portfolio_hash: str,
     traces: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
+    selected_case: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     if atlas.get("schema_version") != "campaign_atlas.v2":
         raise CaseDossierError("campaign_atlas_schema_invalid", repr(atlas.get("schema_version")))
     if atlas.get("selection_manifest_hash") != portfolio_hash:
@@ -381,24 +407,159 @@ def _validate_atlas(
     cells = atlas.get("cells")
     if not isinstance(cells, list):
         raise CaseDossierError("campaign_atlas_cells_invalid", "cells must be an array")
-    sources = [trace["source_trace"]["source"] for trace in traces.values()]
-    scenario = sources[0]["scenario_id"]
-    planners = {source["planner_id"] for source in sources}
-    matched = [
-        cell
-        for cell in cells
-        if isinstance(cell, dict)
-        and cell.get("scenario_family") == scenario
-        and cell.get("planner") in planners
-    ]
-    if {cell.get("planner") for cell in matched} != planners:
-        raise CaseDossierError("campaign_atlas_cell_unavailable", scenario)
-    for cell in matched:
+    resolved_cells: dict[tuple[str, str, str | None], dict[str, Any]] = {}
+    bindings: dict[str, dict[str, Any]] = {}
+    for role in ("left", "right"):
+        source = traces[role]["source_trace"]["source"]
+        scenario = str(source["scenario_id"])
+        planner = str(source["planner_id"])
+        candidates = [
+            cell
+            for cell in cells
+            if isinstance(cell, dict)
+            and cell.get("scenario_family") == scenario
+            and cell.get("planner") == planner
+        ]
+        release_arm_id, authority_source = _authoritative_release_arm(
+            traces[role],
+            selected_case,
+            role=role,
+        )
+        if release_arm_id is not None:
+            matches = [cell for cell in candidates if cell.get("release_arm_id") == release_arm_id]
+            resolution = "authoritative_release_arm_id"
+        else:
+            matches = candidates
+            resolution = "unique_scenario_planner_cell"
+        if not matches:
+            detail = f"{role}: {scenario}/{planner}"
+            if release_arm_id is not None:
+                detail += f"/{release_arm_id}"
+            raise CaseDossierError("campaign_atlas_cell_unavailable", detail)
+        if len(matches) != 1:
+            arms = sorted(str(cell.get("release_arm_id")) for cell in matches)
+            raise CaseDossierError(
+                "campaign_atlas_cell_ambiguous",
+                f"{role}: {scenario}/{planner}: release_arm_ids={arms}",
+            )
+        cell = matches[0]
         planner, denominator, counts = _validated_atlas_counts(cell)
         _validate_atlas_outcome_ci(cell, planner, denominator, counts)
-    return sorted(
-        matched, key=lambda item: (str(item.get("planner")), str(item.get("release_arm_id")))
+        key = (scenario, planner, cell.get("release_arm_id"))
+        resolved_cells[key] = cell
+        bindings[role] = {
+            "status": "resolved",
+            "scenario_family": scenario,
+            "planner": planner,
+            "release_arm_id": cell.get("release_arm_id"),
+            "resolution": resolution,
+            "authority_source": authority_source,
+        }
+    return (
+        sorted(
+            resolved_cells.values(),
+            key=lambda item: (
+                str(item.get("scenario_family")),
+                str(item.get("planner")),
+                str(item.get("release_arm_id")),
+            ),
+        ),
+        bindings,
     )
+
+
+def _append_selection_release_arm_candidates(
+    candidates: list[tuple[str, Any]],
+    *,
+    container_name: str,
+    container: Any,
+    role: str,
+) -> None:
+    """Append explicitly recorded release-arm fields from one selection container."""
+
+    if not isinstance(container, dict):
+        return
+    if "release_arm_id" in container:
+        candidates.append((f"{container_name}.release_arm_id", container["release_arm_id"]))
+    for field in ("release_arm_bindings", "release_arm_id_by_role", "release_arm_ids"):
+        mapping = container.get(field)
+        if not isinstance(mapping, dict) or role not in mapping:
+            continue
+        value = mapping[role]
+        if isinstance(value, dict):
+            value = value.get("release_arm_id")
+        candidates.append((f"{container_name}.{field}.{role}", value))
+
+
+def _release_arm_candidates(
+    trace: dict[str, Any],
+    selected_case: dict[str, Any],
+    *,
+    role: str,
+) -> list[tuple[str, Any]]:
+    """Collect release-arm candidates from authoritative trace and selection fields.
+
+    Returns:
+        Source-path and raw-value pairs for every explicitly recorded candidate.
+    """
+
+    candidates: list[tuple[str, Any]] = []
+    source_trace = trace["source_trace"]
+    trace_source = source_trace.get("source")
+    if isinstance(trace_source, dict) and "release_arm_id" in trace_source:
+        candidates.append(("source_trace.source.release_arm_id", trace_source["release_arm_id"]))
+    content = source_trace.get("content_receipt", {}).get("content_contract", {})
+    content_source = content.get("source") if isinstance(content, dict) else None
+    if isinstance(content_source, dict) and "release_arm_id" in content_source:
+        candidates.append(
+            (
+                "source_trace.content_receipt.content_contract.source.release_arm_id",
+                content_source["release_arm_id"],
+            )
+        )
+    for container_name, container in (
+        ("selection", selected_case),
+        ("selection.source_boundary", selected_case.get("source_boundary")),
+        ("selection.source", selected_case.get("source")),
+    ):
+        _append_selection_release_arm_candidates(
+            candidates,
+            container_name=container_name,
+            container=container,
+            role=role,
+        )
+    return candidates
+
+
+def _authoritative_release_arm(
+    trace: dict[str, Any],
+    selected_case: dict[str, Any],
+    *,
+    role: str,
+) -> tuple[str | None, str | None]:
+    """Resolve explicit release-arm provenance without planner-name inference.
+
+    Returns:
+        The uniquely recorded release-arm ID and its authority source, or two nulls.
+    """
+
+    normalized: list[tuple[str, str]] = []
+    for source, value in _release_arm_candidates(trace, selected_case, role=role):
+        if not isinstance(value, str) or not value.strip():
+            raise CaseDossierError(
+                "release_arm_provenance_invalid",
+                f"{source}: expected non-empty string",
+            )
+        normalized.append((source, value))
+    values = {value for _, value in normalized}
+    if len(values) > 1:
+        raise CaseDossierError(
+            "release_arm_provenance_conflict",
+            ", ".join(f"{source}={value}" for source, value in normalized),
+        )
+    if not normalized:
+        return None, None
+    return normalized[0][1], normalized[0][0]
 
 
 def _bind_atlas_uncertainty(cells: list[dict[str, Any]]) -> dict[str, Any]:
@@ -468,6 +629,7 @@ def _bind_recorded_outcomes(
     trace_refs: dict[str, dict[str, Any]],
     traces: dict[str, dict[str, Any]],
     cells: list[dict[str, Any]],
+    atlas_cell_bindings: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     """Bind declared labels to atlas keys and, in production, terminal evidence.
 
@@ -479,10 +641,15 @@ def _bind_recorded_outcomes(
     for role in ("left", "right"):
         declared = str(trace_refs[role]["recorded_outcome"])
         planner = str(traces[role]["source_trace"]["source"]["planner_id"])
-        planner_cells = [cell for cell in cells if cell.get("planner") == planner]
-        if not planner_cells or any(
-            declared not in cell.get("outcome_counts", {}) for cell in planner_cells
-        ):
+        binding = atlas_cell_bindings[role]
+        planner_cells = [
+            cell
+            for cell in cells
+            if cell.get("scenario_family") == binding["scenario_family"]
+            and cell.get("planner") == planner
+            and cell.get("release_arm_id") == binding["release_arm_id"]
+        ]
+        if len(planner_cells) != 1 or declared not in planner_cells[0].get("outcome_counts", {}):
             raise CaseDossierError(
                 "recorded_outcome_not_in_atlas_cell",
                 f"{role}: planner={planner}, outcome={declared}",
@@ -510,6 +677,7 @@ def _bind_recorded_outcomes(
             "source": source,
             "authority": authority,
             "atlas_outcome_key_validated": True,
+            "atlas_cell_binding": binding,
         }
     return result
 
@@ -653,13 +821,20 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
     pair = _validate_pair(payload["comparison_grammar"], traces)
     atlas_path = _resolve_ref(input_path, sources["campaign_atlas"])
     atlas = _read_mapping(atlas_path, code="campaign_atlas_invalid")
-    cells = _validate_atlas(
+    cells, atlas_cell_bindings = _validate_atlas(
         atlas,
         portfolio_hash=portfolio["content_sha256"],
         traces=traces,
+        selected_case=selected_case,
     )
     uncertainty = _bind_atlas_uncertainty(cells)
-    outcomes = _bind_recorded_outcomes(payload, trace_refs, traces, cells)
+    outcomes = _bind_recorded_outcomes(
+        payload,
+        trace_refs,
+        traces,
+        cells,
+        atlas_cell_bindings,
+    )
     return {
         "input": payload,
         "input_path": input_path,
@@ -673,8 +848,11 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
         "atlas": atlas,
         "atlas_path": atlas_path,
         "cells": cells,
+        "atlas_cell_bindings": atlas_cell_bindings,
         "uncertainty": uncertainty,
         "outcomes": outcomes,
+        "narrative": _controlled_narrative(payload),
+        "narrative_template_id": payload["narrative"]["template_id"],
     }
 
 
@@ -708,10 +886,10 @@ _CONTROLLER_SIGNALS = (
     "fallback_state",
 )
 _CONTROLLER_SIGNAL_LABELS = {
-    "controller_state": "ctrl",
-    "command_source": "src",
+    "controller_state": "controller",
+    "command_source": "source",
     "guard_state": "guard",
-    "fallback_state": "fb",
+    "fallback_state": "fallback",
 }
 _CATEGORICAL_COLORS = (
     "#56B4E9",
@@ -732,6 +910,7 @@ SEMANTIC_STYLE_LABELS = (
     "diagnostic threshold",
     "semantic event cursor",
     "recorded occupancy ribbon",
+    "controller states (direct L/R labels)",
 )
 
 
@@ -764,7 +943,7 @@ def _event_identity_caption(traces: dict[str, dict[str, Any]]) -> str:
     for label in labels:
         separator = " " if lines[-1].endswith(":") else " · "
         candidate = f"{lines[-1]}{separator}{label}"
-        if len(candidate) <= 52:
+        if len(candidate) <= 65:
             lines[-1] = candidate
         else:
             lines.append(label)
@@ -850,9 +1029,41 @@ def _semantic_style_handles(bound: dict[str, Any]) -> list[Any]:
                 edgecolor="none",
                 label=SEMANTIC_STYLE_LABELS[8],
             ),
+            Patch(
+                facecolor=_CATEGORICAL_COLORS[0],
+                edgecolor=PALETTE["left"],
+                label=SEMANTIC_STYLE_LABELS[9].replace(" (", "\n("),
+            ),
         )
     )
     return handles
+
+
+def _draw_semantic_style_key(style_key: Any, bound: dict[str, Any]) -> list[Any]:
+    """Draw the compact complete visual-encoding key outside plot data.
+
+    Returns:
+        All semantic handles, including the separately keyed controller-state patch.
+    """
+
+    semantic_style_handles = _semantic_style_handles(bound)
+    # Matplotlib fills legend columns top-to-bottom. Pack the longest labels into
+    # one column so the complete key fits the fixed publication width.
+    compact_style_handles = [
+        semantic_style_handles[index] for index in (4, 5, 7, 10, 3, 6, 8, 9, 0, 1, 2, 11)
+    ]
+    style_key.legend(
+        handles=compact_style_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.0),
+        ncol=3,
+        frameon=False,
+        columnspacing=0.10,
+        handlelength=1.1,
+        handletextpad=0.15,
+        borderaxespad=0.0,
+    )
+    return semantic_style_handles
 
 
 def _draw_actor_event_anchor(ax: Any, actor: dict[str, Any], color: str) -> None:
@@ -1030,6 +1241,7 @@ def _draw_time_space(
     robot_key = "s_m" if route_available else "robot_signed_distance_to_zone_m"
     actor_key = "focal_actor_s_m" if route_available else "focal_actor_signed_distance_to_zone_m"
     ribbons_available = True
+    ordinate_values: list[float] = []
     for role, trace in traces.items():
         frames = [
             frame for frame in trace["frames"] if frame[frame_key].get("status") == "available"
@@ -1037,6 +1249,7 @@ def _draw_time_space(
         times = [frame["time_s"] for frame in frames]
         robot_s = [frame[frame_key][robot_key] for frame in frames]
         actor_s = [frame[frame_key][actor_key] for frame in frames]
+        ordinate_values.extend(float(value) for value in (*robot_s, *actor_s))
         robot_radii = [frame.get("world", {}).get("robot", {}).get("radius_m") for frame in frames]
         actor_radii = [
             frame.get("world", {}).get("focal_actor", {}).get("radius_m") for frame in frames
@@ -1104,9 +1317,16 @@ def _draw_time_space(
             label=f"{role} focal actor",
         )
     _draw_event_cursors(ax, traces)
-    ylabel = "route progress s (m)" if route_available else "signed distance to conflict zone (m)"
+    ylabel = "route s (m)" if route_available else "signed distance to conflict zone (m)"
     title = "Route occupancy" if route_available else "Conflict-zone approach"
     ax.set(xlim=tuple(time_range), xlabel="", ylabel=ylabel)
+    ordinate_min, ordinate_max = min(ordinate_values), max(ordinate_values)
+    ax.set_yticks(
+        (ordinate_min,)
+        if math.isclose(ordinate_min, ordinate_max, abs_tol=1e-12)
+        else (ordinate_min, ordinate_max)
+    )
+    ax.yaxis.labelpad = 8.0
     ax.set_title(
         f"{title} over absolute time (s) · no duration normalization\n"
         f"{_event_identity_caption(traces)}"
@@ -1283,8 +1503,8 @@ def _draw_closing_speed(
     if not available:
         ax.text(
             0.5,
-            0.5,
-            "RADIAL CLOSING SPEED\nUNAVAILABLE",
+            0.28,
+            "SIGNAL UNAVAILABLE",
             ha="center",
             va="center",
             transform=ax.transAxes,
@@ -1390,6 +1610,10 @@ def _draw_turn_rate(
     time_range: list[float],
     turn_rate_range: list[float],
 ) -> dict[str, Any]:
+    executed_source = (
+        "source_trace.content_receipt.content_contract.frames[].planner."
+        "executed_action.angular_velocity"
+    )
     commanded_status: dict[str, dict[str, Any]] = {}
     executed_status: dict[str, dict[str, Any]] = {}
     commanded_available = False
@@ -1455,14 +1679,18 @@ def _draw_turn_rate(
             executed_status[role] = {
                 "status": "available",
                 "reason": "explicit_executed_angular_velocity",
+                "source": executed_source,
                 "artist_count": 1,
+                "nonzero_observed": any(abs(value) > 0.0 for _, value in executed),
             }
         else:
             executed_unavailable_roles.append(role)
             executed_status[role] = {
                 "status": "unavailable",
                 "reason": "explicit_executed_angular_velocity_unavailable",
+                "source": executed_source,
                 "artist_count": 0,
+                "nonzero_observed": False,
             }
     if commanded_available:
         _draw_event_cursors(ax, traces)
@@ -1481,6 +1709,7 @@ def _draw_turn_rate(
         xlabel="",
         ylabel="turn rate (rad/s)",
     )
+    ax.set_yticks((float(turn_rate_range[0]), float(turn_rate_range[1])))
     executed_note = (
         "EXECUTED UNAVAILABLE — "
         + "/".join("L" if role == "left" else "R" for role in executed_unavailable_roles)
@@ -1565,6 +1794,56 @@ def _categorical_color(value: str) -> str:
     return _CATEGORICAL_COLORS[digest[0] % len(_CATEGORICAL_COLORS)]
 
 
+def _categorical_segments(
+    observations: list[tuple[float, str]],
+    *,
+    time_min: float,
+    time_max: float,
+) -> list[tuple[float, float, str]]:
+    """Convert sampled categorical states into merged midpoint-bounded segments.
+
+    Returns:
+        Ordered ``(start, stop, value)`` segments clipped to the displayed time range.
+    """
+
+    if not observations:
+        return []
+    by_time = {float(time_s): value for time_s, value in observations}
+    samples = sorted(by_time.items())
+    if len(samples) == 1:
+        return [(time_min, time_max, samples[0][1])]
+    boundaries = [time_min]
+    boundaries.extend(
+        max(time_min, min(time_max, (left[0] + right[0]) / 2.0))
+        for left, right in pairwise(samples)
+    )
+    boundaries.append(time_max)
+    segments: list[tuple[float, float, str]] = []
+    for index, (_, value) in enumerate(samples):
+        start = boundaries[index]
+        stop = boundaries[index + 1]
+        if stop <= start:
+            continue
+        if segments and segments[-1][2] == value:
+            previous = segments[-1]
+            segments[-1] = (previous[0], stop, value)
+        else:
+            segments.append((start, stop, value))
+    return segments
+
+
+def _categorical_text_color(color: str) -> str:
+    """Choose black or white text for a deterministic categorical fill.
+
+    Returns:
+        The contrasting hexadecimal text color.
+    """
+
+    red, green, blue = (int(color[index : index + 2], 16) for index in (1, 3, 5))
+    luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255.0
+    return "#000000" if luminance > 0.55 else "#FFFFFF"
+
+
 def _draw_controller_state_strip(  # noqa: C901 - four signals require explicit per-role states
     ax: Any,
     traces: dict[str, dict[str, Any]],
@@ -1602,16 +1881,22 @@ def _draw_controller_state_strip(  # noqa: C901 - four signals require explicit 
             signal_status[signal] = {
                 "status": "unavailable",
                 "reason": "source_planner_signal_absent",
-                "source": f"source_trace.content_receipt.frames[].planner.{signal}",
+                "source": (
+                    f"source_trace.content_receipt.content_contract.frames[].planner.{signal}"
+                ),
                 "roles": {
                     role: {
                         "status": "unavailable",
                         "values": [],
                         "artist_count": 0,
+                        "sublane": role,
                     }
                     for role in ("left", "right")
                 },
                 "artist_count": 0,
+                "label_artist_count": 0,
+                "row_index": _CONTROLLER_SIGNALS.index(signal),
+                "value_styles": {},
             }
         ax.set_xticks([])
         ax.set_yticks([])
@@ -1621,92 +1906,147 @@ def _draw_controller_state_strip(  # noqa: C901 - four signals require explicit 
             "reason": "controller_state_signal_absent",
             "signals": signal_status,
             "artist_count": 0,
+            "signal_row_count": 4,
+            "layout": "unavailable_summary.v1",
+            "decoding": {
+                "method": "explicit_unavailable_text",
+                "role_encoding": "not_applicable",
+                "all_values_labelled": True,
+            },
         }
 
     row_labels: list[str] = []
-    row_positions: list[int] = []
-    row = 0
+    row_positions: list[float] = []
     time_min, time_max = (float(value) for value in time_range)
-    for signal in _CONTROLLER_SIGNALS:
+    total_labels = 0
+    lane_offsets = {"left": -0.25, "right": 0.25}
+    lane_height = 0.40
+    for row_index, signal in enumerate(_CONTROLLER_SIGNALS):
         role_status: dict[str, dict[str, Any]] = {}
         signal_artists = 0
+        signal_labels = 0
         for role in ("left", "right"):
             observations = collected[signal][role]
             values = sorted({value for _, value in observations})
-            row_positions.append(row)
+            lane_position = float(row_index) + lane_offsets[role]
+            row_positions.append(lane_position)
             role_prefix = "L" if role == "left" else "R"
             if observations:
-                for index, (start, value) in enumerate(observations):
-                    stop = observations[index + 1][0] if index + 1 < len(observations) else time_max
-                    width = max(stop - start, (time_max - time_min) * 0.01)
+                segments = _categorical_segments(
+                    observations,
+                    time_min=time_min,
+                    time_max=time_max,
+                )
+                for start, stop, value in segments:
+                    color = _categorical_color(f"{signal}:{value}")
                     ax.broken_barh(
-                        [(start, width)],
-                        (row - 0.34, 0.68),
-                        facecolors=_categorical_color(f"{signal}:{value}"),
+                        [(start, stop - start)],
+                        (lane_position - lane_height / 2.0, lane_height),
+                        facecolors=color,
                         edgecolors=PALETTE[role],
                         linewidth=0.8,
                     )
+                    ax.text(
+                        (start + stop) / 2.0,
+                        lane_position,
+                        value,
+                        ha="center",
+                        va="center",
+                        color=_categorical_text_color(color),
+                        fontsize=MINIMUM_VISIBLE_FONT_PT,
+                        clip_on=True,
+                        zorder=4,
+                    )
                     signal_artists += 1
-                row_labels.append(f"{role_prefix} {_CONTROLLER_SIGNAL_LABELS[signal]}")
+                    signal_labels += 1
+                row_labels.append(f"{role_prefix} · {_CONTROLLER_SIGNAL_LABELS[signal]}")
                 role_status[role] = {
                     "status": "available",
                     "values": values,
-                    "artist_count": len(observations),
+                    "artist_count": len(segments),
+                    "label_artist_count": len(segments),
+                    "sublane": role,
                 }
             else:
                 ax.broken_barh(
                     [(time_min, time_max - time_min)],
-                    (row - 0.34, 0.68),
+                    (lane_position - lane_height / 2.0, lane_height),
                     facecolors="#F2F2F2",
                     edgecolors=PALETTE["context"],
                     linewidth=0.6,
                     hatch="//",
                 )
+                ax.text(
+                    (time_min + time_max) / 2.0,
+                    lane_position,
+                    "UNAVAILABLE",
+                    ha="center",
+                    va="center",
+                    fontsize=MINIMUM_VISIBLE_FONT_PT,
+                    clip_on=True,
+                )
                 signal_artists += 1
-                row_labels.append(f"{role_prefix} {_CONTROLLER_SIGNAL_LABELS[signal]}")
+                signal_labels += 1
+                row_labels.append(f"{role_prefix} · {_CONTROLLER_SIGNAL_LABELS[signal]}")
                 role_status[role] = {
                     "status": "unavailable",
                     "values": [],
                     "artist_count": 1,
+                    "label_artist_count": 1,
+                    "sublane": role,
                 }
-            row += 1
         total_artists += signal_artists
+        total_labels += signal_labels
+        all_values = sorted(
+            {value for role_values in collected[signal].values() for _, value in role_values}
+        )
         signal_status[signal] = {
             "status": (
                 "available"
                 if any(record["status"] == "available" for record in role_status.values())
                 else "unavailable"
             ),
-            "reason": "source_planner_categorical_signal",
-            "source": f"source_trace.content_receipt.frames[].planner.{signal}",
+            "reason": (
+                "source_planner_categorical_signal"
+                if all_values
+                else "source_planner_signal_absent"
+            ),
+            "source": (f"source_trace.content_receipt.content_contract.frames[].planner.{signal}"),
             "roles": role_status,
             "artist_count": signal_artists,
+            "label_artist_count": signal_labels,
+            "row_index": row_index,
+            "value_styles": {
+                value: {
+                    "color": _categorical_color(f"{signal}:{value}"),
+                    "label_rendered": True,
+                }
+                for value in all_values
+            },
         }
     ax.set(
         xlim=(time_min, time_max),
-        ylim=(-0.65, row - 0.35),
+        ylim=(-0.80, len(_CONTROLLER_SIGNALS) - 0.20),
         xlabel="absolute time (s)",
     )
     ax.set_yticks(row_positions, row_labels)
     ax.invert_yaxis()
-    value_labels = [
-        f"{_CONTROLLER_SIGNAL_LABELS[signal]} "
-        + "/".join(
-            sorted(
-                {value for role_values in collected[signal].values() for _, value in role_values}
-            )
-        )
-        for signal in _CONTROLLER_SIGNALS
-        if any(collected[signal].values())
-    ]
-    ax.set_title("Controller / guard / fallback / command source\n" + " · ".join(value_labels))
+    ax.set_title("Controller signals · directly labelled L/R sublanes")
     _draw_event_cursors(ax, traces)
     return {
         "status": "available",
         "reason": "source_planner_categorical_signals",
         "signals": signal_status,
         "artist_count": total_artists,
+        "label_artist_count": total_labels,
         "semantic_event_cursor_count": len(_event_groups(traces)),
+        "signal_row_count": len(_CONTROLLER_SIGNALS),
+        "layout": "four_signal_rows_with_left_right_sublanes.v1",
+        "decoding": {
+            "method": "direct_segment_labels",
+            "role_encoding": "labelled_left_right_sublanes",
+            "all_values_labelled": True,
+        },
     }
 
 
@@ -1829,6 +2169,51 @@ def _assert_structural_panel_text_containment(panels: dict[str, Any]) -> None:
         )
 
 
+def _assert_panel_text_nonoverlap(panels: dict[str, Any]) -> None:
+    """Fail closed when annotations or visible tick labels overlap within a panel."""
+
+    violations: list[str] = []
+    for panel_name, axes in panels.items():
+        renderer = axes.figure.canvas.get_renderer()
+        artists: list[Text] = []
+        seen: set[int] = set()
+        structural_artists = (
+            *axes.texts,
+            *axes.get_xticklabels(),
+            *axes.get_yticklabels(),
+            axes.title,
+            axes._left_title,
+            axes._right_title,
+            axes.xaxis.label,
+            axes.yaxis.label,
+        )
+        for artist in structural_artists:
+            if id(artist) not in seen and artist.get_visible() and artist.get_text().strip():
+                artists.append(artist)
+                seen.add(id(artist))
+        bounds = [artist.get_window_extent(renderer=renderer) for artist in artists]
+        for left_index, left_bounds in enumerate(bounds):
+            for right_index in range(left_index + 1, len(bounds)):
+                right_bounds = bounds[right_index]
+                overlap_width = min(left_bounds.x1, right_bounds.x1) - max(
+                    left_bounds.x0, right_bounds.x0
+                )
+                overlap_height = min(left_bounds.y1, right_bounds.y1) - max(
+                    left_bounds.y0, right_bounds.y0
+                )
+                if overlap_width > 0.5 and overlap_height > 0.5:
+                    violations.append(
+                        f"{panel_name}: {artists[left_index].get_text()!r} <> "
+                        f"{artists[right_index].get_text()!r} "
+                        f"({overlap_width:.1f}px x {overlap_height:.1f}px)"
+                    )
+    if violations:
+        raise CaseDossierError(
+            "structural_panel_text_overlap",
+            "; ".join(sorted(violations)),
+        )
+
+
 def _assert_reserved_title_containment(
     figure: Any,
     panels: dict[str, tuple[Any, Any]],
@@ -1902,19 +2287,58 @@ def _assert_cross_axes_text_separation(figure: Any) -> None:
         )
 
 
-def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
+def _dossier_header_title(bound: dict[str, Any]) -> str:
+    """Compose the compact source-identity title used above every dossier.
+
+    Returns:
+        A three- or four-line title sized for the grammar-specific boundary notice.
+    """
+
     payload = bound["input"]
-    layout = payload["layout"]
     selected = bound["selected_case"]
     sources = [bound["traces"][role]["source_trace"]["source"] for role in ("left", "right")]
-    run_contract = bound["traces"]["left"]["source_trace"]["run_config_contract"]
-    source_contract = bound["traces"]["left"]["source_trace"]["content_receipt"]["content_contract"]
+    source_trace = bound["traces"]["left"]["source_trace"]
+    run_contract = source_trace["run_config_contract"]
     horizon = (
-        source_contract["frames"][0]
+        source_trace["content_receipt"]["content_contract"]["frames"][0]
         .get("planner", {})
         .get("run_config", {})
         .get("horizon", "unavailable")
     )
+    trace_title = (
+        f"{sources[0]['planner_id']} / {sources[1]['planner_id']} · "
+        f"seed {sources[0]['seed']} / {sources[1]['seed']} · "
+        f"horizon {horizon} steps · Δt {run_contract.get('time_step_s', 'unavailable')} s"
+    )
+    selection_title = f"{selected['grain']} · {selected['primary_role']}"
+    if payload["comparison_grammar"] == "same_cell_seed_sensitivity":
+        selection_title += f" · {sources[0]['scenario_id']}"
+        return f"{payload['case_id']}\n{selection_title}\n{trace_title}"
+    return f"{payload['case_id']}\n{selection_title}\n{sources[0]['scenario_id']}\n{trace_title}"
+
+
+def _dossier_header_boundary(bound: dict[str, Any]) -> str:
+    """Compose the visible scientific-boundary notice.
+
+    Returns:
+        The grammar- and mode-specific boundary notice.
+    """
+
+    payload = bound["input"]
+    if payload["comparison_grammar"] == "same_cell_seed_sensitivity":
+        return (
+            f"{SYNTHETIC_FIXTURE_LABEL} · shared_prefix=false\n"
+            "recorded start separation = "
+            f"{_recorded_start_separation_text(bound['pair'])}"
+        )
+    if payload["mode"] == "synthetic_fixture":
+        return SYNTHETIC_FIXTURE_LABEL
+    return "RENDERING DOES NOT ADMIT SCIENTIFIC EVIDENCE"
+
+
+def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
+    payload, layout = bound["input"], bound["input"]["layout"]
+    selected = bound["selected_case"]
     with plt.rc_context(_RC):
         figure = plt.figure(
             figsize=(layout["final_width_in"], layout["final_height_in"]),
@@ -1922,7 +2346,7 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         grid = figure.add_gridspec(
             9,
             2,
-            height_ratios=(2.50, 1.55, 1.85, 2.00, 1.10, 1.80, 0.95, 1.55, 2.00),
+            height_ratios=(2.50, 1.40, 1.75, 2.35, 1.10, 2.00, 0.95, 4.50, 2.00),
         )
         header = figure.add_subplot(grid[0, :])
         style_key = figure.add_subplot(grid[1, :])
@@ -1938,51 +2362,20 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         context = figure.add_subplot(grid[8, :])
         header.axis("off")
         style_key.axis("off")
-        title = (
-            f"{payload['case_id']}\n"
-            f"{selected['grain']} · {selected['primary_role']}\n"
-            f"{sources[0]['scenario_id']}\n"
-            f"{sources[0]['planner_id']} / {sources[1]['planner_id']} · "
-            f"seed {sources[0]['seed']} / {sources[1]['seed']} · "
-            f"horizon {horizon} steps · Δt {run_contract.get('time_step_s', 'unavailable')} s"
-        )
         header.text(
             0.0,
             1.04,
-            title,
+            _dossier_header_title(bound),
             ha="left",
             va="top",
             weight="bold",
             fontsize=MINIMUM_VISIBLE_FONT_PT,
         )
-        semantic_style_handles = _semantic_style_handles(bound)
-        # Matplotlib fills legend columns top-to-bottom.  Pack the longest labels
-        # into one column so the complete key fits the fixed publication width.
-        compact_style_handles = [
-            semantic_style_handles[index] for index in (4, 5, 7, 10, 3, 6, 8, 9, 0, 1, 2)
-        ]
-        style_key.legend(
-            handles=compact_style_handles,
-            loc="center",
-            ncol=3,
-            frameon=False,
-            columnspacing=0.10,
-            handlelength=1.1,
-            handletextpad=0.15,
-            borderaxespad=0.0,
-        )
+        semantic_style_handles = _draw_semantic_style_key(style_key, bound)
         header.text(
             0.0,
             0.0,
-            (
-                f"{SYNTHETIC_FIXTURE_LABEL} · shared_prefix=false\n"
-                "recorded start separation = "
-                f"{_recorded_start_separation_text(bound['pair'])}"
-                if payload["comparison_grammar"] == "same_cell_seed_sensitivity"
-                else SYNTHETIC_FIXTURE_LABEL
-                if payload["mode"] == "synthetic_fixture"
-                else "RENDERING DOES NOT ADMIT SCIENTIFIC EVIDENCE"
-            ),
+            _dossier_header_boundary(bound),
             ha="left",
             va="bottom",
             color=PALETTE["collision"],
@@ -2035,7 +2428,9 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             "semantic_style_key": {
                 "status": "available",
                 "reason": "complete_semantic_style_key",
-                "labels": [handle.get_label() for handle in semantic_style_handles],
+                "labels": [
+                    handle.get_label().replace("\n", " ") for handle in semantic_style_handles
+                ],
                 "artist_count": len(semantic_style_handles),
             },
             "cell_context": {
@@ -2069,15 +2464,16 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         ):
             ax.grid(True, color="#DDDDDD", linewidth=0.45)
         figure.subplots_adjust(
-            left=0.10,
+            left=0.145,
             right=0.97,
             bottom=0.045,
             top=0.985,
-            hspace=1.10,
+            hspace=1.00,
             wspace=0.46,
         )
         reserved_title_panels = {
             "turn_rate": (turn_rate, turn_rate.get_position().frozen()),
+            "controller_state": (controller, controller.get_position().frozen()),
         }
         route_position = route.get_position()
         route_title_band = ROUTE_TITLE_BAND_IN / float(layout["final_height_in"])
@@ -2100,6 +2496,8 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             title_band = (
                 TURN_TITLE_BAND_IN / float(layout["final_height_in"])
                 if process_axis is turn_rate
+                else CONTROLLER_TITLE_BAND_IN / float(layout["final_height_in"])
+                if process_axis is controller
                 else process_title_band
             )
             if process_position.height <= title_band:
@@ -2132,10 +2530,28 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         )
         figure.canvas.draw()
         _assert_text_within_canvas(figure)
-        _assert_structural_panel_text_containment({"turn_rate": turn_rate, "cell_context": context})
+        _assert_structural_panel_text_containment(
+            {
+                "turn_rate": turn_rate,
+                "controller_state": controller,
+                "cell_context": context,
+            }
+        )
+        _assert_panel_text_nonoverlap(
+            {
+                "time_space": route,
+                "turn_rate": turn_rate,
+                "controller_state": controller,
+            }
+        )
         _assert_reserved_title_containment(figure, reserved_title_panels)
         _assert_cross_axes_text_separation(figure)
         assert_clean(figure)
+        panel_status["controller_state"]["text_bounds_checked"] = True
+        panel_status["controller_state"]["text_overlap_checked"] = True
+        panel_status["controller_state"]["tick_label_overlap_checked"] = True
+        panel_status["turn_rate"]["tick_label_overlap_checked"] = True
+        panel_status["time_space"]["tick_label_overlap_checked"] = True
     return figure, panel_status
 
 
@@ -2164,7 +2580,7 @@ def _save_figure(figure: Any, path: Path) -> None:
 
 
 def _caption(bound: dict[str, Any]) -> str:
-    narrative = bound["input"]["narrative"]
+    narrative = bound["narrative"]
     return (
         f"# {bound['input']['case_id']} case dossier\n\n"
         f"**Claim boundary:** Renderer-integrity proof only; scientific_admission=false.\n\n"
@@ -2221,7 +2637,19 @@ def _artifact_catalog(
         _file_ref_for_output(manifest_path),
         _file_ref_for_output(outputs["sidecar"]),
     ]
-    denominator = sum(cell["n_total"] for cell in bound["cells"])
+    release_denominator = sum(cell["n_total"] for cell in bound["cells"])
+    diagnostic_support = len(bound["traces"])
+    figure_outputs = {
+        "svg": _file_ref_for_output(outputs["svg"]),
+        "pdf": _file_ref_for_output(outputs["pdf"]),
+    }
+    caption_file = _file_ref_for_output(outputs["caption"])
+    legend_series = [item["label"] for item in bound["input"]["sources"]["process_traces"]] + list(
+        SEMANTIC_STYLE_LABELS
+    )
+    generation_command = (
+        "scripts/analysis/render_case_dossier.py --input <input> --out-dir <output>"
+    )
     return {
         "schema_version": "artifact_catalog.v2",
         "catalog_id": f"{bound['input']['dossier_id']}.catalog",
@@ -2231,32 +2659,61 @@ def _artifact_catalog(
                 "artifact_kind": "figure",
                 "source_kind": "case_dossier_input",
                 "source_files": source_files,
-                "outputs": {
-                    "svg": _file_ref_for_output(outputs["svg"]),
-                    "pdf": _file_ref_for_output(outputs["pdf"]),
-                },
-                "caption_file": _file_ref_for_output(outputs["caption"]),
-                "generation_command": "scripts/analysis/render_case_dossier.py --input <input> --out-dir <output>",
+                "outputs": figure_outputs,
+                "caption_file": caption_file,
+                "generation_command": generation_command,
                 "generation_commit": generation_commit,
-                "claim_boundary": "Rendering integrity only; scientific_admission=false.",
+                "claim_boundary": (
+                    "Two-trace diagnostic support only; displayed campaign intervals are "
+                    "release context and scientific_admission=false."
+                ),
                 "figure_semantics": {
                     "metric_id": "proxy_envelope_surface_clearance_diagnostic",
                     "unit": "m",
                     "desirability": "not_applicable",
-                    "support": denominator,
-                    "denominator": denominator,
+                    "support": diagnostic_support,
+                    "denominator": diagnostic_support,
                     "comparison": True,
                     "uncertainty_declared": True,
-                    "uncertainty_method": "campaign_atlas_outcome_ci_validated_and_consumed",
+                    "uncertainty_method": (
+                        "release_context_only:campaign_atlas_outcome_ci_validated_and_consumed"
+                    ),
                     "tie_policy": "not_applicable_visualization",
-                    "legend_series": [
-                        item["label"] for item in bound["input"]["sources"]["process_traces"]
-                    ]
-                    + list(SEMANTIC_STYLE_LABELS),
+                    "legend_series": legend_series,
                     "legend_complete": True,
                     "accessibility_palette_contract": "case_dossier_colorblind.v1_redundant_styles",
                 },
-            }
+            },
+            {
+                "artifact_id": "release_context",
+                "artifact_kind": "figure",
+                "source_kind": "campaign_atlas",
+                "source_files": source_files,
+                "outputs": figure_outputs,
+                "caption_file": caption_file,
+                "generation_command": generation_command,
+                "generation_commit": generation_commit,
+                "claim_boundary": (
+                    "Release-context confidence only; does not increase diagnostic "
+                    "trace support or scientific admission."
+                ),
+                "figure_semantics": {
+                    "metric_id": "campaign_atlas_outcome_release_context",
+                    "unit": "proportion",
+                    "desirability": "not_applicable",
+                    "support": release_denominator,
+                    "denominator": release_denominator,
+                    "comparison": True,
+                    "uncertainty_declared": True,
+                    "uncertainty_method": ("campaign_atlas_outcome_ci_validated_and_consumed"),
+                    "tie_policy": "not_applicable_visualization",
+                    "legend_series": legend_series,
+                    "legend_complete": True,
+                    "accessibility_palette_contract": (
+                        "case_dossier_colorblind.v1_redundant_styles"
+                    ),
+                },
+            },
         ],
     }
 
@@ -2307,8 +2764,10 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
         },
         "recorded_outcomes": bound["outcomes"],
         "uncertainty": bound["uncertainty"],
+        "atlas_cell_bindings": bound["atlas_cell_bindings"],
         "panel_status": panel_status,
-        "claim_fields": bound["input"]["narrative"],
+        "claim_template_id": bound["narrative_template_id"],
+        "claim_fields": bound["narrative"],
     }
     _write_json(sidecar_path, sidecar)
     semantic_events = sorted(
@@ -2325,6 +2784,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
             "case_id": bound["input"]["case_id"],
             "mode": bound["input"]["mode"],
             "comparison_grammar": bound["input"]["comparison_grammar"],
+            "claim_template_id": bound["narrative_template_id"],
             "scientific_admission": False,
             "comparison": {
                 "shared_prefix": pair["shared_prefix"],
@@ -2359,6 +2819,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                 "canvas_text_bounds_checked": True,
                 "cross_axes_text_overlap_checked": True,
                 "structural_panel_text_bounds_checked": True,
+                "panel_tick_label_overlap_checked": True,
                 "route_title_band_in": ROUTE_TITLE_BAND_IN,
                 "turn_title_band_in": TURN_TITLE_BAND_IN,
             },
@@ -2389,6 +2850,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                     "sha256": _file_sha256(bound["atlas_path"]),
                     "schema_version": "campaign_atlas.v2",
                     "release_cells": bound["cells"],
+                    "resolved_cell_bindings": bound["atlas_cell_bindings"],
                     "uncertainty": bound["uncertainty"],
                 },
                 "source_classes": {
@@ -2402,7 +2864,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                 {"event_type": event_type, "absolute_time_s": time_s}
                 for event_type, time_s in semantic_events
             ],
-            "claim_fields": bound["input"]["narrative"],
+            "claim_fields": bound["narrative"],
             "outputs": {
                 "svg": _file_ref_for_output(svg_path),
                 "pdf": _file_ref_for_output(pdf_path),

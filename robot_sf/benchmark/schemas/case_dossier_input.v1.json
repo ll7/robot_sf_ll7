@@ -119,17 +119,9 @@
     "narrative": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "observed_signature",
-        "competing_explanation",
-        "causal_status",
-        "generalization_limit"
-      ],
+      "required": ["template_id"],
       "properties": {
-        "observed_signature": {"type": "string", "minLength": 1},
-        "competing_explanation": {"type": "string", "minLength": 1},
-        "causal_status": {"enum": ["observational_only", "causal_abstention"]},
-        "generalization_limit": {"type": "string", "minLength": 1}
+        "template_id": {"type": "string", "minLength": 1}
       }
     }
   },

@@ -117,6 +117,14 @@ def test_matched_start_public_renderer_writes_fixture_only_bundle(tmp_path: Path
     assert bundle.manifest["scientific_admission"] is False
     assert bundle.manifest["selection"]["case_id"] == "fixture-seed-118-planner-upset"
     assert bundle.manifest["selection"]["selected"] is True
+    assert bundle.manifest["claim_fields"]["observed_signature"] == (
+        "Different executed planner stacks show different observed processes and "
+        "terminal outcomes under the matched recorded start."
+    )
+    assert bundle.manifest["claim_fields"]["competing_explanation"] == (
+        "Recorded command and encounter-geometry differences are documented; "
+        "attribution is not estimated."
+    )
     assert bundle.manifest["source_bindings"]["process_traces"][0]["sha256"] == _sha256(
         tmp_path / "goal-process.json"
     )
@@ -160,6 +168,7 @@ def test_same_cell_seed_sensitivity_records_no_shared_prefix_without_difference_
         "status": "available",
         "reason": "recorded_proxy_radius_envelope",
     }
+    assert bundle.manifest["panel_status"]["time_space"]["tick_label_overlap_checked"] is True
     closest = bundle.manifest["panel_status"]["radial_closing_speed"]["closest_approach"]
     assert closest["left"]["status"] == "available"
     assert closest["left"]["model"] == "local_constant_velocity"
@@ -201,6 +210,23 @@ def test_structural_panel_body_text_must_remain_inside_its_axes() -> None:
             match="structural_panel_text_outside_axes",
         ):
             dossier_module._assert_structural_panel_text_containment({"fixture_panel": panel})
+    finally:
+        dossier_module.plt.close(figure)
+
+
+def test_structural_panel_tick_label_overlap_fails_closed() -> None:
+    """Visible x/y tick labels participate in final-width bbox overlap checks."""
+
+    figure = dossier_module.plt.figure(figsize=(2.0, 0.5))
+    panel = figure.add_axes((0.25, 0.15, 0.65, 0.70))
+    panel.set_yticks((0.49, 0.51), ("lower", "upper"))
+    figure.canvas.draw()
+    try:
+        with pytest.raises(
+            dossier_module.CaseDossierError,
+            match="structural_panel_text_overlap",
+        ):
+            dossier_module._assert_panel_text_nonoverlap({"fixture_panel": panel})
     finally:
         dossier_module.plt.close(figure)
 
@@ -278,52 +304,84 @@ def test_no_shared_prefix_rejects_forbidden_interpretation_modes(
 
 
 @pytest.mark.parametrize(
-    ("field", "text"),
+    "text",
     (
-        ("observed_signature", "A Difference-Curve appears after the start."),
-        ("observed_signature", "The plotted DIFFERENCE_CURVES separate."),
-        ("competing_explanation", "The PIVOT/TIME is 0.2 s."),
-        ("generalization_limit", "This proposes a causal—hinge."),
-        (
-            "observed_signature",
-            "Adjacent seed statistical significance is claimed.",
-        ),
-        ("competing_explanation", "Adjacent-seed significance is claimed."),
-        ("observed_signature", "Adjacent seeds are statistically significant."),
-        ("generalization_limit", "A divergence_point is identified."),
-        ("competing_explanation", "A localized divergence is identified."),
+        "A Difference-Curve appears after the start.",
+        "The plotted DIFFERENCE_CURVES separate.",
+        "The PIVOT/TIME is 0.2 s.",
+        "This proposes a causal—hinge.",
+        "Adjacent seed statistical significance is claimed.",
+        "Adjacent-seed significance is claimed.",
+        "Adjacent seeds are statistically significant.",
+        "A divergence_point is identified.",
+        "A localized divergence is identified.",
+        "The paths peel apart near the doorway.",
+        "The split is statistically reliable.",
+        "Seed 113 materially outperforms seed 114.",
+        "The planner change explains the later collision.",
     ),
 )
-def test_no_shared_prefix_rejects_forbidden_free_form_narrative_variants(
+@pytest.mark.parametrize(
+    "grammar",
+    ("matched_start_planner", "same_cell_seed_sensitivity"),
+)
+def test_controlled_narrative_rejects_all_free_form_reviewer_examples(
     tmp_path: Path,
-    field: str,
     text: str,
+    grammar: str,
 ) -> None:
-    """Punctuation, case, and plural variants cannot bypass the narrative gate."""
+    """Neither grammar admits caller-authored claim text on any output surface."""
 
-    input_path = _write_doorway_input(tmp_path)
+    input_path = _write_input(tmp_path, grammar=grammar)
     payload = json.loads(input_path.read_text(encoding="utf-8"))
-    payload["narrative"][field] = text
+    payload["narrative"]["free_form"] = text
     _write_json(input_path, payload)
 
-    with pytest.raises(Exception, match="no_shared_prefix_narrative_forbidden"):
+    with pytest.raises(Exception, match="case_dossier_input_invalid"):
         render_case_dossier(input_path, tmp_path / "forbidden-narrative")
 
 
-def test_no_shared_prefix_narrative_allows_explicit_causal_abstention(tmp_path: Path) -> None:
-    """The concept gate must preserve ordinary, non-causal abstention language."""
+def test_narrative_rejects_arbitrary_semantic_mutation(tmp_path: Path) -> None:
+    """Only the controlled grammar template may reach dossier claim surfaces."""
 
     input_path = _write_doorway_input(tmp_path)
     payload = json.loads(input_path.read_text(encoding="utf-8"))
-    payload["narrative"]["causal_status"] = "causal_abstention"
-    payload["narrative"]["competing_explanation"] = (
-        "We abstain from causal attribution because the starts differ."
-    )
+    payload["narrative"]["template_id"] = "same_cell_small_neighbourhood_split.v1"
     _write_json(input_path, payload)
 
+    with pytest.raises(Exception, match="narrative_template_invalid"):
+        render_case_dossier(input_path, tmp_path / "mutated-narrative")
+
+
+def test_same_cell_claim_surfaces_use_exact_controlled_abstention_template(
+    tmp_path: Path,
+) -> None:
+    """The same-cell grammar emits only its versioned descriptive abstention."""
+
+    input_path = _write_doorway_input(tmp_path)
     bundle = render_case_dossier(input_path, tmp_path / "causal-abstention")
 
-    assert bundle.manifest["claim_fields"]["causal_status"] == "causal_abstention"
+    expected = {
+        "observed_signature": (
+            "The recorded traces show distinct observed paths and terminal outcomes "
+            "from different recorded starts."
+        ),
+        "competing_explanation": (
+            "The different recorded starts preclude attribution to seed choice."
+        ),
+        "causal_status": "causal_abstention",
+        "generalization_limit": (
+            "This selected comparison is descriptive only and supports no mechanistic "
+            "or population inference."
+        ),
+    }
+    sidecar = json.loads(bundle.sidecar_path.read_text(encoding="utf-8"))
+    caption = bundle.caption_path.read_text(encoding="utf-8")
+    assert bundle.manifest["claim_template_id"] == "same_cell_distinct_start_abstention.v1"
+    assert bundle.manifest["claim_fields"] == expected
+    assert sidecar["claim_template_id"] == "same_cell_distinct_start_abstention.v1"
+    assert sidecar["claim_fields"] == expected
+    assert all(value in caption for value in expected.values())
 
 
 def test_current_production_portfolio_fails_when_requested_case_is_not_selected(
@@ -369,6 +427,17 @@ def test_synthetic_recorded_outcomes_are_atlas_checked_and_non_authoritative(
     bundle = render_case_dossier(input_path, tmp_path / "synthetic-outcomes")
 
     sidecar = json.loads(bundle.sidecar_path.read_text(encoding="utf-8"))
+    atlas_bindings = {
+        role: {
+            "status": "resolved",
+            "scenario_family": "classic_realworld_double_bottleneck_high",
+            "planner": planner,
+            "release_arm_id": None,
+            "resolution": "unique_scenario_planner_cell",
+            "authority_source": None,
+        }
+        for role, planner in (("left", "goal"), ("right", "ppo"))
+    }
     expected = {
         "left": {
             "status": "available",
@@ -376,6 +445,7 @@ def test_synthetic_recorded_outcomes_are_atlas_checked_and_non_authoritative(
             "source": "case_dossier_input.sources.process_traces[role=left].recorded_outcome",
             "authority": "non_authoritative_synthetic_fixture_declaration",
             "atlas_outcome_key_validated": True,
+            "atlas_cell_binding": atlas_bindings["left"],
         },
         "right": {
             "status": "available",
@@ -383,6 +453,7 @@ def test_synthetic_recorded_outcomes_are_atlas_checked_and_non_authoritative(
             "source": "case_dossier_input.sources.process_traces[role=right].recorded_outcome",
             "authority": "non_authoritative_synthetic_fixture_declaration",
             "atlas_outcome_key_validated": True,
+            "atlas_cell_binding": atlas_bindings["right"],
         },
     }
     assert sidecar["recorded_outcomes"] == expected
@@ -431,6 +502,14 @@ def test_production_recorded_outcomes_bind_matching_typed_terminal_evidence(
         "source": ("source_trace.content_receipt.content_contract.frames[-1].planner.outcome"),
         "authority": "typed_terminal_trace_evidence",
         "atlas_outcome_key_validated": True,
+        "atlas_cell_binding": {
+            "status": "resolved",
+            "scenario_family": "classic_realworld_double_bottleneck_high",
+            "planner": "goal",
+            "release_arm_id": None,
+            "resolution": "unique_scenario_planner_cell",
+            "authority_source": None,
+        },
     }
     assert records["right"]["value"] == "collision"
     assert records["right"]["authority"] == "typed_terminal_trace_evidence"
@@ -513,6 +592,7 @@ def test_nonzero_commanded_turn_renders_a_separate_aligned_panel(tmp_path: Path)
     bundle = render_case_dossier(input_path, tmp_path / "turn-render")
 
     status = bundle.manifest["panel_status"]["turn_rate"]
+    assert status["tick_label_overlap_checked"] is True
     assert status["status"] == "available"
     assert status["commanded"]["left"]["nonzero_observed"] is True
     assert status["commanded"]["right"]["nonzero_observed"] is True
@@ -555,13 +635,56 @@ def test_missing_executed_turn_is_explicitly_unavailable(tmp_path: Path) -> None
         assert status["executed"][role] == {
             "status": "unavailable",
             "reason": "explicit_executed_angular_velocity_unavailable",
+            "source": (
+                "source_trace.content_receipt.content_contract.frames[].planner."
+                "executed_action.angular_velocity"
+            ),
             "artist_count": 0,
+            "nonzero_observed": False,
         }
     svg = bundle.svg_path.read_text(encoding="utf-8")
     assert "Commanded / executed turn rate" in svg
     assert "EXECUTED UNAVAILABLE — L/R" in svg
     assert status["executed_unavailable_note"]["artist_count"] == 1
     assert bundle.manifest["renderer"]["structural_panel_text_bounds_checked"] is True
+
+
+def test_recorded_executed_angular_velocity_renders_as_available(tmp_path: Path) -> None:
+    """Recorded executed angular velocity exercises the available turn-rate branch."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        nonzero_turn=True,
+        executed_turn=True,
+        controller_signals=True,
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "available-executed-turn")
+
+    status = bundle.manifest["panel_status"]["turn_rate"]
+    for role in ("left", "right"):
+        assert status["executed"][role] == {
+            "status": "available",
+            "reason": "explicit_executed_angular_velocity",
+            "source": (
+                "source_trace.content_receipt.content_contract.frames[].planner."
+                "executed_action.angular_velocity"
+            ),
+            "artist_count": 1,
+            "nonzero_observed": True,
+        }
+    assert status["executed_unavailable_note"] == {
+        "status": "not_applicable",
+        "reason": "executed_angular_velocity_available",
+        "roles": [],
+        "artist_count": 0,
+    }
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    assert "Commanded / executed turn rate" in svg
+    assert "EXECUTED UNAVAILABLE" not in svg
+    assert bundle.manifest["panel_status"]["controller_state"]["status"] == "available"
+    assert bundle.manifest["renderer"]["panel_tick_label_overlap_checked"] is True
 
 
 def test_source_controller_signals_render_categorical_strip(tmp_path: Path) -> None:
@@ -587,9 +710,50 @@ def test_source_controller_signals_render_categorical_strip(tmp_path: Path) -> N
     }
     assert all(record["status"] == "available" for record in status["signals"].values())
     svg = bundle.svg_path.read_text(encoding="utf-8")
-    assert "Controller / guard / fallback / command source" in svg
+    assert "Controller signals · directly labelled L/R sublanes" in svg
     assert "tracking" in svg
     assert "planner" in svg
+
+
+def test_controller_strip_is_decodable_source_bound_and_geometry_checked(
+    tmp_path: Path,
+) -> None:
+    """Four signal rows expose L/R sublanes and directly label every color."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        controller_signals=True,
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "controller-strip-contract")
+
+    status = bundle.manifest["panel_status"]["controller_state"]
+    assert status["layout"] == "four_signal_rows_with_left_right_sublanes.v1"
+    assert status["decoding"] == {
+        "method": "direct_segment_labels",
+        "role_encoding": "labelled_left_right_sublanes",
+        "all_values_labelled": True,
+    }
+    assert status["text_bounds_checked"] is True
+    assert status["text_overlap_checked"] is True
+    assert status["tick_label_overlap_checked"] is True
+    assert status["signal_row_count"] == 4
+    for signal, record in status["signals"].items():
+        assert record["source"] == (
+            f"source_trace.content_receipt.content_contract.frames[].planner.{signal}"
+        )
+        assert record["row_index"] in range(4)
+        assert all(style["label_rendered"] is True for style in record["value_styles"].values())
+        assert record["roles"]["left"]["sublane"] == "left"
+        assert record["roles"]["right"]["sublane"] == "right"
+
+    catalog = json.loads(bundle.catalog_path.read_text(encoding="utf-8"))
+    legend = catalog["artifacts"][0]["figure_semantics"]["legend_series"]
+    assert "controller states (direct L/R labels)" in legend
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    for value in ("tracking", "braking", "planner", "clear", "active", "inactive"):
+        assert value in svg
 
 
 def test_semantic_style_key_is_complete_and_matches_catalog_legend(tmp_path: Path) -> None:
@@ -611,13 +775,16 @@ def test_semantic_style_key_is_complete_and_matches_catalog_legend(tmp_path: Pat
         "diagnostic threshold",
         "semantic event cursor",
         "recorded occupancy ribbon",
+        "controller states (direct L/R labels)",
     }
     assert expected_semantics <= set(legend_series)
     assert {"goal seed 118", "ppo seed 118"} <= set(legend_series)
     assert catalog["artifacts"][0]["figure_semantics"]["legend_complete"] is True
     svg = bundle.svg_path.read_text(encoding="utf-8")
-    for label in expected_semantics:
+    for label in expected_semantics - {"controller states (direct L/R labels)"}:
         assert label in svg
+    assert "controller states" in svg
+    assert "(direct L/R labels)" in svg
 
 
 def test_validated_atlas_intervals_are_bound_displayed_and_catalogued(tmp_path: Path) -> None:
@@ -640,12 +807,45 @@ def test_validated_atlas_intervals_are_bound_displayed_and_catalogued(tmp_path: 
     assert sidecar["uncertainty"] == uncertainty
     assert bundle.manifest["panel_status"]["cell_context"]["uncertainty"] == uncertainty
     catalog = json.loads(bundle.catalog_path.read_text(encoding="utf-8"))
-    semantics = catalog["artifacts"][0]["figure_semantics"]
+    semantics = next(
+        artifact["figure_semantics"]
+        for artifact in catalog["artifacts"]
+        if artifact["artifact_id"] == "release_context"
+    )
     assert semantics["uncertainty_declared"] is True
     assert semantics["uncertainty_method"] == ("campaign_atlas_outcome_ci_validated_and_consumed")
     svg = bundle.svg_path.read_text(encoding="utf-8")
     assert "collision 6/15 CI[0.00,1.00]" in svg
     assert "success 9/15 CI[0.00,1.00]" in svg
+
+
+def test_catalog_separates_two_trace_diagnostic_support_from_release_context(
+    tmp_path: Path,
+) -> None:
+    """Release confidence counts never masquerade as clearance-trace support."""
+
+    input_path = _write_matched_input(tmp_path)
+
+    bundle = render_case_dossier(input_path, tmp_path / "support-semantics")
+
+    catalog = json.loads(bundle.catalog_path.read_text(encoding="utf-8"))
+    artifacts = {artifact["artifact_id"]: artifact for artifact in catalog["artifacts"]}
+    clearance = artifacts["case_dossier"]["figure_semantics"]
+    assert clearance["metric_id"] == "proxy_envelope_surface_clearance_diagnostic"
+    assert clearance["support"] == 2
+    assert clearance["denominator"] == 2
+    assert clearance["uncertainty_declared"] is True
+    assert clearance["uncertainty_method"] == (
+        "release_context_only:campaign_atlas_outcome_ci_validated_and_consumed"
+    )
+
+    release = artifacts["release_context"]["figure_semantics"]
+    assert release["metric_id"] == "campaign_atlas_outcome_release_context"
+    assert release["support"] == 30
+    assert release["denominator"] == 30
+    assert release["uncertainty_declared"] is True
+    assert release["uncertainty_method"] == ("campaign_atlas_outcome_ci_validated_and_consumed")
+    assert "Release-context confidence only" in artifacts["release_context"]["claim_boundary"]
 
 
 def test_atlas_interval_estimates_accept_the_producers_six_decimal_rounding(
@@ -672,6 +872,71 @@ def test_atlas_interval_estimates_accept_the_producers_six_decimal_rounding(
 
     uncertainty = bundle.manifest["source_bindings"]["campaign_atlas"]["uncertainty"]
     assert uncertainty["cells"][0]["outcomes"]["collision"]["estimate"] == 0.333333
+
+
+def test_atlas_duplicate_release_arms_without_provenance_fail_closed(
+    tmp_path: Path,
+) -> None:
+    """Planner identity alone may not choose among multiple release arms."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    goal_cell = atlas["cells"][0]
+    goal_cell["release_arm_id"] = "goal__native"
+    alternate = copy.deepcopy(goal_cell)
+    alternate["release_arm_id"] = "goal__alternate"
+    atlas["cells"].append(alternate)
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="campaign_atlas_cell_ambiguous"):
+        render_case_dossier(input_path, tmp_path / "ambiguous-atlas-arm")
+
+
+def test_authoritative_selection_release_arm_resolves_and_is_bound_durably(
+    tmp_path: Path,
+) -> None:
+    """An explicit selection arm selects exactly one atlas cell and records its authority."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        release_arm_bindings={"left": "goal__native"},
+    )
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    goal_cell = atlas["cells"][0]
+    goal_cell["release_arm_id"] = "goal__native"
+    alternate = copy.deepcopy(goal_cell)
+    alternate["release_arm_id"] = "goal__alternate"
+    atlas["cells"].append(alternate)
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    bundle = render_case_dossier(input_path, tmp_path / "resolved-atlas-arm")
+
+    campaign = bundle.manifest["source_bindings"]["campaign_atlas"]
+    binding = campaign["resolved_cell_bindings"]["left"]
+    assert binding == {
+        "status": "resolved",
+        "scenario_family": "classic_realworld_double_bottleneck_high",
+        "planner": "goal",
+        "release_arm_id": "goal__native",
+        "resolution": "authoritative_release_arm_id",
+        "authority_source": "selection.source_boundary.release_arm_bindings.left",
+    }
+    assert [
+        cell["release_arm_id"] for cell in campaign["release_cells"] if cell["planner"] == "goal"
+    ] == ["goal__native"]
+    left_outcome = bundle.manifest["source_bindings"]["process_traces"][0]["recorded_outcome"]
+    assert left_outcome["atlas_cell_binding"] == binding
+    sidecar = json.loads(bundle.sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["atlas_cell_bindings"]["left"] == binding
 
 
 @pytest.mark.parametrize(
@@ -874,9 +1139,11 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
     missing_velocity: bool = False,
     nonzero_turn: bool = False,
     negative_turn: bool = False,
+    executed_turn: bool = False,
     controller_signals: bool = False,
     mode: str = "synthetic_fixture",
     terminal_outcomes: tuple[str | None, str | None] = (None, None),
+    release_arm_bindings: dict[str, str] | None = None,
 ) -> Path:
     matched = grammar == "matched_start_planner"
     scenario_id = (
@@ -897,6 +1164,7 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
         missing_velocity=missing_velocity,
         nonzero_turn=nonzero_turn,
         negative_turn=negative_turn,
+        executed_turn=executed_turn,
         controller_signals=controller_signals,
         terminal_outcome=terminal_outcomes[0],
     )
@@ -910,6 +1178,7 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
         missing_velocity=missing_velocity,
         nonzero_turn=nonzero_turn,
         negative_turn=negative_turn,
+        executed_turn=executed_turn,
         controller_signals=controller_signals,
         terminal_outcome=terminal_outcomes[1],
     )
@@ -946,6 +1215,7 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
                 case_id,
                 grammar=grammar,
                 synthetic_fixture=mode == "synthetic_fixture",
+                release_arm_bindings=release_arm_bindings,
             )
         )
     )
@@ -1022,10 +1292,11 @@ def _write_input(  # noqa: PLR0913 - fixture controls independently pin render c
             "threshold_profile": "worked_example_threshold_profile.diagnostic.v1",
         },
         "narrative": {
-            "observed_signature": "The fixture traces show different recorded paths and outcomes.",
-            "competing_explanation": "Fixture geometry and planner commands both differ after start.",
-            "causal_status": "observational_only",
-            "generalization_limit": "Synthetic renderer proof; no scientific generalization.",
+            "template_id": (
+                "matched_start_descriptive.v1"
+                if matched
+                else "same_cell_distinct_start_abstention.v1"
+            )
         },
     }
     return _write_json(tmp_path / "matched-input.json", payload)
@@ -1042,6 +1313,7 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
     missing_velocity: bool = False,
     nonzero_turn: bool = False,
     negative_turn: bool = False,
+    executed_turn: bool = False,
     controller_signals: bool = False,
     terminal_outcome: str | None = None,
 ) -> dict[str, Any]:
@@ -1079,6 +1351,11 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
                     "fallback_state": "inactive",
                 }
             )
+        if executed_turn:
+            planner["executed_action"] = {
+                "linear_velocity": 0.9 if step < 3 else 0.4,
+                "angular_velocity": 0.2 if step in {1, 2} else 0.0,
+            }
         if step == len(positions) - 1 and terminal_outcome is not None:
             planner["outcome"] = {
                 "collision_event": terminal_outcome in {"ambiguous", "collision"},
@@ -1136,6 +1413,7 @@ def _portfolio_config(
     *,
     grammar: str,
     synthetic_fixture: bool = True,
+    release_arm_bindings: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     matched = grammar == "matched_start_planner"
     role = "planner_upset" if matched else "seed_sensitivity"
@@ -1172,6 +1450,18 @@ def _portfolio_config(
         "status": "pass",
         "telemetry_grade": "controller",
     }
+    source_boundary = {
+        "synthetic_fixture": synthetic_fixture,
+        "release_id": "synthetic-fixture-release",
+        "release_rows_sha256": release_sha,
+        "expected_release_rows_sha256": release_sha,
+        "trace_package_sha256": trace_sha,
+        "expected_trace_package_sha256": trace_sha,
+        "visualization_only_reexecution": True,
+        "telemetry_grade": "controller",
+    }
+    if release_arm_bindings is not None:
+        source_boundary["release_arm_bindings"] = release_arm_bindings
     unit = {
         "case_id": case_id,
         "grain": grain,
@@ -1199,16 +1489,7 @@ def _portfolio_config(
             "shared_axis_contract": "case_dossier_shared_axes.v1",
             "semantic_keyframes": ["minimum_clearance"],
         },
-        "source_boundary": {
-            "synthetic_fixture": synthetic_fixture,
-            "release_id": "synthetic-fixture-release",
-            "release_rows_sha256": release_sha,
-            "expected_release_rows_sha256": release_sha,
-            "trace_package_sha256": trace_sha,
-            "expected_trace_package_sha256": trace_sha,
-            "visualization_only_reexecution": True,
-            "telemetry_grade": "controller",
-        },
+        "source_boundary": source_boundary,
         "source_refs": [release_ref, trace_ref],
         "coverage": {
             "topology": topology,

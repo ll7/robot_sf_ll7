@@ -10,6 +10,7 @@
     "case_id",
     "mode",
     "comparison_grammar",
+    "claim_template_id",
     "scientific_admission",
     "comparison",
     "selection",
@@ -29,6 +30,12 @@
     "mode": {"enum": ["production", "synthetic_fixture"]},
     "comparison_grammar": {
       "enum": ["matched_start_planner", "same_cell_seed_sensitivity"]
+    },
+    "claim_template_id": {
+      "enum": [
+        "matched_start_descriptive.v1",
+        "same_cell_distinct_start_abstention.v1"
+      ]
     },
     "scientific_admission": {"const": false},
     "comparison": {

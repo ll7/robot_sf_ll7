@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/case_dossier_manifest.v1.json",
+  "title": "Chapter 7 case dossier output manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dossier_id",
+    "case_id",
+    "mode",
+    "comparison_grammar",
+    "scientific_admission",
+    "comparison",
+    "selection",
+    "renderer",
+    "source_bindings",
+    "shared_scales",
+    "panel_status",
+    "semantic_events",
+    "claim_fields",
+    "outputs",
+    "content_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": "case_dossier_manifest.v1"},
+    "dossier_id": {"type": "string", "minLength": 1},
+    "case_id": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["production", "synthetic_fixture"]},
+    "comparison_grammar": {
+      "enum": ["matched_start_planner", "same_cell_seed_sensitivity"]
+    },
+    "scientific_admission": {"const": false},
+    "comparison": {
+      "type": "object",
+      "required": [
+        "shared_prefix",
+        "recorded_start_separation",
+        "divergence_interpretation",
+        "prohibited_semantics"
+      ],
+      "additionalProperties": true
+    },
+    "selection": {
+      "type": "object",
+      "required": ["case_id", "selected", "selection_manifest_sha256"],
+      "properties": {
+        "case_id": {"type": "string"},
+        "selected": {"const": true},
+        "selection_manifest_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": true
+    },
+    "renderer": {
+      "type": "object",
+      "required": ["renderer_version", "style_version", "input_schema_version", "manifest_schema_version"],
+      "additionalProperties": true
+    },
+    "source_bindings": {
+      "type": "object",
+      "required": ["portfolio", "process_traces", "campaign_atlas", "source_classes"],
+      "additionalProperties": true
+    },
+    "shared_scales": {"type": "object"},
+    "panel_status": {"type": "object"},
+    "semantic_events": {"type": "array"},
+    "claim_fields": {
+      "type": "object",
+      "required": ["observed_signature", "competing_explanation", "causal_status", "generalization_limit"],
+      "properties": {
+        "observed_signature": {"type": "string", "minLength": 1},
+        "competing_explanation": {"type": "string", "minLength": 1},
+        "causal_status": {"enum": ["observational_only", "causal_abstention"]},
+        "generalization_limit": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "outputs": {
+      "type": "object",
+      "required": ["svg", "pdf", "caption", "sidecar"],
+      "additionalProperties": {"$ref": "#/$defs/fileRef"}
+    },
+    "content_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fileRef": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

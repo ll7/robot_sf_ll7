@@ -692,6 +692,71 @@ def test_sentence_like_identity_values_fail_before_rendering(
 
 
 @pytest.mark.parametrize(
+    "controller_state",
+    (
+        "this_planner_is_scientifically_superior",
+        "planner-caused-collision",
+        "reviewer_claim",
+    ),
+)
+def test_controller_signal_vocabulary_rejects_semantic_slugs_before_rendering(
+    tmp_path: Path,
+    controller_state: str,
+) -> None:
+    """Categorical telemetry cannot smuggle reviewer prose through token syntax."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        controller_signals=True,
+        identity_overrides={"controller_state": controller_state},
+    )
+    out_dir = tmp_path / "forbidden-controller-value"
+
+    with pytest.raises(Exception, match="controller_signal_value_invalid"):
+        render_case_dossier(input_path, out_dir)
+    assert not list(out_dir.glob("*"))
+
+
+def test_manifest_schema_rejects_semantic_controller_value_keys_and_outputs_are_clean(
+    tmp_path: Path,
+) -> None:
+    """The manifest enum closes categorical keys while valid bundles contain no prose slugs."""
+
+    forbidden_values = (
+        "this_planner_is_scientifically_superior",
+        "planner-caused-collision",
+        "reviewer_claim",
+    )
+    bundle = render_case_dossier(
+        _write_input(tmp_path, grammar="matched_start_planner", controller_signals=True),
+        tmp_path / "controller-vocabulary",
+    )
+    for path in (
+        bundle.svg_path,
+        bundle.pdf_path,
+        bundle.caption_path,
+        bundle.sidecar_path,
+        bundle.manifest_path,
+        bundle.catalog_path,
+    ):
+        content = path.read_bytes()
+        assert all(value.encode("utf-8") not in content for value in forbidden_values)
+
+    for value in forbidden_values:
+        mutated = copy.deepcopy(bundle.manifest)
+        signal = mutated["panel_status"]["controller_state"]["signals"]["controller_state"]
+        signal["roles"]["left"]["values"].append(value)
+        signal["value_styles"][value] = {"color": "#56B4E9", "label_rendered": True}
+        mutated = _rehash_case_dossier_manifest(mutated)
+
+        errors = validate_case_dossier_manifest(mutated)
+
+        assert errors
+        assert any("controller_state" in error for error in errors)
+
+
+@pytest.mark.parametrize(
     ("slot", "value"),
     (
         ("recorded_outcome", "reviewer_declares_a_win"),
@@ -1500,6 +1565,36 @@ def test_authoritative_selection_release_arm_resolves_and_is_bound_durably(
     assert left_outcome["atlas_cell_binding"] == binding
     sidecar = json.loads(bundle.sidecar_path.read_text(encoding="utf-8"))
     assert sidecar["atlas_cell_bindings"]["left"] == binding
+
+
+@pytest.mark.parametrize(
+    "release_arm_id",
+    (
+        {"id": "goal__native"},
+        {"release_arm_id": "goal__native", "claim_note": "caller prose"},
+    ),
+)
+def test_authoritative_selection_release_arm_objects_fail_closed(
+    tmp_path: Path,
+    release_arm_id: dict[str, str],
+) -> None:
+    """Object-valued authority declarations never unwrap or silently fall back."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        release_arm_bindings={"left": release_arm_id},  # type: ignore[dict-item]
+    )
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    atlas["cells"][0]["release_arm_id"] = "goal__native"
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="release_arm_id_invalid"):
+        render_case_dossier(input_path, tmp_path / "invalid-authoritative-object")
 
 
 @pytest.mark.parametrize("release_arm_id", ("", "arm chosen because this planner is safer"))

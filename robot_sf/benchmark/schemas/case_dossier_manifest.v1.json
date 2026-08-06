@@ -1004,7 +1004,7 @@
         "status": {"enum": ["available", "unavailable"]},
         "values": {
           "type": "array",
-          "items": {"$ref": "#/$defs/identityToken"},
+          "items": {"$ref": "#/$defs/controllerCategoricalValue"},
           "uniqueItems": true
         },
         "artist_count": {"type": "integer", "minimum": 0},
@@ -1015,8 +1015,11 @@
     },
     "controllerValueStyles": {
       "type": "object",
-      "propertyNames": {"$ref": "#/$defs/identityToken"},
+      "propertyNames": {"$ref": "#/$defs/controllerCategoricalValue"},
       "additionalProperties": {"$ref": "#/$defs/controllerValueStyle"}
+    },
+    "controllerCategoricalValue": {
+      "enum": ["tracking", "braking", "planner", "clear", "active", "inactive"]
     },
     "controllerValueStyle": {
       "type": "object",

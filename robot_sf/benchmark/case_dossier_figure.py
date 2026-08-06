@@ -315,6 +315,31 @@ def _validated_identity_token(value: Any, *, path: str) -> str:
     return value
 
 
+_CONTROLLER_SIGNAL_VALUES = {
+    "controller_state": frozenset(("tracking", "braking")),
+    "command_source": frozenset(("planner",)),
+    "guard_state": frozenset(("clear", "active")),
+    "fallback_state": frozenset(("inactive",)),
+}
+
+
+def _validated_controller_signal_value(value: Any, *, signal: str, path: str) -> str:
+    """Validate one renderer-owned categorical signal vocabulary value.
+
+    Returns:
+        The validated categorical value.
+    """
+
+    value = _validated_identity_token(value, path=path)
+    if value not in _CONTROLLER_SIGNAL_VALUES[signal]:
+        allowed = ", ".join(sorted(_CONTROLLER_SIGNAL_VALUES[signal]))
+        raise CaseDossierError(
+            "controller_signal_value_invalid",
+            f"{path}: expected one of {allowed}",
+        )
+    return value
+
+
 def _validated_release_arm_id(value: Any, *, path: str) -> str | None:
     """Validate an optional release-arm identity without coercion.
 
@@ -492,8 +517,9 @@ def _validate_trace_identity_tokens(traces: dict[str, dict[str, Any]]) -> None:
                 continue
             for signal in _CONTROLLER_SIGNALS:
                 if signal in planner:
-                    _validated_identity_token(
+                    _validated_controller_signal_value(
                         planner[signal],
+                        signal=signal,
                         path=f"{role}.frames[{frame_index}].planner.{signal}",
                     )
 
@@ -792,10 +818,7 @@ def _append_selection_release_arm_candidates(
         mapping = container.get(field)
         if not isinstance(mapping, dict) or role not in mapping:
             continue
-        value = mapping[role]
-        if isinstance(value, dict):
-            value = value.get("release_arm_id")
-        candidates.append((f"{container_name}.{field}.{role}", value))
+        candidates.append((f"{container_name}.{field}.{role}", mapping[role]))
 
 
 def _release_arm_candidates(

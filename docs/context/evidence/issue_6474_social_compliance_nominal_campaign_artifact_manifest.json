@@ -1,0 +1,26 @@
+{
+  "campaign_manifest": "output/issue_6474_social_compliance_nominal/job-13985/campaign_manifest.json",
+  "campaign_manifest_sha256": "6a76205cf6e36b6a7cf926f3cf56c83f4de971bce1b8b65d46c51e103e65e737",
+  "campaign_source_commit_sha": "d0c8d3400f79c35b40062304b17f91598ccac98d",
+  "commit_sha": "3615540feab993e55fba658e8fff63e5de4b6de4",
+  "config_path": "configs/benchmarks/issue_6474_social_compliance_nominal_campaign.yaml",
+  "config_sha256": "fed85cef7ac43817d0aa47a3ac10f9e7f4b50b4be6410e796fdf3d837e69811e",
+  "scenario_path": "configs/scenarios/issue_6474_social_compliance_nominal.yaml",
+  "scenario_sha256": "8c87eac284b51108d992521b1cdbef3edc28d13a3e0c5c34933a76f076ce3d6f",
+  "slurm_job_id": "13985",
+  "campaign_source_host": "imech192:/home/luttkule/external_data_hub/benchmark-results/robot_sf_ll7/issue6639-social-compliance-nominal/job-13985",
+  "episode_rows": "output/issue_6474_social_compliance_nominal/job-13985/runs",
+  "episode_rows_sha256": "68421501a52f953cfda60983c5a22d441203d89f6a8463ee67306aeeb0de57f5",
+  "execution_mode_counts": {
+    "adapter": 360,
+    "native": 180
+  },
+  "note": "Promoted only after the full 540-row campaign completes with zero fallback/degraded rows (issue #6639 stop conditions).",
+  "rejected_row_count": 0,
+  "report_path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.md",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "row_count": 540,
+  "schema_version": "social-compliance-campaign-artifact-manifest.v1",
+  "summary_path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json",
+  "valid_row_count": 540
+}

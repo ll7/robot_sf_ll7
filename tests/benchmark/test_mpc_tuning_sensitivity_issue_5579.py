@@ -88,6 +88,28 @@ def test_phase_contract_is_required_and_held_out_drift_fails_closed() -> None:
         validate_sensitivity_config(drifted_inference, repo_root=ROOT)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("horizon", 99), ("dt", 0.2), ("workers", 2)],
+)
+def test_tuning_scope_execution_settings_cannot_drift(field: str, value: object) -> None:
+    """The duplicated tuning scope cannot change the frozen execution settings."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    drifted = deepcopy(config)
+    drifted["tuning_scope"][field] = value
+    with pytest.raises(ValueError, match=rf"tuning_scope\.{field} must match"):
+        validate_sensitivity_config(drifted, repo_root=ROOT)
+
+
+def test_frozen_tuning_scenario_ids_cannot_be_replaced() -> None:
+    """The packet validator rejects a different three-scenario tuning slice."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    drifted = deepcopy(config)
+    drifted["scenario_scope"]["scenario_ids"][0] = "classic_bottleneck_high"
+    with pytest.raises(ValueError, match="frozen 2026-08-03 tuning scenarios"):
+        validate_sensitivity_config(drifted, repo_root=ROOT)
+
+
 def test_candidate_plan_preserves_arm_specific_base_and_only_varies_declared_axes() -> None:
     """Each target candidate applies only the three declared overrides to its own base config."""
     config = load_sensitivity_config(CONFIG, repo_root=ROOT)
@@ -212,6 +234,21 @@ def test_canary_requires_exact_native_solver_evidence_and_key_coverage() -> None
     )
     assert failed["status"] == "failed"
     assert "execution_mode_not_native" in failed["invalid_rows"][0]["reasons"]
+
+    for field, reason in (
+        ("solver_failures", "solver_failures_invalid"),
+        ("fallback_stop_count", "fallback_stop_count_invalid"),
+    ):
+        negative_counter = deepcopy(rows)
+        negative_counter[0][field] = -1
+        failed_counter = validate_canary_rows(
+            negative_counter,
+            scenario_ids=scenarios,
+            seed=101,
+            required_eligible=6,
+        )
+        assert failed_counter["status"] == "failed"
+        assert reason in failed_counter["invalid_rows"][0]["reasons"]
 
     duplicate = validate_canary_rows(
         rows + [rows[0]],

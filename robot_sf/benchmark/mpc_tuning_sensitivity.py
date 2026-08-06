@@ -30,6 +30,11 @@ INCUMBENT_ARM_KEYS = (
     "hybrid_rule_v3_fast_progress_static_escape",
     "hybrid_rule_v3_fast_progress_static_escape_continuous",
 )
+TUNING_SCENARIO_IDS = (
+    "classic_bottleneck_medium",
+    "classic_cross_trap_high",
+    "francis2023_intersection_wait",
+)
 TOP_PARAMETERS = ("max_linear_speed", "horizon_steps", "pedestrian_safety_margin")
 VALID_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 VALID_READINESS_STATUSES = frozenset({"native", "adapter"})
@@ -467,6 +472,10 @@ def _validate_scenario_scope(value: Any, *, repo_root: Path) -> None:
         isinstance(item, str) and item.strip() for item in scenario_ids
     ):
         raise ValueError("scenario_scope.scenario_ids must be unique non-empty strings")
+    if tuple(scenario_ids) != TUNING_SCENARIO_IDS:
+        raise ValueError(
+            "scenario_scope.scenario_ids must match the frozen 2026-08-03 tuning scenarios"
+        )
     seeds = scope.get("seeds")
     if not isinstance(seeds, list) or len(seeds) != 3:
         raise ValueError("scenario_scope.seeds must contain exactly three fixed seeds")
@@ -521,6 +530,7 @@ def _validate_tuning_scope(
         raise ValueError("tuning_scope.seeds must be [101, 102, 103]")
     if seeds != scenario_scope.get("seeds"):
         raise ValueError("tuning_scope.seeds must exactly match scenario_scope.seeds")
+    _validate_scope_execution_settings(scope, scenario_scope, scope_name="tuning_scope")
     source_ids = _source_scenario_ids(source)
     missing = sorted(set(scenario_ids) - set(source_ids))
     if missing:
@@ -555,20 +565,20 @@ def _validate_held_out_scope(
     expected_seeds = list(range(111, 121))
     if seeds != expected_seeds:
         raise ValueError(f"held_out_scope.seeds must be {expected_seeds}")
-    _validate_scope_execution_settings(scope, scenario_scope)
+    _validate_scope_execution_settings(scope, scenario_scope, scope_name="held_out_scope")
     _validate_held_out_matrix(scope, source, tuning_scope)
 
 
 def _validate_scope_execution_settings(
-    scope: Mapping[str, Any], scenario_scope: Mapping[str, Any]
+    scope: Mapping[str, Any], scenario_scope: Mapping[str, Any], *, scope_name: str
 ) -> None:
-    """Require held-out execution settings to match the declared tuning settings."""
+    """Require a phase's execution settings to match the declared tuning settings."""
     if int(scope.get("horizon", 0)) != int(scenario_scope.get("horizon", 0)):
-        raise ValueError("held_out_scope.horizon must match scenario_scope.horizon")
+        raise ValueError(f"{scope_name}.horizon must match scenario_scope.horizon")
     if float(scope.get("dt", 0.0)) != float(scenario_scope.get("dt", 0.0)):
-        raise ValueError("held_out_scope.dt must match scenario_scope.dt")
+        raise ValueError(f"{scope_name}.dt must match scenario_scope.dt")
     if int(scope.get("workers", 0)) != int(scenario_scope.get("workers", 0)):
-        raise ValueError("held_out_scope.workers must match scenario_scope.workers")
+        raise ValueError(f"{scope_name}.workers must match scenario_scope.workers")
 
 
 def _validate_held_out_matrix(
@@ -1177,10 +1187,14 @@ def _canary_solver_runtime_reasons(row: Mapping[str, Any]) -> list[str]:
         reasons.append("control_update_missing")
     if not _is_int(row.get("solver_failures")):
         reasons.append("solver_failures_missing")
+    elif int(row["solver_failures"]) < 0:
+        reasons.append("solver_failures_invalid")
     elif int(row["solver_failures"]) > 0:
         reasons.append("solver_failure")
     if not _is_int(row.get("fallback_stop_count")):
         reasons.append("fallback_stop_count_missing")
+    elif int(row["fallback_stop_count"]) < 0:
+        reasons.append("fallback_stop_count_invalid")
     elif int(row["fallback_stop_count"]) > 0:
         reasons.append("fallback")
     return reasons
@@ -1323,6 +1337,7 @@ __all__ = [
     "REPORT_SCHEMA",
     "TARGET_ARM_KEYS",
     "TOP_PARAMETERS",
+    "TUNING_SCENARIO_IDS",
     "analyze_results",
     "build_candidate_plan",
     "compute_scenario_list_hash",

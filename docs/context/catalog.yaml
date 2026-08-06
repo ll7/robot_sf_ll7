@@ -4844,3 +4844,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

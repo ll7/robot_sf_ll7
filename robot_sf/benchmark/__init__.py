@@ -31,6 +31,15 @@ if TYPE_CHECKING:  # pragma: no cover - static type information only
         load_benchmark_protocol,
         validate_benchmark_protocol_payload,
     )
+    from robot_sf.benchmark.case_dossier_figure import (
+        CASE_DOSSIER_INPUT_SCHEMA_VERSION,
+        CASE_DOSSIER_MANIFEST_SCHEMA_VERSION,
+        CASE_DOSSIER_RENDERER_VERSION,
+        CaseDossierBundle,
+        CaseDossierError,
+        render_case_dossier,
+        validate_case_dossier_manifest,
+    )
     from robot_sf.benchmark.errors import AggregationMetadataError
     from robot_sf.benchmark.forecast_batch import (
         FORECAST_BATCH_SCHEMA_VERSION,
@@ -132,6 +141,14 @@ _LAZY: dict[str, str] = {
     "ClaimRules": "benchmark_protocol",
     "load_benchmark_protocol": "benchmark_protocol",
     "validate_benchmark_protocol_payload": "benchmark_protocol",
+    # case_dossier_figure
+    "CASE_DOSSIER_INPUT_SCHEMA_VERSION": "case_dossier_figure",
+    "CASE_DOSSIER_MANIFEST_SCHEMA_VERSION": "case_dossier_figure",
+    "CASE_DOSSIER_RENDERER_VERSION": "case_dossier_figure",
+    "CaseDossierBundle": "case_dossier_figure",
+    "CaseDossierError": "case_dossier_figure",
+    "render_case_dossier": "case_dossier_figure",
+    "validate_case_dossier_manifest": "case_dossier_figure",
     # errors
     "AggregationMetadataError": "errors",
     # forecast_batch
@@ -213,6 +230,9 @@ __all__ = [
     "AMMV_BENCHMARK_PROTOCOL_PATH",
     "CANONICAL_METRICS",
     "CANONICAL_METRIC_LAYERS",
+    "CASE_DOSSIER_INPUT_SCHEMA_VERSION",
+    "CASE_DOSSIER_MANIFEST_SCHEMA_VERSION",
+    "CASE_DOSSIER_RENDERER_VERSION",
     "DEFAULT_FORECAST_DATASET_ID",
     "DEFAULT_TRANSFER_DIMENSIONS",
     "FORECAST_BATCH_SCHEMA_VERSION",
@@ -234,6 +254,8 @@ __all__ = [
     "AggregationMetadataError",
     "BenchmarkProtocolError",
     "BenchmarkProtocolManifest",
+    "CaseDossierBundle",
+    "CaseDossierError",
     "ClaimRules",
     "CoordinateFrame",
     "ExampleOrchestrator",
@@ -274,10 +296,12 @@ __all__ = [
     "record_forecast_dataset_from_trace_exports",
     "render_assurance_fragment_to_markdown",
     "render_assurance_fragment_to_svg",
+    "render_case_dossier",
     "run_episodes_with_recording",
     "save_forecast_batch",
     "validate_assurance_fragment",
     "validate_benchmark_protocol_payload",
+    "validate_case_dossier_manifest",
     "validate_forecast_batch",
     "validate_forecast_dataset_manifest",
     "write_assurance_fragment",

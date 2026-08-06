@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/case_dossier_input.v1.json",
+  "title": "Chapter 7 case dossier input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dossier_id",
+    "case_id",
+    "mode",
+    "scientific_admission",
+    "comparison_grammar",
+    "comparison_options",
+    "ensemble_context",
+    "sources",
+    "layout",
+    "narrative"
+  ],
+  "properties": {
+    "schema_version": {"const": "case_dossier_input.v1"},
+    "dossier_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$"},
+    "case_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"
+    },
+    "mode": {"enum": ["production", "synthetic_fixture"]},
+    "scientific_admission": {"const": false},
+    "comparison_grammar": {
+      "enum": ["matched_start_planner", "same_cell_seed_sensitivity"]
+    },
+    "comparison_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "difference_curve",
+        "pivot_time_s",
+        "causal_hinge",
+        "adjacent_seed_significance"
+      ],
+      "properties": {
+        "difference_curve": {"type": "boolean"},
+        "pivot_time_s": {"type": ["number", "null"]},
+        "causal_hinge": {"type": "boolean"},
+        "adjacent_seed_significance": {"type": "boolean"}
+      }
+    },
+    "ensemble_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "missing_trace_ids",
+        "ineligible_trace_ids",
+        "excluded_trace_ids"
+      ],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {
+          "enum": [
+            "synthetic_fixture_no_ensemble_inventory",
+            "production_ensemble_inventory_unavailable",
+            "ensemble_inventory_complete"
+          ]
+        },
+        "missing_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"}
+        },
+        "ineligible_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"}
+        },
+        "excluded_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$"}
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["portfolio", "process_traces", "campaign_atlas"],
+      "properties": {
+        "portfolio": {"$ref": "#/$defs/fileRef"},
+        "process_traces": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/processTraceRef"}
+        },
+        "campaign_atlas": {
+          "allOf": [
+            {"$ref": "#/$defs/fileRef"},
+            {
+              "type": "object",
+              "required": ["source_class"],
+              "properties": {"source_class": {"const": "release_statistics"}}
+            }
+          ]
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "final_width_in",
+        "final_height_in",
+        "minimum_font_pt",
+        "world_crop_m",
+        "metre_scale_m",
+        "time_range_s",
+        "clearance_range_m",
+        "speed_range_mps",
+        "turn_rate_range_rad_s",
+        "palette_id",
+        "threshold_profile"
+      ],
+      "properties": {
+        "final_width_in": {"type": "number", "minimum": 5.9, "maximum": 5.91},
+        "final_height_in": {"type": "number", "minimum": 7.0, "maximum": 11.0},
+        "minimum_font_pt": {"type": "number", "minimum": 8.25},
+        "world_crop_m": {"$ref": "#/$defs/range4"},
+        "metre_scale_m": {"type": "number", "exclusiveMinimum": 0},
+        "time_range_s": {"$ref": "#/$defs/range2"},
+        "clearance_range_m": {"$ref": "#/$defs/range2"},
+        "speed_range_mps": {"$ref": "#/$defs/range2"},
+        "turn_rate_range_rad_s": {"$ref": "#/$defs/range2"},
+        "palette_id": {"const": "case_dossier_colorblind.v1"},
+        "threshold_profile": {
+          "const": "worked_example_threshold_profile.diagnostic.v1"
+        }
+      }
+    },
+    "narrative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template_id"],
+      "properties": {
+        "template_id": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fileRef": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "processTraceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "role", "recorded_outcome", "source_class"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "role": {"enum": ["left", "right"]},
+        "recorded_outcome": {"enum": ["success", "collision", "timeout"]},
+        "source_class": {"const": "visualization_only_rerun_diagnostics"}
+      }
+    },
+    "range2": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "range4": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "number"},
+        {"type": "number"},
+        {"type": "number"},
+        {"type": "number"}
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    }
+  }
+}

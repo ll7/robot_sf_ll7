@@ -271,3 +271,6 @@ def _save_figure(fig: plt.Figure, target: str | Path) -> None:
     target_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(target_path, dpi=200, bbox_inches="tight")
     logger.info("Saved planner plot to {path}", path=target_path)
+
+
+__all__ = ["ObstacleList", "plot_global_plan", "plot_visibility_graph"]

@@ -140,3 +140,6 @@ class VisibilityGraph:
     def clear_cache(cls) -> None:
         """Clear the visibility graph cache."""
         cls._graph_cache.clear()
+
+
+__all__ = ["VisibilityGraph"]

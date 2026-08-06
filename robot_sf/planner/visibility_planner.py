@@ -595,3 +595,6 @@ class VisibilityPlanner:
             ordered.append(next_goal)
             current = next_goal
         return ordered
+
+
+__all__ = ["PlannerConfig", "PlanningFailedError", "VisibilityPlanner"]

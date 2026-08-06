@@ -42,3 +42,13 @@ DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED: float = 1.2
 #: commit command once a gap is committed. Shared by ``StreamGapPlannerConfig`` and the
 #: GapPrediction adapter that builds that exact config. Behaviorally identical to ``6``.
 DEFAULT_STREAM_GAP_COMMIT_HOLD_STEPS: int = 6
+
+
+__all__ = [
+    "DEFAULT_GMM_MODE_COUNT",
+    "DEFAULT_STREAM_GAP_COMMIT_HOLD_STEPS",
+    "DEFAULT_STREAM_GAP_FORWARD_LOOKAHEAD_M",
+    "DEFAULT_STREAM_GAP_MAX_ANGULAR_SPEED",
+    "DEFAULT_STREAM_GAP_MAX_LINEAR_SPEED",
+    "DEFAULT_STREAM_GAP_SAMPLE_HORIZON_S",
+]

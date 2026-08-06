@@ -95,3 +95,6 @@ class POISampler:
         ]
         distances.sort(key=lambda t: t[1], reverse=(strategy == "farthest"))
         return [idx for idx, _ in distances[:available]]
+
+
+__all__ = ["POISampler"]

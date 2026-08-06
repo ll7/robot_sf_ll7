@@ -443,3 +443,14 @@ def build_prediction_mpc_config(cfg: dict[str, Any] | None) -> PredictionMPCConf
             )
             kwargs[field.name] = default_value
     return PredictionMPCConfig(**kwargs)
+
+
+__all__ = [
+    "ConstantVelocityPedestrianPredictor",
+    "NullPedestrianPredictor",
+    "PedestrianFuturePredictor",
+    "PredictedPedestrianFutures",
+    "PredictionMPCConfig",
+    "PredictionMPCPlannerAdapter",
+    "build_prediction_mpc_config",
+]

@@ -51,3 +51,6 @@ def build_learned_prediction_mpc_adapter(
     )
     predictor = LearnedShortHorizonPedestrianPredictor(predictor_config)
     return PredictionMPCPlannerAdapter(config=mpc_config, predictor=predictor)
+
+
+__all__ = ["LEARNED_PREDICTION_MPC_ALIASES", "build_learned_prediction_mpc_adapter"]

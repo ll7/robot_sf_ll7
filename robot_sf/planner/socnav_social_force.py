@@ -437,3 +437,13 @@ def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNa
     """
 
     return SocNavPlannerPolicy(adapter=SocialForcePlannerAdapter(config=config))
+
+
+__all__ = [
+    "SamplingPlannerAdapter",
+    "SocNavPlannerConfig",
+    "SocNavPlannerPolicy",
+    "SocialForcePlannerAdapter",
+    "make_social_force_policy",
+    "sf_forces",
+]

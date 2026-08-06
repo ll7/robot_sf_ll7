@@ -842,6 +842,8 @@ def test_write_evidence_bundle_blocked_is_diagnostic(tmp_path: Path) -> None:
     provenance_payload = json.loads(written["analysis_provenance.json"].read_text())
     assert provenance_payload["evidence_status"] == "diagnostic-only"
     assert provenance_payload["verdict"]["interpretation_promoted"] is False
+    assert provenance_payload["provenance"]["campaign_commit"] is None
+    assert provenance_payload["provenance"]["analysis_commit"] == "a" * 40
 
 
 def test_write_promoted_bundle_requires_input_checksums(tmp_path: Path) -> None:

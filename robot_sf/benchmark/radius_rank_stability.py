@@ -1696,9 +1696,14 @@ def build_evidence_provenance(
 ) -> EvidenceProvenance:
     """Assemble immutable provenance, checksumming any supplied input artifacts.
 
+    Blocked Gate 3 reports do not have a campaign commit. Normalize that field here so
+    programmatic bundle writers preserve the same fail-closed boundary as the CLI.
+
     Returns:
         The immutable provenance record for the durable evidence bundle.
     """
+    if report.verdict.verdict == ANALYSIS_BLOCKED_PENDING_GATE2:
+        campaign_commit = None
     if config_sha256 is None:
         config_file = Path(config_path)
         if config_file.is_file():

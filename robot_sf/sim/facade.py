@@ -18,3 +18,5 @@ if TYPE_CHECKING:  # avoid runtime import cost
 
 # Factory type for backends (env_config, map_def, peds_have_obstacle_forces) -> simulator-like
 SimulatorFactory = Callable[["EnvSettings", "MapDefinition", bool], Any]
+
+__all__ = ["SimulatorFactory"]

@@ -927,6 +927,7 @@ def _solver_identity(
         The normalized solver mode and any identity exclusion reasons.
     """
     adapter_name = str(kinematics.get("adapter_name", "")).strip()
+    planner_execution_mode = str(kinematics.get("execution_mode", "")).strip().lower()
     solver_mode = (
         str(
             runtime.get("solver_execution_mode")
@@ -937,7 +938,11 @@ def _solver_identity(
         .strip()
         .lower()
     )
-    if not solver_mode and adapter_name == NATIVE_SOLVER_PLANNER:
+    if (
+        not solver_mode
+        and planner_execution_mode == "native"
+        and adapter_name == NATIVE_SOLVER_PLANNER
+    ):
         solver_mode = "native"
     reasons: list[str] = []
     if solver_mode != "native":
@@ -946,8 +951,8 @@ def _solver_identity(
         reasons.append("unexpected_solver_planner")
     if kinematics.get("supports_native_commands") is not True:
         reasons.append("native_commands_unsupported")
-    if str(kinematics.get("execution_mode", "")).strip().lower() == "mixed":
-        reasons.append("mixed_execution")
+    if planner_execution_mode != "native":
+        reasons.append("planner_execution_mode_not_native")
     return solver_mode or "unknown", reasons
 
 
@@ -1059,10 +1064,10 @@ def validate_canary_rows(
 ) -> dict[str, Any]:
     """Apply the exact native-solver canary gate to normalized rows.
 
-    The outer benchmark execution may be an adapter, but an adapter label alone is never
-    sufficient. Each row must carry native solver evidence, valid effective-config provenance,
-    finite commands, and a successful solver/control update. The expected two-arm by three-
-    scenario key set is closed before any production phase can proceed.
+    The outer benchmark execution must be native; an adapter label is never sufficient. Each row
+    must also carry native solver evidence, valid effective-config provenance, finite commands,
+    and a successful solver/control update. The expected two-arm by three-scenario key set is
+    closed before any production phase can proceed.
 
     Returns:
         A status mapping containing exact-key, eligibility, and exclusion diagnostics.

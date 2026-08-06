@@ -41,8 +41,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
-    parser.add_argument("--check", action="store_true", help="Validate without running episodes")
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="Validate without running episodes")
+    mode.add_argument(
         "--canary", action="store_true", help="Run canary check (seed 101, 6/6 eligibility)"
     )
     parser.add_argument(
@@ -54,7 +55,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+def _read_jsonl(path: Path, *, allow_missing: bool = False) -> list[dict[str, Any]]:
+    if not path.is_file():
+        if allow_missing:
+            return []
+        raise FileNotFoundError(f"expected episode JSONL artifact is missing: {path}")
     rows: list[dict[str, Any]] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
@@ -270,7 +275,7 @@ def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path
             benchmark_profile="experimental",
         )
         availability = summary.get("benchmark_availability") or availability_payload(summary)
-        for record in _read_jsonl(episodes_path):
+        for record in _read_jsonl(episodes_path, allow_missing=True):
             decorated = dict(record)
             decorated["sensitivity_availability"] = availability
             all_rows.append(
@@ -282,17 +287,32 @@ def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path
                 )
             )
         if canary_cfg.get("stop_on_ineligible") is True:
+            arm_rows = [
+                row
+                for row in all_rows
+                if row.get("arm_key") == arm_key and row.get("candidate_id") == candidate_id
+            ]
             partial = validate_canary_rows(
-                all_rows,
+                arm_rows,
                 scenario_ids=config["tuning_scope"]["scenario_ids"],
                 seed=canary_seed,
-                required_eligible=required_eligible,
+                required_eligible=len(config["tuning_scope"]["scenario_ids"]),
+                target_arm_keys=(arm_key,),
+                candidate_id=candidate_id,
             )
-            if partial["invalid_rows"] or partial["duplicate_keys"] or partial["unexpected_keys"]:
+            if partial["status"] != "ok":
                 partial["canary_seed"] = canary_seed
                 partial["scope_name"] = "tuning_scope"
                 partial["config_path"] = _display_path(config_path)
-                partial["stop_reason"] = "ineligible_row"
+                partial["validated_arm_key"] = arm_key
+                partial["campaign_required_eligible"] = required_eligible
+                partial["stop_reason"] = (
+                    "ineligible_row"
+                    if partial["invalid_rows"]
+                    or partial["duplicate_keys"]
+                    or partial["unexpected_keys"]
+                    else "missing_or_incomplete_arm"
+                )
                 return partial
 
     result = validate_canary_rows(
@@ -331,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
             sort_keys=True,
         )
     )
-    return 0
+    return 0 if report.get("status") == "complete_diagnostic" else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

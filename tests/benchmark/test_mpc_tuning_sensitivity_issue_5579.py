@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 as sensitivity_runner
 from robot_sf.benchmark.mpc_tuning_sensitivity import (
     TARGET_ARM_KEYS,
     analyze_results,
@@ -132,13 +133,19 @@ def test_normalization_requires_explicit_outcome_and_availability_provenance() -
 def test_normalization_extracts_native_solver_provenance_and_update_evidence() -> None:
     """Raw target metadata is converted into the strict canary predicates."""
     record = _raw_record(route_complete=True, collision_event=False)
+    record["sensitivity_availability"] = {
+        "execution_mode": "native",
+        "readiness_status": "native",
+        "availability_status": "available",
+        "benchmark_success": True,
+    }
     effective_config = {"predictor_backend": "constant_velocity", "fallback_to_stop": False}
     metadata = record["algorithm_metadata"]
     assert isinstance(metadata, dict)
     metadata["config"] = effective_config
     metadata["config_hash"] = config_hash(effective_config)
     metadata["planner_kinematics"] = {
-        "execution_mode": "adapter",
+        "execution_mode": "native",
         "adapter_name": "PredictionMPCPlannerAdapter",
         "supports_native_commands": True,
     }
@@ -162,6 +169,16 @@ def test_normalization_extracts_native_solver_provenance_and_update_evidence() -
     assert row["valid_solver_provenance"] is True
     assert row["finite_commands"] is True
     assert row["native_solver_eligible"] is True
+
+    metadata["planner_kinematics"]["execution_mode"] = "adapter"
+    adapter_row = normalize_episode_record(
+        record,
+        arm_key="prediction_mpc",
+        candidate_id="incumbent",
+        expected_config_hash=config_hash(effective_config),
+    )
+    assert adapter_row["native_solver_eligible"] is False
+    assert "planner_execution_mode_not_native" in adapter_row["native_solver_exclusion_reasons"]
 
 
 def test_canary_requires_exact_native_solver_evidence_and_key_coverage() -> None:
@@ -312,6 +329,60 @@ def test_external_output_path_has_stable_display() -> None:
     external = Path("/tmp") / "issue-5579-output"
     assert _display_path(external) == str(external)
     assert _display_path(ROOT / "output") == "output"
+
+
+def test_runner_returns_nonzero_for_blocked_study(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A blocked report must fail the production wrapper instead of printing success."""
+
+    def blocked_study(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {
+            "status": "blocked",
+            "issue": 5579,
+            "read": {"decision": "blocked"},
+            "eligible_episode_rows": 0,
+            "excluded_episode_rows": 1,
+        }
+
+    monkeypatch.setattr(sensitivity_runner, "run_study", blocked_study)
+    assert (
+        sensitivity_runner.main(
+            ["--config", str(CONFIG), "--phase", "held_out", "--out-dir", str(tmp_path)]
+        )
+        == 1
+    )
+
+
+def test_canary_stops_on_missing_arm_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A skipped batch is reported as a missing arm, without launching the other arm."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    calls = 0
+
+    def skipped_batch(*_args: object, **_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {
+            "benchmark_availability": {
+                "execution_mode": "native",
+                "readiness_status": "degraded",
+                "availability_status": "not_available",
+                "benchmark_success": False,
+            }
+        }
+
+    monkeypatch.setattr(sensitivity_runner, "run_map_batch", skipped_batch)
+    result = sensitivity_runner.run_canary_check(
+        config,
+        out_dir=tmp_path,
+        config_path=CONFIG,
+    )
+    assert result["status"] == "failed"
+    assert result["stop_reason"] == "missing_or_incomplete_arm"
+    assert result["validated_arm_key"] == "prediction_mpc"
+    assert calls == 1
 
 
 def test_report_rejects_missing_paired_rows() -> None:

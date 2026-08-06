@@ -357,6 +357,9 @@ def test_analysis_excludes_target_rows_with_invalid_solver_provenance() -> None:
     assert report["read"]["decision"] == "blocked"
     assert sum(row["eligible_episodes"] for row in target_rows) == 0
     assert sum(row["excluded_episodes"] for row in target_rows) == 360
+    exclusion_reasons = {reason for row in target_rows for reason in row["exclusion_reasons"]}
+    assert "solver_provenance_invalid" in exclusion_reasons
+    assert "eligible" not in exclusion_reasons
 
 
 def test_incumbent_adapter_rows_remain_eligible_without_mpc_solver_evidence() -> None:

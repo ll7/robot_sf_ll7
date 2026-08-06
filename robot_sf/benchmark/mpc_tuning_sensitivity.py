@@ -299,7 +299,7 @@ def analyze_results(
         eligible_rows = [row for row in group_rows if _eligible(row)]
         excluded_rows = [row for row in group_rows if not _eligible(row)]
         exclusion_reasons = sorted(
-            {str(row.get("planner_runtime_status", "missing")) for row in excluded_rows}
+            {reason for row in excluded_rows for reason in _eligibility_reasons(row)}
         )
         success_count = sum(row.get("success") is True for row in eligible_rows)
         candidate_rows.append(
@@ -1203,6 +1203,32 @@ def _native_solver_runtime_reasons(row: Mapping[str, Any]) -> list[str]:
     return reasons
 
 
+def _eligibility_reasons(row: Mapping[str, Any]) -> list[str]:
+    """Return the concrete fail-closed reasons for one analysis row.
+
+    Returns:
+        Sorted, de-duplicated reasons matching the predicates used by ``_eligible``.
+    """
+    reasons: list[str] = []
+    if str(row.get("execution_mode", "")).strip().lower() not in VALID_EXECUTION_MODES:
+        reasons.append("execution_mode_not_supported")
+    if str(row.get("readiness_status", "")).strip().lower() not in VALID_READINESS_STATUSES:
+        reasons.append("readiness_status_not_supported")
+    if str(row.get("availability_status", "")).strip().lower() != "available":
+        reasons.append("availability_not_available")
+    if row.get("benchmark_success") is not True:
+        reasons.append("benchmark_success_false")
+    runtime_status = str(row.get("planner_runtime_status", "missing"))
+    if runtime_status != "eligible":
+        reasons.append(runtime_status)
+
+    if str(row.get("arm_key", "")) in TARGET_ARM_KEYS:
+        reasons.extend(_native_solver_identity_reasons(row))
+        reasons.extend(_native_solver_runtime_reasons(row))
+        reasons.extend(str(reason) for reason in row.get("native_solver_exclusion_reasons", ()))
+    return sorted(set(reasons))
+
+
 def _eligible(row: Mapping[str, Any]) -> bool:
     """Report whether a row meets every fail-closed eligibility requirement.
 
@@ -1216,22 +1242,7 @@ def _eligible(row: Mapping[str, Any]) -> bool:
     Returns:
         True when the row satisfies every fail-closed eligibility requirement.
     """
-    base_eligible = (
-        str(row.get("execution_mode", "")).strip().lower() in VALID_EXECUTION_MODES
-        and str(row.get("readiness_status", "")).strip().lower() in VALID_READINESS_STATUSES
-        and str(row.get("availability_status", "")).strip().lower() == "available"
-        and row.get("benchmark_success") is True
-        and row.get("planner_runtime_status") == "eligible"
-    )
-    if not base_eligible:
-        return False
-    if str(row.get("arm_key", "")) not in TARGET_ARM_KEYS:
-        return True
-    return (
-        not _native_solver_identity_reasons(row)
-        and not _native_solver_runtime_reasons(row)
-        and not row.get("native_solver_exclusion_reasons")
-    )
+    return not _eligibility_reasons(row)
 
 
 def _planner_runtime_status(value: Any) -> str:

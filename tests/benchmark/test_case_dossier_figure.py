@@ -260,6 +260,55 @@ def test_no_shared_prefix_rejects_forbidden_interpretation_modes(
         render_case_dossier(input_path, tmp_path / "forbidden")
 
 
+@pytest.mark.parametrize(
+    ("field", "text"),
+    (
+        ("observed_signature", "A Difference-Curve appears after the start."),
+        ("observed_signature", "The plotted DIFFERENCE_CURVES separate."),
+        ("competing_explanation", "The PIVOT/TIME is 0.2 s."),
+        ("generalization_limit", "This proposes a causal—hinge."),
+        (
+            "observed_signature",
+            "Adjacent seed statistical significance is claimed.",
+        ),
+        ("competing_explanation", "Adjacent-seed significance is claimed."),
+        ("observed_signature", "Adjacent seeds are statistically significant."),
+        ("generalization_limit", "A divergence_point is identified."),
+        ("competing_explanation", "A localized divergence is identified."),
+    ),
+)
+def test_no_shared_prefix_rejects_forbidden_free_form_narrative_variants(
+    tmp_path: Path,
+    field: str,
+    text: str,
+) -> None:
+    """Punctuation, case, and plural variants cannot bypass the narrative gate."""
+
+    input_path = _write_doorway_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    payload["narrative"][field] = text
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="no_shared_prefix_narrative_forbidden"):
+        render_case_dossier(input_path, tmp_path / "forbidden-narrative")
+
+
+def test_no_shared_prefix_narrative_allows_explicit_causal_abstention(tmp_path: Path) -> None:
+    """The concept gate must preserve ordinary, non-causal abstention language."""
+
+    input_path = _write_doorway_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    payload["narrative"]["causal_status"] = "causal_abstention"
+    payload["narrative"]["competing_explanation"] = (
+        "We abstain from causal attribution because the starts differ."
+    )
+    _write_json(input_path, payload)
+
+    bundle = render_case_dossier(input_path, tmp_path / "causal-abstention")
+
+    assert bundle.manifest["claim_fields"]["causal_status"] == "causal_abstention"
+
+
 def test_current_production_portfolio_fails_when_requested_case_is_not_selected(
     tmp_path: Path,
 ) -> None:
@@ -291,6 +340,109 @@ def test_current_production_portfolio_fails_when_requested_case_is_not_selected(
 
     with pytest.raises(Exception, match="production_case_not_selected"):
         render_case_dossier(input_path, tmp_path / "production-stop")
+
+
+def test_synthetic_recorded_outcomes_are_atlas_checked_and_non_authoritative(
+    tmp_path: Path,
+) -> None:
+    """Fixture declarations stay visibly non-authoritative on every durable surface."""
+
+    input_path = _write_matched_input(tmp_path)
+
+    bundle = render_case_dossier(input_path, tmp_path / "synthetic-outcomes")
+
+    sidecar = json.loads(bundle.sidecar_path.read_text(encoding="utf-8"))
+    expected = {
+        "left": {
+            "status": "available",
+            "value": "success",
+            "source": "case_dossier_input.sources.process_traces[role=left].recorded_outcome",
+            "authority": "non_authoritative_synthetic_fixture_declaration",
+            "atlas_outcome_key_validated": True,
+        },
+        "right": {
+            "status": "available",
+            "value": "collision",
+            "source": "case_dossier_input.sources.process_traces[role=right].recorded_outcome",
+            "authority": "non_authoritative_synthetic_fixture_declaration",
+            "atlas_outcome_key_validated": True,
+        },
+    }
+    assert sidecar["recorded_outcomes"] == expected
+    assert {
+        item["role"]: item["recorded_outcome"]
+        for item in bundle.manifest["source_bindings"]["process_traces"]
+    } == expected
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    assert "NON-AUTHORITATIVE synthetic declaration" in svg
+    assert "atlas-key checked" in svg
+
+
+def test_recorded_outcome_must_be_a_key_in_its_bound_atlas_cell(tmp_path: Path) -> None:
+    """A free-form outcome label cannot acquire authority through rendering."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    payload["sources"]["process_traces"][0]["recorded_outcome"] = "near_miss"
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match="recorded_outcome_not_in_atlas_cell"):
+        render_case_dossier(input_path, tmp_path / "unknown-outcome")
+
+
+def test_production_recorded_outcomes_bind_matching_typed_terminal_evidence(
+    tmp_path: Path,
+) -> None:
+    """Production labels are accepted only from a typed terminal trace outcome."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        mode="production",
+        terminal_outcomes=("success", "collision"),
+    )
+
+    bundle = render_case_dossier(input_path, tmp_path / "production-outcomes")
+
+    records = {
+        item["role"]: item["recorded_outcome"]
+        for item in bundle.manifest["source_bindings"]["process_traces"]
+    }
+    assert records["left"] == {
+        "status": "available",
+        "value": "success",
+        "source": ("source_trace.content_receipt.content_contract.frames[-1].planner.outcome"),
+        "authority": "typed_terminal_trace_evidence",
+        "atlas_outcome_key_validated": True,
+    }
+    assert records["right"]["value"] == "collision"
+    assert records["right"]["authority"] == "typed_terminal_trace_evidence"
+
+
+@pytest.mark.parametrize(
+    ("terminal_outcomes", "error_code"),
+    (
+        ((None, None), "production_typed_terminal_outcome_unavailable"),
+        (("collision", "collision"), "production_recorded_outcome_mismatch"),
+        (("ambiguous", "collision"), "production_typed_terminal_outcome_ambiguous"),
+    ),
+)
+def test_production_recorded_outcomes_fail_closed_without_matching_typed_evidence(
+    tmp_path: Path,
+    terminal_outcomes: tuple[str | None, str | None],
+    error_code: str,
+) -> None:
+    """Missing or contradictory production terminal evidence stops before rendering."""
+
+    input_path = _write_input(
+        tmp_path,
+        grammar="matched_start_planner",
+        mode="production",
+        terminal_outcomes=terminal_outcomes,
+    )
+
+    with pytest.raises(Exception, match=error_code):
+        render_case_dossier(input_path, tmp_path / "production-outcome-stop")
 
 
 def test_missing_optional_signals_render_explicit_unavailable_panels(tmp_path: Path) -> None:
@@ -385,6 +537,7 @@ def test_source_controller_signals_render_categorical_strip(tmp_path: Path) -> N
     status = bundle.manifest["panel_status"]["controller_state"]
     assert status["status"] == "available"
     assert status["artist_count"] > 0
+    assert status["semantic_event_cursor_count"] > 0
     assert set(status["signals"]) == {
         "command_source",
         "controller_state",
@@ -396,6 +549,135 @@ def test_source_controller_signals_render_categorical_strip(tmp_path: Path) -> N
     assert "Controller / guard / fallback / command source" in svg
     assert "tracking" in svg
     assert "planner" in svg
+
+
+def test_semantic_style_key_is_complete_and_matches_catalog_legend(tmp_path: Path) -> None:
+    """Every visual encoding has a compact visible key and truthful catalog entry."""
+
+    input_path = _write_matched_input(tmp_path)
+
+    bundle = render_case_dossier(input_path, tmp_path / "semantic-key")
+
+    catalog = json.loads(bundle.catalog_path.read_text(encoding="utf-8"))
+    legend_series = catalog["artifacts"][0]["figure_semantics"]["legend_series"]
+    expected_semantics = {
+        "robot trajectory",
+        "focal actor trajectory",
+        "primary surface clearance",
+        "secondary centre distance",
+        "commanded speed / turn",
+        "executed speed / turn (when recorded)",
+        "diagnostic threshold",
+        "semantic event cursor",
+        "recorded occupancy ribbon",
+    }
+    assert expected_semantics <= set(legend_series)
+    assert {"goal seed 118", "ppo seed 118"} <= set(legend_series)
+    assert catalog["artifacts"][0]["figure_semantics"]["legend_complete"] is True
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    for label in expected_semantics:
+        assert label in svg
+
+
+def test_validated_atlas_intervals_are_bound_displayed_and_catalogued(tmp_path: Path) -> None:
+    """Outcome intervals are consumed visibly and bound to every durable metadata surface."""
+
+    input_path = _write_matched_input(tmp_path)
+
+    bundle = render_case_dossier(input_path, tmp_path / "atlas-intervals")
+
+    uncertainty = bundle.manifest["source_bindings"]["campaign_atlas"]["uncertainty"]
+    assert uncertainty["status"] == "available"
+    assert uncertainty["source"] == "campaign_atlas.v2.cells[].outcome_ci"
+    assert uncertainty["method"] == "campaign_atlas_outcome_ci_validated_and_consumed"
+    assert uncertainty["cells"][0]["outcomes"]["collision"] == {
+        "count": 6,
+        "estimate": 0.4,
+        "interval": [0.0, 1.0],
+    }
+    sidecar = json.loads(bundle.sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["uncertainty"] == uncertainty
+    assert bundle.manifest["panel_status"]["cell_context"]["uncertainty"] == uncertainty
+    catalog = json.loads(bundle.catalog_path.read_text(encoding="utf-8"))
+    semantics = catalog["artifacts"][0]["figure_semantics"]
+    assert semantics["uncertainty_declared"] is True
+    assert semantics["uncertainty_method"] == ("campaign_atlas_outcome_ci_validated_and_consumed")
+    svg = bundle.svg_path.read_text(encoding="utf-8")
+    assert "collision 6/15 CI[0.00,1.00]" in svg
+    assert "success 9/15 CI[0.00,1.00]" in svg
+
+
+def test_atlas_interval_estimates_accept_the_producers_six_decimal_rounding(
+    tmp_path: Path,
+) -> None:
+    """A valid 1/3 release cell survives the atlas producer's six-decimal projection."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    cell = atlas["cells"][0]
+    cell["n_total"] = 3
+    cell["outcome_counts"] = {"collision": 1, "success": 2}
+    cell["outcome_ci"] = {
+        "collision": [0.333333, 0.0, 1.0],
+        "success": [0.666667, 0.0, 1.0],
+    }
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    bundle = render_case_dossier(input_path, tmp_path / "rounded-atlas-ci")
+
+    uncertainty = bundle.manifest["source_bindings"]["campaign_atlas"]["uncertainty"]
+    assert uncertainty["cells"][0]["outcomes"]["collision"]["estimate"] == 0.333333
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error_code"),
+    (
+        ("ineligible", "campaign_atlas_cell_ineligible"),
+        ("key_mismatch", "campaign_atlas_outcome_ci_invalid"),
+        ("triple_shape", "campaign_atlas_outcome_ci_invalid"),
+        ("nonfinite", "campaign_atlas_outcome_ci_invalid"),
+        ("ordering", "campaign_atlas_outcome_ci_invalid"),
+        ("range", "campaign_atlas_outcome_ci_invalid"),
+        ("estimate_mismatch", "campaign_atlas_outcome_ci_invalid"),
+    ),
+)
+def test_invalid_atlas_outcome_intervals_fail_closed_before_render(
+    tmp_path: Path,
+    mutation: str,
+    error_code: str,
+) -> None:
+    """Malformed, non-finite, or count-inconsistent atlas intervals never become claims."""
+
+    input_path = _write_matched_input(tmp_path)
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    atlas_path = Path(payload["sources"]["campaign_atlas"]["path"])
+    atlas = json.loads(atlas_path.read_text(encoding="utf-8"))
+    cell = atlas["cells"][0]
+    if mutation == "ineligible":
+        cell["eligible"] = False
+        cell["ineligible_reason"] = "fixture_negative"
+    elif mutation == "key_mismatch":
+        cell["outcome_ci"].pop("collision")
+    elif mutation == "triple_shape":
+        cell["outcome_ci"]["collision"] = [0.4, 0.0]
+    elif mutation == "nonfinite":
+        cell["outcome_ci"]["collision"] = [float("nan"), 0.0, 1.0]
+    elif mutation == "ordering":
+        cell["outcome_ci"]["collision"] = [0.4, 0.8, 0.2]
+    elif mutation == "range":
+        cell["outcome_ci"]["collision"] = [0.4, -0.1, 1.0]
+    elif mutation == "estimate_mismatch":
+        cell["outcome_ci"]["collision"] = [0.5, 0.0, 1.0]
+    _write_json(atlas_path, atlas)
+    payload["sources"]["campaign_atlas"]["sha256"] = _sha256(atlas_path)
+    _write_json(input_path, payload)
+
+    with pytest.raises(Exception, match=error_code):
+        render_case_dossier(input_path, tmp_path / "invalid-atlas-ci")
 
 
 @pytest.mark.parametrize(
@@ -551,6 +833,8 @@ def _write_input(
     missing_velocity: bool = False,
     nonzero_turn: bool = False,
     controller_signals: bool = False,
+    mode: str = "synthetic_fixture",
+    terminal_outcomes: tuple[str | None, str | None] = (None, None),
 ) -> Path:
     matched = grammar == "matched_start_planner"
     scenario_id = (
@@ -571,6 +855,7 @@ def _write_input(
         missing_velocity=missing_velocity,
         nonzero_turn=nonzero_turn,
         controller_signals=controller_signals,
+        terminal_outcome=terminal_outcomes[0],
     )
     right = _trace_payload(
         trace_id=f"fixture-{scenario_id}-{right_planner}-seed-{right_seed}",
@@ -582,6 +867,7 @@ def _write_input(
         missing_velocity=missing_velocity,
         nonzero_turn=nonzero_turn,
         controller_signals=controller_signals,
+        terminal_outcome=terminal_outcomes[1],
     )
     left_trace = simulation_trace_export_from_dict(left)
     right_trace = simulation_trace_export_from_dict(right)
@@ -611,7 +897,13 @@ def _write_input(
     right_path = _write_json(tmp_path / f"{right_planner}-right-process.json", right_process)
 
     portfolio = finalize_manifest(
-        build_ch7_worked_example_portfolio(_portfolio_config(case_id, grammar=grammar))
+        build_ch7_worked_example_portfolio(
+            _portfolio_config(
+                case_id,
+                grammar=grammar,
+                synthetic_fixture=mode == "synthetic_fixture",
+            )
+        )
     )
     portfolio_path = _write_json(tmp_path / "portfolio.json", portfolio)
     atlas = {
@@ -636,7 +928,7 @@ def _write_input(
         "schema_version": "case_dossier_input.v1",
         "dossier_id": f"{case_id}-dossier",
         "case_id": case_id,
-        "mode": "synthetic_fixture",
+        "mode": mode,
         "scientific_admission": False,
         "comparison_grammar": grammar,
         "comparison_options": {
@@ -706,6 +998,7 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
     missing_velocity: bool = False,
     nonzero_turn: bool = False,
     controller_signals: bool = False,
+    terminal_outcome: str | None = None,
 ) -> dict[str, Any]:
     positions = [(0.0, 0.0), (0.2, 0.0), (0.4, 0.0), (0.6, 0.0), final_position]
     positions = [
@@ -739,6 +1032,12 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
                     "fallback_state": "inactive",
                 }
             )
+        if step == len(positions) - 1 and terminal_outcome is not None:
+            planner["outcome"] = {
+                "collision_event": terminal_outcome in {"ambiguous", "collision"},
+                "route_complete": terminal_outcome in {"ambiguous", "success"},
+                "timeout_event": terminal_outcome == "timeout",
+            }
         frames.append(
             {
                 "step": step,
@@ -785,7 +1084,12 @@ def _trace_payload(  # noqa: PLR0913 - fixture controls independently pin signal
     }
 
 
-def _portfolio_config(case_id: str, *, grammar: str) -> dict[str, Any]:
+def _portfolio_config(
+    case_id: str,
+    *,
+    grammar: str,
+    synthetic_fixture: bool = True,
+) -> dict[str, Any]:
     matched = grammar == "matched_start_planner"
     role = "planner_upset" if matched else "seed_sensitivity"
     grain = "matched_planner_pair" if matched else "matched_seed_pair"
@@ -849,7 +1153,7 @@ def _portfolio_config(case_id: str, *, grammar: str) -> dict[str, Any]:
             "semantic_keyframes": ["minimum_clearance"],
         },
         "source_boundary": {
-            "synthetic_fixture": True,
+            "synthetic_fixture": synthetic_fixture,
             "release_id": "synthetic-fixture-release",
             "release_rows_sha256": release_sha,
             "expected_release_rows_sha256": release_sha,

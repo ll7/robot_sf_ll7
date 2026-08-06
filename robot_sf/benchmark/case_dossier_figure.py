@@ -12,7 +12,9 @@ import hashlib
 import json
 import math
 import os
+import re
 import subprocess
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,7 +25,7 @@ matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt
 from jsonschema import Draft202012Validator
 from matplotlib.lines import Line2D
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Patch
 from matplotlib.text import Text
 
 from robot_sf.analysis_workbench.interaction_coordinates import (
@@ -42,6 +44,19 @@ BASE_FONT_PT = 9.0
 MINIMUM_VISIBLE_FONT_PT = 8.25
 ROUTE_TITLE_BAND_IN = 0.48
 PROCESS_TITLE_BAND_IN = 0.14
+# ``campaign_atlas._wilson_ci`` publishes point estimates rounded to six decimals.
+ATLAS_ESTIMATE_ABS_TOL = 0.5e-6 + 1e-12
+_NO_SHARED_PREFIX_NARRATIVE_PATTERNS = {
+    "difference_curve": r"\bdifference\s+curves?\b",
+    "pivot_time": r"\bpivot\s+time\b",
+    "causal_hinge": r"\bcausal\s+hinge\b",
+    "adjacent_seed_significance": (
+        r"\badjacent\s+seeds?\s+(?:"
+        r"(?:(?:is|are)\s+)?statistically\s+significant|"
+        r"statistical\s+significance|significance)\b"
+    ),
+    "divergence_point": r"\b(?:divergence\s+point|locali[sz]ed\s+divergence)\b",
+}
 
 PALETTE = {
     "left": "#0072B2",
@@ -204,6 +219,23 @@ def _selected_case(portfolio: dict[str, Any], case_id: str) -> dict[str, Any]:
     return selected[0]
 
 
+def _validate_no_shared_prefix_narrative(payload: dict[str, Any]) -> None:
+    if payload["comparison_grammar"] != "same_cell_seed_sensitivity":
+        return
+    for field, raw_value in payload["narrative"].items():
+        normalized = re.sub(
+            r"[\W_]+",
+            " ",
+            unicodedata.normalize("NFKC", str(raw_value)).casefold(),
+        ).strip()
+        for semantic, pattern in _NO_SHARED_PREFIX_NARRATIVE_PATTERNS.items():
+            if re.search(pattern, normalized):
+                raise CaseDossierError(
+                    "no_shared_prefix_narrative_forbidden",
+                    f"{field}: {semantic}",
+                )
+
+
 def _validate_input_semantics(payload: dict[str, Any]) -> None:
     layout = payload["layout"]
     if not math.isclose(float(layout["final_width_in"]), FINAL_WIDTH_IN, abs_tol=1e-9):
@@ -241,6 +273,7 @@ def _validate_input_semantics(payload: dict[str, Any]) -> None:
             "no_shared_prefix_forbidden_mode",
             "difference curves, pivot time, causal hinge, and adjacent-seed significance are forbidden",
         )
+    _validate_no_shared_prefix_narrative(payload)
 
 
 def _prohibited_semantics(grammar: str) -> list[str]:
@@ -253,6 +286,84 @@ def _prohibited_semantics(grammar: str) -> list[str]:
         "divergence_point",
         "pivot_time",
     ]
+
+
+def _validated_atlas_counts(cell: dict[str, Any]) -> tuple[str, int, dict[str, int]]:
+    """Validate eligibility and outcome-count denominator for one matched cell.
+
+    Returns:
+        Planner identity, positive denominator, and validated outcome counts.
+    """
+
+    planner = str(cell.get("planner"))
+    if cell.get("eligible") is not True:
+        raise CaseDossierError("campaign_atlas_cell_ineligible", planner)
+    denominator = cell.get("n_total")
+    counts = cell.get("outcome_counts")
+    if (
+        not isinstance(denominator, int)
+        or isinstance(denominator, bool)
+        or denominator <= 0
+        or not isinstance(counts, dict)
+        or not counts
+        or any(
+            not isinstance(name, str)
+            or not name
+            or not isinstance(count, int)
+            or isinstance(count, bool)
+            or count < 0
+            for name, count in counts.items()
+        )
+        or sum(counts.values()) != denominator
+    ):
+        raise CaseDossierError("campaign_atlas_denominator_mismatch", planner)
+    return planner, denominator, counts
+
+
+def _validate_atlas_outcome_ci(
+    cell: dict[str, Any],
+    planner: str,
+    denominator: int,
+    counts: dict[str, int],
+) -> None:
+    intervals = cell.get("outcome_ci")
+    if not isinstance(intervals, dict) or set(intervals) != set(counts):
+        raise CaseDossierError(
+            "campaign_atlas_outcome_ci_invalid",
+            f"{planner}: outcome keys must exactly match outcome_counts",
+        )
+    for outcome, count in counts.items():
+        triple = intervals[outcome]
+        if (
+            not isinstance(triple, list)
+            or len(triple) != 3
+            or any(
+                not isinstance(value, int | float)
+                or isinstance(value, bool)
+                or not math.isfinite(float(value))
+                for value in triple
+            )
+        ):
+            raise CaseDossierError(
+                "campaign_atlas_outcome_ci_invalid",
+                f"{planner}/{outcome}: expected finite [estimate, lower, upper]",
+            )
+        estimate, lower, upper = (float(value) for value in triple)
+        if not 0.0 <= lower <= estimate <= upper <= 1.0:
+            raise CaseDossierError(
+                "campaign_atlas_outcome_ci_invalid",
+                f"{planner}/{outcome}: interval order or range",
+            )
+        if not math.isclose(
+            estimate,
+            count / denominator,
+            rel_tol=0.0,
+            abs_tol=ATLAS_ESTIMATE_ABS_TOL,
+        ):
+            raise CaseDossierError(
+                "campaign_atlas_outcome_ci_invalid",
+                f"{planner}/{outcome}: estimate does not match count/n_total",
+            )
 
 
 def _validate_atlas(
@@ -281,12 +392,124 @@ def _validate_atlas(
     if {cell.get("planner") for cell in matched} != planners:
         raise CaseDossierError("campaign_atlas_cell_unavailable", scenario)
     for cell in matched:
-        counts = cell.get("outcome_counts")
-        if not isinstance(counts, dict) or sum(counts.values()) != cell.get("n_total"):
-            raise CaseDossierError("campaign_atlas_denominator_mismatch", str(cell.get("planner")))
+        planner, denominator, counts = _validated_atlas_counts(cell)
+        _validate_atlas_outcome_ci(cell, planner, denominator, counts)
     return sorted(
         matched, key=lambda item: (str(item.get("planner")), str(item.get("release_arm_id")))
     )
+
+
+def _bind_atlas_uncertainty(cells: list[dict[str, Any]]) -> dict[str, Any]:
+    """Project validated atlas intervals into compact durable bindings.
+
+    Returns:
+        A source- and method-bound uncertainty projection for durable outputs.
+    """
+
+    return {
+        "status": "available",
+        "source": "campaign_atlas.v2.cells[].outcome_ci",
+        "method": "campaign_atlas_outcome_ci_validated_and_consumed",
+        "cells": [
+            {
+                "scenario_family": cell["scenario_family"],
+                "planner": cell["planner"],
+                "release_arm_id": cell.get("release_arm_id"),
+                "n_total": cell["n_total"],
+                "outcomes": {
+                    outcome: {
+                        "count": cell["outcome_counts"][outcome],
+                        "estimate": float(cell["outcome_ci"][outcome][0]),
+                        "interval": [
+                            float(cell["outcome_ci"][outcome][1]),
+                            float(cell["outcome_ci"][outcome][2]),
+                        ],
+                    }
+                    for outcome in sorted(cell["outcome_counts"])
+                },
+            }
+            for cell in cells
+        ],
+    }
+
+
+def _typed_terminal_outcome(trace: dict[str, Any]) -> str | None:
+    """Read one explicit typed outcome from the terminal source-trace frame.
+
+    Returns:
+        The unique typed terminal outcome, or ``None`` when none is recorded.
+    """
+
+    frames = trace["source_trace"]["content_receipt"]["content_contract"].get("frames")
+    if not isinstance(frames, list) or not frames:
+        return None
+    planner = frames[-1].get("planner")
+    outcome = planner.get("outcome") if isinstance(planner, dict) else None
+    if not isinstance(outcome, dict):
+        return None
+    typed = {
+        "collision": any(outcome.get(key) is True for key in ("collision_event", "collision")),
+        "timeout": any(outcome.get(key) is True for key in ("timeout_event", "timeout")),
+        "success": any(outcome.get(key) is True for key in ("route_complete", "success")),
+    }
+    available = [name for name, observed in typed.items() if observed]
+    if len(available) > 1:
+        raise CaseDossierError(
+            "production_typed_terminal_outcome_ambiguous",
+            ",".join(sorted(available)),
+        )
+    return available[0] if available else None
+
+
+def _bind_recorded_outcomes(
+    payload: dict[str, Any],
+    trace_refs: dict[str, dict[str, Any]],
+    traces: dict[str, dict[str, Any]],
+    cells: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Bind declared labels to atlas keys and, in production, terminal evidence.
+
+    Returns:
+        Outcome records keyed by left/right trace role.
+    """
+
+    result: dict[str, dict[str, Any]] = {}
+    for role in ("left", "right"):
+        declared = str(trace_refs[role]["recorded_outcome"])
+        planner = str(traces[role]["source_trace"]["source"]["planner_id"])
+        planner_cells = [cell for cell in cells if cell.get("planner") == planner]
+        if not planner_cells or any(
+            declared not in cell.get("outcome_counts", {}) for cell in planner_cells
+        ):
+            raise CaseDossierError(
+                "recorded_outcome_not_in_atlas_cell",
+                f"{role}: planner={planner}, outcome={declared}",
+            )
+        if payload["mode"] == "production":
+            typed = _typed_terminal_outcome(traces[role])
+            if typed is None:
+                raise CaseDossierError(
+                    "production_typed_terminal_outcome_unavailable",
+                    role,
+                )
+            if typed != declared:
+                raise CaseDossierError(
+                    "production_recorded_outcome_mismatch",
+                    f"{role}: declared={declared}, terminal={typed}",
+                )
+            source = "source_trace.content_receipt.content_contract.frames[-1].planner.outcome"
+            authority = "typed_terminal_trace_evidence"
+        else:
+            source = f"case_dossier_input.sources.process_traces[role={role}].recorded_outcome"
+            authority = "non_authoritative_synthetic_fixture_declaration"
+        result[role] = {
+            "status": "available",
+            "value": declared,
+            "source": source,
+            "authority": authority,
+            "atlas_outcome_key_validated": True,
+        }
+    return result
 
 
 def _validate_pair(
@@ -433,6 +656,8 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
         portfolio_hash=portfolio["content_sha256"],
         traces=traces,
     )
+    uncertainty = _bind_atlas_uncertainty(cells)
+    outcomes = _bind_recorded_outcomes(payload, trace_refs, traces, cells)
     return {
         "input": payload,
         "input_path": input_path,
@@ -446,6 +671,8 @@ def _load_bound_input(input_path: Path) -> dict[str, Any]:
         "atlas": atlas,
         "atlas_path": atlas_path,
         "cells": cells,
+        "uncertainty": uncertainty,
+        "outcomes": outcomes,
     }
 
 
@@ -492,6 +719,17 @@ _CATEGORICAL_COLORS = (
     "#F0E442",
     "#0072B2",
     "#D55E00",
+)
+SEMANTIC_STYLE_LABELS = (
+    "robot trajectory",
+    "focal actor trajectory",
+    "primary surface clearance",
+    "secondary centre distance",
+    "commanded speed / turn",
+    "executed speed / turn (when recorded)",
+    "diagnostic threshold",
+    "semantic event cursor",
+    "recorded occupancy ribbon",
 )
 
 
@@ -543,6 +781,76 @@ def _draw_event_cursors(ax: Any, traces: dict[str, dict[str, Any]]) -> None:
             alpha=0.55,
             zorder=0,
         )
+
+
+def _semantic_style_handles(bound: dict[str, Any]) -> list[Any]:
+    handles: list[Any] = [
+        Line2D(
+            [0],
+            [0],
+            color=PALETTE[role],
+            linestyle=LINESTYLES[role],
+            marker=MARKERS[role],
+            label=bound["trace_refs"][role]["label"],
+        )
+        for role in ("left", "right")
+    ]
+    handles.extend(
+        (
+            Line2D(
+                [0],
+                [0],
+                color="#222222",
+                linestyle="-",
+                marker="o",
+                label=SEMANTIC_STYLE_LABELS[0],
+            ),
+            Line2D(
+                [0],
+                [0],
+                color=PALETTE["focal"],
+                linestyle=":",
+                label=SEMANTIC_STYLE_LABELS[1],
+            ),
+            Line2D([0], [0], color="#222222", linestyle="-", label=SEMANTIC_STYLE_LABELS[2]),
+            Line2D(
+                [0],
+                [0],
+                color=PALETTE["context"],
+                linestyle=":",
+                label=SEMANTIC_STYLE_LABELS[3],
+            ),
+            Line2D([0], [0], color="#222222", linestyle="-", label=SEMANTIC_STYLE_LABELS[4]),
+            Line2D(
+                [0],
+                [0],
+                color=PALETTE["context"],
+                linestyle=":",
+                label=SEMANTIC_STYLE_LABELS[5],
+            ),
+            Line2D(
+                [0],
+                [0],
+                color=PALETTE["threshold"],
+                linestyle=(0, (3, 2)),
+                label=SEMANTIC_STYLE_LABELS[6],
+            ),
+            Line2D(
+                [0],
+                [0],
+                color=PALETTE["context"],
+                linestyle=_EVENT_LINESTYLES[0],
+                label=SEMANTIC_STYLE_LABELS[7],
+            ),
+            Patch(
+                facecolor=PALETTE["context"],
+                alpha=0.16,
+                edgecolor="none",
+                label=SEMANTIC_STYLE_LABELS[8],
+            ),
+        )
+    )
+    return handles
 
 
 def _draw_actor_event_anchor(ax: Any, actor: dict[str, Any], color: str) -> None:
@@ -1375,11 +1683,13 @@ def _draw_controller_state_strip(  # noqa: C901 - four signals require explicit 
         if any(collected[signal].values())
     ]
     ax.set_title("Controller / guard / fallback / command source\n" + " · ".join(value_labels))
+    _draw_event_cursors(ax, traces)
     return {
         "status": "available",
         "reason": "source_planner_categorical_signals",
         "signals": signal_status,
         "artist_count": total_artists,
+        "semantic_event_cursor_count": len(_event_groups(traces)),
     }
 
 
@@ -1395,16 +1705,33 @@ def _draw_cell_context(
     cells: list[dict[str, Any]],
     ensemble_context: dict[str, Any],
     selected_case: dict[str, Any],
+    outcomes: dict[str, dict[str, Any]],
+    traces: dict[str, dict[str, Any]],
 ) -> None:
     ax.set_title("Release-cell outcomes · release statistics")
     lines: list[str] = []
     for cell in cells:
         counts = ", ".join(
-            f"{name} {count}" for name, count in sorted(cell["outcome_counts"].items())
+            f"{name} {count}/{cell['n_total']} "
+            f"CI[{cell['outcome_ci'][name][1]:.2f},{cell['outcome_ci'][name][2]:.2f}]"
+            for name, count in sorted(cell["outcome_counts"].items())
         )
-        lines.append(f"{cell['planner']}: {counts} (n={cell['n_total']})")
+        lines.append(f"{cell['planner']}: {counts}")
     lines.extend(
         (
+            "Trace outcomes (atlas-key checked): "
+            + " · ".join(
+                f"{traces[role]['source_trace']['source']['planner_id']} {outcomes[role]['value']}"
+                for role in ("left", "right")
+            ),
+            (
+                "Authority: NON-AUTHORITATIVE synthetic declaration"
+                if all(
+                    record["authority"] == "non_authoritative_synthetic_fixture_declaration"
+                    for record in outcomes.values()
+                )
+                else "Authority: typed terminal trace evidence"
+            ),
             (
                 f"Selected: {selected_case['primary_role']} · "
                 f"{selected_case['claim']['grade']} evidence"
@@ -1521,22 +1848,24 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             figsize=(layout["final_width_in"], layout["final_height_in"]),
         )
         grid = figure.add_gridspec(
-            8,
+            9,
             2,
-            height_ratios=(2.00, 1.85, 1.10, 1.10, 1.10, 0.95, 1.55, 1.45),
+            height_ratios=(2.50, 1.55, 1.85, 2.00, 1.10, 1.10, 0.95, 1.55, 1.45),
         )
         header = figure.add_subplot(grid[0, :])
-        world_left = figure.add_subplot(grid[1, 0])
-        world_right = figure.add_subplot(grid[1, 1])
-        route = figure.add_subplot(grid[2, :])
-        clearance = figure.add_subplot(grid[3, 0])
-        closing = figure.add_subplot(grid[3, 1])
-        speed = figure.add_subplot(grid[4, 0])
-        turn_rate = figure.add_subplot(grid[4, 1])
-        progress = figure.add_subplot(grid[5, :])
-        controller = figure.add_subplot(grid[6, :])
-        context = figure.add_subplot(grid[7, :])
+        style_key = figure.add_subplot(grid[1, :])
+        world_left = figure.add_subplot(grid[2, 0])
+        world_right = figure.add_subplot(grid[2, 1])
+        route = figure.add_subplot(grid[3, :])
+        clearance = figure.add_subplot(grid[4, 0])
+        closing = figure.add_subplot(grid[4, 1])
+        speed = figure.add_subplot(grid[5, 0])
+        turn_rate = figure.add_subplot(grid[5, 1])
+        progress = figure.add_subplot(grid[6, :])
+        controller = figure.add_subplot(grid[7, :])
+        context = figure.add_subplot(grid[8, :])
         header.axis("off")
+        style_key.axis("off")
         title = (
             f"{payload['case_id']}\n"
             f"{selected['grain']} · {selected['primary_role']}\n"
@@ -1547,33 +1876,32 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         )
         header.text(
             0.0,
-            0.98,
+            1.04,
             title,
             ha="left",
             va="top",
             weight="bold",
             fontsize=MINIMUM_VISIBLE_FONT_PT,
         )
-        figure.legend(
-            handles=[
-                Line2D(
-                    [0],
-                    [0],
-                    color=PALETTE[role],
-                    linestyle=LINESTYLES[role],
-                    marker=MARKERS[role],
-                    label=bound["trace_refs"][role]["label"],
-                )
-                for role in ("left", "right")
-            ],
+        semantic_style_handles = _semantic_style_handles(bound)
+        # Matplotlib fills legend columns top-to-bottom.  Pack the longest labels
+        # into one column so the complete key fits the fixed publication width.
+        compact_style_handles = [
+            semantic_style_handles[index] for index in (4, 5, 7, 10, 3, 6, 8, 9, 0, 1, 2)
+        ]
+        style_key.legend(
+            handles=compact_style_handles,
             loc="center",
-            bbox_to_anchor=(0.5, 0.84),
-            ncol=2,
+            ncol=3,
             frameon=False,
+            columnspacing=0.10,
+            handlelength=1.1,
+            handletextpad=0.15,
+            borderaxespad=0.0,
         )
         header.text(
             0.0,
-            0.02,
+            0.0,
             (
                 f"{SYNTHETIC_FIXTURE_LABEL} · shared_prefix=false\n"
                 "recorded start separation = "
@@ -1632,13 +1960,30 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
                 bound["traces"],
                 layout["time_range_s"],
             ),
-            "cell_context": {"status": "available", "reason": "campaign_atlas_cell"},
+            "semantic_style_key": {
+                "status": "available",
+                "reason": "complete_semantic_style_key",
+                "labels": [handle.get_label() for handle in semantic_style_handles],
+                "artist_count": len(semantic_style_handles),
+            },
+            "cell_context": {
+                "status": "available",
+                "reason": "campaign_atlas_cell",
+                "uncertainty": bound["uncertainty"],
+            },
             "ensemble_context": {
                 "status": ensemble["status"],
                 "reason": ensemble["reason"],
             },
         }
-        _draw_cell_context(context, bound["cells"], ensemble, selected)
+        _draw_cell_context(
+            context,
+            bound["cells"],
+            ensemble,
+            selected,
+            bound["outcomes"],
+            bound["traces"],
+        )
         for ax in (
             world_left,
             world_right,
@@ -1656,7 +2001,7 @@ def _make_figure(bound: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
             right=0.97,
             bottom=0.045,
             top=0.985,
-            hspace=0.95,
+            hspace=1.30,
             wspace=0.46,
         )
         route_position = route.get_position()
@@ -1805,11 +2150,12 @@ def _artifact_catalog(
                     "denominator": denominator,
                     "comparison": True,
                     "uncertainty_declared": True,
-                    "uncertainty_method": "campaign_atlas_interval_bounds_consumed",
+                    "uncertainty_method": "campaign_atlas_outcome_ci_validated_and_consumed",
                     "tie_policy": "not_applicable_visualization",
                     "legend_series": [
                         item["label"] for item in bound["input"]["sources"]["process_traces"]
-                    ],
+                    ]
+                    + list(SEMANTIC_STYLE_LABELS),
                     "legend_complete": True,
                     "accessibility_palette_contract": "case_dossier_colorblind.v1_redundant_styles",
                 },
@@ -1862,6 +2208,8 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
             "release_statistics": "campaign_atlas.v2",
             "visualization_diagnostics": "visualization_only_rerun_diagnostics",
         },
+        "recorded_outcomes": bound["outcomes"],
+        "uncertainty": bound["uncertainty"],
         "panel_status": panel_status,
         "claim_fields": bound["input"]["narrative"],
     }
@@ -1932,6 +2280,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                         "source_content_sha256": bound["traces"][role]["source_trace"][
                             "content_sha256"
                         ],
+                        "recorded_outcome": bound["outcomes"][role],
                         "run": _trace_run_metadata(bound["traces"][role]),
                     }
                     for role in ("left", "right")
@@ -1941,6 +2290,7 @@ def render_case_dossier(input_path: Path, out_dir: Path) -> CaseDossierBundle:
                     "sha256": _file_sha256(bound["atlas_path"]),
                     "schema_version": "campaign_atlas.v2",
                     "release_cells": bound["cells"],
+                    "uncertainty": bound["uncertainty"],
                 },
                 "source_classes": {
                     "release_statistics": "campaign_atlas.v2",

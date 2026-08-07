@@ -31,6 +31,7 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     load_tuning_selection,
     normalize_episode_record,
     selected_scenarios,
+    solver_execution_contract,
     validate_canary_rows,
     write_report,
     write_tuning_selection,
@@ -142,11 +143,15 @@ def _check_summary(config: dict[str, Any]) -> dict[str, Any]:
         "scenario_list_hash": config["held_out_scope"]["scenario_list_hash"],
         "excluded_scenarios": config["held_out_scope"]["excluded_scenarios"],
     }
+    canary_solver = solver_execution_contract(config)
     res["canary"] = {
         "seed": config["canary"]["seed"],
         "required_eligible_episodes": config["canary"]["required_eligible_episodes"],
         "target_eligible_ratio": config["canary"]["target_eligible_ratio"],
         "native_solver_required": True,
+        "required_solver_execution_mode": canary_solver["solver_execution_mode"],
+        "required_planner_adapter": canary_solver["solver_planner_adapter"],
+        "required_planner_execution_mode": canary_solver["planner_execution_mode"],
     }
     res["inference"] = {
         "inference_population": config["inference"]["inference_population"],
@@ -155,6 +160,7 @@ def _check_summary(config: dict[str, Any]) -> dict[str, Any]:
         "bootstrap_replicates": config["inference"]["bootstrap"]["replicates"],
         "multiplicity_method": config["inference"]["multiplicity"]["method"],
         "contrast_count": config["inference"]["multiplicity"]["contrast_count"],
+        "bootstrap_seed": config["inference"]["bootstrap"]["seed"],
     }
     return res
 
@@ -180,6 +186,7 @@ def run_study(
     if phase == "tuning" and target_candidate_ids is not None:
         raise ValueError("tuning phase cannot receive held-out target candidate selections")
     scope_name = "tuning_scope" if phase == "tuning" else "held_out_scope"
+    solver_contract = solver_execution_contract(config)
     scenarios = selected_scenarios(config, repo_root=REPO_ROOT, scope_name=scope_name)
     plan = build_candidate_plan(
         config,
@@ -229,6 +236,7 @@ def run_study(
                     arm_key=arm_key,
                     candidate_id=candidate_id,
                     expected_config_hash=str(entry["config_sha256_16"]),
+                    solver_contract=solver_contract,
                 )
             )
 
@@ -276,6 +284,7 @@ def _display_path(path: Path) -> str:
 def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> dict[str, Any]:
     """Execute and strictly validate the six target canary rows at seed 101."""
     scenarios = selected_scenarios(config, repo_root=REPO_ROOT, scope_name="tuning_scope")
+    solver_contract = solver_execution_contract(config)
     canary_cfg = config.get("canary", {})
     canary_seed = int(canary_cfg.get("seed", 101))
     required_eligible = int(canary_cfg.get("required_eligible_episodes", 6))
@@ -327,6 +336,7 @@ def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path
                     arm_key=arm_key,
                     candidate_id=candidate_id,
                     expected_config_hash=str(entry["config_sha256_16"]),
+                    solver_contract=solver_contract,
                 )
             )
         if canary_cfg.get("stop_on_ineligible") is True:
@@ -342,6 +352,7 @@ def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path
                 required_eligible=len(config["tuning_scope"]["scenario_ids"]),
                 target_arm_keys=(arm_key,),
                 candidate_id=candidate_id,
+                solver_contract=solver_contract,
             )
             if partial["status"] != "ok":
                 partial["canary_seed"] = canary_seed
@@ -363,6 +374,7 @@ def run_canary_check(config: dict[str, Any], *, out_dir: Path, config_path: Path
         scenario_ids=config["tuning_scope"]["scenario_ids"],
         seed=canary_seed,
         required_eligible=required_eligible,
+        solver_contract=solver_contract,
     )
     result["canary_seed"] = canary_seed
     result["scope_name"] = "tuning_scope"
@@ -422,6 +434,8 @@ def main(argv: list[str] | None = None) -> int:
         "issue": report["issue"],
         "phase": phase,
         "read": report["read"]["decision"],
+        "inference_status": (report.get("inference") or {}).get("status", "missing"),
+        "inference_decision": report["read"].get("inference_decision", "not_established"),
         "eligible_episode_rows": report["eligible_episode_rows"],
         "excluded_episode_rows": report["excluded_episode_rows"],
     }

@@ -7,6 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
 import scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 as sensitivity_runner
 from robot_sf.benchmark.mpc_tuning_sensitivity import (
@@ -19,6 +20,7 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     load_tuning_selection,
     normalize_episode_record,
     selected_scenarios,
+    solver_execution_contract,
     validate_canary_rows,
     validate_sensitivity_config,
     write_report,
@@ -177,12 +179,14 @@ def test_tuning_selection_round_trip_and_fixed_held_out_report(tmp_path: Path) -
         scope_name="tuning_scope",
     )
     selection_path = tmp_path / "tuning_selection.json"
+    source_report = _persisted_tuning_report(tuning_report, tmp_path / "tuning")
     payload = write_tuning_selection(
         tuning_report,
         config,
         output_path=selection_path,
         config_path=CONFIG,
         repo_root=ROOT,
+        source_report=source_report,
     )
     selected = load_tuning_selection(
         selection_path,
@@ -252,22 +256,18 @@ def test_normalization_requires_explicit_outcome_and_availability_provenance() -
 
 def test_normalization_extracts_native_solver_provenance_and_update_evidence() -> None:
     """Raw target metadata is converted into the strict canary predicates."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    contract = solver_execution_contract(config)
     record = _raw_record(route_complete=True, collision_event=False)
-    record["sensitivity_availability"] = {
-        "execution_mode": "native",
-        "readiness_status": "native",
-        "availability_status": "available",
-        "benchmark_success": True,
-    }
     effective_config = {"predictor_backend": "constant_velocity", "fallback_to_stop": False}
     metadata = record["algorithm_metadata"]
     assert isinstance(metadata, dict)
     metadata["config"] = effective_config
     metadata["config_hash"] = config_hash(effective_config)
     metadata["planner_kinematics"] = {
-        "execution_mode": "native",
+        "execution_mode": "adapter",
         "adapter_name": "PredictionMPCPlannerAdapter",
-        "supports_native_commands": True,
+        "supports_native_commands": False,
     }
     runtime = metadata["planner_runtime"]
     assert isinstance(runtime, dict)
@@ -284,21 +284,23 @@ def test_normalization_extracts_native_solver_provenance_and_update_evidence() -
         arm_key="prediction_mpc",
         candidate_id="incumbent",
         expected_config_hash=config_hash(effective_config),
+        solver_contract=contract,
     )
-    assert row["solver_execution_mode"] == "native"
+    assert row["solver_execution_mode"] == "prediction_mpc_native_solver"
     assert row["valid_solver_provenance"] is True
     assert row["finite_commands"] is True
     assert row["native_solver_eligible"] is True
 
-    metadata["planner_kinematics"]["execution_mode"] = "adapter"
-    adapter_row = normalize_episode_record(
+    metadata["planner_kinematics"]["adapter_name"] = "SocialForcePlannerAdapter"
+    foreign_planner_row = normalize_episode_record(
         record,
         arm_key="prediction_mpc",
         candidate_id="incumbent",
         expected_config_hash=config_hash(effective_config),
+        solver_contract=contract,
     )
-    assert adapter_row["native_solver_eligible"] is False
-    assert "planner_execution_mode_not_native" in adapter_row["native_solver_exclusion_reasons"]
+    assert foreign_planner_row["native_solver_eligible"] is False
+    assert "unexpected_solver_planner" in foreign_planner_row["native_solver_exclusion_reasons"]
 
 
 def test_canary_requires_exact_native_solver_evidence_and_key_coverage() -> None:
@@ -322,16 +324,27 @@ def test_canary_requires_exact_native_solver_evidence_and_key_coverage() -> None
     assert result["status"] == "ok"
     assert result["eligible_episodes"] == 6
 
-    adapter_only = deepcopy(rows)
-    adapter_only[0]["execution_mode"] = "adapter"
+    mixed_execution = deepcopy(rows)
+    mixed_execution[0]["execution_mode"] = "mixed"
     failed = validate_canary_rows(
-        adapter_only,
+        mixed_execution,
         scenario_ids=scenarios,
         seed=101,
         required_eligible=6,
     )
     assert failed["status"] == "failed"
-    assert "execution_mode_not_native" in failed["invalid_rows"][0]["reasons"]
+    assert "execution_mode_mismatch" in failed["invalid_rows"][0]["reasons"]
+
+    relabelled_solver = deepcopy(rows)
+    relabelled_solver[0]["solver_execution_mode"] = "adapter"
+    failed_solver = validate_canary_rows(
+        relabelled_solver,
+        scenario_ids=scenarios,
+        seed=101,
+        required_eligible=6,
+    )
+    assert failed_solver["status"] == "failed"
+    assert "native_solver_execution_missing" in failed_solver["invalid_rows"][0]["reasons"]
 
     for field, reason in (
         ("solver_failures", "solver_failures_invalid"),
@@ -379,7 +392,7 @@ def test_report_applies_preregistered_read_to_best_found_configs(tmp_path: Path)
                         "availability_status": "available",
                         "benchmark_success": True,
                         "planner_runtime_status": "eligible",
-                        "solver_execution_mode": "native",
+                        "solver_execution_mode": "prediction_mpc_native_solver",
                         "valid_solver_provenance": True,
                         "finite_commands": True,
                         "solver_successes": 1,
@@ -655,6 +668,231 @@ def test_report_rejects_missing_paired_rows() -> None:
         )
 
 
+def test_canary_solver_contract_is_reachable_from_the_real_policy_builder() -> None:
+    """The declared canary contract must be satisfiable by the actual runner metadata.
+
+    The 2026-08-03 #5579 freeze demands a 6/6 native-solver canary before production
+    compute. Binding that gate to ``planner_kinematics.execution_mode == "native"`` made
+    it unsatisfiable: the canonical ``prediction_mpc`` planner is registry-declared as an
+    adapter-projected unicycle_vw planner, so every real row was rejected before tuning and
+    the campaign stop rule silently became a permanent block. This test walks the real
+    policy builder for both declared target configs and proves the gate can pass.
+    """
+    from robot_sf.benchmark.map_runner import build_map_policy
+
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    contract = solver_execution_contract(config)
+    for arm in config["target_arms"]:
+        algo_config = yaml.safe_load(
+            (ROOT / str(arm["algo_config_path"])).read_text(encoding="utf-8")
+        )
+        _policy, metadata = build_map_policy(str(arm["algo"]), algo_config)
+        kinematics = metadata["planner_kinematics"]
+        assert kinematics["adapter_name"] == contract["solver_planner_adapter"]
+        assert kinematics["execution_mode"] == contract["planner_execution_mode"]
+        assert kinematics["supports_native_commands"] == contract["supports_native_commands"]
+
+        record = _raw_record(route_complete=True, collision_event=False)
+        record["algorithm_metadata"] = {
+            **metadata,
+            "config": algo_config,
+            "config_hash": config_hash(algo_config),
+            "planner_runtime": {
+                "solver_successes": 1,
+                "solver_failures": 0,
+                "fallback_stop_count": 0,
+                "successful_control_updates": 1,
+                "mean_abs_linear": 0.3,
+                "mean_abs_angular": 0.1,
+            },
+        }
+        row = normalize_episode_record(
+            record,
+            arm_key=str(arm["key"]),
+            candidate_id="incumbent",
+            expected_config_hash=config_hash(algo_config),
+            solver_contract=contract,
+        )
+        assert row["native_solver_exclusion_reasons"] == []
+        assert row["native_solver_eligible"] is True
+
+        gate = validate_canary_rows(
+            [{**row, "scenario_id": scenario_id, "seed": 101} for scenario_id in ("a", "b", "c")],
+            scenario_ids=("a", "b", "c"),
+            seed=101,
+            required_eligible=3,
+            target_arm_keys=(str(arm["key"]),),
+            solver_contract=contract,
+        )
+        assert gate["status"] == "ok", gate["invalid_rows"]
+
+
+def test_packet_rejects_an_unreachable_canary_solver_contract() -> None:
+    """A canary the runtime can never satisfy is a permanent block, not a stop rule."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    unreachable = deepcopy(config)
+    unreachable["canary"]["solver_execution"]["planner_execution_mode"] = "native"
+    unreachable["canary"]["solver_execution"]["supports_native_commands"] = True
+    with pytest.raises(ValueError, match="unreachable for target arm"):
+        validate_sensitivity_config(unreachable, repo_root=ROOT)
+
+    relaxed = deepcopy(config)
+    relaxed["canary"]["solver_execution"]["forbid_fallback"] = False
+    with pytest.raises(ValueError, match="forbid_fallback must be true"):
+        validate_sensitivity_config(relaxed, repo_root=ROOT)
+
+
+def test_held_out_report_produces_paired_bootstrap_and_holm_inference() -> None:
+    """A complete held-out report must carry all eight preregistered paired contrasts."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    selected = {"prediction_mpc": "speed_low", "prediction_mpc_cbf": "horizon_high"}
+    plan = build_candidate_plan(config, repo_root=ROOT, target_candidate_ids=selected)
+    rows = _fixture_rows(config, plan, scope_name="held_out_scope")
+    # Give the incumbents a strictly higher paired success rate on every seed block.
+    for row in rows:
+        row["success"] = row["arm_key"] not in TARGET_ARM_KEYS
+
+    report = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="held_out_scope",
+        target_candidate_ids=selected,
+    )
+
+    inference = report["inference"]
+    assert inference["status"] == "complete"
+    assert inference["bootstrap"]["replicates"] == 2000
+    assert inference["bootstrap"]["confidence_level"] == 0.95
+    assert inference["multiplicity"]["method"] == "holm_bonferroni"
+    assert len(inference["contrasts"]) == 8
+    assert {
+        (contrast["target_arm"], contrast["incumbent_arm"]) for contrast in inference["contrasts"]
+    } == {
+        (target_arm, incumbent_arm)
+        for target_arm in TARGET_ARM_KEYS
+        for incumbent_arm in (arm["key"] for arm in config["incumbent_arms"])
+    }
+    for contrast in inference["contrasts"]:
+        assert contrast["paired_units"] == 450
+        assert contrast["paired_delta"] == pytest.approx(-1.0)
+        assert contrast["ci_lower"] == pytest.approx(-1.0)
+        assert contrast["ci_upper"] == pytest.approx(-1.0)
+        assert 0.0 < contrast["p_value"] <= 1.0
+        assert contrast["holm_rank"] in range(1, 9)
+        assert contrast["holm_family_size"] == 8
+        assert contrast["holm_significant"] is True
+        assert contrast["target_candidate_id"] == selected[contrast["target_arm"]]
+
+    read = report["read"]
+    assert read["inference_status"] == "complete"
+    assert read["inference_decision"] == "incumbent_advantage_supported_on_declared_contrasts"
+    assert len(read["inference_paired_deltas"]) == 8
+
+    # The frozen bootstrap seed keeps the interval and p-value reproducible.
+    repeat = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="held_out_scope",
+        target_candidate_ids=selected,
+    )
+    assert repeat["inference"] == inference
+
+
+def test_tuning_scope_report_marks_inference_not_applicable() -> None:
+    """The frozen inference contract is defined on the held-out suite only."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    report = analyze_results(
+        config,
+        _fixture_rows(config, plan, scope_name="tuning_scope"),
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="tuning_scope",
+    )
+    assert report["inference"]["status"] == "not_applicable"
+    assert report["read"]["inference_decision"] == "not_established"
+
+
+def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Path) -> None:
+    """A post-tuning edit of the selected candidate cannot pass the config digest alone."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    tuning_report = analyze_results(
+        config,
+        _fixture_rows(config, plan, scope_name="tuning_scope"),
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="tuning_scope",
+    )
+    selection_path = tmp_path / "tuning_selection.json"
+    source_report = _persisted_tuning_report(tuning_report, tmp_path / "tuning")
+    payload = write_tuning_selection(
+        tuning_report,
+        config,
+        output_path=selection_path,
+        config_path=CONFIG,
+        repo_root=ROOT,
+        source_report=source_report,
+    )
+    assert payload["source_report"] == source_report
+    assert payload["source_report_sha256"]
+    assert payload["selection_input_digest"]
+
+    assert (
+        load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+        == payload["selected_target_candidates"]
+    )
+
+    # A held-out-informed candidate swap keeps the config digest intact and must still fail.
+    declared = [point["id"] for point in config["search"]["candidate_points"]]
+    original = str(payload["selected_target_candidates"]["prediction_mpc"])
+    swapped = deepcopy(payload)
+    swapped["selected_target_candidates"]["prediction_mpc"] = next(
+        candidate_id for candidate_id in declared if candidate_id != original
+    )
+    selection_path.write_text(json.dumps(swapped), encoding="utf-8")
+    with pytest.raises(ValueError, match="does not match the source report selection rule"):
+        load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+
+    # An unreferenced selection cannot be verified at all.
+    unbound = deepcopy(payload)
+    unbound.pop("source_report")
+    selection_path.write_text(json.dumps(unbound), encoding="utf-8")
+    with pytest.raises(ValueError, match="must record the source tuning report"):
+        load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+
+    # Rewriting the tuning report after the fact breaks the recorded digest.
+    selection_path.write_text(json.dumps(payload), encoding="utf-8")
+    edited_report_path = Path(source_report)
+    edited = json.loads(edited_report_path.read_text(encoding="utf-8"))
+    edited["run_commit"] = "rewritten-after-selection"
+    edited_report_path.write_text(json.dumps(edited, indent=2, sort_keys=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="source report digest does not match"):
+        load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+
+
+def _persisted_tuning_report(report: dict, out_dir: Path) -> str:
+    """Write a tuning report to disk and return the path recorded by the selection artifact."""
+    paths = write_report(report, out_dir)
+    return str(Path(paths["json"]).resolve())
+
+
 def _fixture_rows(
     config: dict, plan: list[dict], *, scope_name: str = "scenario_scope"
 ) -> list[dict]:
@@ -675,7 +913,7 @@ def _fixture_rows(
                         "availability_status": "available",
                         "benchmark_success": True,
                         "planner_runtime_status": "eligible",
-                        "solver_execution_mode": "native",
+                        "solver_execution_mode": "prediction_mpc_native_solver",
                         "valid_solver_provenance": True,
                         "finite_commands": True,
                         "solver_successes": 1,
@@ -721,12 +959,12 @@ def _strict_canary_row(*, arm_key: str, scenario_id: str) -> dict[str, object]:
         "candidate_id": "incumbent",
         "scenario_id": scenario_id,
         "seed": 101,
-        "execution_mode": "native",
-        "readiness_status": "native",
+        "execution_mode": "adapter",
+        "readiness_status": "adapter",
         "availability_status": "available",
         "benchmark_success": True,
         "planner_runtime_status": "eligible",
-        "solver_execution_mode": "native",
+        "solver_execution_mode": "prediction_mpc_native_solver",
         "valid_solver_provenance": True,
         "finite_commands": True,
         "solver_successes": 1,

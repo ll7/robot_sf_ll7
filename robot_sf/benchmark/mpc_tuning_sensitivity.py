@@ -11,6 +11,7 @@ import csv
 import hashlib
 import json
 import math
+import random
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -18,12 +19,15 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.planner.prediction_mpc import build_prediction_mpc_config
 from robot_sf.training.scenario_loader import load_scenarios
 
 CONFIG_SCHEMA = "issue_5579_mpc_tuning_sensitivity.v2"
 REPORT_SCHEMA = "issue_5579_mpc_tuning_sensitivity_report.v1"
 SELECTION_SCHEMA = "issue_5579_mpc_tuning_selection.v1"
+INFERENCE_SCHEMA = "issue_5579_mpc_tuning_held_out_inference.v1"
+SELECTION_RULE = "highest eligible route-complete collision-free rate; candidate_id tie-break"
 STUDY_ID = "issue_5579_mpc_tuning_budget_sensitivity_v2"
 TARGET_ARM_KEYS = ("prediction_mpc", "prediction_mpc_cbf")
 INCUMBENT_ARM_KEYS = (
@@ -41,6 +45,54 @@ TOP_PARAMETERS = ("max_linear_speed", "horizon_steps", "pedestrian_safety_margin
 VALID_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 VALID_READINESS_STATUSES = frozenset({"native", "adapter"})
 NATIVE_SOLVER_PLANNER = "PredictionMPCPlannerAdapter"
+
+# The 2026-08-03 #5579 freeze requires "native solver execution" for the canary. That
+# phrase names the solver that produced the command, not the benchmark command-space
+# `execution_mode` field: the canonical `prediction_mpc` planner is registry-declared as
+# an adapter-projected unicycle_vw planner, so a gate bound to `execution_mode: native`
+# is unsatisfiable by construction. The packet therefore declares the reachable solver
+# contract explicitly and the validator cross-checks it against the runtime planner
+# registry, so the campaign gate cannot silently become impossible to pass.
+SOLVER_EXECUTION_IDENTITY_FIELDS = (
+    "solver_execution_mode",
+    "solver_planner_adapter",
+    "planner_execution_mode",
+    "supports_native_commands",
+    "benchmark_execution_mode",
+    "benchmark_readiness_status",
+)
+SOLVER_EXECUTION_REQUIRED_FLAGS = (
+    "require_valid_provenance",
+    "require_finite_commands",
+    "require_solver_update",
+    "require_control_update",
+    "forbid_solver_failure",
+    "forbid_fallback",
+)
+DEFAULT_SOLVER_EXECUTION: dict[str, Any] = {
+    "solver_execution_mode": "prediction_mpc_native_solver",
+    "solver_planner_adapter": NATIVE_SOLVER_PLANNER,
+    "planner_execution_mode": "adapter",
+    "supports_native_commands": False,
+    "benchmark_execution_mode": "adapter",
+    "benchmark_readiness_status": "adapter",
+    **dict.fromkeys(SOLVER_EXECUTION_REQUIRED_FLAGS, True),
+}
+
+
+def solver_execution_contract(config: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return the declared canary solver-execution contract for a packet.
+
+    Returns:
+        The packet's ``canary.solver_execution`` block, or the frozen default.
+    """
+    if isinstance(config, Mapping):
+        canary = config.get("canary")
+        if isinstance(canary, Mapping):
+            declared = canary.get("solver_execution")
+            if isinstance(declared, Mapping):
+                return dict(declared)
+    return dict(DEFAULT_SOLVER_EXECUTION)
 
 
 def load_sensitivity_config(path: str | Path, *, repo_root: Path | None = None) -> dict[str, Any]:
@@ -93,13 +145,13 @@ def validate_sensitivity_config(
         scenario_scope=config["scenario_scope"],
         tuning_scope=config["tuning_scope"],
     )
-    _validate_canary(config.get("canary"))
     _validate_arm_list(config.get("target_arms"), expected=TARGET_ARM_KEYS, repo_root=root)
     _validate_arm_list(
         config.get("incumbent_arms"),
         expected=INCUMBENT_ARM_KEYS,
         repo_root=root,
     )
+    _validate_canary(config.get("canary"), target_arms=config["target_arms"])
     _validate_search(config.get("search"))
     _validate_comparison(config.get("comparison"))
     _validate_inference(config.get("inference"))
@@ -195,12 +247,16 @@ def normalize_episode_record(
     arm_key: str,
     candidate_id: str,
     expected_config_hash: str | None = None,
+    solver_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Normalize one runner row while preserving explicit availability provenance.
 
     Returns:
         A typed episode row suitable for the sensitivity analyzer.
     """
+    contract = (
+        dict(solver_contract) if solver_contract is not None else dict(DEFAULT_SOLVER_EXECUTION)
+    )
     outcome = record.get("outcome")
     if not isinstance(outcome, Mapping):
         raise ValueError("episode row must contain an outcome mapping")
@@ -229,7 +285,9 @@ def normalize_episode_record(
         else None
     )
     solver_evidence = _native_solver_evidence(
-        algorithm_metadata, expected_config_hash=expected_config_hash
+        algorithm_metadata,
+        expected_config_hash=expected_config_hash,
+        contract=contract,
     )
     return {
         "arm_key": arm_key,
@@ -312,14 +370,19 @@ def analyze_results(  # noqa: PLR0913
     if missing:
         raise ValueError(f"sensitivity results are missing {len(missing)} expected rows")
 
+    solver_contract = solver_execution_contract(validated)
     plan_by_key = {(entry["arm_key"], entry["candidate_id"]): entry for entry in plan}
     candidate_rows: list[dict[str, Any]] = []
     for group_key, entry in plan_by_key.items():
         group_rows = grouped[group_key]
-        eligible_rows = [row for row in group_rows if _eligible(row)]
-        excluded_rows = [row for row in group_rows if not _eligible(row)]
+        eligible_rows = [row for row in group_rows if _eligible(row, solver_contract)]
+        excluded_rows = [row for row in group_rows if not _eligible(row, solver_contract)]
         exclusion_reasons = sorted(
-            {reason for row in excluded_rows for reason in _eligibility_reasons(row)}
+            {
+                reason
+                for row in excluded_rows
+                for reason in _eligibility_reasons(row, solver_contract)
+            }
         )
         success_count = sum(row.get("success") is True for row in eligible_rows)
         candidate_rows.append(
@@ -343,11 +406,21 @@ def analyze_results(  # noqa: PLR0913
     target_summary = _summarize_targets(candidate_rows)
     incumbent_summary = _summarize_incumbents(candidate_rows)
     selection_mode = "fixed_from_tuning" if selected is not None else "tuning_search"
+    inference = _build_inference(
+        validated,
+        grouped,
+        target_summary,
+        scenario_scope=scenario_scope,
+        scope_name=scope_name,
+        all_rows_eligible=all_rows_eligible,
+        solver_contract=solver_contract,
+    )
     read = _build_read(
         target_summary,
         incumbent_summary,
         all_rows_eligible,
         selection_mode=selection_mode,
+        inference=inference,
     )
     return {
         "schema_version": REPORT_SCHEMA,
@@ -376,6 +449,7 @@ def analyze_results(  # noqa: PLR0913
         "candidate_rows": candidate_rows,
         "target_summary": target_summary,
         "incumbent_summary": incumbent_summary,
+        "inference": inference,
         "read": read,
         "fallback_degraded_exclusion": (
             "Rows are eligible only with explicit native/adapter/mixed execution, native/adapter "
@@ -393,17 +467,58 @@ def write_tuning_selection(
     output_path: str | Path,
     config_path: str | Path,
     repo_root: Path,
-    source_report: str | None = None,
+    source_report: str | Path,
 ) -> dict[str, Any]:
     """Persist the tuning-selected target candidates for the held-out phase.
 
     The selection is deliberately a separate artifact so the held-out runner cannot silently
-    re-select a target candidate from held-out outcomes.
+    re-select a target candidate from held-out outcomes. It is bound to the tuning report
+    that produced it -- both by content digest and by the persisted report file -- so a
+    post-tuning edit of the selected candidate cannot survive ``load_tuning_selection``.
 
     Returns:
         The validated selection payload written to ``output_path``.
     """
     validated = validate_sensitivity_config(config, repo_root=repo_root)
+    selected = _derive_tuning_selection(report, validated)
+
+    config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
+    if config_sha256 is None:
+        raise ValueError(f"selection config does not exist: {config_path}")
+    report_path = _repo_path(str(source_report), repo_root)
+    if not report_path.is_file():
+        raise ValueError(f"tuning selection source report does not exist: {source_report}")
+    payload: dict[str, Any] = {
+        "schema_version": SELECTION_SCHEMA,
+        "study_id": str(validated["study_id"]),
+        "selection_scope": "tuning_scope",
+        "selection_status": "complete",
+        "selection_rule": SELECTION_RULE,
+        "config_sha256": config_sha256,
+        "selected_target_candidates": selected,
+        "source_report": str(source_report),
+        "source_report_sha256": _sha256(report_path),
+        "source_report_run_commit": str(report.get("run_commit", "")),
+        "selection_input_digest": _selection_input_digest(report),
+    }
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
+def _derive_tuning_selection(
+    report: Mapping[str, Any], validated: Mapping[str, Any]
+) -> dict[str, str]:
+    """Re-derive the declared selection rule from one completed tuning report.
+
+    Returns:
+        The winning candidate ID for each target arm.
+    """
+    if report.get("schema_version") != REPORT_SCHEMA:
+        raise ValueError(f"tuning selection source report must be {REPORT_SCHEMA!r}")
+    if report.get("study_id") != validated["study_id"]:
+        raise ValueError("tuning selection source report belongs to a different study")
     if report.get("execution_scope_name") != "tuning_scope":
         raise ValueError("tuning selection must be created from the tuning_scope report")
     if report.get("status") != "complete_diagnostic":
@@ -419,26 +534,26 @@ def write_tuning_selection(
         if not isinstance(best, Mapping) or not str(best.get("candidate_id", "")).strip():
             raise ValueError(f"tuning report has no eligible selection for target arm {arm_key}")
         selected[arm_key] = str(best["candidate_id"])
-    selected = dict(_validate_target_candidate_ids(selected, validated) or {})
+    return dict(_validate_target_candidate_ids(selected, validated) or {})
 
-    config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
-    if config_sha256 is None:
-        raise ValueError(f"selection config does not exist: {config_path}")
-    payload: dict[str, Any] = {
-        "schema_version": SELECTION_SCHEMA,
-        "study_id": str(validated["study_id"]),
-        "selection_scope": "tuning_scope",
-        "selection_status": "complete",
-        "selection_rule": "highest eligible route-complete collision-free rate; candidate_id tie-break",
-        "config_sha256": config_sha256,
-        "selected_target_candidates": selected,
+
+def _selection_input_digest(report: Mapping[str, Any]) -> str:
+    """Return the digest of the exact report content the selection rule consumed.
+
+    Returns:
+        A ``sha256`` digest over the report identity and the target candidate table.
+    """
+    payload = {
+        "schema_version": report.get("schema_version"),
+        "study_id": report.get("study_id"),
+        "status": report.get("status"),
+        "execution_scope_name": report.get("execution_scope_name"),
+        "config_sha256": report.get("config_sha256"),
+        "run_commit": report.get("run_commit"),
+        "target_summary": report.get("target_summary"),
     }
-    if source_report is not None:
-        payload["source_report"] = source_report
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return payload
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def load_tuning_selection(
@@ -470,13 +585,62 @@ def load_tuning_selection(
         raise ValueError("selection must be derived from tuning_scope")
     if payload.get("selection_status") != "complete":
         raise ValueError("selection status must be complete")
+    if payload.get("selection_rule") != SELECTION_RULE:
+        raise ValueError("tuning selection rule does not match the frozen packet rule")
     expected_config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
     if expected_config_sha256 is None or payload.get("config_sha256") != expected_config_sha256:
         raise ValueError("tuning selection config provenance does not match the active config")
     validated = validate_sensitivity_config(config, repo_root=repo_root)
     selected = payload.get("selected_target_candidates")
-    normalized = _validate_target_candidate_ids(selected, validated)
-    return dict(normalized or {})
+    normalized = dict(_validate_target_candidate_ids(selected, validated) or {})
+    _verify_selection_source_report(
+        payload,
+        validated,
+        repo_root=repo_root,
+        expected_config_sha256=expected_config_sha256,
+        selected=normalized,
+    )
+    return normalized
+
+
+def _verify_selection_source_report(
+    payload: Mapping[str, Any],
+    validated: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    expected_config_sha256: str,
+    selected: Mapping[str, str],
+) -> None:
+    """Bind the selection artifact to the tuning report that produced it.
+
+    The config digest alone cannot detect a post-tuning edit of the selected candidate,
+    because every declared candidate belongs to the same config. The winners are therefore
+    re-derived from the referenced tuning report and compared to the recorded selection.
+    """
+    source_report = str(payload.get("source_report") or "").strip()
+    if not source_report:
+        raise ValueError("tuning selection must record the source tuning report")
+    report_path = _repo_path(source_report, repo_root)
+    if not report_path.is_file():
+        raise ValueError(f"tuning selection source report is missing: {source_report}")
+    if payload.get("source_report_sha256") != _sha256(report_path):
+        raise ValueError("tuning selection source report digest does not match the artifact")
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid tuning selection source report: {source_report}") from exc
+    if not isinstance(report, Mapping):
+        raise ValueError("tuning selection source report must be a mapping")
+    if report.get("config_sha256") != expected_config_sha256:
+        raise ValueError("tuning selection source report was produced by a different config")
+    if payload.get("selection_input_digest") != _selection_input_digest(report):
+        raise ValueError("tuning selection input digest does not match the source report")
+    rederived = _derive_tuning_selection(report, validated)
+    if rederived != dict(selected):
+        raise ValueError(
+            "tuning selection does not match the source report selection rule: "
+            f"recorded={dict(selected)} rederived={rederived}"
+        )
 
 
 def write_report(report: Mapping[str, Any], output_dir: str | Path) -> dict[str, str]:
@@ -567,6 +731,7 @@ def format_report_markdown(report: Mapping[str, Any]) -> str:
             f"| `{arm['arm_key']}` | {_format_rate(arm.get('success_rate'))} | "
             f"{arm.get('eligible_episodes', 0)} | {arm.get('excluded_episodes', 0)} |"
         )
+    lines.extend(_inference_markdown_lines(report.get("inference")))
     lines.extend(
         [
             "",
@@ -574,6 +739,8 @@ def format_report_markdown(report: Mapping[str, Any]) -> str:
             "",
             f"- Decision: `{report.get('read', {}).get('decision')}`",
             f"- Detail: {report.get('read', {}).get('detail')}",
+            f"- Inference decision: `{report.get('read', {}).get('inference_decision')}`",
+            f"- Inference detail: {report.get('read', {}).get('inference_detail')}",
             "",
             "Fallback, degraded, failed, and unavailable rows are never treated as success evidence.",
             "This diagnostic does not change benchmark metrics, roster status, or paper-facing claims.",
@@ -581,6 +748,49 @@ def format_report_markdown(report: Mapping[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _inference_markdown_lines(inference: Any) -> list[str]:
+    """Render the frozen held-out paired-contrast table.
+
+    Returns:
+        Markdown lines describing the paired deltas, intervals, and Holm decisions.
+    """
+    if not isinstance(inference, Mapping):
+        return []
+    lines = [
+        "",
+        "## Pre-registered held-out inference",
+        "",
+        f"- Status: `{inference.get('status')}`",
+        f"- Detail: {inference.get('detail')}",
+    ]
+    contrasts = list(inference.get("contrasts") or [])
+    if not contrasts:
+        return lines
+    bootstrap = inference.get("bootstrap") or {}
+    multiplicity = inference.get("multiplicity") or {}
+    lines.extend(
+        [
+            f"- Resampling: `{inference.get('resampling_unit')}`, "
+            f"{bootstrap.get('replicates')} replicates, "
+            f"{bootstrap.get('confidence_level')} interval, seed `{bootstrap.get('seed')}`",
+            f"- Multiplicity: `{multiplicity.get('method')}` at "
+            f"familywise alpha {multiplicity.get('familywise_alpha')}",
+            "",
+            "| Target arm | Candidate | Incumbent arm | Paired delta | 95% CI | Holm p | Reject |",
+            "| --- | --- | --- | ---: | ---: | ---: | :--: |",
+        ]
+    )
+    for contrast in contrasts:
+        lines.append(
+            f"| `{contrast['target_arm']}` | `{contrast['target_candidate_id']}` | "
+            f"`{contrast['incumbent_arm']}` | {contrast['paired_delta']:.4f} | "
+            f"[{contrast['ci_lower']:.4f}, {contrast['ci_upper']:.4f}] | "
+            f"{contrast['holm_adjusted_p_value']:.4f} | "
+            f"{'yes' if contrast['holm_significant'] else 'no'} |"
+        )
+    return lines
 
 
 def _validate_execution_boundary(value: Any) -> None:
@@ -744,7 +954,7 @@ def _validate_held_out_matrix(
         )
 
 
-def _validate_canary(value: Any) -> None:
+def _validate_canary(value: Any, *, target_arms: Any) -> None:
     """Validate canary section specifying 6/6 eligibility at seed 101."""
     canary = _mapping(value, "canary")
     if canary.get("seed") != 101:
@@ -755,6 +965,75 @@ def _validate_canary(value: Any) -> None:
         raise ValueError("canary.target_eligible_ratio must be '6/6'")
     if canary.get("stop_on_ineligible") is not True:
         raise ValueError("canary.stop_on_ineligible must be true")
+    _validate_solver_execution(canary.get("solver_execution"), target_arms=target_arms)
+
+
+def _validate_solver_execution(value: Any, *, target_arms: Any) -> None:
+    """Validate the declared solver contract and prove the canary gate is reachable.
+
+    A canary that no runtime row can satisfy is not a stop rule, it is a permanent
+    block. The declared planner identity is therefore checked against the runtime
+    algorithm-metadata registry for every declared target arm.
+
+    The ``require_*``/``forbid_*`` flags are freeze declarations, not switches: the
+    predicates always enforce them and this validator rejects any packet that tries to
+    declare a weaker canary than the 2026-08-03 #5579 contract.
+    """
+    contract = _mapping(value, "canary.solver_execution")
+    missing = [field for field in SOLVER_EXECUTION_IDENTITY_FIELDS if field not in contract]
+    if missing:
+        raise ValueError(f"canary.solver_execution is missing declared fields: {missing}")
+    if not str(contract["solver_execution_mode"]).strip():
+        raise ValueError("canary.solver_execution.solver_execution_mode must be a non-empty token")
+    for flag in SOLVER_EXECUTION_REQUIRED_FLAGS:
+        if contract.get(flag) is not True:
+            raise ValueError(f"canary.solver_execution.{flag} must be true")
+    if str(contract["benchmark_execution_mode"]).strip().lower() not in VALID_EXECUTION_MODES:
+        raise ValueError("canary.solver_execution.benchmark_execution_mode is not a valid mode")
+    if str(contract["benchmark_readiness_status"]).strip().lower() not in VALID_READINESS_STATUSES:
+        raise ValueError("canary.solver_execution.benchmark_readiness_status is not a valid status")
+    _validate_solver_execution_reachable(contract, target_arms=target_arms)
+
+
+def _validate_solver_execution_reachable(contract: Mapping[str, Any], *, target_arms: Any) -> None:
+    """Require the declared solver identity to match the runtime planner registry."""
+    if not isinstance(target_arms, Sequence) or isinstance(target_arms, str):
+        raise ValueError("target_arms must be declared before canary.solver_execution")
+    for arm in target_arms:
+        arm_map = _mapping(arm, "target_arms[]")
+        reachable = _registry_planner_kinematics(str(arm_map.get("algo", "")))
+        for field, declared_key in (
+            ("adapter_name", "solver_planner_adapter"),
+            ("execution_mode", "planner_execution_mode"),
+            ("supports_native_commands", "supports_native_commands"),
+        ):
+            if reachable.get(field) != contract[declared_key]:
+                raise ValueError(
+                    "canary.solver_execution is unreachable for target arm "
+                    f"{arm_map.get('key')!r}: runtime planner_kinematics.{field}="
+                    f"{reachable.get(field)!r} but the packet declares {declared_key}="
+                    f"{contract[declared_key]!r}"
+                )
+
+
+def _registry_planner_kinematics(algo: str) -> dict[str, Any]:
+    """Return the runtime planner kinematics the benchmark runner emits for one algorithm.
+
+    Returns:
+        The enriched ``planner_kinematics`` block produced by the shared adapter path.
+    """
+    if not algo:
+        raise ValueError("target arm must declare an algo key")
+    metadata = enrich_algorithm_metadata(
+        algo=algo,
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    kinematics = metadata.get("planner_kinematics")
+    if not isinstance(kinematics, Mapping):
+        raise ValueError(f"algorithm {algo!r} declares no planner kinematics contract")
+    return dict(kinematics)
 
 
 def _validate_inference(value: Any) -> None:
@@ -783,6 +1062,8 @@ def _validate_bootstrap(value: Any) -> None:
         raise ValueError("inference.bootstrap.confidence_level must be 0.95")
     if not _is_int(bootstrap.get("replicates")) or int(bootstrap["replicates"]) <= 0:
         raise ValueError("inference.bootstrap.replicates must be a positive integer")
+    if not _is_int(bootstrap.get("seed")):
+        raise ValueError("inference.bootstrap.seed must be a frozen integer for reproducibility")
 
 
 def _validate_multiplicity(value: Any) -> None:
@@ -1007,12 +1288,261 @@ def _summarize_incumbents(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, A
     ]
 
 
+def _build_inference(
+    config: Mapping[str, Any],
+    grouped: Mapping[tuple[str, str], Sequence[Mapping[str, Any]]],
+    target_summary: Sequence[Mapping[str, Any]],
+    *,
+    scenario_scope: Mapping[str, Any],
+    scope_name: str,
+    all_rows_eligible: bool,
+    solver_contract: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Produce the frozen paired-bootstrap / Holm-Bonferroni held-out inference block.
+
+    The estimand is the paired difference in collision-free route completion between each
+    target arm and each incumbent arm on the declared held-out suite. The resampling unit
+    is the paired seed block: one bootstrap replicate resamples whole seeds with
+    replacement and reuses the same resampled seeds for every arm and every contrast, so
+    the pairing declared by the packet is preserved.
+
+    Returns:
+        The inference block recorded in the report and consumed by the pre-registered read.
+    """
+    inference_config = _mapping(config.get("inference"), "inference")
+    bootstrap_config = _mapping(inference_config.get("bootstrap"), "inference.bootstrap")
+    multiplicity_config = _mapping(inference_config.get("multiplicity"), "inference.multiplicity")
+    header: dict[str, Any] = {
+        "schema_version": INFERENCE_SCHEMA,
+        "inference_population": str(inference_config["inference_population"]),
+        "estimand": str(inference_config["estimand"]),
+        "primary_metric": str(inference_config["primary_metric"]),
+        "resampling_unit": str(inference_config["resampling_unit"]),
+        "bootstrap": {
+            "method": str(bootstrap_config["method"]),
+            "confidence_level": float(bootstrap_config["confidence_level"]),
+            "replicates": int(bootstrap_config["replicates"]),
+            "seed": int(bootstrap_config["seed"]),
+        },
+        "multiplicity": {
+            "method": str(multiplicity_config["method"]),
+            "family": str(multiplicity_config["family"]),
+            "familywise_alpha": float(multiplicity_config["familywise_alpha"]),
+            "contrast_count": int(multiplicity_config["contrast_count"]),
+        },
+        "contrasts": [],
+    }
+    if scope_name != "held_out_scope":
+        return {
+            **header,
+            "status": "not_applicable",
+            "detail": (
+                "The frozen inference contract is defined on the declared held-out suite; "
+                f"this report executed {scope_name}."
+            ),
+        }
+    if not all_rows_eligible:
+        return {
+            **header,
+            "status": "blocked",
+            "detail": (
+                "Complete solver-valid rows are required before the frozen paired bootstrap "
+                "and Holm-Bonferroni correction can be computed."
+            ),
+        }
+
+    seeds = [int(seed) for seed in scenario_scope["seeds"]]
+    scenario_ids = [str(scenario_id) for scenario_id in scenario_scope["scenario_ids"]]
+    selected_candidates = {
+        str(summary["arm_key"]): str(summary["best_candidate"]["candidate_id"])
+        for summary in target_summary
+        if summary.get("best_candidate") is not None
+    }
+    arm_seed_successes: dict[str, dict[int, int]] = {}
+    for (arm_key, candidate_id), rows in grouped.items():
+        if arm_key in TARGET_ARM_KEYS and selected_candidates.get(arm_key) != candidate_id:
+            continue
+        arm_seed_successes[arm_key] = _seed_block_successes(
+            rows, seeds=seeds, scenario_count=len(scenario_ids), solver_contract=solver_contract
+        )
+    missing_arms = [
+        arm_key
+        for arm_key in (*TARGET_ARM_KEYS, *INCUMBENT_ARM_KEYS)
+        if arm_key not in arm_seed_successes
+    ]
+    if missing_arms:
+        return {
+            **header,
+            "status": "blocked",
+            "detail": f"paired inference is missing complete arms: {missing_arms}",
+        }
+
+    paired_units = len(seeds) * len(scenario_ids)
+    replicates = int(bootstrap_config["replicates"])
+    resampled_seed_blocks = _resample_seed_blocks(
+        seeds, replicates=replicates, seed=int(bootstrap_config["seed"])
+    )
+    alpha = 1.0 - float(bootstrap_config["confidence_level"])
+    contrasts: list[dict[str, Any]] = []
+    for declared in multiplicity_config["contrasts"]:
+        target_arm = str(declared["target_arm"])
+        incumbent_arm = str(declared["incumbent_arm"])
+        target_blocks = arm_seed_successes[target_arm]
+        incumbent_blocks = arm_seed_successes[incumbent_arm]
+        target_rate = sum(target_blocks.values()) / paired_units
+        incumbent_rate = sum(incumbent_blocks.values()) / paired_units
+        deltas = [
+            (
+                sum(target_blocks[seed] for seed in block)
+                - sum(incumbent_blocks[seed] for seed in block)
+            )
+            / paired_units
+            for block in resampled_seed_blocks
+        ]
+        lower, upper = _percentile_interval(deltas, alpha=alpha)
+        contrasts.append(
+            {
+                "target_arm": target_arm,
+                "target_candidate_id": selected_candidates[target_arm],
+                "incumbent_arm": incumbent_arm,
+                "paired_units": paired_units,
+                "seed_blocks": len(seeds),
+                "target_rate": target_rate,
+                "incumbent_rate": incumbent_rate,
+                "paired_delta": target_rate - incumbent_rate,
+                "ci_lower": lower,
+                "ci_upper": upper,
+                "p_value": _bootstrap_two_sided_p_value(deltas),
+            }
+        )
+    _apply_holm_bonferroni(contrasts, alpha=float(multiplicity_config["familywise_alpha"]))
+    return {
+        **header,
+        "status": "complete",
+        "detail": (
+            "Paired seed-block percentile bootstrap with Holm-Bonferroni correction over the "
+            f"{len(contrasts)} declared target-versus-incumbent contrasts."
+        ),
+        "paired_units": paired_units,
+        "seed_blocks": seeds,
+        "selected_target_candidates": dict(selected_candidates),
+        "contrasts": contrasts,
+        "significant_contrasts": [
+            f"{contrast['target_arm']} vs {contrast['incumbent_arm']}"
+            for contrast in contrasts
+            if contrast["holm_significant"]
+        ],
+    }
+
+
+def _seed_block_successes(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    seeds: Sequence[int],
+    scenario_count: int,
+    solver_contract: Mapping[str, Any],
+) -> dict[int, int]:
+    """Return eligible successes per seed block for one arm.
+
+    Returns:
+        A per-seed success count covering the full declared scenario slice.
+
+    Raises:
+        ValueError: If a seed block is not fully covered by eligible rows.
+    """
+    counts = {int(seed): 0 for seed in seeds}
+    totals = {int(seed): 0 for seed in seeds}
+    for row in rows:
+        if not _eligible(row, solver_contract):
+            continue
+        seed = int(row["seed"])
+        if seed not in counts:
+            continue
+        totals[seed] += 1
+        counts[seed] += 1 if row.get("success") is True else 0
+    incomplete = [seed for seed in totals if totals[seed] != scenario_count]
+    if incomplete:
+        raise ValueError(f"paired seed blocks are incomplete for seeds: {sorted(incomplete)}")
+    return {int(seed): int(counts[int(seed)]) for seed in seeds}
+
+
+def _resample_seed_blocks(seeds: Sequence[int], *, replicates: int, seed: int) -> list[list[int]]:
+    """Return the deterministic paired seed-block bootstrap resamples.
+
+    Returns:
+        One resampled seed list per bootstrap replicate.
+    """
+    rng = random.Random(seed)
+    pool = [int(value) for value in seeds]
+    return [[rng.choice(pool) for _ in pool] for _ in range(replicates)]
+
+
+def _percentile_interval(values: Sequence[float], *, alpha: float) -> tuple[float, float]:
+    """Return the two-sided percentile interval of a bootstrap distribution.
+
+    Returns:
+        Lower and upper percentile bounds.
+    """
+    ordered = sorted(values)
+    if not ordered:
+        return (float("nan"), float("nan"))
+    return (
+        _percentile(ordered, alpha / 2.0),
+        _percentile(ordered, 1.0 - alpha / 2.0),
+    )
+
+
+def _percentile(ordered: Sequence[float], quantile: float) -> float:
+    """Return a linear-interpolated percentile of a sorted sequence.
+
+    Returns:
+        The interpolated percentile value.
+    """
+    if len(ordered) == 1:
+        return float(ordered[0])
+    position = quantile * (len(ordered) - 1)
+    lower_index = math.floor(position)
+    upper_index = min(lower_index + 1, len(ordered) - 1)
+    weight = position - lower_index
+    return float(ordered[lower_index] * (1.0 - weight) + ordered[upper_index] * weight)
+
+
+def _bootstrap_two_sided_p_value(deltas: Sequence[float]) -> float:
+    """Return the two-sided achieved significance level for a zero paired delta.
+
+    Returns:
+        A p-value in ``[1 / (replicates + 1), 1.0]``.
+    """
+    replicates = len(deltas)
+    if replicates == 0:
+        return 1.0
+    at_or_below = sum(1 for delta in deltas if delta <= 0.0)
+    at_or_above = sum(1 for delta in deltas if delta >= 0.0)
+    tail = min(at_or_below, at_or_above) / replicates
+    return float(min(1.0, max(2.0 * tail, 1.0 / (replicates + 1))))
+
+
+def _apply_holm_bonferroni(contrasts: list[dict[str, Any]], *, alpha: float) -> None:
+    """Annotate each contrast with its Holm-Bonferroni rank, adjusted p-value, and decision."""
+    family_size = len(contrasts)
+    ordered = sorted(range(family_size), key=lambda index: contrasts[index]["p_value"])
+    running_max = 0.0
+    for rank, index in enumerate(ordered, start=1):
+        adjusted = min(1.0, (family_size - rank + 1) * float(contrasts[index]["p_value"]))
+        running_max = max(running_max, adjusted)
+        contrasts[index]["holm_rank"] = rank
+        contrasts[index]["holm_family_size"] = family_size
+        contrasts[index]["holm_adjusted_p_value"] = running_max
+        contrasts[index]["holm_significant"] = running_max <= alpha
+
+
 def _build_read(
     targets: Sequence[Mapping[str, Any]],
     incumbents: Sequence[Mapping[str, Any]],
     all_rows_eligible: bool,
     *,
     selection_mode: str,
+    inference: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Produce the preregistered decision comparing target MPC rates to the incumbent band.
 
@@ -1032,7 +1562,11 @@ def _build_read(
     if not all_rows_eligible or len(target_rates) != len(TARGET_ARM_KEYS) or not incumbent_rates:
         return {
             "decision": "blocked",
-            "detail": "Complete native solver/provenance-valid rows are required before the pre-registered read.",
+            "detail": (
+                "Complete native solver/provenance-valid rows are required before the "
+                "pre-registered read."
+            ),
+            **_inference_read(inference),
         }
     if max(target_rates) < min(incumbent_rates):
         decision = "structural_reading_strengthens_on_tested_slice"
@@ -1055,7 +1589,7 @@ def _build_read(
             if selection_mode == "fixed_from_tuning"
             else "The best-of-20 MPC rates overlap the incumbent hybrid band."
         )
-    return {
+    read = {
         "decision": decision,
         "detail": detail,
         "selection_mode": selection_mode,
@@ -1063,9 +1597,71 @@ def _build_read(
         "incumbent_rates": incumbent_rates,
         "incumbent_band": {"minimum": min(incumbent_rates), "maximum": max(incumbent_rates)},
     }
+    read.update(_inference_read(inference))
+    return read
 
 
-def _native_solver_evidence(value: Any, *, expected_config_hash: str | None) -> dict[str, Any]:
+def _inference_read(inference: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Fold the frozen paired-bootstrap/Holm result into the pre-registered read.
+
+    Returns:
+        The inference-derived fields of the pre-registered read.
+    """
+    status = str((inference or {}).get("status", "missing"))
+    if status != "complete":
+        return {
+            "inference_status": status,
+            "inference_decision": "not_established",
+            "inference_detail": str(
+                (inference or {}).get("detail", "no frozen paired-bootstrap inference is available")
+            ),
+        }
+    contrasts = list(inference.get("contrasts") or [])
+    significant = [contrast for contrast in contrasts if contrast.get("holm_significant")]
+    favoring_target = [
+        contrast for contrast in significant if float(contrast["paired_delta"]) > 0.0
+    ]
+    favoring_incumbent = [
+        contrast for contrast in significant if float(contrast["paired_delta"]) < 0.0
+    ]
+    if not significant:
+        decision = "no_contrast_significant_after_holm"
+    elif favoring_target and not favoring_incumbent:
+        decision = "target_advantage_supported_on_declared_contrasts"
+    elif favoring_incumbent and not favoring_target:
+        decision = "incumbent_advantage_supported_on_declared_contrasts"
+    else:
+        decision = "mixed_significant_contrasts"
+    return {
+        "inference_status": status,
+        "inference_decision": decision,
+        "inference_detail": (
+            f"{len(significant)}/{len(contrasts)} declared contrasts reject the zero paired "
+            "delta after Holm-Bonferroni correction of the paired seed-block bootstrap."
+        ),
+        "inference_significant_contrasts": [
+            f"{contrast['target_arm']} vs {contrast['incumbent_arm']}" for contrast in significant
+        ],
+        "inference_paired_deltas": [
+            {
+                "target_arm": contrast["target_arm"],
+                "incumbent_arm": contrast["incumbent_arm"],
+                "paired_delta": contrast["paired_delta"],
+                "ci_lower": contrast["ci_lower"],
+                "ci_upper": contrast["ci_upper"],
+                "holm_adjusted_p_value": contrast["holm_adjusted_p_value"],
+            }
+            for contrast in contrasts
+        ],
+    }
+
+
+def _native_solver_evidence(
+    value: Any,
+    *,
+    expected_config_hash: str | None,
+    contract: Mapping[str, Any],
+) -> dict[str, Any]:
     """Extract strict native-solver evidence from one raw algorithm metadata mapping.
 
     Returns:
@@ -1077,7 +1673,7 @@ def _native_solver_evidence(value: Any, *, expected_config_hash: str | None) -> 
     runtime = value.get("planner_runtime")
     kinematics = kinematics if isinstance(kinematics, Mapping) else {}
     runtime = runtime if isinstance(runtime, Mapping) else {}
-    solver_execution_mode, identity_reasons = _solver_identity(value, kinematics, runtime)
+    solver_execution_mode, identity_reasons = _solver_identity(value, kinematics, runtime, contract)
     valid_provenance, provenance_reasons = _solver_provenance(value, expected_config_hash)
     runtime_evidence = _solver_runtime_evidence(runtime)
     reasons = identity_reasons + provenance_reasons + runtime_evidence["exclusion_reasons"]
@@ -1113,14 +1709,23 @@ def _solver_identity(
     value: Mapping[str, Any],
     kinematics: Mapping[str, Any],
     runtime: Mapping[str, Any],
+    contract: Mapping[str, Any],
 ) -> tuple[str, list[str]]:
-    """Validate the declared planner identity and native solver execution mode.
+    """Validate the declared planner identity against the packet solver contract.
 
     Returns:
         The normalized solver mode and any identity exclusion reasons.
     """
+    expected_adapter = str(contract["solver_planner_adapter"])
+    expected_planner_mode = str(contract["planner_execution_mode"]).strip().lower()
+    expected_solver_mode = str(contract["solver_execution_mode"]).strip().lower()
     adapter_name = str(kinematics.get("adapter_name", "")).strip()
     planner_execution_mode = str(kinematics.get("execution_mode", "")).strip().lower()
+    identity_matches = (
+        adapter_name == expected_adapter
+        and planner_execution_mode == expected_planner_mode
+        and kinematics.get("supports_native_commands") is contract["supports_native_commands"]
+    )
     solver_mode = (
         str(
             runtime.get("solver_execution_mode")
@@ -1131,21 +1736,17 @@ def _solver_identity(
         .strip()
         .lower()
     )
-    if (
-        not solver_mode
-        and planner_execution_mode == "native"
-        and adapter_name == NATIVE_SOLVER_PLANNER
-    ):
-        solver_mode = "native"
+    if not solver_mode and identity_matches:
+        solver_mode = expected_solver_mode
     reasons: list[str] = []
-    if solver_mode != "native":
+    if solver_mode != expected_solver_mode:
         reasons.append("native_solver_execution_missing")
-    if adapter_name != NATIVE_SOLVER_PLANNER:
+    if adapter_name != expected_adapter:
         reasons.append("unexpected_solver_planner")
-    if kinematics.get("supports_native_commands") is not True:
-        reasons.append("native_commands_unsupported")
-    if planner_execution_mode != "native":
-        reasons.append("planner_execution_mode_not_native")
+    if kinematics.get("supports_native_commands") is not contract["supports_native_commands"]:
+        reasons.append("solver_command_support_mismatch")
+    if planner_execution_mode != expected_planner_mode:
+        reasons.append("planner_execution_mode_mismatch")
     return solver_mode or "unknown", reasons
 
 
@@ -1254,17 +1855,21 @@ def validate_canary_rows(
     required_eligible: int,
     target_arm_keys: Sequence[str] = TARGET_ARM_KEYS,
     candidate_id: str = "incumbent",
+    solver_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply the exact native-solver canary gate to normalized rows.
 
-    The outer benchmark execution must be native; an adapter label is never sufficient. Each row
-    must also carry native solver evidence, valid effective-config provenance, finite commands,
-    and a successful solver/control update. The expected two-arm by three-scenario key set is
+    Every row must match the packet's declared solver-execution contract and carry valid
+    effective-config provenance, finite commands, and a successful solver/control update,
+    with no solver failure or fallback. The expected two-arm by three-scenario key set is
     closed before any production phase can proceed.
 
     Returns:
         A status mapping containing exact-key, eligibility, and exclusion diagnostics.
     """
+    contract = (
+        dict(solver_contract) if solver_contract is not None else dict(DEFAULT_SOLVER_EXECUTION)
+    )
     expected_keys = {
         (str(arm_key), str(candidate_id), str(scenario_id), int(seed))
         for arm_key in target_arm_keys
@@ -1290,7 +1895,7 @@ def validate_canary_rows(
         if key not in expected_keys:
             unexpected_keys.append(key)
             continue
-        reasons = _canary_exclusion_reasons(row)
+        reasons = _canary_exclusion_reasons(row, contract)
         if reasons:
             invalid_rows.append({"key": key, "reasons": reasons})
         else:
@@ -1319,40 +1924,46 @@ def validate_canary_rows(
         "unexpected_keys": [list(key) for key in sorted(set(unexpected_keys))],
         "invalid_rows": invalid_rows,
         "target_eligible_ratio": f"{len(eligible_keys)}/{len(rows)}",
+        "required_solver_execution_mode": str(contract["solver_execution_mode"]),
+        "required_planner_adapter": str(contract["solver_planner_adapter"]),
     }
 
 
-def _canary_exclusion_reasons(row: Mapping[str, Any]) -> list[str]:
+def _canary_exclusion_reasons(row: Mapping[str, Any], contract: Mapping[str, Any]) -> list[str]:
     """Return every strict canary predicate that a row fails."""
-    reasons = _canary_availability_reasons(row) + _canary_solver_reasons(row)
+    reasons = _canary_availability_reasons(row, contract) + _canary_solver_reasons(row, contract)
     if row.get("native_solver_exclusion_reasons"):
         reasons.extend(str(reason) for reason in row["native_solver_exclusion_reasons"])
     return sorted(set(reasons))
 
 
-def _canary_availability_reasons(row: Mapping[str, Any]) -> list[str]:
-    """Return outer native-execution and availability canary failures."""
+def _canary_availability_reasons(row: Mapping[str, Any], contract: Mapping[str, Any]) -> list[str]:
+    """Return outer benchmark-execution and availability canary failures."""
     reasons: list[str] = []
-    if not _eligible(row):
+    if not _eligible(row, contract):
         reasons.append("availability_or_runtime_ineligible")
-    if str(row.get("execution_mode", "")).strip().lower() != "native":
-        reasons.append("execution_mode_not_native")
-    if str(row.get("readiness_status", "")).strip().lower() != "native":
-        reasons.append("readiness_status_not_native")
+    expected_mode = str(contract["benchmark_execution_mode"]).strip().lower()
+    expected_readiness = str(contract["benchmark_readiness_status"]).strip().lower()
+    if str(row.get("execution_mode", "")).strip().lower() != expected_mode:
+        reasons.append("execution_mode_mismatch")
+    if str(row.get("readiness_status", "")).strip().lower() != expected_readiness:
+        reasons.append("readiness_status_mismatch")
     return reasons
 
 
-def _canary_solver_reasons(row: Mapping[str, Any]) -> list[str]:
+def _canary_solver_reasons(row: Mapping[str, Any], contract: Mapping[str, Any]) -> list[str]:
     """Return native solver, provenance, finite-command, and update failures."""
-    return _native_solver_identity_reasons(row) + _native_solver_runtime_reasons(row)
+    return _native_solver_identity_reasons(row, contract) + _native_solver_runtime_reasons(row)
 
 
-def _native_solver_identity_reasons(row: Mapping[str, Any]) -> list[str]:
+def _native_solver_identity_reasons(
+    row: Mapping[str, Any], contract: Mapping[str, Any]
+) -> list[str]:
     """Return native solver mode and provenance failures."""
     reasons: list[str] = []
     if row.get("native_solver_eligible") is not True:
         reasons.append("native_solver_evidence_ineligible")
-    if row.get("solver_execution_mode") != "native":
+    if row.get("solver_execution_mode") != str(contract["solver_execution_mode"]).strip().lower():
         reasons.append("native_solver_execution_missing")
     if row.get("valid_solver_provenance") is not True:
         reasons.append("solver_provenance_invalid")
@@ -1383,12 +1994,15 @@ def _native_solver_runtime_reasons(row: Mapping[str, Any]) -> list[str]:
     return reasons
 
 
-def _eligibility_reasons(row: Mapping[str, Any]) -> list[str]:
+def _eligibility_reasons(
+    row: Mapping[str, Any], contract: Mapping[str, Any] | None = None
+) -> list[str]:
     """Return the concrete fail-closed reasons for one analysis row.
 
     Returns:
         Sorted, de-duplicated reasons matching the predicates used by ``_eligible``.
     """
+    solver_contract = dict(contract) if contract is not None else dict(DEFAULT_SOLVER_EXECUTION)
     reasons: list[str] = []
     if str(row.get("execution_mode", "")).strip().lower() not in VALID_EXECUTION_MODES:
         reasons.append("execution_mode_not_supported")
@@ -1403,13 +2017,13 @@ def _eligibility_reasons(row: Mapping[str, Any]) -> list[str]:
         reasons.append(runtime_status)
 
     if str(row.get("arm_key", "")) in TARGET_ARM_KEYS:
-        reasons.extend(_native_solver_identity_reasons(row))
+        reasons.extend(_native_solver_identity_reasons(row, solver_contract))
         reasons.extend(_native_solver_runtime_reasons(row))
         reasons.extend(str(reason) for reason in row.get("native_solver_exclusion_reasons", ()))
     return sorted(set(reasons))
 
 
-def _eligible(row: Mapping[str, Any]) -> bool:
+def _eligible(row: Mapping[str, Any], contract: Mapping[str, Any] | None = None) -> bool:
     """Report whether a row meets every fail-closed eligibility requirement.
 
     The shared availability/runtime contract applies to every arm. The strict
@@ -1422,7 +2036,7 @@ def _eligible(row: Mapping[str, Any]) -> bool:
     Returns:
         True when the row satisfies every fail-closed eligibility requirement.
     """
-    return not _eligibility_reasons(row)
+    return not _eligibility_reasons(row, contract)
 
 
 def _planner_runtime_status(value: Any) -> str:

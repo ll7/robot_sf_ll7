@@ -19,6 +19,29 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml"
 SCHEMA_VERSION = "robot_sf.issue_6561_pedestrian_speed_protocol.v1"
+EXPECTED_PROTOCOL_SEMANTIC_HASH = "6dca14e2021394fcfc9116418d23ebd351cba5ffd135abfe84d6c140ee1ced3d"
+EXPECTED_PROTOCOL_TOP_LEVEL_KEYS = frozenset(
+    {
+        "schema_version",
+        "issue",
+        "study_id",
+        "status",
+        "claim_boundary",
+        "execution_boundary",
+        "ordering_gate",
+        "baseline_protocol",
+        "scenario_contract",
+        "planner_contract",
+        "seed_contract",
+        "pedestrian_speed_contract",
+        "metric_contract",
+        "inference_contract",
+        "activation_contract",
+        "manifest_contract",
+        "turnaround_ledger",
+        "validation_contract",
+    }
+)
 EXPECTED_SCENARIOS = (
     "classic_head_on_corridor_medium",
     "classic_doorway_medium",
@@ -53,8 +76,14 @@ FORBIDDEN_TRANSIENT_KEYS = {
     "host",
     "job_id",
     "queue",
+    "runtime",
+    "scheduler",
+    "scheduler_routing",
+    "scheduler_state",
     "scratch_path",
     "target_host",
+    "routing",
+    "routing_state",
     "worktree",
 }
 
@@ -92,6 +121,20 @@ def _assert_no_transient_state(value: Any, path: str = "protocol") -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _assert_no_transient_state(child, f"{path}[{index}]")
+
+
+def _validate_complete_semantic_contract(payload: dict[str, Any]) -> None:
+    """Reject any change to the complete parsed protocol, including non-manifest fields."""
+    _assert_no_transient_state(payload)
+    actual_keys = set(payload)
+    _require(
+        actual_keys == EXPECTED_PROTOCOL_TOP_LEVEL_KEYS,
+        "protocol top-level fields drifted from the frozen semantic contract",
+    )
+    _require(
+        _canonical_hash(payload) == EXPECTED_PROTOCOL_SEMANTIC_HASH,
+        "complete frozen semantic contract drifted",
+    )
 
 
 def _resolve_repo_path(raw_path: str, field: str) -> Path:
@@ -382,11 +425,12 @@ def validate_protocol(payload: dict[str, Any]) -> None:
         validation.get("production_launcher_in_this_pr") is False,
         "production launcher must remain out of the protocol PR",
     )
-    _assert_no_transient_state(payload)
+    _validate_complete_semantic_contract(payload)
 
 
 def compile_manifest(payload: dict[str, Any]) -> dict[str, Any]:
     """Compile the exact 2,160 registered identities from a validated protocol."""
+    validate_protocol(payload)
     scenarios = _mapping(payload["scenario_contract"], "scenario_contract")["selected_scenarios"]
     regimes = _mapping(payload["pedestrian_speed_contract"], "pedestrian_speed_contract")["regimes"]
     planners = _mapping(payload["planner_contract"], "planner_contract")["roster"]

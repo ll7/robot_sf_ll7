@@ -109,6 +109,32 @@ def test_checker_rejects_transient_scheduler_state() -> None:
         checker.validate_protocol(payload)
 
 
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("activation_contract", "rule"), "activation is optional"),
+        (("inference_contract", "interval_method"), "wilson_score"),
+        (
+            ("inference_contract", "multiplicity", "family"),
+            "primary_metrics_only",
+        ),
+        (("scheduler",), {"partition": "gpu"}),
+    ],
+)
+def test_compile_manifest_rejects_semantic_and_transient_drift(
+    path: tuple[object, ...], value: object
+) -> None:
+    """Manifest compilation cannot bypass the complete frozen semantic contract."""
+    payload = deepcopy(_payload())
+    target: object = payload
+    for key in path[:-1]:
+        target = target[key]  # type: ignore[index]
+    target[path[-1]] = value  # type: ignore[index]
+
+    with pytest.raises(ValueError):
+        checker.compile_manifest(payload)
+
+
 def test_checker_requires_spawn_speed_and_activation_rule() -> None:
     """The spawn boundary and desired-speed activation gate are immutable."""
     payload = _payload()

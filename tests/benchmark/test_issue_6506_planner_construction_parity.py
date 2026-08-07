@@ -1,24 +1,22 @@
-"""Issue #6506 parity guard for unified planner-construction diagnostics.
+"""Issue #6506 parity guard for canonical planner construction and diagnostics.
 
-Issue #6506 asks the benchmark harness to replace its two duplicated planner
-bridging layers -- the baselines ``step(obs) -> dict`` arm in
-``robot_sf/benchmark/runner.py`` (native-command / simple policy) and the
-planner ``plan(observation) -> tuple`` arm in ``robot_sf/benchmark/map_runner.py``
-(SocNav-family adapter construction) -- with the single canonical adapter
-introduced by issue #6492 (``LocalPlannerProtocol``).
+Issue #6506 replaces the duplicated planner bridges at the benchmark harness
+boundary with the canonical adapter introduced by issue #6492
+(``LocalPlannerProtocol``). Its scoped wiring covers the baseline
+``step(obs) -> dict`` path in ``robot_sf/benchmark/runner.py`` and the external-
+MPC ``plan(observation) -> tuple`` bridge in ``robot_sf/benchmark/map_runner.py``.
 
-#6492 has now merged its canonical adapter (``robot_sf/planner/protocol.py``).
-#6506 wires both harness entry points' ``planner_diagnostics`` propagation
-through that single canonical adapter's fail-closed normalizer
-(``normalize_planner_diagnostics``): the runner native-command arm
-(``run_episode``) and the map-runner SocNav-family adapter arm
-(``_build_common_adapter_policy._planner_stats``) now share one diagnostics
-schema that always carries a string ``planner_type``. The full step()->dict /
-plan()->tuple *bridging* collapse remains blocked behind #6506 stop-condition 3
-(the canonical adapter is a proof-of-concept and lacks the process-isolated,
-heading-based, holonomic-passthrough, and learned-action conversions the two
-arms actually use); this module pins the contract the diagnostics unification
-must preserve -- validation requirement #4 of the #6506 contract:
+The #6771 injection points (merged as #6813) now let the runner construct
+``BaselineStepToLocalAdapter`` with its existing process-isolated step executor
+and world-velocity projector. The map-runner external-MPC bridge reuses the same
+canonical adapter with callbacks for its external observation format and
+heading-aware action projection. Both paths retain their existing execution-mode
+metadata, cleanup, and fail-closed behavior. Their diagnostics continue through
+the canonical ``normalize_planner_diagnostics`` path: the runner native-command
+arm (``run_episode``) and the map-runner adapter arm
+(``_build_common_adapter_policy._planner_stats``) share one diagnostics schema
+that always carries a string ``planner_type``. This module pins the parity
+contract required by #6506:
 
     "A parity assertion that native vs adapter execution-mode metadata and
     planner_diagnostics are unchanged for representative planners."
@@ -55,12 +53,12 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 # Representative planners spanning every execution-mode family the #6506
-# unification must preserve. The ``algo_key`` values are the canonical keys the
+# canonical wiring must preserve. The ``algo_key`` values are the canonical keys the
 # benchmark registry resolves via ``canonical_algorithm_name``; they are the
 # stable handles both ``runner.py`` and ``map_runner.py`` classify against.
 EXECUTION_MODE_REPRESENTATIVES: list[tuple[str, str]] = [
-    # Native family: baselines ``step(obs) -> dict`` arm wired in ``runner.py``
-    # (simple goal-seeking policy, SAC learned policy, native-command process arm).
+    # Native family: baseline ``step(obs) -> dict`` planners routed through the
+    # canonical adapter in ``runner.py`` (including the process-isolated arm).
     ("goal", "native"),
     ("sac", "native"),
     ("simple_policy", "native"),
@@ -109,9 +107,8 @@ def _native_command_scenario() -> dict[str, object]:
 def test_execution_mode_classification_baseline(algo_key: str, expected_mode: str) -> None:
     """Execution-mode classification is unchanged for representative planners.
 
-    The unified canonical adapter from #6492/#6506 must route every planner
-    through one construction path while preserving the native/adapter/mixed
-    label each representative earns today via ``enrich_algorithm_metadata``.
+    The #6506 canonical wiring must preserve the native/adapter/mixed label each
+    representative earns today via ``enrich_algorithm_metadata``.
     """
     metadata = enrich_algorithm_metadata(algo=algo_key, adapter_impact_requested=True)
     planner_kinematics = metadata["planner_kinematics"]
@@ -121,7 +118,7 @@ def test_execution_mode_classification_baseline(algo_key: str, expected_mode: st
     # would change the execution-mode classification surfaced to consumers.
     assert planner_kinematics["adapter_active"] is (expected_mode in {"adapter", "mixed"})
 
-    # The eventual single construction path must retain the additive
+    # The canonical construction path must retain the additive
     # adapter-impact counters for every execution-mode family. Actual values
     # are accumulated at runtime, so metadata initialization is deliberately
     # zeroed here rather than fabricated by this contract test.
@@ -150,15 +147,15 @@ def test_map_runner_socnav_adapter_preserves_adapter_metadata() -> None:
 
 
 def test_native_command_arm_propagates_native_mode_and_diagnostics() -> None:
-    """The runner.py ``step()->dict`` arm keeps native mode + planner_diagnostics.
+    """The runner's canonical ``step()->dict`` arm keeps native mode + diagnostics.
 
     The native-command arm is the representative of the baselines ``step()``
     family in ``runner.py``. It must classify as ``native`` and surface its
     counters under ``algorithm_metadata.planner_diagnostics`` (the
-    ``NATIVE_COMMAND_DIAGNOSTICS_KEY`` propagation path). After the #6506 rewire
-    the payload is routed through the canonical ``normalize_planner_diagnostics``
-    adapter from #6492, so it must additionally carry a string ``planner_type``
-    while every existing counter is preserved unchanged.
+    ``NATIVE_COMMAND_DIAGNOSTICS_KEY`` propagation path). The #6506 wiring
+    routes the payload through the canonical
+    ``normalize_planner_diagnostics`` path, so it must carry a string
+    ``planner_type`` while every existing counter is preserved unchanged.
     """
     record = run_episode(
         _native_command_scenario(),

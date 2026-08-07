@@ -1,0 +1,30 @@
+{
+  "campaign_integrity": {
+    "schema_version": "benchmark-camera-ready-integrity.v1",
+    "status": "valid"
+  },
+  "campaign_manifest": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json",
+  "campaign_manifest_sha256": "10c45f44ec5679144671c6247644a7e88b1444fdf9b25a7373b343bbf732e1bc",
+  "campaign_manifest_raw_retrieved_sha256": "6a76205cf6e36b6a7cf926f3cf56c83f4de971bce1b8b65d46c51e103e65e737",
+  "campaign_manifest_backfill_note": "The promoted campaign manifest adds config_path and config_sha256 (verified as the SHA-256 of the frozen campaign config at producing commit d0c8d340) for the evidence-registry linter; raw retrieved bytes recorded above.",
+  "campaign_source_commit_sha": "d0c8d3400f79c35b40062304b17f91598ccac98d",
+  "commit_sha": "3615540feab993e55fba658e8fff63e5de4b6de4",
+  "config_path": "configs/benchmarks/issue_6474_social_compliance_nominal_campaign.yaml",
+  "config_sha256": "fed85cef7ac43817d0aa47a3ac10f9e7f4b50b4be6410e796fdf3d837e69811e",
+  "episode_rows": "output/issue_6474_social_compliance_nominal/job-13985/runs",
+  "episode_rows_sha256": "68421501a52f953cfda60983c5a22d441203d89f6a8463ee67306aeeb0de57f5",
+  "execution_mode_counts": {
+    "adapter": 360,
+    "native": 180
+  },
+  "note": "Admitted as nominal benchmark evidence after the full 540-row campaign (job 13985) completed with zero fallback/degraded rows (issue #6639).",
+  "rejected_row_count": 0,
+  "report_path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.md",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "row_count": 540,
+  "scenario_sha256": "8c87eac284b51108d992521b1cdbef3edc28d13a3e0c5c34933a76f076ce3d6f",
+  "schema_version": "social-compliance-campaign-artifact-manifest.v1",
+  "slurm_job_id": 13985,
+  "summary_path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json",
+  "valid_row_count": 540
+}

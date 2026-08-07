@@ -17,6 +17,8 @@ from robot_sf.robot.robot_state import RobotState
 if TYPE_CHECKING:
     from robot_sf.sensor.sensor_fusion import SensorFusion
 
+__all__ = ["RobotEnvWithImage"]
+
 
 class RobotEnvWithImage(RobotEnv):
     """

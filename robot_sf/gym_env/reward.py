@@ -31,6 +31,22 @@ _DEFAULT_SNQI_REWARD_BASELINE: dict[str, dict[str, float]] = {
 }
 _SNQI_COMPUTE_FN = None
 
+__all__ = [
+    "_ROUTE_COMPLETION_V2_WEIGHTS",
+    "_ROUTE_COMPLETION_V3_WEIGHTS",
+    "_SOCIAL_QUALITY_V1_WEIGHTS",
+    "build_reward_curriculum_function",
+    "build_reward_function",
+    "punish_action_reward",
+    "route_completion_v2_reward",
+    "route_completion_v3_reward",
+    "simple_ped_reward",
+    "simple_reward",
+    "snqi_step_reward",
+    "social_quality_v1_reward",
+    "stationary_collision_ped_reward",
+]
+
 
 @dataclass(frozen=True, slots=True)
 class RewardCurriculumStage:

@@ -252,3 +252,16 @@ def envelope_diagnostics(*, enabled: bool, alpha: float, dt: float) -> dict[str,
             "not conformal calibration or safety certification"
         ),
     }
+
+
+__all__ = [
+    "DEFAULT_ALPHA_MPS",
+    "ENVELOPE_SCHEMA_VERSION",
+    "ConformalInflationPolicy",
+    "PedestrianUncertaintyEnvelope",
+    "SpatialInflationPolicy",
+    "effective_pedestrian_radius",
+    "envelope_diagnostics",
+    "envelope_from_position",
+    "linear_inflation_policy",
+]

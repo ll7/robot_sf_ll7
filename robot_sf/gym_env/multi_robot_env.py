@@ -31,6 +31,8 @@ from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.simulator import init_simulators
 
+__all__ = ["MultiRobotEnv"]
+
 
 def _stack_box_space(space: spaces.Box, num_agents: int) -> spaces.Box:
     """Return a leading-agent-axis Box matching stacked per-agent observations."""

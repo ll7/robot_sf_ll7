@@ -84,6 +84,19 @@ if TYPE_CHECKING:
     from robot_sf.gym_env.abstract_envs import MultiAgentEnv, SingleAgentEnv
     from robot_sf.gym_env.crowd_sim_env import CrowdSimEnv, CrowdSimulationConfig
 
+__all__ = [
+    "EnvironmentFactory",
+    "JsonlRecordingOptions",
+    "RecordingOptions",
+    "RenderOptions",
+    "TelemetryOptions",
+    "make_crowd_sim_env",
+    "make_image_robot_env",
+    "make_multi_robot_env",
+    "make_pedestrian_env",
+    "make_robot_env",
+]
+
 
 def _load_robot_env_with_image():
     """Lazy-load the image-capable robot environment class.

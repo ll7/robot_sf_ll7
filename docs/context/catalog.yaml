@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-28
+updated_at: 2026-08-07
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_6561_pedestrian_speed_protocol.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5273_s20_launch_packet.json
   status: evidence
   freshness: evidence
@@ -4829,6 +4833,26 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6158_topology_parallel_nmpc_offline_verdict.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_artifact_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

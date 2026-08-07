@@ -28,14 +28,23 @@ class FailureAttribution:
 def attribution_from_episode_record(record: dict[str, Any]) -> FailureAttribution:
     """Build a conservative attribution summary from a benchmark episode record."""
     outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
+    metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
     termination = str(record.get("termination_reason", record.get("status", "unknown")))
     reasons: list[str] = []
     primary: str | None = None
     collision = bool(outcome.get("collision")) or bool(outcome.get("collision_event"))
     timeout = bool(outcome.get("timeout")) or bool(outcome.get("timeout_event"))
+    severe_intrusion = any(
+        container.get(name) is True
+        for container in (outcome, metrics)
+        for name in ("severe_intrusion", "severe_intrusion_event")
+    )
     if collision:
         primary = "collision"
         reasons.append("episode outcome reports a collision")
+    elif severe_intrusion:
+        primary = "severe_intrusion"
+        reasons.append("episode outcome or metrics report severe intrusion")
     elif timeout:
         primary = "timeout"
         reasons.append("episode timed out before route completion")

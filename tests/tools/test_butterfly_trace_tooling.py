@@ -285,3 +285,122 @@ def test_print_contrast_renderer_uses_final_width_and_role_colors(tmp_path: Path
     assert legend[1].get_linestyle() == "--"
     assert hinge.COLOR_PED_FOCAL_OUTLINE == hinge.tsf.ORANGE
     plt.close("all")
+
+
+def _render_args(tmp_path: Path, *, b_story_steps: int = 1) -> tuple[list[str], Path]:
+    """Build two minimal fixture bundles and return a runnable ``main()`` argv + out dir.
+
+    Both bundles are the same 2-frame doorway fixture row (seed 113); ``--b-story-steps``
+    truncates episode B's story window so the rendered ``n_steps_used`` is observable and
+    pin-able by the issue #6616 expectation flags.
+    """
+    episodes = tmp_path / "episodes.jsonl"
+    _write_episode(episodes, _episode_row())
+    bundle_a = tmp_path / "bundle_a"
+    bundle_b = tmp_path / "bundle_b"
+    adapter.build_bundle(episodes, 113, bundle_a)
+    adapter.build_bundle(episodes, 113, bundle_b)
+    out_dir = tmp_path / "out"
+    argv = [
+        "--episode-a",
+        str(bundle_a),
+        "--episode-b",
+        str(bundle_b),
+        "--out-dir",
+        str(out_dir),
+        "--no-video",
+        "--b-story-steps",
+        str(b_story_steps),
+    ]
+    return argv, out_dir
+
+
+def test_hinge_sidecar_records_full_invocation_with_non_default_flag(tmp_path: Path) -> None:
+    """Issue #6616: a render with a non-default ``--b-story-steps`` pins the COMPLETE argv.
+
+    Asserts the regression class: a re-render reading the provenance sidecar can recover
+    the exact non-default flag (``--b-story-steps 1``) from ``invocation.argv`` /
+    ``invocation.parsed_args``, so a silent fallback to the 220-step default is no longer
+    unrecoverable.
+    """
+    argv, out_dir = _render_args(tmp_path, b_story_steps=1)
+    assert hinge.main(argv) == 0
+
+    sidecar = json.loads((out_dir / "butterfly_hinge_provenance.json").read_text(encoding="utf-8"))
+    assert sidecar["invocation"]["argv"] == argv
+    assert "--b-story-steps" in sidecar["invocation"]["argv"]
+    assert "1" in sidecar["invocation"]["argv"]
+    assert sidecar["invocation"]["parsed_args"]["b_story_steps"] == 1
+    assert sidecar["episode_b"]["n_steps_used"] == 1
+
+
+def test_hinge_fails_closed_on_b_story_steps_expectation_mismatch(tmp_path: Path) -> None:
+    """Issue #6616: ``--expect-b-story-steps`` disagreement fails closed before rendering.
+
+    A re-render that silently dropped ``--b-story-steps`` (falling back to the 220
+    default) must exit non-zero with an actionable message instead of writing a
+    mismatched figure.
+    """
+    argv, out_dir = _render_args(tmp_path, b_story_steps=1)
+    argv += ["--expect-b-story-steps", "235"]
+
+    with pytest.raises(RuntimeError, match="--expect-b-story-steps 235"):
+        hinge.main(argv)
+
+    assert not (out_dir / "butterfly_hinge_figure_proto.png").exists()
+    assert not (out_dir / "butterfly_hinge_report.json").exists()
+    assert not (out_dir / "butterfly_hinge_provenance.json").exists()
+
+
+def test_hinge_fails_closed_on_rendered_step_count_expectation_mismatch(tmp_path: Path) -> None:
+    """Issue #6616: ``--expect-n-steps-b`` disagreement fails closed before rendering."""
+    argv, out_dir = _render_args(tmp_path, b_story_steps=1)
+    argv += ["--expect-n-steps-b", "2"]
+
+    with pytest.raises(RuntimeError, match="--expect-n-steps-b 2"):
+        hinge.main(argv)
+
+    assert not (out_dir / "butterfly_hinge_figure_proto.png").exists()
+    assert not (out_dir / "butterfly_hinge_report.json").exists()
+    assert not (out_dir / "butterfly_hinge_provenance.json").exists()
+
+
+def test_hinge_expectation_agreement_renders_normally(tmp_path: Path) -> None:
+    """Issue #6616: matching expectations render normally and land in the sidecar."""
+    argv, out_dir = _render_args(tmp_path, b_story_steps=1)
+    argv += ["--expect-b-story-steps", "1", "--expect-n-steps-b", "1"]
+
+    assert hinge.main(argv) == 0
+
+    sidecar = json.loads((out_dir / "butterfly_hinge_provenance.json").read_text(encoding="utf-8"))
+    assert sidecar["episode_b"]["n_steps_used"] == 1
+    assert sidecar["invocation"]["parsed_args"]["expect_b_story_steps"] == 1
+    assert sidecar["invocation"]["parsed_args"]["expect_n_steps_b"] == 1
+    assert (out_dir / "butterfly_hinge_report.json").exists()
+
+
+def test_assert_render_expectations_match_guard_semantics() -> None:
+    """The guard is a no-op when nothing is pinned and raises an actionable RuntimeError
+    for each mismatch class independently."""
+    hinge.assert_render_expectations_match(
+        expected_b_story_steps=None,
+        expected_n_steps_b=None,
+        actual_b_story_steps=220,
+        actual_n_steps_b=220,
+    )
+
+    with pytest.raises(RuntimeError, match="expect-b-story-steps 235"):
+        hinge.assert_render_expectations_match(
+            expected_b_story_steps=235,
+            expected_n_steps_b=None,
+            actual_b_story_steps=220,
+            actual_n_steps_b=220,
+        )
+
+    with pytest.raises(RuntimeError, match="expect-n-steps-b 235"):
+        hinge.assert_render_expectations_match(
+            expected_b_story_steps=None,
+            expected_n_steps_b=235,
+            actual_b_story_steps=220,
+            actual_n_steps_b=220,
+        )

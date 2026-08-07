@@ -111,7 +111,7 @@ entries:
   - path: docs/context/evidence/issue_5034_control_action_latency_sweep/README.md
     sha256: d9fe91eed69843bd85919233199aa67b0476b68d39180a07aee7a39ce0e378ba
   - path: docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256
-    sha256: 7394e4348f72dca7e00e95e1ef6644a705bc9adfd699523af27260e0a133f0ae
+    sha256: 973e043a332d65dddc67da7f006e6fc556aeae58aad4b69d33b7ed685d57fcf8
   - path: docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_analysis.json
     sha256: 5ba2974cd8f300e61153e9e5d25ffe737dadbfb5efc62fc2659b19f9f9ec3949
   - path: docs/context/evidence/issue_5305_certified_archive/acceptance_report.json

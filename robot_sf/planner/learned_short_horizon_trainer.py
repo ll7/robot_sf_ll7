@@ -551,3 +551,17 @@ def train_short_horizon_predictor(config: ShortHorizonTrainerConfig) -> Training
         num_samples=config.num_samples,
         predictor_config=predictor_config,
     )
+
+
+__all__ = [
+    "CLAIM_BOUNDARY",
+    "EVIDENCE_TIER",
+    "REAL_TRAJECTORY_EVIDENCE_TIER",
+    "SCHEMA_VERSION",
+    "ShortHorizonTrainerConfig",
+    "TrainingResult",
+    "generate_real_trajectory_training_batch",
+    "generate_synthetic_training_batch",
+    "generate_training_batch",
+    "train_short_horizon_predictor",
+]

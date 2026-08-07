@@ -16,7 +16,6 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -81,6 +80,21 @@ _TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
 _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
 _GridObstacleCacheKey = tuple[int, int, int]
 _GridObstacleCacheValue = tuple[list[Line2D], list[ShapelyPolygon]]
+
+__all__ = [
+    "EnvSettings",
+    "RobotEnv",
+    "VisualizableSimState",
+    "_FlatteningObservationWrapper",
+    "_attach_goal_posterior_planner_input",
+    "_build_goal_posterior_planner_input",
+    "_build_step_info",
+    "_flatten_nested_dict_obs",
+    "_flatten_nested_dict_spaces",
+    "_flatten_occupancy_grid_metadata",
+    "_make_telemetry_run_id",
+    "_stable_config_hash",
+]
 
 
 # Helper to compute a stable, short hash for env_config
@@ -1411,7 +1425,8 @@ class RobotEnv(BaseEnv):
             timestep=self.state.timestep,
             robot_action=action,
             robot_pose=self.simulator.robot_poses[0],
-            pedestrian_positions=deepcopy(self.simulator.ped_pos),
+            # NumPy-native copy avoids deepcopy's pickle overhead (issue #6460)
+            pedestrian_positions=np.asarray(self.simulator.ped_pos).copy(),
             ray_vecs=ray_vecs_np,
             ped_actions=ped_actions_np,
             time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,

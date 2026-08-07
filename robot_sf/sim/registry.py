@@ -162,3 +162,5 @@ try:
     register_backend("dummy", dummy_factory, override=True)
 except (ValueError, KeyError) as _e:  # pragma: no cover - defensive
     logger.warning("Failed to register dummy backend: {}", _e)
+
+__all__ = ["get_backend", "list_backends", "register_backend", "select_best_backend"]

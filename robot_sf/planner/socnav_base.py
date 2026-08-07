@@ -479,7 +479,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             return linear, angular
         # Upstream planner failures use the heuristic fallback when enabled.
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:  # pragma: no cover - broad catch: planner surface unknown; heuristic fallback or re-raise
             if self._allow_fallback:
                 return self._heuristic_plan(observation)
             raise RuntimeError("SocNavBench planner failed during _plan_upstream.") from exc
@@ -819,3 +819,12 @@ class SocNavBenchComplexPolicy(SocNavPlannerPolicy):
             allow_fallback=allow_fallback,
         )
         super().__init__(adapter=adapter)
+
+
+__all__ = [
+    "SamplingPlannerAdapter",
+    "SocNavBenchComplexPolicy",
+    "SocNavPlannerConfig",
+    "SocNavPlannerPolicy",
+    "TrivialReferencePlannerAdapter",
+]

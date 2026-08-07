@@ -268,6 +268,11 @@ class TestMainCLI:
         assert (out / "report.md").exists()
         assert (out / "summary.json").exists()
         assert (out / "README.md").exists()
+        report_payload = json.loads((out / "report.json").read_text(encoding="utf-8"))
+        assert report_payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+        for md_name in ("report.md", "README.md"):
+            first_line = (out / md_name).read_text(encoding="utf-8").splitlines()[0]
+            assert first_line == "<!-- AI-GENERATED (robot_sf#2869) - NEEDS-REVIEW -->", md_name
 
     def test_main_summary_json_content(self, tmp_path: Path) -> None:
         """summary.json should carry the diagnostic claim boundary and recommendation."""

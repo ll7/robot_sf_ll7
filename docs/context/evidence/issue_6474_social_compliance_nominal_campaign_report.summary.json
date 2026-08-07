@@ -1,0 +1,417 @@
+{
+  "claim_boundary": "Simulator-defined social-compliance metric-family paired effects only; Holm multiplicity control over planner-pair-by-metric-family decisions; no composite ranking, fairness, ethics, safety, social-validity, or real-world claim.",
+  "claim_class": "diagnostic_proxy",
+  "decisions": [
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "social_force",
+      "confidence": 0.95,
+      "denominator": "tracked_pedestrian_steps_with_baseline",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "pedestrian_deviation",
+      "metric_id": "pedestrian_deviation_mean_m",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "meters"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "social_force",
+      "confidence": 0.95,
+      "denominator": "pedestrians_with_reference_arrival",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "flow_disruption",
+      "metric_id": "flow_disruption_delay_s",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "seconds"
+    },
+    {
+      "ci95_high": -0.471569444444445,
+      "ci95_low": -1.9366666666666668,
+      "comparison_planner": "social_force",
+      "confidence": 0.95,
+      "denominator": "pedestrian_steps",
+      "holm_adjusted_p_value": 0.025987006496751622,
+      "mean_difference": -1.2405555555555559,
+      "metric_family": "comfort_exposure",
+      "metric_id": "comfort_exposure_person_s",
+      "n_paired": 180,
+      "raw_p_value": 0.001999000499750125,
+      "reference_planner": "goal",
+      "rejected_at_alpha": true,
+      "scenario_support": [
+        {
+          "mean_difference": 0.4900000000000001,
+          "n_paired": 30,
+          "scenario_family": "doorway"
+        },
+        {
+          "mean_difference": -2.8066666666666666,
+          "n_paired": 30,
+          "scenario_family": "group_crossing"
+        },
+        {
+          "mean_difference": 0.5600000000000002,
+          "n_paired": 30,
+          "scenario_family": "head_on_corridor"
+        },
+        {
+          "mean_difference": -4.180000000000001,
+          "n_paired": 30,
+          "scenario_family": "merging"
+        },
+        {
+          "mean_difference": 0.019999999999999987,
+          "n_paired": 30,
+          "scenario_family": "overtaking"
+        },
+        {
+          "mean_difference": -1.526666666666667,
+          "n_paired": 30,
+          "scenario_family": "station_platform"
+        }
+      ],
+      "units": "person_seconds"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "social_force",
+      "confidence": 0.95,
+      "denominator": "robot_steps_before_terminal",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "legibility_progress",
+      "metric_id": "legibility_progress_deficit_m",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "meters"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "social_force",
+      "confidence": 0.95,
+      "denominator": "pedestrians_with_delay_samples",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "distributional_inconvenience",
+      "metric_id": "distributional_inconvenience_p90_p50_gap",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "seconds"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "tracked_pedestrian_steps_with_baseline",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "pedestrian_deviation",
+      "metric_id": "pedestrian_deviation_mean_m",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "meters"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "pedestrians_with_reference_arrival",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "flow_disruption",
+      "metric_id": "flow_disruption_delay_s",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "seconds"
+    },
+    {
+      "ci95_high": 3.6994722222222225,
+      "ci95_low": 1.8377083333333333,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "pedestrian_steps",
+      "holm_adjusted_p_value": 0.0074962518740629685,
+      "mean_difference": 2.767777777777778,
+      "metric_family": "comfort_exposure",
+      "metric_id": "comfort_exposure_person_s",
+      "n_paired": 180,
+      "raw_p_value": 0.0004997501249375312,
+      "reference_planner": "goal",
+      "rejected_at_alpha": true,
+      "scenario_support": [
+        {
+          "mean_difference": 3.726666666666667,
+          "n_paired": 30,
+          "scenario_family": "doorway"
+        },
+        {
+          "mean_difference": -0.5166666666666667,
+          "n_paired": 30,
+          "scenario_family": "group_crossing"
+        },
+        {
+          "mean_difference": -1.1666666666666665,
+          "n_paired": 30,
+          "scenario_family": "head_on_corridor"
+        },
+        {
+          "mean_difference": 8.596666666666668,
+          "n_paired": 30,
+          "scenario_family": "merging"
+        },
+        {
+          "mean_difference": 3.066666666666667,
+          "n_paired": 30,
+          "scenario_family": "overtaking"
+        },
+        {
+          "mean_difference": 2.9,
+          "n_paired": 30,
+          "scenario_family": "station_platform"
+        }
+      ],
+      "units": "person_seconds"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "robot_steps_before_terminal",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "legibility_progress",
+      "metric_id": "legibility_progress_deficit_m",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "meters"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "pedestrians_with_delay_samples",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "distributional_inconvenience",
+      "metric_id": "distributional_inconvenience_p90_p50_gap",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "goal",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "seconds"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "tracked_pedestrian_steps_with_baseline",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "pedestrian_deviation",
+      "metric_id": "pedestrian_deviation_mean_m",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "social_force",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "meters"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "pedestrians_with_reference_arrival",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "flow_disruption",
+      "metric_id": "flow_disruption_delay_s",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "social_force",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "seconds"
+    },
+    {
+      "ci95_high": 5.126416666666665,
+      "ci95_low": 2.8798055555555564,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "pedestrian_steps",
+      "holm_adjusted_p_value": 0.0074962518740629685,
+      "mean_difference": 4.008333333333334,
+      "metric_family": "comfort_exposure",
+      "metric_id": "comfort_exposure_person_s",
+      "n_paired": 180,
+      "raw_p_value": 0.0004997501249375312,
+      "reference_planner": "social_force",
+      "rejected_at_alpha": true,
+      "scenario_support": [
+        {
+          "mean_difference": 3.2366666666666672,
+          "n_paired": 30,
+          "scenario_family": "doorway"
+        },
+        {
+          "mean_difference": 2.2900000000000005,
+          "n_paired": 30,
+          "scenario_family": "group_crossing"
+        },
+        {
+          "mean_difference": -1.7266666666666666,
+          "n_paired": 30,
+          "scenario_family": "head_on_corridor"
+        },
+        {
+          "mean_difference": 12.776666666666667,
+          "n_paired": 30,
+          "scenario_family": "merging"
+        },
+        {
+          "mean_difference": 3.0466666666666677,
+          "n_paired": 30,
+          "scenario_family": "overtaking"
+        },
+        {
+          "mean_difference": 4.426666666666667,
+          "n_paired": 30,
+          "scenario_family": "station_platform"
+        }
+      ],
+      "units": "person_seconds"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "robot_steps_before_terminal",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "legibility_progress",
+      "metric_id": "legibility_progress_deficit_m",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "social_force",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "meters"
+    },
+    {
+      "ci95_high": NaN,
+      "ci95_low": NaN,
+      "comparison_planner": "orca",
+      "confidence": 0.95,
+      "denominator": "pedestrians_with_delay_samples",
+      "holm_adjusted_p_value": NaN,
+      "mean_difference": NaN,
+      "metric_family": "distributional_inconvenience",
+      "metric_id": "distributional_inconvenience_p90_p50_gap",
+      "n_paired": 0,
+      "raw_p_value": NaN,
+      "reference_planner": "social_force",
+      "rejected_at_alpha": false,
+      "scenario_support": [],
+      "units": "seconds"
+    }
+  ],
+  "policy": {
+    "alpha": 0.05,
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 123,
+    "confidence": 0.95,
+    "permutation_samples": 2000,
+    "planner_pairs": [
+      [
+        "goal",
+        "social_force"
+      ],
+      [
+        "goal",
+        "orca"
+      ],
+      [
+        "social_force",
+        "orca"
+      ]
+    ]
+  },
+  "provenance": {
+    "campaign_manifest": "output/issue_6474_social_compliance_nominal/job-13985/campaign_manifest.json",
+    "campaign_manifest_sha256": "6a76205cf6e36b6a7cf926f3cf56c83f4de971bce1b8b65d46c51e103e65e737",
+    "campaign_source_commit_sha": "d0c8d3400f79c35b40062304b17f91598ccac98d",
+    "commit_sha": "3615540feab993e55fba658e8fff63e5de4b6de4",
+    "config_path": "configs/benchmarks/issue_6474_social_compliance_nominal_campaign.yaml",
+    "config_sha256": "fed85cef7ac43817d0aa47a3ac10f9e7f4b50b4be6410e796fdf3d837e69811e",
+    "episode_rows": "output/issue_6474_social_compliance_nominal/job-13985/runs",
+    "episode_rows_sha256": "68421501a52f953cfda60983c5a22d441203d89f6a8463ee67306aeeb0de57f5",
+    "planner_pairs": [
+      [
+        "goal",
+        "social_force"
+      ],
+      [
+        "goal",
+        "orca"
+      ],
+      [
+        "social_force",
+        "orca"
+      ]
+    ]
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "social-compliance-cross-planner-report.v1",
+  "social_compliance_schema_version": "social-compliance-metric-contract.v1",
+  "validation": {
+    "execution_mode_counts": {
+      "adapter": 360,
+      "native": 180
+    },
+    "expected_row_count": 540,
+    "rejected": [],
+    "row_count": 540,
+    "scenario_count": 6,
+    "schema_versions": {
+      "social-compliance-metric-contract.v1": 540
+    },
+    "seed_count": 30,
+    "valid_row_count": 540
+  }
+}

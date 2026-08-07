@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+__all__ = ["build_reset_metadata", "resolve_map_id"]
+
 
 def resolve_map_id(config: Any, map_def: Any) -> str | None:
     """Resolve the active map id from a map definition, then fall back to config.

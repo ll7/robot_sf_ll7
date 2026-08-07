@@ -911,6 +911,8 @@ def _load_expert_training_config_mapping(
     base_path = Path(str(base_raw))
     if not base_path.is_absolute():
         base_path = resolved.parent / base_path
+    if not base_path.is_file():
+        raise ValueError(f"base_config {base_path} referenced by {resolved} does not exist")
     base_data = _load_expert_training_config_mapping(
         base_path,
         seen=seen | frozenset({resolved}),

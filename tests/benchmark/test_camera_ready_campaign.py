@@ -2665,6 +2665,7 @@ def test_artifact_writers_preserve_stable_formatting_and_injection_guards(
         {"name": "'=SUM(1,1)", "notes": "plain"},
         {"name": "'+cmd", "notes": "'@handle"},
     ]
+    assert b"\r\n" not in csv_path.read_bytes()
 
 
 def test_table_artifact_writer_projects_headers_and_escapes_markdown(

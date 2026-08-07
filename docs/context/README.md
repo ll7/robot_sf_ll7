@@ -108,6 +108,8 @@ knowledge, not every transient iteration detail.
   [research_month_one_synthesis_2026-06.md](research_month_one_synthesis_2026-06.md)
 * Issue #2946 mechanism-evidence figure pack: [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md)
 * Issue #3279 Social Mini-Game scenario families (v0): [issue_3279_social_mini_game_families.md](issue_3279_social_mini_game_families.md)
+* Issue #6103 / Issue #3275 same-planner held-out contract:
+  [issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md)
 * Issue #4932 data-driven scenario generation:
   [issue_4932_data_driven_scenario_generation.md](issue_4932_data_driven_scenario_generation.md)
 * Issue #6054 regulation-to-scenario compilation prototype:
@@ -130,6 +132,8 @@ knowledge, not every transient iteration detail.
   [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
 * Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600):
   [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
+* Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle (Gate 3 of #6600):
+  [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 
@@ -1157,6 +1161,10 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
 
 ## Benchmark Run Notes
 
+* [Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration](issue_6095_s10_discriminability_calibration.md)
+  records the fail-closed, portable preflight for the frozen two-planner S10 (ten-seed) campaign. It is a
+  configuration/provenance packet only; full SLURM execution remains required before any benchmark
+  or discriminability claim.
 * [Issue #1434 Stress/Uncertainty Coverage Schema v1](issue_1434_stress_uncertainty_coverage_schema.md)
   defines the `stress_uncertainty_coverage.v1` field contract, statistical summary tiers,
   scenario-parameter and failure-mode coverage axes, interpretation boundaries, and fail-closed

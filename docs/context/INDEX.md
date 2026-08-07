@@ -1,5 +1,14 @@
 # Context Retrieval Index
 
+Issue #6103 / Issue #3275 same-planner held-out contract: six frozen eligible
+fit anchors, cross-family same-planner evaluation, exact per-arm outcome
+admission, and the pending human-review boundary:
+[issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md).
+
+
+Issue #5303 step 2 frozen TPE-versus-random diagnostic preregistration (proposal/preflight only): the side-effect-free three-seed contract, hash manifest, and check command for `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`. The parent issue's 2026-07-28 domain ruling supersedes this design for promotion with a new six-seed preregistration; this historical packet remains an inconclusive-only diagnostic handoff and cannot authorize the #6145 campaign:
+[README.md](evidence/issue_5303_search_promotion_preregistration/README.md).
+
 Issue #6644 oracle-first narrow-doorway geometry-family preflight for the #6600
 collision-envelope campaign: versioned manifest
 (`issue_6644_narrow_doorway_geometry_family.v1`) over a 15-cell
@@ -16,11 +25,20 @@ planner inputs, with a fail-closed machine-readable go/no-go verdict per binding
 (`radius_binding_canary.v1`):
 [issue_6641_radius_binding_canary.md](issue_6641_radius_binding_canary.md).
 
-Issue #6642 collision-envelope radius sweep preparation (Gate 2 of #6600): dry-run manifest
-pinning the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the 48-cell
-classic_interactions_francis2023 matrix at one immutable campaign commit; preparation only, not
-benchmark evidence, production compute blocked until the Gate 1 binding canary (#6641) passes:
+Issue #6642 collision-envelope radius sweep admission (Gate 2 of #6600): manifest and three
+arm configs pin the 0.5/0.8/1.0 m treatment over the 14-planner release roster and the
+48-cell classic_interactions_francis2023 matrix at one immutable campaign commit, with
+fail-closed cross-arm non-radius consistency checks. Gate 1 runtime binding is admitted;
+the configs are still not benchmark evidence and production compute remains blocked by
+the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
+
+Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle for #6600:
+the analysis tooling is merged and fails closed, while the scientific analysis remains
+blocked until Gate 2 supplies complete row identities or a fail-closed missingness ledger.
+The current diagnostic-only handoff, exact reproduction command, and no-verdict boundary are
+recorded here:
+[issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md).
 
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
@@ -36,6 +54,10 @@ the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
+Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
+preflight configuration and its explicit no-result boundary:
+[issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).
+
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
 or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).
@@ -49,6 +71,11 @@ Issue #5792 one-command demo reproducibility and CPU UX smoke record:
 Issue #5579 MPC tuning-budget archaeology and completed bounded sensitivity diagnostic (two
 prediction-MPC arms, 20-point shared grid, fixed paired slice, and blocked fail-closed read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
+
+Issue #6700 SLURM compute run for the preregistered two-phase matched-budget MPC tuning-sensitivity
+campaign — blocked on this lane (not authorized to submit, no SLURM tooling, two-phase packet
+refreeze and passed native canary not yet on main); blocker and enabling gate:
+[issue_6700_mpc_tuning_campaign_compute_blocker.md](issue_6700_mpc_tuning_campaign_compute_blocker.md).
 
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7
 scenario discovery research program:
@@ -241,6 +268,7 @@ or the normal diff wrapper.
 | Root layout and cleanup | [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md), [issue_2035_path_reference_audit.md](issue_2035_path_reference_audit.md), [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md) | Current root-structure migration, path-reference cleanup validation, and the historical root-layout inventory retained as provenance. Superseded root-layout notes stay discoverable through `catalog.yaml` and the cleanup notes below instead of acting as current entry points. |
 | Adversarial search | [issue_4360_adversarial_dispatchable_inventory.md](issue_4360_adversarial_dispatchable_inventory.md), [issue_4360_reactive_adversary_design.md](issue_4360_reactive_adversary_design.md), [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md), [issue_3292_rare_event_probability_plan.md](issue_3292_rare_event_probability_plan.md), [issue_3474_seed_overlap_policy.md](issue_3474_seed_overlap_policy.md), [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md), [issue_2529_llm_manifest_interface.md](issue_2529_llm_manifest_interface.md), [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md), [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md), [issue_3281_naturalistic_vru_priors.md](issue_3281_naturalistic_vru_priors.md), [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md), [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md), [issue_2658_adversarial_manifest_smoke.md](issue_2658_adversarial_manifest_smoke.md), [issue_2725_generator_readiness.md](issue_2725_generator_readiness.md), [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md), [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md), [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md), [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md), [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md), [issue_1878_head_on_route_replay_determinism.md](issue_1878_head_on_route_replay_determinism.md), [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md), [../ai/awesome_copilot_adaptation.md](../ai/awesome_copilot_adaptation.md) | Current #4360 dispatchable inventory and runbook, reactive residual-adversary capability contract, cross-method adversarial generation roadmap, rare-event probability language gates and compact pilot plan, seed-overlap policy for held-out proposal-vs-random evidence, validator-backed manifest generation, guarded LLM-to-manifest interface, route-materialized planner smoke, compact manifest quality metrics, additive naturalistic VRU prior metadata, learned-expansion gate, generated-manifest collision/low-progress smoke, validator-runner compact evidence smoke, generator-readiness and training-readiness gates, bounded generation, manifest freeze, smoke packets, two-family execution evidence, replay determinism, head-on replay determinism, stress synthesis, and workflow adaptation. |
 | Manual control and trace analysis | [issue_1151_manual_control_mvp_foundation.md](issue_1151_manual_control_mvp_foundation.md), [issue_1689_simulation_trace_export_schema.md](issue_1689_simulation_trace_export_schema.md), [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md), [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md), [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md), [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md), [issue_2667_trace_failure_predicate_tables.md](issue_2667_trace_failure_predicate_tables.md), [issue_2688_trace_predicate_matrix.md](issue_2688_trace_predicate_matrix.md), [issue_3278_real_trace_validation_contract.md](issue_3278_real_trace_validation_contract.md), [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md), [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md), [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md), [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md), [issue_2405_amv_step_export_decision.md](issue_2405_amv_step_export_decision.md), [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md), [issue_2564_signal_state_proxy_smoke.md](issue_2564_signal_state_proxy_smoke.md), [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md), [issue_2223_topology_hypothesis_planning.md](issue_2223_topology_hypothesis_planning.md), [issue_2258_topology_primary_route_audit.md](issue_2258_topology_primary_route_audit.md), [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md), [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md), [issue_1646_analysis_workbench_closeout.md](issue_1646_analysis_workbench_closeout.md), [../debug_visualization.md](../debug_visualization.md) | Recorder workflows, trace export shape, real-trace viewer smoke evidence, trace-mechanism evidence levels, nonzero mechanism-signal gate, trace-level failure predicates with fail-closed `not_available` rows, denominator-aware predicate-table diagnostic evidence, the proposed predeclared trace-predicate benchmark matrix, the metadata-only real-trace validation-contract checker for candidate micromobility datasets, mechanism activation report fields, mechanism-panel input readiness, first AMMV/default diagnostic trace-panel bundle, first compact mechanism-evidence figure pack from existing tracked traces, candidate-trace blockers, AMMV single-row step-export proof, authored waiting/crossing trace metadata, trace-only signal-state proxy smoke, cyclist-like VRU proxy trace metadata, topology-hypothesis explanation diagnostics, primary-route audit, score-overselection diagnostic, the #1646 analysis-workbench epic closeout audit (criterion→evidence map), and debug visualization boundaries. |
+| Worked-example process traces | [issue_6790_worked_example_process_trace.md](issue_6790_worked_example_process_trace.md) | Diagnostic-only `worked_example_process_trace.v1` schema, builder, CLI reproduction command, pair-compatibility gate, and fail-closed route/conflict/encounter/process diagnostics for renderer-neutral worked-example figures. |
 
 ## Catalog Status Cleanup Notes
 

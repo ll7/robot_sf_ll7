@@ -1285,3 +1285,14 @@ def init_ped_simulators(
     )
 
     return [sim]
+
+
+__all__ = [
+    "PYSF_POSITION_SLICE",
+    "PYSF_TAU_INDEX",
+    "PYSF_VELOCITY_SLICE",
+    "PedSimulator",
+    "Simulator",
+    "init_ped_simulators",
+    "init_simulators",
+]

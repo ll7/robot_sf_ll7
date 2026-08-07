@@ -1,0 +1,20 @@
+{
+  "non_migrated_guards": {
+    "expert_ppo_issue_791_best_ckpt_all_scenarios_horizon500_20m_env22.yaml": "7f224720a8d5bdb6d2f6a0df77e40670f187dec72ad966d408e9be8bbbc4f2f3"
+  },
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "c8a10c04b40c569428d299d88dfc3b3b1e369483",
+  "variants": {
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml": "23193a77a15738cedd123f79c624498978a77af5834e7b21f8c25f5c77810868",
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed1337.yaml": "27f29abe3ca4c71f2da22cab417d707cbe6bda59bad5b2126f55026ce74ba117",
+    "expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity_seed231.yaml": "70f8c66eb3f2a6ed9bea0b6dc1de2ae336f47e786deade17d30ff0b7b95ba705",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml": "f85515e506bf4ef93b7d34e443351a8daa3045690b3ae0fd02339729627d75c2",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337.yaml": "9572f3c96b71198ab879d5dd0f53deea7cac0884ec43efa77edd5c73cc13cb54",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed1337_fixed.yaml": "da8369e694728a87f00cdff2708b83740ad96b372fdbaf7adaec6bf431d53b88",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231.yaml": "8a06d6cc8473702d6f892326f2a1a5bca558d94da0b2b0c9253245f26a8fcbd7",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed231_fixed.yaml": "361aeefd5f04758148384a8aa3436e2a009c77db42e7034af9ea88fdb71abb81",
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed1337.yaml": "142786a6f148d95e5ab7fdb9513969dbcc573c87961d22c7030548e764643e98",
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed231.yaml": "2f3e9824a690c1b5e64f30fd6b7f86fe49feeb927076f266d12d64b9c91a6d12",
+    "expert_ppo_issue_791_reward_curriculum_promotion_3m_env22_eval_aligned_seed992.yaml": "64e1b0ff5f02b82c79c2e75fa36900545ff713316294cbaa2a03c76b8a9b48f4"
+  }
+}

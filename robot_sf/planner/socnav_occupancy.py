@@ -339,3 +339,8 @@ class OccupancyAwarePlannerMixin:
             weight=self.config.occupancy_weight,  # type: ignore[attr-defined]
             angle_weight=self.config.occupancy_angle_weight,  # type: ignore[attr-defined]
         )
+
+
+__all__ = [
+    "OccupancyAwarePlannerMixin",
+]

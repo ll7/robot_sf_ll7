@@ -119,7 +119,7 @@ def main():
             # Local mode: always exit 0 (informational)
             sys.exit(0)
 
-    except Exception as e:
+    except Exception as e:  # broad catch: map-verification boundary; exit nonzero
         logger.exception(f"Verification failed with exception: {e}")
         sys.exit(1)
 

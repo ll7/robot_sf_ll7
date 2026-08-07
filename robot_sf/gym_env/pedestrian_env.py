@@ -49,6 +49,8 @@ if TYPE_CHECKING:
 
 logger = loguru.logger
 
+__all__ = ["PedestrianEnv", "_reward_function_name"]
+
 
 def _adapt_legacy_pedestrian_config(env_config: PedEnvSettings) -> PedestrianSimulationConfig:
     """Convert legacy ``PedEnvSettings`` into the unified pedestrian config type.
@@ -539,7 +541,8 @@ class PedestrianEnv(SingleAgentEnv):
             self.robot_state.timestep,
             robot_action,
             self.simulator.robot_poses[0],
-            deepcopy(self.simulator.ped_pos),
+            # NumPy-native copy avoids deepcopy's pickle overhead (issue #6460)
+            np.asarray(self.simulator.ped_pos).copy(),
             robot_ray_vecs,
             ped_actions_np,
             self.simulator.ego_ped_pose,

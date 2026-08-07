@@ -557,7 +557,7 @@ def _execute_campaign_planner_batch(
             status = "partial-failure"
         elif availability.availability_status == "failed":
             status = "failed"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - campaign fault isolation: failed arm, not crash
         status = "failed"
         summary = {
             "status": "failed",

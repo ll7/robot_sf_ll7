@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 6695
-latest_reviewed_date: 2026-08-03
+latest_reconciliation_issue: 6776
+latest_reviewed_date: 2026-08-05
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 415
-refreshed_baseline_files_with_findings: 89
+refreshed_baseline_total_findings: 419
+refreshed_baseline_files_with_findings: 91
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -89,6 +89,10 @@ decision_summary: >-
   repair, so all three files are dispositioned baseline below and the baseline grows from 397
   findings across 86 files to 415 findings across 89 files. A future backfill that binds these
   artifacts should refresh the baseline with --write-baseline to lock in the reduction.
+  S10 squash-history addendum (issue #6776): the nominal and stress metadata-only preflight
+  packets from #6095 reference the real producing commit d791c08f, which is unreachable from
+  main after the #6106 squash merge. The four resulting dangling_commit/config_missing_at_commit
+  findings are explicitly baselined below; the source packets and producer SHA are preserved.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -230,6 +234,28 @@ reviewed_files:
       no adjacent artifact-path key under the linter's meaning. Adding a binding path field would
       edit a package schema whose human owner review is still pending, so the findings stay
       explicitly baselined until the #6412 owner-review backfill.
+  # Added 2026-08-05: these S10 metadata-only preflight packets were newly added to the baseline
+  # by #6776 and therefore belong under reviewed_files, not reviewed_baseline_increases.
+  - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/preview_scenarios.json
+    codes: [dangling_commit, config_missing_at_commit]
+    disposition: baseline
+    reason: >-
+      The S10 nominal metadata-only preflight packet records producing commit d791c08f (a real
+      worktree commit present in the object store but unreachable from main's squash-merged
+      history). The referenced config exists at d791c08f and the packet is metadata-only
+      (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
+      class as the other dangling_commit entries; recorded here rather than rewriting the
+      producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.
+  - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/preflight/preview_scenarios.json
+    codes: [dangling_commit, config_missing_at_commit]
+    disposition: baseline
+    reason: >-
+      The S10 stress metadata-only preflight packet records producing commit d791c08f (a real
+      worktree commit present in the object store but unreachable from main's squash-merged
+      history). The referenced config exists at d791c08f and the packet is metadata-only
+      (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
+      class as the other dangling_commit entries; recorded here rather than rewriting the
+      producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

@@ -10,13 +10,13 @@ and not paper-grade claim promotion.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_csv, write_json, write_text
 from robot_sf.representation.uncertainty_source_generalization import (
     SourceContrast,
     assess_source_generalization,
@@ -172,55 +172,53 @@ def _write_integration_report(report: dict[str, Any], output_path: Path) -> None
         for row in report["per_representation"]
     )
 
-    output_path.write_text(
-        "\n".join(
-            [
-                "# Issue #3557 Integration Report",
-                "",
-                "Plain-language summary: this report connects the CPU-only diagnostic "
-                "uncertainty-representation result to the still-open full-campaign promotion "
-                "work. It records what is delivered, what remains blocked, and the next "
-                "empirical action without promoting the diagnostic result into a benchmark "
-                "claim.",
-                "",
-                f"- Issue: #{ISSUE}",
-                f"- Schema: `{SCHEMA_VERSION}`",
-                f"- Generalization verdict: `{report['generalization']}`",
-                f"- Delivered contract: {state['delivered_contract']}",
-                "",
-                "## Contract Delta",
-                "",
-                "- Adds `campaign_promotion_state` to `summary.json`.",
-                "- Adds this `integration_report.md` handoff artifact.",
-                "- Does not change the episode harness, benchmark runner, or decision thresholds.",
-                "",
-                "## Remaining Blockers",
-                "",
-                blockers,
-                "",
-                "## New Blockers",
-                "",
-                new_blockers,
-                "",
-                "## Intentional Boundaries",
-                "",
-                boundaries,
-                "",
-                "## Next Empirical Action",
-                "",
-                state["next_empirical_action"],
-                "",
-                "## Diagnostic Decision Rows",
-                "",
-                "| Representation | Harness decision | Generalization verdict | "
-                "Unsafe-rate delta | Min-separation delta (m) |",
-                "| --- | --- | --- | ---: | ---: |",
-                rows,
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    content = "\n".join(
+        [
+            "# Issue #3557 Integration Report",
+            "",
+            "Plain-language summary: this report connects the CPU-only diagnostic "
+            "uncertainty-representation result to the still-open full-campaign promotion "
+            "work. It records what is delivered, what remains blocked, and the next "
+            "empirical action without promoting the diagnostic result into a benchmark "
+            "claim.",
+            "",
+            f"- Issue: #{ISSUE}",
+            f"- Schema: `{SCHEMA_VERSION}`",
+            f"- Generalization verdict: `{report['generalization']}`",
+            f"- Delivered contract: {state['delivered_contract']}",
+            "",
+            "## Contract Delta",
+            "",
+            "- Adds `campaign_promotion_state` to `summary.json`.",
+            "- Adds this `integration_report.md` handoff artifact.",
+            "- Does not change the episode harness, benchmark runner, or decision thresholds.",
+            "",
+            "## Remaining Blockers",
+            "",
+            blockers,
+            "",
+            "## New Blockers",
+            "",
+            new_blockers,
+            "",
+            "## Intentional Boundaries",
+            "",
+            boundaries,
+            "",
+            "## Next Empirical Action",
+            "",
+            state["next_empirical_action"],
+            "",
+            "## Diagnostic Decision Rows",
+            "",
+            "| Representation | Harness decision | Generalization verdict | "
+            "Unsafe-rate delta | Min-separation delta (m) |",
+            "| --- | --- | --- | ---: | ---: |",
+            rows,
+            "",
+        ]
     )
+    write_text(output_path, content, issue_ref="robot_sf#3557")
 
 
 def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: str) -> None:
@@ -234,14 +232,8 @@ def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: st
     persisted_report = {
         key: value for key, value in report.items() if key != "representation_reports"
     }
-    summary_path.write_text(
-        json.dumps(persisted_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    fieldnames = list(report["per_representation"][0])
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(report["per_representation"])
+    write_json(summary_path, persisted_report)
+    write_csv(csv_path, report["per_representation"])
 
     rows = "\n".join(
         "| {representation} | {harness_decision} | {generalization_verdict} | "
@@ -249,47 +241,45 @@ def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: st
         "{min_separation_delta_dropped_minus_retained_m} |".format(**row)
         for row in report["per_representation"]
     )
-    readme_path.write_text(
-        "\n".join(
-            [
-                "# Issue #3557 Uncertainty-Representation Generalization",
-                "",
-                "Plain-language summary: this artifact runs the merged #4187 controlled "
-                "episode harness across `belief_drop`, `conformal_radius`, and "
-                "`envelope_inflation` representations. It asks whether dropping uncertain "
-                "agents remains worse in the same diagnostic crossing scenario.",
-                "",
-                f"- Issue: #{ISSUE}",
-                f"- Schema: `{SCHEMA_VERSION}`",
-                f"- Evidence tier: `{report['evidence_tier']}`",
-                f"- Generalization verdict: `{report['generalization']}`",
-                f"- Seeds: `{report['seeds']}`",
-                f"- Command: `{command}`",
-                "",
-                "## Claim Boundary",
-                "",
-                CLAIM_BOUNDARY,
-                "",
-                "This is not a full benchmark campaign result. It does not use Slurm or "
-                "GPU resources and does not edit paper or dissertation claims.",
-                "",
-                "## Per-Representation Decisions",
-                "",
-                "| Representation | Harness decision | Generalization verdict | "
-                "Unsafe-rate delta | Min-separation delta (m) |",
-                "| --- | --- | --- | ---: | ---: |",
-                rows,
-                "",
-                "Detailed machine-readable outputs:",
-                "",
-                "- `summary.json`",
-                "- `per_representation_decisions.csv`",
-                "- `integration_report.md`",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    readme = "\n".join(
+        [
+            "# Issue #3557 Uncertainty-Representation Generalization",
+            "",
+            "Plain-language summary: this artifact runs the merged #4187 controlled "
+            "episode harness across `belief_drop`, `conformal_radius`, and "
+            "`envelope_inflation` representations. It asks whether dropping uncertain "
+            "agents remains worse in the same diagnostic crossing scenario.",
+            "",
+            f"- Issue: #{ISSUE}",
+            f"- Schema: `{SCHEMA_VERSION}`",
+            f"- Evidence tier: `{report['evidence_tier']}`",
+            f"- Generalization verdict: `{report['generalization']}`",
+            f"- Seeds: `{report['seeds']}`",
+            f"- Command: `{command}`",
+            "",
+            "## Claim Boundary",
+            "",
+            CLAIM_BOUNDARY,
+            "",
+            "This is not a full benchmark campaign result. It does not use Slurm or "
+            "GPU resources and does not edit paper or dissertation claims.",
+            "",
+            "## Per-Representation Decisions",
+            "",
+            "| Representation | Harness decision | Generalization verdict | "
+            "Unsafe-rate delta | Min-separation delta (m) |",
+            "| --- | --- | --- | ---: | ---: |",
+            rows,
+            "",
+            "Detailed machine-readable outputs:",
+            "",
+            "- `summary.json`",
+            "- `per_representation_decisions.csv`",
+            "- `integration_report.md`",
+            "",
+        ]
     )
+    write_text(readme_path, readme, issue_ref="robot_sf#3557")
     _write_integration_report(report, integration_path)
 
 

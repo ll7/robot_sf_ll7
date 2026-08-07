@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: SLURM submission reconciliation gate; docs/context/evidence is a
+# read-only input and the only write is an optional caller-supplied --markdown summary, with
+# primary serialization to stdout.
 """Reconcile SLURM submission manifests against compact evidence bundles.
 
 The tool is intentionally metadata-only: it maps queue seed requests to manifest

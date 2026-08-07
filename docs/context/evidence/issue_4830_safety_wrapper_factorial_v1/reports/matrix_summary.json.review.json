@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/reports/matrix_summary.json",
+  "artifact_sha256": "b425cac9f4caaf7bc6e6bfcf2e550b47341c9fc4ed8fb2e33faa77331e9a0dde",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

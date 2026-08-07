@@ -164,6 +164,22 @@ def test_held_out_plan_contains_only_tuning_selected_targets() -> None:
     assert all(entry["candidate_id"] == "incumbent" for entry in incumbents)
 
 
+def test_held_out_analysis_rejects_missing_selection() -> None:
+    """The analyzer cannot re-select a candidate from held-out outcomes."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    with pytest.raises(ValueError, match="do not re-select candidates"):
+        analyze_results(
+            config,
+            [],
+            repo_root=ROOT,
+            config_path=str(CONFIG),
+            run_commit="fixture",
+            reproduction_command="fixture",
+            raw_artifact_root="output/fixture",
+            scope_name="held_out_scope",
+        )
+
+
 def test_tuning_selection_round_trip_and_fixed_held_out_report(tmp_path: Path) -> None:
     """Selection is frozen from tuning rows and held-out reporting uses one target per arm."""
     config = load_sensitivity_config(CONFIG, repo_root=ROOT)
@@ -590,6 +606,20 @@ def test_runner_rejects_held_out_execution_without_selection(tmp_path: Path) -> 
         )
 
 
+def test_runner_rejects_unbound_held_out_candidates(tmp_path: Path) -> None:
+    """A held-out run cannot proceed from candidate IDs without a validated artifact."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    selected = {"prediction_mpc": "speed_low", "prediction_mpc_cbf": "horizon_high"}
+    with pytest.raises(ValueError, match="completed tuning selection artifact"):
+        sensitivity_runner.run_study(
+            config,
+            out_dir=tmp_path,
+            config_path=CONFIG,
+            phase="held_out",
+            target_candidate_ids=selected,
+        )
+
+
 def test_runner_returns_nonzero_for_blocked_study(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -858,6 +888,12 @@ def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Pat
         load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
         == payload["selected_target_candidates"]
     )
+
+    tampered_commit = deepcopy(payload)
+    tampered_commit["source_report_run_commit"] = "different-run"
+    selection_path.write_text(json.dumps(tampered_commit), encoding="utf-8")
+    with pytest.raises(ValueError, match="run commit does not match"):
+        load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
 
     # A held-out-informed candidate swap keeps the config digest intact and must still fail.
     declared = [point["id"] for point in config["search"]["candidate_points"]]

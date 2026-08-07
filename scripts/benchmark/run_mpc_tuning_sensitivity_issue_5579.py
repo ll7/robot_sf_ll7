@@ -181,8 +181,13 @@ def run_study(
     """
     if phase not in {"tuning", "held_out"}:
         raise ValueError(f"unsupported sensitivity phase: {phase}")
-    if phase == "held_out" and target_candidate_ids is None:
-        raise ValueError("held_out phase requires a completed tuning selection artifact")
+    if phase == "held_out":
+        target_candidate_ids = _resolve_held_out_candidates(
+            config,
+            config_path=config_path,
+            target_candidate_ids=target_candidate_ids,
+            selection_artifact=selection_artifact,
+        )
     if phase == "tuning" and target_candidate_ids is not None:
         raise ValueError("tuning phase cannot receive held-out target candidate selections")
     scope_name = "tuning_scope" if phase == "tuning" else "held_out_scope"
@@ -270,6 +275,31 @@ def run_study(
     report["normalized_episode_rows"] = _display_path(normalized_path)
     write_report(report, phase_dir)
     return report
+
+
+def _resolve_held_out_candidates(
+    config: dict[str, Any],
+    *,
+    config_path: Path,
+    target_candidate_ids: Mapping[str, str] | None,
+    selection_artifact: str | None,
+) -> Mapping[str, str]:
+    """Load and bind held-out candidates to the validated tuning selection artifact."""
+    if selection_artifact is None:
+        raise ValueError("held_out phase requires a completed tuning selection artifact")
+    selected_from_artifact = load_tuning_selection(
+        selection_artifact,
+        config,
+        config_path=config_path,
+        repo_root=REPO_ROOT,
+    )
+    if target_candidate_ids is None:
+        return selected_from_artifact
+    if dict(target_candidate_ids) != selected_from_artifact:
+        raise ValueError(
+            "held_out target candidates do not match the validated tuning selection artifact"
+        )
+    return target_candidate_ids
 
 
 def _display_path(path: Path) -> str:

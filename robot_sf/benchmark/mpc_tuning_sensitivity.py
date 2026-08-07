@@ -337,6 +337,11 @@ def analyze_results(  # noqa: PLR0913
         Diagnostic report with candidate-level rows and the preregistered read.
     """
     validated = validate_sensitivity_config(config, repo_root=repo_root)
+    if scope_name == "held_out_scope" and target_candidate_ids is None:
+        raise ValueError(
+            "held_out_scope requires tuning-selected target candidates; "
+            "do not re-select candidates from held-out outcomes"
+        )
     selected = _validate_target_candidate_ids(target_candidate_ids, validated)
     plan = build_candidate_plan(
         validated,
@@ -485,6 +490,9 @@ def write_tuning_selection(
     config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
     if config_sha256 is None:
         raise ValueError(f"selection config does not exist: {config_path}")
+    source_report_run_commit = str(report.get("run_commit") or "").strip()
+    if not source_report_run_commit:
+        raise ValueError("tuning selection source report must record a run commit")
     report_path = _repo_path(str(source_report), repo_root)
     if not report_path.is_file():
         raise ValueError(f"tuning selection source report does not exist: {source_report}")
@@ -498,7 +506,7 @@ def write_tuning_selection(
         "selected_target_candidates": selected,
         "source_report": str(source_report),
         "source_report_sha256": _sha256(report_path),
-        "source_report_run_commit": str(report.get("run_commit", "")),
+        "source_report_run_commit": source_report_run_commit,
         "selection_input_digest": _selection_input_digest(report),
     }
     path = Path(output_path)
@@ -633,6 +641,7 @@ def _verify_selection_source_report(
         raise ValueError("tuning selection source report must be a mapping")
     if report.get("config_sha256") != expected_config_sha256:
         raise ValueError("tuning selection source report was produced by a different config")
+    _validate_selection_source_report_run_commit(payload, report)
     if payload.get("selection_input_digest") != _selection_input_digest(report):
         raise ValueError("tuning selection input digest does not match the source report")
     rederived = _derive_tuning_selection(report, validated)
@@ -641,6 +650,17 @@ def _verify_selection_source_report(
             "tuning selection does not match the source report selection rule: "
             f"recorded={dict(selected)} rederived={rederived}"
         )
+
+
+def _validate_selection_source_report_run_commit(
+    payload: Mapping[str, Any], report: Mapping[str, Any]
+) -> None:
+    """Require the selection artifact to bind the source report's run commit."""
+    report_run_commit = str(report.get("run_commit") or "").strip()
+    if not report_run_commit:
+        raise ValueError("tuning selection source report must record a run commit")
+    if payload.get("source_report_run_commit") != report_run_commit:
+        raise ValueError("tuning selection source report run commit does not match the artifact")
 
 
 def write_report(report: Mapping[str, Any], output_dir: str | Path) -> dict[str, str]:

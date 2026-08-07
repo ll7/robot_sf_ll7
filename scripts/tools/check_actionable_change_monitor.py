@@ -19,6 +19,7 @@ from typing import Any
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ISSUE = 6819
 DEFAULT_LIMIT = 500
+PAGE_SIZE = 100
 STALE_DRAFT_HOURS = 72
 SCHEMA_VERSION = "robot_sf.actionable_change_monitor.v1"
 FINGERPRINT_RE = re.compile(r"<!--\s*actionable-change-monitor:fingerprint:([0-9a-f]{64})\s*-->")
@@ -115,8 +116,9 @@ def _finding(
 def _check_findings(
     pull_request: dict[str, Any],
     check_runs: list[dict[str, Any]],
+    statuses: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Return pending or failed check findings for one pull request."""
+    """Return pending or failed check-run and legacy-status findings for one pull request."""
     findings: list[dict[str, Any]] = []
     for check in sorted(check_runs, key=lambda row: str(row.get("name") or "")):
         name = str(check.get("name") or "unnamed-check")
@@ -138,6 +140,27 @@ def _check_findings(
                     kind="check_failed",
                     target=pull_request,
                     detail=f"{name}: conclusion={conclusion or 'missing'}",
+                )
+            )
+    for commit_status in sorted(statuses or [], key=lambda row: str(row.get("context") or "")):
+        context = str(commit_status.get("context") or "unnamed-status")
+        state = str(commit_status.get("state") or "unknown").casefold()
+        if state == "pending":
+            findings.append(
+                _finding(
+                    finding_id=f"pr:{pull_request['number']}:status:{context}:pending",
+                    kind="check_pending",
+                    target=pull_request,
+                    detail=f"{context}: state={state}",
+                )
+            )
+        elif state != "success":
+            findings.append(
+                _finding(
+                    finding_id=f"pr:{pull_request['number']}:status:{context}:failed",
+                    kind="check_failed",
+                    target=pull_request,
+                    detail=f"{context}: state={state}",
                 )
             )
     return findings
@@ -247,6 +270,7 @@ def build_findings(
     *,
     now: datetime,
     target_issue: int = DEFAULT_ISSUE,
+    statuses_by_pr: dict[int, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build deterministic findings from a read-only GitHub snapshot."""
     findings: list[dict[str, Any]] = []
@@ -274,7 +298,14 @@ def build_findings(
                     detail=f"draft has not been updated since {pr.get('updated_at', 'unknown')}",
                 )
             )
-        findings.extend(_check_findings(pr, check_runs_by_pr.get(int(pr["number"]), [])))
+        pr_number = int(pr["number"])
+        findings.extend(
+            _check_findings(
+                pr,
+                check_runs_by_pr.get(pr_number, []),
+                (statuses_by_pr or {}).get(pr_number, []),
+            )
+        )
 
     for issue in issues:
         number = int(issue["number"])
@@ -355,7 +386,7 @@ def render_issue_body(
         [
             "## Safety contract",
             "",
-            "- Permissions: repository contents read, pull requests read, and issues write.",
+            "- Permissions: repository contents read, pull requests read, checks read, commit statuses read, and issues write.",
             "- The only allowed write is this issue body, after a fingerprint change.",
             "- API errors fail closed with no issue write.",
             "- Empty scans and unchanged fingerprints are no-ops.",
@@ -404,10 +435,48 @@ def _gh_json(
     return rows
 
 
+def _fetch_commit_collection(
+    repo: str,
+    sha: str,
+    *,
+    resource: str,
+    collection_key: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Read one bounded, paginated commit collection and reject malformed pages."""
+    if limit < 1:
+        raise MonitorError("monitor limit must be positive")
+    page_size = min(limit, PAGE_SIZE)
+    max_pages = max(1, (limit + page_size - 1) // page_size)
+    rows: list[dict[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        payload = _gh_json(
+            f"repos/{repo}/commits/{sha}/{resource}?per_page={page_size}&page={page}"
+        )
+        if not isinstance(payload, dict):
+            raise MonitorError(f"{resource} response for commit {sha} is not an object")
+        collection = payload.get(collection_key)
+        if not isinstance(collection, list) or any(not isinstance(row, dict) for row in collection):
+            raise MonitorError(
+                f"{resource} response for commit {sha} has no valid {collection_key} list"
+            )
+        rows.extend(collection)
+        if len(rows) >= limit or len(collection) < page_size:
+            return rows[:limit]
+    return rows[:limit]
+
+
 def _fetch_snapshot(
     repo: str, limit: int
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[int, list[dict[str, Any]]]]:
-    """Read open PRs, open issues, and checks for research PR heads."""
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[int, list[dict[str, Any]]],
+    dict[int, list[dict[str, Any]]],
+]:
+    """Read open PRs, open issues, check-runs, and legacy statuses for research PR heads."""
+    if limit < 1:
+        raise MonitorError("monitor limit must be positive")
     pull_requests = _gh_json(
         f"repos/{repo}/pulls?state=open&sort=updated&direction=desc&per_page={min(limit, 100)}",
         paginate=True,
@@ -420,23 +489,42 @@ def _fetch_snapshot(
     )
     issues = [row for row in issues_payload if isinstance(row, dict) and "pull_request" not in row]
     checks: dict[int, list[dict[str, Any]]] = {}
+    statuses: dict[int, list[dict[str, Any]]] = {}
     for pr in pull_requests:
         if not isinstance(pr, dict) or not _is_research_surface(pr):
             continue
         sha = str(pr.get("head", {}).get("sha") or "")
         if not sha:
             raise MonitorError(f"research PR #{pr.get('number')} has no head SHA")
-        check_payload = _gh_json(f"repos/{repo}/commits/{sha}/check-runs?per_page=100")
-        if not isinstance(check_payload, dict):
-            raise MonitorError(f"check-runs response for PR #{pr.get('number')} is not an object")
-        checks[int(pr["number"])] = [
-            row for row in check_payload.get("check_runs", []) if isinstance(row, dict)
-        ]
-    return pull_requests, issues, checks
+        pr_number = int(pr["number"])
+        checks[pr_number] = _fetch_commit_collection(
+            repo,
+            sha,
+            resource="check-runs",
+            collection_key="check_runs",
+            limit=limit,
+        )
+        statuses[pr_number] = _fetch_commit_collection(
+            repo,
+            sha,
+            resource="status",
+            collection_key="statuses",
+            limit=limit,
+        )
+    return pull_requests, issues, checks, statuses
+
+
+def _assert_canonical_target(repo: str, issue_number: int) -> None:
+    """Reject any target other than the repository's dedicated alert issue."""
+    if repo != DEFAULT_REPO or issue_number != DEFAULT_ISSUE:
+        raise MonitorError(
+            f"monitor writes are restricted to {DEFAULT_REPO} issue #{DEFAULT_ISSUE}"
+        )
 
 
 def _read_target_issue(repo: str, issue_number: int) -> dict[str, Any]:
     """Read and validate the one permitted write target."""
+    _assert_canonical_target(repo, issue_number)
     payload = _gh_json(f"repos/{repo}/issues/{issue_number}")
     if not isinstance(payload, dict) or int(payload.get("number", -1)) != issue_number:
         raise MonitorError("dedicated monitor issue identity could not be verified")
@@ -445,8 +533,19 @@ def _read_target_issue(repo: str, issue_number: int) -> dict[str, Any]:
     return payload
 
 
-def _update_target_issue(repo: str, issue_number: int, body: str) -> None:
-    """Perform the monitor's sole allowed write after target verification."""
+def _update_target_issue(
+    repo: str,
+    issue_number: int,
+    body: str,
+    *,
+    expected_previous: str | None,
+) -> None:
+    """Revalidate the marker, then perform the monitor's sole allowed write."""
+    _assert_canonical_target(repo, issue_number)
+    latest_target = _read_target_issue(repo, issue_number)
+    observed_previous = extract_previous_fingerprint(str(latest_target.get("body") or ""))
+    if observed_previous != expected_previous:
+        raise MonitorError("dedicated monitor target changed during scan; refusing stale write")
     endpoint = f"repos/{repo}/issues/{issue_number}"
     command = ["gh", "api", "--method", "PATCH", endpoint, "--field", f"body={body}"]
     try:
@@ -468,23 +567,37 @@ def run_monitor(
 ) -> dict[str, Any]:
     """Run one delta-only scan and update only the dedicated issue when needed."""
     scanned_at = now or datetime.now(UTC)
-    pull_requests, issues, checks = _fetch_snapshot(repo, limit)
+    _assert_canonical_target(repo, issue_number)
+    pull_requests, issues, checks, statuses = _fetch_snapshot(repo, limit)
     findings = build_findings(
         pull_requests,
         issues,
         checks,
         now=scanned_at,
         target_issue=issue_number,
+        statuses_by_pr=statuses,
     )
     fingerprint = compute_fingerprint(findings)
     target = _read_target_issue(repo, issue_number)
     previous = extract_previous_fingerprint(str(target.get("body") or ""))
+    if not findings:
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "repo": repo,
+            "issue": issue_number,
+            "fingerprint": fingerprint,
+            "previous_fingerprint": previous,
+            "changed": False,
+            "write_performed": False,
+            "finding_count": 0,
+        }
     changed = previous != fingerprint
     if changed and not dry_run:
         _update_target_issue(
             repo,
             issue_number,
             render_issue_body(findings, fingerprint=fingerprint, scanned_at=scanned_at),
+            expected_previous=previous,
         )
     return {
         "schema_version": SCHEMA_VERSION,

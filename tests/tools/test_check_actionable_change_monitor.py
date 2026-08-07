@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import pytest
+import yaml
 
 import scripts.tools.check_actionable_change_monitor as monitor
 
@@ -67,6 +71,27 @@ def test_build_findings_covers_research_pr_checks_and_stale_drafts() -> None:
     }
 
 
+def test_build_findings_covers_legacy_commit_statuses() -> None:
+    findings = monitor.build_findings(
+        [_pull_request(3)],
+        [],
+        {3: []},
+        now=NOW,
+        statuses_by_pr={
+            3: [
+                {"context": "legacy-pending", "state": "pending"},
+                {"context": "legacy-failure", "state": "failure"},
+            ]
+        },
+    )
+
+    assert {finding["kind"] for finding in findings} == {
+        "research_pr_activity",
+        "check_pending",
+        "check_failed",
+    }
+
+
 def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None:
     contradictory_launch = _issue(
         10,
@@ -115,6 +140,7 @@ def test_successful_checks_and_propagated_evidence_are_not_findings() -> None:
         [issue],
         {2: [{"name": "ci", "status": "completed", "conclusion": "success"}]},
         now=NOW,
+        statuses_by_pr={2: [{"context": "legacy-ci", "state": "success"}]},
     )
 
     assert {finding["kind"] for finding in findings} == {
@@ -155,9 +181,106 @@ def test_render_and_extract_fingerprint_marker() -> None:
     assert "a \\| detail" in body
 
 
+def test_workflow_declares_read_permissions_for_both_check_state_apis() -> None:
+    workflow_path = Path(".github/workflows/actionable-change-monitor.yml")
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "pull-requests": "read",
+        "checks": "read",
+        "statuses": "read",
+        "issues": "write",
+    }
+
+
+def test_fetch_snapshot_paginates_check_runs_and_statuses(monkeypatch) -> None:
+    calls: list[str] = []
+    pull_request = _pull_request(20)
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        calls.append(path)
+        if "/pulls?" in path:
+            return [pull_request]
+        if "/issues?" in path:
+            return []
+        if "/check-runs?" in path:
+            page = int(path.rsplit("page=", 1)[1])
+            if page == 1:
+                return {
+                    "total_count": 101,
+                    "check_runs": [{"name": f"check-{index}"} for index in range(100)],
+                }
+            return {"total_count": 101, "check_runs": [{"name": "check-100"}]}
+        if "/status?" in path:
+            return {
+                "total_count": 1,
+                "statuses": [{"context": "legacy-ci", "state": "success"}],
+            }
+        raise AssertionError(f"unexpected GitHub path: {path}")
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+    _, _, check_runs_by_pr, statuses_by_pr = monitor._fetch_snapshot(monitor.DEFAULT_REPO, 150)
+
+    assert len(check_runs_by_pr[20]) == 101
+    assert statuses_by_pr[20] == [{"context": "legacy-ci", "state": "success"}]
+    assert any("/check-runs?per_page=100&page=2" in call for call in calls)
+    assert any("/status?per_page=100&page=1" in call for call in calls)
+
+
+def test_fetch_snapshot_rejects_malformed_check_run_collection(monkeypatch) -> None:
+    pull_request = _pull_request(21)
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        if "/pulls?" in path:
+            return [pull_request]
+        if "/issues?" in path:
+            return []
+        if "/check-runs?" in path:
+            return {"total_count": 1}
+        raise AssertionError(f"unexpected GitHub path: {path}")
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    with pytest.raises(monitor.MonitorError, match="check_runs"):
+        monitor._fetch_snapshot(monitor.DEFAULT_REPO, 100)
+
+
+def test_run_monitor_rejects_noncanonical_target_before_reading(monkeypatch) -> None:
+    def fail_snapshot(*args: object, **kwargs: object) -> object:
+        raise AssertionError("non-canonical target must be rejected first")
+
+    monkeypatch.setattr(monitor, "_fetch_snapshot", fail_snapshot)
+
+    with pytest.raises(monitor.MonitorError, match="restricted"):
+        monitor.run_monitor(repo="other/repository", issue_number=42, now=NOW)
+
+
+def test_empty_scan_is_a_noop_even_without_a_previous_marker(monkeypatch) -> None:
+    writes: list[object] = []
+    target = {"number": 6819, "state": "open", "body": ""}
+
+    monkeypatch.setattr(monitor, "_fetch_snapshot", lambda repo, limit: ([], [], {}, {}))
+    monkeypatch.setattr(monitor, "_read_target_issue", lambda repo, issue: target)
+    monkeypatch.setattr(
+        monitor,
+        "_update_target_issue",
+        lambda *args, **kwargs: writes.append((args, kwargs)),
+    )
+
+    result = monitor.run_monitor(repo=monitor.DEFAULT_REPO, issue_number=6819, now=NOW)
+
+    assert result["finding_count"] == 0
+    assert result["changed"] is False
+    assert result["write_performed"] is False
+    assert writes == []
+
+
 def test_run_monitor_writes_only_when_fingerprint_changes(monkeypatch) -> None:
     pull_request = _pull_request(20)
-    snapshot = ([pull_request], [], {20: []})
+    snapshot = ([pull_request], [], {20: []}, {})
     writes: list[tuple[str, int, str]] = []
     target = {"number": 6819, "state": "open", "body": ""}
 
@@ -166,7 +289,7 @@ def test_run_monitor_writes_only_when_fingerprint_changes(monkeypatch) -> None:
     monkeypatch.setattr(
         monitor,
         "_update_target_issue",
-        lambda repo, issue, body: writes.append((repo, issue, body)),
+        lambda repo, issue, body, **kwargs: writes.append((repo, issue, body)),
     )
 
     first = monitor.run_monitor(repo="ll7/robot_sf_ll7", issue_number=6819, now=NOW)
@@ -178,3 +301,32 @@ def test_run_monitor_writes_only_when_fingerprint_changes(monkeypatch) -> None:
     assert second["changed"] is False
     assert second["write_performed"] is False
     assert len(writes) == 1
+
+
+def test_run_monitor_refuses_stale_target_before_patching(monkeypatch) -> None:
+    pull_request = _pull_request(22)
+    target_reads = iter(
+        [
+            {"number": 6819, "state": "open", "body": ""},
+            {
+                "number": 6819,
+                "state": "open",
+                "body": "<!-- actionable-change-monitor:fingerprint:" + "a" * 64 + " -->",
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        monitor,
+        "_fetch_snapshot",
+        lambda repo, limit: ([pull_request], [], {22: []}, {}),
+    )
+    monkeypatch.setattr(monitor, "_read_target_issue", lambda repo, issue: next(target_reads))
+
+    def fail_patch(*args: object, **kwargs: object) -> object:
+        raise AssertionError("stale target must be rejected before PATCH")
+
+    monkeypatch.setattr(monitor.subprocess, "run", fail_patch)
+
+    with pytest.raises(monitor.MonitorError, match="stale write"):
+        monitor.run_monitor(repo=monitor.DEFAULT_REPO, issue_number=6819, now=NOW)

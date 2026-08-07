@@ -14,6 +14,7 @@ Usage::
         --output-dir docs/context/evidence/issue_2765_dense_pedestrian_stress_2026-06-14
 """
 
+# evidence-writer-exempt: insertion-order JSON contract - json.dump without sort_keys preserves the committed field order that shared write_json (sort_keys=True) would reorder.
 from __future__ import annotations
 
 import argparse

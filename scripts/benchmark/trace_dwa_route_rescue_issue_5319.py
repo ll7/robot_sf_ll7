@@ -36,7 +36,7 @@ from typing import Any
 
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.evidence.distance_convention import DistanceConvention
-from robot_sf.evidence.writers import write_distance_series_csv, write_json
+from robot_sf.evidence.writers import write_distance_series_csv, write_json, write_text
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -501,7 +501,7 @@ def _write_evidence_readme(  # noqa: PLR0915
     lines.append("")
     lines.append(f"Executed at repo commit `{trace_commit}`.")
     lines.append("")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(path, "\n".join(lines) + "\n")
 
 
 def _fmt(value: Any) -> str:
@@ -600,20 +600,15 @@ def trace_episodes(
         )
 
     all_step_rows.sort(key=lambda row: (row["episode_id"], row["step"]))
-    (out_dir / "dwa_route_rescue_trace.json").write_text(
-        json.dumps(
-            {
-                "schema_version": "dwa-route-rescue-trace.v1",
-                "issue": 5319,
-                "claim_boundary": "diagnostic-only: two CPU fixed-seed DWA episodes with route-rescue; no benchmark/roster/metric/paper claim.",
-                "config": _repo_relative_path(algo_config_path),
-                "episodes": episodes_payload,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    write_json(
+        out_dir / "dwa_route_rescue_trace.json",
+        {
+            "schema_version": "dwa-route-rescue-trace.v1",
+            "issue": 5319,
+            "claim_boundary": "diagnostic-only: two CPU fixed-seed DWA episodes with route-rescue; no benchmark/roster/metric/paper claim.",
+            "config": _repo_relative_path(algo_config_path),
+            "episodes": episodes_payload,
+        },
     )
     _write_steps_csv(out_dir / "dwa_route_rescue_steps.csv", all_step_rows)
     summary_payload = {

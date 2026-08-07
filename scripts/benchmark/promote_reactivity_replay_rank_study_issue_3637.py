@@ -6,6 +6,7 @@ claim. It copies the compact post-run analyzer artifacts into docs/context/evide
 after checking the issue, replay limitation, and expected file contract.
 """
 
+# evidence-writer-exempt: digest/manifest use - the `manifest.sha256` sidecar records `{sha256}  {name}` pairs without the shared SHA256SUMS marker+label format, so write_sha256sums cannot preserve the exact bytes.
 from __future__ import annotations
 
 import argparse

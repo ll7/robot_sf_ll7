@@ -1,0 +1,45 @@
+name: RobotSF actionable-change monitor
+
+# Advisory delta-only monitor for the research queue (issue #6819). This
+# workflow is read-only with respect to every GitHub object except the pinned
+# target issue: it never merges pull requests, never changes research state or
+# labels, never submits or mutates compute, never creates issues, and never
+# updates any issue other than #6819. It scans on a six-hour cadence and on
+# manual dispatch, and writes the recomputed fingerprint into the dedicated
+# issue body only when it differs from the current body.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: actionable-change-monitor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+        with:
+          migrate-artifacts: "false"
+
+      - name: Run delta-only actionable-change monitor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run python scripts/ci/check_actionable_change_monitor.py
+          --repo "${{ github.repository }}"
+          --issue 6819

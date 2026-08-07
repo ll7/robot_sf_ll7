@@ -222,7 +222,7 @@ def _verify_repository_entry(
         frozen_sha256 = _sha256_git_path(repo_root, source_commit, relative_path)
         if frozen_sha256 == expected_sha256:
             result["current_sha256"] = actual_sha256
-            result["actual_sha256"] = frozen_sha256
+            result["frozen_sha256"] = frozen_sha256
             result["source_commit"] = source_commit
             result["match"] = True
     return result

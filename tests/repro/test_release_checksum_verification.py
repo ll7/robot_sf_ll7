@@ -661,7 +661,9 @@ class TestVerificationScript:
         )
         assert frozen_source["match"] is True
         assert frozen_source["source_commit"] == manifest["frozen_manifest_origin_main_commit"]
-        assert frozen_source["current_sha256"] != frozen_source["actual_sha256"]
+        assert frozen_source["current_sha256"] == frozen_source["actual_sha256"]
+        assert frozen_source["frozen_sha256"] == frozen_source["expected_sha256"]
+        assert frozen_source["frozen_sha256"] != frozen_source["actual_sha256"]
 
     def test_unavailable_frozen_source_commit_fails_closed(self, tmp_path: Path) -> None:
         """A manifest pinning an unavailable frozen commit must fail closed."""

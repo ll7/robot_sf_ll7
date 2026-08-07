@@ -741,6 +741,48 @@ class TestVerificationScript:
         assert report["overall_verdict"] == "fail"
         assert any("must be a 40-character Git SHA" in error for error in report["errors"])
 
+    def test_frozen_source_fallback_does_not_rescue_unmatched_digest(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A frozen commit must not rescue a digest that matches neither source."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        canonical_manifest_path = (
+            ROOT / "configs" / "releases" / "release_0_0_5_checksum_manifest.yaml"
+        )
+        frozen_commit = _read_yaml(canonical_manifest_path)["frozen_manifest_origin_main_commit"]
+        source_path = (
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+        )
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "frozen_manifest_origin_main_commit": frozen_commit,
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": source_path, "sha256": "0" * 64}],
+                },
+            },
+            "entries": [{"path": source_path, "sha256": "0" * 64}],
+        }
+        manifest_path = tmp_path / "configs" / "releases" / "manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=ROOT,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert any(
+            "Repository entry checksum verification failed" in error for error in report["errors"]
+        )
+
     def test_release_0_0_5_preserves_frozen_candidate_contract(self) -> None:
         """The release cards must preserve the frozen membership and claim boundaries."""
         frozen = _read_yaml(

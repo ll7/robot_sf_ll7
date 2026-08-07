@@ -258,7 +258,7 @@ def test_compose_produces_acyclic_reproducible_hashes() -> None:
         assert hashlib.sha256(content).hexdigest() == hashlib.sha256(files_b[name]).hexdigest()
     # The aggregate packet's generated_files match the recomputed raw digests.
     packet = json.loads(files_a["preflight_packet.json"])
-    generated = {entry["path"]: entry["sha256"] for entry in packet["generated_files"]}
+    generated = {entry["path"]: entry["file_sha256"] for entry in packet["generated_files"]}
     for name, digest in generated.items():
         assert hashlib.sha256(files_a[name]).hexdigest() == digest
 

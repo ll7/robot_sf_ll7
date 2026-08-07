@@ -710,11 +710,11 @@ def build_held_out_preflight(
         },
         "search_space": {
             "path": eval_cfg["search_space_path"],
-            "sha256": model_provenance.get("search_space_sha256"),
+            "search_space_file_sha256": model_provenance.get("search_space_sha256"),
         },
         "evaluation_map": {
             "path": eval_cfg["map_file"],
-            "sha256": model_provenance.get("evaluation_map_sha256"),
+            "map_file_sha256": model_provenance.get("evaluation_map_sha256"),
         },
         "target_planner": {
             "id": target_planner_id,
@@ -893,7 +893,8 @@ def compose_preflight_packet_files(
     }
 
     generated = [
-        {"path": name, "sha256": hashlib.sha256(files[name]).hexdigest()} for name in _PACKET_FILES
+        {"path": name, "file_sha256": hashlib.sha256(files[name]).hexdigest()}
+        for name in _PACKET_FILES
     ]
     packet["generated_files"] = list(generated)
     packet["verification"] = {

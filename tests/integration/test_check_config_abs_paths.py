@@ -152,7 +152,7 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 
-    def test_issue_6474_manifest_is_pinned_verbatim_and_digest_guarded(self):
+    def test_issue_6474_manifest_is_pinned_verbatim_and_digest_guarded(self, tmp_path):
         """The admitted issue-6474 campaign manifest is byte-exact pinned provenance.
 
         The manifest's ``invoked_command`` faithfully records the absolute SLURM
@@ -173,14 +173,10 @@ class TestCheckConfigAbsPaths:
             "issue-6639-social-compliance-20260804",
             "issue-6639-social-compliance-20260804-altered",
         )
-        monkeypatch_path = manifest.parent / "issue_6474_tmp_altered.json"
-        monkeypatch_path.write_text(altered, encoding="utf-8")
-        try:
-            result = find_abs_path_violations([str(monkeypatch_path)])
-            assert result["status"] == "fail"
-            assert len(result["violations"]) == 1
-        finally:
-            monkeypatch_path.unlink(missing_ok=True)
+        altered_path = Path(_write(tmp_path, rel, altered))
+        result = find_abs_path_violations([str(altered_path)])
+        assert result["status"] == "fail"
+        assert len(result["violations"]) == 1
 
     def test_ignores_docs_outside_evidence(self, tmp_path, monkeypatch):
         """Docs files outside docs/context/evidence/ are not scanned."""

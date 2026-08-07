@@ -78,21 +78,21 @@ def _text(payload: dict[str, Any]) -> str:
     return f"{payload.get('title') or ''}\n{payload.get('body') or ''}".casefold()
 
 
-def _is_research_surface(payload: dict[str, Any]) -> bool:
-    """Return whether a PR or issue belongs to the research/benchmark watch lane."""
-    labels = set(_labels(payload))
-    if labels & RESEARCH_LABELS:
-        return True
-    text = _text(payload)
-    return any(term in text for term in WATCH_TERMS)
-
-
 def _has_watch_label(labels: tuple[str, ...]) -> bool:
     """Return whether labels identify a monitored prediction/navigation/blocked surface."""
     return bool(
         set(labels) & {"paper-critical", "slurm", "resource:slurm", "state:blocked", "blocked"}
         or any(label.startswith(WATCH_LABEL_PREFIXES) for label in labels)
     )
+
+
+def _is_research_surface(payload: dict[str, Any]) -> bool:
+    """Return whether a PR or issue belongs to the research/benchmark watch lane."""
+    labels = _labels(payload)
+    if set(labels) & RESEARCH_LABELS or _has_watch_label(labels):
+        return True
+    text = _text(payload)
+    return any(term in text for term in WATCH_TERMS)
 
 
 def _finding(
@@ -495,8 +495,25 @@ def _fetch_commit_collection(
             raise MonitorError(
                 f"{resource} response for commit {sha} has no valid {collection_key} list"
             )
+        total_count = payload.get("total_count")
+        if total_count is not None and (
+            isinstance(total_count, bool) or not isinstance(total_count, int) or total_count < 0
+        ):
+            raise MonitorError(f"{resource} response for commit {sha} has invalid total_count")
         rows.extend(collection)
-        if len(rows) >= limit or len(collection) < page_size:
+        if total_count is not None and total_count < len(rows):
+            raise MonitorError(
+                f"{resource} response for commit {sha} reports total_count={total_count} "
+                f"below {len(rows)} returned rows"
+            )
+        if len(rows) >= limit:
+            return rows[:limit]
+        if len(collection) < page_size:
+            if total_count is not None and total_count > len(rows):
+                raise MonitorError(
+                    f"{resource} response for commit {sha} returned a short page with "
+                    f"total_count={total_count} but only {len(rows)} rows were returned"
+                )
             return rows[:limit]
     return rows[:limit]
 

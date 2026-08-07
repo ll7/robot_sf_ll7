@@ -142,6 +142,18 @@ def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None
     }
 
 
+@pytest.mark.parametrize(
+    "label",
+    ["blocked:needs-campaign", "evidence:provisional", "resource:external-data", "state:pending"],
+)
+def test_prefix_only_watch_labels_are_selected_as_research_surfaces(label: str) -> None:
+    issue = _issue(14, body="ordinary maintenance", labels=_labels(label))
+
+    findings = monitor.build_findings([], [issue], {}, now=NOW)
+
+    assert {finding["kind"] for finding in findings} == {"watched_research_surface"}
+
+
 def test_successful_checks_and_propagated_evidence_are_not_findings() -> None:
     pull_request = _pull_request(2)
     issue = _issue(
@@ -241,6 +253,34 @@ def test_fetch_snapshot_paginates_check_runs_and_statuses(monkeypatch) -> None:
     assert statuses_by_pr[20] == [{"context": "legacy-ci", "state": "success"}]
     assert any("/check-runs?per_page=100&page=2" in call for call in calls)
     assert any("/status?per_page=100&page=1" in call for call in calls)
+
+
+@pytest.mark.parametrize(
+    ("resource", "collection_key"),
+    [("check-runs", "check_runs"), ("status", "statuses")],
+)
+def test_fetch_commit_collection_rejects_inconsistent_short_pages(
+    monkeypatch, resource: str, collection_key: str
+) -> None:
+    calls: list[str] = []
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        calls.append(path)
+        return {"total_count": 101, collection_key: [{"name": "only-row"}]}
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    with pytest.raises(monitor.MonitorError, match="short page"):
+        monitor._fetch_commit_collection(
+            monitor.DEFAULT_REPO,
+            "sha-inconsistent",
+            resource=resource,
+            collection_key=collection_key,
+            limit=150,
+        )
+
+    assert len(calls) == 1
 
 
 def test_fetch_snapshot_rejects_malformed_check_run_collection(monkeypatch) -> None:

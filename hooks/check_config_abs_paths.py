@@ -60,10 +60,10 @@ LEGACY_EVIDENCE_ALLOWLIST = frozenset(
     }
 )
 
-# Two issue-5164 exporter companions are verbatim copies of the original 2026-07-02 campaign
-# summaries. Their embedded absolute paths are historical execution provenance and cannot be
-# rewritten without breaking the recovery checksums. Keep this exception byte-exact: any change to
-# either file stops matching here and restores the normal absolute-path scan.
+# A few verbatim recovered campaign artifacts are byte-exact copies of the original campaign
+# summaries/manifests. Their embedded absolute paths are historical execution provenance and cannot
+# be rewritten without breaking the recovery checksums. Keep this exception byte-exact: any change to
+# any pinned file stops matching here and restores the normal absolute-path scan.
 PINNED_VERBATIM_EVIDENCE_SHA256 = {
     (
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
@@ -73,6 +73,9 @@ PINNED_VERBATIM_EVIDENCE_SHA256 = {
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
         "source_reports/13273/campaign_summary.json"
     ): "f456580bad70167e42d6e24c9570547042fd02ce39c35687ed152928f6a0698e",
+    (
+        "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json"
+    ): "10c45f44ec5679144671c6247644a7e88b1444fdf9b25a7373b343bbf732e1bc",
 }
 
 

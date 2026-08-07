@@ -152,6 +152,34 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 
+    def test_issue_6474_manifest_is_pinned_verbatim_and_digest_guarded(
+        self, tmp_path: Path
+    ) -> None:
+        """The admitted issue-6474 campaign manifest is byte-exact pinned provenance.
+
+        The manifest's ``invoked_command`` faithfully records the absolute SLURM
+        launch line (issue #6639 admission). It is pinned through
+        ``PINNED_VERBATIM_EVIDENCE_SHA256`` so the promoted bytes keep their
+        recovery checksum, while any edit re-enables the absolute-path scan.
+        """
+        repo_root = Path(__file__).resolve().parents[2]
+        rel = "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json"
+        manifest = repo_root / rel
+        assert manifest.is_file(), f"tracked issue-6474 manifest is missing: {manifest}"
+        expected_sha256 = abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256[rel]
+        observed_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest()
+        assert observed_sha256 == expected_sha256
+        assert find_abs_path_violations([str(manifest)])["status"] == "pass"
+
+        altered = manifest.read_text(encoding="utf-8").replace(
+            "issue-6639-social-compliance-20260804",
+            "issue-6639-social-compliance-20260804-altered",
+        )
+        altered_path = Path(_write(tmp_path, rel, altered))
+        result = find_abs_path_violations([str(altered_path)])
+        assert result["status"] == "fail"
+        assert len(result["violations"]) == 1
+
     def test_ignores_docs_outside_evidence(self, tmp_path, monkeypatch):
         """Docs files outside docs/context/evidence/ are not scanned."""
         monkeypatch.chdir(tmp_path)

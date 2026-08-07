@@ -794,3 +794,26 @@ def _is_lowercase_snake_case(value: str) -> bool:
     return value[0].islower() and all(
         char.islower() or char.isdigit() or char == "_" for char in value
     )
+
+
+__all__ = [
+    "FOOTPRINT_KIND_CIRCULAR",
+    "FOOTPRINT_KIND_RECTANGULAR",
+    "FOOTPRINT_ORIENTATION_SCHEMA_VERSION",
+    "REQUIRED_SCENARIO_FAMILY_IDS",
+    "CircularFootprint",
+    "FootprintClearanceResult",
+    "FootprintDiagnosticScenario",
+    "FootprintModel",
+    "FootprintOrientationConfigError",
+    "RectangularFootprint",
+    "build_diagnostic_report",
+    "build_diagnostic_scenarios",
+    "centerline_clearance_m",
+    "footprint_aware_clearance_m",
+    "load_footprint_orientation_config",
+    "parse_diagnostic_parameters",
+    "parse_footprints",
+    "run_footprint_diagnostic",
+    "validate_footprint_orientation_config",
+]

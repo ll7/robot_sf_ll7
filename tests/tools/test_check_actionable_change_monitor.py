@@ -71,6 +71,20 @@ def test_build_findings_covers_research_pr_checks_and_stale_drafts() -> None:
     }
 
 
+def test_duplicate_check_run_names_have_unique_ids_and_stable_fingerprint() -> None:
+    pull_request = _pull_request(4)
+    check_runs = [
+        {"id": 401, "name": "ci", "status": "completed", "conclusion": "failure"},
+        {"id": 402, "name": "ci", "status": "in_progress", "conclusion": None},
+    ]
+
+    findings = monitor._check_findings(pull_request, check_runs)
+    reversed_findings = monitor._check_findings(pull_request, list(reversed(check_runs)))
+
+    assert len({finding["id"] for finding in findings}) == 2
+    assert monitor.compute_fingerprint(findings) == monitor.compute_fingerprint(reversed_findings)
+
+
 def test_build_findings_covers_legacy_commit_statuses() -> None:
     findings = monitor.build_findings(
         [_pull_request(3)],
@@ -245,6 +259,25 @@ def test_fetch_snapshot_rejects_malformed_check_run_collection(monkeypatch) -> N
     monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
 
     with pytest.raises(monitor.MonitorError, match="check_runs"):
+        monitor._fetch_snapshot(monitor.DEFAULT_REPO, 100)
+
+
+@pytest.mark.parametrize("resource", ["pulls", "issues"])
+def test_fetch_snapshot_rejects_malformed_top_level_rows(monkeypatch, resource: str) -> None:
+    pull_request = _pull_request(21)
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        if "/pulls?" in path:
+            return [pull_request, None] if resource == "pulls" else [pull_request]
+        if "/issues?" in path:
+            return [_issue(22), "malformed"] if resource == "issues" else []
+        raise AssertionError(f"unexpected GitHub path: {path}")
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    expected_resource = "pull requests" if resource == "pulls" else resource
+    with pytest.raises(monitor.MonitorError, match=expected_resource):
         monitor._fetch_snapshot(monitor.DEFAULT_REPO, 100)
 
 

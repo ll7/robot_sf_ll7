@@ -113,6 +113,20 @@ def _finding(
     }
 
 
+def _canonical_json(value: Any) -> str:
+    """Serialize a JSON-compatible value with stable key and separator ordering."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _check_run_identity(check: dict[str, Any]) -> str:
+    """Return a stable identity for a check run, including duplicate-named runs."""
+    check_id = check.get("id")
+    if check_id is not None:
+        return f"id:{check_id}"
+    payload = _canonical_json(check).encode("utf-8")
+    return f"payload:{hashlib.sha256(payload).hexdigest()}"
+
+
 def _check_findings(
     pull_request: dict[str, Any],
     check_runs: list[dict[str, Any]],
@@ -120,14 +134,24 @@ def _check_findings(
 ) -> list[dict[str, Any]]:
     """Return pending or failed check-run and legacy-status findings for one pull request."""
     findings: list[dict[str, Any]] = []
-    for check in sorted(check_runs, key=lambda row: str(row.get("name") or "")):
+    for check in sorted(
+        check_runs,
+        key=lambda row: (
+            str(row.get("name") or ""),
+            _check_run_identity(row),
+            _canonical_json(row),
+        ),
+    ):
         name = str(check.get("name") or "unnamed-check")
+        check_identity = _check_run_identity(check)
         status = str(check.get("status") or "unknown").casefold()
         conclusion = str(check.get("conclusion") or "").casefold()
         if status != "completed":
             findings.append(
                 _finding(
-                    finding_id=f"pr:{pull_request['number']}:check:{name}:pending",
+                    finding_id=(
+                        f"pr:{pull_request['number']}:check:{check_identity}:{name}:pending"
+                    ),
                     kind="check_pending",
                     target=pull_request,
                     detail=f"{name}: status={status}",
@@ -136,7 +160,9 @@ def _check_findings(
         elif conclusion not in SUCCESS_CONCLUSIONS:
             findings.append(
                 _finding(
-                    finding_id=f"pr:{pull_request['number']}:check:{name}:failed",
+                    finding_id=(
+                        f"pr:{pull_request['number']}:check:{check_identity}:{name}:failed"
+                    ),
                     kind="check_failed",
                     target=pull_request,
                     detail=f"{name}: conclusion={conclusion or 'missing'}",
@@ -332,11 +358,10 @@ def compute_fingerprint(findings: list[dict[str, Any]]) -> str:
             str(row.get("kind", "")),
             int(row.get("number", 0)),
             str(row.get("id", "")),
+            _canonical_json(row),
         ),
     )
-    canonical = json.dumps(canonical_findings, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    canonical = _canonical_json(canonical_findings).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
 
 
@@ -435,6 +460,16 @@ def _gh_json(
     return rows
 
 
+def _require_object_rows(payload: Any, *, resource: str) -> list[dict[str, Any]]:
+    """Reject a non-list or any malformed top-level row from a paginated API response."""
+    if not isinstance(payload, list):
+        raise MonitorError(f"{resource} response is not a list")
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            raise MonitorError(f"{resource} response contains malformed row at index {index}")
+    return payload
+
+
 def _fetch_commit_collection(
     repo: str,
     sha: str,
@@ -477,17 +512,23 @@ def _fetch_snapshot(
     """Read open PRs, open issues, check-runs, and legacy statuses for research PR heads."""
     if limit < 1:
         raise MonitorError("monitor limit must be positive")
-    pull_requests = _gh_json(
-        f"repos/{repo}/pulls?state=open&sort=updated&direction=desc&per_page={min(limit, 100)}",
-        paginate=True,
-        max_pages=max(1, (limit + 99) // 100),
+    pull_requests = _require_object_rows(
+        _gh_json(
+            f"repos/{repo}/pulls?state=open&sort=updated&direction=desc&per_page={min(limit, 100)}",
+            paginate=True,
+            max_pages=max(1, (limit + 99) // 100),
+        ),
+        resource="pull requests",
     )
-    issues_payload = _gh_json(
-        f"repos/{repo}/issues?state=open&sort=updated&direction=desc&per_page={min(limit, 100)}",
-        paginate=True,
-        max_pages=max(1, (limit + 99) // 100),
+    issues_payload = _require_object_rows(
+        _gh_json(
+            f"repos/{repo}/issues?state=open&sort=updated&direction=desc&per_page={min(limit, 100)}",
+            paginate=True,
+            max_pages=max(1, (limit + 99) // 100),
+        ),
+        resource="issues",
     )
-    issues = [row for row in issues_payload if isinstance(row, dict) and "pull_request" not in row]
+    issues = [row for row in issues_payload if "pull_request" not in row]
     checks: dict[int, list[dict[str, Any]]] = {}
     statuses: dict[int, list[dict[str, Any]]] = {}
     for pr in pull_requests:

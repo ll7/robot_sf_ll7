@@ -37,16 +37,19 @@ execution modes:
 
 from __future__ import annotations
 
+import math
 import sys
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 
 from robot_sf.benchmark import map_runner, runner
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.map_runner import build_map_policy
 from robot_sf.benchmark.runner import NATIVE_COMMAND_DIAGNOSTICS_KEY, run_episode
+from robot_sf.planner.protocol import BaselineStepToLocalAdapter
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -361,3 +364,132 @@ def test_native_command_diagnostics_fail_closed_for_non_mapping_payload(
     assert diagnostics["diagnostics_unavailable_reason"] == (
         "diagnostics() did not return a mapping (got str)"
     )
+
+
+class _RecordingMpcPlanner:
+    """Stub external-MPC ``step(obs) -> dict`` planner that records its input obs."""
+
+    def __init__(self, action: dict[str, object]) -> None:
+        """Store the action the stub returns from every ``step`` call."""
+        self.action = action
+        self.received_obs: dict[str, object] | None = None
+
+    def step(self, obs: dict[str, object]) -> dict[str, object]:
+        """Record the observation and return the configured action dict."""
+        self.received_obs = obs
+        return self.action
+
+
+def _external_mpc_adapter(stub: _RecordingMpcPlanner) -> object:
+    """Build an external-MPC adapter over a stub planner."""
+    return map_runner._ExternalMPCAdapter(
+        stub,
+        algo_config={},
+        robot_kinematics=None,
+        planner_name="StubExternalMPC",
+    )
+
+
+def test_external_mpc_adapter_uses_canonical_step_adapter() -> None:
+    """The external-MPC bridge is the canonical adapter with injected callbacks."""
+    adapter = _external_mpc_adapter(_RecordingMpcPlanner({"v": 0.5, "omega": 0.1}))
+    assert isinstance(adapter, BaselineStepToLocalAdapter)
+
+
+def test_external_mpc_adapter_forwards_mpc_observation_format() -> None:
+    """The MPC bridge preserves its observation transform and unicycle output."""
+    stub = _RecordingMpcPlanner({"v": 0.5, "omega": 0.1})
+    adapter = _external_mpc_adapter(stub)
+    obs = {
+        "robot": {"heading": [0.0], "position": [0.0, 0.0]},
+        "goal": {"current": [1.0, 0.0]},
+        "obstacles": [{"x": 1.0, "y": 2.0}],
+    }
+
+    linear, angular = adapter.plan(obs)
+
+    assert stub.received_obs == map_runner._obs_to_external_mpc_format(obs)
+    assert stub.received_obs is not None and "obstacles" in stub.received_obs
+    assert (linear, angular) == (0.5, 0.1)
+
+
+def test_external_mpc_adapter_converts_holonomic_action() -> None:
+    """The MPC bridge preserves heading-error angular derivation."""
+    stub = _RecordingMpcPlanner({"vx": 1.0, "vy": 0.0})
+    adapter = _external_mpc_adapter(stub)
+
+    assert adapter.plan({"robot": {"heading": [0.0]}}) == (1.0, 0.0)
+    assert adapter.plan({"robot": {"heading": [math.pi / 2]}}) == (1.0, -1.0)
+
+
+def test_external_mpc_adapter_rejects_non_dict_action() -> None:
+    """The MPC bridge fails closed on a non-dict ``step`` action payload."""
+
+    class InvalidPlanner(_RecordingMpcPlanner):
+        def __init__(self) -> None:
+            super().__init__({})
+
+        def step(self, obs: dict[str, object]) -> object:
+            self.received_obs = obs
+            return "not-a-dict"
+
+    adapter = _external_mpc_adapter(InvalidPlanner())
+    with pytest.raises(TypeError, match="StubExternalMPC"):
+        adapter.plan({"robot": {"heading": [0.0]}})
+
+
+class _StubStepRunner:
+    """Minimal process-runner stand-in for the baseline canonical-adapter test."""
+
+    def __init__(self, action: dict[str, float]) -> None:
+        """Store the action returned by the isolated-step stand-in."""
+        self.action = action
+        self.calls = 0
+        self.closed = False
+
+    def step(self, _obs: object) -> dict[str, float]:
+        """Return the configured action and record the isolated call."""
+        self.calls += 1
+        return self.action
+
+    def close(self) -> None:
+        """Record worker cleanup."""
+        self.closed = True
+
+
+def test_runner_baseline_policy_uses_canonical_adapter_without_output_change() -> None:
+    """The runner adapter preserves the existing world-velocity projection."""
+    action = {"v": 1.5, "omega": 0.2}
+    step_runner = _StubStepRunner(action)
+    planner = object()
+    metadata: dict[str, object] = {}
+    timeout_metadata: dict[str, object] = {}
+    policy = runner._build_baseline_policy_fn(
+        algo="stub",
+        planner=planner,
+        observation_cls=lambda **kwargs: kwargs,
+        step_runner=step_runner,
+        timeout_metadata=timeout_metadata,
+        metadata=metadata,
+        retry_budget=0,
+        robot_radius=0.3,
+        ped_radius=0.35,
+    )
+    robot_pos = np.array([0.0, 0.0])
+    robot_vel = np.array([0.0, 1.0])
+    robot_goal = np.array([3.0, 0.0])
+
+    actual = policy(robot_pos, robot_vel, robot_goal, np.empty((0, 2)), 0.1)
+    expected = runner._action_to_velocity(
+        action,
+        robot_pos,
+        robot_vel,
+        robot_goal,
+        "stub",
+    )
+
+    assert isinstance(policy._planner_adapter, BaselineStepToLocalAdapter)
+    assert step_runner.calls == 1
+    np.testing.assert_allclose(actual, expected)
+    policy.close()
+    assert step_runner.closed is True

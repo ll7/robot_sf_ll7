@@ -982,6 +982,148 @@ def test_strict_export_rejects_unknown_trace_identity_fallbacks() -> None:
         )
 
 
+def _strict_run_config(**overrides: Any) -> dict[str, Any]:
+    """Return a valid strict run configuration with selected fields overridden."""
+
+    config: dict[str, Any] = {
+        "map_id": "map",
+        "horizon": 600,
+        "time_step_s": 0.1,
+        "config_digest": "a" * 64,
+    }
+    config.update(overrides)
+    return config
+
+
+def test_strict_projection_rejects_non_object_source_and_invalid_seed() -> None:
+    """Reject missing source objects and non-integer source seeds before projection."""
+
+    missing_source = _trace(
+        _base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483")
+    )
+    missing_source["source"] = None
+    invalid_seed = _trace(
+        _base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483")
+    )
+    invalid_seed["source"]["seed"] = True
+
+    with pytest.raises(SimulationTraceNormalizationError, match="source identity"):
+        apply_strict_metadata_projection(missing_source, run_config=_strict_run_config())
+    with pytest.raises(SimulationTraceNormalizationError, match="seed"):
+        apply_strict_metadata_projection(invalid_seed, run_config=_strict_run_config())
+
+
+def test_strict_identity_validation_skips_malformed_container_shapes() -> None:
+    """Traverse malformed frame and pedestrian containers without inventing identities."""
+
+    trace = _trace(_base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483"))
+    trace["frames"] = [
+        "not-a-frame",
+        {"pedestrians": "not-a-list", "planner": {}},
+        {"pedestrians": [None, {}], "planner": {}},
+    ]
+
+    with pytest.raises(SimulationTraceNormalizationError, match="missing"):
+        apply_strict_metadata_projection(trace, run_config=_strict_run_config())
+
+
+def test_strict_export_rejects_numeric_generated_pedestrian_identity() -> None:
+    """Reject numeric actor identifiers generated from pedestrian ordering."""
+
+    trace = _trace(_base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483"))
+    trace["frames"][0]["pedestrians"][0]["id"] = "0"
+    with pytest.raises(SimulationTraceNormalizationError, match="generated actor"):
+        apply_strict_metadata_projection(trace, run_config=_strict_run_config())
+
+
+def test_strict_projection_returns_a_semantic_delta_receipt() -> None:
+    """Return typed metadata and prove the canonical trace state stayed unchanged."""
+
+    trace = _trace(_base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483"))
+    original = copy.deepcopy(trace)
+    enriched, receipt = apply_strict_metadata_projection(
+        trace,
+        run_config=_strict_run_config(),
+        terminal_outcome={
+            "collision_event": False,
+            "timeout_event": False,
+            "route_complete": True,
+        },
+    )
+
+    assert trace == original
+    assert all(
+        frame["planner"]["run_config"] == _strict_run_config() for frame in enriched["frames"]
+    )
+    assert enriched["frames"][-1]["planner"]["outcome"]["route_complete"] is True
+    assert receipt["before_projection_sha256"] == receipt["after_projection_sha256"]
+    assert receipt["terminal_outcome_path"] == "/frames/1/planner/outcome"
+    assert receipt["semantic_payload_unchanged"] is True
+
+
+@pytest.mark.parametrize(
+    ("run_config", "error_text"),
+    (
+        ({"map_id": "map", "horizon": 600, "time_step_s": 0.1}, "fields"),
+        ({**_strict_run_config(), "extra": True}, "fields"),
+        (_strict_run_config(map_id=""), "map_id"),
+        (_strict_run_config(horizon=0), "horizon"),
+        (_strict_run_config(time_step_s=True), "numeric"),
+        (_strict_run_config(time_step_s=0.0), "positive"),
+        (_strict_run_config(config_digest="not-a-sha"), "SHA-256"),
+    ),
+)
+def test_strict_projection_rejects_invalid_run_config(
+    run_config: dict[str, Any], error_text: str
+) -> None:
+    """Reject missing, extra, malformed, and non-finite strict run settings."""
+
+    trace = _trace(_base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483"))
+    with pytest.raises(SimulationTraceNormalizationError, match=error_text):
+        apply_strict_metadata_projection(trace, run_config=run_config)
+
+
+@pytest.mark.parametrize(
+    ("terminal_outcome", "error_text"),
+    (
+        ({}, "exactly"),
+        (
+            {"collision_event": 1, "timeout_event": False, "route_complete": True},
+            "booleans",
+        ),
+    ),
+)
+def test_strict_projection_rejects_invalid_terminal_outcome(
+    terminal_outcome: dict[str, Any], error_text: str
+) -> None:
+    """Require exactly typed terminal outcome fields before writing the final frame."""
+
+    trace = _trace(_base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483"))
+    with pytest.raises(SimulationTraceNormalizationError, match=error_text):
+        apply_strict_metadata_projection(
+            trace,
+            run_config=_strict_run_config(),
+            terminal_outcome=terminal_outcome,
+        )
+
+
+@pytest.mark.parametrize(
+    "frames",
+    (
+        [],
+        ["not-a-frame"],
+        [{"planner": None}],
+    ),
+)
+def test_strict_projection_rejects_empty_or_malformed_frames(frames: list[Any]) -> None:
+    """Reject empty traces and frames without a planner object before mutation."""
+
+    trace = _trace(_base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483"))
+    trace["frames"] = frames
+    with pytest.raises(SimulationTraceNormalizationError, match="frame|planner"):
+        apply_strict_metadata_projection(trace, run_config=_strict_run_config())
+
+
 def test_strict_export_rejects_generated_pedestrian_identity() -> None:
     """Reject generated pedestrian identifiers in provenance-bound strict exports."""
 

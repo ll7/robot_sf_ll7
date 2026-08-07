@@ -2,7 +2,7 @@
 
 Guards the reviewed ``__all__`` surfaces for issue #6798: every declared
 export resolves to the pre-change object on its pre-change import path, no
-declared name is missing, and private, stale, or foreign names never leak
+declared name is missing, and private, stale, or unreviewed foreign names never leak
 into the public surface. The ``robot_sf.nav`` facade ``__init__`` is
 deliberately not exercised here (it is guarded by its own reviewed list);
 this module covers the fifteen individual modules that gained ``__all__``.
@@ -69,9 +69,11 @@ GEOJSON_MAP_PROVENANCE_ALL = ["validate_import_provenance"]
 GLOBAL_ROUTE_ALL = ["GlobalRoute"]
 
 MAP_CONFIG_ALL = [
+    "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
     "MapDefinitionPool",
+    "Obstacle",
     "PedestrianWaitRule",
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",
@@ -192,7 +194,7 @@ MODULE_ALL = {
     "uncertainty_envelope": UNCERTAINTY_ENVELOPE_ALL,
 }
 
-# Known private / foreign module-level names that must stay out of the public
+# Known private / unreviewed foreign module-level names that must stay out of the public
 # surface. ``_bresenham_line`` is the reviewed exception: a public perf-test
 # consumer imports it directly (see tests/perf/test_hotpath_perf.py).
 UNEXPORTED_NAMES = {
@@ -213,6 +215,17 @@ UNEXPORTED_NAMES = {
     "uncertainty_envelope": ["Callable", "TypeAlias", "np", "Protocol"],
 }
 
+REVIEWED_COMPATIBILITY_EXPORTS = {
+    ("map_config", "GlobalRoute"): (
+        "robot_sf.nav.global_route",
+        "GlobalRoute",
+    ),
+    ("map_config", "Obstacle"): (
+        "robot_sf.nav.obstacle",
+        "Obstacle",
+    ),
+}
+
 
 @pytest.mark.parametrize("module_name", MODULE_NAMES)
 def test_nav_module_declares_the_reviewed_export_surface(module_name: str) -> None:
@@ -224,11 +237,23 @@ def test_nav_module_declares_the_reviewed_export_surface(module_name: str) -> No
 
 @pytest.mark.parametrize("module_name", MODULE_NAMES)
 def test_nav_module_all_names_resolve_on_pre_change_paths(module_name: str) -> None:
-    """Every declared nav export resolves to the pre-change module object."""
+    """Every declared nav export resolves with its reviewed identity."""
     module = importlib.import_module(f"robot_sf.nav.{module_name}")
     expected_module = f"robot_sf.nav.{module_name}"
+
     for name in module.__all__:
         export = getattr(module, name)
+
+        compatibility_origin = REVIEWED_COMPATIBILITY_EXPORTS.get((module_name, name))
+        if compatibility_origin is not None:
+            origin_module_name, origin_name = compatibility_origin
+            origin_module = importlib.import_module(origin_module_name)
+
+            assert export is getattr(origin_module, origin_name)
+            assert export.__module__ == origin_module_name
+            assert export.__qualname__ == origin_name
+            continue
+
         if inspect.isclass(export) or inspect.isfunction(export):
             assert export.__module__ == expected_module
             assert export.__qualname__ == name
@@ -237,8 +262,10 @@ def test_nav_module_all_names_resolve_on_pre_change_paths(module_name: str) -> N
 
 
 @pytest.mark.parametrize("module_name", MODULE_NAMES)
-def test_nav_module_keeps_private_and_foreign_names_unexported(module_name: str) -> None:
-    """Private, foreign, and stale names never leak into the public surface."""
+def test_nav_module_keeps_private_and_unreviewed_foreign_names_unexported(
+    module_name: str,
+) -> None:
+    """Private, stale, and unreviewed foreign names never leak into the public surface."""
     module = importlib.import_module(f"robot_sf.nav.{module_name}")
     declared = set(module.__all__)
     for name in UNEXPORTED_NAMES[module_name]:

@@ -1559,9 +1559,11 @@ def serialize_map(map_structure: dict) -> MapDefinition:
 
 
 __all__ = [
+    "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
     "MapDefinitionPool",
+    "Obstacle",
     "PedestrianWaitRule",
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",

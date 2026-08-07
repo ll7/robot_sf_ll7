@@ -63,7 +63,7 @@ LEGACY_EVIDENCE_ALLOWLIST = frozenset(
 # A few verbatim recovered campaign artifacts are byte-exact copies of the original campaign
 # summaries/manifests. Their embedded absolute paths are historical execution provenance and cannot
 # be rewritten without breaking the recovery checksums. Keep this exception byte-exact: any change to
-# either file stops matching here and restores the normal absolute-path scan.
+# any pinned file stops matching here and restores the normal absolute-path scan.
 PINNED_VERBATIM_EVIDENCE_SHA256 = {
     (
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"

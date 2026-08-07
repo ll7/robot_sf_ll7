@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
+from loguru import logger
+
 from robot_sf.benchmark.issue_6814_trace_reexport import (
-    Issue6814DeterminismError,
-    Issue6814Error,
     Issue6814SourceIntegrityError,
     build_issue_6814_trace_packet,
 )
@@ -48,23 +47,22 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _parser().parse_args(argv)
     try:
+        arm_roots = _arm_roots(args.arm_root)
+    except ValueError as exc:
+        logger.error("{}", exc)
+        return 2
+    try:
         manifest = build_issue_6814_trace_packet(
             package_root=args.source_package,
-            arm_roots=_arm_roots(args.arm_root),
+            arm_roots=arm_roots,
             external_output_root=args.external_output_root,
             compact_output=args.compact_output,
             execution_repository=args.execution_repository,
             check_determinism=args.check_determinism,
         )
     except (ValueError, OSError) as exc:
-        print(str(exc), file=sys.stderr)
-        if isinstance(exc, Issue6814SourceIntegrityError):
-            return 2
-        if isinstance(exc, Issue6814DeterminismError):
-            return 1
-        if isinstance(exc, Issue6814Error):
-            return 1
-        return 1
+        logger.error("{}", exc)
+        return 2 if isinstance(exc, Issue6814SourceIntegrityError) else 1
     print(f"issue #6814 packet disposition: {manifest['disposition']}")
     return 0
 

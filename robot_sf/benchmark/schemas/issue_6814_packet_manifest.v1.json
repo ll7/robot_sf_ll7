@@ -4,25 +4,26 @@
   "title": "Issue #6814 trace re-export packet manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "issue", "generated_at", "source_package", "source_contracts", "pair_compatibility_receipts", "output_hashes", "disposition"],
+  "required": ["schema_version", "issue", "generation_time", "source_package", "source_contracts", "pair_compatibility_receipts", "output_hashes", "disposition"],
   "properties": {
     "schema_version": {"const": "issue_6814_packet_manifest.v1"},
     "issue": {"const": 6814},
-    "generated_at": {"type": "string", "format": "date-time"},
+    "generation_time": {"const": "deterministic-not-a-clock"},
     "source_package": {"$ref": "#/$defs/sourcePackage"},
     "source_contracts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sourceContractFile"}},
     "pair_compatibility_receipts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pairReceiptFile"}},
     "output_hashes": {"$ref": "#/$defs/outputHashes"},
     "disposition": {"enum": ["supported", "unsupported", "blocked"]},
     "notes": {"type": "array", "items": {"type": "string"}},
-    "check_results": {"type": "object", "additionalProperties": false, "required": ["package_digest_ok", "row_contract_digest_ok", "artifact_integrity_ok", "deterministic_rebuild_ok"], "properties": {"package_digest_ok": {"type": "boolean"}, "row_contract_digest_ok": {"type": "boolean"}, "artifact_integrity_ok": {"type": "boolean"}, "deterministic_rebuild_ok": {"type": "boolean"}}}
+    "check_results": {"type": "object", "additionalProperties": false, "required": ["package_digest_ok", "row_contract_digest_ok", "artifact_integrity_ok", "deterministic_rebuild_ok"], "properties": {"package_digest_ok": {"type": "boolean"}, "row_contract_digest_ok": {"type": "boolean"}, "artifact_integrity_ok": {"type": "boolean"}, "deterministic_rebuild_ok": {"type": ["boolean", "null"]}}}
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "arm": {"type": "object", "additionalProperties": false, "required": ["job_id", "manifest_uri", "manifest_sha256", "episodes_uri", "episodes_sha256", "run_summary_uri", "run_summary_sha256", "preflight_uri", "preflight_sha256", "n_rows"], "properties": {"job_id": {"type": "string", "minLength": 1}, "manifest_uri": {"type": "string", "minLength": 1}, "manifest_sha256": {"$ref": "#/$defs/sha256"}, "episodes_uri": {"type": "string", "minLength": 1}, "episodes_sha256": {"$ref": "#/$defs/sha256"}, "run_summary_uri": {"type": "string", "minLength": 1}, "run_summary_sha256": {"$ref": "#/$defs/sha256"}, "preflight_uri": {"type": "string", "minLength": 1}, "preflight_sha256": {"$ref": "#/$defs/sha256"}, "n_rows": {"type": "integer", "minimum": 1}}},
     "sourcePackage": {"type": "object", "additionalProperties": false, "required": ["source_issue", "source_package_sha256sums_sha256", "package_manifest_uri", "package_manifest_sha256", "package_complete_uri", "package_complete_sha256", "mapping_receipt_uri", "mapping_receipt_sha256", "arms"], "properties": {"source_issue": {"const": 6412}, "source_package_sha256sums_sha256": {"$ref": "#/$defs/sha256"}, "package_manifest_uri": {"type": "string", "minLength": 1}, "package_manifest_sha256": {"$ref": "#/$defs/sha256"}, "package_complete_uri": {"type": "string", "minLength": 1}, "package_complete_sha256": {"$ref": "#/$defs/sha256"}, "mapping_receipt_uri": {"type": "string", "minLength": 1}, "mapping_receipt_sha256": {"$ref": "#/$defs/sha256"}, "arms": {"type": "object", "additionalProperties": {"$ref": "#/$defs/arm"}, "minProperties": 3}}},
     "outputHashes": {"type": "object", "additionalProperties": false, "required": ["package_manifest_uri", "source_contracts_manifest_uri", "pair_receipts"], "properties": {"package_manifest_uri": {"type": "string", "minLength": 1}, "source_contracts_manifest_uri": {"type": "string", "minLength": 1}, "pair_receipts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pairReceiptFile"}}}},
-    "sourceContractFile": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "status", "trace_identity"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}, "status": {"enum": ["available", "unsupported", "unavailable", "blocked"]}, "trace_identity": {"type": "object"}}},
+    "traceIdentity": {"type": "object", "additionalProperties": false, "required": ["planner_id", "scenario_id", "seed", "episode_id", "job_id", "row_index", "execution_commit", "raw_trace_sha256", "prior_normalized_trace_sha256", "reexported_trace_sha256"], "properties": {"planner_id": {"type": "string", "minLength": 1}, "scenario_id": {"type": "string", "minLength": 1}, "seed": {"type": "integer"}, "episode_id": {"type": "string", "minLength": 1}, "job_id": {"type": "string", "minLength": 1}, "row_index": {"type": "integer", "minimum": 1}, "execution_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "raw_trace_sha256": {"$ref": "#/$defs/sha256"}, "prior_normalized_trace_sha256": {"$ref": "#/$defs/sha256"}, "reexported_trace_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}}},
+    "sourceContractFile": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "status", "trace_identity"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}, "status": {"enum": ["available", "unsupported", "unavailable", "blocked"]}, "trace_identity": {"$ref": "#/$defs/traceIdentity"}}},
     "pairReceiptFile": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "pair_id", "disposition"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}, "pair_id": {"type": "string", "minLength": 1}, "disposition": {"enum": ["supported", "unsupported", "blocked"]}}}
   }
 }

@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -32,22 +33,20 @@ from robot_sf.analysis_workbench.event_alignment import (
     build_trace_run_config_contract,
 )
 from robot_sf.analysis_workbench.interaction_coordinates import (
-    _build_worked_example_process_trace_from_export,
+    build_worked_example_process_trace_from_export,
 )
 from robot_sf.analysis_workbench.simulation_trace_export import (
+    apply_strict_metadata_projection,
     simulation_trace_export_from_dict,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.trace_reexport_packaging import (
     EXECUTION_COMMIT,
     ISSUE_6412_PACKAGE_SHA256SUMS_SHA256,
     RealReexportBindingError,
     TraceReexportPackagingError,
     VerifiedRealReexportRowSource,
-    _sha256_file,
     load_verified_real_reexport_row_source,
-)
-from scripts.tools.build_simulation_trace_export import (
-    apply_strict_metadata_projection,
 )
 
 ISSUE = 6814
@@ -242,8 +241,15 @@ def build_static_run_config(
             "source_algorithm_config_hash": source_algorithm_config_hash,
         },
         "metric_affecting_settings": {
-            "status": "available",
-            "content": dict(metric_affecting_settings or {}),
+            "status": "available" if metric_affecting_settings is not None else "unavailable",
+            **(
+                {"content": dict(metric_affecting_settings)}
+                if metric_affecting_settings is not None
+                else {
+                    "reason_code": "metric_affecting_settings_unavailable",
+                    "required_authority": "verified source settings",
+                }
+            ),
         },
     }
 
@@ -285,10 +291,14 @@ def build_initial_state_record(trace: Mapping[str, Any]) -> dict[str, Any]:
             or actor_id.startswith("ped_")
         ):
             raise Issue6814UnsupportedError("initial actor identity is generated or unavailable")
+        actor_position = actor.get("position")
+        actor_velocity = actor.get("velocity")
+        if not isinstance(actor_position, list) or not isinstance(actor_velocity, list):
+            raise Issue6814UnsupportedError("initial actor position or velocity is unavailable")
         item = {
             "id": actor_id,
-            "position": list(actor["position"]),
-            "velocity": list(actor["velocity"]),
+            "position": list(actor_position),
+            "velocity": list(actor_velocity),
             "radius_m": actor.get("radius", 0.0),
         }
         if "heading" in actor:
@@ -344,8 +354,9 @@ def _git_show(repository: Path, commit: str, relative: str) -> bytes:
             cwd=repository,
             check=True,
             capture_output=True,
+            timeout=60,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except (OSError, subprocess.SubprocessError) as exc:
         raise Issue6814UnsupportedError(
             f"producing-commit artifact unavailable: {commit}:{relative}"
         ) from exc
@@ -391,8 +402,8 @@ def _authority(role: str, digest: str, pointer: str) -> dict[str, str]:
 
 def _settings_candidates(
     source: VerifiedRealReexportRowSource,
-) -> list[tuple[str, Any, Any, str]]:
-    candidates: list[tuple[str, Any, Any, str]] = []
+) -> list[tuple[str, Any, Any, str, str]]:
+    candidates: list[tuple[str, Any, Any, str, str]] = []
     artifact_digests = {
         "result_provenance": source.result_provenance_sha256,
         "preflight": source.preflight_sha256,
@@ -401,17 +412,18 @@ def _settings_candidates(
         "raw_result_provenance": source.raw_row_sha256,
     }
     row = source.raw_row
-    for role, settings in (
+    for role, settings, pointer in (
         (
             "result_provenance",
             source.result_provenance_row.get("simulator_settings")
             if source.result_provenance_row
             else None,
+            "/simulator_settings",
         ),
-        ("preflight", source.preflight),
-        ("run_summary", source.run_summary),
-        ("raw_episode_row", row.get("simulator_settings")),
-        ("raw_result_provenance", row.get("result_provenance")),
+        ("preflight", source.preflight, "/"),
+        ("run_summary", source.run_summary, "/"),
+        ("raw_episode_row", row.get("simulator_settings"), "/simulator_settings"),
+        ("raw_result_provenance", row.get("result_provenance"), "/result_provenance"),
     ):
         if not isinstance(settings, Mapping):
             continue
@@ -421,10 +433,11 @@ def _settings_candidates(
             nested = settings["simulator_settings"]
             horizon = nested.get("horizon", nested.get("horizon_steps", horizon))
             dt = nested.get("dt", nested.get("time_step_s", dt))
+            pointer = f"{pointer.rstrip('/')}/simulator_settings"
         if horizon is not None or dt is not None:
             digest = artifact_digests[role]
             if digest is not None:
-                candidates.append((role, horizon, dt, digest))
+                candidates.append((role, horizon, dt, digest, pointer))
     params = row.get("scenario_params")
     if isinstance(params, Mapping):
         if params.get("run_horizon") is not None or params.get("run_dt") is not None:
@@ -434,6 +447,7 @@ def _settings_candidates(
                     params.get("run_horizon"),
                     params.get("run_dt"),
                     source.raw_row_sha256,
+                    "/scenario_params",
                 )
             )
     return candidates
@@ -441,34 +455,39 @@ def _settings_candidates(
 
 def _resolve_settings(
     source: VerifiedRealReexportRowSource,
-) -> tuple[int, float, list[dict[str, Any]]]:
+) -> tuple[int | None, float | None, list[dict[str, Any]], list[dict[str, Any]]]:
     candidates = _settings_candidates(source)
     horizons = {
         int(horizon)
-        for _role, horizon, _dt, _digest in candidates
+        for _role, horizon, _dt, _digest, _pointer in candidates
         if isinstance(horizon, (int, float)) and not isinstance(horizon, bool)
     }
     dts = {
         float(dt)
-        for _role, _horizon, dt, _digest in candidates
+        for _role, _horizon, dt, _digest, _pointer in candidates
         if isinstance(dt, (int, float)) and not isinstance(dt, bool)
     }
     if len(horizons) > 1:
         raise TraceReexportPackagingError("issue #6814 conflicting authoritative horizon values")
     if len(dts) > 1:
         raise TraceReexportPackagingError("issue #6814 conflicting authoritative time-step values")
-    if not horizons or not dts:
-        raise Issue6814UnsupportedError("authoritative run configuration is unavailable")
-    horizon = next(iter(horizons))
-    dt = next(iter(dts))
-    if horizon <= 0 or dt <= 0.0 or not math.isfinite(dt):
-        raise Issue6814UnsupportedError("authoritative run configuration is invalid")
-    authorities = [
-        _authority(role, digest, f"/{role}/simulator_settings")
-        for role, raw_horizon, raw_dt, digest in candidates
-        if raw_horizon == horizon and raw_dt == dt
+    horizon = next(iter(horizons)) if horizons else None
+    dt = next(iter(dts)) if dts else None
+    if horizon is not None and horizon <= 0:
+        raise Issue6814UnsupportedError("authoritative horizon is invalid")
+    if dt is not None and (dt <= 0.0 or not math.isfinite(dt)):
+        raise Issue6814UnsupportedError("authoritative time-step is invalid")
+    horizon_authorities = [
+        _authority(role, digest, pointer)
+        for role, raw_horizon, _raw_dt, digest, pointer in candidates
+        if horizon is not None and raw_horizon is not None and raw_horizon == horizon
     ]
-    return horizon, dt, authorities
+    dt_authorities = [
+        _authority(role, digest, pointer)
+        for role, _raw_horizon, raw_dt, digest, pointer in candidates
+        if dt is not None and raw_dt is not None and raw_dt == dt
+    ]
+    return horizon, dt, horizon_authorities, dt_authorities
 
 
 def _matrix_authorities(
@@ -562,7 +581,7 @@ def _planner_config(
     if isinstance(config, Mapping):
         config_digest = _sha256_payload(config)
         return str(source.planner_id), str(source_hash), config_digest, config
-    if len(source_hash) != 64 or any(char not in "0123456789abcdef" for char in source_hash):
+    if not _SHA256_RE.fullmatch(source_hash):
         raise Issue6814UnsupportedError(
             "planner config is represented only by an opaque short hash"
         )
@@ -599,6 +618,8 @@ def build_issue_6814_trace_source_contract(
     map_bytes = _git_show(execution_repository, source.execution_commit, map_path)
     matrix_path = "configs/scenarios/classic_interactions_francis2023.yaml"
     matrix_bytes = _git_show(execution_repository, source.execution_commit, matrix_path)
+    trace_schema_path = "robot_sf/analysis_workbench/schemas/simulation_trace_export.v1.json"
+    trace_schema_bytes = _git_show(execution_repository, source.execution_commit, trace_schema_path)
     scenario_payload = yaml.safe_load(scenario_bytes)
     scenario_index, scenario = _scenario_entry_with_index(source.scenario_id, scenario_payload)
     map_id = map_path
@@ -686,6 +707,13 @@ def build_issue_6814_trace_source_contract(
                 "sha256": map_sha,
                 "authority": "producing_commit",
             },
+            {
+                "role": "trace_schema",
+                "schema_version": "simulation_trace_export.v1",
+                "retrieval_key": trace_schema_path,
+                "sha256": hashlib.sha256(trace_schema_bytes).hexdigest(),
+                "authority": "source_code_contract",
+            },
         ]
     )
     for role, payload, digest in (
@@ -705,16 +733,19 @@ def build_issue_6814_trace_source_contract(
             )
 
     try:
-        horizon, dt, setting_authorities = _resolve_settings(source)
-        planner_id, planner_source_hash, planner_digest, planner_config = _planner_config(source)
+        horizon, dt, horizon_authorities, dt_authorities = _resolve_settings(source)
     except Issue6814UnsupportedError:
         horizon = None
         dt = None
+        horizon_authorities = []
+        dt_authorities = []
+    try:
+        planner_id, planner_source_hash, planner_digest, planner_config = _planner_config(source)
+    except Issue6814UnsupportedError:
         planner_id = source.planner_id
         planner_source_hash = None
         planner_digest = None
         planner_config = None
-        setting_authorities = []
 
     fields: dict[str, Any] = {
         "map_id": _available(
@@ -750,15 +781,15 @@ def build_issue_6814_trace_source_contract(
             authorities=[_authority("map_artifact", map_sha, "blob")],
         ),
         "horizon_steps": (
-            _available(horizon, authorities=setting_authorities, unit="step")
-            if horizon is not None
+            _available(horizon, authorities=horizon_authorities, unit="step")
+            if horizon is not None and horizon_authorities
             else _unavailable(
                 "authoritative_horizon_absent", "result_provenance or verified preflight"
             )
         ),
         "time_step_s": (
-            _available(dt, authorities=setting_authorities, unit="s")
-            if dt is not None
+            _available(dt, authorities=dt_authorities, unit="s")
+            if dt is not None and dt_authorities
             else _unavailable(
                 "authoritative_time_step_absent", "result_provenance or verified preflight"
             )
@@ -815,12 +846,22 @@ def build_issue_6814_trace_source_contract(
         ),
         "coordinate_frame": _available(
             "world",
-            authorities=[_authority("preflight", source.preflight_sha256, "/coordinate_frame")],
+            authorities=[
+                _authority(
+                    "source_code_contract",
+                    hashlib.sha256(trace_schema_bytes).hexdigest(),
+                    "/coordinate_frame",
+                )
+            ],
         ),
         "units": _available(
             {"position": "m", "heading": "rad", "time": "s", "velocity": "m/s"},
             authorities=[
-                _authority("trace_schema", source.preflight_sha256, "simulation_trace_export.v1")
+                _authority(
+                    "source_code_contract",
+                    hashlib.sha256(trace_schema_bytes).hexdigest(),
+                    "/units",
+                )
             ],
         ),
     }
@@ -987,7 +1028,7 @@ def enrich_simulation_trace_export(
 def _load_prior_trace(path: Path, expected_sha256: str) -> dict[str, Any]:
     if not path.is_file():
         raise Issue6814SourceIntegrityError(f"prior normalized trace is unavailable: {path}")
-    actual = _sha256_file(path)
+    actual = sha256_file(path)
     if actual != expected_sha256:
         raise Issue6814SourceIntegrityError(
             f"prior normalized trace SHA-256 mismatch: expected {expected_sha256}, got {actual}"
@@ -1007,14 +1048,29 @@ def _load_prior_trace(path: Path, expected_sha256: str) -> dict[str, Any]:
     return dict(payload)
 
 
-def _schema_validate(payload: Mapping[str, Any], schema_name: str) -> None:
+@cache
+def _load_schema(schema_name: str) -> dict[str, Any]:
+    """Load one issue schema once per process."""
+
     schema_path = Path(__file__).with_name("schemas") / schema_name
     try:
-        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        return json.loads(schema_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise Issue6814Error(f"cannot load issue #6814 schema {schema_name}") from exc
+
+
+@cache
+def _validator(schema_name: str) -> Draft202012Validator:
+    """Build one cached validator for an issue schema."""
+
+    return Draft202012Validator(_load_schema(schema_name))
+
+
+def _schema_validate(payload: Mapping[str, Any], schema_name: str) -> None:
+    """Validate one packet payload against its cached issue schema."""
+
     errors = sorted(
-        Draft202012Validator(schema).iter_errors(payload), key=lambda error: list(error.path)
+        _validator(schema_name).iter_errors(payload), key=lambda error: list(error.path)
     )
     if errors:
         raise Issue6814Error(f"{schema_name}: {errors[0].message} at {list(errors[0].path)}")
@@ -1028,7 +1084,7 @@ def _process_payload(
         simulation_trace_export_from_dict(pair_payload) if pair_payload is not None else None
     )
     try:
-        payload = _build_worked_example_process_trace_from_export(
+        payload = build_worked_example_process_trace_from_export(
             trace,
             pair_trace=pair_trace,
             pair_comparison_grain=grain,
@@ -1047,7 +1103,7 @@ def _relative_hashes(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if path.is_file():
-            result[path.relative_to(root).as_posix()] = _sha256_file(path)
+            result[path.relative_to(root).as_posix()] = sha256_file(path)
     return result
 
 
@@ -1163,12 +1219,16 @@ def _pair_receipt(
             "left": {
                 "source_contract_sha256": _sha256_payload(left_contract),
                 "trace_content_sha256": _sha256_payload(left_trace),
-                "process_trace_sha256": _sha256_payload(left_process or {"status": "unavailable"}),
+                "process_trace_sha256": (
+                    _sha256_payload(left_process) if left_process is not None else None
+                ),
             },
             "right": {
                 "source_contract_sha256": _sha256_payload(right_contract),
                 "trace_content_sha256": _sha256_payload(right_trace),
-                "process_trace_sha256": _sha256_payload(right_process or {"status": "unavailable"}),
+                "process_trace_sha256": (
+                    _sha256_payload(right_process) if right_process is not None else None
+                ),
             },
         },
         "pair_compatibility": pair,
@@ -1180,10 +1240,17 @@ def _pair_receipt(
             "terminal_event": (
                 {
                     "status": "available",
-                    "source_process_trace_sha256": _sha256_payload(left_process or left_trace),
+                    "source_process_trace_sha256": _sha256_payload(left_process),
                 }
-                if terminal_available
-                else {"status": "unavailable", "reason_code": "typed_terminal_outcome_unavailable"}
+                if terminal_available and left_process is not None
+                else {
+                    "status": "unavailable",
+                    "reason_code": (
+                        "process_trace_unavailable"
+                        if left_process is None
+                        else "typed_terminal_outcome_unavailable"
+                    ),
+                }
             ),
         },
         "process_validation": {
@@ -1226,6 +1293,20 @@ def _build_packet_once(
             dict[str, Any] | None,
         ],
     ] = {}
+    try:
+        mapping_payload = json.loads(
+            (package_root / "mapping_receipt.json").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Issue6814SourceIntegrityError("mapping receipt is unavailable or invalid") from exc
+    mapping_rows = mapping_payload.get("rows") if isinstance(mapping_payload, Mapping) else None
+    if not isinstance(mapping_rows, list):
+        raise Issue6814SourceIntegrityError("mapping receipt rows are unavailable")
+    trace_uris = {
+        row["episode_id"]: row.get("trace_artifact_uri")
+        for row in mapping_rows
+        if isinstance(row, Mapping) and isinstance(row.get("episode_id"), str)
+    }
     for identity in SELECTED_TRACE_IDENTITIES:
         try:
             source = load_verified_real_reexport_row_source(
@@ -1239,14 +1320,7 @@ def _build_packet_once(
         contract = build_issue_6814_trace_source_contract(
             source, execution_repository=execution_repository
         )
-        trace_uri = None
-        mapping_rows = json.loads(
-            (package_root / "mapping_receipt.json").read_text(encoding="utf-8")
-        )["rows"]
-        for row in mapping_rows:
-            if isinstance(row, Mapping) and row.get("episode_id") == source.episode_id:
-                trace_uri = row.get("trace_artifact_uri")
-                break
+        trace_uri = trace_uris.get(source.episode_id)
         if not isinstance(trace_uri, str):
             raise Issue6814SourceIntegrityError("selected row lacks prior trace artifact URI")
         prior_path = package_root / trace_uri
@@ -1317,7 +1391,7 @@ def _build_packet_once(
         source_contract_records.append(
             {
                 "path": contract_path.relative_to(root).as_posix(),
-                "sha256": _sha256_file(contract_path),
+                "sha256": sha256_file(contract_path),
                 "status": contract["status"],
                 "trace_identity": contract["trace_identity"],
             }
@@ -1328,24 +1402,40 @@ def _build_packet_once(
         pair_file_records.append(
             {
                 "path": pair_path.relative_to(root).as_posix(),
-                "sha256": _sha256_file(pair_path),
+                "sha256": sha256_file(pair_path),
                 "pair_id": receipt["pair_id"],
                 "disposition": receipt["renderer_admission"]["disposition"],
             }
         )
+    package_digest_ok = len(sources) == len(SELECTED_TRACE_IDENTITIES)
+    row_contract_digest_ok = package_digest_ok and all(
+        source.row_index == identity.row_index
+        and source.raw_row_sha256 == identity.raw_trace_sha256
+        for identity, source, _contract, _trace, _delta in sources.values()
+    )
+    artifact_integrity_ok = package_digest_ok and all(
+        _SHA256_RE.fullmatch(digest)
+        for _identity, source, _contract, _trace, _delta in sources.values()
+        for digest in (
+            source.episodes_sha256,
+            source.manifest_sha256,
+            source.run_summary_sha256,
+            source.preflight_sha256,
+        )
+    )
     manifest: dict[str, Any] = {
         "schema_version": PACKET_MANIFEST_SCHEMA,
         "issue": ISSUE,
-        "generated_at": "1970-01-01T00:00:00Z",
+        "generation_time": "deterministic-not-a-clock",
         "source_package": {
             "source_issue": SOURCE_ISSUE,
             "source_package_sha256sums_sha256": ISSUE_6412_PACKAGE_SHA256SUMS_SHA256,
             "package_manifest_uri": "package_manifest.json",
-            "package_manifest_sha256": _sha256_file(package_root / "package_manifest.json"),
+            "package_manifest_sha256": sha256_file(package_root / "package_manifest.json"),
             "package_complete_uri": "package_complete.json",
-            "package_complete_sha256": _sha256_file(package_root / "package_complete.json"),
+            "package_complete_sha256": sha256_file(package_root / "package_complete.json"),
             "mapping_receipt_uri": "mapping_receipt.json",
-            "mapping_receipt_sha256": _sha256_file(package_root / "mapping_receipt.json"),
+            "mapping_receipt_sha256": sha256_file(package_root / "mapping_receipt.json"),
             "arms": {},
         },
         "source_contracts": source_contract_records,
@@ -1362,10 +1452,10 @@ def _build_packet_once(
         else "unsupported",
         "notes": ["visualization-only overlay; no simulation performed"],
         "check_results": {
-            "package_digest_ok": True,
-            "row_contract_digest_ok": True,
-            "artifact_integrity_ok": True,
-            "deterministic_rebuild_ok": True,
+            "package_digest_ok": package_digest_ok,
+            "row_contract_digest_ok": row_contract_digest_ok,
+            "artifact_integrity_ok": artifact_integrity_ok,
+            "deterministic_rebuild_ok": None,
         },
     }
     for identity in SELECTED_TRACE_IDENTITIES:
@@ -1380,7 +1470,7 @@ def _build_packet_once(
             "run_summary_sha256": source.run_summary_sha256,
             "preflight_uri": source.source_root_retrieval_key,
             "preflight_sha256": source.preflight_sha256,
-            "n_rows": 30,
+            "n_rows": source.n_rows,
         }
     _schema_validate(manifest, "issue_6814_packet_manifest.v1.json")
     _write_json(root / "packet_manifest.json", manifest)
@@ -1392,6 +1482,17 @@ def _compare_trees(left: Path, right: Path) -> None:
     right_hashes = _relative_hashes(right)
     if left_hashes != right_hashes:
         raise Issue6814DeterminismError("issue #6814 packet rebuild changed file set or SHA-256")
+
+
+def _mark_deterministic_rebuild_ok(root: Path) -> dict[str, Any]:
+    """Record a successful rebuild comparison in a staged packet manifest."""
+
+    manifest_path = root / "packet_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["check_results"]["deterministic_rebuild_ok"] = True
+    _schema_validate(manifest, "issue_6814_packet_manifest.v1.json")
+    _write_json(manifest_path, manifest)
+    return manifest
 
 
 def build_issue_6814_trace_packet(
@@ -1449,6 +1550,10 @@ def build_issue_6814_trace_packet(
                 expected_package_sha256=expected_package_sha256,
             )
             _compare_trees(first, second)
+            _mark_deterministic_rebuild_ok(first)
+            _mark_deterministic_rebuild_ok(second)
+            _compare_trees(first, second)
+            manifest = json.loads((first / "packet_manifest.json").read_text(encoding="utf-8"))
         first.rename(external_output_root)
         renamed = True
         if compact_output is not None:

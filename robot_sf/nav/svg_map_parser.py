@@ -1840,3 +1840,10 @@ def load_svg_maps(
     if not p.exists():  # pragma: no cover
         raise FileNotFoundError(f"Path does not exist: {path}")
     return _load_single_svg(p, strict) if p.is_file() else _load_svg_directory(p, pattern, strict)
+
+
+__all__ = [
+    "SvgMapConverter",
+    "convert_map",
+    "load_svg_maps",
+]

@@ -663,6 +663,84 @@ class TestVerificationScript:
         assert frozen_source["source_commit"] == manifest["frozen_manifest_origin_main_commit"]
         assert frozen_source["current_sha256"] != frozen_source["actual_sha256"]
 
+    def test_unavailable_frozen_source_commit_fails_closed(self, tmp_path: Path) -> None:
+        """A manifest pinning an unavailable frozen commit must fail closed."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "docs" / "evidence.txt"
+        evidence_path.parent.mkdir(parents=True)
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "frozen_manifest_origin_main_commit": "0" * 40,
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": evidence_digest}],
+                },
+            },
+            "entries": [
+                {
+                    "path": "docs/evidence.txt",
+                    "sha256": evidence_digest,
+                },
+            ],
+        }
+        manifest_path = tmp_path / "configs" / "releases" / "manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert any("unavailable in the repository" in error for error in report["errors"])
+
+    def test_malformed_frozen_source_commit_fails_closed(self, tmp_path: Path) -> None:
+        """A manifest with a malformed frozen commit pin must fail closed."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "docs" / "evidence.txt"
+        evidence_path.parent.mkdir(parents=True)
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "frozen_manifest_origin_main_commit": "not-a-valid-sha",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": evidence_digest}],
+                },
+            },
+            "entries": [
+                {
+                    "path": "docs/evidence.txt",
+                    "sha256": evidence_digest,
+                },
+            ],
+        }
+        manifest_path = tmp_path / "configs" / "releases" / "manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert any("must be a 40-character Git SHA" in error for error in report["errors"])
+
     def test_release_0_0_5_preserves_frozen_candidate_contract(self) -> None:
         """The release cards must preserve the frozen membership and claim boundaries."""
         frozen = _read_yaml(

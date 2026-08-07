@@ -115,6 +115,14 @@ def raw_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _repo_relative_path(repo_root: Path, path: Path) -> str:
+    """Return a repository-root-relative POSIX path, failing closed on escapes."""
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"path must live under the repository: {path}") from exc
+
+
 def candidate_pool_id(pool_index: int) -> str:
     """Return the stable pool/manifest ID for a candidate (matches the main runner)."""
     return f"pool_{pool_index}"
@@ -364,7 +372,7 @@ def _build_candidate_record(ctx: _RecordContext) -> dict[str, Any]:
 
 def _step3_run_plan(
     *,
-    contract_path: Path,
+    contract_path: str,
     contract_raw_sha: str,
     target_planner_id: str,
     execution_commit: str,
@@ -687,7 +695,7 @@ def build_held_out_preflight(
             "metadata, the frozen search space, and the frozen contract were read."
         ),
         "frozen_contract": {
-            "path": str(contract_path),
+            "path": _repo_relative_path(repo_root, contract_path),
             "raw_sha256": raw_sha256(contract_path),
             "fit": {
                 "count": fit_cfg["count"],
@@ -870,7 +878,7 @@ def compose_preflight_packet_files(
     )
     proposal_manifest, random_manifest = _arm_manifests(pool_manifest)
     run_plan = _step3_run_plan(
-        contract_path=contract_path,
+        contract_path=_repo_relative_path(repo_root, contract_path),
         contract_raw_sha=raw_sha256(contract_path),
         target_planner_id=pool_manifest["target_planner"]["id"],
         execution_commit=pool_manifest["target_planner"]["execution_commit"],

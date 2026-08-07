@@ -283,6 +283,39 @@ def test_fetch_commit_collection_rejects_inconsistent_short_pages(
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize(
+    ("resource", "collection_key", "metadata"),
+    [
+        ("check-runs", "check_runs", {}),
+        ("check-runs", "check_runs", {"total_count": None}),
+        ("status", "statuses", {}),
+        ("status", "statuses", {"total_count": None}),
+    ],
+)
+def test_fetch_commit_collection_requires_total_count_metadata(
+    monkeypatch, resource: str, collection_key: str, metadata: dict[str, object]
+) -> None:
+    calls: list[str] = []
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        calls.append(path)
+        return {**metadata, collection_key: []}
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    with pytest.raises(monitor.MonitorError, match="total_count"):
+        monitor._fetch_commit_collection(
+            monitor.DEFAULT_REPO,
+            "sha-missing-total-count",
+            resource=resource,
+            collection_key=collection_key,
+            limit=150,
+        )
+
+    assert len(calls) == 1
+
+
 def test_fetch_snapshot_rejects_malformed_check_run_collection(monkeypatch) -> None:
     pull_request = _pull_request(21)
 

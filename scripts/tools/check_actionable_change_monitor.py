@@ -496,12 +496,10 @@ def _fetch_commit_collection(
                 f"{resource} response for commit {sha} has no valid {collection_key} list"
             )
         total_count = payload.get("total_count")
-        if total_count is not None and (
-            isinstance(total_count, bool) or not isinstance(total_count, int) or total_count < 0
-        ):
+        if type(total_count) is not int or total_count < 0:
             raise MonitorError(f"{resource} response for commit {sha} has invalid total_count")
         rows.extend(collection)
-        if total_count is not None and total_count < len(rows):
+        if total_count < len(rows):
             raise MonitorError(
                 f"{resource} response for commit {sha} reports total_count={total_count} "
                 f"below {len(rows)} returned rows"
@@ -509,7 +507,7 @@ def _fetch_commit_collection(
         if len(rows) >= limit:
             return rows[:limit]
         if len(collection) < page_size:
-            if total_count is not None and total_count > len(rows):
+            if total_count > len(rows):
                 raise MonitorError(
                     f"{resource} response for commit {sha} returned a short page with "
                     f"total_count={total_count} but only {len(rows)} rows were returned"

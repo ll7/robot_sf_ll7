@@ -229,7 +229,7 @@ REVIEWED_COMPATIBILITY_EXPORTS = {
 
 @pytest.mark.parametrize("module_name", MODULE_NAMES)
 def test_nav_module_declares_the_reviewed_export_surface(module_name: str) -> None:
-    """Every nav module exports exactly its reviewed public surface."""
+    """Verify exact exports so accidental public API changes fail fast."""
     module = importlib.import_module(f"robot_sf.nav.{module_name}")
     assert module.__all__ == MODULE_ALL[module_name]
     assert set(module.__all__) <= set(dir(module))
@@ -237,7 +237,7 @@ def test_nav_module_declares_the_reviewed_export_surface(module_name: str) -> No
 
 @pytest.mark.parametrize("module_name", MODULE_NAMES)
 def test_nav_module_all_names_resolve_on_pre_change_paths(module_name: str) -> None:
-    """Every declared nav export resolves with its reviewed identity."""
+    """Verify export identity so imports retain their reviewed compatibility path."""
     module = importlib.import_module(f"robot_sf.nav.{module_name}")
     expected_module = f"robot_sf.nav.{module_name}"
 
@@ -265,7 +265,7 @@ def test_nav_module_all_names_resolve_on_pre_change_paths(module_name: str) -> N
 def test_nav_module_keeps_private_and_unreviewed_foreign_names_unexported(
     module_name: str,
 ) -> None:
-    """Private, stale, and unreviewed foreign names never leak into the public surface."""
+    """Verify private, stale, or unreviewed foreign names never leak into the public API."""
     module = importlib.import_module(f"robot_sf.nav.{module_name}")
     declared = set(module.__all__)
     for name in UNEXPORTED_NAMES[module_name]:

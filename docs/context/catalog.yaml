@@ -28,6 +28,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json
   status: evidence
   freshness: evidence
@@ -68,10 +69,12 @@ entries:
   status: evidence
   freshness: dated
   area: reproducibility
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
   status: evidence
   freshness: dated
   area: reproducibility
+  legacy_dirty_evidence: true
 - path: docs/context/issue_5936_result_job_durability_gate.md
   status: current
   freshness: policy
@@ -4840,18 +4843,22 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_artifact_manifest.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json.review.json
   status: evidence
   freshness: evidence

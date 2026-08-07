@@ -76,3 +76,6 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+__all__ = ["validate_import_provenance"]

@@ -255,3 +255,9 @@ def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:
             (svg_rectangle.x, svg_rectangle.y + svg_rectangle.height),
         ],
     )
+
+
+__all__ = [
+    "Obstacle",
+    "obstacle_from_svgrectangle",
+]

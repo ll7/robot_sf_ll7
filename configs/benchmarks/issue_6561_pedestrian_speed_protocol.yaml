@@ -1,0 +1,312 @@
+# Issue #6561 pedestrian desired-speed protocol.
+#
+# Plain-language summary: freeze a paired six-scenario pedestrian-speed study so
+# the released regime, a distributed slow regime, and a typical 1.3 m/s regime
+# can be compared reproducibly after the robot-speed campaign completes.
+schema_version: robot_sf.issue_6561_pedestrian_speed_protocol.v1
+issue: 6561
+study_id: issue_6561_pedestrian_desired_speed_v1
+status: protocol_only
+
+claim_boundary: >-
+  Protocol and check-only manifest evidence. This packet does not run registered
+  episodes, establish planner superiority, establish real-world walking or safety
+  claims, edit dissertation/manuscript claims, or admit evidence to the dissertation.
+
+execution_boundary:
+  protocol_only_pr: true
+  registered_campaign_in_this_pr: false
+  compute_submit_authorized: false
+  paper_or_dissertation_claim_edits: false
+  fallback_or_degraded_success_allowed: false
+
+ordering_gate:
+  robot_speed_campaign_issue: 6102
+  required_before_registered_submission: >-
+    Retrieve the exact #6102 result bundle and validate completeness, native
+    execution, provenance, duplicate/missing-row integrity, and the frozen
+    manifest hash. A blocked or degraded #6102 result does not satisfy this gate.
+  production_submission_allowed_in_protocol_pr: false
+
+baseline_protocol:
+  scenario_matrix: configs/scenarios/classic_interactions.yaml
+  scenario_matrix_sha256: 5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5
+  seed_set_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_set_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+  seed_set_name: paper_eval_s30
+  horizon_steps: 600
+  dt_seconds: 0.1
+  robot_speed_cap_m_s: 2.0
+  execution_mode: native
+
+scenario_contract:
+  selection_rule: >-
+    Use exactly the six medium-band classic-interaction scenarios from the
+    approved #6102 surface. Scenario order is frozen and no scenario may be
+    added, removed, or substituted after the protocol hash is admitted.
+  selected_scenarios:
+    - scenario_id: classic_head_on_corridor_medium
+      source_path: configs/scenarios/archetypes/classic_head_on_corridor.yaml
+      source_sha256: e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8
+      mechanism: head_on_corridor
+    - scenario_id: classic_doorway_medium
+      source_path: configs/scenarios/archetypes/classic_doorway.yaml
+      source_sha256: 2b68b827ba83bbe56e7ddfe3e34cb642ee67202097c970cb7eadc466cc7ff7b0
+      mechanism: doorway
+    - scenario_id: classic_group_crossing_medium
+      source_path: configs/scenarios/archetypes/classic_group_crossing.yaml
+      source_sha256: 370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8
+      mechanism: group_crossing
+    - scenario_id: classic_merging_medium
+      source_path: configs/scenarios/archetypes/classic_merging.yaml
+      source_sha256: eb1c80372a6c0d96fdfe36d5523980bb5461475abbca8db0d7f8a04b0cfd9023
+      mechanism: merging
+    - scenario_id: classic_overtaking_medium
+      source_path: configs/scenarios/archetypes/classic_overtaking.yaml
+      source_sha256: fdd789f19e833039cee0bd4f5fceeb2f273dedb9925c58f41b26246cdfee9f74
+      mechanism: overtaking
+    - scenario_id: classic_station_platform_medium
+      source_path: configs/scenarios/archetypes/classic_station_platform.yaml
+      source_sha256: 7f093fdb6406f4043e07b4a8d4113defd4cb17ec4bc793bf3583f12960b77228
+      mechanism: station_platform
+  scenario_count: 6
+  pairing:
+    same_scenario_seed_set_across_regimes: true
+    same_scenario_seed_set_across_planners: true
+    scenario_order_frozen: true
+    no_seed_substitution: true
+
+planner_contract:
+  roster:
+    - planner_id: scenario_adaptive_hybrid_orca_v2_collision_guard
+      algorithm: hybrid_rule_local_planner
+      role: top_hybrid_promoted
+      config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+      config_sha256: d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe
+    - planner_id: ppo
+      algorithm: ppo
+      role: learned_comparator_zero_shot
+      config_path: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
+      config_sha256: 109c0ae61d4bf40a6ce74c69982d71a68b6437e0aaf00b97a2e11761fd4c2e3f
+      estimand: zero_shot_ood_robustness
+      retraining: forbidden
+    - planner_id: orca
+      algorithm: orca
+      role: classical_baseline
+      config_path: null
+      config_sha256: null
+      binding: native_orca_registry
+    - planner_id: prediction_planner
+      algorithm: prediction_planner
+      role: predictive_comparator
+      config_path: configs/algos/prediction_planner_camera_ready.yaml
+      config_sha256: a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481
+  planner_count: 4
+
+seed_contract:
+  source_path: configs/benchmarks/seed_sets_v1.yaml
+  set_name: paper_eval_s30
+  seeds:
+    - 111
+    - 112
+    - 113
+    - 114
+    - 115
+    - 116
+    - 117
+    - 118
+    - 119
+    - 120
+    - 121
+    - 122
+    - 123
+    - 124
+    - 125
+    - 126
+    - 127
+    - 128
+    - 129
+    - 130
+    - 131
+    - 132
+    - 133
+    - 134
+    - 135
+    - 136
+    - 137
+    - 138
+    - 139
+    - 140
+  seed_count: 30
+
+pedestrian_speed_contract:
+  spawn:
+    initial_speed_m_s: 0.5
+    initial_speed_binding: released_default
+    change_forbidden: true
+  regimes:
+    - regime_id: legacy_default
+      role: released_reference
+      runtime_controls:
+        ped_speed_tier: null
+        desired_speed_mean: null
+        desired_speed_std: null
+        desired_speed_seed: null
+      binding: unset_tier_spawn_coupled_legacy_default
+    - regime_id: slow_distributed
+      role: fixed_mean_distribution_control
+      runtime_controls:
+        ped_speed_tier: null
+        desired_speed_mean: 0.65
+        desired_speed_std: 0.2
+        desired_speed_seed: episode_seed
+      binding: explicit_desired_speed_distribution
+    - regime_id: typical_distributed
+      role: typical_adult_walking_distribution
+      runtime_controls:
+        ped_speed_tier: null
+        desired_speed_mean: 1.3
+        desired_speed_std: 0.2
+        desired_speed_seed: episode_seed
+      binding: explicit_desired_speed_distribution
+  regime_count: 3
+
+metric_contract:
+  primary_metrics:
+    - success_rate
+    - collision_rate
+    - near_miss_rate
+  exposure_metrics:
+    - time_to_goal_norm
+    - total_exposure_seconds
+    - travel_distance_m
+    - mean_clearance_m
+    - min_clearance_m
+  typed_collision_metrics:
+    - ped_collision_rate
+    - obstacle_collision_rate
+    - agent_collision_rate
+    - unclassified_collision_rate
+  denominator_contract: >-
+    Every primary and exposure metric is computed over complete native rows for
+    the exact scenario-regime-planner-seed identity; excluded rows are listed and
+    cannot be silently reintroduced into a summary.
+
+inference_contract:
+  comparison: regime_minus_legacy_default
+  resampling_unit: paired_scenario_seed_block
+  resampling_unit_rationale: >-
+    Pair each non-reference regime with legacy_default for the same scenario,
+    planner, and seed, then resample the seed block across the six declared
+    scenarios. This preserves the fixed-suite contrasts without implying an
+    unobserved scenario superpopulation.
+  estimand_scope: per_planner_robustness
+  ranking_scope: descriptive_only
+  confidence_level: 0.95
+  interval_method: paired_seed_block_percentile_bootstrap_one_sided
+  bootstrap_replicates: 2000
+  tail_probability_rule: plus_one_empirical_tail_at_harm_margin
+  multiplicity:
+    method: holm_bonferroni
+    family: planner_by_non_reference_regime_by_primary_metric
+    tests_per_planner: 6
+    directional_families:
+      - materially_harmful
+      - noninferiority
+    familywise_alpha: 0.05
+    directional_family_alpha: 0.025
+    allocation: equal_split_bonferroni
+  harm_margins:
+    success_rate: -0.05
+    collision_rate: 0.02
+    near_miss_rate: 0.05
+  decision_labels:
+    materially_harmful: >-
+      At least one primary metric crosses its multiplicity-adjusted harm margin
+      in the harmful direction.
+    no_material_shift: >-
+      All primary metrics satisfy the adjusted non-inferiority rule at their
+      declared margins.
+    inconclusive: >-
+      The native paired grid is complete but neither decision condition is met.
+    intervention_not_activated: >-
+      The desired-speed intervention fails the frozen activation or transient
+      validity rule; no no-harm conclusion is allowed.
+
+activation_contract:
+  required_diagnostics:
+    - configured_desired_speed_mean_m_s
+    - configured_desired_speed_std_m_s
+    - realized_desired_speed_mean_m_s
+    - realized_desired_speed_std_m_s
+    - initial_spawn_speed_mean_m_s
+    - initial_spawn_speed_peak_m_s
+    - time_to_desired_speed_target_seconds
+    - acceleration_transient_steps
+    - desired_speed_activation_fraction
+  target_tolerance_m_s: 0.2
+  minimum_activation_fraction: 0.8
+  maximum_spawn_transient_seconds: 2.0
+  transient_exclusion: >-
+    Record the first time each pedestrian enters the target tolerance and the
+    acceleration transient; exclude only the declared transient window from
+    activation summaries. Never tune or silently shorten the window after rows.
+  rule: >-
+    For slow_distributed and typical_distributed, the regime is activated only
+    when at least 0.80 of pedestrians reach the configured desired-speed mean
+    within 0.20 m/s and the p95 time-to-target is at most 2.0 seconds. The
+    legacy_default reference is recorded but is not treated as an intervention.
+  failure_class: intervention_not_activated
+
+manifest_contract:
+  identity_fields:
+    - scenario_id
+    - scenario_source_sha256
+    - regime_id
+    - planner_id
+    - planner_config_sha256
+    - seed
+    - horizon_steps
+    - dt_seconds
+    - robot_speed_cap_m_s
+    - execution_mode
+  expected_scenario_count: 6
+  expected_regime_count: 3
+  expected_planner_count: 4
+  expected_seed_count: 30
+  expected_cell_count: 2160
+  manifest_hash_algorithm: sha256_json_canonical_sort_keys
+  manifest_hash: 371f1a0160ec7faf1ade531691f104e2a1c92f7c34857e887ba1ba539e1b5238
+  upstream_robot_speed_manifest_hash: e32ce197149af62bf366f5ca95abbb42215b379fe7916d916ccdd544dce8666f
+  registered_rows_allowed_in_protocol_pr: false
+
+turnaround_ledger:
+  required_timestamps:
+    - decision_at
+    - protocol_work_started_at
+    - protocol_frozen_at
+    - preflight_passed_at
+    - slurm_submitted_at
+    - scheduler_started_at
+    - scheduler_completed_at
+    - artifacts_retrieved_at
+    - integrity_validated_at
+    - analysis_completed_at
+    - evidence_frozen_at
+    - dissertation_admission_decided_at
+  retain_failed_attempts: true
+  private_scheduler_details_allowed: false
+
+validation_contract:
+  check_only_command: uv run python scripts/validation/check_issue_6561_pedestrian_speed_protocol.py --manifest
+  focused_test_command: uv run pytest -q tests/validation/test_check_issue_6561_pedestrian_speed_protocol.py
+  production_launcher_in_this_pr: false
+  required_status_for_registered_rows: native_complete_integrity_validated
+  forbidden_row_statuses:
+    - missing
+    - duplicate
+    - failed
+    - fallback
+    - degraded
+    - provenance_invalid
+    - intervention_not_activated

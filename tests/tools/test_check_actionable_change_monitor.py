@@ -236,9 +236,15 @@ def test_fetch_snapshot_paginates_check_runs_and_statuses(monkeypatch) -> None:
             if page == 1:
                 return {
                     "total_count": 101,
-                    "check_runs": [{"name": f"check-{index}"} for index in range(100)],
+                    "check_runs": [
+                        {"id": index + 1, "name": f"check-{index}", "status": "completed"}
+                        for index in range(100)
+                    ],
                 }
-            return {"total_count": 101, "check_runs": [{"name": "check-100"}]}
+            return {
+                "total_count": 101,
+                "check_runs": [{"id": 101, "name": "check-100", "status": "completed"}],
+            }
         if "/status?" in path:
             return {
                 "total_count": 1,
@@ -267,7 +273,12 @@ def test_fetch_commit_collection_rejects_inconsistent_short_pages(
     def fake_gh_json(path: str, **kwargs: object) -> object:
         del kwargs
         calls.append(path)
-        return {"total_count": 101, collection_key: [{"name": "only-row"}]}
+        row = (
+            {"id": 1, "name": "only-row", "status": "completed"}
+            if collection_key == "check_runs"
+            else {"context": "only-row", "state": "success"}
+        )
+        return {"total_count": 101, collection_key: [row]}
 
     monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
 
@@ -333,6 +344,62 @@ def test_fetch_snapshot_rejects_malformed_check_run_collection(monkeypatch) -> N
 
     with pytest.raises(monitor.MonitorError, match="check_runs"):
         monitor._fetch_snapshot(monitor.DEFAULT_REPO, 100)
+
+
+@pytest.mark.parametrize(
+    ("resource", "malformed_pull_request"),
+    [
+        ("pulls", {"labels": [{"id": 1}]}),
+        ("pulls", {"head": {"sha": None}}),
+        ("issues", {"labels": [{"id": 1}]}),
+        ("issues", {"number": "22"}),
+    ],
+)
+def test_fetch_snapshot_rejects_malformed_surface_fields(
+    monkeypatch, resource: str, malformed_pull_request: dict[str, object]
+) -> None:
+    pull_request = _pull_request(21)
+    issue = _issue(22)
+    (pull_request if resource == "pulls" else issue).update(malformed_pull_request)
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        if "/pulls?" in path:
+            return [pull_request] if resource == "pulls" else []
+        if "/issues?" in path:
+            return [issue] if resource == "issues" else []
+        raise AssertionError(f"unexpected GitHub path: {path}")
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    with pytest.raises(monitor.MonitorError, match="invalid|malformed"):
+        monitor._fetch_snapshot(monitor.DEFAULT_REPO, 100)
+
+
+@pytest.mark.parametrize(
+    ("resource", "collection_key", "row"),
+    [
+        ("check-runs", "check_runs", {"name": "ci", "status": "completed"}),
+        ("status", "statuses", {"context": "ci"}),
+    ],
+)
+def test_fetch_commit_collection_rejects_malformed_rows(
+    monkeypatch, resource: str, collection_key: str, row: dict[str, object]
+) -> None:
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del path, kwargs
+        return {"total_count": 1, collection_key: [row]}
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    with pytest.raises(monitor.MonitorError, match="invalid|malformed"):
+        monitor._fetch_commit_collection(
+            monitor.DEFAULT_REPO,
+            "sha-malformed",
+            resource=resource,
+            collection_key=collection_key,
+            limit=100,
+        )
 
 
 @pytest.mark.parametrize("resource", ["pulls", "issues"])
@@ -433,6 +500,34 @@ def test_run_monitor_refuses_stale_target_before_patching(monkeypatch) -> None:
         raise AssertionError("stale target must be rejected before PATCH")
 
     monkeypatch.setattr(monitor.subprocess, "run", fail_patch)
+
+    with pytest.raises(monitor.MonitorError, match="stale write"):
+        monitor.run_monitor(repo=monitor.DEFAULT_REPO, issue_number=6819, now=NOW)
+
+
+def test_run_monitor_refuses_target_body_change_without_marker_change(monkeypatch) -> None:
+    pull_request = _pull_request(23)
+    target_reads = iter(
+        [
+            {
+                "number": 6819,
+                "state": "open",
+                "body": "operator note",
+            },
+            {
+                "number": 6819,
+                "state": "open",
+                "body": "operator note changed",
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        monitor,
+        "_fetch_snapshot",
+        lambda repo, limit: ([pull_request], [], {23: []}, {}),
+    )
+    monkeypatch.setattr(monitor, "_read_target_issue", lambda repo, issue: next(target_reads))
 
     with pytest.raises(monitor.MonitorError, match="stale write"):
         monitor.run_monitor(repo=monitor.DEFAULT_REPO, issue_number=6819, now=NOW)

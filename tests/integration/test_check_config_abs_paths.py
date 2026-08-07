@@ -152,7 +152,9 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 
-    def test_issue_6474_manifest_is_pinned_verbatim_and_digest_guarded(self, tmp_path):
+    def test_issue_6474_manifest_is_pinned_verbatim_and_digest_guarded(
+        self, tmp_path: Path
+    ) -> None:
         """The admitted issue-6474 campaign manifest is byte-exact pinned provenance.
 
         The manifest's ``invoked_command`` faithfully records the absolute SLURM

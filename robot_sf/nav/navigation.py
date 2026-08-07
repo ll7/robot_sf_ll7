@@ -514,3 +514,11 @@ def get_prepared_obstacles(map_def: MapDefinition) -> list[PreparedGeometry]:
     prepared = [prep(poly) for poly in polygons if not poly.is_empty]
     map_def._prepared_obstacles = prepared
     return prepared
+
+
+__all__ = [
+    "NavigationSettings",
+    "RouteNavigator",
+    "get_prepared_obstacles",
+    "sample_route",
+]

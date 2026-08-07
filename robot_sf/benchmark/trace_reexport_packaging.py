@@ -1,3 +1,5 @@
+# ruff: noqa: DOC201, RUF022
+
 """Fail-closed packaging for the issue #5756 trace re-export.
 
 The packager verifies frozen inputs before reading episode rows, joins release and rerun rows by
@@ -31,6 +33,7 @@ from robot_sf.benchmark.camera_ready._config import (
     load_campaign_config,
 )
 from robot_sf.benchmark.camera_ready._util import _hash_payload, _jsonable_repo_relative
+from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 from robot_sf.benchmark.utils import _config_hash
 from scripts.tools.build_simulation_trace_export import (
     build_simulation_trace_export,
@@ -64,6 +67,14 @@ RESOLVER_MAPPING_SCHEMA = "issue_5756_trace_mapping_receipt.v1"
 REAL_REEXPORT_BINDING_SCHEMA = "issue_6411_real_reexport_binding.v1"
 REAL_REEXPORT_RECEIPT_SCHEMA = "issue_6411_trace_transformation_receipt.v1"
 REAL_REEXPORT_CONFIG_EVIDENCE_SCHEMA = "issue_6411_config_evidence.v1"
+
+# This is the approved package identity from issue #6814.  The current tracked
+# package deliberately fails this check (its SHA256SUMS digest is different),
+# so the strict re-export path must stop before reading external artifacts.
+ISSUE_6412_PACKAGE_SHA256SUMS_SHA256 = (
+    "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
+)
+ISSUE_6814_EXECUTION_COMMIT = EXECUTION_COMMIT
 
 REAL_REEXPORT_SEEDS = tuple(range(111, 141))
 REAL_REEXPORT_EXCEPTION_SEEDS = (128, 130)
@@ -168,6 +179,45 @@ class RealReexportArm:
         """Return this arm's exact planner/scenario/seed tuple set."""
 
         return {(self.planner, self.scenario_id, seed) for seed in self.seeds}
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedRealReexportRowSource:
+    """Immutable, source-bound record for one approved #6412 row."""
+
+    arm: str
+    job_id: str
+    row_index: int
+    episode_id: str
+    scenario_id: str
+    planner_id: str
+    seed: int
+    execution_commit: str
+    raw_row: Mapping[str, object]
+    raw_row_sha256: str
+    prior_normalized_sha256: str
+    episodes_sha256: str
+    manifest_sha256: str
+    run_summary_sha256: str
+    preflight_sha256: str
+    result_provenance_sha256: str | None
+    result_provenance_row: Mapping[str, object] | None
+    source_root_retrieval_key: str
+    episodes_retrieval_key: str | None = None
+    manifest_retrieval_key: str | None = None
+    run_summary_retrieval_key: str | None = None
+    preflight_retrieval_key: str | None = None
+    manifest: Mapping[str, object] | None = None
+    run_summary: Mapping[str, object] | None = None
+    preflight: Mapping[str, object] | None = None
+    result_provenance_manifest: Mapping[str, object] | None = None
+    route_geometry: Mapping[str, object] | None = None
+    conflict_geometry: Mapping[str, object] | None = None
+    encounter_report: Mapping[str, object] | None = None
+    route_geometry_sha256: str | None = None
+    conflict_geometry_sha256: str | None = None
+    encounter_report_sha256: str | None = None
+    n_rows: int = 0
 
 
 REAL_REEXPORT_ARMS = tuple(RealReexportArm(**spec) for spec in REAL_REEXPORT_ARM_SPECS)
@@ -2270,14 +2320,628 @@ def build_resolver_mapping_receipt(
     return resolver_receipt
 
 
+def _issue_6814_identity_value(identity: object, field: str) -> object:
+    """Read an identity field from a mapping or a small immutable record."""
+
+    if isinstance(identity, Mapping):
+        return identity.get(field)
+    return getattr(identity, field, None)
+
+
+def _issue_6814_required_text(value: object, field: str) -> str:
+    """Require one non-empty identity string."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise RealReexportBindingError(f"issue #6814 {field} must be a non-empty string")
+    return value.strip()
+
+
+def _issue_6814_sha256(value: object, field: str) -> str:
+    """Require one lowercase SHA-256 digest."""
+
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise RealReexportBindingError(f"issue #6814 {field} must be lowercase SHA-256")
+    return value
+
+
+def _issue_6814_read_package_json(package_root: Path, name: str) -> dict[str, Any]:
+    """Read one immutable package JSON object."""
+
+    path = package_root / name
+    if not path.is_file():
+        raise RealReexportBindingError(f"issue #6814 package artifact is unavailable: {name}")
+    return _read_json_object(path)
+
+
+def _parse_issue_6814_sha256sums(text: str) -> list[tuple[int, str, str]]:
+    """Parse non-comment SHA256SUMS entries with their source line numbers."""
+
+    entries: list[tuple[int, str, str]] = []
+    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2 or not re.fullmatch(r"[0-9a-f]{64}", parts[0]):
+            raise RealReexportBindingError(f"invalid issue #6412 SHA256SUMS line {line_number}")
+        relative = parts[1].lstrip("*").strip()
+        if not relative:
+            raise RealReexportBindingError(f"invalid issue #6412 SHA256SUMS line {line_number}")
+        entries.append((line_number, parts[0], relative))
+    if not entries:
+        raise RealReexportBindingError("issue #6412 SHA256SUMS is empty")
+    return entries
+
+
+def _issue_6814_verify_package(  # noqa: C901, PLR0912, PLR0915
+    package_root: Path,
+    *,
+    expected_identity: object,
+    expected_package_sha256: str,
+) -> dict[str, Any]:
+    """Verify the complete #6412 compact package before external retrieval."""
+
+    package_root = package_root.resolve()
+    if not package_root.is_dir():
+        raise RealReexportBindingError(f"issue #6412 package is unavailable: {package_root}")
+    complete = _issue_6814_read_package_json(package_root, "package_complete.json")
+    if complete.get("schema_version") != "issue_6412_package_complete.v1":
+        raise RealReexportBindingError("issue #6412 package_complete schema mismatch")
+    if (
+        complete.get("status") != "complete"
+        or complete.get("visualization_only") is not True
+        or complete.get("n_requested") != 90
+        or complete.get("n_admitted") != 88
+        or complete.get("n_excluded") != 2
+    ):
+        raise RealReexportBindingError("issue #6412 package count or evidence boundary mismatch")
+
+    sums_path = package_root / "SHA256SUMS"
+    if not sums_path.is_file():
+        raise RealReexportBindingError("issue #6412 SHA256SUMS is unavailable")
+    actual_sums_sha = _sha256_file(sums_path)
+    _require_digest(actual_sums_sha, expected_package_sha256, "issue #6412 SHA256SUMS")
+    declared_sums_sha = complete.get("sha256sums_sha256")
+    if declared_sums_sha != expected_package_sha256:
+        raise RealReexportBindingError("issue #6412 package_complete SHA256SUMS identity mismatch")
+
+    try:
+        sums_text = sums_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RealReexportBindingError(f"cannot read issue #6412 SHA256SUMS: {exc}") from exc
+    listed_paths: set[str] = set()
+    for line_number, digest, relative in _parse_issue_6814_sha256sums(sums_text):
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise RealReexportBindingError(f"unsafe issue #6412 package path: {relative}")
+        listed_paths.add(relative_path.as_posix())
+        artifact = package_root / relative_path
+        if not artifact.is_file():
+            raise RealReexportBindingError(
+                f"issue #6412 package artifact is unavailable: {relative}"
+            )
+        _require_digest(_sha256_file(artifact), digest, f"issue #6412 package {relative}")
+    required_package_paths = {
+        "package_manifest.json",
+        "source_pointer.json",
+        "mapping_receipt.json",
+    }
+    if not required_package_paths <= listed_paths:
+        missing = sorted(required_package_paths - listed_paths)
+        raise RealReexportBindingError(
+            f"issue #6412 SHA256SUMS omits required package artifacts: {missing}"
+        )
+
+    manifest = _issue_6814_read_package_json(package_root, "package_manifest.json")
+    if (
+        manifest.get("schema_version") != "issue_6412_real_reexport_package.v1"
+        or manifest.get("execution_commit") != ISSUE_6814_EXECUTION_COMMIT
+        or manifest.get("n_requested") != 90
+        or manifest.get("n_admitted") != 88
+        or manifest.get("n_excluded") != 2
+        or manifest.get("visualization_only") is not True
+    ):
+        raise RealReexportBindingError("issue #6412 package_manifest identity mismatch")
+    if manifest.get("excluded_tuples") != [
+        ["ppo", "classic_doorway_medium", 128],
+        ["ppo", "classic_doorway_medium", 130],
+    ]:
+        raise RealReexportBindingError("issue #6412 excluded tuple boundary mismatch")
+
+    source_pointer = _issue_6814_read_package_json(package_root, "source_pointer.json")
+    mapping = _issue_6814_read_package_json(package_root, "mapping_receipt.json")
+    if mapping.get("schema_version") != "issue_6412_trace_reexport_mapping_receipt.v1":
+        raise RealReexportBindingError("issue #6412 mapping receipt schema mismatch")
+    rows = mapping.get("rows")
+    if mapping.get("n_rows") != 90 or not isinstance(rows, list) or len(rows) != 90:
+        raise RealReexportBindingError("issue #6412 mapping receipt must contain 90 rows")
+
+    expected_arm = _issue_6814_required_text(
+        _issue_6814_identity_value(expected_identity, "arm"), "arm"
+    )
+    expected_planner = _issue_6814_required_text(
+        _issue_6814_identity_value(expected_identity, "planner_id"), "planner_id"
+    )
+    expected_scenario = _issue_6814_required_text(
+        _issue_6814_identity_value(expected_identity, "scenario_id"), "scenario_id"
+    )
+    expected_seed = _issue_6814_identity_value(expected_identity, "seed")
+    if type(expected_seed) is not int:
+        raise RealReexportBindingError("issue #6814 seed identity must be an integer")
+    selected = [
+        row
+        for row in rows
+        if isinstance(row, Mapping)
+        and row.get("planner") == expected_planner
+        and row.get("scenario_id") == expected_scenario
+        and row.get("seed") == expected_seed
+    ]
+    if len(selected) != 1:
+        raise RealReexportBindingError("issue #6412 selected row identity is not unique")
+    selected_row = dict(selected[0])
+    source_provenance = selected_row.get("source_provenance")
+    if not isinstance(source_provenance, Mapping):
+        raise RealReexportBindingError("issue #6412 selected row lacks source provenance")
+    if source_provenance.get("arm") != expected_arm:
+        raise RealReexportBindingError("issue #6412 selected row arm mismatch")
+    row_identity = {
+        "episode_id": selected_row.get("episode_id"),
+        "row_index": source_provenance.get("source_row_index"),
+        "job_id": source_provenance.get("job_id"),
+        "execution_commit": source_provenance.get("execution_commit"),
+        "raw_trace_sha256": selected_row.get("raw_trace_sha256"),
+        "prior_normalized_sha256": selected_row.get("normalized_trace_sha256"),
+    }
+    for field in (
+        "episode_id",
+        "row_index",
+        "job_id",
+        "execution_commit",
+        "raw_trace_sha256",
+        "prior_normalized_sha256",
+    ):
+        expected = _issue_6814_identity_value(expected_identity, field)
+        if expected is not None and row_identity[field] != expected:
+            raise RealReexportBindingError(f"issue #6412 selected row {field} mismatch")
+    for field in ("raw_trace_sha256", "prior_normalized_sha256"):
+        _issue_6814_sha256(row_identity[field], f"selected row {field}")
+    pointer_arms = source_pointer.get("arms")
+    if not isinstance(pointer_arms, list):
+        raise RealReexportBindingError("issue #6412 source_pointer arms are unavailable")
+    pointer = next(
+        (
+            entry
+            for entry in pointer_arms
+            if isinstance(entry, Mapping) and entry.get("arm") == expected_arm
+        ),
+        None,
+    )
+    if not isinstance(pointer, Mapping):
+        raise RealReexportBindingError("issue #6412 selected source arm is unavailable")
+    for field, source_field in (
+        ("episodes_sha256", "source_episodes_sha256"),
+        ("manifest_sha256", "source_manifest_sha256"),
+        ("run_summary_sha256", "run_summary_sha256"),
+        ("preflight_sha256", "preflight_sha256"),
+    ):
+        if source_provenance.get(source_field) != pointer.get(field):
+            raise RealReexportBindingError(f"issue #6412 {field} disagrees across package records")
+        _issue_6814_sha256(pointer.get(field), f"{expected_arm} {field}")
+    if pointer.get("job_id") != source_provenance.get("job_id"):
+        raise RealReexportBindingError("issue #6412 source job identity disagrees")
+    if (
+        pointer.get("planner") != expected_planner
+        or pointer.get("scenario_id") != expected_scenario
+    ):
+        raise RealReexportBindingError("issue #6412 source arm identity disagrees")
+    return {
+        "package_root": package_root,
+        "package_sha256sums_sha256": expected_package_sha256,
+        "package_manifest": manifest,
+        "package_manifest_sha256": _sha256_file(package_root / "package_manifest.json"),
+        "package_complete": complete,
+        "package_complete_sha256": _sha256_file(package_root / "package_complete.json"),
+        "source_pointer": source_pointer,
+        "mapping_receipt": mapping,
+        "mapping_receipt_sha256": _sha256_file(package_root / "mapping_receipt.json"),
+        "selected_row": selected_row,
+        "source_provenance": dict(source_provenance),
+        "source_pointer_arm": dict(pointer),
+    }
+
+
+def _issue_6814_one_external_file(
+    root: Path,
+    *,
+    label: str,
+    direct_names: tuple[str, ...],
+    glob_patterns: tuple[str, ...],
+) -> Path:
+    """Resolve one unambiguous external compact artifact."""
+
+    candidates = _issue_6814_external_candidates(
+        root, direct_names=direct_names, glob_patterns=glob_patterns
+    )
+    if len(candidates) != 1:
+        raise RealReexportBindingError(
+            f"issue #6814 {label} must resolve to one file; found {len(candidates)}"
+        )
+    return candidates[0]
+
+
+def _issue_6814_artifact_retrieval_key(
+    source_root_retrieval_key: str, root: Path, artifact: Path
+) -> str:
+    """Bind a verified external artifact to its root retrieval namespace."""
+
+    try:
+        relative = artifact.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError as exc:
+        raise RealReexportBindingError(
+            "issue #6814 external artifact is outside its verified arm root"
+        ) from exc
+    return f"{source_root_retrieval_key.rstrip('/')}/{relative}"
+
+
+def _issue_6814_external_candidates(
+    root: Path,
+    *,
+    direct_names: tuple[str, ...],
+    glob_patterns: tuple[str, ...],
+) -> list[Path]:
+    """Resolve direct external artifact names before recursive glob matches."""
+
+    direct = [root / name for name in direct_names if (root / name).is_file()]
+    if direct:
+        return direct
+    return sorted({path for pattern in glob_patterns for path in root.glob(pattern)})
+
+
+def _issue_6814_optional_external_json(
+    root: Path,
+    *,
+    label: str,
+    direct_names: tuple[str, ...],
+    glob_patterns: tuple[str, ...],
+    schema_versions: tuple[str, ...],
+) -> tuple[dict[str, Any], str] | None:
+    """Load one optional semantic owner without inventing a missing record."""
+
+    candidates = _issue_6814_external_candidates(
+        root, direct_names=direct_names, glob_patterns=glob_patterns
+    )
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        raise RealReexportBindingError(
+            f"issue #6814 {label} owner must resolve to one file; found {len(candidates)}"
+        )
+    payload = _read_json_object(candidates[0])
+    if payload.get("schema_version") not in schema_versions:
+        raise RealReexportBindingError(f"issue #6814 {label} owner schema mismatch")
+    return payload, _sha256_file(candidates[0])
+
+
+def _issue_6814_row_value(row: Mapping[str, Any], *paths: tuple[str, ...]) -> object:
+    """Read the first present nested row value."""
+
+    for path in paths:
+        current: object = row
+        for part in path:
+            if isinstance(current, Mapping) and part in current:
+                current = current[part]
+            elif isinstance(current, list) and part.isdigit() and int(part) < len(current):
+                current = current[int(part)]
+            else:
+                break
+        else:
+            return current
+    return None
+
+
+def _issue_6814_external_row_identity(
+    row: Mapping[str, Any], *, expected: Mapping[str, Any], raw_line: bytes
+) -> None:
+    """Verify selected external row identity and both row-level hashes."""
+
+    expected_fields = {
+        "episode_id": expected["episode_id"],
+        "scenario_id": expected["scenario_id"],
+        "planner_id": expected["planner_id"],
+        "seed": expected["seed"],
+    }
+    planner = _issue_6814_row_value(
+        row, ("planner_id",), ("planner",), ("algo",), ("scenario_params", "algo")
+    )
+    actual = {
+        "episode_id": row.get("episode_id"),
+        "scenario_id": row.get("scenario_id"),
+        "planner_id": planner,
+        "seed": row.get("seed"),
+    }
+    if actual != expected_fields:
+        raise RealReexportBindingError(
+            f"issue #6814 selected external row identity mismatch: expected {expected_fields}, got {actual}"
+        )
+    if _sha256_bytes(raw_line) != expected["raw_trace_sha256"]:
+        raise RealReexportBindingError("issue #6814 selected external raw row SHA-256 mismatch")
+    row_config_hash = expected.get("row_config_hash")
+    if row_config_hash is not None:
+        actual_row_config = _issue_6814_row_value(
+            row,
+            ("row_config_hash",),
+            ("config_hash",),
+            ("result_provenance", "config_hash"),
+        )
+        if actual_row_config != row_config_hash:
+            raise RealReexportBindingError("issue #6814 selected external row config hash mismatch")
+    algorithm_config_hash = expected.get("algorithm_config_hash")
+    if algorithm_config_hash is not None:
+        actual_algorithm_hash = _issue_6814_row_value(
+            row,
+            ("algorithm_config_hash",),
+            ("algorithm_metadata", "config_hash"),
+            ("result_provenance", "row_config", "algorithm_config_hash"),
+        )
+        if actual_algorithm_hash != algorithm_config_hash:
+            raise RealReexportBindingError(
+                "issue #6814 selected external algorithm config hash mismatch"
+            )
+    commit = _issue_6814_row_value(
+        row,
+        ("git_hash",),
+        ("repo_commit",),
+        ("execution_commit",),
+        ("result_provenance", "repo_commit"),
+    )
+    if commit != ISSUE_6814_EXECUTION_COMMIT:
+        raise RealReexportBindingError("issue #6814 selected external execution commit mismatch")
+
+
+def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
+    *,
+    package_root: Path,
+    external_arm_root: Path,
+    expected_identity: object,
+    expected_package_sha256: str = ISSUE_6412_PACKAGE_SHA256SUMS_SHA256,
+) -> VerifiedRealReexportRowSource:
+    """Verify the complete #6412 lineage before exposing one row's fields."""
+
+    package = _issue_6814_verify_package(
+        package_root,
+        expected_identity=expected_identity,
+        expected_package_sha256=expected_package_sha256,
+    )
+    source_provenance = package["source_provenance"]
+    pointer = package["source_pointer_arm"]
+    root = Path(external_arm_root).resolve()
+    if not root.is_dir():
+        raise RealReexportBindingError(f"issue #6814 external arm root is unavailable: {root}")
+    episodes_path = _issue_6814_one_external_file(
+        root,
+        label="episodes.jsonl",
+        direct_names=("episodes.jsonl",),
+        glob_patterns=("**/episodes.jsonl",),
+    )
+    manifest_path = _issue_6814_one_external_file(
+        root,
+        label="arm manifest",
+        direct_names=("manifest.json", "campaign_manifest.json"),
+        glob_patterns=("**/manifest.json", "**/campaign_manifest.json"),
+    )
+    run_summary_path = _issue_6814_one_external_file(
+        root,
+        label="run summary",
+        direct_names=("run_summary.yaml", "run_summary.yml"),
+        glob_patterns=("**/run_summary.yaml", "**/run_summary.yml"),
+    )
+    preflight_path = _issue_6814_one_external_file(
+        root,
+        label="preflight",
+        direct_names=("preflight/validate_config.json", "validate_config.json"),
+        glob_patterns=("**/preflight/validate_config.json", "**/validate_config.json"),
+    )
+    artifact_paths = {
+        "episodes_sha256": episodes_path,
+        "manifest_sha256": manifest_path,
+        "run_summary_sha256": run_summary_path,
+        "preflight_sha256": preflight_path,
+    }
+    for field, path in artifact_paths.items():
+        _require_digest(_sha256_file(path), pointer[field], f"issue #6814 {field}")
+
+    expected = {
+        "episode_id": package["selected_row"]["episode_id"],
+        "scenario_id": package["selected_row"]["scenario_id"],
+        "planner_id": package["selected_row"]["planner"],
+        "seed": package["selected_row"]["seed"],
+        "raw_trace_sha256": package["selected_row"]["raw_trace_sha256"],
+        "row_config_hash": source_provenance.get("row_config_hash"),
+        "algorithm_config_hash": source_provenance.get("algorithm_config_hash"),
+    }
+    raw_lines = episodes_path.read_bytes().splitlines(keepends=True)
+    n_rows = sum(1 for raw_line in raw_lines if raw_line.strip())
+    row_index = int(source_provenance["source_row_index"])
+    if row_index < 1 or row_index > len(raw_lines):
+        raise RealReexportBindingError("issue #6814 selected external row index is out of range")
+    raw_line = raw_lines[row_index - 1]
+    try:
+        row = json.loads(raw_line)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RealReexportBindingError("issue #6814 selected external row is invalid JSON") from exc
+    if not isinstance(row, Mapping):
+        raise RealReexportBindingError("issue #6814 selected external row must be an object")
+    _issue_6814_external_row_identity(row, expected=expected, raw_line=raw_line)
+
+    manifest = _read_json_object(manifest_path)
+    manifest_planner = _issue_6814_row_value(
+        manifest, ("planner_id",), ("planner",), ("planners", "0", "key")
+    )
+    if manifest.get("job_id", manifest.get("slurm_job_id")) != source_provenance["job_id"]:
+        raise RealReexportBindingError("issue #6814 external manifest job mismatch")
+    if manifest_planner is not None and manifest_planner != expected["planner_id"]:
+        raise RealReexportBindingError("issue #6814 external manifest planner mismatch")
+    manifest_scenario = manifest.get("scenario_id")
+    if manifest_scenario is not None and manifest_scenario != expected["scenario_id"]:
+        raise RealReexportBindingError("issue #6814 external manifest scenario mismatch")
+    try:
+        run_summary_raw = yaml.safe_load(run_summary_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise RealReexportBindingError("issue #6814 run summary is not valid YAML") from exc
+    if not isinstance(run_summary_raw, Mapping):
+        raise RealReexportBindingError("issue #6814 run summary must be an object")
+    preflight = _read_json_object(preflight_path)
+    route_geometry_artifact = _issue_6814_optional_external_json(
+        root,
+        label="route geometry",
+        direct_names=("process_trace_geometry_registry.json", "geometry_registry.json"),
+        glob_patterns=(
+            "**/process_trace_geometry_registry*.json",
+            "**/geometry_registry*.json",
+        ),
+        schema_versions=("process_trace_geometry_registry.v1",),
+    )
+    conflict_geometry_artifact = _issue_6814_optional_external_json(
+        root,
+        label="conflict geometry",
+        direct_names=("conflict_registry.json", "process_trace_conflict_registry.json"),
+        glob_patterns=("**/conflict_registry*.json", "**/process_trace_conflict_registry*.json"),
+        schema_versions=("conflict_geometry.v1", "process_trace_conflict_registry.v1"),
+    )
+    encounter_report_artifact = _issue_6814_optional_external_json(
+        root,
+        label="encounter report",
+        direct_names=("near_miss_encounter.json", "encounter_report.json"),
+        glob_patterns=("**/near_miss_encounter*.json", "**/encounter_report*.json"),
+        schema_versions=("near_miss_encounter.v1",),
+    )
+
+    provenance_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
+    if not provenance_path.is_file():
+        matches = sorted(root.glob("**/episodes.jsonl.provenance.json"))
+        if len(matches) > 1:
+            raise RealReexportBindingError("issue #6814 result provenance sidecar is ambiguous")
+        provenance_path = matches[0] if matches else provenance_path
+    result_provenance_sha256: str | None = None
+    result_provenance_row: Mapping[str, object] | None = None
+    result_provenance_manifest: Mapping[str, object] | None = None
+    if provenance_path.is_file():
+        provenance_payload = _read_json_object(provenance_path)
+        rows = provenance_payload.get("rows")
+        if not isinstance(rows, list):
+            raise RealReexportBindingError(
+                "issue #6814 result provenance sidecar rows are unavailable"
+            )
+        try:
+            validate_result_provenance_manifest(provenance_payload)
+        except (ValueError, TypeError) as exc:
+            raise RealReexportBindingError(
+                "issue #6814 result provenance sidecar failed validation"
+            ) from exc
+        result_provenance_sha256 = _sha256_file(provenance_path)
+        result_provenance_manifest = dict(provenance_payload)
+        matches = [
+            candidate
+            for candidate in rows
+            if isinstance(candidate, Mapping)
+            and candidate.get("episode_id") == expected["episode_id"]
+            and candidate.get("scenario_id") == expected["scenario_id"]
+            and candidate.get("seed") == expected["seed"]
+        ]
+        if len(matches) != 1:
+            raise RealReexportBindingError(
+                "issue #6814 result provenance sidecar row link is not unique"
+            )
+        result_provenance_row = dict(matches[0])
+        provenance_commit = result_provenance_row.get("repo_commit")
+        if provenance_commit != ISSUE_6814_EXECUTION_COMMIT:
+            raise RealReexportBindingError("issue #6814 result provenance commit mismatch")
+        jsonl_line = result_provenance_row.get("jsonl_line")
+        if jsonl_line is not None and jsonl_line != row_index:
+            raise RealReexportBindingError("issue #6814 result provenance row index mismatch")
+        artifact_sha = result_provenance_row.get("trace_artifact_sha256")
+        if artifact_sha is not None and artifact_sha != pointer["episodes_sha256"]:
+            raise RealReexportBindingError("issue #6814 result provenance artifact hash mismatch")
+        artifact_path = result_provenance_row.get("raw_artifact") or result_provenance_row.get(
+            "trace_artifact_path"
+        )
+        if artifact_path is not None and not str(artifact_path).endswith("episodes.jsonl"):
+            raise RealReexportBindingError("issue #6814 result provenance artifact path mismatch")
+        simulator_settings = result_provenance_row.get("simulator_settings")
+        if not isinstance(simulator_settings, Mapping):
+            raise RealReexportBindingError(
+                "issue #6814 result provenance row lacks simulator settings"
+            )
+    source_root_retrieval_key = source_provenance.get("source_retrieval_key")
+    if not isinstance(source_root_retrieval_key, str) or not source_root_retrieval_key.strip():
+        source_root_retrieval_key = pointer.get("retrieval_key")
+    if not isinstance(source_root_retrieval_key, str) or not source_root_retrieval_key.strip():
+        source_root_retrieval_key = package["source_pointer"].get("retrieval_key")
+    if not isinstance(source_root_retrieval_key, str) or not source_root_retrieval_key.strip():
+        raise RealReexportBindingError(
+            "issue #6814 source retrieval key is unavailable in verified provenance"
+        )
+    source_root_retrieval_key = source_root_retrieval_key.strip()
+    return VerifiedRealReexportRowSource(
+        arm=str(source_provenance["arm"]),
+        job_id=str(source_provenance["job_id"]),
+        row_index=row_index,
+        episode_id=str(expected["episode_id"]),
+        scenario_id=str(expected["scenario_id"]),
+        planner_id=str(expected["planner_id"]),
+        seed=int(expected["seed"]),
+        execution_commit=ISSUE_6814_EXECUTION_COMMIT,
+        raw_row=dict(row),
+        raw_row_sha256=str(expected["raw_trace_sha256"]),
+        prior_normalized_sha256=str(package["selected_row"]["normalized_trace_sha256"]),
+        episodes_sha256=str(pointer["episodes_sha256"]),
+        manifest_sha256=str(pointer["manifest_sha256"]),
+        run_summary_sha256=str(pointer["run_summary_sha256"]),
+        preflight_sha256=str(pointer["preflight_sha256"]),
+        result_provenance_sha256=result_provenance_sha256,
+        result_provenance_row=result_provenance_row,
+        source_root_retrieval_key=source_root_retrieval_key,
+        episodes_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, episodes_path
+        ),
+        manifest_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, manifest_path
+        ),
+        run_summary_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, run_summary_path
+        ),
+        preflight_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, preflight_path
+        ),
+        manifest=dict(manifest),
+        run_summary=dict(run_summary_raw),
+        preflight=dict(preflight),
+        result_provenance_manifest=result_provenance_manifest,
+        route_geometry=(route_geometry_artifact[0] if route_geometry_artifact else None),
+        conflict_geometry=(conflict_geometry_artifact[0] if conflict_geometry_artifact else None),
+        encounter_report=(encounter_report_artifact[0] if encounter_report_artifact else None),
+        route_geometry_sha256=(route_geometry_artifact[1] if route_geometry_artifact else None),
+        conflict_geometry_sha256=(
+            conflict_geometry_artifact[1] if conflict_geometry_artifact else None
+        ),
+        encounter_report_sha256=(
+            encounter_report_artifact[1] if encounter_report_artifact else None
+        ),
+        n_rows=n_rows,
+    )
+
+
 __all__ = [
     "REAL_REEXPORT_ARMS",
     "REAL_REEXPORT_ARMS_BY_KEY",
     "REAL_REEXPORT_EXCEPTION_SEEDS",
     "REAL_REEXPORT_REQUEST_TUPLES",
+    "ISSUE_6412_PACKAGE_SHA256SUMS_SHA256",
+    "ISSUE_6814_EXECUTION_COMMIT",
     "CampaignExpectation",
     "FrozenTraceReexportContract",
     "RealReexportArm",
+    "VerifiedRealReexportRowSource",
     "RealReexportBindingError",
     "TraceReexportPackagingError",
     "bind_real_reexport_arms",
@@ -2289,4 +2953,5 @@ __all__ = [
     "package_trace_reexport",
     "real_reexport_arms",
     "real_reexport_request_tuples",
+    "load_verified_real_reexport_row_source",
 ]

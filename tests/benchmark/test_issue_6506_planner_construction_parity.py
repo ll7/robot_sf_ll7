@@ -13,12 +13,15 @@ through that single canonical adapter's fail-closed normalizer
 (``normalize_planner_diagnostics``): the runner native-command arm
 (``run_episode``) and the map-runner SocNav-family adapter arm
 (``_build_common_adapter_policy._planner_stats``) now share one diagnostics
-schema that always carries a string ``planner_type``. The full step()->dict /
-plan()->tuple *bridging* collapse remains blocked behind #6506 stop-condition 3
-(the canonical adapter is a proof-of-concept and lacks the process-isolated,
-heading-based, holonomic-passthrough, and learned-action conversions the two
-arms actually use); this module pins the contract the diagnostics unification
-must preserve -- validation requirement #4 of the #6506 contract:
+schema that always carries a string ``planner_type``.
+
+The full step()->dict / plan()->tuple *bridging* collapse remains blocked
+behind #6506 stop-condition 3 (the canonical adapter is a proof-of-concept and
+lacks the process-isolated, heading-based, holonomic-passthrough, and
+learned-action conversions the two arms actually use). Reusing it as-is would
+change command/velocity output (stop-condition 4) or require extending
+``robot_sf/planner/`` (a forbidden path). This module pins the contract the
+unification must preserve -- validation requirement #4 of the #6506 contract:
 
     "A parity assertion that native vs adapter execution-mode metadata and
     planner_diagnostics are unchanged for representative planners."
@@ -32,11 +35,18 @@ execution modes:
 * the canonical ``planner_diagnostics`` propagation path: both the runner
   native-command arm and the map-runner SocNav-family adapter arm must route
   through ``normalize_planner_diagnostics`` so the payload carries a string
-  ``planner_type`` while every existing counter is preserved unchanged.
+  ``planner_type`` while every existing counter is preserved unchanged, and
+* the map-runner ``_ExternalMPCAdapter`` step()->dict / plan()->tuple bridge
+  output. This is the second ``step() -> dict`` construction path #6506 names
+  (the SICNav / DR-MPC external-MPC family): it transforms the observation via
+  ``_obs_to_external_mpc_format`` and converts the action via
+  ``_ppo_action_to_unicycle``. A successor PR that collapses this bridge onto an
+  extended canonical adapter must keep this pinned output unchanged.
 """
 
 from __future__ import annotations
 
+import math
 import sys
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -361,3 +371,79 @@ def test_native_command_diagnostics_fail_closed_for_non_mapping_payload(
     assert diagnostics["diagnostics_unavailable_reason"] == (
         "diagnostics() did not return a mapping (got str)"
     )
+
+
+class _RecordingMpcPlanner:
+    """Stub external-MPC ``step(obs) -> dict`` planner that records its input obs."""
+
+    def __init__(self, action: dict[str, object]) -> None:
+        """Store the action the stub returns from every ``step`` call."""
+        self.action = action
+        self.received_obs: dict[str, object] | None = None
+
+    def step(self, obs: dict[str, object]) -> dict[str, object]:
+        """Record the observation and return the configured action dict."""
+        self.received_obs = obs
+        return self.action
+
+
+def _external_mpc_adapter(stub: _RecordingMpcPlanner) -> object:
+    """Build an ``_ExternalMPCAdapter`` over a stub external-MPC planner."""
+    return map_runner._ExternalMPCAdapter(
+        stub,
+        algo_config={},
+        robot_kinematics=None,
+        planner_name="StubExternalMPC",
+    )
+
+
+def test_external_mpc_adapter_forwards_mpc_observation_format() -> None:
+    """The MPC ``step()->dict`` bridge forwards the external-MPC observation format.
+
+    The map-runner ``_ExternalMPCAdapter`` (SICNav / DR-MPC family) is the second
+    ``step() -> dict`` construction path #6506 must collapse onto the #6492
+    canonical adapter. Unlike the canonical ``BaselineStepToLocalAdapter``, it
+    transforms the observation via ``_obs_to_external_mpc_format`` before calling
+    ``step``. A successor PR that migrates this bridge must preserve both the
+    observation transformation and the unicycle passthrough.
+    """
+    stub = _RecordingMpcPlanner({"v": 0.5, "omega": 0.1})
+    adapter = _external_mpc_adapter(stub)
+    obs = {
+        "robot": {"heading": [0.0], "position": [0.0, 0.0]},
+        "goal": {"current": [1.0, 0.0]},
+        "obstacles": [{"x": 1.0, "y": 2.0}],
+    }
+
+    linear, angular = adapter.plan(obs)
+
+    assert stub.received_obs == map_runner._obs_to_external_mpc_format(obs)
+    assert stub.received_obs is not None and "obstacles" in stub.received_obs
+    assert (linear, angular) == (0.5, 0.1)
+
+
+def test_external_mpc_adapter_converts_holonomic_action() -> None:
+    """The MPC bridge converts holonomic actions via heading-error angular derivation.
+
+    The canonical #6492 adapter converts holonomic ``{vx, vy}`` lossily to
+    ``(hypot(vx, vy), 0.0)``. The MPC bridge instead derives angular velocity from
+    the heading error through ``_ppo_action_to_unicycle`` (with
+    ``project_command=False``). This divergence is exactly why the full bridging
+    collapse is deferred: the successor PR must reconcile it, and this pins the
+    current adapter output it must preserve.
+    """
+    stub = _RecordingMpcPlanner({"vx": 1.0, "vy": 0.0})
+    adapter = _external_mpc_adapter(stub)
+
+    aligned = adapter.plan({"robot": {"heading": [0.0]}})
+    assert aligned == (1.0, 0.0)
+
+    heading_error = adapter.plan({"robot": {"heading": [math.pi / 2]}})
+    assert heading_error == (1.0, -1.0)
+
+
+def test_external_mpc_adapter_rejects_non_dict_action() -> None:
+    """The MPC bridge fails closed on a non-dict ``step`` action payload."""
+    adapter = _external_mpc_adapter(_RecordingMpcPlanner("not-a-dict"))
+    with pytest.raises(TypeError, match="StubExternalMPC"):
+        adapter.plan({"robot": {"heading": [0.0]}})

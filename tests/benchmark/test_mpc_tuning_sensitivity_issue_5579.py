@@ -30,6 +30,7 @@ from scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 import _display_pat
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml"
+FIXTURE_RUN_COMMIT = "0" * 40
 
 
 def test_packet_freezes_two_target_arms_three_parameters_and_twenty_points() -> None:
@@ -173,7 +174,7 @@ def test_held_out_analysis_rejects_missing_selection() -> None:
             [],
             repo_root=ROOT,
             config_path=str(CONFIG),
-            run_commit="fixture",
+            run_commit=FIXTURE_RUN_COMMIT,
             reproduction_command="fixture",
             raw_artifact_root="output/fixture",
             scope_name="held_out_scope",
@@ -189,7 +190,7 @@ def test_tuning_selection_round_trip_and_fixed_held_out_report(tmp_path: Path) -
         _fixture_rows(config, tuning_plan),
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
         scope_name="tuning_scope",
@@ -224,7 +225,7 @@ def test_tuning_selection_round_trip_and_fixed_held_out_report(tmp_path: Path) -
         _fixture_rows(config, held_out_plan, scope_name="held_out_scope"),
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
         scope_name="held_out_scope",
@@ -424,7 +425,7 @@ def test_report_applies_preregistered_read_to_best_found_configs(tmp_path: Path)
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
     )
@@ -462,7 +463,7 @@ def test_analysis_excludes_target_rows_with_invalid_solver_provenance() -> None:
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
     )
@@ -512,7 +513,7 @@ def test_incumbent_adapter_rows_remain_eligible_without_mpc_solver_evidence() ->
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
     )
@@ -538,7 +539,7 @@ def test_fallback_row_blocks_read_and_is_not_counted(tmp_path: Path) -> None:
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
     )
@@ -559,7 +560,7 @@ def test_solver_fallback_runtime_blocks_read_and_is_not_counted() -> None:
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
     )
@@ -579,7 +580,7 @@ def test_missing_planner_runtime_blocks_read() -> None:
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
     )
@@ -692,7 +693,7 @@ def test_report_rejects_missing_paired_rows() -> None:
             rows[:-1],
             repo_root=ROOT,
             config_path=str(CONFIG),
-            run_commit="fixture",
+            run_commit=FIXTURE_RUN_COMMIT,
             reproduction_command="fixture",
             raw_artifact_root="output/fixture",
         )
@@ -787,7 +788,7 @@ def test_held_out_report_produces_paired_bootstrap_and_holm_inference() -> None:
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
         scope_name="held_out_scope",
@@ -829,7 +830,7 @@ def test_held_out_report_produces_paired_bootstrap_and_holm_inference() -> None:
         rows,
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
         scope_name="held_out_scope",
@@ -847,7 +848,7 @@ def test_tuning_scope_report_marks_inference_not_applicable() -> None:
         _fixture_rows(config, plan, scope_name="tuning_scope"),
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
         scope_name="tuning_scope",
@@ -865,7 +866,7 @@ def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Pat
         _fixture_rows(config, plan, scope_name="tuning_scope"),
         repo_root=ROOT,
         config_path=str(CONFIG),
-        run_commit="fixture",
+        run_commit=FIXTURE_RUN_COMMIT,
         reproduction_command="fixture",
         raw_artifact_root="output/fixture",
         scope_name="tuning_scope",
@@ -890,7 +891,7 @@ def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Pat
     )
 
     tampered_commit = deepcopy(payload)
-    tampered_commit["source_report_run_commit"] = "different-run"
+    tampered_commit["source_report_run_commit"] = "1" * 40
     selection_path.write_text(json.dumps(tampered_commit), encoding="utf-8")
     with pytest.raises(ValueError, match="run commit does not match"):
         load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
@@ -921,6 +922,34 @@ def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Pat
     edited_report_path.write_text(json.dumps(edited, indent=2, sort_keys=True), encoding="utf-8")
     with pytest.raises(ValueError, match="source report digest does not match"):
         load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+
+
+def test_tuning_selection_requires_a_40_character_git_commit_sha(tmp_path: Path) -> None:
+    """Selection provenance cannot be satisfied by an arbitrary placeholder token."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    tuning_report = analyze_results(
+        config,
+        _fixture_rows(config, plan, scope_name="tuning_scope"),
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit=FIXTURE_RUN_COMMIT,
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="tuning_scope",
+    )
+    malformed_report = deepcopy(tuning_report)
+    malformed_report["run_commit"] = "fixture"
+    source_report = _persisted_tuning_report(malformed_report, tmp_path / "tuning")
+    with pytest.raises(ValueError, match="40-character Git commit SHA"):
+        write_tuning_selection(
+            malformed_report,
+            config,
+            output_path=tmp_path / "tuning_selection.json",
+            config_path=CONFIG,
+            repo_root=ROOT,
+            source_report=source_report,
+        )
 
 
 def _persisted_tuning_report(report: dict, out_dir: Path) -> str:

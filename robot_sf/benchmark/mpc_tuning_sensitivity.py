@@ -337,6 +337,7 @@ def analyze_results(  # noqa: PLR0913
         Diagnostic report with candidate-level rows and the preregistered read.
     """
     validated = validate_sensitivity_config(config, repo_root=repo_root)
+    validated_run_commit = _validate_run_commit(run_commit, context="analysis report")
     if scope_name == "held_out_scope" and target_candidate_ids is None:
         raise ValueError(
             "held_out_scope requires tuning-selected target candidates; "
@@ -437,7 +438,7 @@ def analyze_results(  # noqa: PLR0913
         "claim_boundary": str(validated["claim_boundary"]),
         "config_path": config_path,
         "config_sha256": _config_sha256(config_path, repo_root=repo_root),
-        "run_commit": run_commit,
+        "run_commit": validated_run_commit,
         "reproduction_command": reproduction_command,
         "raw_artifact_root": raw_artifact_root,
         "execution_scope_name": scope_name,
@@ -490,9 +491,9 @@ def write_tuning_selection(
     config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
     if config_sha256 is None:
         raise ValueError(f"selection config does not exist: {config_path}")
-    source_report_run_commit = str(report.get("run_commit") or "").strip()
-    if not source_report_run_commit:
-        raise ValueError("tuning selection source report must record a run commit")
+    source_report_run_commit = _validate_run_commit(
+        report.get("run_commit"), context="tuning selection source report"
+    )
     report_path = _repo_path(str(source_report), repo_root)
     if not report_path.is_file():
         raise ValueError(f"tuning selection source report does not exist: {source_report}")
@@ -562,6 +563,20 @@ def _selection_input_digest(report: Mapping[str, Any]) -> str:
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_run_commit(value: Any, *, context: str) -> str:
+    """Require a concrete Git commit SHA for report and selection provenance.
+
+    Returns:
+        The normalized lowercase 40-character commit SHA.
+    """
+    commit = str(value or "").strip().lower()
+    if not commit:
+        raise ValueError(f"{context} must record a run commit")
+    if len(commit) != 40 or any(character not in "0123456789abcdef" for character in commit):
+        raise ValueError(f"{context} must record a 40-character Git commit SHA")
+    return commit
 
 
 def load_tuning_selection(
@@ -656,10 +671,13 @@ def _validate_selection_source_report_run_commit(
     payload: Mapping[str, Any], report: Mapping[str, Any]
 ) -> None:
     """Require the selection artifact to bind the source report's run commit."""
-    report_run_commit = str(report.get("run_commit") or "").strip()
-    if not report_run_commit:
-        raise ValueError("tuning selection source report must record a run commit")
-    if payload.get("source_report_run_commit") != report_run_commit:
+    report_run_commit = _validate_run_commit(
+        report.get("run_commit"), context="tuning selection source report"
+    )
+    selection_run_commit = _validate_run_commit(
+        payload.get("source_report_run_commit"), context="tuning selection artifact"
+    )
+    if selection_run_commit != report_run_commit:
         raise ValueError("tuning selection source report run commit does not match the artifact")
 
 

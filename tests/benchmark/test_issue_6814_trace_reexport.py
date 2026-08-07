@@ -18,6 +18,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
 from robot_sf.benchmark import issue_6814_trace_reexport as issue6814
 from robot_sf.benchmark.issue_6814_trace_reexport import (
     EXECUTION_COMMIT,
+    Issue6814Error,
     Issue6814SourceIntegrityError,
     TraceIdentity,
     build_initial_state_record,
@@ -446,6 +447,17 @@ def test_source_contract_selects_exact_6412_row_and_hashes() -> None:
     assert contract["trace_identity"]["episode_id"] == source.episode_id
     assert contract["fields"]["map_id"]["status"] == "available"
     assert len(contract["canonical_config"]["sha256"]) == 64
+    retrieval_keys = {
+        artifact["retrieval_key"]
+        for artifact in contract["source_artifacts"]
+        if artifact["role"] in {"episodes_jsonl", "arm_manifest", "run_summary", "preflight"}
+    }
+    assert retrieval_keys == {
+        "synthetic/doorway_ppo/episodes.jsonl",
+        "synthetic/doorway_ppo/manifest.json",
+        "synthetic/doorway_ppo/run_summary.yaml",
+        "synthetic/doorway_ppo/validate_config.json",
+    }
 
 
 def test_source_contract_rejects_6412_package_digest_drift(tmp_path: Path) -> None:
@@ -475,6 +487,10 @@ def test_source_loader_accepts_mapping_identity(tmp_path: Path) -> None:
         expected_package_sha256=package_sha,
     )
     assert source.episode_id == identities[0].episode_id
+    assert source.episodes_retrieval_key == "synthetic/doorway_ppo/episodes.jsonl"
+    assert source.manifest_retrieval_key == "synthetic/doorway_ppo/manifest.json"
+    assert source.run_summary_retrieval_key == "synthetic/doorway_ppo/run_summary.yaml"
+    assert source.preflight_retrieval_key == "synthetic/doorway_ppo/validate_config.json"
 
 
 def test_source_loader_rejects_missing_package_root(tmp_path: Path) -> None:
@@ -1083,6 +1099,22 @@ def test_strict_projection_rejects_invalid_run_config(
         apply_strict_metadata_projection(trace, run_config=run_config)
 
 
+def test_strict_projection_rejects_non_object_metadata() -> None:
+    """Reject list-shaped metadata before attempting mapping operations."""
+
+    trace = _trace(_base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483"))
+    with pytest.raises(SimulationTraceNormalizationError, match="run_config must be an object"):
+        apply_strict_metadata_projection(trace, run_config=["not", "an", "object"])  # type: ignore[arg-type]
+    with pytest.raises(
+        SimulationTraceNormalizationError, match="terminal_outcome must be an object"
+    ):
+        apply_strict_metadata_projection(
+            trace,
+            run_config=_strict_run_config(),
+            terminal_outcome=["not", "an", "object"],  # type: ignore[arg-type]
+        )
+
+
 @pytest.mark.parametrize(
     ("terminal_outcome", "error_text"),
     (
@@ -1281,3 +1313,57 @@ def test_packet_generation_is_content_hash_deterministic(
         for line in (roots["doorway_ppo"] / "episodes.jsonl").read_bytes().splitlines()
         if line.strip()
     )
+    doorway_arm = manifest["source_package"]["arms"]["doorway_ppo"]
+    assert doorway_arm["manifest_uri"] == "synthetic/doorway_ppo/manifest.json"
+    assert doorway_arm["episodes_uri"] == "synthetic/doorway_ppo/episodes.jsonl"
+    assert doorway_arm["run_summary_uri"] == "synthetic/doorway_ppo/run_summary.yaml"
+    assert doorway_arm["preflight_uri"] == "synthetic/doorway_ppo/validate_config.json"
+    assert (
+        len(
+            {
+                doorway_arm["manifest_uri"],
+                doorway_arm["episodes_uri"],
+                doorway_arm["run_summary_uri"],
+                doorway_arm["preflight_uri"],
+            }
+        )
+        == 4
+    )
+
+
+def test_packet_manifest_schema_is_fail_closed_on_coverage_and_integrity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reject incomplete source indexes, mismatched receipt lists, and false support claims."""
+
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    monkeypatch.setattr(issue6814, "SELECTED_TRACE_IDENTITIES", identities)
+    manifest = build_issue_6814_trace_packet(
+        package_root=package,
+        arm_roots=roots,
+        external_output_root=tmp_path / "packet",
+        execution_repository=Path(__file__).parents[2],
+        check_determinism=True,
+        expected_package_sha256=package_sha,
+    )
+
+    missing_source = copy.deepcopy(manifest)
+    missing_source["source_contracts"].pop()
+    with pytest.raises(Issue6814Error):
+        issue6814._schema_validate(missing_source, "issue_6814_packet_manifest.v1.json")
+
+    mismatched_receipts = copy.deepcopy(manifest)
+    mismatched_receipts["output_hashes"]["pair_receipts"][0]["pair_id"] = "wrong"
+    with pytest.raises(Issue6814Error, match="indexes disagree"):
+        issue6814._schema_validate(mismatched_receipts, "issue_6814_packet_manifest.v1.json")
+
+    false_supported = copy.deepcopy(manifest)
+    false_supported["disposition"] = "supported"
+    false_supported["check_results"]["artifact_integrity_ok"] = False
+    with pytest.raises(Issue6814Error):
+        issue6814._schema_validate(false_supported, "issue_6814_packet_manifest.v1.json")
+
+    missing_reexport_digest = copy.deepcopy(manifest)
+    missing_reexport_digest["source_contracts"][0]["status"] = "available"
+    with pytest.raises(Issue6814Error):
+        issue6814._schema_validate(missing_reexport_digest, "issue_6814_packet_manifest.v1.json")

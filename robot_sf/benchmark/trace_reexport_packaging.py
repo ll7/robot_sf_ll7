@@ -203,6 +203,10 @@ class VerifiedRealReexportRowSource:
     result_provenance_sha256: str | None
     result_provenance_row: Mapping[str, object] | None
     source_root_retrieval_key: str
+    episodes_retrieval_key: str | None = None
+    manifest_retrieval_key: str | None = None
+    run_summary_retrieval_key: str | None = None
+    preflight_retrieval_key: str | None = None
     manifest: Mapping[str, object] | None = None
     run_summary: Mapping[str, object] | None = None
     preflight: Mapping[str, object] | None = None
@@ -2565,6 +2569,20 @@ def _issue_6814_one_external_file(
     return candidates[0]
 
 
+def _issue_6814_artifact_retrieval_key(
+    source_root_retrieval_key: str, root: Path, artifact: Path
+) -> str:
+    """Bind a verified external artifact to its root retrieval namespace."""
+
+    try:
+        relative = artifact.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError as exc:
+        raise RealReexportBindingError(
+            "issue #6814 external artifact is outside its verified arm root"
+        ) from exc
+    return f"{source_root_retrieval_key.rstrip('/')}/{relative}"
+
+
 def _issue_6814_external_candidates(
     root: Path,
     *,
@@ -2856,11 +2874,14 @@ def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
             )
     source_root_retrieval_key = source_provenance.get("source_retrieval_key")
     if not isinstance(source_root_retrieval_key, str) or not source_root_retrieval_key.strip():
+        source_root_retrieval_key = pointer.get("retrieval_key")
+    if not isinstance(source_root_retrieval_key, str) or not source_root_retrieval_key.strip():
         source_root_retrieval_key = package["source_pointer"].get("retrieval_key")
     if not isinstance(source_root_retrieval_key, str) or not source_root_retrieval_key.strip():
         raise RealReexportBindingError(
             "issue #6814 source retrieval key is unavailable in verified provenance"
         )
+    source_root_retrieval_key = source_root_retrieval_key.strip()
     return VerifiedRealReexportRowSource(
         arm=str(source_provenance["arm"]),
         job_id=str(source_provenance["job_id"]),
@@ -2879,7 +2900,19 @@ def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
         preflight_sha256=str(pointer["preflight_sha256"]),
         result_provenance_sha256=result_provenance_sha256,
         result_provenance_row=result_provenance_row,
-        source_root_retrieval_key=source_root_retrieval_key.strip(),
+        source_root_retrieval_key=source_root_retrieval_key,
+        episodes_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, episodes_path
+        ),
+        manifest_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, manifest_path
+        ),
+        run_summary_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, run_summary_path
+        ),
+        preflight_retrieval_key=_issue_6814_artifact_retrieval_key(
+            source_root_retrieval_key, root, preflight_path
+        ),
         manifest=dict(manifest),
         run_summary=dict(run_summary_raw),
         preflight=dict(preflight),

@@ -646,28 +646,36 @@ def build_issue_6814_trace_source_contract(
         {
             "role": "episodes_jsonl",
             "schema_version": "issue_5756_episode.v1",
-            "retrieval_key": source.source_root_retrieval_key,
+            "retrieval_key": _source_artifact_retrieval_key(
+                source, "episodes_retrieval_key", "episodes.jsonl"
+            ),
             "sha256": source.episodes_sha256,
             "authority": "durable_source",
         },
         {
             "role": "arm_manifest",
             "schema_version": "issue_5756_arm_manifest.v1",
-            "retrieval_key": source.source_root_retrieval_key,
+            "retrieval_key": _source_artifact_retrieval_key(
+                source, "manifest_retrieval_key", "manifest.json"
+            ),
             "sha256": source.manifest_sha256,
             "authority": "durable_source",
         },
         {
             "role": "run_summary",
             "schema_version": "run_summary.external.v1",
-            "retrieval_key": source.source_root_retrieval_key,
+            "retrieval_key": _source_artifact_retrieval_key(
+                source, "run_summary_retrieval_key", "run_summary.yaml"
+            ),
             "sha256": source.run_summary_sha256,
             "authority": "durable_source",
         },
         {
             "role": "preflight",
             "schema_version": "validate_config.v1",
-            "retrieval_key": source.source_root_retrieval_key,
+            "retrieval_key": _source_artifact_retrieval_key(
+                source, "preflight_retrieval_key", "validate_config.json"
+            ),
             "sha256": source.preflight_sha256,
             "authority": "durable_source",
         },
@@ -678,7 +686,8 @@ def build_issue_6814_trace_source_contract(
                 "role": "result_provenance",
                 "schema_version": "benchmark_result_provenance.v1",
                 "retrieval_key": (
-                    f"{source.source_root_retrieval_key}/episodes.jsonl.provenance.json"
+                    f"{_source_artifact_retrieval_key(source, 'episodes_retrieval_key', 'episodes.jsonl')}"
+                    ".provenance.json"
                 ),
                 "sha256": source.result_provenance_sha256,
                 "authority": "durable_source",
@@ -1069,11 +1078,56 @@ def _validator(schema_name: str) -> Draft202012Validator:
 def _schema_validate(payload: Mapping[str, Any], schema_name: str) -> None:
     """Validate one packet payload against its cached issue schema."""
 
+    if schema_name == "issue_6814_packet_manifest.v1.json":
+        output_hashes = payload.get("output_hashes")
+        pair_receipts = payload.get("pair_compatibility_receipts")
+        output_pair_receipts = (
+            output_hashes.get("pair_receipts") if isinstance(output_hashes, Mapping) else None
+        )
+        if isinstance(pair_receipts, list) and isinstance(output_pair_receipts, list):
+            if pair_receipts != output_pair_receipts:
+                raise Issue6814Error(
+                    "issue_6814_packet_manifest.v1.json: pair receipt indexes disagree"
+                )
     errors = sorted(
         _validator(schema_name).iter_errors(payload), key=lambda error: list(error.path)
     )
     if errors:
         raise Issue6814Error(f"{schema_name}: {errors[0].message} at {list(errors[0].path)}")
+
+
+def _source_artifact_retrieval_key(
+    source: VerifiedRealReexportRowSource, attribute: str, fallback_name: str
+) -> str:
+    """Return a verified artifact key, retaining a compatibility fallback for fixtures."""
+
+    value = getattr(source, attribute, None)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return f"{source.source_root_retrieval_key.rstrip('/')}/{fallback_name}"
+
+
+def _manifest_disposition(
+    pair_receipts: list[Mapping[str, Any]], check_results: Mapping[str, Any]
+) -> str:
+    """Classify the packet only after pair admission and integrity checks agree."""
+
+    if not all(
+        receipt.get("renderer_admission", {}).get("disposition") == "supported"
+        for receipt in pair_receipts
+    ):
+        return "unsupported"
+    required_checks = (
+        "package_digest_ok",
+        "row_contract_digest_ok",
+        "artifact_integrity_ok",
+        "deterministic_rebuild_ok",
+    )
+    return (
+        "supported"
+        if all(check_results.get(name) is True for name in required_checks)
+        else "blocked"
+    )
 
 
 def _process_payload(
@@ -1423,6 +1477,12 @@ def _build_packet_once(
             source.preflight_sha256,
         )
     )
+    check_results = {
+        "package_digest_ok": package_digest_ok,
+        "row_contract_digest_ok": row_contract_digest_ok,
+        "artifact_integrity_ok": artifact_integrity_ok,
+        "deterministic_rebuild_ok": None,
+    }
     manifest: dict[str, Any] = {
         "schema_version": PACKET_MANIFEST_SCHEMA,
         "issue": ISSUE,
@@ -1445,30 +1505,29 @@ def _build_packet_once(
             "source_contracts_manifest_uri": "source_contracts/",
             "pair_receipts": pair_file_records,
         },
-        "disposition": "supported"
-        if all(
-            receipt["renderer_admission"]["disposition"] == "supported" for receipt in pair_receipts
-        )
-        else "unsupported",
+        "disposition": _manifest_disposition(pair_receipts, check_results),
         "notes": ["visualization-only overlay; no simulation performed"],
-        "check_results": {
-            "package_digest_ok": package_digest_ok,
-            "row_contract_digest_ok": row_contract_digest_ok,
-            "artifact_integrity_ok": artifact_integrity_ok,
-            "deterministic_rebuild_ok": None,
-        },
+        "check_results": check_results,
     }
     for identity in SELECTED_TRACE_IDENTITIES:
         source = sources[identity.episode_id][1]
         manifest["source_package"]["arms"][identity.arm] = {
             "job_id": source.job_id,
-            "manifest_uri": source.source_root_retrieval_key,
+            "manifest_uri": _source_artifact_retrieval_key(
+                source, "manifest_retrieval_key", "manifest.json"
+            ),
             "manifest_sha256": source.manifest_sha256,
-            "episodes_uri": source.source_root_retrieval_key,
+            "episodes_uri": _source_artifact_retrieval_key(
+                source, "episodes_retrieval_key", "episodes.jsonl"
+            ),
             "episodes_sha256": source.episodes_sha256,
-            "run_summary_uri": source.source_root_retrieval_key,
+            "run_summary_uri": _source_artifact_retrieval_key(
+                source, "run_summary_retrieval_key", "run_summary.yaml"
+            ),
             "run_summary_sha256": source.run_summary_sha256,
-            "preflight_uri": source.source_root_retrieval_key,
+            "preflight_uri": _source_artifact_retrieval_key(
+                source, "preflight_retrieval_key", "validate_config.json"
+            ),
             "preflight_sha256": source.preflight_sha256,
             "n_rows": source.n_rows,
         }
@@ -1490,6 +1549,13 @@ def _mark_deterministic_rebuild_ok(root: Path) -> dict[str, Any]:
     manifest_path = root / "packet_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["check_results"]["deterministic_rebuild_ok"] = True
+    manifest["disposition"] = _manifest_disposition(
+        [
+            {"renderer_admission": {"disposition": receipt["disposition"]}}
+            for receipt in manifest["pair_compatibility_receipts"]
+        ],
+        manifest["check_results"],
+    )
     _schema_validate(manifest, "issue_6814_packet_manifest.v1.json")
     _write_json(manifest_path, manifest)
     return manifest

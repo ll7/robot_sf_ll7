@@ -200,6 +200,8 @@ def apply_strict_metadata_projection(  # noqa: C901, PLR0912
     if identity_errors:
         raise SimulationTraceNormalizationError("; ".join(identity_errors))
 
+    if not isinstance(run_config, Mapping):
+        raise SimulationTraceNormalizationError("strict run_config must be an object")
     required_config = {"map_id", "horizon", "time_step_s", "config_digest"}
     if set(run_config) != required_config:
         missing = sorted(required_config - set(run_config))
@@ -233,6 +235,8 @@ def apply_strict_metadata_projection(  # noqa: C901, PLR0912
 
     outcome: dict[str, bool] | None = None
     if terminal_outcome is not None:
+        if not isinstance(terminal_outcome, Mapping):
+            raise SimulationTraceNormalizationError("strict terminal_outcome must be an object")
         outcome_fields = {"collision_event", "timeout_event", "route_complete"}
         if set(terminal_outcome) != outcome_fields:
             raise SimulationTraceNormalizationError(

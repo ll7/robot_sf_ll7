@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/issue_6814_trace_source_contract.v1.json",
+  "title": "Issue #6814 verified trace source contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "issue", "status", "source_boundary", "trace_identity",
+    "source_artifacts", "fields", "canonical_config", "initial_state",
+    "trace_projection", "transformation"
+  ],
+  "properties": {
+    "schema_version": {"const": "issue_6814_trace_source_contract.v1"},
+    "issue": {"const": 6814},
+    "status": {"enum": ["available", "unsupported", "unavailable", "blocked"]},
+    "source_boundary": {"$ref": "#/$defs/sourceBoundary"},
+    "trace_identity": {"$ref": "#/$defs/traceIdentity"},
+    "source_artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sourceArtifact"}},
+    "fields": {"type": "object", "minProperties": 4, "additionalProperties": {"$ref": "#/$defs/field"}},
+    "canonical_config": {"$ref": "#/$defs/canonicalConfig"},
+    "initial_state": {"oneOf": [{"$ref": "#/$defs/availableInitial"}, {"$ref": "#/$defs/unavailable"}]},
+    "trace_projection": {"$ref": "#/$defs/traceProjection"},
+    "transformation": {"$ref": "#/$defs/transformation"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "sourceBoundary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_issue", "package_sha256sums_sha256", "visualization_only", "release_statistics_authoritative", "new_simulation_performed"],
+      "properties": {
+        "source_issue": {"const": 6412},
+        "package_sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "visualization_only": {"const": true},
+        "release_statistics_authoritative": {"type": "boolean"},
+        "new_simulation_performed": {"const": false}
+      }
+    },
+    "traceIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["planner_id", "scenario_id", "seed", "episode_id", "job_id", "row_index", "execution_commit", "raw_trace_sha256", "prior_normalized_trace_sha256", "reexported_trace_sha256"],
+      "properties": {
+        "planner_id": {"type": "string", "minLength": 1},
+        "scenario_id": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer"},
+        "episode_id": {"type": "string", "minLength": 1},
+        "job_id": {"type": "string", "minLength": 1},
+        "row_index": {"type": "integer", "minimum": 1},
+        "execution_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "raw_trace_sha256": {"$ref": "#/$defs/sha256"},
+        "prior_normalized_trace_sha256": {"$ref": "#/$defs/sha256"},
+        "reexported_trace_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "sourceArtifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "schema_version", "sha256", "authority"],
+      "properties": {
+        "role": {"type": "string", "minLength": 1},
+        "schema_version": {"type": "string", "minLength": 1},
+        "retrieval_key": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "authority": {"enum": ["durable_source", "producing_commit", "source_code_contract"]}
+      }
+    },
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact_role", "artifact_sha256", "json_pointer"],
+      "properties": {
+        "artifact_role": {"type": "string", "minLength": 1},
+        "artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "json_pointer": {"type": "string", "minLength": 1}
+      }
+    },
+    "field": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["status", "value", "authorities"], "properties": {"status": {"const": "available"}, "value": {}, "unit": {"type": "string"}, "authorities": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/authority"}}}},
+        {"$ref": "#/$defs/unavailable"}
+      ]
+    },
+    "unavailable": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "reason_code", "required_authority"],
+      "properties": {"status": {"const": "unavailable"}, "reason_code": {"type": "string", "minLength": 1}, "required_authority": {"type": "string", "minLength": 1}}
+    },
+    "canonicalConfig": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "canonicalization", "included_fields", "excluded_fields", "content", "sha256"],
+      "properties": {
+        "schema_version": {"const": "chapter7_static_run_config.v1"},
+        "canonicalization": {"const": "strict-json-sort-keys-utf8-no-newline.v1"},
+        "included_fields": {"type": "array", "items": {"type": "string"}},
+        "excluded_fields": {"type": "array", "items": {"type": "string"}},
+        "content": {"type": "object"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "availableInitial": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "source", "value", "sha256"],
+      "properties": {"status": {"const": "available"}, "source": {"type": "string", "minLength": 1}, "value": {"type": "object"}, "sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "traceProjection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["planner_run_config", "terminal_outcome"],
+      "properties": {
+        "planner_run_config": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": false, "required": ["map_id", "horizon", "time_step_s", "config_digest"], "properties": {"map_id": {"type": "string", "minLength": 1}, "horizon": {"type": "integer", "minimum": 1}, "time_step_s": {"type": "number", "exclusiveMinimum": 0}, "config_digest": {"$ref": "#/$defs/sha256"}}},
+            {"$ref": "#/$defs/unavailable"}
+          ]
+        },
+        "terminal_outcome": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": false, "required": ["status", "source", "value", "authorities"], "properties": {"status": {"const": "available"}, "source": {"type": "string", "minLength": 1}, "value": {"type": "object", "additionalProperties": false, "required": ["collision_event", "timeout_event", "route_complete"], "properties": {"collision_event": {"type": "boolean"}, "timeout_event": {"type": "boolean"}, "route_complete": {"type": "boolean"}}}, "authorities": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/authority"}}}},
+            {"$ref": "#/$defs/unavailable"}
+          ]
+        }
+      }
+    },
+    "transformation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["prior_normalized_trace_sha256", "reexported_trace_sha256", "state_projection_sha256_before", "state_projection_sha256_after", "state_payload_unchanged", "allowed_added_paths", "observed_added_paths"],
+      "properties": {
+        "prior_normalized_trace_sha256": {"$ref": "#/$defs/sha256"},
+        "reexported_trace_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "state_projection_sha256_before": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "state_projection_sha256_after": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "state_payload_unchanged": {"type": "boolean"},
+        "allowed_added_paths": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "observed_added_paths": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

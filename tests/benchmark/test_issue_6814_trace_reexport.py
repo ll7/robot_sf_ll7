@@ -411,6 +411,32 @@ def _write_result_provenance_sidecar(root: Path, identity: TraceIdentity) -> Pat
     return path
 
 
+def _refresh_synthetic_package_sums(package: Path) -> str:
+    """Refresh the synthetic package's listed-artifact digest and completion pin."""
+
+    names = ("README.md", "package_manifest.json", "source_pointer.json", "mapping_receipt.json")
+    sums = "".join(
+        f"{_sha256_bytes((package / name).read_bytes())}  {name}\n" for name in names
+    ).encode()
+    (package / "SHA256SUMS").write_bytes(sums)
+    package_sha = _sha256_bytes(sums)
+    complete = json.loads((package / "package_complete.json").read_text(encoding="utf-8"))
+    complete["sha256sums_sha256"] = package_sha
+    _write_json(package / "package_complete.json", complete)
+    return package_sha
+
+
+def _mapping_identity(identity: TraceIdentity, *, seed: object | None = None) -> dict[str, object]:
+    """Return the small mapping identity accepted by the strict package loader."""
+
+    return {
+        "arm": identity.arm,
+        "planner_id": identity.planner_id,
+        "scenario_id": identity.scenario_id,
+        "seed": identity.seed if seed is None else seed,
+    }
+
+
 def test_source_contract_selects_exact_6412_row_and_hashes() -> None:
     source, contract, _trace_payload = _make_source_contract()
     assert source.row_index == 3
@@ -430,6 +456,174 @@ def test_source_contract_rejects_6412_package_digest_drift(tmp_path: Path) -> No
             expected_identity=_base_identity(
                 "doorway_ppo", "ppo", "classic_doorway_medium", 113, 1, "13483"
             ),
+        )
+
+
+def test_source_loader_accepts_mapping_identity(tmp_path: Path) -> None:
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    source = load_verified_real_reexport_row_source(
+        package_root=package,
+        external_arm_root=roots[identities[0].arm],
+        expected_identity=_mapping_identity(identities[0]),
+        expected_package_sha256=package_sha,
+    )
+    assert source.episode_id == identities[0].episode_id
+
+
+def test_source_loader_rejects_missing_package_root(tmp_path: Path) -> None:
+    identity = _base_identity("doorway_ppo", "ppo", "classic_doorway_medium", 113, 3, "13483")
+    with pytest.raises(RealReexportBindingError, match="package is unavailable"):
+        load_verified_real_reexport_row_source(
+            package_root=tmp_path / "missing-package",
+            external_arm_root=tmp_path,
+            expected_identity=identity,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("n_admitted", 87, "count or evidence"),
+        ("sha256sums_sha256", "0" * 64, "identity mismatch"),
+    ),
+)
+def test_source_loader_rejects_package_complete_drift(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    complete = json.loads((package / "package_complete.json").read_text(encoding="utf-8"))
+    complete[field] = value
+    _write_json(package / "package_complete.json", complete)
+    with pytest.raises(RealReexportBindingError, match=message):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_missing_package_sums(tmp_path: Path) -> None:
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    (package / "SHA256SUMS").unlink()
+    with pytest.raises(RealReexportBindingError, match="SHA256SUMS is unavailable"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_unsafe_package_sums_path(tmp_path: Path) -> None:
+    package, roots, identities, _package_sha = _make_synthetic_packet_inputs(tmp_path)
+    sums = ("0" * 64 + "  ../outside\n").encode()
+    (package / "SHA256SUMS").write_bytes(sums)
+    complete = json.loads((package / "package_complete.json").read_text(encoding="utf-8"))
+    complete["sha256sums_sha256"] = _sha256_bytes(sums)
+    _write_json(package / "package_complete.json", complete)
+    with pytest.raises(RealReexportBindingError, match="unsafe issue #6412 package path"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=_sha256_bytes(sums),
+        )
+
+
+def test_source_loader_rejects_missing_required_package_sum_entry(tmp_path: Path) -> None:
+    package, roots, identities, _package_sha = _make_synthetic_packet_inputs(tmp_path)
+    names = ("README.md", "package_manifest.json", "source_pointer.json")
+    sums = "".join(
+        f"{_sha256_bytes((package / name).read_bytes())}  {name}\n" for name in names
+    ).encode()
+    (package / "SHA256SUMS").write_bytes(sums)
+    complete = json.loads((package / "package_complete.json").read_text(encoding="utf-8"))
+    complete["sha256sums_sha256"] = _sha256_bytes(sums)
+    _write_json(package / "package_complete.json", complete)
+    with pytest.raises(RealReexportBindingError, match="omits required"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=_sha256_bytes(sums),
+        )
+
+
+@pytest.mark.parametrize(
+    ("artifact", "field", "message"),
+    (
+        ("package_manifest.json", "schema_version", "package_manifest identity"),
+        ("mapping_receipt.json", "schema_version", "mapping receipt schema"),
+    ),
+)
+def test_source_loader_rejects_package_record_schema_drift(
+    tmp_path: Path, artifact: str, field: str, message: str
+) -> None:
+    package, roots, identities, _package_sha = _make_synthetic_packet_inputs(tmp_path)
+    payload = json.loads((package / artifact).read_text(encoding="utf-8"))
+    payload[field] = "wrong.schema.v1"
+    _write_json(package / artifact, payload)
+    package_sha = _refresh_synthetic_package_sums(package)
+    with pytest.raises(RealReexportBindingError, match=message):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_non_integer_identity_seed(tmp_path: Path) -> None:
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    with pytest.raises(RealReexportBindingError, match="seed identity"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=_mapping_identity(identities[0], seed="113"),
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_ambiguous_optional_owner(tmp_path: Path) -> None:
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    root = roots[identities[0].arm]
+    _write_json(
+        root / "process_trace_geometry_registry.json",
+        {"schema_version": "wrong.schema.v1"},
+    )
+    with pytest.raises(RealReexportBindingError, match="route geometry owner schema"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=root,
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_ambiguous_result_provenance_sidecars(tmp_path: Path) -> None:
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    root = roots[identities[0].arm]
+    _write_json(root / "nested-a" / "episodes.jsonl.provenance.json", {})
+    _write_json(root / "nested-b" / "episodes.jsonl.provenance.json", {})
+    with pytest.raises(RealReexportBindingError, match="sidecar is ambiguous"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=root,
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_invalid_result_provenance_sidecar(tmp_path: Path) -> None:
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    _write_json(roots[identities[0].arm] / "episodes.jsonl.provenance.json", {"invalid": True})
+    with pytest.raises(RealReexportBindingError, match="sidecar failed validation"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
         )
 
 

@@ -599,6 +599,19 @@ def test_text_line_overlap_detected() -> None:
     plt.close(fig)
 
 
+def test_text_line_overlap_uses_the_line_artist_transform() -> None:
+    """Blended-transform guide lines must be linted at their rendered position."""
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.axvline(5.0)
+    ax.text(5.0, 8.0, "on guide", fontsize=14)
+    defects = lint_figure(fig)
+    assert any(d.defect_type == "text_line_overlap" for d in defects)
+    plt.close(fig)
+
+
 def test_tagged_annotation_line_overlap_is_warning() -> None:
     """Explicit renderer tags downgrade only intentional annotation overlaps."""
     fig, ax = plt.subplots(figsize=(6, 6))

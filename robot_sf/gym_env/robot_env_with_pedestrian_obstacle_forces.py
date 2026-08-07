@@ -12,6 +12,8 @@ from robot_sf.nav.map_config import MapDefinitionPool
 # specify default map:
 from robot_sf.nav.svg_map_parser import convert_map
 
+__all__ = ["RobotEnvWithPedestrianObstacleForces"]
+
 
 class RobotEnvWithPedestrianObstacleForces(RobotEnv):
     """

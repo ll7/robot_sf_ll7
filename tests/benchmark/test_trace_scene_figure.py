@@ -20,10 +20,12 @@ from robot_sf.benchmark.trace_scene_figure import (
     EpisodeTrace,
     _choose_scale_bar_corner,
     _clamp_texts_to_canvas,
+    _clear_scene_trajectories_behind_annotations,
     _collect_line_obstacles,
     _collect_marker_obstacles,
     _compute_scene_extent,
     _contiguous_segments,
+    _draw_key_frames,
     _draw_robot_time_markers,
     _effective_marker_interval,
     _focal_pedestrian_id,
@@ -182,6 +184,7 @@ def test_extent_and_synthetic_pdf(synthetic_episode: EpisodeTrace, tmp_path: Pat
     output = render_scene(synthetic_episode, tmp_path / "synthetic.pdf", timeline=False)
     assert output.exists()
     assert output.stat().st_size > 5_000
+    assert b"/CreationDate" not in output.read_bytes()
 
 
 def test_default_render_preserves_screen_layout(
@@ -289,13 +292,7 @@ def test_render_real_comparison(tmp_path: Path) -> None:
     reason="real exemplar figures unavailable",
 )
 def test_real_scene_and_comparison_have_no_hard_qa_defects(tmp_path: Path) -> None:
-    """Real single and comparison figures carry no label-on-label or out-of-axes defects.
-
-    ``text_line_overlap`` is deliberately not asserted: the canonical ``figure_qa`` linter
-    flags reference-line labels (e.g. the ``collision envelope`` label that annotates its own
-    dashed line) and time-marker labels adjacent to the trajectory, which are an intended part
-    of this renderer's annotation style rather than legibility defects.
-    """
+    """Real single and comparison figures carry no label-on-label or out-of-axes defects."""
     orca_episode = load_episode(ORCA_EPISODE)
     social_force_episode = load_episode(SOCIAL_FORCE_EPISODE)
     _, scene_figure = render_scene(
@@ -320,6 +317,65 @@ def test_real_scene_and_comparison_have_no_hard_qa_defects(tmp_path: Path) -> No
     finally:
         plt.close(scene_figure)
         plt.close(comparison_figure)
+
+
+def test_timeline_reference_labels_do_not_overlap_data_lines(
+    synthetic_episode: EpisodeTrace, tmp_path: Path
+) -> None:
+    """Reference labels must be placed clear of ordinary timeline data lines."""
+
+    _, figure = render_scene(
+        synthetic_episode,
+        tmp_path / "qa_timeline.pdf",
+        return_figure=True,
+    )
+    try:
+        hard_reference_overlaps = [
+            defect
+            for defect in lint_figure(figure)
+            if defect.severity == "error"
+            and defect.defect_type == "text_line_overlap"
+            and ("collision envelope" in defect.message or "personal space" in defect.message)
+        ]
+        assert not hard_reference_overlaps, [defect.message for defect in hard_reference_overlaps]
+    finally:
+        plt.close(figure)
+
+
+def test_scene_trajectory_is_visibly_gapped_behind_annotation() -> None:
+    """A tagged scene track is split around label glyphs instead of exempted from QA."""
+
+    figure, ax = plt.subplots(figsize=(6, 3))
+    ax.set_xlim(0.0, 10.0)
+    ax.set_ylim(0.0, 2.0)
+    trajectory = ax.plot([0.0, 10.0], [1.0, 1.0])[0]
+    trajectory.set_gid("trace-scene-trajectory")
+    label = ax.text(5.0, 1.0, "t=8s")
+    label.set_gid("trace-scene-time-label")
+
+    _clear_scene_trajectories_behind_annotations(ax)
+
+    hard_overlaps = [
+        defect
+        for defect in lint_figure(figure)
+        if defect.severity == "error" and defect.defect_type == "text_line_overlap"
+    ]
+    assert not hard_overlaps
+    assert np.isnan(np.asarray(trajectory.get_xdata(), dtype=float)).any()
+    plt.close(figure)
+
+
+def test_key_frame_labels_opt_in_to_their_generated_leaders(
+    synthetic_episode: EpisodeTrace,
+) -> None:
+    """Every semantic key-frame label carries the text half of the strict GID pair."""
+
+    figure, ax = plt.subplots()
+    _draw_key_frames(ax, synthetic_episode)
+
+    assert {text.get_text() for text in ax.texts} == {"start", "d_min = 1.00 m", "goal"}
+    assert all(text.get_gid() == "trace-scene-key-frame-label" for text in ax.texts)
+    plt.close(figure)
 
 
 def test_contiguous_segments_breaks_on_teleport() -> None:

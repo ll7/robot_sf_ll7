@@ -207,3 +207,13 @@ def resolve_benchmark_kinematics_model(
         max_angular_speed=max_angular,
         allow_backwards=bool(limits.get("allow_backwards", False)),
     )
+
+
+__all__ = [
+    "BicycleDriveKinematicsModel",
+    "Command2D",
+    "DifferentialDriveKinematicsModel",
+    "HolonomicPassthroughKinematicsModel",
+    "KinematicsModel",
+    "resolve_benchmark_kinematics_model",
+]

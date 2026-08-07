@@ -1,0 +1,444 @@
+schema_version: ch7_case_portfolio.v2
+issue: "#6789"
+claim_boundary: >-
+  Selection and exclusion record only. It freezes the first Chapter 7 worked-example
+  portfolio contract before figure inspection; it is not causal evidence, real-world
+  prevalence evidence, planner ranking, or dissertation-ready evidence.
+compatibility_rationale: >-
+  Issue #6789 names four conceptual grains. The source design contract is
+  authoritative for serialization, so this config emits ch7_case_portfolio.v2
+  with v2 grain enums while retaining explicit conceptual_grain values for the
+  issue's campaign/cell/matched_contrast/trace coverage language.
+
+pinned_inputs:
+  candidate_manifest_rel: docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz
+  candidate_manifest_gz_sha256: 1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64
+
+selection:
+  target_size: 4
+  max_size: 4
+  require_unique_primary_roles: true
+  required_roles:
+    - planner_upset
+    - seed_sensitivity
+    - feasibility_criticism
+    - metric_disagreement
+  required_grains:
+    - cell
+    - cross_cell
+    - matched_planner_pair
+    - matched_seed_pair
+  required_conceptual_grains:
+    - campaign
+    - cell
+    - matched_contrast
+    - trace
+  required_topologies:
+    - double_bottleneck
+    - doorway
+    - narrow_doorway
+    - double_bottleneck_blind_corner
+  required_failure_classes:
+    - planner_advantage_inversion
+    - seed_outcome_bimodality
+    - route_feasibility_geometry
+    - metric_disagreement_inversion
+  required_process_classes:
+    - matched_planner_table
+    - matched_seed_trace
+    - geometry_cell_table
+    - cross_cell_release_table
+  frozen_role_targets:
+    planner_upset: ch7-role-planner-upset--classic-realworld-double-bottleneck-high--goal-vs-ppo--seed-118
+    seed_sensitivity: ch7-role-seed-sensitivity--classic-doorway-medium--ppo--seeds-113-114
+    feasibility_criticism: ch7-role-feasibility-criticism--francis2023-narrow-doorway
+    metric_disagreement: ch7-role-cross-cell-inversion--hybrid-vs-ppo--double-bottleneck-vs-blind-corner
+
+evidence_units:
+  - case_id: ch7-role-planner-upset--classic-realworld-double-bottleneck-high--goal-vs-ppo--seed-118
+    candidate_manifest_id: planner_upset::classic_realworld_double_bottleneck_high::goal>ppo
+    grain: matched_planner_pair
+    conceptual_grain: matched_contrast
+    conceptual_coverage: [matched_contrast]
+    primary_role: planner_upset
+    claim_grade: descriptive
+    forbidden_claims:
+      - universal planner ranking
+      - causal mechanism claim
+      - dissertation-ready evidence before #6412 admission
+    event_anchor:
+      type: terminal
+      source: issue_5446_release_0_0_3_candidates
+      time_s: unavailable
+      source_field: release_rows.terminal_outcome
+      shared_between_cases: true
+      observed_at: "2026-08-05T00:00:00Z"
+      scenario_id: classic_realworld_double_bottleneck_high
+      seed: 118
+      planners: [goal, ppo]
+      shared_semantics:
+        matched_seed: true
+        shared_prefix: true
+    source_boundary:
+      release_id: benchmark_release_0_0_3_issue_5446_candidates
+      release_rows_sha256: 1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64
+      expected_release_rows_sha256: 1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64
+      trace_package_sha256: unavailable
+      expected_trace_package_sha256: unavailable
+      release_statistics: true
+      visualization_only_rerun: false
+      source_design_version: ch7_case_portfolio.v2
+    presentation:
+      required_views:
+        - world_xy
+        - cell_context
+      conceptual_coverage: [matched_contrast]
+      shared_axis_contract: shared_world_time_axes
+      semantic_keyframes: []
+      shared_axes:
+        status: not_required
+      keyframes:
+        status: not_required
+    secondary_descriptors:
+      - frozen_first_production_target
+      - release_statistics_not_visualization_only
+    allowed_claim: >-
+      In the frozen release-backed cell, the weaker held-out goal row succeeds at seed
+      118 where the stronger PPO row does not; this supports a planner-upset
+      worked-example selection, not a universal planner ranking.
+    coverage:
+      topology: double_bottleneck
+      mechanism: planner_advantage_inversion
+      failure_class: planner_advantage_inversion
+      process_class: matched_planner_table
+    eligibility:
+      release_campaign_identity: pass
+      source_hashes: pass
+      exact_digest_human_review_admission:
+        status: unavailable
+        reason: "issue #6412 exact-digest human review/admission is still pending"
+      durable_source_status:
+        status: unavailable
+        reason: "issue #6412 durable source admission is still pending"
+      typed_outcome_collision_semantics: pass
+      execution_status:
+        status: pass
+        execution_mode: native
+        stop_condition: terminal
+      scenario_config_seed_provenance: pass
+      matched_initial_state_or_shared_prefix: pass
+      release_vs_rerun_outcome_agreement: pass
+      exact_repeat_or_context_sensitivity: pass
+      telemetry_sufficiency: pass
+    dimensions:
+      evidence_grade: 3
+      provenance_completeness: 3
+      topology_mechanism: 3
+      terminal_outcome: 3
+      criticality_persistence: 2
+      paired_divergence: 0.23333333333333334
+      metric_disagreement: 0
+      representativeness_or_outlier: 2
+      telemetry_visualizability: 2
+      page_cost: 1
+    source_refs:
+      - docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz
+
+  - case_id: ch7-role-seed-sensitivity--classic-doorway-medium--ppo--seeds-113-114
+    candidate_manifest_id: seed_flip::classic_doorway_medium::ppo
+    grain: matched_seed_pair
+    conceptual_grain: matched_contrast
+    conceptual_coverage: [matched_contrast, trace]
+    primary_role: seed_sensitivity
+    claim_grade: descriptive
+    forbidden_claims:
+      - numerical seed adjacency as causal explanation
+      - causal mechanism claim
+      - dissertation-ready evidence before #6412 admission
+    event_anchor:
+      type: terminal
+      source: issue_5446_release_0_0_3_candidates
+      time_s: unavailable
+      source_field: release_rows.terminal_outcome
+      shared_between_cases: false
+      observed_at: "2026-08-05T00:00:00Z"
+      scenario_id: classic_doorway_medium
+      planner: ppo
+      seeds: [113, 114]
+      shared_semantics:
+        shared_prefix: false
+        same_planner: true
+    source_boundary:
+      release_id: benchmark_release_0_0_3_issue_5446_candidates
+      release_rows_sha256: 1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64
+      expected_release_rows_sha256: 1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64
+      trace_package_sha256: unavailable
+      expected_trace_package_sha256: unavailable
+      release_statistics: true
+      visualization_only_rerun: true
+      authoritative_source: release_statistics
+      source_design_version: ch7_case_portfolio.v2
+    presentation:
+      required_views:
+        - world_xy
+        - route_sn
+        - time_space
+        - event_timeline
+        - cell_context
+      conceptual_coverage: [matched_contrast, trace]
+      shared_axis_contract: shared_world_time_axes
+      semantic_keyframes: []
+      shared_axes:
+        axes_limits: required
+        map_crop: required
+        palette: required
+      keyframes:
+        status: required_downstream
+        reason: selected traces must expose keyframes through #6790/#6791, not case grain
+    secondary_descriptors:
+      - frozen_first_production_target
+      - seeds_are_indices_not_causal_variables
+    allowed_claim: >-
+      The PPO classic_doorway_medium cell has a bimodal release outcome distribution,
+      making seeds 113 and 114 an admissible seed-sensitivity worked-example pair.
+      Numerical seed adjacency is not the selection reason.
+    coverage:
+      topology: doorway
+      mechanism: seed_outcome_bimodality
+      failure_class: seed_outcome_bimodality
+      process_class: matched_seed_trace
+    eligibility:
+      release_campaign_identity: pass
+      source_hashes: pass
+      exact_digest_human_review_admission:
+        status: unavailable
+        reason: "issue #6412 exact-digest human review/admission is still pending"
+      durable_source_status:
+        status: unavailable
+        reason: "issue #6412 durable source admission is still pending"
+      typed_outcome_collision_semantics: pass
+      execution_status:
+        status: pass
+        execution_mode: native
+        stop_condition: terminal
+      scenario_config_seed_provenance: pass
+      matched_initial_state_or_shared_prefix:
+        status: fail
+        reason: "seed 113/114 are distinct seeded realizations; shared_prefix=false by contract"
+      release_vs_rerun_outcome_agreement: pass
+      trace_resolution:
+        status: unavailable
+        reason: selected trace package admission is pending #6790/#6791
+      trace_schema:
+        status: unavailable
+        reason: selected trace package schema admission is pending #6790/#6791
+      visualization_only_status:
+        status: unavailable
+        reason: visualization-only trace package boundary is not admitted yet
+      exact_repeat_or_context_sensitivity: pass
+      telemetry_sufficiency: pass
+    dimensions:
+      evidence_grade: 3
+      provenance_completeness: 3
+      topology_mechanism: 3
+      terminal_outcome: 2
+      criticality_persistence: 2
+      entropy_bimodality: 1
+      paired_divergence: 1
+      metric_disagreement: 1
+      representativeness_or_outlier: 2
+      telemetry_visualizability: 3
+      page_cost: 1
+    source_refs:
+      - docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz
+      - robot_sf/benchmark/trace_reexport_packaging.py
+
+  - case_id: ch7-role-feasibility-criticism--francis2023-narrow-doorway
+    grain: cell
+    conceptual_grain: cell
+    conceptual_coverage: [cell]
+    primary_role: feasibility_criticism
+    claim_grade: abstention
+    forbidden_claims:
+      - trace-level process interpretation
+      - causal mechanism claim
+      - route-feasibility conclusion before reviewed release evidence
+    event_anchor:
+      type: terminal
+      source: scenario_config
+      time_s: unavailable
+      source_field: scenario_config
+      shared_between_cases: false
+      observed_at: "2026-08-05T00:00:00Z"
+      scenario_id: francis2023_narrow_doorway
+      status: cell_level_only
+      shared_semantics:
+        trace_level: false
+    source_boundary:
+      release_id: francis2023_narrow_doorway_config
+      release_rows_sha256: unavailable
+      expected_release_rows_sha256: unavailable
+      trace_package_sha256: unavailable
+      expected_trace_package_sha256: unavailable
+      release_statistics: intended
+      visualization_only_rerun: false
+      source_design_version: ch7_case_portfolio.v2
+    presentation:
+      required_views:
+        - world_xy
+        - cell_context
+      conceptual_coverage: [cell]
+      shared_axis_contract: unavailable
+      semantic_keyframes: []
+      shared_axes:
+        status: not_applicable
+      keyframes:
+        status: not_applicable
+    secondary_descriptors:
+      - frozen_first_production_target
+      - honest_partial_if_missing_reviewed_cell_evidence
+    scenario_id: francis2023_narrow_doorway
+    planner: release_cell
+    allowed_claim: >-
+      Intended release cell-level geometry and terminal-signature evidence for a
+      feasibility-criticism worked example. It remains blocked until the reviewed
+      release-backed geometry/terminal-signature evidence is bound here.
+    coverage:
+      topology: narrow_doorway
+      mechanism: route_feasibility_geometry
+      failure_class: route_feasibility_geometry
+      process_class: geometry_cell_table
+    eligibility:
+      release_campaign_identity: pass
+      source_hashes:
+        status: unavailable
+        reason: no reviewed release-backed geometry/terminal-signature source hash is bound
+      exact_digest_human_review_admission:
+        status: unavailable
+        reason: "issue #6412 exact-digest human review/admission is still pending"
+      durable_source_status:
+        status: unavailable
+        reason: "issue #6412 durable source admission is still pending"
+      typed_outcome_collision_semantics: pass
+      execution_status:
+        status: pass
+        execution_mode: native
+        stop_condition: terminal
+      scenario_config_seed_provenance: pass
+      route_feasibility:
+        status: unavailable
+        reason: reviewed route-feasibility evidence is not bound to this portfolio contract
+      release_vs_rerun_outcome_agreement:
+        status: not_applicable
+        reason: cell-level feasibility criticism does not require a trace rerun gate
+      trace_resolution:
+        status: not_applicable
+        reason: cell-level feasibility criticism does not require trace resolution
+      trace_schema:
+        status: not_applicable
+        reason: cell-level feasibility criticism does not require trace schema admission
+      telemetry_sufficiency: pass
+    dimensions:
+      evidence_grade: 1
+      provenance_completeness: 1
+      topology_mechanism: 3
+      terminal_outcome: 2
+      criticality_persistence: 2
+      representativeness_or_outlier: 2
+      telemetry_visualizability: 2
+      page_cost: 1
+    source_refs:
+      - configs/scenarios/single/francis2023_narrow_doorway.yaml
+
+  - case_id: ch7-role-cross-cell-inversion--hybrid-vs-ppo--double-bottleneck-vs-blind-corner
+    grain: cross_cell
+    conceptual_grain: campaign
+    conceptual_coverage: [campaign]
+    primary_role: metric_disagreement
+    claim_grade: abstention
+    forbidden_claims:
+      - substituting a single-cell severe trace
+      - universal planner ranking
+      - causal mechanism claim
+    event_anchor:
+      type: terminal
+      source: issue_6789_source_design
+      time_s: unavailable
+      source_field: release_rows.terminal_outcome
+      shared_between_cases: true
+      observed_at: "2026-08-05T00:00:00Z"
+      scenario_family_pair: double_bottleneck_vs_blind_corner
+      planner_pair: hybrid_vs_ppo
+      status: release_table_unbound
+      shared_semantics:
+        same_planner_pair: true
+        cross_cell: true
+    source_boundary:
+      release_id: issue_6789_source_design_cross_cell
+      release_rows_sha256: unavailable
+      expected_release_rows_sha256: unavailable
+      trace_package_sha256: unavailable
+      expected_trace_package_sha256: unavailable
+      release_statistics: intended
+      visualization_only_rerun: false
+      source_design_version: ch7_case_portfolio.v2
+    presentation:
+      required_views:
+        - world_xy
+        - cell_context
+      conceptual_coverage: [campaign]
+      shared_axis_contract: shared_world_time_axes
+      semantic_keyframes: []
+      shared_axes:
+        status: not_required
+      keyframes:
+        status: not_required
+    secondary_descriptors:
+      - frozen_first_production_target
+      - deterministic_rule_release_backed_planner_advantage_inversion
+      - hybrid_vs_ppo_double_bottleneck_blind_corner_candidate
+    scenario_id: classic_realworld_double_bottleneck_high__francis2023_blind_corner
+    planner: hybrid_vs_ppo
+    allowed_claim: >-
+      Intended cross-cell planner-advantage inversion: hybrid-vs-PPO across the
+      double-bottleneck/blind-corner candidate family. It remains blocked until
+      the release-backed inversion table and exact-review durable source are
+      bound, rather than being replaced by a visually attractive severe trace.
+    coverage:
+      topology: double_bottleneck_blind_corner
+      mechanism: release_backed_planner_advantage_inversion
+      failure_class: metric_disagreement_inversion
+      process_class: cross_cell_release_table
+    eligibility:
+      release_campaign_identity: pass
+      source_hashes:
+        status: unavailable
+        reason: release-backed hybrid-vs-PPO inversion table digest is not bound
+      exact_digest_human_review_admission:
+        status: unavailable
+        reason: "issue #6412 exact-digest human review/admission is still pending"
+      durable_source_status:
+        status: unavailable
+        reason: "issue #6412 durable source admission is still pending"
+      typed_outcome_collision_semantics: pass
+      execution_status:
+        status: pass
+        execution_mode: native
+        stop_condition: terminal
+      scenario_config_seed_provenance: pass
+      telemetry_sufficiency:
+        status: unavailable
+        reason: release-backed cross-cell inversion source table is not bound
+    dimensions:
+      evidence_grade: 2
+      provenance_completeness: 1
+      topology_mechanism: 3
+      terminal_outcome: 2
+      criticality_persistence: 2
+      paired_divergence: 1
+      metric_disagreement: 1
+      representativeness_or_outlier: 2
+      telemetry_visualizability: 1
+      page_cost: 1
+    source_refs:
+      - "issue #6789 source-design cross-cell candidate: hybrid-vs-PPO across double-bottleneck/blind-corner"

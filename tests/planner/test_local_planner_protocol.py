@@ -30,6 +30,7 @@ from robot_sf.planner.protocol import (
     PLANNER_TYPE_KEY,
     BaselineStepToLocalAdapter,
     LocalPlannerProtocol,
+    _action_dict_to_command,
     normalize_planner_diagnostics,
 )
 
@@ -527,3 +528,67 @@ def test_baseline_adapter_wraps_real_social_force_end_to_end() -> None:
     diagnostics = adapter.diagnostics()
     assert isinstance(diagnostics[PLANNER_TYPE_KEY], str) and diagnostics[PLANNER_TYPE_KEY]
     adapter.close()
+
+
+# ---------------------------------------------------------------------------
+# BaselineStepToLocalAdapter injection points (#6771)
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_adapter_defaults_match_current_behavior() -> None:
+    """Without injection, plan() equals the direct step()->_action_dict_to_command path."""
+    baseline = _RecordingBaseline(accepts_seed=True, action={"v": 1.5, "omega": -0.25})
+    adapter = BaselineStepToLocalAdapter(baseline)
+    obs = {"sentinel": object()}
+    expected = _action_dict_to_command(baseline.step(obs), type(baseline).__name__)
+    assert adapter.plan(obs) == expected
+    # default step_executor delegated to baseline.step (called once directly, once via adapter)
+    assert baseline.step_calls == 2
+    assert adapter.plan(obs) == (1.5, -0.25)
+
+
+def test_baseline_adapter_injects_step_executor() -> None:
+    """An injected step_executor overrides the default planner.step delegation."""
+    baseline = _RecordingBaseline(accepts_seed=True, action={"v": 9.0, "omega": 9.0})
+    seen: list[Any] = []
+
+    def step_exec(planner: Any, observation: dict[str, Any]) -> dict[str, float]:
+        seen.append(observation)
+        assert planner is baseline
+        return {"v": 2.0, "omega": 1.0}
+
+    adapter = BaselineStepToLocalAdapter(baseline, step_executor=step_exec)
+    assert adapter.plan({"o": 1}) == (2.0, 1.0)
+    assert seen == [{"o": 1}]
+    assert baseline.step_calls == 0  # default delegation not used
+
+
+def test_baseline_adapter_injects_action_projector() -> None:
+    """An injected action_projector overrides _action_dict_to_command."""
+    baseline = _RecordingBaseline(accepts_seed=True, action={"v": 1.0, "omega": 0.5})
+    projected: list[tuple[Any, str]] = []
+
+    def proj(action: Any, planner_type: str) -> tuple[float, float]:
+        projected.append((action, planner_type))
+        return (7.0, 7.0)
+
+    adapter = BaselineStepToLocalAdapter(baseline, action_projector=proj)
+    assert adapter.plan({"o": 1}) == (7.0, 7.0)
+    assert projected == [({"v": 1.0, "omega": 0.5}, "_RecordingBaseline")]
+
+
+def test_baseline_adapter_injection_preserves_lifecycle() -> None:
+    """reset/diagnostics/close remain correct when both injection points are supplied."""
+    baseline = _RecordingBaseline(accepts_seed=True, action={"vx": 3.0, "vy": 4.0})
+    adapter = BaselineStepToLocalAdapter(
+        baseline,
+        step_executor=lambda planner, obs: planner.step(obs),
+        action_projector=lambda action, planner_type: (5.0, 5.0),
+    )
+    adapter.reset(seed=11)  # forwarded to baseline.reset, no raise
+    assert baseline.reset_calls and baseline.reset_calls[-1][1] == {"seed": 11}
+    diag = adapter.diagnostics()
+    assert diag[PLANNER_TYPE_KEY] == "_RecordingBaseline"
+    adapter.close()
+    adapter.close()  # idempotent
+    assert baseline.close_calls == 1

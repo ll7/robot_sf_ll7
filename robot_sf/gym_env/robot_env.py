@@ -81,6 +81,21 @@ _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
 _GridObstacleCacheKey = tuple[int, int, int]
 _GridObstacleCacheValue = tuple[list[Line2D], list[ShapelyPolygon]]
 
+__all__ = [
+    "EnvSettings",
+    "RobotEnv",
+    "VisualizableSimState",
+    "_FlatteningObservationWrapper",
+    "_attach_goal_posterior_planner_input",
+    "_build_goal_posterior_planner_input",
+    "_build_step_info",
+    "_flatten_nested_dict_obs",
+    "_flatten_nested_dict_spaces",
+    "_flatten_occupancy_grid_metadata",
+    "_make_telemetry_run_id",
+    "_stable_config_hash",
+]
+
 
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity

@@ -7,6 +7,13 @@ from typing import Any
 
 DEFAULT_OBSERVATION_STACK_STEPS = 3
 
+__all__ = [
+    "ObservationStackSettings",
+    "get_observation_stack_steps",
+    "set_observation_stack_steps",
+    "sync_observation_stack_settings",
+]
+
 
 def _validate_stack_steps(stack_steps: int) -> int:
     """Return a positive stack depth or raise a clear configuration error."""

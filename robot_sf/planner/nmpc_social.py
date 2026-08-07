@@ -991,3 +991,11 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
             )
             kwargs[config_field.name] = default_value
     return NMPCSocialConfig(**kwargs)
+
+
+__all__ = [
+    "NMPCSocialConfig",
+    "NMPCSocialPlannerAdapter",
+    "NMPCSolveResult",
+    "build_nmpc_social_config",
+]

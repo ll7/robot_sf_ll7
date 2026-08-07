@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
+four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
+gate, #6102 ordering gate, and turnaround ledger; no registered rows or production claim:
+[issue_6561_pedestrian_speed_protocol.md](issue_6561_pedestrian_speed_protocol.md).
+
 Issue #6103 / Issue #3275 same-planner held-out contract: six frozen eligible
 fit anchors, cross-family same-planner evaluation, exact per-arm outcome
 admission, and the pending human-review boundary:

@@ -16,6 +16,8 @@ from typing import Any
 from robot_sf.analysis_workbench.simulation_trace_export import (
     SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
     SimulationTraceExportValidationError,
+    SimulationTraceNormalizationError,
+    apply_strict_metadata_projection,
     simulation_trace_export_from_dict,
 )
 from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
@@ -54,10 +56,6 @@ _UNIT_FIELDS = {"position", "heading", "time", "velocity"}
 _FRAME_FIELDS = {"step", "time_s", "robot", "pedestrians", "planner"}
 _ROBOT_FIELDS = {"position", "heading", "velocity", "radius"}
 _PEDESTRIAN_FIELDS = {"id", "position", "velocity", "radius"}
-
-
-class SimulationTraceNormalizationError(ValueError):
-    """Raised when a trace contains an unallowlisted or unsafe extra field."""
 
 
 def _source_metadata_path(source: Path) -> Path | None:
@@ -597,8 +595,13 @@ def build_simulation_trace_export_with_receipt(
     scenario_id: str | None = None,
     source_signature: str | None = None,
     provenance: Mapping[str, Any] | None = None,
+    strict_metadata: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Build and normalize one trace, returning its payload and receipt."""
+    """Build and normalize one trace, returning its payload and receipt.
+
+    ``strict_metadata`` may contain only ``run_config`` and an optional typed
+    ``terminal_outcome`` mapping; unknown keys and invalid values fail closed.
+    """
 
     raw_payload = _build_simulation_trace_export(
         source,
@@ -606,12 +609,36 @@ def build_simulation_trace_export_with_receipt(
         scenario_id=scenario_id,
         source_signature=source_signature,
     )
-    return normalize_simulation_trace_export(
+    payload, receipt = normalize_simulation_trace_export(
         raw_payload,
         source=source,
         source_sha256=source_signature or _sha256(source),
         provenance=provenance,
     )
+    if strict_metadata is not None:
+        unknown = sorted(set(strict_metadata) - {"run_config", "terminal_outcome"})
+        if unknown:
+            raise SimulationTraceNormalizationError(
+                f"strict_metadata contains unallowlisted field(s): {', '.join(unknown)}"
+            )
+        raw_run_config = strict_metadata.get("run_config")
+        if not isinstance(raw_run_config, Mapping):
+            raise SimulationTraceNormalizationError(
+                "strict_metadata must contain a run_config object"
+            )
+        raw_outcome = strict_metadata.get("terminal_outcome")
+        if raw_outcome is not None and not isinstance(raw_outcome, Mapping):
+            raise SimulationTraceNormalizationError(
+                "strict_metadata terminal_outcome must be an object"
+            )
+        payload, strict_receipt = apply_strict_metadata_projection(
+            payload,
+            run_config=raw_run_config,
+            terminal_outcome=raw_outcome,
+        )
+        receipt = dict(receipt)
+        receipt["strict_metadata_delta"] = strict_receipt
+    return payload, receipt
 
 
 def build_simulation_trace_export(
@@ -620,12 +647,14 @@ def build_simulation_trace_export(
     planner_id: str | None = None,
     scenario_id: str | None = None,
     source_signature: str | None = None,
+    strict_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build and validate one renderer-neutral timeline payload.
 
     This compatibility wrapper preserves the original dictionary-only API.  Call
     :func:`build_simulation_trace_export_with_receipt` when provenance and digest
-    evidence are required.
+    evidence are required. ``strict_metadata`` accepts the same validated
+    ``run_config`` and optional ``terminal_outcome`` fields as that function.
     """
 
     payload, _receipt = build_simulation_trace_export_with_receipt(
@@ -633,6 +662,7 @@ def build_simulation_trace_export(
         planner_id=planner_id,
         scenario_id=scenario_id,
         source_signature=source_signature,
+        strict_metadata=strict_metadata,
     )
     return payload
 
@@ -645,14 +675,20 @@ def write_simulation_trace_export(
     scenario_id: str | None = None,
     receipt: Path | None = None,
     provenance: Mapping[str, Any] | None = None,
+    strict_metadata: Mapping[str, Any] | None = None,
 ) -> Path:
-    """Write a validated timeline payload and optional transformation receipt."""
+    """Write a validated timeline payload and optional transformation receipt.
+
+    ``strict_metadata`` is forwarded to the receipt builder and accepts only
+    the validated ``run_config`` and optional typed ``terminal_outcome`` fields.
+    """
 
     payload, receipt_payload = build_simulation_trace_export_with_receipt(
         source,
         planner_id=planner_id,
         scenario_id=scenario_id,
         provenance=provenance,
+        strict_metadata=strict_metadata,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(_canonical_json_bytes(payload))

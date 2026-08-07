@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #6814 fail-closed provenance re-export.** Added
+  `apply_strict_metadata_projection`, the receipt-capable
+  `build_simulation_trace_export*`/`write_simulation_trace_export` APIs,
+  `load_verified_real_reexport_row_source`, and `VerifiedRealReexportRowSource`
+  for deterministic provenance-only visualization overlays.
+  Missing source authority remains explicitly unavailable or blocked; the
+  implementation does not rerun simulation or promote replay values to
+  benchmark evidence.
+
 * **Issue #6154 release 0.0.5 evidence bundle.** Assembled the draft release
   evidence bundle from the three reverified frozen candidates (Issue #6153):
   Issue #5034 control-action-latency metric evidence, Issue #5305 certified

@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/README.md",
+  "artifact_sha256": "a21a1c864c227c24c8908efed34ae7fb05310e90fdb6175a4ab31885e66dabf6",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

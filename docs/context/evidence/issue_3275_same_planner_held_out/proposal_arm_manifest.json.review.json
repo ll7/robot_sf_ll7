@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/proposal_arm_manifest.json",
+  "artifact_sha256": "5569fbcf68cb6f9a33c4e511148f55a8188837552e1dc074865b149612bf5466",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

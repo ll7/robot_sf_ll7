@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/SHA256SUMS",
+  "artifact_sha256": "dde97413e1fbc5ef62850129385160b6b2c5e41f4c7e7abda1c28c264f4cf834",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

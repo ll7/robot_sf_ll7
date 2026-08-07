@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/candidate_manifest_bindings.v2.json",
+  "artifact_sha256": "99dd5eda8d2b5d2540ee9a9ea9d08ebfe4e1a9caa10fd77dbfdde74e8c63c1d9",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

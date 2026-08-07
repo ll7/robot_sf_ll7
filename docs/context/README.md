@@ -93,6 +93,8 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Issue #6561 pedestrian desired-speed protocol:
+  [issue_6561_pedestrian_speed_protocol.md](issue_6561_pedestrian_speed_protocol.md)
 * Issue #6469 benchmark module reorganization plan (ghost `util`/`utils` confirmation and proposed
   benchmark domain subdirectories; planning only):
   [issue_6469_benchmark_reorganization_plan.md](issue_6469_benchmark_reorganization_plan.md)

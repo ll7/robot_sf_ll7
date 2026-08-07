@@ -79,3 +79,6 @@ class GlobalRoute:
         """Total path length."""
 
         return 0 if len(self.waypoints) < 2 else sum(self.section_lengths)
+
+
+__all__ = ["GlobalRoute"]

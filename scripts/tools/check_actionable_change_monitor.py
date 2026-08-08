@@ -341,13 +341,29 @@ def build_findings(
 
 
 def _parse_timestamp(value: Any) -> datetime:
-    """Parse GitHub's ISO timestamp, returning the epoch for missing values."""
-    if not value:
-        return datetime.fromtimestamp(0, tz=UTC)
+    """Parse a GitHub ISO timestamp, failing closed on unusable values.
+
+    A silent epoch fallback is unsafe here: every classification that compares
+    a timestamp against ``now`` would then treat malformed API data as
+    arbitrarily old and publish a fabricated ``stale_research_draft`` finding.
+    Surface rows are validated up front by ``_validate_surface_identity``, so
+    reaching this function with an unparseable value means the snapshot cannot
+    be classified and the monitor must stop before it writes anything.
+    """
+    return _require_timestamp(value, context="classified surface timestamp")
+
+
+def _require_timestamp(value: Any, *, context: str) -> datetime:
+    """Return a timezone-aware UTC timestamp or raise ``MonitorError``."""
+    if not isinstance(value, str) or not value.strip():
+        raise MonitorError(f"{context} is missing or not a string")
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return datetime.fromtimestamp(0, tz=UTC)
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise MonitorError(f"{context} is not an ISO-8601 timestamp: {value!r}") from exc
+    if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+        raise MonitorError(f"{context} has no timezone: {value!r}")
+    return parsed.astimezone(UTC)
 
 
 def compute_fingerprint(findings: list[dict[str, Any]]) -> str:
@@ -497,10 +513,17 @@ def _validate_surface_identity(row: dict[str, Any], *, resource: str, index: int
     body = row.get("body")
     if body is not None and not isinstance(body, str):
         raise MonitorError(f"{resource} response has invalid body at index {index}")
-    for field in ("html_url", "updated_at"):
-        value = row.get(field)
-        if not isinstance(value, str) or not value:
-            raise MonitorError(f"{resource} response has invalid {field} at index {index}")
+    html_url = row.get("html_url")
+    if not isinstance(html_url, str) or not html_url:
+        raise MonitorError(f"{resource} response has invalid html_url at index {index}")
+    # Timestamps decide staleness classification, so they are validated as real
+    # timezone-aware instants here rather than as non-empty strings.  A row with
+    # ``updated_at='not-an-ISO-timestamp'`` must stop the scan instead of being
+    # silently classified as epoch-old and published as a false finding.
+    _require_timestamp(
+        row.get("updated_at"),
+        context=f"{resource} response updated_at at index {index}",
+    )
 
 
 def _validate_surface_labels(row: dict[str, Any], *, resource: str, index: int) -> None:
@@ -753,7 +776,21 @@ def _update_target_issue(
     expected_previous: str | None,
     expected_body: str | None,
 ) -> None:
-    """Revalidate the marker, then perform the monitor's sole allowed write."""
+    """Revalidate the marker, write once, then prove the write survived.
+
+    GitHub's issue API has no ``If-Match`` compare-and-swap, so the monitor
+    composes the two mechanisms it does have into a single-writer contract:
+
+    1. The workflow serializes every run under one target-wide concurrency
+       group, so scheduled and ``workflow_dispatch`` runs from any ref queue
+       behind each other instead of writing issue #6819 concurrently.
+    2. This function re-reads the body immediately before the PATCH (rejecting
+       any change since the scan) and re-reads it immediately after (rejecting
+       any change since the PATCH).  The post-write read-back is what closes
+       the residual time-of-check/time-of-use window: if a second writer
+       overwrites this report, the losing writer observes a body it did not
+       author and fails closed instead of reporting a successful publish.
+    """
     _assert_canonical_target(repo, issue_number)
     latest_target = _read_target_issue(repo, issue_number)
     observed_previous = extract_previous_fingerprint(str(latest_target.get("body") or ""))
@@ -768,6 +805,18 @@ def _update_target_issue(
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise MonitorError(f"dedicated issue update failed: {detail}")
+    _assert_write_survived(repo, issue_number, body)
+
+
+def _assert_write_survived(repo: str, issue_number: int, body: str) -> None:
+    """Fail closed when a concurrent writer overwrote the report just published."""
+    committed = _read_target_issue(repo, issue_number)
+    committed_body = str(committed.get("body") or "")
+    if committed_body != body:
+        raise MonitorError(
+            "dedicated monitor target was overwritten by a concurrent writer; "
+            "published report was not durable"
+        )
 
 
 def run_monitor(

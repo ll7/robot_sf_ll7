@@ -14,9 +14,15 @@ permissions:
   statuses: read
   issues: write
 
+# Every run writes the same dedicated issue, so the group is deliberately
+# target-wide rather than ref-scoped: a scheduled main run and a
+# workflow_dispatch run from another ref must not update issue #6819
+# concurrently. In-progress runs are never cancelled, because cancelling
+# between the pre-write recheck and the PATCH is exactly the race this group
+# exists to prevent.
 concurrency:
-  group: actionable-change-monitor-${{ github.ref }}
-  cancel-in-progress: true
+  group: actionable-change-monitor-target-6819
+  cancel-in-progress: false
 
 jobs:
   monitor:

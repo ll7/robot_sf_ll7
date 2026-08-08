@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -218,6 +219,23 @@ def test_workflow_declares_read_permissions_for_both_check_state_apis() -> None:
         "statuses": "read",
         "issues": "write",
     }
+
+
+def test_workflow_serializes_every_writer_under_one_target_wide_group() -> None:
+    workflow_path = Path(".github/workflows/actionable-change-monitor.yml")
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    concurrency = workflow["concurrency"]
+    group = str(concurrency["group"])
+
+    # A ref-scoped group lets a scheduled main run and a workflow_dispatch run
+    # from another ref write issue #6819 at the same time.
+    assert "github.ref" not in group
+    assert "${{" not in group
+    assert str(monitor.DEFAULT_ISSUE) in group
+    # Cancelling an in-flight writer between its recheck and its PATCH is the
+    # race the single-writer group exists to prevent.
+    assert concurrency["cancel-in-progress"] is False
 
 
 def test_fetch_snapshot_paginates_check_runs_and_statuses(monkeypatch) -> None:
@@ -531,3 +549,100 @@ def test_run_monitor_refuses_target_body_change_without_marker_change(monkeypatc
 
     with pytest.raises(monitor.MonitorError, match="stale write"):
         monitor.run_monitor(repo=monitor.DEFAULT_REPO, issue_number=6819, now=NOW)
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    ["not-an-ISO-timestamp", "", "   ", "2026-08-07T11:00:00"],
+)
+def test_malformed_updated_at_fails_closed_instead_of_classifying_as_stale(
+    monkeypatch, malformed: str
+) -> None:
+    """A malformed or naive timestamp must stop the scan, not publish a finding."""
+    pull_request = _pull_request(31, draft=True, updated_at=malformed)
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        if "/pulls?" in path:
+            return [pull_request]
+        return []
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    with pytest.raises(monitor.MonitorError, match="updated_at"):
+        monitor._fetch_snapshot(monitor.DEFAULT_REPO, 5)
+
+
+def test_parse_timestamp_never_silently_returns_the_epoch() -> None:
+    with pytest.raises(monitor.MonitorError):
+        monitor._parse_timestamp("not-an-ISO-timestamp")
+    with pytest.raises(monitor.MonitorError):
+        monitor._parse_timestamp(None)
+    # Naive timestamps cannot be compared against the timezone-aware scan clock.
+    with pytest.raises(monitor.MonitorError):
+        monitor._parse_timestamp("2026-08-07T11:00:00")
+
+    parsed = monitor._parse_timestamp("2026-08-07T11:00:00Z")
+    assert parsed == datetime(2026, 8, 7, 11, 0, tzinfo=UTC)
+
+
+def test_concurrent_overwrite_of_the_published_report_fails_closed(monkeypatch) -> None:
+    """The losing writer in a PATCH race must not report a successful publish."""
+    pull_request = _pull_request(32)
+    stored = {"body": ""}
+    patch_calls: list[str] = []
+
+    def read_target(repo: str, issue: int) -> dict[str, object]:
+        del repo, issue
+        return {"number": 6819, "state": "open", "body": stored["body"]}
+
+    def fake_patch(command, **kwargs):
+        del kwargs
+        field = next(arg for arg in command if str(arg).startswith("body="))
+        patch_calls.append(str(field)[len("body=") :])
+        stored["body"] = str(field)[len("body=") :]
+        # A concurrent writer commits its own report between our PATCH and our
+        # read-back, exactly as the exact-head concurrency probe demonstrated.
+        stored["body"] = "body-from-the-other-writer"
+        return subprocess.CompletedProcess(command, 0, "{}", "")
+
+    monkeypatch.setattr(
+        monitor,
+        "_fetch_snapshot",
+        lambda repo, limit: ([pull_request], [], {32: []}, {}),
+    )
+    monkeypatch.setattr(monitor, "_read_target_issue", read_target)
+    monkeypatch.setattr(monitor.subprocess, "run", fake_patch)
+
+    with pytest.raises(monitor.MonitorError, match="overwritten by a concurrent writer"):
+        monitor.run_monitor(repo=monitor.DEFAULT_REPO, issue_number=6819, now=NOW)
+
+    assert len(patch_calls) == 1
+
+
+def test_durable_write_passes_the_read_back_verification(monkeypatch) -> None:
+    pull_request = _pull_request(33)
+    stored = {"body": ""}
+
+    def read_target(repo: str, issue: int) -> dict[str, object]:
+        del repo, issue
+        return {"number": 6819, "state": "open", "body": stored["body"]}
+
+    def fake_patch(command, **kwargs):
+        del kwargs
+        field = next(arg for arg in command if str(arg).startswith("body="))
+        stored["body"] = str(field)[len("body=") :]
+        return subprocess.CompletedProcess(command, 0, "{}", "")
+
+    monkeypatch.setattr(
+        monitor,
+        "_fetch_snapshot",
+        lambda repo, limit: ([pull_request], [], {33: []}, {}),
+    )
+    monkeypatch.setattr(monitor, "_read_target_issue", read_target)
+    monkeypatch.setattr(monitor.subprocess, "run", fake_patch)
+
+    result = monitor.run_monitor(repo=monitor.DEFAULT_REPO, issue_number=6819, now=NOW)
+
+    assert result["write_performed"] is True
+    assert monitor.extract_previous_fingerprint(stored["body"]) == result["fingerprint"]

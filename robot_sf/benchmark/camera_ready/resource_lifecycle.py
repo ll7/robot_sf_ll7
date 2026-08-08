@@ -382,7 +382,7 @@ def _main_subprocess_worker() -> int:
 
         result = _run_single_arm_subprocess(params)
         # Write result to stdout as JSON for parent process
-        print(json.dumps(result))  # noqa: T201
+        print(json.dumps(result))  # noqa: T201 - subprocess JSON IPC to parent process
         return 0
     except Exception as exc:  # noqa: BLE001 - worker must always emit structured output (#4826)
         # Best-effort GPU cleanup even on the unexpected-exception path, so a
@@ -400,7 +400,7 @@ def _main_subprocess_worker() -> int:
             except Exception:  # noqa: BLE001 - cleanup must never mask the original error
                 logger.opt(exception=True).debug("Cleanup after unexpected worker error failed")
         logger.error("Subprocess arm failed: {}", exc)
-        print(  # noqa: T201
+        print(  # noqa: T201 - subprocess JSON IPC to parent process
             json.dumps(
                 {
                     "summary": {

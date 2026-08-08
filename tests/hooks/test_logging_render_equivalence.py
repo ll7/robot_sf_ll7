@@ -222,3 +222,67 @@ def test_hot_path_files_have_no_fstring_logger_calls() -> None:
         source = (_REPO_ROOT / rel).read_text(encoding="utf-8")
         violations = find_violations(source, rel)
         assert violations == [], f"{rel} still has f-string logger calls: {violations}"
+
+
+# Issue #6528: the robot_env occupancy-grid call was migrated from a multi-line f-string to
+# structured positional {} placeholders by #6697. Its shape (positional len() args) differs from
+# the named-kwarg MIGRATED_SITES above, so it gets dedicated tests that also anchor the allowlist
+# cleanup performed by #6528.
+ROBOT_ENV_OCCUPANCY_FILE = "robot_sf/gym_env/robot_env.py"
+ROBOT_ENV_OCCUPANCY_FMT = "Initial occupancy grid generated: obstacles={}, pedestrians={}"
+
+
+def test_robot_env_occupancy_grid_call_renders_identical_to_fstring(
+    captured_messages: list[str],
+) -> None:
+    """The migrated positional structured call renders the exact f-string text for sample counts."""
+    sample_obstacles, sample_pedestrians = 5, 3
+    expected = (
+        f"Initial occupancy grid generated: obstacles={sample_obstacles}, "
+        f"pedestrians={sample_pedestrians}"
+    )
+    captured_messages.clear()
+    logger.debug(ROBOT_ENV_OCCUPANCY_FMT, sample_obstacles, sample_pedestrians)
+    assert captured_messages == [expected]
+
+
+def test_robot_env_occupancy_grid_call_is_structured_in_source() -> None:
+    """The occupancy-grid call uses positional {} placeholders with eager len() args, not an f-string."""
+    tree = ast.parse(
+        (_REPO_ROOT / ROBOT_ENV_OCCUPANCY_FILE).read_text(encoding="utf-8"),
+        filename=ROBOT_ENV_OCCUPANCY_FILE,
+    )
+    matching = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == ROBOT_ENV_OCCUPANCY_FMT
+    ]
+    assert len(matching) == 1
+    call = matching[0]
+    # The message is a plain literal, not an f-string (ast.JoinedStr).
+    assert not isinstance(call.args[0], ast.JoinedStr)
+    # Both placeholders are filled by eager len(...) calls passed positionally; no **kwargs.
+    assert call.keywords == []
+    assert len(call.args) == 3
+    for arg in call.args[1:]:
+        assert isinstance(arg, ast.Call), "occupancy-grid field must be an eager call"
+        assert isinstance(arg.func, ast.Name) and arg.func.id == "len"
+
+
+def test_robot_env_has_no_fstring_logger_violation() -> None:
+    """The hook reports zero f-string logger calls in robot_env.py (migration anchored)."""
+    source = (_REPO_ROOT / ROBOT_ENV_OCCUPANCY_FILE).read_text(encoding="utf-8")
+    violations = find_violations(source, ROBOT_ENV_OCCUPANCY_FILE)
+    occupancy = [v for v in violations if "occupancy grid" in v.preview]
+    assert occupancy == [], f"occupancy-grid call regressed to f-string: {occupancy}"
+
+
+def test_robot_env_occupancy_grid_allowlist_entry_removed() -> None:
+    """The orphaned allowlist row for the migrated robot_env call is gone (#6528)."""
+    allowlist = (_REPO_ROOT / "hooks" / "no_fstring_logger_allowlist.txt").read_text(
+        encoding="utf-8"
+    )
+    assert ROBOT_ENV_OCCUPANCY_FILE not in allowlist

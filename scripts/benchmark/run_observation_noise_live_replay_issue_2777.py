@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run or fail-close the issue #2777 live observation-perturbation replay batch."""
 
-# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
+# evidence-writer-exempt: YAML funnel-config artifact (yaml.safe_dump with sort_keys=False) plus insertion-order JSON (json.dumps indent=2 without sort_keys); shared writers cannot preserve the exact bytes.
 from __future__ import annotations
 
 import argparse

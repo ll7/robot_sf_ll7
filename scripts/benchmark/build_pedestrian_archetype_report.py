@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from robot_sf.evidence.writers import write_json, write_text
 from robot_sf.ped_npc.ped_archetypes import (
     build_archetype_population_report,
     load_archetypes,
@@ -115,8 +115,8 @@ def main() -> int:
     }
     out = REPO_ROOT / args.output_dir
     out.mkdir(parents=True, exist_ok=True)
-    (out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-    (out / "README.md").write_text(_format_markdown(summary), encoding="utf-8")
+    write_json(out / "summary.json", summary)
+    write_text(out / "README.md", _format_markdown(summary), issue_ref="robot_sf#3206")
     print(f"wrote {args.output_dir}")
     return 0
 

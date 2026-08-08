@@ -26,6 +26,7 @@ Modes
 - ``--check-only``: classify and validate the input without writing artifacts.
 """
 
+# evidence-writer-exempt: sidecar/digest use - the `.review.json` review sidecar is serialized with sort_keys=False and shared write_json sorts keys, so byte-for-byte sidecar output cannot be preserved.
 from __future__ import annotations
 
 import argparse

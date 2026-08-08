@@ -1,0 +1,308 @@
+{
+  "candidate_manifest_ids_by_arm": {
+    "proposal": [
+      "pool_39",
+      "pool_44",
+      "pool_57",
+      "pool_16",
+      "pool_5",
+      "pool_56",
+      "pool_34",
+      "pool_20",
+      "pool_45",
+      "pool_1",
+      "pool_2",
+      "pool_48"
+    ],
+    "random": [
+      "pool_12",
+      "pool_28",
+      "pool_30",
+      "pool_6",
+      "pool_26",
+      "pool_47",
+      "pool_21",
+      "pool_49",
+      "pool_24",
+      "pool_14",
+      "pool_58",
+      "pool_29"
+    ]
+  },
+  "candidate_manifest_sha256_by_id": {
+    "pool_1": "e6b16e69e4746a1e124bb87a976fe310aa4693329bc7e72a2dda4481d4167967",
+    "pool_12": "d02b3688f1ff261c17ee896ecd0fb2e18c619fef75430cd49df4a17092ad075d",
+    "pool_14": "ae9c8abec9792c6ab7e67281b84940f97cf981f0cdbc06e2dfc180808cce6ae0",
+    "pool_16": "4865f35adf736ef1cc2990aea01d841e8d536bc5b0ad3435632f9eb24845f350",
+    "pool_2": "f628bdd9a3dd1a6b5ebe413cd4ec7c1ea56cdec0d9bc9aa67fbcbb1906519429",
+    "pool_20": "54e43976e05e1b64232d47002814d2a871b7a48a6fa802d89eae2835fe18bddb",
+    "pool_21": "d1aaca1b401a9a8b8d68ef9e88ed7251ca22028977de5b0ff514755ea3bb58ac",
+    "pool_24": "b075abee56e2e54e007b5edaf95d68bc687c5af0cd4186677f546f968b0884c8",
+    "pool_26": "c61be5a0255698a8285117468895de74291304f42e12e97ee4fd8e6e48b35e1d",
+    "pool_28": "96272cf39cf59d69219bd8ebaa4dc13082c90a9848f346f9b40ab6c98c8f2a30",
+    "pool_29": "6b64a1ba631e90856187f60f5e42f971ddd7eb2397fa8348ff3814c0555e3886",
+    "pool_30": "ba81f2bb0cbe9d5a27d4809988a5ca54fad83b3a1564cb01691d0de62559164e",
+    "pool_34": "b57472f11962edf77fea84d1626c617afcc8d2bcfdf8f259a700edc46d4ebc19",
+    "pool_39": "1b53c8b7a27f5f3630aac96be33d82675370f0b84cfaa7a2e343ee75554e7a80",
+    "pool_44": "398dd81e1711b55bde9556680c8a04f2a649fd0cc79fb656631ac395398153f2",
+    "pool_45": "1c7e9bec134e523856062eb8f4d7370c0465cbf9a82d5f1e77a3889b2fdb2472",
+    "pool_47": "da5384b5c9e6e6b09d643fd9dabbc4695c9addbdb3b04054bced64b118a6b702",
+    "pool_48": "dad402344a4e9b30568f671a67f0ebf0c373ddba1c0311ccb812ff95af4a0a93",
+    "pool_49": "00f4d0767aeaa4deb64f949b7327bc6a3df54899bc3aeb7a1805eb05d0d83df1",
+    "pool_5": "0ea974bc05a5e42605ed017909ab00675b9e43273cc033d8b39350f2471f5391",
+    "pool_56": "2f8bb7cb0cae8f430c5a9a646e651493e7b62ac900564fdf5bcc97a11e25e4c9",
+    "pool_57": "6a100b1b1df841246c28daf791de799116739ec0e0cc93b220b0bfd64e911849",
+    "pool_58": "4dae94d75f09c9be2f87a2a5cdc4586c664b0397a11cc06fed6d51091052a12d",
+    "pool_6": "05fe4c4ca3cfa98c7beae12853cda94f052a9d968ac6eeb5ebb059d73d1d0385"
+  },
+  "candidate_pool_index_by_manifest_id": {
+    "pool_1": 1,
+    "pool_12": 12,
+    "pool_14": 14,
+    "pool_16": 16,
+    "pool_2": 2,
+    "pool_20": 20,
+    "pool_21": 21,
+    "pool_24": 24,
+    "pool_26": 26,
+    "pool_28": 28,
+    "pool_29": 29,
+    "pool_30": 30,
+    "pool_34": 34,
+    "pool_39": 39,
+    "pool_44": 44,
+    "pool_45": 45,
+    "pool_47": 47,
+    "pool_48": 48,
+    "pool_49": 49,
+    "pool_5": 5,
+    "pool_56": 56,
+    "pool_57": 57,
+    "pool_58": 58,
+    "pool_6": 6
+  },
+  "candidate_pool_seed": 42,
+  "execution_seeds_by_manifest_id": {
+    "pool_1": [
+      8100005,
+      8100006,
+      8100007,
+      8100008,
+      8100009
+    ],
+    "pool_12": [
+      8100060,
+      8100061,
+      8100062,
+      8100063,
+      8100064
+    ],
+    "pool_14": [
+      8100070,
+      8100071,
+      8100072,
+      8100073,
+      8100074
+    ],
+    "pool_16": [
+      8100080,
+      8100081,
+      8100082,
+      8100083,
+      8100084
+    ],
+    "pool_2": [
+      8100010,
+      8100011,
+      8100012,
+      8100013,
+      8100014
+    ],
+    "pool_20": [
+      8100100,
+      8100101,
+      8100102,
+      8100103,
+      8100104
+    ],
+    "pool_21": [
+      8100105,
+      8100106,
+      8100107,
+      8100108,
+      8100109
+    ],
+    "pool_24": [
+      8100120,
+      8100121,
+      8100122,
+      8100123,
+      8100124
+    ],
+    "pool_26": [
+      8100130,
+      8100131,
+      8100132,
+      8100133,
+      8100134
+    ],
+    "pool_28": [
+      8100140,
+      8100141,
+      8100142,
+      8100143,
+      8100144
+    ],
+    "pool_29": [
+      8100145,
+      8100146,
+      8100147,
+      8100148,
+      8100149
+    ],
+    "pool_30": [
+      8100150,
+      8100151,
+      8100152,
+      8100153,
+      8100154
+    ],
+    "pool_34": [
+      8100170,
+      8100171,
+      8100172,
+      8100173,
+      8100174
+    ],
+    "pool_39": [
+      8100195,
+      8100196,
+      8100197,
+      8100198,
+      8100199
+    ],
+    "pool_44": [
+      8100220,
+      8100221,
+      8100222,
+      8100223,
+      8100224
+    ],
+    "pool_45": [
+      8100225,
+      8100226,
+      8100227,
+      8100228,
+      8100229
+    ],
+    "pool_47": [
+      8100235,
+      8100236,
+      8100237,
+      8100238,
+      8100239
+    ],
+    "pool_48": [
+      8100240,
+      8100241,
+      8100242,
+      8100243,
+      8100244
+    ],
+    "pool_49": [
+      8100245,
+      8100246,
+      8100247,
+      8100248,
+      8100249
+    ],
+    "pool_5": [
+      8100025,
+      8100026,
+      8100027,
+      8100028,
+      8100029
+    ],
+    "pool_56": [
+      8100280,
+      8100281,
+      8100282,
+      8100283,
+      8100284
+    ],
+    "pool_57": [
+      8100285,
+      8100286,
+      8100287,
+      8100288,
+      8100289
+    ],
+    "pool_58": [
+      8100290,
+      8100291,
+      8100292,
+      8100293,
+      8100294
+    ],
+    "pool_6": [
+      8100030,
+      8100031,
+      8100032,
+      8100033,
+      8100034
+    ]
+  },
+  "record_sha256_by_manifest_id": {
+    "pool_1": "8c4e04dbb7864006fb994336f952b9314b2a03ddd675dc0dd729de5c3e987ae7",
+    "pool_12": "0b1a8d4b4021ad6da39ba6031aeac8f0a6694c355343db8fa8a93cabfb13a46b",
+    "pool_14": "a56b681f68f760a8ac7415db960472c49eced3bfd56208c973582b2a857fb91a",
+    "pool_16": "c919eb64f959fb22aee960ec39159b479f79a1a64a8c33810fb1a063e010f2d2",
+    "pool_2": "b057135b1f300fbe1917926e66fa061a9ebaf2415a4edae44ca4005f99bee78d",
+    "pool_20": "833f226fad7ba8e7147799dcf9dc40ca42f6164e559dd045a5929bea0da2d8bc",
+    "pool_21": "58cf962658f48963bd31fbb65f5c672bc69995d949980148a3cb09aaab1a9406",
+    "pool_24": "5d41373dc7291507da68e3d41e44bf28d6009a8e2e9157a443ea41db00f1b0a9",
+    "pool_26": "fb5a627825f6d60f54421dd3bb19cadcaf6db0e57eab4c09fc57f461299f571e",
+    "pool_28": "5d46dd739d2a560df63d004c6a53d23db0e57341181469e45b4f3154d87b9622",
+    "pool_29": "957aa840d4247613123c03e5ec92363478a0045786329f0c3e86682ba666269f",
+    "pool_30": "a3cd277fe23f1606ac6f52e51255fee9503ddd771c6a58f7ca3df86f6a0a75f2",
+    "pool_34": "dc0a275107e3452af1855ceaaca28ed32831255bfc6895fd26b067b53dded5dd",
+    "pool_39": "e291a1b8e2a28dea8b2fdce813e74f1626d6e5022d9a38ef4d9176ed4d45f268",
+    "pool_44": "836d42db9d0964489b90125a461ce05b7f12c61e5efb5a9266326990b90d7300",
+    "pool_45": "19d554461fcdfb4b667fd0feb9947c02e880b37143f2c23c308c846bab5f06ee",
+    "pool_47": "de5374d864eee1ec03f611057ac411657d6f0cceb1313d6092ba64b44d98a281",
+    "pool_48": "19104648390432d5ffc678af0cf91030f963784df5c38a6408e994084f86e32e",
+    "pool_49": "1c28f4d1d83e058e3f3884f4635bc0f57fd1198baba93da5fcbf53d1c2a7f13b",
+    "pool_5": "ab66cacdac364b8d28c7a9f575d4557dfa9f4bde1005799cdcc3c9f5c455deef",
+    "pool_56": "ce6227d51b8ab90a33b85303709ba2ea89e97f996859a13cf1a1975805ab134a",
+    "pool_57": "50c63c7795702cd1a5fa2825b98fbe8f2fbdd085867cb8e8d1f8c66ac9a7ec35",
+    "pool_58": "a4c4102637888b147d92d2aa23de617fa7c0e44ba01e318cfe6304e3dcdc700d",
+    "pool_6": "09c972da6384cda9f158f99de5684d3019f57b4db0970e63c9fb93f4bf3e479a"
+  },
+  "scenario_seed_by_manifest_id": {
+    "pool_1": 818,
+    "pool_12": 641,
+    "pool_14": 612,
+    "pool_16": 471,
+    "pool_2": 448,
+    "pool_20": 335,
+    "pool_21": 626,
+    "pool_24": 294,
+    "pool_26": 270,
+    "pool_28": 294,
+    "pool_29": 614,
+    "pool_30": 982,
+    "pool_34": 548,
+    "pool_39": 658,
+    "pool_44": 940,
+    "pool_45": 385,
+    "pool_47": 720,
+    "pool_48": 925,
+    "pool_49": 438,
+    "pool_5": 975,
+    "pool_56": 209,
+    "pool_57": 224,
+    "pool_58": 727,
+    "pool_6": 373
+  },
+  "schema_version": "adversarial_candidate_manifest_bindings.v2"
+}

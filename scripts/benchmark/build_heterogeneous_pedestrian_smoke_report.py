@@ -9,6 +9,8 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
@@ -342,11 +344,8 @@ def _fmt(value: Any) -> str:
 def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
     """Write JSON and Markdown report files."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "smoke_report.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (output_dir / "README.md").write_text(format_markdown(report), encoding="utf-8")
+    write_json(output_dir / "smoke_report.json", report)
+    write_text(output_dir / "README.md", format_markdown(report), issue_ref="robot_sf#3206")
 
 
 def _input_ref(path: Path) -> str:

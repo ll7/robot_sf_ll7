@@ -45,7 +45,7 @@ stability. The preflight artifact states prominently:
 ``NOT BENCHMARK EVIDENCE -- DISJOINT-SEED ACTIVATION CHECK ONLY``.
 """
 
-# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
+# evidence-writer-exempt: JSONL cell-summary contract (_write_cell_summaries writes per-row sort_keys JSON lines) plus compact separators JSON; shared write_json writes a single JSON document and cannot preserve the JSONL bytes.
 from __future__ import annotations
 
 import argparse

@@ -96,7 +96,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import set_global_seed
-from robot_sf.planner.protocol import normalize_planner_diagnostics
+from robot_sf.planner.protocol import BaselineStepToLocalAdapter, normalize_planner_diagnostics
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -1259,9 +1259,10 @@ def _step_planner_with_retry(
             return {"vx": 0.0, "vy": 0.0}
 
 
-def _build_baseline_policy_fn(
+def _build_baseline_policy_fn(  # noqa: PLR0913
     *,
     algo: str,
+    planner: Any,
     observation_cls: type,
     step_runner: _PlannerStepProcess | None,
     timeout_metadata: dict[str, Any],
@@ -1275,6 +1276,48 @@ def _build_baseline_policy_fn(
     Returns:
         Policy function callable.
     """
+
+    # Keep the benchmark-specific execution and command projection at the
+    # harness boundary while routing the construction through the canonical
+    # baseline adapter. The executor remains process-isolated and retains the
+    # existing timeout/retry/fallback accounting; the projector retains the
+    # runner's world-velocity semantics, including heading-aware unicycle
+    # actions and holonomic velocity clamping.
+    projection_context: dict[str, Any] = {}
+
+    def _step_executor(_planner: Any, observation: Any) -> Any:
+        """Execute a baseline step through the existing isolated retry path.
+
+        Returns:
+            The planner action mapping or the existing zero-velocity fallback.
+        """
+        return _step_planner_with_retry(
+            step_runner, observation, algo, timeout_metadata, metadata, retry_budget
+        )
+
+    def _action_projector(action: Any, _planner_type: str) -> tuple[float, float]:
+        """Project an action using the current runner state without changing semantics.
+
+        Returns:
+            The existing two-dimensional world-velocity command.
+        """
+        if not projection_context:
+            raise RuntimeError("baseline action projection context is not initialized")
+        velocity = _action_to_velocity(
+            action,
+            projection_context["robot_pos"],
+            projection_context["robot_vel"],
+            projection_context["robot_goal"],
+            algo,
+        )
+        return float(velocity[0]), float(velocity[1])
+
+    adapter = BaselineStepToLocalAdapter(
+        planner,
+        planner_type=algo,
+        step_executor=_step_executor,
+        action_projector=_action_projector,
+    )
 
     def policy_fn(
         robot_pos: np.ndarray,
@@ -1298,10 +1341,25 @@ def _build_baseline_policy_fn(
             robot_radius=robot_radius,
             ped_radius=ped_radius,
         )
-        action = _step_planner_with_retry(
-            step_runner, obs, algo, timeout_metadata, metadata, retry_budget
+        projection_context.update(
+            robot_pos=robot_pos,
+            robot_vel=robot_vel,
+            robot_goal=robot_goal,
         )
-        return _action_to_velocity(action, robot_pos, robot_vel, robot_goal, algo)
+        command = adapter.plan(obs)
+        return np.asarray(command, dtype=float)
+
+    def _close_policy() -> None:
+        """Close the isolated worker and wrapped planner exactly once."""
+        if step_runner is not None:
+            step_runner.close()
+        adapter.close()
+
+    policy_fn.close = _close_policy  # type: ignore[attr-defined]
+    policy_fn._planner_close = _close_policy  # type: ignore[attr-defined]
+    policy_fn._planner_adapter = adapter  # type: ignore[attr-defined]
+    if callable(getattr(planner, "diagnostics", None)):
+        policy_fn.diagnostics = adapter.diagnostics  # type: ignore[attr-defined]
 
     return policy_fn
 
@@ -1397,6 +1455,7 @@ def _create_baseline_planner_policy(
 
     policy_fn = _build_baseline_policy_fn(
         algo=algo,
+        planner=planner,
         observation_cls=Observation,
         step_runner=step_runner,
         timeout_metadata=timeout_metadata,
@@ -1406,8 +1465,6 @@ def _create_baseline_planner_policy(
         ped_radius=ped_radius,
     )
 
-    if step_runner is not None:
-        policy_fn.close = step_runner.close  # type: ignore[attr-defined]
     # Issue #6190: expose the predictive planner's live foresight-model-load
     # provenance on the policy closure. PPO executes behind ``step_runner``;
     # its encoder mutates in the forked child, so the parent planner is stale and

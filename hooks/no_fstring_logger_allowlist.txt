@@ -15,8 +15,9 @@
 #
 # Baseline on 2026-08-03: 270 unique identities representing 272 calls in 43
 # files. The three migrated hot-path files are absent.
-# robot_sf/gym_env/robot_env.py retains one out-of-scope call pending a dedicated
-# follow-up issue and allowed-path assignment.
+# Updated 2026-08-08 (#6528): the residual robot_env occupancy-grid call migrated
+# to structured placeholders by #6697; its orphaned allowlist row is removed
+# (269 unique identities representing 271 calls in 42 files).
 robot_sf/benchmark/campaign_checkpoint_preflight.py	check_campaign_arm_checkpoints_preflight	info	b2a7f404625a3d8d	1
 robot_sf/benchmark/campaign_checkpoint_preflight.py	check_campaign_arm_checkpoints_preflight	info	bba56173ab93e260	1
 robot_sf/benchmark/episode_replay_figure.py	replay_episode_and_generate_figures	info	9b474727598124bb	1
@@ -76,7 +77,6 @@ robot_sf/docs/helper_catalog.py	register_helper	info	0edac032afbaeed3	1
 robot_sf/docs/helper_catalog.py	register_helper	info	83d2004c0f88db38	1
 robot_sf/docs/helper_catalog.py	register_helper	info	e312388452cb445d	1
 robot_sf/docs/helper_catalog.py	register_helper	warning	5c835f50878e1c39	1
-robot_sf/gym_env/robot_env.py	RobotEnv.reset	debug	4aa4e742ba58ee4c	1
 robot_sf/maps/import_svg_from_osm.py	import_svg_from_osm	info	611079ddf84488ac	1
 robot_sf/maps/import_svg_from_osm.py	import_svg_from_osm	info	836facdfa17a66cb	1
 robot_sf/maps/map_visualizer.py	visualize_map_definition	info	2f617074d85daf76	1

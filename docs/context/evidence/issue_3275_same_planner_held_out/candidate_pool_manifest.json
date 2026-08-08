@@ -1,0 +1,4183 @@
+{
+  "arm_overlap_policy": "disjoint_by_candidate",
+  "budget_per_arm": 12,
+  "candidate_pool_seed": 42,
+  "candidate_pool_size": 64,
+  "candidates": [
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.550058636738239,
+          "y": 2.4464214762976457
+        },
+        "pedestrian_delay_s": 1.7843591354096908,
+        "pedestrian_speed_mps": 1.2060196924537467,
+        "scenario_seed": 189,
+        "spawn_time_s": 1.4729424283280248,
+        "start": {
+          "theta": 0.0,
+          "x": 2.2788535969157673,
+          "y": 2.050021510445334
+        }
+      },
+      "candidate_manifest_id": "pool_0",
+      "candidate_manifest_sha256": "c6e8edf09efc438309256d3030362f6acc2561c9fcf3b64b5c304271beaa715b",
+      "candidate_pool_index": 0,
+      "execution_seeds": [
+        8100000,
+        8100001,
+        8100002,
+        8100003,
+        8100004
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100000,
+          "row_id": "pool_0_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100001,
+          "row_id": "pool_0_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100002,
+          "row_id": "pool_0_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100003,
+          "row_id": "pool_0_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100004,
+          "row_id": "pool_0_unselected_seed_4"
+        }
+      ],
+      "model_rank": 19,
+      "normalized_control_hash": "89dabea8ec09870f",
+      "record_sha256": "96614bbfa79a95158c1b001de94a4219fdd5a2295c465ff5f6850b04b8521c0f",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 189,
+      "score": -1.465436413,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.1873904797231845,
+          "y": 2.4653217867814794
+        },
+        "pedestrian_delay_s": 1.432039225844807,
+        "pedestrian_speed_mps": 1.1367470377631679,
+        "scenario_seed": 818,
+        "spawn_time_s": 1.2040374580999607,
+        "start": {
+          "theta": 0.0,
+          "x": 2.1809850248980793,
+          "y": 2.063565358963567
+        }
+      },
+      "candidate_manifest_id": "pool_1",
+      "candidate_manifest_sha256": "e6b16e69e4746a1e124bb87a976fe310aa4693329bc7e72a2dda4481d4167967",
+      "candidate_pool_index": 1,
+      "execution_seeds": [
+        8100005,
+        8100006,
+        8100007,
+        8100008,
+        8100009
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100005,
+          "row_id": "proposal_rank_10_seed_0"
+        },
+        {
+          "execution_seed": 8100006,
+          "row_id": "proposal_rank_10_seed_1"
+        },
+        {
+          "execution_seed": 8100007,
+          "row_id": "proposal_rank_10_seed_2"
+        },
+        {
+          "execution_seed": 8100008,
+          "row_id": "proposal_rank_10_seed_3"
+        },
+        {
+          "execution_seed": 8100009,
+          "row_id": "proposal_rank_10_seed_4"
+        }
+      ],
+      "model_rank": 9,
+      "normalized_control_hash": "f7739ece2dae18cb",
+      "record_sha256": "8c4e04dbb7864006fb994336f952b9314b2a03ddd675dc0dd729de5c3e987ae7",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 818,
+      "score": -1.272316144,
+      "selection_rank": 10,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.178531367751818,
+          "y": 3.618860913355653
+        },
+        "pedestrian_delay_s": 1.3962787899764537,
+        "pedestrian_speed_mps": 1.2834915510996847,
+        "scenario_seed": 448,
+        "spawn_time_s": 0.012997519356122034,
+        "start": {
+          "theta": 0.0,
+          "x": 2.0898829612064334,
+          "y": 2.4408812440813934
+        }
+      },
+      "candidate_manifest_id": "pool_2",
+      "candidate_manifest_sha256": "f628bdd9a3dd1a6b5ebe413cd4ec7c1ea56cdec0d9bc9aa67fbcbb1906519429",
+      "candidate_pool_index": 2,
+      "execution_seeds": [
+        8100010,
+        8100011,
+        8100012,
+        8100013,
+        8100014
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100010,
+          "row_id": "proposal_rank_11_seed_0"
+        },
+        {
+          "execution_seed": 8100011,
+          "row_id": "proposal_rank_11_seed_1"
+        },
+        {
+          "execution_seed": 8100012,
+          "row_id": "proposal_rank_11_seed_2"
+        },
+        {
+          "execution_seed": 8100013,
+          "row_id": "proposal_rank_11_seed_3"
+        },
+        {
+          "execution_seed": 8100014,
+          "row_id": "proposal_rank_11_seed_4"
+        }
+      ],
+      "model_rank": 10,
+      "normalized_control_hash": "7d3d776581880d45",
+      "record_sha256": "b057135b1f300fbe1917926e66fa061a9ebaf2415a4edae44ca4005f99bee78d",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 448,
+      "score": -1.2736515110000002,
+      "selection_rank": 11,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.526988258013048,
+          "y": 2.2044205530396974
+        },
+        "pedestrian_delay_s": 0.6879114449579422,
+        "pedestrian_speed_mps": 1.015387628290777,
+        "scenario_seed": 370,
+        "spawn_time_s": 0.7598546012746747,
+        "start": {
+          "theta": 0.0,
+          "x": 1.5557426833432837,
+          "y": 2.4306275242151774
+        }
+      },
+      "candidate_manifest_id": "pool_3",
+      "candidate_manifest_sha256": "b004b5a08f5f15f1028477122597de41f924152146164d07ea7943e022029353",
+      "candidate_pool_index": 3,
+      "execution_seeds": [
+        8100015,
+        8100016,
+        8100017,
+        8100018,
+        8100019
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100015,
+          "row_id": "pool_3_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100016,
+          "row_id": "pool_3_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100017,
+          "row_id": "pool_3_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100018,
+          "row_id": "pool_3_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100019,
+          "row_id": "pool_3_unselected_seed_4"
+        }
+      ],
+      "model_rank": 36,
+      "normalized_control_hash": "14b37b84dfa48f7f",
+      "record_sha256": "38093656c16036478737e55f176077fbebe47a7ed9638f0c3949c17ae6ca9cea",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 370,
+      "score": -1.700601646,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.072456182909402,
+          "y": 3.946231527958741
+        },
+        "pedestrian_delay_s": 1.6588093285059897,
+        "pedestrian_speed_mps": 1.1312243787639362,
+        "scenario_seed": 733,
+        "spawn_time_s": 0.757068754416707,
+        "start": {
+          "theta": 0.0,
+          "x": 2.61425654654876,
+          "y": 3.4594635733876355
+        }
+      },
+      "candidate_manifest_id": "pool_4",
+      "candidate_manifest_sha256": "0a2d62d76bad575a8e2e081035b164862060b6d9bb9aa08a8050111825f0b5ad",
+      "candidate_pool_index": 4,
+      "execution_seeds": [
+        8100020,
+        8100021,
+        8100022,
+        8100023,
+        8100024
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100020,
+          "row_id": "pool_4_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100021,
+          "row_id": "pool_4_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100022,
+          "row_id": "pool_4_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100023,
+          "row_id": "pool_4_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100024,
+          "row_id": "pool_4_unselected_seed_4"
+        }
+      ],
+      "model_rank": 21,
+      "normalized_control_hash": "a78c19644e9bd614",
+      "record_sha256": "c00d7d30d5706a994013521cb20dca3b918f98f88cfe191b9155b0e36ff9ab8a",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 733,
+      "score": -1.5612658139999998,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.38457718051332,
+          "y": 2.139110297647482
+        },
+        "pedestrian_delay_s": 1.9704430413215155,
+        "pedestrian_speed_mps": 1.2638410044732151,
+        "scenario_seed": 975,
+        "spawn_time_s": 1.3225266371354203,
+        "start": {
+          "theta": 0.0,
+          "x": 2.770903495873614,
+          "y": 2.723270052333953
+        }
+      },
+      "candidate_manifest_id": "pool_5",
+      "candidate_manifest_sha256": "0ea974bc05a5e42605ed017909ab00675b9e43273cc033d8b39350f2471f5391",
+      "candidate_pool_index": 5,
+      "execution_seeds": [
+        8100025,
+        8100026,
+        8100027,
+        8100028,
+        8100029
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100025,
+          "row_id": "proposal_rank_5_seed_0"
+        },
+        {
+          "execution_seed": 8100026,
+          "row_id": "proposal_rank_5_seed_1"
+        },
+        {
+          "execution_seed": 8100027,
+          "row_id": "proposal_rank_5_seed_2"
+        },
+        {
+          "execution_seed": 8100028,
+          "row_id": "proposal_rank_5_seed_3"
+        },
+        {
+          "execution_seed": 8100029,
+          "row_id": "proposal_rank_5_seed_4"
+        }
+      ],
+      "model_rank": 4,
+      "normalized_control_hash": "5caf95ff5dc0c069",
+      "record_sha256": "ab66cacdac364b8d28c7a9f575d4557dfa9f4bde1005799cdcc3c9f5c455deef",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 975,
+      "score": -1.141054349,
+      "selection_rank": 5,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.555947206220184,
+          "y": 3.2713688885288006
+        },
+        "pedestrian_delay_s": 0.4190140615429754,
+        "pedestrian_speed_mps": 1.0221085802701295,
+        "scenario_seed": 373,
+        "spawn_time_s": 0.7296643579401685,
+        "start": {
+          "theta": 0.0,
+          "x": 1.4655817727220604,
+          "y": 2.2020028588194585
+        }
+      },
+      "candidate_manifest_id": "pool_6",
+      "candidate_manifest_sha256": "05fe4c4ca3cfa98c7beae12853cda94f052a9d968ac6eeb5ebb059d73d1d0385",
+      "candidate_pool_index": 6,
+      "execution_seeds": [
+        8100030,
+        8100031,
+        8100032,
+        8100033,
+        8100034
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100030,
+          "row_id": "random_rank_4_seed_0"
+        },
+        {
+          "execution_seed": 8100031,
+          "row_id": "random_rank_4_seed_1"
+        },
+        {
+          "execution_seed": 8100032,
+          "row_id": "random_rank_4_seed_2"
+        },
+        {
+          "execution_seed": 8100033,
+          "row_id": "random_rank_4_seed_3"
+        },
+        {
+          "execution_seed": 8100034,
+          "row_id": "random_rank_4_seed_4"
+        }
+      ],
+      "model_rank": 51,
+      "normalized_control_hash": "d0eac81245329e69",
+      "record_sha256": "09c972da6384cda9f158f99de5684d3019f57b4db0970e63c9fb93f4bf3e479a",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 373,
+      "score": -1.932293902,
+      "selection_rank": 4,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.142805019157096,
+          "y": 3.2699565763941205
+        },
+        "pedestrian_delay_s": 0.9245204237022315,
+        "pedestrian_speed_mps": 0.9468865550908557,
+        "scenario_seed": 376,
+        "spawn_time_s": 1.068279754059416,
+        "start": {
+          "theta": 0.0,
+          "x": 2.4036406269171025,
+          "y": 3.3670953310733345
+        }
+      },
+      "candidate_manifest_id": "pool_7",
+      "candidate_manifest_sha256": "c5b86bd52e55487d2fe10838a32fd8ee71af2dd4f0376b226323abc4a2854871",
+      "candidate_pool_index": 7,
+      "execution_seeds": [
+        8100035,
+        8100036,
+        8100037,
+        8100038,
+        8100039
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100035,
+          "row_id": "pool_7_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100036,
+          "row_id": "pool_7_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100037,
+          "row_id": "pool_7_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100038,
+          "row_id": "pool_7_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100039,
+          "row_id": "pool_7_unselected_seed_4"
+        }
+      ],
+      "model_rank": 25,
+      "normalized_control_hash": "95eff2611c69c824",
+      "record_sha256": "225abcfb4eba882b4fe2f606efa46e78b0918c57c9448d6e9deffc4551cb6dd2",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 376,
+      "score": -1.6044818900000002,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.113899487549293,
+          "y": 3.369228501979749
+        },
+        "pedestrian_delay_s": 0.45809614392820874,
+        "pedestrian_speed_mps": 1.2655999469277468,
+        "scenario_seed": 132,
+        "spawn_time_s": 1.6857038403796192,
+        "start": {
+          "theta": 0.0,
+          "x": 2.9790467012731905,
+          "y": 3.279999519708186
+        }
+      },
+      "candidate_manifest_id": "pool_8",
+      "candidate_manifest_sha256": "57f64b476e5850ef439056dfee06d4f1ed02ab451549fd1458ea7d253d505c01",
+      "candidate_pool_index": 8,
+      "execution_seeds": [
+        8100040,
+        8100041,
+        8100042,
+        8100043,
+        8100044
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100040,
+          "row_id": "pool_8_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100041,
+          "row_id": "pool_8_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100042,
+          "row_id": "pool_8_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100043,
+          "row_id": "pool_8_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100044,
+          "row_id": "pool_8_unselected_seed_4"
+        }
+      ],
+      "model_rank": 12,
+      "normalized_control_hash": "2d3a9c8a423368e2",
+      "record_sha256": "a5e5fadef25a5b99d4ce123800c1ff068dd846b506d6791adf4712728cdcd4ff",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 132,
+      "score": -1.3484973660000001,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.132377210423094,
+          "y": 3.8262722483710903
+        },
+        "pedestrian_delay_s": 0.4252530881082812,
+        "pedestrian_speed_mps": 1.2307485624313856,
+        "scenario_seed": 611,
+        "spawn_time_s": 1.1343601029570045,
+        "start": {
+          "theta": 0.0,
+          "x": 2.610091601542429,
+          "y": 2.802329574044658
+        }
+      },
+      "candidate_manifest_id": "pool_9",
+      "candidate_manifest_sha256": "76eb3564c49f06e6a70860abc355eed54fc93fd1357b0ec7d17b5feadfe94947",
+      "candidate_pool_index": 9,
+      "execution_seeds": [
+        8100045,
+        8100046,
+        8100047,
+        8100048,
+        8100049
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100045,
+          "row_id": "pool_9_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100046,
+          "row_id": "pool_9_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100047,
+          "row_id": "pool_9_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100048,
+          "row_id": "pool_9_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100049,
+          "row_id": "pool_9_unselected_seed_4"
+        }
+      ],
+      "model_rank": 43,
+      "normalized_control_hash": "747898d206efcb8a",
+      "record_sha256": "a5002e3fc7a14a674be5ddb6a958fbdebec46a2c0e0e3c459c71f8db09fbde3f",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 611,
+      "score": -1.805886652,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.917703705174798,
+          "y": 2.529760332996105
+        },
+        "pedestrian_delay_s": 0.5254832170458705,
+        "pedestrian_speed_mps": 1.1368208804978903,
+        "scenario_seed": 698,
+        "spawn_time_s": 0.4932550153879669,
+        "start": {
+          "theta": 0.0,
+          "x": 1.7912638021213285,
+          "y": 3.829095179481087
+        }
+      },
+      "candidate_manifest_id": "pool_10",
+      "candidate_manifest_sha256": "f68c0e189781dad129c3347085fad2ea0ddbb9e4c4080d3e3c22b96746398acb",
+      "candidate_pool_index": 10,
+      "execution_seeds": [
+        8100050,
+        8100051,
+        8100052,
+        8100053,
+        8100054
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100050,
+          "row_id": "pool_10_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100051,
+          "row_id": "pool_10_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100052,
+          "row_id": "pool_10_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100053,
+          "row_id": "pool_10_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100054,
+          "row_id": "pool_10_unselected_seed_4"
+        }
+      ],
+      "model_rank": 37,
+      "normalized_control_hash": "98db6d9c8a4b07b8",
+      "record_sha256": "6ebdfe8406bfc03f193914f8ffcad1a2ce3a0c904ac0a1ac32619f4b9bf7ada1",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 698,
+      "score": -1.706592054,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.723992887427222,
+          "y": 3.994651555978322
+        },
+        "pedestrian_delay_s": 1.5115643150674756,
+        "pedestrian_speed_mps": 1.0961095009337787,
+        "scenario_seed": 981,
+        "spawn_time_s": 0.27666348978171174,
+        "start": {
+          "theta": 0.0,
+          "x": 1.8568676545891594,
+          "y": 3.1670658498913125
+        }
+      },
+      "candidate_manifest_id": "pool_11",
+      "candidate_manifest_sha256": "b7380d74812a3ba2d9c856809540f62a31d51c41637147069530a772a3653116",
+      "candidate_pool_index": 11,
+      "execution_seeds": [
+        8100055,
+        8100056,
+        8100057,
+        8100058,
+        8100059
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100055,
+          "row_id": "pool_11_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100056,
+          "row_id": "pool_11_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100057,
+          "row_id": "pool_11_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100058,
+          "row_id": "pool_11_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100059,
+          "row_id": "pool_11_unselected_seed_4"
+        }
+      ],
+      "model_rank": 50,
+      "normalized_control_hash": "fc714d1e4432490d",
+      "record_sha256": "f23456359a8fa92f2b7891b6f8c2c5ab9e813dcb16a4a5da1f9e91c45bf71f86",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 981,
+      "score": -1.930139719,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.584158728725928,
+          "y": 2.844319933599368
+        },
+        "pedestrian_delay_s": 1.9922427604801936,
+        "pedestrian_speed_mps": 1.028971571903922,
+        "scenario_seed": 641,
+        "spawn_time_s": 0.12705541230391426,
+        "start": {
+          "theta": 0.0,
+          "x": 1.2192982607013183,
+          "y": 3.25489208340618
+        }
+      },
+      "candidate_manifest_id": "pool_12",
+      "candidate_manifest_sha256": "d02b3688f1ff261c17ee896ecd0fb2e18c619fef75430cd49df4a17092ad075d",
+      "candidate_pool_index": 12,
+      "execution_seeds": [
+        8100060,
+        8100061,
+        8100062,
+        8100063,
+        8100064
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100060,
+          "row_id": "random_rank_1_seed_0"
+        },
+        {
+          "execution_seed": 8100061,
+          "row_id": "random_rank_1_seed_1"
+        },
+        {
+          "execution_seed": 8100062,
+          "row_id": "random_rank_1_seed_2"
+        },
+        {
+          "execution_seed": 8100063,
+          "row_id": "random_rank_1_seed_3"
+        },
+        {
+          "execution_seed": 8100064,
+          "row_id": "random_rank_1_seed_4"
+        }
+      ],
+      "model_rank": 23,
+      "normalized_control_hash": "7cf2f9948247610a",
+      "record_sha256": "0b1a8d4b4021ad6da39ba6031aeac8f0a6694c355343db8fa8a93cabfb13a46b",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 641,
+      "score": -1.5994457649999998,
+      "selection_rank": 1,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.88486172275962,
+          "y": 3.360566820513037
+        },
+        "pedestrian_delay_s": 1.5017555991832194,
+        "pedestrian_speed_mps": 1.3308730700774654,
+        "scenario_seed": 887,
+        "spawn_time_s": 0.2291034859673733,
+        "start": {
+          "theta": 0.0,
+          "x": 1.5028282399636264,
+          "y": 3.1064517924305752
+        }
+      },
+      "candidate_manifest_id": "pool_13",
+      "candidate_manifest_sha256": "3c5729e863a031e25ee980ee118fc1f3d45a2bf74542dc5e7a40cff97ac536d9",
+      "candidate_pool_index": 13,
+      "execution_seeds": [
+        8100065,
+        8100066,
+        8100067,
+        8100068,
+        8100069
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100065,
+          "row_id": "pool_13_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100066,
+          "row_id": "pool_13_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100067,
+          "row_id": "pool_13_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100068,
+          "row_id": "pool_13_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100069,
+          "row_id": "pool_13_unselected_seed_4"
+        }
+      ],
+      "model_rank": 49,
+      "normalized_control_hash": "32fc97643a934174",
+      "record_sha256": "3a818b78cc171584a4910a158349cd3b6411fc8476244e6722e0989bacac138e",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 887,
+      "score": -1.907194791,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.86953050133821,
+          "y": 2.9074474126584127
+        },
+        "pedestrian_delay_s": 0.5267781015021815,
+        "pedestrian_speed_mps": 1.3255117642269165,
+        "scenario_seed": 612,
+        "spawn_time_s": 1.9076318550421603,
+        "start": {
+          "theta": 0.0,
+          "x": 2.281923597159616,
+          "y": 2.223104347191753
+        }
+      },
+      "candidate_manifest_id": "pool_14",
+      "candidate_manifest_sha256": "ae9c8abec9792c6ab7e67281b84940f97cf981f0cdbc06e2dfc180808cce6ae0",
+      "candidate_pool_index": 14,
+      "execution_seeds": [
+        8100070,
+        8100071,
+        8100072,
+        8100073,
+        8100074
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100070,
+          "row_id": "random_rank_10_seed_0"
+        },
+        {
+          "execution_seed": 8100071,
+          "row_id": "random_rank_10_seed_1"
+        },
+        {
+          "execution_seed": 8100072,
+          "row_id": "random_rank_10_seed_2"
+        },
+        {
+          "execution_seed": 8100073,
+          "row_id": "random_rank_10_seed_3"
+        },
+        {
+          "execution_seed": 8100074,
+          "row_id": "random_rank_10_seed_4"
+        }
+      ],
+      "model_rank": 32,
+      "normalized_control_hash": "2e52b22ce6b0633e",
+      "record_sha256": "a56b681f68f760a8ac7415db960472c49eced3bfd56208c973582b2a857fb91a",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 612,
+      "score": -1.667431583,
+      "selection_rank": 10,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.21282164559541,
+          "y": 3.250600387132835
+        },
+        "pedestrian_delay_s": 0.39782220352946607,
+        "pedestrian_speed_mps": 1.1045977291865805,
+        "scenario_seed": 482,
+        "spawn_time_s": 1.6833386963449342,
+        "start": {
+          "theta": 0.0,
+          "x": 2.5239243981041293,
+          "y": 3.0153633492086502
+        }
+      },
+      "candidate_manifest_id": "pool_15",
+      "candidate_manifest_sha256": "06889033be3669fa1fb5e4e3166a61cf76d380e66eabc4eb61ca82981a6c4f99",
+      "candidate_pool_index": 15,
+      "execution_seeds": [
+        8100075,
+        8100076,
+        8100077,
+        8100078,
+        8100079
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100075,
+          "row_id": "pool_15_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100076,
+          "row_id": "pool_15_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100077,
+          "row_id": "pool_15_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100078,
+          "row_id": "pool_15_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100079,
+          "row_id": "pool_15_unselected_seed_4"
+        }
+      ],
+      "model_rank": 30,
+      "normalized_control_hash": "ac804d06bc663aa1",
+      "record_sha256": "bae25422060190d44aa5e0a0c5e2b15df73c3e7c89b38574b34fff97f3cfffb3",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 482,
+      "score": -1.6304867140000001,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.557252957261117,
+          "y": 3.060707344390355
+        },
+        "pedestrian_delay_s": 0.038953484771664604,
+        "pedestrian_speed_mps": 0.9944936342028039,
+        "scenario_seed": 471,
+        "spawn_time_s": 0.0011437922558870106,
+        "start": {
+          "theta": 0.0,
+          "x": 2.5250216001503025,
+          "y": 3.0787580602392515
+        }
+      },
+      "candidate_manifest_id": "pool_16",
+      "candidate_manifest_sha256": "4865f35adf736ef1cc2990aea01d841e8d536bc5b0ad3435632f9eb24845f350",
+      "candidate_pool_index": 16,
+      "execution_seeds": [
+        8100080,
+        8100081,
+        8100082,
+        8100083,
+        8100084
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100080,
+          "row_id": "proposal_rank_4_seed_0"
+        },
+        {
+          "execution_seed": 8100081,
+          "row_id": "proposal_rank_4_seed_1"
+        },
+        {
+          "execution_seed": 8100082,
+          "row_id": "proposal_rank_4_seed_2"
+        },
+        {
+          "execution_seed": 8100083,
+          "row_id": "proposal_rank_4_seed_3"
+        },
+        {
+          "execution_seed": 8100084,
+          "row_id": "proposal_rank_4_seed_4"
+        }
+      ],
+      "model_rank": 3,
+      "normalized_control_hash": "87213ddb8a84e2a9",
+      "record_sha256": "c919eb64f959fb22aee960ec39159b479f79a1a64a8c33810fb1a063e010f2d2",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 471,
+      "score": -0.8469144449999999,
+      "selection_rank": 4,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.615028250805323,
+          "y": 2.115850332988375
+        },
+        "pedestrian_delay_s": 0.17130690413575755,
+        "pedestrian_speed_mps": 1.3681696671787964,
+        "scenario_seed": 597,
+        "spawn_time_s": 1.756019198408081,
+        "start": {
+          "theta": 0.0,
+          "x": 2.7574437556463685,
+          "y": 3.663331058722359
+        }
+      },
+      "candidate_manifest_id": "pool_17",
+      "candidate_manifest_sha256": "17daf27aed2a4c33ebdf402f56e7cef13bf56eff82c4f702c3443d5f7c22e1e2",
+      "candidate_pool_index": 17,
+      "execution_seeds": [
+        8100085,
+        8100086,
+        8100087,
+        8100088,
+        8100089
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100085,
+          "row_id": "pool_17_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100086,
+          "row_id": "pool_17_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100087,
+          "row_id": "pool_17_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100088,
+          "row_id": "pool_17_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100089,
+          "row_id": "pool_17_unselected_seed_4"
+        }
+      ],
+      "model_rank": 48,
+      "normalized_control_hash": "329de81b5cbb8e19",
+      "record_sha256": "f7ede709dd0b3be6768f10353e1dcdf89117e5064d0f2f7ecf81e0c6086aa5a4",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 597,
+      "score": -1.9023618629999999,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.065412339059032,
+          "y": 2.2515210230408824
+        },
+        "pedestrian_delay_s": 0.3302539179482553,
+        "pedestrian_speed_mps": 1.3681092078229944,
+        "scenario_seed": 640,
+        "spawn_time_s": 1.3195016454947348,
+        "start": {
+          "theta": 0.0,
+          "x": 2.632046506840177,
+          "y": 3.9559689873546686
+        }
+      },
+      "candidate_manifest_id": "pool_18",
+      "candidate_manifest_sha256": "2757fa2187625052f311d405c46c5e680e0c32b56f2de22b4539def2a8f8be2f",
+      "candidate_pool_index": 18,
+      "execution_seeds": [
+        8100090,
+        8100091,
+        8100092,
+        8100093,
+        8100094
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100090,
+          "row_id": "pool_18_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100091,
+          "row_id": "pool_18_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100092,
+          "row_id": "pool_18_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100093,
+          "row_id": "pool_18_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100094,
+          "row_id": "pool_18_unselected_seed_4"
+        }
+      ],
+      "model_rank": 52,
+      "normalized_control_hash": "3874aa7719db6111",
+      "record_sha256": "4952823e23454ab62c0f415a767ae59ab58baead7f994d278615b00b556859a0",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 640,
+      "score": -1.932720008,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.423596410884164,
+          "y": 3.0785921775589165
+        },
+        "pedestrian_delay_s": 0.6234325826017899,
+        "pedestrian_speed_mps": 0.9206906380338176,
+        "scenario_seed": 787,
+        "spawn_time_s": 1.4598621381799524,
+        "start": {
+          "theta": 0.0,
+          "x": 2.744866082170515,
+          "y": 2.846275880401774
+        }
+      },
+      "candidate_manifest_id": "pool_19",
+      "candidate_manifest_sha256": "4043af80395c15a29bdd83703eae9203de9ec8bcd97dff2651a555b802a956c1",
+      "candidate_pool_index": 19,
+      "execution_seeds": [
+        8100095,
+        8100096,
+        8100097,
+        8100098,
+        8100099
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100095,
+          "row_id": "pool_19_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100096,
+          "row_id": "pool_19_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100097,
+          "row_id": "pool_19_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100098,
+          "row_id": "pool_19_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100099,
+          "row_id": "pool_19_unselected_seed_4"
+        }
+      ],
+      "model_rank": 15,
+      "normalized_control_hash": "9a84f722d01bdd67",
+      "record_sha256": "d140a7ab0c110fa7c17bcdf4c73b98a7bfcd816fbc29c69b6e30f2798c392389",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 787,
+      "score": -1.4433175870000001,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.03515168207118,
+          "y": 2.2420083917365314
+        },
+        "pedestrian_delay_s": 1.1766174369144666,
+        "pedestrian_speed_mps": 1.0028513372884733,
+        "scenario_seed": 335,
+        "spawn_time_s": 0.44939467406311473,
+        "start": {
+          "theta": 0.0,
+          "x": 2.2997561152789068,
+          "y": 2.8762001678290083
+        }
+      },
+      "candidate_manifest_id": "pool_20",
+      "candidate_manifest_sha256": "54e43976e05e1b64232d47002814d2a871b7a48a6fa802d89eae2835fe18bddb",
+      "candidate_pool_index": 20,
+      "execution_seeds": [
+        8100100,
+        8100101,
+        8100102,
+        8100103,
+        8100104
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100100,
+          "row_id": "proposal_rank_8_seed_0"
+        },
+        {
+          "execution_seed": 8100101,
+          "row_id": "proposal_rank_8_seed_1"
+        },
+        {
+          "execution_seed": 8100102,
+          "row_id": "proposal_rank_8_seed_2"
+        },
+        {
+          "execution_seed": 8100103,
+          "row_id": "proposal_rank_8_seed_3"
+        },
+        {
+          "execution_seed": 8100104,
+          "row_id": "proposal_rank_8_seed_4"
+        }
+      ],
+      "model_rank": 7,
+      "normalized_control_hash": "e4128b9f12b32e0d",
+      "record_sha256": "833f226fad7ba8e7147799dcf9dc40ca42f6164e559dd045a5929bea0da2d8bc",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 335,
+      "score": -1.236043901,
+      "selection_rank": 8,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.415681893096908,
+          "y": 2.117747533752647
+        },
+        "pedestrian_delay_s": 0.6608569781609974,
+        "pedestrian_speed_mps": 0.8188477748318109,
+        "scenario_seed": 626,
+        "spawn_time_s": 0.134800656220615,
+        "start": {
+          "theta": 0.0,
+          "x": 2.176880228820702,
+          "y": 2.014381677970187
+        }
+      },
+      "candidate_manifest_id": "pool_21",
+      "candidate_manifest_sha256": "d1aaca1b401a9a8b8d68ef9e88ed7251ca22028977de5b0ff514755ea3bb58ac",
+      "candidate_pool_index": 21,
+      "execution_seeds": [
+        8100105,
+        8100106,
+        8100107,
+        8100108,
+        8100109
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100105,
+          "row_id": "random_rank_7_seed_0"
+        },
+        {
+          "execution_seed": 8100106,
+          "row_id": "random_rank_7_seed_1"
+        },
+        {
+          "execution_seed": 8100107,
+          "row_id": "random_rank_7_seed_2"
+        },
+        {
+          "execution_seed": 8100108,
+          "row_id": "random_rank_7_seed_3"
+        },
+        {
+          "execution_seed": 8100109,
+          "row_id": "random_rank_7_seed_4"
+        }
+      ],
+      "model_rank": 46,
+      "normalized_control_hash": "1b45a6572d4e6b94",
+      "record_sha256": "58cf962658f48963bd31fbb65f5c672bc69995d949980148a3cb09aaab1a9406",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 626,
+      "score": -1.878800623,
+      "selection_rank": 7,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.428473614740877,
+          "y": 2.26462369745005
+        },
+        "pedestrian_delay_s": 0.9453420526235883,
+        "pedestrian_speed_mps": 1.1426258559951705,
+        "scenario_seed": 903,
+        "spawn_time_s": 1.871028481161342,
+        "start": {
+          "theta": 0.0,
+          "x": 1.4760092687379904,
+          "y": 3.3379555565925614
+        }
+      },
+      "candidate_manifest_id": "pool_22",
+      "candidate_manifest_sha256": "0051f57601487ce53655358fa085632ef76e9a30784437d1712b2c2f18c8dd8f",
+      "candidate_pool_index": 22,
+      "execution_seeds": [
+        8100110,
+        8100111,
+        8100112,
+        8100113,
+        8100114
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100110,
+          "row_id": "pool_22_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100111,
+          "row_id": "pool_22_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100112,
+          "row_id": "pool_22_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100113,
+          "row_id": "pool_22_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100114,
+          "row_id": "pool_22_unselected_seed_4"
+        }
+      ],
+      "model_rank": 35,
+      "normalized_control_hash": "4a15cb2acb8e446b",
+      "record_sha256": "9f28cf4474a9c6fd1da85e57b066d44108961f4db075b9a2abf25707f11feb4f",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 903,
+      "score": -1.693862707,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.188651592983764,
+          "y": 3.3179654990293264
+        },
+        "pedestrian_delay_s": 1.7276734967392064,
+        "pedestrian_speed_mps": 1.0466613656298427,
+        "scenario_seed": 155,
+        "spawn_time_s": 0.7085951331791076,
+        "start": {
+          "theta": 0.0,
+          "x": 1.9459458858891874,
+          "y": 2.814119922971873
+        }
+      },
+      "candidate_manifest_id": "pool_23",
+      "candidate_manifest_sha256": "6bbdcb62149098fa1509445bea0268ceb883350b7b32ddbb767776a6a834e0ba",
+      "candidate_pool_index": 23,
+      "execution_seeds": [
+        8100115,
+        8100116,
+        8100117,
+        8100118,
+        8100119
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100115,
+          "row_id": "pool_23_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100116,
+          "row_id": "pool_23_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100117,
+          "row_id": "pool_23_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100118,
+          "row_id": "pool_23_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100119,
+          "row_id": "pool_23_unselected_seed_4"
+        }
+      ],
+      "model_rank": 38,
+      "normalized_control_hash": "bec5540756560a8b",
+      "record_sha256": "0bd7723b0512569bc92bed310b4576eaf99899afa5401c66286d5ff4a130d0ca",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 155,
+      "score": -1.738330498,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.196835742303918,
+          "y": 2.8052425642045375
+        },
+        "pedestrian_delay_s": 0.49731266784057127,
+        "pedestrian_speed_mps": 1.3170035218116745,
+        "scenario_seed": 294,
+        "spawn_time_s": 0.6786052107899263,
+        "start": {
+          "theta": 0.0,
+          "x": 2.3467290945866033,
+          "y": 3.968330422731932
+        }
+      },
+      "candidate_manifest_id": "pool_24",
+      "candidate_manifest_sha256": "b075abee56e2e54e007b5edaf95d68bc687c5af0cd4186677f546f968b0884c8",
+      "candidate_pool_index": 24,
+      "execution_seeds": [
+        8100120,
+        8100121,
+        8100122,
+        8100123,
+        8100124
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100120,
+          "row_id": "random_rank_9_seed_0"
+        },
+        {
+          "execution_seed": 8100121,
+          "row_id": "random_rank_9_seed_1"
+        },
+        {
+          "execution_seed": 8100122,
+          "row_id": "random_rank_9_seed_2"
+        },
+        {
+          "execution_seed": 8100123,
+          "row_id": "random_rank_9_seed_3"
+        },
+        {
+          "execution_seed": 8100124,
+          "row_id": "random_rank_9_seed_4"
+        }
+      ],
+      "model_rank": 16,
+      "normalized_control_hash": "b8f9c8001a7fe7dc",
+      "record_sha256": "5d41373dc7291507da68e3d41e44bf28d6009a8e2e9157a443ea41db00f1b0a9",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 294,
+      "score": -1.452556459,
+      "selection_rank": 9,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.3669760715744665,
+          "y": 2.9252561368019347
+        },
+        "pedestrian_delay_s": 1.6160444894634052,
+        "pedestrian_speed_mps": 0.8452309330245736,
+        "scenario_seed": 976,
+        "spawn_time_s": 1.7489719081411599,
+        "start": {
+          "theta": 0.0,
+          "x": 2.0725715078206886,
+          "y": 2.2803645941895487
+        }
+      },
+      "candidate_manifest_id": "pool_25",
+      "candidate_manifest_sha256": "556620ce801baf360d28e2187f23c265f8b85481548b5f2c5e1b4ece3983107b",
+      "candidate_pool_index": 25,
+      "execution_seeds": [
+        8100125,
+        8100126,
+        8100127,
+        8100128,
+        8100129
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100125,
+          "row_id": "pool_25_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100126,
+          "row_id": "pool_25_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100127,
+          "row_id": "pool_25_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100128,
+          "row_id": "pool_25_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100129,
+          "row_id": "pool_25_unselected_seed_4"
+        }
+      ],
+      "model_rank": 56,
+      "normalized_control_hash": "efcfb7f37d3b1224",
+      "record_sha256": "c9e204c151eb1f012952c719408466145ebe41606ea17d243ac5db7ab7dd48e9",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 976,
+      "score": -1.9813029789999999,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.998564936825453,
+          "y": 3.672055170159904
+        },
+        "pedestrian_delay_s": 1.697391468828611,
+        "pedestrian_speed_mps": 1.3558201898048765,
+        "scenario_seed": 270,
+        "spawn_time_s": 1.9379925145695025,
+        "start": {
+          "theta": 0.0,
+          "x": 2.1006506248996963,
+          "y": 2.1011766590497625
+        }
+      },
+      "candidate_manifest_id": "pool_26",
+      "candidate_manifest_sha256": "c61be5a0255698a8285117468895de74291304f42e12e97ee4fd8e6e48b35e1d",
+      "candidate_pool_index": 26,
+      "execution_seeds": [
+        8100130,
+        8100131,
+        8100132,
+        8100133,
+        8100134
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100130,
+          "row_id": "random_rank_5_seed_0"
+        },
+        {
+          "execution_seed": 8100131,
+          "row_id": "random_rank_5_seed_1"
+        },
+        {
+          "execution_seed": 8100132,
+          "row_id": "random_rank_5_seed_2"
+        },
+        {
+          "execution_seed": 8100133,
+          "row_id": "random_rank_5_seed_3"
+        },
+        {
+          "execution_seed": 8100134,
+          "row_id": "random_rank_5_seed_4"
+        }
+      ],
+      "model_rank": 57,
+      "normalized_control_hash": "4ad2088165de0f6b",
+      "record_sha256": "fb5a627825f6d60f54421dd3bb19cadcaf6db0e57eab4c09fc57f461299f571e",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 270,
+      "score": -2.070982506,
+      "selection_rank": 5,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.729300788060431,
+          "y": 3.8048857310210975
+        },
+        "pedestrian_delay_s": 0.7808435151756263,
+        "pedestrian_speed_mps": 0.8012932270108559,
+        "scenario_seed": 902,
+        "spawn_time_s": 0.32927424280305373,
+        "start": {
+          "theta": 0.0,
+          "x": 1.812828115904944,
+          "y": 2.962716835942079
+        }
+      },
+      "candidate_manifest_id": "pool_27",
+      "candidate_manifest_sha256": "e43ffbd60538ed6af596d0a1f3eccd4d82793fb04f39b09d055511d5e3cb11bd",
+      "candidate_pool_index": 27,
+      "execution_seeds": [
+        8100135,
+        8100136,
+        8100137,
+        8100138,
+        8100139
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100135,
+          "row_id": "pool_27_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100136,
+          "row_id": "pool_27_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100137,
+          "row_id": "pool_27_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100138,
+          "row_id": "pool_27_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100139,
+          "row_id": "pool_27_unselected_seed_4"
+        }
+      ],
+      "model_rank": 44,
+      "normalized_control_hash": "773382d6e0fb55d3",
+      "record_sha256": "61e6822dc3377cf476fe6fcfed9b1bb39c003b25790dea56027e66891e5e8981",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 902,
+      "score": -1.8075307459999999,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.393183007200324,
+          "y": 3.4610106348309317
+        },
+        "pedestrian_delay_s": 0.973342823308659,
+        "pedestrian_speed_mps": 1.197122787170447,
+        "scenario_seed": 294,
+        "spawn_time_s": 1.5667230569685744,
+        "start": {
+          "theta": 0.0,
+          "x": 2.570258713588243,
+          "y": 2.570498457893841
+        }
+      },
+      "candidate_manifest_id": "pool_28",
+      "candidate_manifest_sha256": "96272cf39cf59d69219bd8ebaa4dc13082c90a9848f346f9b40ab6c98c8f2a30",
+      "candidate_pool_index": 28,
+      "execution_seeds": [
+        8100140,
+        8100141,
+        8100142,
+        8100143,
+        8100144
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100140,
+          "row_id": "random_rank_2_seed_0"
+        },
+        {
+          "execution_seed": 8100141,
+          "row_id": "random_rank_2_seed_1"
+        },
+        {
+          "execution_seed": 8100142,
+          "row_id": "random_rank_2_seed_2"
+        },
+        {
+          "execution_seed": 8100143,
+          "row_id": "random_rank_2_seed_3"
+        },
+        {
+          "execution_seed": 8100144,
+          "row_id": "random_rank_2_seed_4"
+        }
+      ],
+      "model_rank": 18,
+      "normalized_control_hash": "d5591b4d024288bf",
+      "record_sha256": "5d46dd739d2a560df63d004c6a53d23db0e57341181469e45b4f3154d87b9622",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 294,
+      "score": -1.459216027,
+      "selection_rank": 2,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.158360581632513,
+          "y": 3.0843904027485483
+        },
+        "pedestrian_delay_s": 1.1683551889179424,
+        "pedestrian_speed_mps": 0.8342991637444899,
+        "scenario_seed": 614,
+        "spawn_time_s": 1.4959511207581282,
+        "start": {
+          "theta": 0.0,
+          "x": 1.5934156509891284,
+          "y": 3.937418729938318
+        }
+      },
+      "candidate_manifest_id": "pool_29",
+      "candidate_manifest_sha256": "6b64a1ba631e90856187f60f5e42f971ddd7eb2397fa8348ff3814c0555e3886",
+      "candidate_pool_index": 29,
+      "execution_seeds": [
+        8100145,
+        8100146,
+        8100147,
+        8100148,
+        8100149
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100145,
+          "row_id": "random_rank_12_seed_0"
+        },
+        {
+          "execution_seed": 8100146,
+          "row_id": "random_rank_12_seed_1"
+        },
+        {
+          "execution_seed": 8100147,
+          "row_id": "random_rank_12_seed_2"
+        },
+        {
+          "execution_seed": 8100148,
+          "row_id": "random_rank_12_seed_3"
+        },
+        {
+          "execution_seed": 8100149,
+          "row_id": "random_rank_12_seed_4"
+        }
+      ],
+      "model_rank": 63,
+      "normalized_control_hash": "1f13c44781ee4461",
+      "record_sha256": "957aa840d4247613123c03e5ec92363478a0045786329f0c3e86682ba666269f",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 614,
+      "score": -2.363426296,
+      "selection_rank": 12,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.113759159457369,
+          "y": 3.0156569939868367
+        },
+        "pedestrian_delay_s": 0.13592172675151448,
+        "pedestrian_speed_mps": 0.8411127996222755,
+        "scenario_seed": 982,
+        "spawn_time_s": 1.702685090688243,
+        "start": {
+          "theta": 0.0,
+          "x": 2.8387742616641507,
+          "y": 3.062252270541083
+        }
+      },
+      "candidate_manifest_id": "pool_30",
+      "candidate_manifest_sha256": "ba81f2bb0cbe9d5a27d4809988a5ca54fad83b3a1564cb01691d0de62559164e",
+      "candidate_pool_index": 30,
+      "execution_seeds": [
+        8100150,
+        8100151,
+        8100152,
+        8100153,
+        8100154
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100150,
+          "row_id": "random_rank_3_seed_0"
+        },
+        {
+          "execution_seed": 8100151,
+          "row_id": "random_rank_3_seed_1"
+        },
+        {
+          "execution_seed": 8100152,
+          "row_id": "random_rank_3_seed_2"
+        },
+        {
+          "execution_seed": 8100153,
+          "row_id": "random_rank_3_seed_3"
+        },
+        {
+          "execution_seed": 8100154,
+          "row_id": "random_rank_3_seed_4"
+        }
+      ],
+      "model_rank": 40,
+      "normalized_control_hash": "e11855aa8299a46f",
+      "record_sha256": "a3cd277fe23f1606ac6f52e51255fee9503ddd771c6a58f7ca3df86f6a0a75f2",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 982,
+      "score": -1.754359333,
+      "selection_rank": 3,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.780574628258876,
+          "y": 2.4924306955772497
+        },
+        "pedestrian_delay_s": 0.838449830671745,
+        "pedestrian_speed_mps": 1.1716289061992617,
+        "scenario_seed": 697,
+        "spawn_time_s": 1.1890383070668824,
+        "start": {
+          "theta": 0.0,
+          "x": 1.4704077900018624,
+          "y": 2.2397732278942484
+        }
+      },
+      "candidate_manifest_id": "pool_31",
+      "candidate_manifest_sha256": "666f2a73e1601af04924b91e4777965ade3b05ef23370ac3921821db63a7bb9d",
+      "candidate_pool_index": 31,
+      "execution_seeds": [
+        8100155,
+        8100156,
+        8100157,
+        8100158,
+        8100159
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100155,
+          "row_id": "pool_31_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100156,
+          "row_id": "pool_31_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100157,
+          "row_id": "pool_31_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100158,
+          "row_id": "pool_31_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100159,
+          "row_id": "pool_31_unselected_seed_4"
+        }
+      ],
+      "model_rank": 39,
+      "normalized_control_hash": "b4e55a1459eb8ecf",
+      "record_sha256": "a26b006e00e433a205204282b7b353e7df1d7b0280d5325024ac0894d594d553",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 697,
+      "score": -1.7429188630000003,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.521531391207265,
+          "y": 3.3394519495396584
+        },
+        "pedestrian_delay_s": 0.2617565642549129,
+        "pedestrian_speed_mps": 0.9593687075188123,
+        "scenario_seed": 760,
+        "spawn_time_s": 0.6283677255911522,
+        "start": {
+          "theta": 0.0,
+          "x": 2.130453847688179,
+          "y": 2.6327396919534545
+        }
+      },
+      "candidate_manifest_id": "pool_32",
+      "candidate_manifest_sha256": "d945fedd492976918c765867eca65bae56fa74ae2d159f32ab928889614e5a78",
+      "candidate_pool_index": 32,
+      "execution_seeds": [
+        8100160,
+        8100161,
+        8100162,
+        8100163,
+        8100164
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100160,
+          "row_id": "pool_32_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100161,
+          "row_id": "pool_32_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100162,
+          "row_id": "pool_32_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100163,
+          "row_id": "pool_32_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100164,
+          "row_id": "pool_32_unselected_seed_4"
+        }
+      ],
+      "model_rank": 20,
+      "normalized_control_hash": "02f31d5cd7aec3d9",
+      "record_sha256": "ef3827d41696934dd85c8983553dd901cab4f4989c1392d44538b95f93940eec",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 760,
+      "score": -1.512324906,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.503728984828804,
+          "y": 2.1450862289863144
+        },
+        "pedestrian_delay_s": 1.9921928957101889,
+        "pedestrian_speed_mps": 1.3990726645126652,
+        "scenario_seed": 175,
+        "spawn_time_s": 0.9165710452371723,
+        "start": {
+          "theta": 0.0,
+          "x": 1.5999941595975244,
+          "y": 2.632354392543708
+        }
+      },
+      "candidate_manifest_id": "pool_33",
+      "candidate_manifest_sha256": "d3a2ff350f889f6a250c8c162d7ac5f833c07d90fa79f02220a4e7828eac4767",
+      "candidate_pool_index": 33,
+      "execution_seeds": [
+        8100165,
+        8100166,
+        8100167,
+        8100168,
+        8100169
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100165,
+          "row_id": "pool_33_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100166,
+          "row_id": "pool_33_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100167,
+          "row_id": "pool_33_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100168,
+          "row_id": "pool_33_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100169,
+          "row_id": "pool_33_unselected_seed_4"
+        }
+      ],
+      "model_rank": 34,
+      "normalized_control_hash": "e603de8af3cf9959",
+      "record_sha256": "5f62a8bd70f89b2f240ba09ee76a0ed5c99fb0cb9583f7af5ee46c46b414ad54",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 175,
+      "score": -1.6879002470000002,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.264913140732935,
+          "y": 2.69801766992903
+        },
+        "pedestrian_delay_s": 0.5699747824333135,
+        "pedestrian_speed_mps": 0.9465706499048788,
+        "scenario_seed": 548,
+        "spawn_time_s": 0.13758262812003852,
+        "start": {
+          "theta": 0.0,
+          "x": 2.075268808203255,
+          "y": 3.0117693880975307
+        }
+      },
+      "candidate_manifest_id": "pool_34",
+      "candidate_manifest_sha256": "b57472f11962edf77fea84d1626c617afcc8d2bcfdf8f259a700edc46d4ebc19",
+      "candidate_pool_index": 34,
+      "execution_seeds": [
+        8100170,
+        8100171,
+        8100172,
+        8100173,
+        8100174
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100170,
+          "row_id": "proposal_rank_7_seed_0"
+        },
+        {
+          "execution_seed": 8100171,
+          "row_id": "proposal_rank_7_seed_1"
+        },
+        {
+          "execution_seed": 8100172,
+          "row_id": "proposal_rank_7_seed_2"
+        },
+        {
+          "execution_seed": 8100173,
+          "row_id": "proposal_rank_7_seed_3"
+        },
+        {
+          "execution_seed": 8100174,
+          "row_id": "proposal_rank_7_seed_4"
+        }
+      ],
+      "model_rank": 6,
+      "normalized_control_hash": "c00e287c832e3806",
+      "record_sha256": "dc0a275107e3452af1855ceaaca28ed32831255bfc6895fd26b067b53dded5dd",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 548,
+      "score": -1.1716387760000002,
+      "selection_rank": 7,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.223355531451901,
+          "y": 3.9744661272630086
+        },
+        "pedestrian_delay_s": 1.6342082702309233,
+        "pedestrian_speed_mps": 0.8046938642912949,
+        "scenario_seed": 406,
+        "spawn_time_s": 1.3079526354214652,
+        "start": {
+          "theta": 0.0,
+          "x": 2.667489909279614,
+          "y": 3.4070798501747417
+        }
+      },
+      "candidate_manifest_id": "pool_35",
+      "candidate_manifest_sha256": "e7e37e83b2f84d2c64cf67371e91e19b86ef6bf662b981b0a6fc502633fb97cd",
+      "candidate_pool_index": 35,
+      "execution_seeds": [
+        8100175,
+        8100176,
+        8100177,
+        8100178,
+        8100179
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100175,
+          "row_id": "pool_35_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100176,
+          "row_id": "pool_35_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100177,
+          "row_id": "pool_35_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100178,
+          "row_id": "pool_35_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100179,
+          "row_id": "pool_35_unselected_seed_4"
+        }
+      ],
+      "model_rank": 55,
+      "normalized_control_hash": "a44d5bf8e2687a99",
+      "record_sha256": "b6c09e199e8c604282b78c61711528f094e5a89e9637d0c84ce3e9d921a16615",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 406,
+      "score": -1.972560435,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.756253929947185,
+          "y": 2.5289318429742553
+        },
+        "pedestrian_delay_s": 0.3108958195499809,
+        "pedestrian_speed_mps": 1.2454500103885993,
+        "scenario_seed": 388,
+        "spawn_time_s": 1.7794254140114183,
+        "start": {
+          "theta": 0.0,
+          "x": 2.863512078872155,
+          "y": 2.207173003836423
+        }
+      },
+      "candidate_manifest_id": "pool_36",
+      "candidate_manifest_sha256": "4d77f3a399840b851e3fffeb0aab3c6349a3576857c59ae689c33052cfe4cc78",
+      "candidate_pool_index": 36,
+      "execution_seeds": [
+        8100180,
+        8100181,
+        8100182,
+        8100183,
+        8100184
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100180,
+          "row_id": "pool_36_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100181,
+          "row_id": "pool_36_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100182,
+          "row_id": "pool_36_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100183,
+          "row_id": "pool_36_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100184,
+          "row_id": "pool_36_unselected_seed_4"
+        }
+      ],
+      "model_rank": 22,
+      "normalized_control_hash": "d6f0b5228772b5c2",
+      "record_sha256": "152a60a93eb8bbfc344f3fa9cdd01c597b8ecf5e426016ae2b91eee064cdb41b",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 388,
+      "score": -1.566884165,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.407194624654906,
+          "y": 3.2684759177701594
+        },
+        "pedestrian_delay_s": 1.8106729821586465,
+        "pedestrian_speed_mps": 1.093119111289626,
+        "scenario_seed": 966,
+        "spawn_time_s": 0.5279678032608188,
+        "start": {
+          "theta": 0.0,
+          "x": 2.209659654060448,
+          "y": 3.435224374277596
+        }
+      },
+      "candidate_manifest_id": "pool_37",
+      "candidate_manifest_sha256": "686fe5012124fe3445469664867de07c1ca71c9f5a6770942ab981a1e6d8b09e",
+      "candidate_pool_index": 37,
+      "execution_seeds": [
+        8100185,
+        8100186,
+        8100187,
+        8100188,
+        8100189
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100185,
+          "row_id": "pool_37_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100186,
+          "row_id": "pool_37_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100187,
+          "row_id": "pool_37_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100188,
+          "row_id": "pool_37_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100189,
+          "row_id": "pool_37_unselected_seed_4"
+        }
+      ],
+      "model_rank": 13,
+      "normalized_control_hash": "c2163929d05c28d4",
+      "record_sha256": "a1dc9e416c619796ee0d81a5078cfddc42087405c2f96d94dad39d9acdc456de",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 966,
+      "score": -1.369602295,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.658696178744439,
+          "y": 2.0881735235981003
+        },
+        "pedestrian_delay_s": 1.9595959076576719,
+        "pedestrian_speed_mps": 0.8784917964210214,
+        "scenario_seed": 265,
+        "spawn_time_s": 0.6671130772101763,
+        "start": {
+          "theta": 0.0,
+          "x": 1.1015977873250613,
+          "y": 3.2685688946183884
+        }
+      },
+      "candidate_manifest_id": "pool_38",
+      "candidate_manifest_sha256": "cb601cc3885cc389fca42abf54661d5178362b6b5b51b6f5e49a001febc318dd",
+      "candidate_pool_index": 38,
+      "execution_seeds": [
+        8100190,
+        8100191,
+        8100192,
+        8100193,
+        8100194
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100190,
+          "row_id": "pool_38_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100191,
+          "row_id": "pool_38_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100192,
+          "row_id": "pool_38_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100193,
+          "row_id": "pool_38_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100194,
+          "row_id": "pool_38_unselected_seed_4"
+        }
+      ],
+      "model_rank": 53,
+      "normalized_control_hash": "9be9f3f4da806e71",
+      "record_sha256": "7ab4fca0e6877a14abb621574f2246336b2ddf22a67b83eebf9b0fd07ba63555",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 265,
+      "score": -1.952264251,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.855373837961359,
+          "y": 2.0193393992166797
+        },
+        "pedestrian_delay_s": 1.8078571431197863,
+        "pedestrian_speed_mps": 1.3298638359800856,
+        "scenario_seed": 658,
+        "spawn_time_s": 0.1504877201475341,
+        "start": {
+          "theta": 0.0,
+          "x": 2.482461816695862,
+          "y": 3.1033608422527825
+        }
+      },
+      "candidate_manifest_id": "pool_39",
+      "candidate_manifest_sha256": "1b53c8b7a27f5f3630aac96be33d82675370f0b84cfaa7a2e343ee75554e7a80",
+      "candidate_pool_index": 39,
+      "execution_seeds": [
+        8100195,
+        8100196,
+        8100197,
+        8100198,
+        8100199
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100195,
+          "row_id": "proposal_rank_1_seed_0"
+        },
+        {
+          "execution_seed": 8100196,
+          "row_id": "proposal_rank_1_seed_1"
+        },
+        {
+          "execution_seed": 8100197,
+          "row_id": "proposal_rank_1_seed_2"
+        },
+        {
+          "execution_seed": 8100198,
+          "row_id": "proposal_rank_1_seed_3"
+        },
+        {
+          "execution_seed": 8100199,
+          "row_id": "proposal_rank_1_seed_4"
+        }
+      ],
+      "model_rank": 0,
+      "normalized_control_hash": "3f86a025aae90dbb",
+      "record_sha256": "e291a1b8e2a28dea8b2fdce813e74f1626d6e5022d9a38ef4d9176ed4d45f268",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 658,
+      "score": -0.6467850100000001,
+      "selection_rank": 1,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.105050193489996,
+          "y": 2.8595734257615435
+        },
+        "pedestrian_delay_s": 1.8661760210413083,
+        "pedestrian_speed_mps": 1.0187909091963536,
+        "scenario_seed": 981,
+        "spawn_time_s": 0.08365771633771568,
+        "start": {
+          "theta": 0.0,
+          "x": 1.0720562761216612,
+          "y": 2.7384319690243837
+        }
+      },
+      "candidate_manifest_id": "pool_40",
+      "candidate_manifest_sha256": "355b6f1940c7c28b65a6440be12d565abd190ff23cde186fec442be92679f656",
+      "candidate_pool_index": 40,
+      "execution_seeds": [
+        8100200,
+        8100201,
+        8100202,
+        8100203,
+        8100204
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100200,
+          "row_id": "pool_40_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100201,
+          "row_id": "pool_40_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100202,
+          "row_id": "pool_40_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100203,
+          "row_id": "pool_40_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100204,
+          "row_id": "pool_40_unselected_seed_4"
+        }
+      ],
+      "model_rank": 28,
+      "normalized_control_hash": "5cc110e6f7380783",
+      "record_sha256": "3059036e830f5b1f0f5885557164a7d6e3506806273e45cd2a5b46535841fe54",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 981,
+      "score": -1.620026484,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.364133376621153,
+          "y": 3.3338668212710862
+        },
+        "pedestrian_delay_s": 1.7494254470821824,
+        "pedestrian_speed_mps": 1.1359301114863218,
+        "scenario_seed": 735,
+        "spawn_time_s": 0.7073572692292367,
+        "start": {
+          "theta": 0.0,
+          "x": 1.0797897562224363,
+          "y": 2.715618464500852
+        }
+      },
+      "candidate_manifest_id": "pool_41",
+      "candidate_manifest_sha256": "b2b4a1be955b7b95164db875c7879f77518a31f770880a565de7847a65a91b4e",
+      "candidate_pool_index": 41,
+      "execution_seeds": [
+        8100205,
+        8100206,
+        8100207,
+        8100208,
+        8100209
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100205,
+          "row_id": "pool_41_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100206,
+          "row_id": "pool_41_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100207,
+          "row_id": "pool_41_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100208,
+          "row_id": "pool_41_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100209,
+          "row_id": "pool_41_unselected_seed_4"
+        }
+      ],
+      "model_rank": 27,
+      "normalized_control_hash": "b968dad54379c785",
+      "record_sha256": "5fd431eb336b0a7d0fa9c4f7e0dbd26401231ce3859a258fd7ef8c4e12f3ee0a",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 735,
+      "score": -1.610146326,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.473474664458717,
+          "y": 2.325003534200877
+        },
+        "pedestrian_delay_s": 0.8245888207075946,
+        "pedestrian_speed_mps": 0.9062314221922287,
+        "scenario_seed": 283,
+        "spawn_time_s": 1.5997740598137933,
+        "start": {
+          "theta": 0.0,
+          "x": 2.4989552222870786,
+          "y": 3.851527645139113
+        }
+      },
+      "candidate_manifest_id": "pool_42",
+      "candidate_manifest_sha256": "6d533cc7952d5b7b83cdff1c492af766e3f9c22346f89e81bc5cc3dbac235111",
+      "candidate_pool_index": 42,
+      "execution_seeds": [
+        8100210,
+        8100211,
+        8100212,
+        8100213,
+        8100214
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100210,
+          "row_id": "pool_42_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100211,
+          "row_id": "pool_42_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100212,
+          "row_id": "pool_42_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100213,
+          "row_id": "pool_42_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100214,
+          "row_id": "pool_42_unselected_seed_4"
+        }
+      ],
+      "model_rank": 17,
+      "normalized_control_hash": "0b9bcd47945259da",
+      "record_sha256": "17c32e3f91c0591714fe51c40ba22726c6b978224a682375a1b69c732f4c68b2",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 283,
+      "score": -1.4583046840000002,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.86163177209665,
+          "y": 3.604470277874278
+        },
+        "pedestrian_delay_s": 0.5336114191889441,
+        "pedestrian_speed_mps": 1.2864495899446333,
+        "scenario_seed": 906,
+        "spawn_time_s": 1.7281280567505588,
+        "start": {
+          "theta": 0.0,
+          "x": 2.473128943510164,
+          "y": 2.6643709358928573
+        }
+      },
+      "candidate_manifest_id": "pool_43",
+      "candidate_manifest_sha256": "22eebdda129c66fe0a448a37f0a7f507fa81ed5193ea6810ca703372c3a25a62",
+      "candidate_pool_index": 43,
+      "execution_seeds": [
+        8100215,
+        8100216,
+        8100217,
+        8100218,
+        8100219
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100215,
+          "row_id": "pool_43_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100216,
+          "row_id": "pool_43_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100217,
+          "row_id": "pool_43_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100218,
+          "row_id": "pool_43_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100219,
+          "row_id": "pool_43_unselected_seed_4"
+        }
+      ],
+      "model_rank": 33,
+      "normalized_control_hash": "ea7961358550a3e8",
+      "record_sha256": "37044ca179c009c94856d3d6166b3176d6fea264cdd029a70911e718a427e5d9",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 906,
+      "score": -1.6792697740000002,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.077449215331573,
+          "y": 2.9413800421719807
+        },
+        "pedestrian_delay_s": 0.6993168488918373,
+        "pedestrian_speed_mps": 1.351071140737697,
+        "scenario_seed": 940,
+        "spawn_time_s": 0.39914566005150376,
+        "start": {
+          "theta": 0.0,
+          "x": 2.402556376279825,
+          "y": 2.7650834451938686
+        }
+      },
+      "candidate_manifest_id": "pool_44",
+      "candidate_manifest_sha256": "398dd81e1711b55bde9556680c8a04f2a649fd0cc79fb656631ac395398153f2",
+      "candidate_pool_index": 44,
+      "execution_seeds": [
+        8100220,
+        8100221,
+        8100222,
+        8100223,
+        8100224
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100220,
+          "row_id": "proposal_rank_2_seed_0"
+        },
+        {
+          "execution_seed": 8100221,
+          "row_id": "proposal_rank_2_seed_1"
+        },
+        {
+          "execution_seed": 8100222,
+          "row_id": "proposal_rank_2_seed_2"
+        },
+        {
+          "execution_seed": 8100223,
+          "row_id": "proposal_rank_2_seed_3"
+        },
+        {
+          "execution_seed": 8100224,
+          "row_id": "proposal_rank_2_seed_4"
+        }
+      ],
+      "model_rank": 1,
+      "normalized_control_hash": "74ab702652a0c443",
+      "record_sha256": "836d42db9d0964489b90125a461ce05b7f12c61e5efb5a9266326990b90d7300",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 940,
+      "score": -0.8226561139999999,
+      "selection_rank": 2,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.047328869402903,
+          "y": 2.3862595766554175
+        },
+        "pedestrian_delay_s": 1.9337782080967223,
+        "pedestrian_speed_mps": 1.3186117652181717,
+        "scenario_seed": 385,
+        "spawn_time_s": 0.656523902395413,
+        "start": {
+          "theta": 0.0,
+          "x": 2.590690998305724,
+          "y": 2.4551909748155407
+        }
+      },
+      "candidate_manifest_id": "pool_45",
+      "candidate_manifest_sha256": "1c7e9bec134e523856062eb8f4d7370c0465cbf9a82d5f1e77a3889b2fdb2472",
+      "candidate_pool_index": 45,
+      "execution_seeds": [
+        8100225,
+        8100226,
+        8100227,
+        8100228,
+        8100229
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100225,
+          "row_id": "proposal_rank_9_seed_0"
+        },
+        {
+          "execution_seed": 8100226,
+          "row_id": "proposal_rank_9_seed_1"
+        },
+        {
+          "execution_seed": 8100227,
+          "row_id": "proposal_rank_9_seed_2"
+        },
+        {
+          "execution_seed": 8100228,
+          "row_id": "proposal_rank_9_seed_3"
+        },
+        {
+          "execution_seed": 8100229,
+          "row_id": "proposal_rank_9_seed_4"
+        }
+      ],
+      "model_rank": 8,
+      "normalized_control_hash": "696112dbebbbf2c0",
+      "record_sha256": "19d554461fcdfb4b667fd0feb9947c02e880b37143f2c23c308c846bab5f06ee",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 385,
+      "score": -1.272282169,
+      "selection_rank": 9,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.359036236720527,
+          "y": 3.6873223265441615
+        },
+        "pedestrian_delay_s": 1.7540768231511206,
+        "pedestrian_speed_mps": 0.8165603210717816,
+        "scenario_seed": 367,
+        "spawn_time_s": 0.6622997364288141,
+        "start": {
+          "theta": 0.0,
+          "x": 1.7022922581655044,
+          "y": 3.018811351056075
+        }
+      },
+      "candidate_manifest_id": "pool_46",
+      "candidate_manifest_sha256": "7cbff822f20f0367dd7e30e76b722ee9691528d3a1ca25844b1fbf04d254f472",
+      "candidate_pool_index": 46,
+      "execution_seeds": [
+        8100230,
+        8100231,
+        8100232,
+        8100233,
+        8100234
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100230,
+          "row_id": "pool_46_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100231,
+          "row_id": "pool_46_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100232,
+          "row_id": "pool_46_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100233,
+          "row_id": "pool_46_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100234,
+          "row_id": "pool_46_unselected_seed_4"
+        }
+      ],
+      "model_rank": 58,
+      "normalized_control_hash": "b8a231587c445f44",
+      "record_sha256": "ae38fa032966034120803c8c56ed3abc3148448e5ddebf239bead6c939a19ade",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 367,
+      "score": -2.1371963700000003,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.530932725045937,
+          "y": 2.2168050944294224
+        },
+        "pedestrian_delay_s": 0.6273546283899825,
+        "pedestrian_speed_mps": 1.2371270363916225,
+        "scenario_seed": 720,
+        "spawn_time_s": 0.8691275171292887,
+        "start": {
+          "theta": 0.0,
+          "x": 1.3571356323449273,
+          "y": 3.9250686315231107
+        }
+      },
+      "candidate_manifest_id": "pool_47",
+      "candidate_manifest_sha256": "da5384b5c9e6e6b09d643fd9dabbc4695c9addbdb3b04054bced64b118a6b702",
+      "candidate_pool_index": 47,
+      "execution_seeds": [
+        8100235,
+        8100236,
+        8100237,
+        8100238,
+        8100239
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100235,
+          "row_id": "random_rank_6_seed_0"
+        },
+        {
+          "execution_seed": 8100236,
+          "row_id": "random_rank_6_seed_1"
+        },
+        {
+          "execution_seed": 8100237,
+          "row_id": "random_rank_6_seed_2"
+        },
+        {
+          "execution_seed": 8100238,
+          "row_id": "random_rank_6_seed_3"
+        },
+        {
+          "execution_seed": 8100239,
+          "row_id": "random_rank_6_seed_4"
+        }
+      ],
+      "model_rank": 45,
+      "normalized_control_hash": "5a081c452448f18e",
+      "record_sha256": "de5374d864eee1ec03f611057ac411657d6f0cceb1313d6092ba64b44d98a281",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 720,
+      "score": -1.848487515,
+      "selection_rank": 6,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.7990094658224,
+          "y": 2.380157549004592
+        },
+        "pedestrian_delay_s": 1.0398406971331708,
+        "pedestrian_speed_mps": 1.0616345092729833,
+        "scenario_seed": 925,
+        "spawn_time_s": 0.08877306742646218,
+        "start": {
+          "theta": 0.0,
+          "x": 2.96847169863318,
+          "y": 2.231291568058661
+        }
+      },
+      "candidate_manifest_id": "pool_48",
+      "candidate_manifest_sha256": "dad402344a4e9b30568f671a67f0ebf0c373ddba1c0311ccb812ff95af4a0a93",
+      "candidate_pool_index": 48,
+      "execution_seeds": [
+        8100240,
+        8100241,
+        8100242,
+        8100243,
+        8100244
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100240,
+          "row_id": "proposal_rank_12_seed_0"
+        },
+        {
+          "execution_seed": 8100241,
+          "row_id": "proposal_rank_12_seed_1"
+        },
+        {
+          "execution_seed": 8100242,
+          "row_id": "proposal_rank_12_seed_2"
+        },
+        {
+          "execution_seed": 8100243,
+          "row_id": "proposal_rank_12_seed_3"
+        },
+        {
+          "execution_seed": 8100244,
+          "row_id": "proposal_rank_12_seed_4"
+        }
+      ],
+      "model_rank": 11,
+      "normalized_control_hash": "d6a63350eee9d841",
+      "record_sha256": "19104648390432d5ffc678af0cf91030f963784df5c38a6408e994084f86e32e",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 925,
+      "score": -1.336983886,
+      "selection_rank": 12,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.483900155678953,
+          "y": 3.341257008865999
+        },
+        "pedestrian_delay_s": 1.3284753698225447,
+        "pedestrian_speed_mps": 0.8419842866757862,
+        "scenario_seed": 438,
+        "spawn_time_s": 0.7284429435625284,
+        "start": {
+          "theta": 0.0,
+          "x": 2.076903994185584,
+          "y": 3.438859998289691
+        }
+      },
+      "candidate_manifest_id": "pool_49",
+      "candidate_manifest_sha256": "00f4d0767aeaa4deb64f949b7327bc6a3df54899bc3aeb7a1805eb05d0d83df1",
+      "candidate_pool_index": 49,
+      "execution_seeds": [
+        8100245,
+        8100246,
+        8100247,
+        8100248,
+        8100249
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100245,
+          "row_id": "random_rank_8_seed_0"
+        },
+        {
+          "execution_seed": 8100246,
+          "row_id": "random_rank_8_seed_1"
+        },
+        {
+          "execution_seed": 8100247,
+          "row_id": "random_rank_8_seed_2"
+        },
+        {
+          "execution_seed": 8100248,
+          "row_id": "random_rank_8_seed_3"
+        },
+        {
+          "execution_seed": 8100249,
+          "row_id": "random_rank_8_seed_4"
+        }
+      ],
+      "model_rank": 42,
+      "normalized_control_hash": "bf13f86688a97683",
+      "record_sha256": "1c28f4d1d83e058e3f3884f4635bc0f57fd1198baba93da5fcbf53d1c2a7f13b",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 438,
+      "score": -1.767452863,
+      "selection_rank": 8,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.249250631328735,
+          "y": 3.8000936701941828
+        },
+        "pedestrian_delay_s": 0.6523658097147997,
+        "pedestrian_speed_mps": 1.2001357424634378,
+        "scenario_seed": 813,
+        "spawn_time_s": 1.0142450080705383,
+        "start": {
+          "theta": 0.0,
+          "x": 2.2463108198928183,
+          "y": 3.3267749525310886
+        }
+      },
+      "candidate_manifest_id": "pool_50",
+      "candidate_manifest_sha256": "e03bffc1ab1c56e9fbc0849881e4c121569e38a1cebeadee3883a239e6321ff8",
+      "candidate_pool_index": 50,
+      "execution_seeds": [
+        8100250,
+        8100251,
+        8100252,
+        8100253,
+        8100254
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100250,
+          "row_id": "pool_50_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100251,
+          "row_id": "pool_50_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100252,
+          "row_id": "pool_50_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100253,
+          "row_id": "pool_50_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100254,
+          "row_id": "pool_50_unselected_seed_4"
+        }
+      ],
+      "model_rank": 41,
+      "normalized_control_hash": "d9ea9f7ddfdf49d9",
+      "record_sha256": "03b8461a82b504cf82bd9853b1dc8d7078cf3f6492fd91c36ba34bed0d808e3e",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 813,
+      "score": -1.767085323,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.840892667545816,
+          "y": 3.880727341460366
+        },
+        "pedestrian_delay_s": 1.231029831902761,
+        "pedestrian_speed_mps": 1.3416833274395494,
+        "scenario_seed": 408,
+        "spawn_time_s": 1.3546358905454658,
+        "start": {
+          "theta": 0.0,
+          "x": 1.591310405051894,
+          "y": 2.2545755981183064
+        }
+      },
+      "candidate_manifest_id": "pool_51",
+      "candidate_manifest_sha256": "98b0e22f5a31683ab7545d9d69f36ab9461d389acfbce8f9550ae703bedc1a5e",
+      "candidate_pool_index": 51,
+      "execution_seeds": [
+        8100255,
+        8100256,
+        8100257,
+        8100258,
+        8100259
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100255,
+          "row_id": "pool_51_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100256,
+          "row_id": "pool_51_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100257,
+          "row_id": "pool_51_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100258,
+          "row_id": "pool_51_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100259,
+          "row_id": "pool_51_unselected_seed_4"
+        }
+      ],
+      "model_rank": 60,
+      "normalized_control_hash": "869906b998d2b81e",
+      "record_sha256": "1244de8f9c6e530ffe0810324817fdc42100fe90f0b6d68a244cef4be395995d",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 408,
+      "score": -2.213031182,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.607749898536707,
+          "y": 2.4203653697652836
+        },
+        "pedestrian_delay_s": 0.6444984594730763,
+        "pedestrian_speed_mps": 1.1639969422878576,
+        "scenario_seed": 552,
+        "spawn_time_s": 1.5715176549551602,
+        "start": {
+          "theta": 0.0,
+          "x": 1.8121503375163257,
+          "y": 3.667450338608115
+        }
+      },
+      "candidate_manifest_id": "pool_52",
+      "candidate_manifest_sha256": "1ccef95d656c433eb0234001dcb58109e268ccf06ba4eacd6b598304660ec6ef",
+      "candidate_pool_index": 52,
+      "execution_seeds": [
+        8100260,
+        8100261,
+        8100262,
+        8100263,
+        8100264
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100260,
+          "row_id": "pool_52_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100261,
+          "row_id": "pool_52_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100262,
+          "row_id": "pool_52_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100263,
+          "row_id": "pool_52_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100264,
+          "row_id": "pool_52_unselected_seed_4"
+        }
+      ],
+      "model_rank": 29,
+      "normalized_control_hash": "71eb9fb39de79292",
+      "record_sha256": "23b0b5454eb42fae11f692b81a0deb93ca71b35853f0db321c9e7b578a740453",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 552,
+      "score": -1.62559141,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.9463723718186525,
+          "y": 3.8023616516565086
+        },
+        "pedestrian_delay_s": 0.1695910734502435,
+        "pedestrian_speed_mps": 0.9018148377188329,
+        "scenario_seed": 627,
+        "spawn_time_s": 1.5920495202535605,
+        "start": {
+          "theta": 0.0,
+          "x": 1.8843195986096148,
+          "y": 2.4274028019782006
+        }
+      },
+      "candidate_manifest_id": "pool_53",
+      "candidate_manifest_sha256": "c4cfcc521843fcc884b614594ed8b1868bfe0e4b71b16c2374c8f7f85c51da21",
+      "candidate_pool_index": 53,
+      "execution_seeds": [
+        8100265,
+        8100266,
+        8100267,
+        8100268,
+        8100269
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100265,
+          "row_id": "pool_53_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100266,
+          "row_id": "pool_53_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100267,
+          "row_id": "pool_53_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100268,
+          "row_id": "pool_53_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100269,
+          "row_id": "pool_53_unselected_seed_4"
+        }
+      ],
+      "model_rank": 61,
+      "normalized_control_hash": "f99a7ea6a525b076",
+      "record_sha256": "b9a440eec5680092af3d7873031062a582e2ce66d97e83e059da77eba4244e37",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 627,
+      "score": -2.22226578,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.186774400151125,
+          "y": 3.9039993249049507
+        },
+        "pedestrian_delay_s": 1.6131257891525317,
+        "pedestrian_speed_mps": 0.9862516785769492,
+        "scenario_seed": 250,
+        "spawn_time_s": 0.4697371970533679,
+        "start": {
+          "theta": 0.0,
+          "x": 2.3277076726099972,
+          "y": 3.238521610724751
+        }
+      },
+      "candidate_manifest_id": "pool_54",
+      "candidate_manifest_sha256": "4a14c70a442c423989b4f05ec9be0ff618d64da7cf281213b15574beda89cd35",
+      "candidate_pool_index": 54,
+      "execution_seeds": [
+        8100270,
+        8100271,
+        8100272,
+        8100273,
+        8100274
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100270,
+          "row_id": "pool_54_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100271,
+          "row_id": "pool_54_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100272,
+          "row_id": "pool_54_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100273,
+          "row_id": "pool_54_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100274,
+          "row_id": "pool_54_unselected_seed_4"
+        }
+      ],
+      "model_rank": 54,
+      "normalized_control_hash": "1f0509fc0b3dd9d4",
+      "record_sha256": "5f5be3ef27c32f1e83ad5e395b0f1e36f94619b6c5f8c4e20a0ddd7786732d00",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 250,
+      "score": -1.952864754,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.95027268843761,
+          "y": 3.699475389249464
+        },
+        "pedestrian_delay_s": 1.2595307614754274,
+        "pedestrian_speed_mps": 1.0486646065986316,
+        "scenario_seed": 299,
+        "spawn_time_s": 0.1456564583691382,
+        "start": {
+          "theta": 0.0,
+          "x": 1.0488507754536527,
+          "y": 2.4896850881567003
+        }
+      },
+      "candidate_manifest_id": "pool_55",
+      "candidate_manifest_sha256": "c6f655999d75291a2e29f27913b89b2c031ac733ff095f9beaf325415a693e82",
+      "candidate_pool_index": 55,
+      "execution_seeds": [
+        8100275,
+        8100276,
+        8100277,
+        8100278,
+        8100279
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100275,
+          "row_id": "pool_55_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100276,
+          "row_id": "pool_55_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100277,
+          "row_id": "pool_55_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100278,
+          "row_id": "pool_55_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100279,
+          "row_id": "pool_55_unselected_seed_4"
+        }
+      ],
+      "model_rank": 59,
+      "normalized_control_hash": "7ca0d70169c1e747",
+      "record_sha256": "8eb7df8a9891ac30ec203bb686a790c66abbb42b6e5310548877fd5b0554ed38",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 299,
+      "score": -2.169318458,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.799305725753076,
+          "y": 2.2951426901825966
+        },
+        "pedestrian_delay_s": 1.7208811308450427,
+        "pedestrian_speed_mps": 1.33559589572682,
+        "scenario_seed": 209,
+        "spawn_time_s": 1.375244826161039,
+        "start": {
+          "theta": 0.0,
+          "x": 2.4366918309979773,
+          "y": 2.7679569347855026
+        }
+      },
+      "candidate_manifest_id": "pool_56",
+      "candidate_manifest_sha256": "2f8bb7cb0cae8f430c5a9a646e651493e7b62ac900564fdf5bcc97a11e25e4c9",
+      "candidate_pool_index": 56,
+      "execution_seeds": [
+        8100280,
+        8100281,
+        8100282,
+        8100283,
+        8100284
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100280,
+          "row_id": "proposal_rank_6_seed_0"
+        },
+        {
+          "execution_seed": 8100281,
+          "row_id": "proposal_rank_6_seed_1"
+        },
+        {
+          "execution_seed": 8100282,
+          "row_id": "proposal_rank_6_seed_2"
+        },
+        {
+          "execution_seed": 8100283,
+          "row_id": "proposal_rank_6_seed_3"
+        },
+        {
+          "execution_seed": 8100284,
+          "row_id": "proposal_rank_6_seed_4"
+        }
+      ],
+      "model_rank": 5,
+      "normalized_control_hash": "24c284fe7b64393e",
+      "record_sha256": "ce6227d51b8ab90a33b85303709ba2ea89e97f996859a13cf1a1975805ab134a",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 209,
+      "score": -1.167700275,
+      "selection_rank": 6,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "proposal",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.608219712346287,
+          "y": 3.3918235528164766
+        },
+        "pedestrian_delay_s": 1.8349400289108804,
+        "pedestrian_speed_mps": 1.134443476420037,
+        "scenario_seed": 224,
+        "spawn_time_s": 0.9290997691485043,
+        "start": {
+          "theta": 0.0,
+          "x": 2.55684081353465,
+          "y": 2.437682273624639
+        }
+      },
+      "candidate_manifest_id": "pool_57",
+      "candidate_manifest_sha256": "6a100b1b1df841246c28daf791de799116739ec0e0cc93b220b0bfd64e911849",
+      "candidate_pool_index": 57,
+      "execution_seeds": [
+        8100285,
+        8100286,
+        8100287,
+        8100288,
+        8100289
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100285,
+          "row_id": "proposal_rank_3_seed_0"
+        },
+        {
+          "execution_seed": 8100286,
+          "row_id": "proposal_rank_3_seed_1"
+        },
+        {
+          "execution_seed": 8100287,
+          "row_id": "proposal_rank_3_seed_2"
+        },
+        {
+          "execution_seed": 8100288,
+          "row_id": "proposal_rank_3_seed_3"
+        },
+        {
+          "execution_seed": 8100289,
+          "row_id": "proposal_rank_3_seed_4"
+        }
+      ],
+      "model_rank": 2,
+      "normalized_control_hash": "997d63c68b3c1d92",
+      "record_sha256": "50c63c7795702cd1a5fa2825b98fbe8f2fbdd085867cb8e8d1f8c66ac9a7ec35",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 224,
+      "score": -0.837094258,
+      "selection_rank": 3,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": "random",
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.335155465172706,
+          "y": 3.975784906132896
+        },
+        "pedestrian_delay_s": 1.782851851620874,
+        "pedestrian_speed_mps": 1.3700237650658935,
+        "scenario_seed": 727,
+        "spawn_time_s": 1.1909046369388394,
+        "start": {
+          "theta": 0.0,
+          "x": 1.912923650940345,
+          "y": 3.602833203444529
+        }
+      },
+      "candidate_manifest_id": "pool_58",
+      "candidate_manifest_sha256": "4dae94d75f09c9be2f87a2a5cdc4586c664b0397a11cc06fed6d51091052a12d",
+      "candidate_pool_index": 58,
+      "execution_seeds": [
+        8100290,
+        8100291,
+        8100292,
+        8100293,
+        8100294
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100290,
+          "row_id": "random_rank_11_seed_0"
+        },
+        {
+          "execution_seed": 8100291,
+          "row_id": "random_rank_11_seed_1"
+        },
+        {
+          "execution_seed": 8100292,
+          "row_id": "random_rank_11_seed_2"
+        },
+        {
+          "execution_seed": 8100293,
+          "row_id": "random_rank_11_seed_3"
+        },
+        {
+          "execution_seed": 8100294,
+          "row_id": "random_rank_11_seed_4"
+        }
+      ],
+      "model_rank": 62,
+      "normalized_control_hash": "63e47fb2097d8d36",
+      "record_sha256": "a4c4102637888b147d92d2aa23de617fa7c0e44ba01e318cfe6304e3dcdc700d",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 727,
+      "score": -2.22977875,
+      "selection_rank": 11,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.853481513717311,
+          "y": 3.813709460912227
+        },
+        "pedestrian_delay_s": 1.7229898195665245,
+        "pedestrian_speed_mps": 0.8954947445257996,
+        "scenario_seed": 560,
+        "spawn_time_s": 0.8918272241534009,
+        "start": {
+          "theta": 0.0,
+          "x": 2.630013014663368,
+          "y": 3.784040592682036
+        }
+      },
+      "candidate_manifest_id": "pool_59",
+      "candidate_manifest_sha256": "6ca762b3472854b0dbff2914a9883e4ac238db41074b930037acad8c79726cd0",
+      "candidate_pool_index": 59,
+      "execution_seeds": [
+        8100295,
+        8100296,
+        8100297,
+        8100298,
+        8100299
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100295,
+          "row_id": "pool_59_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100296,
+          "row_id": "pool_59_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100297,
+          "row_id": "pool_59_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100298,
+          "row_id": "pool_59_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100299,
+          "row_id": "pool_59_unselected_seed_4"
+        }
+      ],
+      "model_rank": 47,
+      "normalized_control_hash": "66300b5ab902aa04",
+      "record_sha256": "d80b4c2c2073e9ac699fa0efb15fa89e810b838da2698d0d6a48fa7827138fe1",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 560,
+      "score": -1.891391811,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.275322873552312,
+          "y": 3.531627368594331
+        },
+        "pedestrian_delay_s": 0.5491948938350766,
+        "pedestrian_speed_mps": 1.1760490621890687,
+        "scenario_seed": 179,
+        "spawn_time_s": 1.0425996256559642,
+        "start": {
+          "theta": 0.0,
+          "x": 1.5183830969300387,
+          "y": 2.494479475019319
+        }
+      },
+      "candidate_manifest_id": "pool_60",
+      "candidate_manifest_sha256": "9be3dd2c3247d0d229f6527932dedd6868714aed27934db8d744e0242b79e575",
+      "candidate_pool_index": 60,
+      "execution_seeds": [
+        8100300,
+        8100301,
+        8100302,
+        8100303,
+        8100304
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100300,
+          "row_id": "pool_60_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100301,
+          "row_id": "pool_60_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100302,
+          "row_id": "pool_60_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100303,
+          "row_id": "pool_60_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100304,
+          "row_id": "pool_60_unselected_seed_4"
+        }
+      ],
+      "model_rank": 24,
+      "normalized_control_hash": "afcb54bb2dc0a203",
+      "record_sha256": "4f7fabdf736caecf41107fed976b8e5bb3644f609db2f6719c18461635f18a67",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 179,
+      "score": -1.600201554,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.671695073242628,
+          "y": 3.7860536655806336
+        },
+        "pedestrian_delay_s": 0.7660705848626763,
+        "pedestrian_speed_mps": 0.890498394807852,
+        "scenario_seed": 256,
+        "spawn_time_s": 0.1611553153153369,
+        "start": {
+          "theta": 0.0,
+          "x": 2.427089725222113,
+          "y": 2.4689871560292707
+        }
+      },
+      "candidate_manifest_id": "pool_61",
+      "candidate_manifest_sha256": "7072d06b3af903b09c9a63583328d1a34d4963e033c951e789ee0729a32096ff",
+      "candidate_pool_index": 61,
+      "execution_seeds": [
+        8100305,
+        8100306,
+        8100307,
+        8100308,
+        8100309
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100305,
+          "row_id": "pool_61_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100306,
+          "row_id": "pool_61_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100307,
+          "row_id": "pool_61_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100308,
+          "row_id": "pool_61_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100309,
+          "row_id": "pool_61_unselected_seed_4"
+        }
+      ],
+      "model_rank": 26,
+      "normalized_control_hash": "86a8e54ac5f40f2b",
+      "record_sha256": "4b0c10c04e6ce80b01a686bba0a948834440e6813c5b56e53276b94dcff91298",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 256,
+      "score": -1.6082143260000001,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.815198739333173,
+          "y": 3.0852222810078307
+        },
+        "pedestrian_delay_s": 0.8402870355468512,
+        "pedestrian_speed_mps": 0.9241006337086461,
+        "scenario_seed": 888,
+        "spawn_time_s": 0.8315484682063119,
+        "start": {
+          "theta": 0.0,
+          "x": 2.4128382833891044,
+          "y": 2.128457701427756
+        }
+      },
+      "candidate_manifest_id": "pool_62",
+      "candidate_manifest_sha256": "c261912371e76c13ebaa43b3314eeb74320624ec056fb209cd3701275103d0d1",
+      "candidate_pool_index": 62,
+      "execution_seeds": [
+        8100310,
+        8100311,
+        8100312,
+        8100313,
+        8100314
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100310,
+          "row_id": "pool_62_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100311,
+          "row_id": "pool_62_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100312,
+          "row_id": "pool_62_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100313,
+          "row_id": "pool_62_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100314,
+          "row_id": "pool_62_unselected_seed_4"
+        }
+      ],
+      "model_rank": 31,
+      "normalized_control_hash": "82bdb27e784df40e",
+      "record_sha256": "58087f897edb3b79f8efc2f5c93e0a71f00a24f4de308ae3c6af20e1ab22b94c",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 888,
+      "score": -1.667271969,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    },
+    {
+      "arm": null,
+      "candidate_controls": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.71346406460787,
+          "y": 3.5311891522361387
+        },
+        "pedestrian_delay_s": 0.7035176053436494,
+        "pedestrian_speed_mps": 0.8035376501503959,
+        "scenario_seed": 871,
+        "spawn_time_s": 0.7607620578554233,
+        "start": {
+          "theta": 0.0,
+          "x": 2.1681588284084503,
+          "y": 3.3910459729959364
+        }
+      },
+      "candidate_manifest_id": "pool_63",
+      "candidate_manifest_sha256": "a63fff68c7b30c76429ece75d8745e6c2df18428e5e768b13edbd88120fd53ed",
+      "candidate_pool_index": 63,
+      "execution_seeds": [
+        8100315,
+        8100316,
+        8100317,
+        8100318,
+        8100319
+      ],
+      "expected_outcome_rows": [
+        {
+          "execution_seed": 8100315,
+          "row_id": "pool_63_unselected_seed_0"
+        },
+        {
+          "execution_seed": 8100316,
+          "row_id": "pool_63_unselected_seed_1"
+        },
+        {
+          "execution_seed": 8100317,
+          "row_id": "pool_63_unselected_seed_2"
+        },
+        {
+          "execution_seed": 8100318,
+          "row_id": "pool_63_unselected_seed_3"
+        },
+        {
+          "execution_seed": 8100319,
+          "row_id": "pool_63_unselected_seed_4"
+        }
+      ],
+      "model_rank": 14,
+      "normalized_control_hash": "755ad0a2a87c64f6",
+      "record_sha256": "443d93a0974de2443dd36db9985e04bc336afb456f21d55e1b0fce622034bca0",
+      "scenario_family": "classic_cross_trap_medium",
+      "scenario_seed": 871,
+      "score": -1.414247235,
+      "selection_rank": null,
+      "structural_eligibility": {
+        "eligible": true,
+        "errors": [],
+        "warnings": []
+      },
+      "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+      "target_planner_id": "social_force"
+    }
+  ],
+  "contract_issue": 6103,
+  "duplicate_accounting": {
+    "duplicate_count": 0,
+    "duplicate_normalized_control_hashes": [],
+    "unique_normalized_control_hashes": 64
+  },
+  "parent_issue": 3275,
+  "scenario_family": "classic_cross_trap_medium",
+  "schema_version": "issue_3275_candidate_pool_manifest.v1",
+  "target_planner": {
+    "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+    "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "id": "social_force"
+  },
+  "this_issue": 6104
+}

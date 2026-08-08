@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-07
+updated_at: 2026-08-08
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -28,6 +28,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json
   status: evidence
   freshness: evidence
@@ -68,10 +69,12 @@ entries:
   status: evidence
   freshness: dated
   area: reproducibility
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
   status: evidence
   freshness: dated
   area: reproducibility
+  legacy_dirty_evidence: true
 - path: docs/context/issue_5936_result_job_durability_gate.md
   status: current
   freshness: policy
@@ -3689,6 +3692,10 @@ entries:
   status: evidence
   freshness: evidence
   area: adversarial_search
+- path: docs/context/evidence/issue_3275_same_planner_held_out
+  status: evidence
+  freshness: evidence
+  area: adversarial_search
 - path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/report.md
   status: evidence
   freshness: evidence
@@ -4840,19 +4847,31 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_artifact_manifest.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/figure_render_registry.v1.yaml
+  status: evidence
+  freshness: maintained
+  area: workflow_evidence
+- path: docs/context/evidence/issue_6769_figure_render_registry_audit.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence

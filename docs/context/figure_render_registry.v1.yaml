@@ -1,0 +1,905 @@
+version: 1
+generated_at: '2026-08-08T12:40:49+00:00'
+generator: scripts/dev/build_figure_render_registry.py
+issue: 6769
+claim_boundary: Workflow reproducibility metadata only. No figure, benchmark, or publication claim is
+  produced. recurrence_eligible means only safe, deterministic, local, committed-input recurrence candidacy.
+provenance:
+  source_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+  issue: 6769
+entries:
+- id: docs_context_evidence_issue_5447_ch7_case_capsules_build_command_v1_txt__cmd1_6c792a9b
+  source_class: build_command_txt
+  source_path: docs/context/evidence/issue_5447_ch7_case_capsules/build_command.v1.txt
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/analysis/materialize_issue_5447_capsules.py
+  working_dir: .
+  inputs:
+  - path: scripts/analysis/materialize_issue_5447_capsules.py
+    sha256: f063027fbd5387cecb771ed9c679e3d46feb1621c977b87d9bcf32a336575a20
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_5447_ch7_case_capsules_build_command_v1_txt__cmd2_7b5b13af
+  source_class: build_command_txt
+  source_path: docs/context/evidence/issue_5447_ch7_case_capsules/build_command.v1.txt
+  command_index: 1
+  command:
+  - uv
+  - run
+  - python
+  - scripts/analysis/build_ch7_case_capsules_issue_5447.py
+  - --candidates
+  - docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz
+  - --json
+  - docs/context/evidence/issue_5447_ch7_case_capsules/ch7_case_capsule_manifest.v1.json
+  - --validate
+  working_dir: .
+  inputs:
+  - path: scripts/analysis/build_ch7_case_capsules_issue_5447.py
+    sha256: a09907aa43076b486fbb0ae58f7fc85a2c3736ef2d7c768320612f1db008bea8
+  - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz
+    sha256: 1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64
+  - path: docs/context/evidence/issue_5447_ch7_case_capsules/ch7_case_capsule_manifest.v1.json
+    sha256: 7da8de1640991f97123e4c3789b3c1716cebb8852260dfaa30823ae00dd3d9d0
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd1_0535d6e6
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/run_camera_ready_benchmark.py
+  - --config
+  - configs/benchmarks/issue_1344_paired_nominal_v1_primary.yaml
+  - --mode
+  - preflight
+  - --output-root
+  - output/benchmarks/issue_1344
+  - --campaign-id
+  - issue_1344_nominal_primary_final_preflight
+  working_dir: .
+  inputs:
+  - path: scripts/tools/run_camera_ready_benchmark.py
+    sha256: 9999830b58880248f87062d042a3fb94c5b4aa44a75bbe3f16cabf19c6f65d81
+  - path: configs/benchmarks/issue_1344_paired_nominal_v1_primary.yaml
+    sha256: 059de1ff221de657601495abea008665be0a077d728ec9f96d6a66dca51f2105
+  expected_outputs:
+  - output/benchmarks/issue_1344
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command writes to the untracked output/ root
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd2_02aa81d2
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
+  command_index: 1
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/run_camera_ready_benchmark.py
+  - --config
+  - configs/benchmarks/issue_1344_paired_stress_primary.yaml
+  - --mode
+  - preflight
+  - --output-root
+  - output/benchmarks/issue_1344
+  - --campaign-id
+  - issue_1344_stress_primary_final_preflight
+  working_dir: .
+  inputs:
+  - path: scripts/tools/run_camera_ready_benchmark.py
+    sha256: 9999830b58880248f87062d042a3fb94c5b4aa44a75bbe3f16cabf19c6f65d81
+  - path: configs/benchmarks/issue_1344_paired_stress_primary.yaml
+    sha256: 0666df22d7651ca0c8066c484da76129d292a419b6ebe35ec9a8e3e5707f603a
+  expected_outputs:
+  - output/benchmarks/issue_1344
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command writes to the untracked output/ root
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd3_921930f5
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
+  command_index: 2
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/run_camera_ready_benchmark.py
+  - --config
+  - configs/benchmarks/issue_1344_paired_nominal_v1_primary.yaml
+  - --mode
+  - run
+  - --output-root
+  - output/benchmarks/issue_1344
+  - --campaign-id
+  - issue_1344_nominal_primary_final
+  - --log-level
+  - INFO
+  working_dir: .
+  inputs:
+  - path: scripts/tools/run_camera_ready_benchmark.py
+    sha256: 9999830b58880248f87062d042a3fb94c5b4aa44a75bbe3f16cabf19c6f65d81
+  - path: configs/benchmarks/issue_1344_paired_nominal_v1_primary.yaml
+    sha256: 059de1ff221de657601495abea008665be0a077d728ec9f96d6a66dca51f2105
+  expected_outputs:
+  - output/benchmarks/issue_1344
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command writes to the untracked output/ root
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd4_8a001f3b
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
+  command_index: 3
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/run_camera_ready_benchmark.py
+  - --config
+  - configs/benchmarks/issue_1344_paired_stress_primary.yaml
+  - --mode
+  - run
+  - --output-root
+  - output/benchmarks/issue_1344
+  - --campaign-id
+  - issue_1344_stress_primary_final
+  - --log-level
+  - INFO
+  working_dir: .
+  inputs:
+  - path: scripts/tools/run_camera_ready_benchmark.py
+    sha256: 9999830b58880248f87062d042a3fb94c5b4aa44a75bbe3f16cabf19c6f65d81
+  - path: configs/benchmarks/issue_1344_paired_stress_primary.yaml
+    sha256: 0666df22d7651ca0c8066c484da76129d292a419b6ebe35ec9a8e3e5707f603a
+  expected_outputs:
+  - output/benchmarks/issue_1344
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command writes to the untracked output/ root
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2444_ammv_divergence_2026-06-23_README_md__cmd1_1bd521a8
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/analysis/run_ammv_divergence_classification_issue_2444.py
+  working_dir: .
+  inputs:
+  - path: scripts/analysis/run_ammv_divergence_classification_issue_2444.py
+    sha256: ed570be9c36127386ffb3cec32ac3cb5442e7a613501dfce238499ada47d0af3
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2444_ammv_divergence_2026-06-23_README_md__cmd2_a8eb8623
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
+  command_index: 1
+  command:
+  - python
+  - -m
+  - json.tool
+  - output/issue_2444_ammv_divergence/ammv_divergence_classification.json
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - 'referenced path missing: output/issue_2444_ammv_divergence/ammv_divergence_classification.json'
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2444_ammv_divergence_2026-06-23_README_md__cmd3_e911e4a2
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
+  command_index: 2
+  command:
+  - uv
+  - run
+  - python
+  - -m
+  - pytest
+  - tests/
+  - -k
+  - ammv or divergence or 2444
+  - -q
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2704_progress_gated_topology_successor_README_md__cmd1_9669de18
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2704_progress_gated_topology_successor/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/validation/run_topology_hypothesis_diagnostics.py
+  - --candidate
+  - topology_guided_hybrid_rule_v0_progress_gated_reselection
+  - --stage
+  - full_matrix
+  - --scenario-name
+  - classic_realworld_double_bottleneck_high
+  - --seed
+  - '111'
+  - --horizon
+  - '160'
+  - --max-hypotheses
+  - '3'
+  - --min-hypotheses
+  - '2'
+  - --output-dir
+  - /tmp/robot_sf_issue2704_progress_gated_successor
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment:
+    LOGURU_LEVEL: WARNING
+    TF_CPP_MIN_LOG_LEVEL: '2'
+    PYGAME_HIDE_SUPPORT_PROMPT: '1'
+    DISPLAY: ''
+    MPLBACKEND: Agg
+    SDL_VIDEODRIVER: dummy
+  recurrence_eligible: false
+  exclusion_reason: unsafe_command
+  classification_notes:
+  - command uses shell environment-assignment prefix
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2704_progress_gated_topology_successor_README_md__cmd2_36147cfb
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2704_progress_gated_topology_successor/README.md
+  command_index: 1
+  command:
+  - uv
+  - run
+  - python
+  - scripts/validation/run_topology_hypothesis_diagnostics.py
+  - --candidate
+  - topology_guided_hybrid_rule_v0
+  - --stage
+  - full_matrix
+  - --scenario-name
+  - classic_realworld_double_bottleneck_high
+  - --seed
+  - '111'
+  - --horizon
+  - '160'
+  - --max-hypotheses
+  - '3'
+  - --min-hypotheses
+  - '2'
+  - --output-dir
+  - /tmp/robot_sf_issue2704_baseline_comparator
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment:
+    LOGURU_LEVEL: WARNING
+    TF_CPP_MIN_LOG_LEVEL: '2'
+    PYGAME_HIDE_SUPPORT_PROMPT: '1'
+    DISPLAY: ''
+    MPLBACKEND: Agg
+    SDL_VIDEODRIVER: dummy
+  recurrence_eligible: false
+  exclusion_reason: unsafe_command
+  classification_notes:
+  - command uses shell environment-assignment prefix
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2751_topology_reselection_runtime_README_md__cmd1_99e7ede0
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2751_topology_reselection_runtime/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/validation/run_topology_reselection_cross_slice.py
+  - --manifest
+  - configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml
+  - --output-dir
+  - <ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command references a placeholder path
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2752_topology_reselection_mechanism_README_md__cmd1_99e7ede0
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2752_topology_reselection_mechanism/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/validation/run_topology_reselection_cross_slice.py
+  - --manifest
+  - configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml
+  - --output-dir
+  - <ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command references a placeholder path
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2753_signalized_crossing_metrics_README_md__cmd1_c31b529c
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2753_signalized_crossing_metrics/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/generate_signalized_crossing_metrics_report.py
+  working_dir: .
+  inputs:
+  - path: scripts/tools/generate_signalized_crossing_metrics_report.py
+    sha256: fd3a1467d01b3cd6f2396dffcfad05fdcf3681ef7decde7e83cc3ef7c7a4d02e
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2799_signalized_runtime_README_md__cmd1_05cf0eec
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2799_signalized_runtime/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/run_camera_ready_benchmark.py
+  - --config
+  - configs/benchmarks/signalized_runtime_smoke_issue_2799.yaml
+  - --output-root
+  - output/benchmarks/issue_2799_signalized_runtime
+  - --label
+  - issue_2799_signalized_runtime_red
+  - --skip-publication-bundle
+  working_dir: .
+  inputs:
+  - path: scripts/tools/run_camera_ready_benchmark.py
+    sha256: 9999830b58880248f87062d042a3fb94c5b4aa44a75bbe3f16cabf19c6f65d81
+  - path: configs/benchmarks/signalized_runtime_smoke_issue_2799.yaml
+    sha256: 7477e6d50505e03a7849aa3bc69321121e9ac131ce633345256c9e675b02a25e
+  expected_outputs:
+  - output/benchmarks/issue_2799_signalized_runtime
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command writes to the untracked output/ root
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2837_horizon_timestep_ablation_2026-06-15_README_md__cmd1_7fa1f21a
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/build_horizon_timestep_ablation_report.py
+  - --issue
+  - '2837'
+  - --generated-at-utc
+  - '2026-06-15T00:00:00+00:00'
+  - --output-dir
+  - docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/build_horizon_timestep_ablation_report.py
+    sha256: dc7a8cf81745481febcc306275592dc85ee7692aa807e55688be0e3a4acd0b76
+  expected_outputs:
+  - docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2865_forecast_calibration_report_2026-06-15_README_md__cmd1_ae6ca2f2
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/build_forecast_calibration_from_cv_comparison.py
+  - docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/comparison_report.json
+  - --report-id
+  - issue_2865_forecast_calibration_report_2026-06-15
+  - --generated-at-utc
+  - '2026-06-15T00:00:00+00:00'
+  - --out-json
+  - docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.json
+  - --out-md
+  - docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.md
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/build_forecast_calibration_from_cv_comparison.py
+    sha256: a410b89b86d7f6911f3696f51227643dfd787bee314d4ac01eebfcc7a3e95394
+  - path: docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/comparison_report.json
+    sha256: 759ca129118fa6f6f751129d2988ed4ea4231dc56e57ecc4e448db4babdae128
+  expected_outputs:
+  - docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.json
+  - docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.md
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2868_semantic_metadata_fixtures_2026-06-15_README_md__cmd1_447840f3
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/run_cv_forecast_eval.py
+  - --output-dir
+  - docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15
+  - --compare-all
+  - --issue
+  - '2868'
+  - --generated-at-utc
+  - '2026-06-15T00:00:00+00:00'
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/run_cv_forecast_eval.py
+    sha256: b6c6c25648ca1f2b55df05d689884115ffbf775700a686b48f783876eb98b667
+  expected_outputs:
+  - docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2869_forecast_risk_calibration_filter_2026-06-15_README_md__cmd1_fb074256
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/validation/validate_forecast_risk_calibration_filter.py
+  - --out-dir
+  - docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15
+  working_dir: .
+  inputs:
+  - path: scripts/validation/validate_forecast_risk_calibration_filter.py
+    sha256: 215513eaaffed39fca44f0b4bab8b23b89aedd494d65f110c271638203af59f3
+  expected_outputs:
+  - docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2903_horizon_denominator_health_2026-06-16_README_md__cmd1_13b50431
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/build_horizon_timestep_denominator_report.py
+  - --issue
+  - '2903'
+  - --parent-issue
+  - '2837'
+  - --generated-at-utc
+  - '2026-06-16T00:00:00+00:00'
+  - --output-dir
+  - docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/build_horizon_timestep_denominator_report.py
+    sha256: b74c440721506c41601bcea035d1b48ddbf7f839bc16f17d422da67132ad3f64
+  expected_outputs:
+  - docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_2937_horizon_denominator_health_2026-06-16_README_md__cmd1_28236d14
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/build_horizon_timestep_denominator_report.py
+  - --issue
+  - '2937'
+  - --parent-issue
+  - '2837'
+  - --generated-at-utc
+  - '2026-06-16T00:00:00+00:00'
+  - --output-dir
+  - docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/build_horizon_timestep_denominator_report.py
+    sha256: b74c440721506c41601bcea035d1b48ddbf7f839bc16f17d422da67132ad3f64
+  expected_outputs:
+  - docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29_README_md__cmd1_8d846b56
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/validation/check_simulator_dependence_validity_boundary.py
+  - --expected-axis
+  - integration_timestep__dt_0_05
+  - --expected-axis
+  - social_force_speed_archetypes__mixed_balanced
+  - --expected-axis
+  - observation_noise__pose_heading_low
+  - --expected-axis
+  - clearance_radius__radius_0_30
+  - --out
+  - docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/decision_packet.json
+  working_dir: .
+  inputs:
+  - path: scripts/validation/check_simulator_dependence_validity_boundary.py
+    sha256: 061aaa4db954884b18511ed733640fb53c431a03723be7cc662ea3e1993503f5
+  expected_outputs:
+  - docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/decision_packet.json
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_3275_rerun_closure_2026-07-03_README_md__cmd1_53b553b9
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_3275_rerun_closure_2026-07-03/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/adversarial/produce_rerun_closure_packet.py
+  - --source-archive
+  - docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json
+  - --rerun-archive
+  - docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json
+  - --output
+  - output/adversarial/issue_3275_closure/real_archive_closure_packet.json
+  working_dir: .
+  inputs:
+  - path: scripts/adversarial/produce_rerun_closure_packet.py
+    sha256: 08a34703def90dedcaadcce22cf9b6f79fd125c4847c550b3dedc2709a91954d
+  - path: docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json
+    sha256: 222ba50880a1a77830f3c630315c2d5048aa56ab9cf1bf9cede5fadb62426278
+  - path: docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json
+    sha256: a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393
+  expected_outputs:
+  - output/adversarial/issue_3275_closure/real_archive_closure_packet.json
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - command writes to the untracked output/ root
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd1_92e66dae
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/export_event_ledger_reconciliation.py
+  - --episodes
+  - tests/benchmark/fixtures/event_ledger_reconciliation/reconciled_episodes.jsonl
+  - --out
+  - docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/reconciled_fixture_reconciliation.jsonl
+  - --fail-on-violations
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/export_event_ledger_reconciliation.py
+    sha256: 46c143d80d6991d2e4144092a33b4a7432ff2646c4ef2cb2c2bcff7c0bf023f5
+  - path: tests/benchmark/fixtures/event_ledger_reconciliation/reconciled_episodes.jsonl
+    sha256: 63e593cea92dac643a52173f2f02f47df69cbc724ac4f197b1d2fd7fcc85519a
+  expected_outputs:
+  - docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/reconciled_fixture_reconciliation.jsonl
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd2_fccbfb79
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/README.md
+  command_index: 1
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/export_event_ledger_reconciliation.py
+  - --episodes
+  - tests/benchmark/fixtures/event_ledger_reconciliation/violating_exact_collision_zero_count.jsonl
+  - --out
+  - docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/violating_fixture_reconciliation.jsonl
+  - --fail-on-violations
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/export_event_ledger_reconciliation.py
+    sha256: 46c143d80d6991d2e4144092a33b4a7432ff2646c4ef2cb2c2bcff7c0bf023f5
+  - path: tests/benchmark/fixtures/event_ledger_reconciliation/violating_exact_collision_zero_count.jsonl
+    sha256: 0b14d1229288960be1116aad2502f2ee94dd9d1fc10b39581804ae947fd7cc18
+  expected_outputs:
+  - docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/violating_fixture_reconciliation.jsonl
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: true
+  exclusion_reason: null
+  classification_notes: []
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_3544_signalized_failure_pack_real_runtime_metrics_README_md__cmd1_8933a7f3
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_3544_signalized_failure_pack_real/runtime_metrics/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/generate_signalized_runtime_metrics_report.py
+  - --episodes-jsonl
+  - output/benchmarks/issue_3544_signalized_trace_run/episodes.jsonl
+  - --output-dir
+  - docs/context/evidence/issue_3544_signalized_failure_pack_real/runtime_metrics
+  working_dir: .
+  inputs:
+  - path: scripts/tools/generate_signalized_runtime_metrics_report.py
+    sha256: 580bd0e22e77ac242e5a4b17be992b25a182de2f60b2af2089b4e5a5b414bd8c
+  expected_outputs:
+  - docs/context/evidence/issue_3544_signalized_failure_pack_real/runtime_metrics
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: missing_committed_fixture
+  classification_notes:
+  - 'referenced path missing: output/benchmarks/issue_3544_signalized_trace_run/episodes.jsonl'
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_3978_snqi_v1_recalibration_README_md__cmd1_c7b3b872
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_3978_snqi_v1_recalibration/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - pytest
+  - tests/test_snqi_normalization_comparison.py
+  - tests/benchmark/test_snqi_normalization_inventory.py
+  - tests/benchmark/test_snqi_governance_preflight.py
+  - -q
+  working_dir: .
+  inputs:
+  - path: tests/test_snqi_normalization_comparison.py
+    sha256: 47ecbaa0be112138d692ac4932ad4c1a4178ac698e6bfb7b1d07bda70fd9ce2d
+  - path: tests/benchmark/test_snqi_normalization_inventory.py
+    sha256: 5902ddb6c4ededf3c4abfdc5b34a782b139564fcf2790e49c5a08192345e1860
+  - path: tests/benchmark/test_snqi_governance_preflight.py
+    sha256: 38c09a4352e9e43b1ce52de032be8feadf764583261f394b4f01835c5c8010fa
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_4013_learned_model_based_planning_README_md__cmd1_e194aa46
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_4013_learned_model_based_planning/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/benchmark/run_issue_4013_model_based_comparison.py
+  working_dir: .
+  inputs:
+  - path: scripts/benchmark/run_issue_4013_model_based_comparison.py
+    sha256: 430de398b4b1d30a8fa030588213ad56eb64634f0d7ac93b98f93007dd3cff1f
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_5088_braking_authority_sensitivity_smoke_README_md__cmd1_9d2ea7ed
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_5088_braking_authority_sensitivity_smoke/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/tools/run_braking_authority_sensitivity_smoke.py
+  - --config
+  - configs/benchmarks/issue_5088_braking_authority_sensitivity_smoke.yaml
+  - --output
+  - <fresh-artifact-dir>
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment:
+    DISPLAY: ''
+    MPLBACKEND: Agg
+    SDL_VIDEODRIVER: dummy
+  recurrence_eligible: false
+  exclusion_reason: unsafe_command
+  classification_notes:
+  - command uses shell environment-assignment prefix
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_5446_release_0_0_3_candidates_README_md__cmd1_86ddd7b2
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_5446_release_0_0_3_candidates/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/analysis/build_campaign_atlas_issue_5616.py
+  - --inventory
+  - /tmp/atlas_inventory.jsonl
+  - --out-dir
+  - campaign_atlas
+  - --campaign-id
+  - paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final
+  - --commit
+  - a307ef276d701f8d14dead1aa0513f44ee97c0b0
+  working_dir: .
+  inputs: []
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: unsafe_command
+  classification_notes:
+  - command uses an absolute path argument
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a
+- id: docs_context_evidence_issue_5447_ch7_case_capsules_README_md__cmd1_6c792a9b
+  source_class: readme_reproduction
+  source_path: docs/context/evidence/issue_5447_ch7_case_capsules/README.md
+  command_index: 0
+  command:
+  - uv
+  - run
+  - python
+  - scripts/analysis/materialize_issue_5447_capsules.py
+  working_dir: .
+  inputs:
+  - path: scripts/analysis/materialize_issue_5447_capsules.py
+    sha256: f063027fbd5387cecb771ed9c679e3d46feb1621c977b87d9bcf32a336575a20
+  expected_outputs: []
+  timeout_seconds: 600
+  environment: {}
+  recurrence_eligible: false
+  exclusion_reason: non_deterministic_contract
+  classification_notes:
+  - command declares no explicit expected output
+  provenance_status: discovered
+  last_verified_commit: 250e8563e6127ebcd4a695b284e535ef3075854a

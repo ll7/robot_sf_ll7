@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import platform
+import re
 import subprocess
 import sys
 import tarfile
@@ -124,59 +125,147 @@ def _list_archive_contents(bundle_path: Path) -> list[str]:
         return sorted(tar.getnames())
 
 
-def _verify_repository_entries(entries: Any, repo_root: Path) -> list[dict[str, Any]]:
-    """Verify repository-relative checksum entries without a release archive."""
+def _resolve_frozen_source_commit(
+    manifest: dict[str, Any],
+    repo_root: Path,
+) -> tuple[str | None, str | None]:
+    """Validate the optional Git revision that freezes repository evidence."""
+
+    raw_commit = manifest.get("frozen_manifest_origin_main_commit")
+    if raw_commit is None:
+        return None, None
+    if not isinstance(raw_commit, str) or re.fullmatch(r"[0-9a-fA-F]{40}", raw_commit) is None:
+        return None, "frozen_manifest_origin_main_commit must be a 40-character Git SHA."
+
+    revision = raw_commit.lower()
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--verify", f"{revision}^{{commit}}"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        return None, f"Could not inspect frozen source commit {revision}: {exc}"
+    if completed.returncode != 0:
+        return None, f"Frozen source commit {revision} is unavailable in the repository."
+    return revision, None
+
+
+def _sha256_git_path(repo_root: Path, revision: str, relative_path: str) -> str | None:
+    """Hash one repository path from an immutable Git tree."""
+
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "cat-file", "blob", f"{revision}:{relative_path}"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if completed.returncode != 0:
+        return None
+    return hashlib.sha256(completed.stdout).hexdigest()
+
+
+def _verify_repository_entry(
+    entry: Any,
+    index: int,
+    resolved_root: Path,
+    repo_root: Path,
+    source_commit: str | None,
+) -> dict[str, Any]:
+    """Verify one repository entry, preserving an explicitly frozen source hash."""
+    if not isinstance(entry, dict):
+        return {"match": False, "error": f"entries[{index}] must be a mapping."}
+
+    raw_path = entry.get("path")
+    expected_sha256 = entry.get("sha256")
+    result: dict[str, Any] = {
+        "path": raw_path,
+        "expected_sha256": expected_sha256,
+        "match": False,
+    }
+    if not isinstance(raw_path, str) or not raw_path:
+        result["error"] = f"entries[{index}] is missing a non-empty path."
+        return result
+    if (
+        not isinstance(expected_sha256, str)
+        or len(expected_sha256) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in expected_sha256)
+    ):
+        result["error"] = f"entries[{index}] has an invalid SHA-256 digest."
+        return result
+
+    candidate = Path(raw_path)
+    if candidate.is_absolute():
+        result["error"] = "Repository entry path must be relative."
+        return result
+    path = (resolved_root / candidate).resolve()
+    try:
+        path.relative_to(resolved_root)
+    except ValueError:
+        result["error"] = "Repository entry path escapes the repository root."
+        return result
+    if not path.is_file():
+        result["error"] = "Repository entry is missing or not a regular file."
+        return result
+
+    actual_sha256 = _sha256_file(path)
+    result["actual_sha256"] = actual_sha256
+    expected_sha256 = expected_sha256.lower()
+    if actual_sha256 == expected_sha256:
+        result["match"] = True
+        return result
+
+    if source_commit is not None:
+        relative_path = path.relative_to(resolved_root).as_posix()
+        frozen_sha256 = _sha256_git_path(repo_root, source_commit, relative_path)
+        if frozen_sha256 == expected_sha256:
+            result["current_sha256"] = actual_sha256
+            result["frozen_sha256"] = frozen_sha256
+            result["source_commit"] = source_commit
+            result["match"] = True
+    return result
+
+
+def _verify_repository_entries(
+    entries: Any,
+    repo_root: Path,
+    *,
+    source_commit: str | None = None,
+) -> list[dict[str, Any]]:
+    """Verify repository-relative checksum entries without a release archive.
+
+    The current checkout must contain every entry. If a manifest explicitly records a
+    frozen source commit, a current-byte mismatch is accepted only when the immutable
+    Git blob at that commit exactly matches the manifest checksum.
+    """
     if not isinstance(entries, list) or not entries:
         return [{"match": False, "error": "Manifest entries must be a non-empty list."}]
 
     resolved_root = repo_root.resolve()
-    results: list[dict[str, Any]] = []
-    for index, entry in enumerate(entries):
-        if not isinstance(entry, dict):
-            results.append({"match": False, "error": f"entries[{index}] must be a mapping."})
-            continue
-        raw_path = entry.get("path")
-        expected_sha256 = entry.get("sha256")
-        result: dict[str, Any] = {
-            "path": raw_path,
-            "expected_sha256": expected_sha256,
-            "match": False,
-        }
-        if not isinstance(raw_path, str) or not raw_path:
-            result["error"] = f"entries[{index}] is missing a non-empty path."
-            results.append(result)
-            continue
-        if (
-            not isinstance(expected_sha256, str)
-            or len(expected_sha256) != 64
-            or any(character not in "0123456789abcdefABCDEF" for character in expected_sha256)
-        ):
-            result["error"] = f"entries[{index}] has an invalid SHA-256 digest."
-            results.append(result)
-            continue
+    return [
+        _verify_repository_entry(entry, index, resolved_root, repo_root, source_commit)
+        for index, entry in enumerate(entries)
+    ]
 
-        candidate = Path(raw_path)
-        if candidate.is_absolute():
-            result["error"] = "Repository entry path must be relative."
-            results.append(result)
-            continue
-        path = (resolved_root / candidate).resolve()
-        try:
-            path.relative_to(resolved_root)
-        except ValueError:
-            result["error"] = "Repository entry path escapes the repository root."
-            results.append(result)
-            continue
-        if not path.is_file():
-            result["error"] = "Repository entry is missing or not a regular file."
-            results.append(result)
-            continue
 
-        actual_sha256 = _sha256_file(path)
-        result["actual_sha256"] = actual_sha256
-        result["match"] = actual_sha256 == expected_sha256.lower()
-        results.append(result)
-    return results
+def _verify_manifest_repository_entries(
+    manifest: dict[str, Any],
+    repo_root: Path,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Verify entries and return any frozen-source resolution error separately."""
+    source_commit, source_commit_error = _resolve_frozen_source_commit(manifest, repo_root)
+    if source_commit_error is not None:
+        return [], [source_commit_error]
+    return (
+        _verify_repository_entries(
+            manifest.get("entries"),
+            repo_root,
+            source_commit=source_commit,
+        ),
+        [],
+    )
 
 
 def _repository_entry_digests(entries: Any) -> tuple[dict[str, str], list[str]]:
@@ -394,20 +483,22 @@ def verify_release(  # noqa: C901, PLR0912 - failures need distinct structured r
         report["overall_verdict"] = "error"
         return report
     if has_bundle_evidence:
+        resolved_repo_root = repo_root or Path.cwd()
         coverage_errors = _verify_bundle_evidence_coverage(
             artifact_set["bundle_evidence"],
             manifest.get("entries"),
-            repo_root or Path.cwd(),
+            resolved_repo_root,
         )
         report["verdicts"]["bundle_evidence_coverage"] = {
             "match": not coverage_errors,
             "errors": coverage_errors,
         }
         report["errors"].extend(coverage_errors)
-        repository_results = _verify_repository_entries(
-            manifest.get("entries"),
-            repo_root or Path.cwd(),
+        repository_results, repository_errors = _verify_manifest_repository_entries(
+            manifest,
+            resolved_repo_root,
         )
+        report["errors"].extend(repository_errors)
         report["verdicts"]["repository_entries"] = repository_results
         for result in repository_results:
             if not result.get("match"):

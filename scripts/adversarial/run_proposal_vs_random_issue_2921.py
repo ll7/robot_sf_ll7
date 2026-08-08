@@ -26,6 +26,24 @@ namespace. When valid independent native planner-execution outcomes (the frozen
 top-level comparison and the issue #2921 stop rule follow those outcomes
 exclusively, and the decision vocabulary is exactly ``continue | stop |
 inconclusive``.
+
+Preflight materialization (issue #6104, parent #3275):
+
+    uv run python scripts/adversarial/run_proposal_vs_random_issue_2921.py \\
+        --contract configs/adversarial/issue_3275_same_planner_contract.json \\
+        --materialize-preflight docs/context/evidence/issue_3275_same_planner_held_out
+
+    uv run python scripts/adversarial/run_proposal_vs_random_issue_2921.py \\
+        --contract configs/adversarial/issue_3275_same_planner_contract.json \\
+        --verify-preflight docs/context/evidence/issue_3275_same_planner_held_out
+
+The ``--materialize-preflight`` path writes the deterministic, content-addressed
+candidate-pool, proposal-arm, random-arm, external v2 binding, and step-3 run-plan
+manifests under the given directory and self-verifies them. The
+``--verify-preflight`` path is a repeatable null/check-only execution: it
+recomputes the whole packet in memory and compares every on-disk file
+byte-for-byte. Neither path executes a planner or reads, imports, or inspects any
+outcome value.
 """
 
 from __future__ import annotations
@@ -680,6 +698,28 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Side-effect-free validation of the frozen #3275 contract config.",
+    )
+    parser.add_argument(
+        "--materialize-preflight",
+        type=Path,
+        default=None,
+        help=(
+            "Write the deterministic content-addressed #3275 held-out preflight packet "
+            "(candidate-pool, proposal-arm, random-arm, v2 binding, and step-3 run-plan "
+            "manifests) to the given directory and verify it. Requires --contract. Executes "
+            "no planner and reads no outcome."
+        ),
+    )
+    parser.add_argument(
+        "--verify-preflight",
+        type=Path,
+        default=None,
+        help=(
+            "Side-effect-free null/check-only re-derivation of an existing preflight packet "
+            "directory: recompute every manifest in memory and compare byte-for-byte against "
+            "the recorded SHA-256 values. Requires --contract. Executes no planner and reads "
+            "no outcome."
+        ),
     )
     parser.add_argument(
         "--contract",
@@ -1506,6 +1546,99 @@ def _resolve_frozen_binding_for_run(  # noqa: PLR0913
     return binding_for_admission, frozen_binding_reason, state, reason
 
 
+def _run_preflight_mode(args: argparse.Namespace) -> int:
+    """Materialize or verify the #3275 held-out preflight packet (no planner/outcome).
+
+    ``--materialize-preflight`` and ``--verify-preflight`` are mutually exclusive and
+    both require the frozen ``--contract``. The materialize path writes the
+    content-addressed packet and self-verifies it; the verify path recomputes the
+    packet in memory and compares every on-disk file byte-for-byte. Neither path
+    executes a planner or reads an outcome.
+    """
+    if args.materialize_preflight is not None and args.verify_preflight is not None:
+        print(
+            json.dumps(
+                {
+                    "schema_version": "issue_3275_held_out_preflight.v1",
+                    "status": "fail",
+                    "failures": [
+                        "--materialize-preflight and --verify-preflight are mutually exclusive"
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 2
+    if args.contract is None:
+        print(
+            json.dumps(
+                {
+                    "schema_version": "issue_3275_held_out_preflight.v1",
+                    "status": "fail",
+                    "failures": ["preflight mode requires --contract"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 2
+    from robot_sf.adversarial.held_out_preflight import (
+        materialize_preflight_packet,
+        verify_preflight_packet,
+    )
+
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        if args.materialize_preflight is not None:
+            code_revision = _git_head_sha(repo_root)
+            report = materialize_preflight_packet(
+                args.materialize_preflight,
+                contract_path=args.contract,
+                repo_root=repo_root,
+                code_revision=code_revision,
+            )
+        else:
+            report = verify_preflight_packet(
+                args.verify_preflight,
+                contract_path=args.contract,
+                repo_root=repo_root,
+            )
+    except (ValueError, OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        print(
+            json.dumps(
+                {
+                    "schema_version": "issue_3275_held_out_preflight.v1",
+                    "status": "fail",
+                    "failures": [str(exc)],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 2
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report.get("status") == "pass" else 1
+
+
+def _git_head_sha(repo_root: Path) -> str:
+    """Return the current HEAD SHA-256 (40 hex chars) without touching the worktree."""
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError("failed to resolve repository HEAD for code_revision")
+    revision = result.stdout.strip()
+    if len(revision) != 40:
+        raise ValueError("resolved repository HEAD is not a 40-character SHA-1")
+    return revision
+
+
 def main() -> int:
     """Main execution function."""
     args = parse_args()
@@ -1514,6 +1647,9 @@ def main() -> int:
         exit_code, verdict = run_check_contract(args.check_contract)
         print(json.dumps(verdict, indent=2, sort_keys=True))
         return exit_code
+
+    if args.materialize_preflight is not None or args.verify_preflight is not None:
+        return _run_preflight_mode(args)
 
     try:
         frozen = _contract_frozen_params(args)

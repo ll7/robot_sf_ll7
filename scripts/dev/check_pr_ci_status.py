@@ -160,16 +160,18 @@ def _git_remote_owner_name() -> tuple[str, str]:
         return "", ""
     if result.returncode != 0:
         return "", ""
-    tail = result.stdout.strip()
-    if "github.com/" in tail:
-        tail = tail.split("github.com/", 1)[1]
-    elif "github.com:" in tail:
-        tail = tail.split("github.com:", 1)[1]
-    if tail.endswith(".git"):
-        tail = tail[:-4]
-    if "/" not in tail:
+    url = result.stdout.strip()
+    if url.endswith(".git"):
+        url = url[:-4]
+    # Normalize the ssh shorthand "git@host:owner/name" to a slash-delimited path, then take the
+    # final two non-empty path segments as owner/name. This avoids substring matching a host name
+    # (which can appear at arbitrary positions) and stays robust across ssh/https remote forms.
+    if "://" not in url and ":" in url:
+        url = url.replace(":", "/", 1)
+    parts = [segment for segment in url.split("/") if segment]
+    if len(parts) < 2:
         return "", ""
-    owner, name = tail.split("/", 1)
+    owner, name = parts[-2], parts[-1]
     return (owner, name) if owner and name else ("", "")
 
 

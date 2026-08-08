@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/issue_6814_pair_compatibility_receipt.v1.json",
+  "title": "Issue #6814 pair compatibility and admission receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "issue", "pair_id", "comparison_grammar", "comparison_grain", "evidence_boundary", "sources", "pair_compatibility", "semantic_inputs", "process_validation", "renderer_admission"],
+  "properties": {
+    "schema_version": {"const": "issue_6814_pair_compatibility_receipt.v1"},
+    "issue": {"const": 6814},
+    "pair_id": {"type": "string", "minLength": 1},
+    "comparison_grammar": {"enum": ["same_cell_seed_sensitivity", "matched_start"]},
+    "comparison_grain": {"enum": ["matched_realization_pair", "matched_planner_pair"]},
+    "evidence_boundary": {"$ref": "#/$defs/evidenceBoundary"},
+    "sources": {"type": "object", "additionalProperties": false, "required": ["left", "right"], "properties": {"left": {"$ref": "#/$defs/source"}, "right": {"$ref": "#/$defs/source"}}},
+    "pair_compatibility": {"type": "object", "required": ["profile_version", "status", "comparison_grain"], "properties": {"profile_version": {"const": "pair_compatibility.deterministic.v1"}, "status": {"enum": ["available", "unavailable", "incompatible", "blocked"]}, "comparison_grain": {"type": "object"}}, "additionalProperties": true},
+    "run_config_contracts": {"type": "object", "additionalProperties": false, "required": ["left", "right"], "properties": {"left": {"type": "object"}, "right": {"type": "object"}}},
+    "semantic_inputs": {"type": "object", "additionalProperties": false, "required": ["route", "conflict", "encounter", "terminal_event"], "properties": {"route": {"$ref": "#/$defs/semantic"}, "conflict": {"$ref": "#/$defs/semantic"}, "encounter": {"$ref": "#/$defs/semantic"}, "terminal_event": {"$ref": "#/$defs/semantic"}}},
+    "process_validation": {"type": "object", "additionalProperties": false, "required": ["left", "right"], "properties": {"left": {"$ref": "#/$defs/process"}, "right": {"$ref": "#/$defs/process"}}},
+    "renderer_admission": {"$ref": "#/$defs/admission"},
+    "notes": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "evidenceBoundary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_package_sha256sums_sha256", "visualization_only", "release_statistics_authoritative", "new_simulation_performed", "episode_substitution_performed", "tolerance_profile_modified"],
+      "properties": {"source_package_sha256sums_sha256": {"$ref": "#/$defs/sha256"}, "visualization_only": {"const": true}, "release_statistics_authoritative": {"type": "boolean"}, "new_simulation_performed": {"const": false}, "episode_substitution_performed": {"const": false}, "tolerance_profile_modified": {"const": false}}
+    },
+    "source": {"type": "object", "additionalProperties": false, "required": ["source_contract_sha256", "trace_content_sha256", "process_trace_sha256"], "properties": {"source_contract_sha256": {"$ref": "#/$defs/sha256"}, "trace_content_sha256": {"$ref": "#/$defs/sha256"}, "process_trace_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}}},
+    "semantic": {"type": "object", "additionalProperties": false, "required": ["status"], "properties": {"status": {"enum": ["available", "unavailable"]}, "reason_code": {"type": "string"}, "source_process_trace_sha256": {"$ref": "#/$defs/sha256"}}},
+    "process": {"type": "object", "additionalProperties": false, "required": ["status", "errors"], "properties": {"status": {"enum": ["pass", "fail", "unavailable"]}, "errors": {"type": "array", "items": {"type": "string"}}}},
+    "admission": {"type": "object", "additionalProperties": false, "required": ["eligible", "attempted", "disposition", "reason_codes"], "properties": {"eligible": {"type": "boolean"}, "attempted": {"const": false}, "disposition": {"enum": ["supported", "unsupported", "blocked"]}, "reason_codes": {"type": "array", "items": {"type": "string"}}}}
+  }
+}

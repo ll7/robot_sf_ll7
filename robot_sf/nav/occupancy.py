@@ -494,3 +494,14 @@ def check_quality_of_map_point(map_def: "MapDefinition", point: Vec2D, radius: f
         obstacle_lines.append(((x1, y1), (x2, y2)))
 
     return not any(is_circle_line_intersection(circle, seg) for seg in obstacle_lines)
+
+
+__all__ = [
+    "ContinuousOccupancy",
+    "EgoPedContinuousOccupancy",
+    "check_quality_of_map_point",
+    "circle_collides_any",
+    "circle_collides_any_lines",
+    "is_circle_circle_intersection",
+    "is_circle_line_intersection",
+]

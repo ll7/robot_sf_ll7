@@ -385,3 +385,13 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - exercised through the wrapper script.
     raise SystemExit(main())
+
+
+__all__ = [
+    "build_parser",
+    "geojson_to_map_definition",
+    "geojson_to_map_structure",
+    "load_geojson",
+    "main",
+    "write_segment_map",
+]

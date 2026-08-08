@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-28
+updated_at: 2026-08-07
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,10 +20,15 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_6561_pedestrian_speed_protocol.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5273_s20_launch_packet.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json
   status: evidence
   freshness: evidence
@@ -64,10 +69,12 @@ entries:
   status: evidence
   freshness: dated
   area: reproducibility
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
   status: evidence
   freshness: dated
   area: reproducibility
+  legacy_dirty_evidence: true
 - path: docs/context/issue_5936_result_job_durability_gate.md
   status: current
   freshness: policy
@@ -4836,18 +4843,22 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_artifact_manifest.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json.review.json
   status: evidence
   freshness: evidence

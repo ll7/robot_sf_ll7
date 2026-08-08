@@ -134,6 +134,157 @@ def _latest_check_runs(rollup: list[dict[str, Any]]) -> tuple[list[dict[str, Any
     return effective_rollup, superseded_count
 
 
+def _is_graphql_quota_error(message: str) -> bool:
+    """Return whether a gh error message indicates GraphQL API rate-limit/quota exhaustion."""
+    text = (message or "").lower()
+    if "rate limit" not in text:
+        return False
+    return "graphql" in text or "api rate limit" in text or "too many requests" in text
+
+
+def _git_remote_owner_name() -> tuple[str, str]:
+    """Derive the ``owner/name`` GitHub repository from the ``origin`` git remote.
+
+    Used by the REST fallback when GraphQL quota is exhausted (issue #6564): it is a local git
+    call with no API quota cost. Returns empty strings when the remote cannot be parsed.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "", ""
+    if result.returncode != 0:
+        return "", ""
+    tail = result.stdout.strip()
+    if "github.com/" in tail:
+        tail = tail.split("github.com/", 1)[1]
+    elif "github.com:" in tail:
+        tail = tail.split("github.com:", 1)[1]
+    if tail.endswith(".git"):
+        tail = tail[:-4]
+    if "/" not in tail:
+        return "", ""
+    owner, name = tail.split("/", 1)
+    return (owner, name) if owner and name else ("", "")
+
+
+def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
+    """Fetch ``repos/{owner}/{name}/{path}`` via REST and parse JSON, or ``None`` on failure."""
+    owner, name = _git_remote_owner_name()
+    if not owner or not name:
+        return None
+    result = _gh(["api", f"repos/{owner}/{name}/{path}"], timeout=timeout)
+    if result.returncode != 0:
+        return None
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, Any], int]:
+    """Build the ``checks`` summary (and superseded count) from raw REST check-run dicts."""
+    rollup = [
+        {
+            "__typename": "CheckRun",
+            "name": str(run.get("name", "") or ""),
+            "status": str(run.get("status", "") or ""),
+            "conclusion": run.get("conclusion") or "",
+            "detailsUrl": str(run.get("details_url", "") or ""),
+            "startedAt": str(run.get("started_at", "") or ""),
+            "workflowName": str(
+                (run.get("workflow") or (run.get("check_suite") or {}).get("workflow") or "")
+                if isinstance(run, dict)
+                else ""
+            ),
+        }
+        for run in check_runs
+        if isinstance(run, dict)
+    ]
+    effective, superseded_count = _latest_check_runs(rollup)
+    conclusions: dict[str, int] = {}
+    states: dict[str, int] = {}
+    name_counts: dict[str, int] = {}
+    for check in effective:
+        conclusion = _rollup_conclusion(check)
+        conclusions[conclusion] = conclusions.get(conclusion, 0) + 1
+        status = _rollup_status(check)
+        states[status] = states.get(status, 0) + 1
+        name = _rollup_name(check)
+        name_counts[name] = name_counts.get(name, 0) + 1
+    failure_count = sum(conclusions.get(c, 0) for c in FAILURE_CONCLUSIONS)
+    pending_count = sum(states.get(s, 0) for s in PENDING_STATUSES)
+    overall = (
+        "failure" if failure_count else ("pending" if pending_count or not effective else "success")
+    )
+    details = [
+        {
+            "name": _rollup_name(check),
+            "status": _rollup_status(check),
+            "conclusion": _rollup_conclusion(check),
+            "details_url": check.get("detailsUrl", "") or check.get("targetUrl", ""),
+        }
+        for check in effective
+    ]
+    checks = {
+        "total": len(effective),
+        "superseded": superseded_count,
+        "overall": overall,
+        "by_conclusion": conclusions,
+        "by_status": states,
+        "names": sorted(name_counts),
+        "details": details,
+    }
+    return checks, superseded_count
+
+
+def _fetch_ci_status_rest(pr_number: str) -> dict[str, Any]:
+    """Build the CI status payload from REST when GraphQL quota is exhausted (issue #6564)."""
+    pull = _rest_api_get(f"pulls/{pr_number}")
+    if not isinstance(pull, dict):
+        return {
+            "status": "error",
+            "error_kind": "graphql_quota_exhausted",
+            "error": "GraphQL quota exhausted and REST pull fallback failed",
+        }
+    head = pull.get("head") or {}
+    head_sha = str(head.get("sha", "") or "")
+    checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs")
+    check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
+    checks, _ = _summarize_check_runs(check_runs if isinstance(check_runs, list) else [])
+    reviews_raw = _rest_api_get(f"pulls/{pr_number}/reviews")
+    review_states: dict[str, int] = {}
+    for review in reviews_raw if isinstance(reviews_raw, list) else []:
+        if isinstance(review, dict):
+            state = str(review.get("state", "UNKNOWN") or "UNKNOWN")
+            review_states[state] = review_states.get(state, 0) + 1
+    return {
+        "status": "ok",
+        "pr": pull.get("number"),
+        "title": str(pull.get("title", "") or ""),
+        "state": str(pull.get("state", "unknown") or "unknown"),
+        "mergeable": str(pull.get("mergeable_state", "unknown") or "unknown").upper(),
+        "branch": str(head.get("ref", "") or ""),
+        "head_sha": head_sha,
+        "checks": checks,
+        "reviews": review_states,
+        "data_source": "rest_fallback_graphql_quota",
+        "route_evidence_only": True,
+    }
+
+
+def _gh_view_error_payload(pr_number: str, stderr: str, returncode: int) -> dict[str, Any]:
+    """Map a failed ``gh pr view`` to an error payload, falling back to REST on GraphQL quota."""
+    if _is_graphql_quota_error(stderr):
+        return _fetch_ci_status_rest(pr_number)
+    return {"status": "error", "error": stderr or f"gh returned exit code {returncode}"}
+
+
 def _fetch_ci_status(
     pr_number: str,
     backoff: float = 0.0,
@@ -161,10 +312,7 @@ def _fetch_ci_status(
     )
     if result.returncode != 0:
         stderr = result.stderr.strip()
-        return {
-            "status": "error",
-            "error": stderr or f"gh returned exit code {result.returncode}",
-        }
+        return _gh_view_error_payload(pr_number, stderr, result.returncode)
 
     data, parse_error = _parse_pr_view_json(result.stdout)
     if parse_error or data is None:

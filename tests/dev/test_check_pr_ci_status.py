@@ -1033,3 +1033,102 @@ def test_smoke_attempt_exhaustion_reports_bounded_pending_reason(
     assert final["monitor"]["terminal_reason"] == "attempt_exhausted"
     assert final["monitor"]["poll_attempt"] == 3
     assert final["monitor"]["poll_attempts"] == 3
+
+
+# Issue #6564: GraphQL quota exhaustion REST fallback tests.
+from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    _git_remote_owner_name,
+    _is_graphql_quota_error,
+)
+
+QUOTA_STDERR = "GraphQL: API rate limit already exceeded."
+
+
+def test_is_graphql_quota_error_detection() -> None:
+    assert _is_graphql_quota_error(QUOTA_STDERR)
+    assert _is_graphql_quota_error("API rate limit exceeded for GraphQL")
+    assert not _is_graphql_quota_error("merge conflict")
+
+
+def test_git_remote_owner_name_parses_ssh_and_https(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake(url: str):
+        return MagicMock(returncode=0, stdout=url, stderr="")
+
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status.subprocess.run",
+        lambda *a, **k: _fake("git@github.com:ll7/robot_sf_ll7.git"),
+    )
+    assert _git_remote_owner_name() == ("ll7", "robot_sf_ll7")
+
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status.subprocess.run",
+        lambda *a, **k: _fake("https://github.com/ll7/robot_sf_ll7.git"),
+    )
+    assert _git_remote_owner_name() == ("ll7", "robot_sf_ll7")
+
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status.subprocess.run",
+        lambda *a, **k: MagicMock(returncode=1, stdout="", stderr="no remote"),
+    )
+    assert _git_remote_owner_name() == ("", "")
+
+
+def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A GraphQL quota failure switches the watcher to REST and marks the source."""
+    pull = {
+        "number": 42,
+        "title": "demo",
+        "state": "OPEN",
+        "head": {"ref": "fix", "sha": "abc"},
+        "mergeable_state": "clean",
+    }
+    check_runs = {
+        "check_runs": [
+            {"name": "ci", "status": "completed", "conclusion": "success", "details_url": "u"},
+        ]
+    }
+    reviews = [{"state": "APPROVED"}]
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=1, stderr=QUOTA_STDERR, stdout="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        MagicMock(side_effect=[pull, check_runs, reviews]),
+    )
+    data = _fetch_ci_status("42")
+    assert data["status"] == "ok"
+    assert data["data_source"] == "rest_fallback_graphql_quota"
+    assert data["head_sha"] == "abc"
+    assert data["checks"]["overall"] == "success"
+    assert data["reviews"] == {"APPROVED": 1}
+    assert data["route_evidence_only"] is True
+
+
+def test_fetch_ci_status_non_quota_error_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-quota gh failures are unchanged (no REST attempt)."""
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=1, stderr="not found", stdout="")),
+    )
+    data = _fetch_ci_status("9")
+    assert data["status"] == "error"
+    assert "not found" in data["error"]
+    assert "data_source" not in data
+
+
+def test_fetch_ci_status_rest_failure_is_labeled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If REST also fails under quota, the watcher reports a labeled error."""
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=1, stderr=QUOTA_STDERR, stdout="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        MagicMock(return_value=None),
+    )
+    data = _fetch_ci_status("5")
+    assert data["status"] == "error"
+    assert data["error_kind"] == "graphql_quota_exhausted"

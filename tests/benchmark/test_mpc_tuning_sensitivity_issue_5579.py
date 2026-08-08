@@ -304,6 +304,7 @@ def test_normalization_extracts_native_solver_provenance_and_update_evidence() -
         solver_contract=contract,
     )
     assert row["solver_execution_mode"] == "prediction_mpc_native_solver"
+    assert row["config_provenance_valid"] is True
     assert row["valid_solver_provenance"] is True
     assert row["finite_commands"] is True
     assert row["native_solver_eligible"] is True
@@ -410,6 +411,7 @@ def test_report_applies_preregistered_read_to_best_found_configs(tmp_path: Path)
                         "benchmark_success": True,
                         "planner_runtime_status": "eligible",
                         "solver_execution_mode": "prediction_mpc_native_solver",
+                        "config_provenance_valid": True,
                         "valid_solver_provenance": True,
                         "finite_commands": True,
                         "solver_successes": 1,
@@ -478,6 +480,55 @@ def test_analysis_excludes_target_rows_with_invalid_solver_provenance() -> None:
     assert "eligible" not in exclusion_reasons
 
 
+def test_analysis_enforces_frozen_benchmark_execution_shape() -> None:
+    """Reports cannot count rows whose runtime shape disagrees with the packet contract."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    rows = _fixture_rows(config, plan)
+    rows[0]["execution_mode"] = "native"
+    rows[1]["readiness_status"] = "native"
+
+    report = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit=FIXTURE_RUN_COMMIT,
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+    )
+
+    assert report["status"] == "blocked"
+    target_rows = [row for row in report["candidate_rows"] if row["target"]]
+    reasons = {reason for row in target_rows for reason in row["exclusion_reasons"]}
+    assert "execution_mode_mismatch" in reasons
+    assert "readiness_status_mismatch" in reasons
+
+
+def test_analysis_requires_config_provenance_for_incumbents() -> None:
+    """Frozen comparator rows must retain their effective-config provenance."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    rows = _fixture_rows(config, plan)
+    incumbent = next(row for row in rows if row["arm_key"] not in TARGET_ARM_KEYS)
+    incumbent["config_provenance_valid"] = False
+
+    report = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit=FIXTURE_RUN_COMMIT,
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+    )
+
+    assert report["status"] == "blocked"
+    incumbent_rows = [row for row in report["candidate_rows"] if not row["target"]]
+    reasons = {reason for row in incumbent_rows for reason in row["exclusion_reasons"]}
+    assert "config_provenance_invalid" in reasons
+
+
 def test_incumbent_adapter_rows_remain_eligible_without_mpc_solver_evidence() -> None:
     """Frozen hybrid incumbents run via their declared adapter and must stay eligible.
 
@@ -493,6 +544,7 @@ def test_incumbent_adapter_rows_remain_eligible_without_mpc_solver_evidence() ->
     # hybrid-rule adapter rows; keep the strict native-solver evidence on target arms.
     incumbent_solver_profile = {
         "solver_execution_mode": "unknown",
+        "config_provenance_valid": True,
         "valid_solver_provenance": False,
         "finite_commands": False,
         "solver_successes": None,
@@ -767,6 +819,12 @@ def test_packet_rejects_an_unreachable_canary_solver_contract() -> None:
     with pytest.raises(ValueError, match="unreachable for target arm"):
         validate_sensitivity_config(unreachable, repo_root=ROOT)
 
+    for field in ("benchmark_execution_mode", "benchmark_readiness_status"):
+        drifted = deepcopy(config)
+        drifted["canary"]["solver_execution"][field] = "native"
+        with pytest.raises(ValueError, match="unreachable for target arm"):
+            validate_sensitivity_config(drifted, repo_root=ROOT)
+
     relaxed = deepcopy(config)
     relaxed["canary"]["solver_execution"]["forbid_fallback"] = False
     with pytest.raises(ValueError, match="forbid_fallback must be true"):
@@ -979,6 +1037,7 @@ def _fixture_rows(
                         "benchmark_success": True,
                         "planner_runtime_status": "eligible",
                         "solver_execution_mode": "prediction_mpc_native_solver",
+                        "config_provenance_valid": True,
                         "valid_solver_provenance": True,
                         "finite_commands": True,
                         "solver_successes": 1,
@@ -1030,6 +1089,7 @@ def _strict_canary_row(*, arm_key: str, scenario_id: str) -> dict[str, object]:
         "benchmark_success": True,
         "planner_runtime_status": "eligible",
         "solver_execution_mode": "prediction_mpc_native_solver",
+        "config_provenance_valid": True,
         "valid_solver_provenance": True,
         "finite_commands": True,
         "solver_successes": 1,

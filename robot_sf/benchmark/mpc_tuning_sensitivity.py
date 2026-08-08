@@ -307,6 +307,7 @@ def normalize_episode_record(
         ),
         "planner_runtime_status": _planner_runtime_status(planner_runtime),
         "solver_execution_mode": solver_evidence["solver_execution_mode"],
+        "config_provenance_valid": solver_evidence["config_provenance_valid"],
         "valid_solver_provenance": solver_evidence["valid_solver_provenance"],
         "finite_commands": solver_evidence["finite_commands"],
         "solver_successes": solver_evidence["solver_successes"],
@@ -1052,6 +1053,28 @@ def _validate_solver_execution_reachable(contract: Mapping[str, Any], *, target_
                     f"{reachable.get(field)!r} but the packet declares {declared_key}="
                     f"{contract[declared_key]!r}"
                 )
+        runtime_execution_mode = str(reachable.get("execution_mode", "")).strip().lower()
+        declared_benchmark_mode = str(contract["benchmark_execution_mode"]).strip().lower()
+        if declared_benchmark_mode != runtime_execution_mode:
+            raise ValueError(
+                "canary.solver_execution is unreachable for target arm "
+                f"{arm_map.get('key')!r}: runtime planner_kinematics.execution_mode="
+                f"{runtime_execution_mode!r} but the packet declares "
+                f"benchmark_execution_mode={declared_benchmark_mode!r}"
+            )
+        expected_readiness = {
+            "native": "native",
+            "adapter": "adapter",
+            "mixed": "adapter",
+        }.get(runtime_execution_mode)
+        declared_readiness = str(contract["benchmark_readiness_status"]).strip().lower()
+        if expected_readiness is not None and declared_readiness != expected_readiness:
+            raise ValueError(
+                "canary.solver_execution is unreachable for target arm "
+                f"{arm_map.get('key')!r}: runtime planner_kinematics.execution_mode="
+                f"{runtime_execution_mode!r} requires benchmark_readiness_status="
+                f"{expected_readiness!r}, but the packet declares {declared_readiness!r}"
+            )
 
 
 def _registry_planner_kinematics(algo: str) -> dict[str, Any]:
@@ -1217,6 +1240,8 @@ def _validate_candidate_points(value: Any, candidate_count: int, levels: Mapping
         ids.add(point_id)
         if not overrides:
             incumbent_count += 1
+            if point_id != "incumbent":
+                raise ValueError("the empty candidate point must be named incumbent")
         unknown = sorted(set(overrides) - set(TOP_PARAMETERS))
         if unknown:
             raise ValueError(f"candidate {point_id} varies unsupported parameters: {unknown}")
@@ -1717,6 +1742,7 @@ def _native_solver_evidence(
     reasons = identity_reasons + provenance_reasons + runtime_evidence["exclusion_reasons"]
     return {
         "solver_execution_mode": solver_execution_mode,
+        "config_provenance_valid": valid_provenance,
         "valid_solver_provenance": valid_provenance,
         "finite_commands": runtime_evidence["finite_commands"],
         "solver_successes": runtime_evidence["solver_successes"],
@@ -1732,6 +1758,7 @@ def _missing_solver_evidence() -> dict[str, Any]:
     """Return the fail-closed evidence shape for missing algorithm metadata."""
     return {
         "solver_execution_mode": "unknown",
+        "config_provenance_valid": False,
         "valid_solver_provenance": False,
         "finite_commands": False,
         "solver_successes": None,
@@ -2042,10 +2069,18 @@ def _eligibility_reasons(
     """
     solver_contract = dict(contract) if contract is not None else dict(DEFAULT_SOLVER_EXECUTION)
     reasons: list[str] = []
-    if str(row.get("execution_mode", "")).strip().lower() not in VALID_EXECUTION_MODES:
+    execution_mode = str(row.get("execution_mode", "")).strip().lower()
+    readiness_status = str(row.get("readiness_status", "")).strip().lower()
+    expected_execution_mode = str(solver_contract["benchmark_execution_mode"]).strip().lower()
+    expected_readiness_status = str(solver_contract["benchmark_readiness_status"]).strip().lower()
+    if execution_mode not in VALID_EXECUTION_MODES:
         reasons.append("execution_mode_not_supported")
-    if str(row.get("readiness_status", "")).strip().lower() not in VALID_READINESS_STATUSES:
+    elif execution_mode != expected_execution_mode:
+        reasons.append("execution_mode_mismatch")
+    if readiness_status not in VALID_READINESS_STATUSES:
         reasons.append("readiness_status_not_supported")
+    elif readiness_status != expected_readiness_status:
+        reasons.append("readiness_status_mismatch")
     if str(row.get("availability_status", "")).strip().lower() != "available":
         reasons.append("availability_not_available")
     if row.get("benchmark_success") is not True:
@@ -2053,6 +2088,8 @@ def _eligibility_reasons(
     runtime_status = str(row.get("planner_runtime_status", "missing"))
     if runtime_status != "eligible":
         reasons.append(runtime_status)
+    if row.get("config_provenance_valid") is not True:
+        reasons.append("config_provenance_invalid")
 
     if str(row.get("arm_key", "")) in TARGET_ARM_KEYS:
         reasons.extend(_native_solver_identity_reasons(row, solver_contract))
@@ -2064,12 +2101,12 @@ def _eligibility_reasons(
 def _eligible(row: Mapping[str, Any], contract: Mapping[str, Any] | None = None) -> bool:
     """Report whether a row meets every fail-closed eligibility requirement.
 
-    The shared availability/runtime contract applies to every arm. The strict
-    native-solver, provenance, finite-command, and control-update evidence is
-    required only for the prediction-aware MPC target arms: incumbents are frozen
-    hybrid-rule arms that legitimately execute via their declared adapter, so they
-    cannot carry ``PredictionMPCPlannerAdapter`` solver evidence and are gated by
-    the outer availability/runtime predicates alone.
+    The shared availability, execution-shape, runtime, and effective-config
+    provenance contract applies to every arm. The strict native-solver,
+    finite-command, and control-update evidence is required only for the
+    prediction-aware MPC target arms: incumbents are frozen hybrid-rule arms that
+    legitimately execute via their declared adapter, so they cannot carry
+    ``PredictionMPCPlannerAdapter`` solver evidence.
 
     Returns:
         True when the row satisfies every fail-closed eligibility requirement.

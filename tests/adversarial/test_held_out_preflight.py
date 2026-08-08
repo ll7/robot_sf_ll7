@@ -188,6 +188,33 @@ def test_duplicate_accounting_is_explicit_and_machine_checked() -> None:
             assert isinstance(record["selection_rank"], int) and record["selection_rank"] >= 1
 
 
+def test_expected_outcome_row_ids_are_globally_unique() -> None:
+    """Every declared candidate-by-seed row has an unambiguous stable ID."""
+    _, pool_manifest, _ = _build()
+    rows = [
+        row for record in pool_manifest["candidates"] for row in record["expected_outcome_rows"]
+    ]
+    row_ids = [row["row_id"] for row in rows]
+    assert len(row_ids) == len(set(row_ids)) == 64 * 5
+    for record in pool_manifest["candidates"]:
+        if record["arm"] is None:
+            assert all(
+                row["row_id"].startswith(f"{record['candidate_manifest_id']}_unselected_seed_")
+                for row in record["expected_outcome_rows"]
+            )
+
+
+def test_duplicate_expected_outcome_row_ids_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The packet builder rejects any future regression to ambiguous row IDs."""
+    import robot_sf.adversarial.held_out_preflight as preflight
+
+    monkeypatch.setattr(preflight, "_outcome_row_id", lambda *_args: "duplicate-row-id")
+    with pytest.raises(ValueError, match="expected outcome row IDs must be globally unique"):
+        preflight.build_held_out_preflight(_CONTRACT, repo_root=_REPO_ROOT, code_revision="a" * 40)
+
+
 # --- Seed provenance and disjointness ----------------------------------------
 
 

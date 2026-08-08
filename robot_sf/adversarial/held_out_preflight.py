@@ -315,10 +315,12 @@ def _rank_candidates(
     return result
 
 
-def _outcome_row_id(arm: str | None, selection_rank: int | None, seed_offset: int) -> str:
+def _outcome_row_id(
+    candidate_id: str, arm: str | None, selection_rank: int | None, seed_offset: int
+) -> str:
     """Return the predeclared independent-outcome row ID for one execution seed."""
     if arm is None or selection_rank is None:
-        return f"unselected_seed_{seed_offset}"
+        return f"{candidate_id}_unselected_seed_{seed_offset}"
     return f"{arm}_rank_{selection_rank}_seed_{seed_offset}"
 
 
@@ -362,7 +364,9 @@ def _build_candidate_record(ctx: _RecordContext) -> dict[str, Any]:
         "execution_seeds": execution_seeds,
         "expected_outcome_rows": [
             {
-                "row_id": _outcome_row_id(ctx.arm, ctx.selection_rank, seed_offset),
+                "row_id": _outcome_row_id(
+                    ctx.candidate_id, ctx.arm, ctx.selection_rank, seed_offset
+                ),
                 "execution_seed": execution_seeds[seed_offset],
             }
             for seed_offset in range(CONFIRMATION_SEEDS_PER_CANDIDATE)
@@ -858,7 +862,23 @@ def _build_records(  # noqa: PLR0913
                 scenario_family=scenario_family,
             )
         )
+    _assert_unique_expected_outcome_row_ids(records_by_id)
     return records_by_id
+
+
+def _assert_unique_expected_outcome_row_ids(records_by_id: dict[str, dict[str, Any]]) -> None:
+    """Fail closed when the candidate pool declares an ambiguous outcome row ID."""
+    row_ids = [
+        row["row_id"]
+        for record in records_by_id.values()
+        for row in record["expected_outcome_rows"]
+    ]
+    if len(row_ids) == len(set(row_ids)):
+        return
+    duplicates = sorted({row_id for row_id in row_ids if row_ids.count(row_id) > 1})
+    raise ValueError(
+        f"expected outcome row IDs must be globally unique; duplicate IDs: {duplicates}"
+    )
 
 
 def compose_preflight_packet_files(

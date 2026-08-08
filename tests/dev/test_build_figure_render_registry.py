@@ -235,6 +235,33 @@ def test_duplicate_command_identity_fails_closed(monkeypatch):
         reg.build_registry()
 
 
+def test_check_ignores_volatile_commit_fields(tmp_path, monkeypatch):
+    """--check must not report drift when only provenance commit SHAs change between commits."""
+    import importlib
+
+    original_registry = reg.REGISTRY_PATH
+    original_audit = reg.AUDIT_PATH
+    tmp_registry = tmp_path / "figure_render_registry.v1.yaml"
+    tmp_audit = tmp_path / "audit.json"
+    reg.REGISTRY_PATH = tmp_registry
+    reg.AUDIT_PATH = tmp_audit
+    try:
+        registry, audit = reg.build_registry()
+        reg.write_outputs(registry, audit)
+        assert reg.check_drift() == 0
+        # Change only volatile provenance commit SHAs; substantive content is unchanged.
+        data = yaml.safe_load(tmp_registry.read_text())
+        data["provenance"]["source_commit"] = "deadbeef" * 5
+        for entry in data["entries"]:
+            entry["last_verified_commit"] = "cafebabe" * 5
+        tmp_registry.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        assert reg.check_drift() == 0
+    finally:
+        reg.REGISTRY_PATH = original_registry
+        reg.AUDIT_PATH = original_audit
+        importlib.reload(reg)
+
+
 def test_check_detects_drift(tmp_path, monkeypatch):
     # Point the module paths at temp copies and verify --check flags a mutated registry.
     import importlib

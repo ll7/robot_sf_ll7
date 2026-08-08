@@ -523,6 +523,36 @@ def write_outputs(registry: dict[str, Any], audit: dict[str, Any]) -> None:
     write_evidence_json(AUDIT_PATH, audit, catalog_area="workflow_evidence")
 
 
+# Provenance fields that legitimately change between commits and must not be treated as
+# content drift by --check.
+_VOLATILE_REGISTRY_KEYS = {"generated_at"}
+_VOLATILE_PROVENANCE_KEYS = {"source_commit"}
+_VOLATILE_ENTRY_KEYS = {"last_verified_commit"}
+
+
+def _strip_volatile(node: Any, volatile_keys: set[str]) -> Any:
+    """Return a deep copy of ``node`` with the named volatile keys removed at every level."""
+    if isinstance(node, dict):
+        return {
+            k: _strip_volatile(v, volatile_keys) for k, v in node.items() if k not in volatile_keys
+        }
+    if isinstance(node, list):
+        return [_strip_volatile(item, volatile_keys) for item in node]
+    return node
+
+
+def _normalize_registry_for_drift(registry: dict[str, Any]) -> dict[str, Any]:
+    """Drop volatile timestamp/commit/provenance fields so --check is stable across commits."""
+    stripped = _strip_volatile(registry, _VOLATILE_REGISTRY_KEYS)
+    provenance = stripped.get("provenance")
+    if isinstance(provenance, dict):
+        stripped["provenance"] = {k: v for k, v in provenance.items() if k != "source_commit"}
+    entries = stripped.get("entries")
+    if isinstance(entries, list):
+        stripped["entries"] = [_strip_volatile(e, _VOLATILE_ENTRY_KEYS) for e in entries]
+    return stripped
+
+
 def check_drift() -> int:
     """Return 0 if committed outputs match current discovery rules, else 1."""
     registry, audit = build_registry()
@@ -531,13 +561,17 @@ def check_drift() -> int:
         return 1
     committed_registry = yaml.safe_load(REGISTRY_PATH.read_text(encoding="utf-8"))
     committed_audit = json.loads(AUDIT_PATH.read_text(encoding="utf-8"))
-    reg_cmp = {k: v for k, v in registry.items() if k != "generated_at"}
-    committed_reg_cmp = {k: v for k, v in committed_registry.items() if k != "generated_at"}
+    reg_cmp = _normalize_registry_for_drift(registry)
+    committed_reg_cmp = _normalize_registry_for_drift(committed_registry)
     # The shared evidence writer prepends a review_marker to the on-disk audit; mirror it before
-    # comparing so drift detection is byte-stable across regenerations.
+    # comparing. The audit's source_commit is also volatile across commits.
     audit_with_marker = {"review_marker": review_marker_json(), **audit}
-    audit_cmp = {k: v for k, v in audit_with_marker.items() if k != "generated_at"}
-    committed_audit_cmp = {k: v for k, v in committed_audit.items() if k != "generated_at"}
+    audit_cmp = {
+        k: v for k, v in audit_with_marker.items() if k not in ("generated_at", "source_commit")
+    }
+    committed_audit_cmp = {
+        k: v for k, v in committed_audit.items() if k not in ("generated_at", "source_commit")
+    }
     if reg_cmp != committed_reg_cmp or audit_cmp != committed_audit_cmp:
         print("drift: regenerated registry/audit differs from committed files", file=sys.stderr)
         return 1

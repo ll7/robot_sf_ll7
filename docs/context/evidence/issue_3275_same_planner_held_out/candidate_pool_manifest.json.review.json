@@ -1,7 +1,7 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/candidate_pool_manifest.json",
-  "artifact_sha256": "06af21e5f092f60dbf79d05c667091a0463faa92693cb0928fdd7a3f06f957fd",
+  "artifact_sha256": "3de02fc5647149165dd9081a608d89e0b84506a9e169ba0e887ddb34f3c36875",
+  "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "preserved_exact_bytes": true
+  "schema_version": "evidence-review-marker.v1"
 }

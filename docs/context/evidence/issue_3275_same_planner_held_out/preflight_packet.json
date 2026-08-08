@@ -24,7 +24,7 @@
   },
   "certified_archive_issue": 5305,
   "claim_boundary": "preflight_evidence_only: this packet proves deterministic manifest construction, equal frozen arm budgets, seed/lineage separation, duplicate handling, reproducible hashes, and readiness to run. It produces no planner execution, no outcome read, and no proposal-yield, benchmark, or generalization claim.",
-  "code_revision": "8e2ee7a924ac994a713651407e22690a63149506",
+  "code_revision": "1c38efb99124d052e5169bc7ed16585f23e9cbeb",
   "contract_issue": 6103,
   "duplicate_accounting": {
     "duplicate_count": 0,
@@ -66,7 +66,7 @@
   },
   "generated_files": [
     {
-      "file_sha256": "06af21e5f092f60dbf79d05c667091a0463faa92693cb0928fdd7a3f06f957fd",
+      "file_sha256": "3de02fc5647149165dd9081a608d89e0b84506a9e169ba0e887ddb34f3c36875",
       "path": "candidate_pool_manifest.json"
     },
     {
@@ -86,7 +86,7 @@
       "path": "step3_run_plan.json"
     },
     {
-      "file_sha256": "a21a1c864c227c24c8908efed34ae7fb05310e90fdb6175a4ab31885e66dabf6",
+      "file_sha256": "4b7e79b4030b2e973306b6fcadf7fb1b2533b27bba1116d8651fb883eb2ba5b2",
       "path": "README.md"
     }
   ],

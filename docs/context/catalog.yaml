@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-07
+updated_at: 2026-08-08
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -4867,3 +4867,11 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/figure_render_registry.v1.yaml
+  status: evidence
+  freshness: maintained
+  area: workflow_evidence
+- path: docs/context/evidence/issue_6769_figure_render_registry_audit.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence

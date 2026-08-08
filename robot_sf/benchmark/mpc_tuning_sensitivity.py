@@ -25,7 +25,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 CONFIG_SCHEMA = "issue_5579_mpc_tuning_sensitivity.v2"
 REPORT_SCHEMA = "issue_5579_mpc_tuning_sensitivity_report.v1"
-SELECTION_SCHEMA = "issue_5579_mpc_tuning_selection.v1"
+SELECTION_SCHEMA = "issue_5579_mpc_tuning_selection.v2"
 INFERENCE_SCHEMA = "issue_5579_mpc_tuning_held_out_inference.v1"
 SELECTION_RULE = "highest eligible route-complete collision-free rate; candidate_id tie-break"
 STUDY_ID = "issue_5579_mpc_tuning_budget_sensitivity_v2"
@@ -319,6 +319,7 @@ def normalize_episode_record(
         if isinstance(algorithm_metadata, Mapping)
         else None
     )
+    auxiliary_runtime = _auxiliary_runtime_payloads(algorithm_metadata)
     solver_evidence = _native_solver_evidence(
         algorithm_metadata,
         expected_config_hash=expected_config_hash,
@@ -340,7 +341,10 @@ def normalize_episode_record(
         "benchmark_success": _bool_field(
             availability["benchmark_success"], field="benchmark_success"
         ),
-        "planner_runtime_status": _planner_runtime_status(planner_runtime),
+        "planner_runtime_status": _planner_runtime_status(
+            planner_runtime,
+            additional_runtime=auxiliary_runtime,
+        ),
         "solver_execution_mode": solver_evidence["solver_execution_mode"],
         "config_provenance_valid": solver_evidence["config_provenance_valid"],
         "valid_solver_provenance": solver_evidence["valid_solver_provenance"],
@@ -523,6 +527,7 @@ def write_tuning_selection(
     """
     validated = validate_sensitivity_config(config, repo_root=repo_root)
     selected = _derive_tuning_selection(report, validated)
+    selected_config_hashes = _selected_target_config_hashes(report, selected)
 
     config_sha256 = _config_sha256(str(config_path), repo_root=repo_root)
     if config_sha256 is None:
@@ -541,6 +546,7 @@ def write_tuning_selection(
         "selection_rule": SELECTION_RULE,
         "config_sha256": config_sha256,
         "selected_target_candidates": selected,
+        "selected_target_config_hashes": selected_config_hashes,
         "source_report": str(source_report),
         "source_report_sha256": _sha256(report_path),
         "source_report_run_commit": source_report_run_commit,
@@ -582,6 +588,48 @@ def _derive_tuning_selection(
     return dict(_validate_target_candidate_ids(selected, validated) or {})
 
 
+def _selected_target_config_hashes(
+    report: Mapping[str, Any], selected: Mapping[str, str]
+) -> dict[str, str]:
+    """Return the effective config hash recorded for each selected target candidate."""
+    summaries = {
+        str(summary.get("arm_key")): summary
+        for summary in report.get("target_summary", [])
+        if isinstance(summary, Mapping)
+    }
+    hashes: dict[str, str] = {}
+    for arm_key in TARGET_ARM_KEYS:
+        best = summaries.get(arm_key, {}).get("best_candidate")
+        if not isinstance(best, Mapping) or best.get("candidate_id") != selected.get(arm_key):
+            raise ValueError(
+                f"tuning report has no selected candidate row for target arm {arm_key}"
+            )
+        digest = str(best.get("config_sha256_16", "")).strip().lower()
+        if len(digest) != 16 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError(
+                f"tuning report selected candidate for {arm_key} has an invalid config hash"
+            )
+        hashes[arm_key] = digest
+    return hashes
+
+
+def _validate_selected_target_config_hashes(value: Any) -> dict[str, str]:
+    """Validate the effective config hashes bound into a selection artifact.
+
+    Returns:
+        Normalized short hashes keyed by target arm.
+    """
+    if not isinstance(value, Mapping):
+        raise ValueError("tuning selection must record selected target config hashes")
+    hashes = {str(key): str(item).strip().lower() for key, item in value.items()}
+    if set(hashes) != set(TARGET_ARM_KEYS):
+        raise ValueError("tuning selection target config hashes must cover both target arms")
+    for arm_key, digest in hashes.items():
+        if len(digest) != 16 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError(f"tuning selection config hash for {arm_key} is invalid")
+    return hashes
+
+
 def _selection_input_digest(report: Mapping[str, Any]) -> str:
     """Return the digest of the exact report content the selection rule consumed.
 
@@ -621,6 +669,7 @@ def load_tuning_selection(
     *,
     config_path: str | Path,
     repo_root: Path,
+    expected_run_commit: str | None = None,
 ) -> dict[str, str]:
     """Load and validate the tuning selection required by held-out execution.
 
@@ -652,14 +701,49 @@ def load_tuning_selection(
     validated = validate_sensitivity_config(config, repo_root=repo_root)
     selected = payload.get("selected_target_candidates")
     normalized = dict(_validate_target_candidate_ids(selected, validated) or {})
+    selected_config_hashes = _validate_selected_target_config_hashes(
+        payload.get("selected_target_config_hashes")
+    )
+    _validate_active_target_config_hashes(
+        validated,
+        repo_root=repo_root,
+        selected=normalized,
+        recorded=selected_config_hashes,
+    )
     _verify_selection_source_report(
         payload,
         validated,
         repo_root=repo_root,
         expected_config_sha256=expected_config_sha256,
         selected=normalized,
+        selected_config_hashes=selected_config_hashes,
+        expected_run_commit=expected_run_commit,
     )
     return normalized
+
+
+def _validate_active_target_config_hashes(
+    validated: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    selected: Mapping[str, str],
+    recorded: Mapping[str, str],
+) -> None:
+    """Require the active effective target configs to match the selection artifact."""
+    active = {
+        str(entry["arm_key"]): str(entry["config_sha256_16"])
+        for entry in build_candidate_plan(
+            validated,
+            repo_root=repo_root,
+            target_candidate_ids=selected,
+        )
+        if entry["target"]
+    }
+    if active != dict(recorded):
+        raise ValueError(
+            "tuning selection selected target config hashes do not match the active candidate "
+            f"configs: recorded={dict(recorded)} active={active}"
+        )
 
 
 def _verify_selection_source_report(
@@ -669,12 +753,13 @@ def _verify_selection_source_report(
     repo_root: Path,
     expected_config_sha256: str,
     selected: Mapping[str, str],
+    selected_config_hashes: Mapping[str, str],
+    expected_run_commit: str | None,
 ) -> None:
     """Bind the selection artifact to the tuning report that produced it.
 
-    The config digest alone cannot detect a post-tuning edit of the selected candidate,
-    because every declared candidate belongs to the same config. The winners are therefore
-    re-derived from the referenced tuning report and compared to the recorded selection.
+    The artifact binds both the selected candidate IDs and their effective config hashes to the
+    referenced report, then re-derives and compares both values before held-out execution.
     """
     source_report = str(payload.get("source_report") or "").strip()
     if not source_report:
@@ -692,7 +777,11 @@ def _verify_selection_source_report(
         raise ValueError("tuning selection source report must be a mapping")
     if report.get("config_sha256") != expected_config_sha256:
         raise ValueError("tuning selection source report was produced by a different config")
-    _validate_selection_source_report_run_commit(payload, report)
+    _validate_selection_source_report_run_commit(
+        payload,
+        report,
+        expected_run_commit=expected_run_commit,
+    )
     if payload.get("selection_input_digest") != _selection_input_digest(report):
         raise ValueError("tuning selection input digest does not match the source report")
     rederived = _derive_tuning_selection(report, validated)
@@ -701,10 +790,19 @@ def _verify_selection_source_report(
             "tuning selection does not match the source report selection rule: "
             f"recorded={dict(selected)} rederived={rederived}"
         )
+    rederived_hashes = _selected_target_config_hashes(report, rederived)
+    if rederived_hashes != dict(selected_config_hashes):
+        raise ValueError(
+            "tuning selection target config hashes do not match the source report: "
+            f"recorded={dict(selected_config_hashes)} rederived={rederived_hashes}"
+        )
 
 
 def _validate_selection_source_report_run_commit(
-    payload: Mapping[str, Any], report: Mapping[str, Any]
+    payload: Mapping[str, Any],
+    report: Mapping[str, Any],
+    *,
+    expected_run_commit: str | None,
 ) -> None:
     """Require the selection artifact to bind the source report's run commit."""
     report_run_commit = _validate_run_commit(
@@ -715,6 +813,15 @@ def _validate_selection_source_report_run_commit(
     )
     if selection_run_commit != report_run_commit:
         raise ValueError("tuning selection source report run commit does not match the artifact")
+    if expected_run_commit is not None:
+        active_run_commit = _validate_run_commit(
+            expected_run_commit,
+            context="active held-out run",
+        )
+        if selection_run_commit != active_run_commit:
+            raise ValueError(
+                "tuning selection source report run commit does not match the active run"
+            )
 
 
 def write_report(report: Mapping[str, Any], output_dir: str | Path) -> dict[str, str]:
@@ -1794,7 +1901,10 @@ def _native_solver_evidence(
     runtime = runtime if isinstance(runtime, Mapping) else {}
     solver_execution_mode, identity_reasons = _solver_identity(value, kinematics, runtime, contract)
     valid_provenance, provenance_reasons = _solver_provenance(value, expected_config_hash)
-    runtime_evidence = _solver_runtime_evidence(runtime)
+    runtime_evidence = _solver_runtime_evidence(
+        runtime,
+        additional_runtime=_auxiliary_runtime_payloads(value),
+    )
     reasons = identity_reasons + provenance_reasons + runtime_evidence["exclusion_reasons"]
     return {
         "solver_execution_mode": solver_execution_mode,
@@ -1892,7 +2002,11 @@ def _solver_provenance(
     return valid, [] if valid else ["solver_provenance_invalid"]
 
 
-def _solver_runtime_evidence(runtime: Mapping[str, Any]) -> dict[str, Any]:
+def _solver_runtime_evidence(
+    runtime: Mapping[str, Any],
+    *,
+    additional_runtime: Sequence[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
     """Validate solver counters, finite commands, and a successful control update.
 
     Returns:
@@ -1906,6 +2020,9 @@ def _solver_runtime_evidence(runtime: Mapping[str, Any]) -> dict[str, Any]:
     reasons = _solver_counter_reasons(
         solver_successes, solver_failures, fallback_stop_count, runtime
     )
+    reasons.extend(_fallback_diagnostic_reasons(runtime))
+    for payload in additional_runtime:
+        reasons.extend(_fallback_diagnostic_reasons(payload))
     if not finite_commands:
         reasons.append("commands_not_finite")
     if control_updates is None or control_updates < 1:
@@ -1918,6 +2035,54 @@ def _solver_runtime_evidence(runtime: Mapping[str, Any]) -> dict[str, Any]:
         "control_updates": control_updates,
         "exclusion_reasons": reasons,
     }
+
+
+def _fallback_diagnostic_reasons(value: Mapping[str, Any]) -> list[str]:
+    """Find active or malformed fallback diagnostics in nested planner runtime payloads.
+
+    Returns:
+        Fallback-related exclusion reasons, including malformed known counters.
+    """
+    reasons: list[str] = []
+    for key, item in value.items():
+        reasons.extend(_fallback_field_reasons(key, item))
+        if isinstance(item, Mapping):
+            reasons.extend(_fallback_diagnostic_reasons(item))
+    return reasons
+
+
+def _fallback_field_reasons(key: Any, value: Any) -> list[str]:
+    """Classify one known fallback diagnostic field.
+
+    Returns:
+        Exclusion reasons for the field, or an empty list when it is inactive or unknown.
+    """
+    if key in {"fallback_count", "fallback_stop_count", "fallback_step_count"}:
+        if not _is_int(value) or int(value) < 0:
+            return ["fallback_diagnostics_invalid"]
+        return ["fallback"] if int(value) > 0 else []
+    if key == "fallback_rate":
+        if not _finite_number(value) or float(value) < 0.0:
+            return ["fallback_diagnostics_invalid"]
+        return ["fallback"] if float(value) > 0.0 else []
+    if key in {"fallback_triggered", "fallback_applied"}:
+        if value is True:
+            return ["fallback"]
+        if not isinstance(value, bool):
+            return ["fallback_diagnostics_invalid"]
+    return []
+
+
+def _auxiliary_runtime_payloads(value: Any) -> tuple[Mapping[str, Any], ...]:
+    """Return top-level shield/fallback summaries that supplement planner runtime."""
+    if not isinstance(value, Mapping):
+        return ()
+    payloads: list[Mapping[str, Any]] = []
+    for field in ("cbf_safety_filter", "safety_wrapper", "shield_stats"):
+        payload = value.get(field)
+        if isinstance(payload, Mapping):
+            payloads.append(payload)
+    return tuple(payloads)
 
 
 def _solver_counter_reasons(
@@ -2170,7 +2335,11 @@ def _eligible(row: Mapping[str, Any], contract: Mapping[str, Any] | None = None)
     return not _eligibility_reasons(row, contract)
 
 
-def _planner_runtime_status(value: Any) -> str:
+def _planner_runtime_status(
+    value: Any,
+    *,
+    additional_runtime: Sequence[Mapping[str, Any]] = (),
+) -> str:
     """Classify planner runtime diagnostics for fail-closed episode eligibility.
 
     Returns:
@@ -2179,6 +2348,26 @@ def _planner_runtime_status(value: Any) -> str:
     """
     if not isinstance(value, Mapping) or not value:
         return "missing"
+    direct_status = _direct_planner_runtime_status(value)
+    if direct_status != "eligible":
+        return direct_status
+    reasons = _fallback_diagnostic_reasons(value)
+    reasons.extend(
+        reason for payload in additional_runtime for reason in _fallback_diagnostic_reasons(payload)
+    )
+    if "fallback_diagnostics_invalid" in reasons:
+        return "invalid"
+    if "fallback" in reasons:
+        return "fallback"
+    return "eligible"
+
+
+def _direct_planner_runtime_status(value: Mapping[str, Any]) -> str:
+    """Classify direct planner counters before checking nested diagnostics.
+
+    Returns:
+        The direct planner runtime status.
+    """
     for field in ("solver_failures", "fallback_stop_count", "fallback_count"):
         if field not in value:
             continue

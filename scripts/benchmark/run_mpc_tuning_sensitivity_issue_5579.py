@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Run the bounded CPU sensitivity study for issue #5579.
 
-The default path is a no-submit config check. The tuning phase evaluates the two target MPC arms at
-the 20 pre-registered points and writes a validated candidate-selection artifact. The held-out
-phase requires that artifact and evaluates only the selected target candidates plus the four frozen
-incumbents on the declared held-out scenario and seed slice. Raw episode output stays under
-``output/``; only compact derived reports should be promoted into ``docs/context/evidence/``.
+``--check`` is the no-submit configuration path. The tuning phase evaluates the two target MPC
+arms at the 20 pre-registered points and writes a validated candidate-selection artifact. The
+held-out phase requires that artifact and evaluates only the selected target candidates plus the
+four frozen incumbents on the declared held-out scenario and seed slice. Raw episode output stays
+under ``output/``; only compact derived reports should be promoted into ``docs/context/evidence/``.
 """
 
 from __future__ import annotations
@@ -292,6 +292,7 @@ def _resolve_held_out_candidates(
         config,
         config_path=config_path,
         repo_root=REPO_ROOT,
+        expected_run_commit=_git_head(),
     )
     if target_candidate_ids is None:
         return selected_from_artifact
@@ -449,6 +450,7 @@ def main(argv: list[str] | None = None) -> int:
             config,
             config_path=args.config,
             repo_root=REPO_ROOT,
+            expected_run_commit=_git_head(),
         )
         report = run_study(
             config,

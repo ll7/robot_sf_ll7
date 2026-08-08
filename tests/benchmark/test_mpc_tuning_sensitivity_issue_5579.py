@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import robot_sf.benchmark.mpc_tuning_sensitivity as sensitivity_module
 import scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 as sensitivity_runner
 from robot_sf.benchmark.mpc_tuning_sensitivity import (
     TARGET_ARM_KEYS,
@@ -831,6 +832,23 @@ def test_canary_solver_contract_is_reachable_from_the_real_policy_builder() -> N
         assert row["native_solver_exclusion_reasons"] == []
         assert row["native_solver_eligible"] is True
 
+        if arm["key"] == "prediction_mpc_cbf":
+            fallback_record = deepcopy(record)
+            fallback_metadata = deepcopy(fallback_record["algorithm_metadata"])
+            fallback_metadata["planner_runtime"]["cbf_safety_filter"] = {"fallback_count": 1}
+            fallback_metadata["cbf_safety_filter"] = {"fallback_step_count": 1}
+            fallback_record["algorithm_metadata"] = fallback_metadata
+            fallback_row = normalize_episode_record(
+                fallback_record,
+                arm_key=str(arm["key"]),
+                candidate_id="incumbent",
+                expected_config_hash=config_hash(algo_config),
+                solver_contract=contract,
+            )
+            assert fallback_row["planner_runtime_status"] == "fallback"
+            assert fallback_row["native_solver_eligible"] is False
+            assert "fallback" in fallback_row["native_solver_exclusion_reasons"]
+
         gate = validate_canary_rows(
             [{**row, "scenario_id": scenario_id, "seed": 101} for scenario_id in ("a", "b", "c")],
             scenario_ids=("a", "b", "c"),
@@ -974,11 +992,21 @@ def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Pat
     assert payload["source_report"] == source_report
     assert payload["source_report_sha256"]
     assert payload["selection_input_digest"]
+    assert set(payload["selected_target_config_hashes"]) == set(TARGET_ARM_KEYS)
 
     assert (
         load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
         == payload["selected_target_candidates"]
     )
+
+    with pytest.raises(ValueError, match="active run"):
+        load_tuning_selection(
+            selection_path,
+            config,
+            config_path=CONFIG,
+            repo_root=ROOT,
+            expected_run_commit="1" * 40,
+        )
 
     tampered_commit = deepcopy(payload)
     tampered_commit["source_report_run_commit"] = "1" * 40
@@ -993,8 +1021,24 @@ def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Pat
     swapped["selected_target_candidates"]["prediction_mpc"] = next(
         candidate_id for candidate_id in declared if candidate_id != original
     )
+    swapped_plan = build_candidate_plan(
+        config,
+        repo_root=ROOT,
+        target_candidate_ids=swapped["selected_target_candidates"],
+    )
+    swapped["selected_target_config_hashes"]["prediction_mpc"] = next(
+        entry["config_sha256_16"]
+        for entry in swapped_plan
+        if entry["target"] and entry["arm_key"] == "prediction_mpc"
+    )
     selection_path.write_text(json.dumps(swapped), encoding="utf-8")
     with pytest.raises(ValueError, match="does not match the source report selection rule"):
+        load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+
+    tampered_hashes = deepcopy(payload)
+    tampered_hashes["selected_target_config_hashes"]["prediction_mpc"] = "0" * 16
+    selection_path.write_text(json.dumps(tampered_hashes), encoding="utf-8")
+    with pytest.raises(ValueError, match="active candidate configs"):
         load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
 
     # An unreferenced selection cannot be verified at all.
@@ -1012,6 +1056,48 @@ def test_tuning_selection_rejects_a_candidate_swapped_after_tuning(tmp_path: Pat
     edited_report_path.write_text(json.dumps(edited, indent=2, sort_keys=True), encoding="utf-8")
     with pytest.raises(ValueError, match="source report digest does not match"):
         load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+
+
+def test_tuning_selection_rejects_active_effective_config_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A selected ID cannot hide a changed effective target configuration."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    plan = build_candidate_plan(config, repo_root=ROOT)
+    tuning_report = analyze_results(
+        config,
+        _fixture_rows(config, plan, scope_name="tuning_scope"),
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit=FIXTURE_RUN_COMMIT,
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+        scope_name="tuning_scope",
+    )
+    selection_path = tmp_path / "tuning_selection.json"
+    source_report = _persisted_tuning_report(tuning_report, tmp_path / "tuning")
+    payload = write_tuning_selection(
+        tuning_report,
+        config,
+        output_path=selection_path,
+        config_path=CONFIG,
+        repo_root=ROOT,
+        source_report=source_report,
+    )
+
+    original_build_candidate_plan = sensitivity_module.build_candidate_plan
+
+    def drifted_build_candidate_plan(*args: object, **kwargs: object) -> list[dict]:
+        drifted_plan = original_build_candidate_plan(*args, **kwargs)
+        for entry in drifted_plan:
+            if entry["target"] and entry["arm_key"] == "prediction_mpc":
+                entry["config_sha256_16"] = "f" * 16
+        return drifted_plan
+
+    monkeypatch.setattr(sensitivity_module, "build_candidate_plan", drifted_build_candidate_plan)
+    with pytest.raises(ValueError, match="active candidate configs"):
+        load_tuning_selection(selection_path, config, config_path=CONFIG, repo_root=ROOT)
+    assert payload["selected_target_config_hashes"]["prediction_mpc"] != "f" * 16
 
 
 def test_tuning_selection_requires_a_40_character_git_commit_sha(tmp_path: Path) -> None:

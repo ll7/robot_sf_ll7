@@ -3692,6 +3692,10 @@ entries:
   status: evidence
   freshness: evidence
   area: adversarial_search
+- path: docs/context/evidence/issue_3275_same_planner_held_out
+  status: evidence
+  freshness: evidence
+  area: adversarial_search
 - path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/report.md
   status: evidence
   freshness: evidence

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/random_arm_manifest.json",
+  "artifact_sha256": "55c5d92ed6f7dbdd3e8c50aa8fffcf3eb0418d7a2cf9eb161130803a53bbe48e",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -1206,9 +1206,10 @@ class RobotEnv(BaseEnv):
                         _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
                     )
                     logger.debug(
-                        "Initial occupancy grid generated: obstacles={}, pedestrians={}",
-                        len(obstacles),
-                        len(ped_positions),
+                        "Initial occupancy grid generated: "
+                        "obstacles={obstacles}, pedestrians={pedestrians}",
+                        obstacles=f"{len(obstacles)}",
+                        pedestrians=f"{len(ped_positions)}",
                     )
             obs = self._attach_asymmetric_critic_state(obs)
             self._latest_observation = obs

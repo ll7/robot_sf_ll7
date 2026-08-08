@@ -129,6 +129,16 @@ MIGRATED_SITES = [
         values={"target_path": Path("output/{rec}.pkl")},
         before=lambda target_path: f"Recording saved to {target_path}",
     ),
+    MigratedSite(
+        id="robotenv-occupancy-grid",
+        file="robot_sf/gym_env/robot_env.py",
+        level="debug",
+        fmt=("Initial occupancy grid generated: obstacles={obstacles}, pedestrians={pedestrians}"),
+        values={"obstacles": 5, "pedestrians": 3},
+        before=lambda obstacles, pedestrians: (
+            f"Initial occupancy grid generated: obstacles={obstacles}, pedestrians={pedestrians}"
+        ),
+    ),
 ]
 
 

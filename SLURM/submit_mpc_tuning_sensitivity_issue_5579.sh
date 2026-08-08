@@ -8,6 +8,9 @@
 # 4. Runs the bounded tuning phase and freezes its selected target candidates.
 # 5. Runs only the frozen held-out production phase after tuning succeeds.
 #
+# Submit through scripts/dev/sbatch_use_max_time.sh. That wrapper creates output/slurm/ before
+# sbatch opens this script's log path; Slurm opens #SBATCH --output before this body runs.
+#
 #SBATCH --job-name=mpc-tuning-sensitivity
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -23,6 +26,10 @@ PROJECT_ROOT="$(
     || echo "${SLURM_SUBMIT_DIR:-$(pwd)}"
 )"
 cd "${PROJECT_ROOT}"
+
+# Keep the conventional artifact directory available for allocations launched through an
+# existing wrapper or allocation. The submission wrapper creates it earlier for sbatch itself.
+mkdir -p output/slurm
 
 CONFIG_PATH="${CONFIG_PATH:-configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml}"
 OUT_DIR="${OUT_DIR:-output/benchmarks/issue_5579_mpc_tuning_sensitivity_v2}"

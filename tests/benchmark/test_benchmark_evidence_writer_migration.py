@@ -217,38 +217,30 @@ def test_hetero_smoke_report_readme_prepends_marker_and_preserves_body(
 # ---------------------------------------------------------------------------
 
 
-def _archetype_summary() -> dict:
-    return {
-        "schema_version": "pedestrian-archetype-reporting-packet.v1",
-        "status": "composition_report_only",
-        "evidence_date": "2026-06-20",
-        "config_path": "configs/research/pedestrian_archetypes_v1.yaml",
-        "population_size": 30,
-        "claim_boundary": "No benchmark claim.",
-        "reports": {
-            "homogeneous_standard": {
-                "archetypes": {"standard": {"realized_count": 30}},
-                "speed_factor_min": 1.0,
-                "speed_factor_max": 1.0,
-                "assignment_order_sha1": "d445fb25af0e",
-            }
-        },
-    }
+def test_archetype_main_writes_through_shared_contract(tmp_path: Path, monkeypatch) -> None:
+    """The archetype CLI writes its real JSON and Markdown paths with markers."""
+    output_dir = tmp_path / "archetype-report"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_pedestrian_archetype_report.py",
+            "--config",
+            "configs/research/pedestrian_archetypes_v1.yaml",
+            "--output-dir",
+            str(output_dir),
+            "--population-size",
+            "3",
+        ],
+    )
 
-
-def test_archetype_shared_writer_contract_matches_migrated_path(tmp_path: Path) -> None:
-    """The archetype builder serializes the same summary through write_json/write_text.
-
-    This pins the migrated serialization path against the shared writer directly so
-    the real ``main()`` write cannot drift from the shared contract.
-    """
-    summary = _archetype_summary()
-    json_path = tmp_path / "summary.json"
-    write_json(json_path, summary)
-    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert _ARCHETYPE.main() == 0
+    payload = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert payload["review_marker"] == review_marker_json()
-    for key, value in summary.items():
-        assert payload[key] == value
+    assert payload["schema_version"] == "pedestrian-archetype-reporting-packet.v1"
+    assert payload["population_size"] == 3
+    readme = (output_dir / "README.md").read_text(encoding="utf-8")
+    assert readme.startswith(review_marker("robot_sf#3206") + "\n")
 
 
 # ---------------------------------------------------------------------------
@@ -299,3 +291,74 @@ def test_trace_dwa_trace_json_is_marker_additive_and_deterministic(tmp_path: Pat
     assert parsed["review_marker"] == review_marker_json()
     for key, value in payload.items():
         assert parsed[key] == value
+
+
+def test_trace_dwa_production_trace_path_uses_shared_json_writer(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The real trace exporter adds the marker at its production JSON boundary."""
+    records = [
+        {
+            "scenario_id": scenario_id,
+            "seed": seed,
+            "termination_reason": "max_steps",
+            "steps": 1,
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "timeout_event": True,
+            },
+            "algorithm_metadata": {
+                "planner_decision_trace": {
+                    "steps": [
+                        {
+                            "step": 0,
+                            "selected_command": [0.1, 0.0],
+                            "selected_source": "best_feasible",
+                            "selected_score": 1.0,
+                            "constraint_reason": "best_feasible",
+                            "candidate_total": 1,
+                            "candidate_feasible": 1,
+                            "candidate_infeasible": 0,
+                            "dynamic_window": {
+                                "v_min": 0.0,
+                                "v_max": 1.0,
+                                "w_min": -0.3,
+                                "w_max": 0.3,
+                            },
+                            "target_goal": {"kind": "goal", "x": 1.0, "y": 0.0},
+                            "distance_to_goal_m": 2.0,
+                            "route_progress_from_start_m": 0.0,
+                            "robot_x_m": 0.0,
+                            "robot_y_m": 0.0,
+                            "route_rescue_active": False,
+                            "route_rescue_type": None,
+                            "feasibility_slowdown_active": False,
+                        }
+                    ]
+                }
+            },
+        }
+        for scenario_id, seed, _ in _TRACE.TARGET_EPISODES
+    ]
+
+    monkeypatch.setattr(_TRACE, "_load_scenario", lambda *args, **kwargs: {})
+
+    def fake_run_map_batch(_scenarios, episodes_path, **_kwargs) -> None:
+        episodes_path.write_text(json.dumps(records.pop(0)) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(_TRACE, "run_map_batch", fake_run_map_batch)
+    output_dir = tmp_path / "trace-output"
+    report = _TRACE.trace_episodes(
+        matrix_path=Path("unused-matrix.yaml"),
+        algo_config_path=REPO_ROOT / "configs/algos/dwa_route_rescue.yaml",
+        out_dir=output_dir,
+        evidence_dir=None,
+    )
+
+    assert report["issue"] == 5319
+    payload = json.loads((output_dir / "dwa_route_rescue_trace.json").read_text(encoding="utf-8"))
+    assert payload["review_marker"] == review_marker_json()
+    assert payload["schema_version"] == "dwa-route-rescue-trace.v1"
+    assert len(payload["episodes"]) == 2
+    assert records == []

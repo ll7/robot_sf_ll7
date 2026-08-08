@@ -137,3 +137,12 @@ class SemanticBoundary:
     pedestrian_passable: bool = False
     occluding: bool = False
     spawn_edge: bool = False
+
+
+__all__ = [
+    "SUPPORTED_SEMANTIC_BOUNDARY_FLAGS",
+    "SemanticBoundary",
+    "SvgCircle",
+    "SvgPath",
+    "SvgRectangle",
+]

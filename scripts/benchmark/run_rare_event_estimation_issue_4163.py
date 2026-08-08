@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Run issue #4163 rare-event importance-sampling smoke harness."""
 
+# evidence-writer-exempt: JSONL episodes contract (episodes.jsonl is written row-by-row with sort_keys JSON lines); shared write_json writes a single JSON document and cannot preserve the JSONL bytes.
 from __future__ import annotations
 
 import argparse

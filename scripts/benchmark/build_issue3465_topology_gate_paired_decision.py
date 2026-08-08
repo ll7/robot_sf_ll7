@@ -7,6 +7,7 @@ checks paired statistical significance, detects fallback/degraded rows, calls th
 promotion gate classifier, and writes the required evidence artifacts.
 """
 
+# evidence-writer-exempt: header-only empty-CSV contract (the paired_deltas.csv is written even when the gate is blocked with zero data rows) plus a csv.writer row API that shared write_csv (list-of-dicts, marker line) cannot preserve byte-for-byte.
 from __future__ import annotations
 
 import argparse

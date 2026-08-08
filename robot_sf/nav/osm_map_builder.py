@@ -639,3 +639,16 @@ def osm_to_map_definition(
         ped_crowded_zones=[],
         allowed_areas=buffered_local,  # Explicit walkable areas in local frame
     )
+
+
+__all__ = [
+    "OSMTagFilters",
+    "buffer_ways",
+    "cleanup_polygons",
+    "compute_obstacles",
+    "extract_obstacles",
+    "filter_driveable_ways",
+    "load_pbf",
+    "osm_to_map_definition",
+    "project_to_utm",
+]

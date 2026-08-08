@@ -7,8 +7,11 @@ import hashlib
 import json
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml"
+HISTORICAL_CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml"
+PACKET_CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml"
 EVIDENCE = ROOT / "docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14"
 REPORT_JSON = EVIDENCE / "sensitivity_report.json"
 REPORT_MD = EVIDENCE / "sensitivity_report.md"
@@ -25,8 +28,15 @@ def test_compact_report_preserves_the_preregistered_claim_boundary() -> None:
     assert report["evidence_tier"] == "diagnostic-only"
     assert report["benchmark_evidence"] is False
     assert "benchmark ranking" in report["claim_boundary"]
-    assert report["config_path"] == str(CONFIG.relative_to(ROOT))
-    assert report["config_sha256"] == hashlib.sha256(CONFIG.read_bytes()).hexdigest()
+    assert report["config_path"] == str(HISTORICAL_CONFIG.relative_to(ROOT))
+    assert report["config_sha256"] == _sha256(HISTORICAL_CONFIG)
+    packet = yaml.safe_load(PACKET_CONFIG.read_text(encoding="utf-8"))
+    assert packet["schema_version"] == "issue_5579_mpc_tuning_sensitivity.v2"
+    assert packet["study_id"] == "issue_5579_mpc_tuning_budget_sensitivity_v2"
+    assert report["study_id"] != packet["study_id"]
+    assert report["config_path"] != str(PACKET_CONFIG.relative_to(ROOT))
+    assert report["config_sha256"] != _sha256(PACKET_CONFIG)
+    assert packet["artifacts"]["durable_evidence_root"] != str(EVIDENCE.relative_to(ROOT))
     assert report["candidate_count"] == 20
     assert report["target_arm_count"] == 2
     assert report["total_episode_rows"] == 396
@@ -77,3 +87,8 @@ def test_markdown_leads_with_status_and_claim_boundary_before_results() -> None:
     assert "does not change benchmark metrics, roster status, or paper-facing claims" in markdown
     assert "295 eligible" in markdown
     assert "101 excluded" in markdown
+
+
+def _sha256(path: Path) -> str:
+    """Return the byte-level SHA-256 binding for a tracked config file."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()

@@ -104,6 +104,38 @@ def test_phase_contract_is_required_and_held_out_drift_fails_closed() -> None:
     with pytest.raises(ValueError, match="contrast_count must be 8"):
         validate_sensitivity_config(drifted_inference, repo_root=ROOT)
 
+    drifted_metric = deepcopy(config)
+    drifted_metric["comparison"]["success_fields"] = ["outcome.route_complete"]
+    with pytest.raises(ValueError, match="comparison.success_fields"):
+        validate_sensitivity_config(drifted_metric, repo_root=ROOT)
+
+    drifted_band_read = deepcopy(config)
+    drifted_band_read["comparison"]["hybrid_band_read"]["otherwise"] = "supported"
+    with pytest.raises(ValueError, match="hybrid_band_read"):
+        validate_sensitivity_config(drifted_band_read, repo_root=ROOT)
+
+
+def test_packet_pins_solver_token_and_arm_bindings() -> None:
+    """The canary token and every compared arm cannot drift behind the report logic."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+
+    drifted_solver = deepcopy(config)
+    drifted_solver["canary"]["solver_execution"]["solver_execution_mode"] = "solver_ran"
+    with pytest.raises(ValueError, match="solver_execution_mode.*must be"):
+        validate_sensitivity_config(drifted_solver, repo_root=ROOT)
+
+    drifted_target = deepcopy(config)
+    drifted_target["target_arms"][0]["algo"] = "prediction_mpc_cbf"
+    with pytest.raises(ValueError, match="arm prediction_mpc must use algo"):
+        validate_sensitivity_config(drifted_target, repo_root=ROOT)
+
+    drifted_incumbent = deepcopy(config)
+    drifted_incumbent["incumbent_arms"][0]["algo_config_path"] = (
+        "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml"
+    )
+    with pytest.raises(ValueError, match="arm scenario_adaptive_hybrid_orca_v1"):
+        validate_sensitivity_config(drifted_incumbent, repo_root=ROOT)
+
 
 @pytest.mark.parametrize(
     ("field", "value"),

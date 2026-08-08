@@ -45,6 +45,41 @@ TOP_PARAMETERS = ("max_linear_speed", "horizon_steps", "pedestrian_safety_margin
 VALID_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 VALID_READINESS_STATUSES = frozenset({"native", "adapter"})
 NATIVE_SOLVER_PLANNER = "PredictionMPCPlannerAdapter"
+NATIVE_SOLVER_EXECUTION_MODE = "prediction_mpc_native_solver"
+
+FROZEN_ARM_BINDINGS: dict[str, tuple[str, str]] = {
+    "prediction_mpc": (
+        "prediction_mpc",
+        "configs/algos/prediction_mpc_cv.yaml",
+    ),
+    "prediction_mpc_cbf": (
+        "prediction_mpc",
+        "configs/algos/prediction_mpc_cv_cbf_collision_cone.yaml",
+    ),
+    "scenario_adaptive_hybrid_orca_v1": (
+        "hybrid_rule_local_planner",
+        "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml",
+    ),
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": (
+        "hybrid_rule_local_planner",
+        "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
+    ),
+    "hybrid_rule_v3_fast_progress_static_escape": (
+        "hybrid_rule_local_planner",
+        "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml",
+    ),
+    "hybrid_rule_v3_fast_progress_static_escape_continuous": (
+        "hybrid_rule_local_planner",
+        "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml",
+    ),
+}
+
+FROZEN_SUCCESS_FIELDS = ["outcome.route_complete", "outcome.collision_event"]
+FROZEN_HYBRID_BAND_READ = {
+    "structural_if": "both_tuning_selected_mpc_rates_below_all_incumbent_rates",
+    "budget_bound_if": "both_tuning_selected_mpc_rates_at_or_above_all_incumbent_rates",
+    "otherwise": "mixed_or_inconclusive",
+}
 
 # The 2026-08-03 #5579 freeze requires "native solver execution" for the canary. That
 # phrase names the solver that produced the command, not the benchmark command-space
@@ -70,7 +105,7 @@ SOLVER_EXECUTION_REQUIRED_FLAGS = (
     "forbid_fallback",
 )
 DEFAULT_SOLVER_EXECUTION: dict[str, Any] = {
-    "solver_execution_mode": "prediction_mpc_native_solver",
+    "solver_execution_mode": NATIVE_SOLVER_EXECUTION_MODE,
     "solver_planner_adapter": NATIVE_SOLVER_PLANNER,
     "planner_execution_mode": "adapter",
     "supports_native_commands": False,
@@ -1024,6 +1059,11 @@ def _validate_solver_execution(value: Any, *, target_arms: Any) -> None:
         raise ValueError(f"canary.solver_execution is missing declared fields: {missing}")
     if not str(contract["solver_execution_mode"]).strip():
         raise ValueError("canary.solver_execution.solver_execution_mode must be a non-empty token")
+    if str(contract["solver_execution_mode"]).strip().lower() != NATIVE_SOLVER_EXECUTION_MODE:
+        raise ValueError(
+            "canary.solver_execution.solver_execution_mode must be "
+            f"{NATIVE_SOLVER_EXECUTION_MODE!r}"
+        )
     for flag in SOLVER_EXECUTION_REQUIRED_FLAGS:
         if contract.get(flag) is not True:
             raise ValueError(f"canary.solver_execution.{flag} must be true")
@@ -1177,6 +1217,7 @@ def _validate_arm(value: Any, *, repo_root: Path) -> str:
     path_value = str(value.get("algo_config_path", "")).strip()
     if not key or not algo or not path_value:
         raise ValueError("each arm needs non-empty key, algo, and algo_config_path")
+    _validate_frozen_arm_binding(key, algo, path_value)
     config_path = _repo_path(path_value, repo_root)
     if not config_path.is_file():
         raise ValueError(f"arm config does not exist: {path_value}")
@@ -1190,6 +1231,18 @@ def _validate_arm(value: Any, *, repo_root: Path) -> str:
             raise ValueError(f"target arm {key} must disable solver fallback_to_stop")
         build_prediction_mpc_config(algorithm_config)
     return key
+
+
+def _validate_frozen_arm_binding(key: str, algo: str, path_value: str) -> None:
+    """Reject arm identity changes that the analyzer would otherwise relabel."""
+    expected_binding = FROZEN_ARM_BINDINGS.get(key)
+    if expected_binding is None:
+        return
+    expected_algo, expected_path = expected_binding
+    if algo != expected_algo:
+        raise ValueError(f"arm {key} must use algo {expected_algo!r}")
+    if path_value != expected_path:
+        raise ValueError(f"arm {key} must use algo_config_path {expected_path!r}")
 
 
 def _validate_search(value: Any) -> None:
@@ -1302,9 +1355,12 @@ def _validate_comparison(value: Any) -> None:
         raise ValueError("comparison.primary_metric has drifted")
     if comparison.get("higher_is_better") is not True:
         raise ValueError("comparison.higher_is_better must be true")
+    if comparison.get("success_fields") != FROZEN_SUCCESS_FIELDS:
+        raise ValueError(f"comparison.success_fields must be {FROZEN_SUCCESS_FIELDS}")
     if comparison.get("fallback_degraded_policy") != "exclude_from_success_evidence":
         raise ValueError("comparison must exclude fallback/degraded rows")
-    _mapping(comparison.get("hybrid_band_read"), "comparison.hybrid_band_read")
+    if comparison.get("hybrid_band_read") != FROZEN_HYBRID_BAND_READ:
+        raise ValueError("comparison.hybrid_band_read must match the frozen band-read contract")
 
 
 def _summarize_targets(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:

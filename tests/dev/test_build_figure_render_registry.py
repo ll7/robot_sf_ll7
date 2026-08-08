@@ -4,6 +4,9 @@ Covers each declared source class, deterministic classification rules, fail-clos
 identity, stable ordering, and ``--check`` drift detection.
 """
 
+# evidence-writer-exempt: these tests write to pytest tmp_path fixtures (local scratch), not to
+# tracked evidence artifacts.
+
 from __future__ import annotations
 
 import json

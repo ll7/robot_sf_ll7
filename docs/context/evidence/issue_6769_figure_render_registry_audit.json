@@ -16,15 +16,16 @@
     "non_deterministic_contract": 8,
     "unsafe_command": 4
   },
-  "generated_at": "2026-08-08T12:31:32+00:00",
+  "generated_at": "2026-08-08T12:38:39+00:00",
   "ineligible_count": 22,
   "issue": 6769,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "route_evidence_only": true,
   "schema": "issue_6769_figure_render_registry_audit.v1",
   "source_class_counts": {
     "build_command_txt": 2,
     "readme_reproduction": 29
   },
-  "source_commit": "0b6cea3faeda5524cf9d35e35258d0db219389e8",
+  "source_commit": "42357c4c58b8061b4ff5f4eb786862140558a64d",
   "total_entries": 31
 }

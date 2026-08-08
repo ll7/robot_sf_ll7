@@ -38,6 +38,12 @@ from typing import Any
 
 import yaml
 
+from robot_sf.evidence.writers import review_marker_json
+from robot_sf.evidence.writers import write_json as write_evidence_json
+
+# evidence-writer-exempt: figure_render_registry.v1.yaml is a versioned workflow artifact under
+# docs/context/ (not the docs/context/evidence/ tree, so the evidence write_* helpers do not
+# apply to it); the audit JSON is written through the shared write_evidence_json writer.
 REGISTRY_VERSION = 1
 ISSUE_NUMBER = 6769
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -514,7 +520,7 @@ def write_outputs(registry: dict[str, Any], audit: dict[str, Any]) -> None:
         registry, sort_keys=False, default_flow_style=False, allow_unicode=True, width=100
     )
     REGISTRY_PATH.write_text(registry_text, encoding="utf-8")
-    AUDIT_PATH.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_evidence_json(AUDIT_PATH, audit, catalog_area="workflow_evidence")
 
 
 def check_drift() -> int:
@@ -527,7 +533,10 @@ def check_drift() -> int:
     committed_audit = json.loads(AUDIT_PATH.read_text(encoding="utf-8"))
     reg_cmp = {k: v for k, v in registry.items() if k != "generated_at"}
     committed_reg_cmp = {k: v for k, v in committed_registry.items() if k != "generated_at"}
-    audit_cmp = {k: v for k, v in audit.items() if k != "generated_at"}
+    # The shared evidence writer prepends a review_marker to the on-disk audit; mirror it before
+    # comparing so drift detection is byte-stable across regenerations.
+    audit_with_marker = {"review_marker": review_marker_json(), **audit}
+    audit_cmp = {k: v for k, v in audit_with_marker.items() if k != "generated_at"}
     committed_audit_cmp = {k: v for k, v in committed_audit.items() if k != "generated_at"}
     if reg_cmp != committed_reg_cmp or audit_cmp != committed_audit_cmp:
         print("drift: regenerated registry/audit differs from committed files", file=sys.stderr)

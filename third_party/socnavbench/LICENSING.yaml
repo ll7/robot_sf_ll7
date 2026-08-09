@@ -10,6 +10,59 @@ notes: >-
   override below. The override is explicit because the directory also retains
   Apache-2.0 headers from the upstream mesh-loading bridge. Files created by
   Robot SF are listed separately and are not silently attributed to upstream.
+upstream_files:
+  - agents/agent.py
+  - agents/agent_base.py
+  - agents/humans/human.py
+  - agents/robot_agent.py
+  - agents/robot_utils.py
+  - control_pipelines/base.py
+  - control_pipelines/control_pipeline_v0.py
+  - control_pipelines/control_pipeline_v0_helper.py
+  - costs/cost.py
+  - costs/quad_cost_with_wrapping.py
+  - metrics/cost_functions.py
+  - metrics/cost_utils.py
+  - mp_env/__init__.py
+  - mp_env/map_utils.py
+  - mp_env/mp_env.py
+  - mp_env/render/__init__.py
+  - mp_env/render/rotation_utils.py
+  - mp_env/render/swiftshader_renderer.py
+  - objectives/angle_distance.py
+  - objectives/goal_distance.py
+  - objectives/objective_function.py
+  - objectives/obstacle_avoidance.py
+  - objectives/personal_space_cost.py
+  - obstacles/obstacle_map.py
+  - obstacles/sbpd_map.py
+  - optCtrl/lqr.py
+  - params/__init__.py
+  - params/central_params.py
+  - params/dataset_params.ini
+  - params/episode_params_val.ini
+  - params/.default_params.ini
+  - params/user_params.ini
+  - planners/planner.py
+  - planners/sampling_planner.py
+  - sbpd/__init__.py
+  - sbpd/sbpd.py
+  - sbpd/sbpd_renderer.py
+  - simulators/sim_state.py
+  - systems/dubins_3d.py
+  - systems/dubins_car.py
+  - systems/dubins_v2.py
+  - systems/dynamics.py
+  - trajectory/spline/spline.py
+  - trajectory/spline/spline_3rd_order.py
+  - trajectory/trajectory.py
+  - utils/angle_utils.py
+  - utils/fmm_map.py
+  - utils/utils.py
+  - utils/voxel_map_utils.py
+  - waypoint_grids/base.py
+  - waypoint_grids/projected_image_space_grid.py
+  - waypoint_grids/uniform_sampling_grid.py
 license_overrides:
   - license_spdx: Apache-2.0
     files:
@@ -18,6 +71,10 @@ license_overrides:
       - mp_env/render/swiftshader_renderer.py
       - sbpd/sbpd.py
 local_files:
+  - path: __init__.py
+    license_spdx: GPL-3.0-only
+    copyright: Robot SF contributors
+    note: Package marker added for the vendored planner subset.
   - path: dotmap.py
     license_spdx: GPL-3.0-only
     copyright: Robot SF contributors

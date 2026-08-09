@@ -72,6 +72,12 @@ and `included_notices` paths. Publication fails closed when any of this rights
 evidence is missing; repository or inference-code licensing is not inferred as a
 weights license.
 
+The publisher also audits every existing `github_release` row before staging a new release. A
+public row without the licensing mapping or its hashed `legal_bundle` blocks the entire operation;
+this prevents a new release from masking older unverified public artifacts. Missing local model
+files likewise block the operation rather than producing a partial release; use
+`--download-missing` only when the registry's immutable source metadata is available.
+
 ## How
 
 Inventory and stage the current W&B-backed entries without uploading:

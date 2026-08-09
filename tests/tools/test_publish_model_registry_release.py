@@ -6,6 +6,7 @@ import json
 import tarfile
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.tools import publish_model_registry_release
@@ -35,8 +36,8 @@ def _registry_text(model_path: Path, *, include_licensing: bool = True) -> str:
       copyright: Fixture copyright holder
       redistribution_basis: Fixture permits redistribution
       source_repository: https://example.invalid/fixture
-      source_revision: abc123
-      source_archive_sha256: fixture-source-sha256
+      source_revision: 0123456789abcdef0123456789abcdef01234567
+      source_archive_sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       weights_origin: trained-here
       training_code_license: GPL-3.0-only
       training_data:
@@ -163,25 +164,45 @@ def test_publish_model_registry_release_reports_missing_local_without_download(
     _write(registry_path, _registry_text(tmp_path / "missing" / "model.zip"))
     monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
 
-    publish_model_registry_release.main(
-        [
-            "--registry-path",
-            str(registry_path),
-            "--tag",
-            "artifact/models-test",
-            "--staging-dir",
-            str(tmp_path / "staging"),
-        ]
-    )
-    plan = json.loads(capsys.readouterr().out)
+    with pytest.raises(ValueError, match="selected artifacts are unavailable"):
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-test",
+                "--staging-dir",
+                str(tmp_path / "staging"),
+            ]
+        )
+    capsys.readouterr()
 
-    assert plan["published"] == []
-    assert plan["skipped"] == [
-        {
-            "model_id": "demo_model",
-            "reason": "missing local_path; rerun with --download-missing to hydrate from registry",
-        }
-    ]
+
+def test_publish_model_registry_release_blocks_existing_public_rows_without_legal_bundle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Existing public rows must be remediated before any new release can be staged."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    data = yaml.safe_load(_registry_text(model_path))
+    data["models"][0]["github_release"] = {"asset_name": "old-model.zip"}
+    data["models"][0]["public_artifact_source"] = "github_release"
+    _write(registry_path, yaml.safe_dump(data, sort_keys=False))
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="existing public rows"):
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-test",
+                "--staging-dir",
+                str(tmp_path / "staging"),
+            ]
+        )
 
 
 def test_publish_model_registry_release_requires_upload_before_registry_update(

@@ -14,6 +14,8 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
         (root / ".github" / "workflows" / "dependency-review.yml").read_text(encoding="utf-8")
     )
     trigger = workflow.get("on") or workflow[True]
+    assert "workflow_dispatch" in trigger
+    assert "pull_request" in trigger
     paths = set(trigger["pull_request"]["paths"])
     assert {
         "third_party/python-rvo2/pyproject.toml",

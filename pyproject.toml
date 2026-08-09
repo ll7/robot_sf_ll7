@@ -18,6 +18,8 @@ license-files = [
     "LICENSE",
     "fast-pysf/LICENSE",
     "third_party/python-rvo2/LICENSE",
+    "third_party/python-rvo2/UPSTREAM.md",
+    "third_party/python-rvo2/LOCAL_CHANGES.patch",
     "third_party/socnavbench/LICENSE",
     "third_party/socnavbench/LICENSES/Apache-2.0.txt",
     "THIRD_PARTY_NOTICES.md",

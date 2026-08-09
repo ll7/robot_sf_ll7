@@ -214,28 +214,69 @@ MODEL_LICENSING_REQUIRED_FIELDS = (
     "license_file",
     "model_card_file",
 )
+SPDX_IDENTIFIER_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9.+-]*(?:\s+(?:AND|OR|WITH)\s+[A-Za-z0-9][A-Za-z0-9.+-]*)*$"
+)
+COMMIT_REVISION_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+HTTPS_URL_RE = re.compile(r"^https://")
 
 
-def _validate_model_licensing(entry: dict[str, Any], *, repo_root: Path) -> list[str]:
-    """Return fail-closed licensing gaps for one publishable model row."""
-    model_id = str(entry.get("model_id", "unknown-model"))
-    licensing = entry.get("licensing")
-    if not isinstance(licensing, dict):
-        return [f"{model_id}: licensing mapping is required before publication"]
-
+def _validate_licensing_identity(licensing: dict[str, Any], *, model_id: str) -> list[str]:
+    """Validate machine-checkable identity fields in a licensing mapping."""
     issues = [
         f"{model_id}: licensing.{field} is required"
         for field in MODEL_LICENSING_REQUIRED_FIELDS
         if field not in licensing or licensing[field] in (None, "", [], {})
     ]
-    training_data = licensing.get("training_data")
-    if isinstance(training_data, dict):
-        for field in ("provenance", "license_spdx"):
-            if training_data.get(field) in (None, "", [], {}):
-                issues.append(f"{model_id}: licensing.training_data.{field} is required")
-    else:
-        issues.append(f"{model_id}: licensing.training_data must be a mapping")
+    for field in ("license_spdx", "training_code_license"):
+        value = licensing.get(field)
+        if value and (not isinstance(value, str) or not SPDX_IDENTIFIER_RE.fullmatch(value)):
+            issues.append(f"{model_id}: licensing.{field} must be an SPDX expression")
+    source_repository = licensing.get("source_repository")
+    if source_repository and (
+        not isinstance(source_repository, str) or not HTTPS_URL_RE.match(source_repository)
+    ):
+        issues.append(f"{model_id}: licensing.source_repository must be an HTTPS URL")
+    source_revision = licensing.get("source_revision")
+    if source_revision and (
+        not isinstance(source_revision, str) or not COMMIT_REVISION_RE.fullmatch(source_revision)
+    ):
+        issues.append(f"{model_id}: licensing.source_revision must be a 40-character commit SHA")
+    source_archive_sha256 = licensing.get("source_archive_sha256")
+    if source_archive_sha256 and (
+        not isinstance(source_archive_sha256, str) or not SHA256_RE.fullmatch(source_archive_sha256)
+    ):
+        issues.append(f"{model_id}: licensing.source_archive_sha256 must be a SHA-256 digest")
+    return issues
 
+
+def _validate_training_data(licensing: dict[str, Any], *, model_id: str) -> list[str]:
+    """Validate training-data provenance and license identity."""
+    training_data = licensing.get("training_data")
+    if not isinstance(training_data, dict):
+        return [f"{model_id}: licensing.training_data must be a mapping"]
+    issues = [
+        f"{model_id}: licensing.training_data.{field} is required"
+        for field in ("provenance", "license_spdx")
+        if training_data.get(field) in (None, "", [], {})
+    ]
+    training_data_license = training_data.get("license_spdx")
+    if training_data_license and (
+        not isinstance(training_data_license, str)
+        or not SPDX_IDENTIFIER_RE.fullmatch(training_data_license)
+    ):
+        issues.append(
+            f"{model_id}: licensing.training_data.license_spdx must be an SPDX expression"
+        )
+    return issues
+
+
+def _validate_legal_files(
+    licensing: dict[str, Any], *, repo_root: Path, model_id: str
+) -> list[str]:
+    """Validate repository-contained license, model-card, and notice files."""
+    issues: list[str] = []
     for field in ("license_file", "model_card_file"):
         issue = _validate_repository_file(
             licensing.get(field),
@@ -245,20 +286,51 @@ def _validate_model_licensing(entry: dict[str, Any], *, repo_root: Path) -> list
         )
         if issue:
             issues.append(issue)
-
     notices = licensing.get("included_notices")
     if not isinstance(notices, list) or any(not isinstance(item, str) for item in notices):
-        issues.append(f"{model_id}: licensing.included_notices must be a list of paths")
-    else:
-        for notice in notices:
-            issue = _validate_repository_file(
-                notice,
-                repo_root=repo_root,
-                model_id=model_id,
-                label="licensing notice",
-            )
-            if issue:
-                issues.append(issue)
+        return issues + [f"{model_id}: licensing.included_notices must be a list of paths"]
+    for notice in notices:
+        issue = _validate_repository_file(
+            notice,
+            repo_root=repo_root,
+            model_id=model_id,
+            label="licensing notice",
+        )
+        if issue:
+            issues.append(issue)
+    return issues
+
+
+def _validate_model_licensing(entry: dict[str, Any], *, repo_root: Path) -> list[str]:
+    """Return fail-closed licensing gaps for one publishable model row."""
+    model_id = str(entry.get("model_id", "unknown-model"))
+    licensing = entry.get("licensing")
+    if not isinstance(licensing, dict):
+        return [f"{model_id}: licensing mapping is required before publication"]
+
+    return [
+        *_validate_licensing_identity(licensing, model_id=model_id),
+        *_validate_training_data(licensing, model_id=model_id),
+        *_validate_legal_files(licensing, repo_root=repo_root, model_id=model_id),
+    ]
+
+
+def _validate_public_registry_rows(registry_data: dict[str, Any], *, repo_root: Path) -> list[str]:
+    """Reject existing public rows that predate the rights-evidence contract."""
+    issues: list[str] = []
+    for entry in registry_data.get("models", []):
+        if not isinstance(entry, dict):
+            continue
+        release = entry.get("github_release")
+        if entry.get("public_artifact_source") != "github_release" and not isinstance(
+            release, dict
+        ):
+            continue
+        model_id = str(entry.get("model_id", "unknown-model"))
+        licensing_issues = _validate_model_licensing(entry, repo_root=repo_root)
+        issues.extend(licensing_issues)
+        if not isinstance(release, dict) or not release.get("legal_bundle"):
+            issues.append(f"{model_id}: existing github_release.legal_bundle is required")
     return issues
 
 
@@ -345,6 +417,12 @@ def _stage_assets(args: argparse.Namespace, registry_data: dict[str, Any]) -> di
     repo_root = get_repository_root()
     staging_dir = args.staging_dir or repo_root / "output" / "model_registry_release" / args.tag
     staging_dir.mkdir(parents=True, exist_ok=True)
+    public_licensing_issues = _validate_public_registry_rows(registry_data, repo_root=repo_root)
+    if public_licensing_issues:
+        raise ValueError(
+            "Model publication blocked by existing public rows without rights evidence: "
+            + "; ".join(public_licensing_issues)
+        )
     selected_ids = set(args.model_id)
     models = [
         entry
@@ -431,6 +509,13 @@ def _stage_assets(args: argparse.Namespace, registry_data: dict[str, Any]) -> di
                 "size_bytes": size_bytes,
                 "release_asset_url": release_pointer["url"],
             }
+        )
+
+    if skipped:
+        details = "; ".join(f"{item['model_id']}: {item['reason']}" for item in skipped)
+        raise ValueError(
+            "Model publication blocked because one or more selected artifacts are unavailable: "
+            + details
         )
 
     manifest = {

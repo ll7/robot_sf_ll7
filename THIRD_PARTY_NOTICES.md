@@ -17,6 +17,8 @@ and source-distribution consumers can find the applicable notice.
 - Full text: `third_party/python-rvo2/LICENSE`
 - Upstream source and local modifications: `third_party/python-rvo2/UPSTREAM.md` and
   `third_party/python-rvo2/LOCAL_CHANGES.patch`
+- The standalone `pyrvo2` companion wheel carries the same three files under its
+  `.dist-info/licenses/` directory.
 
 ## SocNavBench
 

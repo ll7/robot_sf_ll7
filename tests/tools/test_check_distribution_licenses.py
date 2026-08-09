@@ -43,6 +43,10 @@ PAYLOADS = {
         "python-rvo2\nApache License, Version 2.0\nSocNavBench\nTBD) Lab\n"
         "does not include model weights\n"
     ),
+    "third_party/python-rvo2/UPSTREAM.md": (
+        "upstream_repository\nsource_archive_sha256\nLOCAL_CHANGES.patch\n"
+    ),
+    "third_party/python-rvo2/LOCAL_CHANGES.patch": ("diff -ruN\nthird_party/python-rvo2\n"),
 }
 
 
@@ -77,9 +81,17 @@ def _write_robot_sf_archives(dist_dir: Path, payloads: Mapping[str, str] = PAYLO
 
 
 def _write_pyrvo2_wheel(path: Path, *, content: str) -> None:
-    """Write a minimal companion wheel carrying one Apache license file."""
+    """Write a minimal companion wheel carrying legal and provenance payloads."""
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("pyrvo2-0.0.0.dist-info/licenses/LICENSE", content)
+        archive.writestr(
+            "pyrvo2-0.0.0.dist-info/licenses/UPSTREAM.md",
+            PAYLOADS["third_party/python-rvo2/UPSTREAM.md"],
+        )
+        archive.writestr(
+            "pyrvo2-0.0.0.dist-info/licenses/LOCAL_CHANGES.patch",
+            PAYLOADS["third_party/python-rvo2/LOCAL_CHANGES.patch"],
+        )
 
 
 def test_valid_wheel_and_sdist_pass(tmp_path: Path) -> None:
@@ -132,3 +144,13 @@ def test_pyrvo2_license_content_is_checked(tmp_path: Path) -> None:
 
     with pytest.raises(DistributionLicenseError, match="pyrvo2 Apache license.*wrong"):
         check_distribution(tmp_path, require_pyrvo2=True)
+
+
+def test_license_gate_rejects_noncanonical_payload_paths(tmp_path: Path) -> None:
+    """A decoy nested filename must not satisfy the canonical archive contract."""
+    decoy_payloads = {f"decoy/{name}": content for name, content in PAYLOADS.items()}
+    _write_wheel(tmp_path / "robot_sf-0.0.0-py3-none-any.whl", decoy_payloads)
+    _write_sdist(tmp_path / "robot_sf-0.0.0.tar.gz", decoy_payloads)
+
+    with pytest.raises(DistributionLicenseError, match="missing root GPL license"):
+        check_distribution(tmp_path)

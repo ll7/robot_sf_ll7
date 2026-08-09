@@ -104,6 +104,16 @@ REQUIREMENTS = (
             "does not include model weights",
         ),
     ),
+    ArchiveRequirement(
+        label="python-rvo2 provenance record",
+        path_suffix="third_party/python-rvo2/UPSTREAM.md",
+        markers=("upstream_repository", "source_archive_sha256", "LOCAL_CHANGES.patch"),
+    ),
+    ArchiveRequirement(
+        label="python-rvo2 local-change patch",
+        path_suffix="third_party/python-rvo2/LOCAL_CHANGES.patch",
+        markers=("diff -ruN", "third_party/python-rvo2"),
+    ),
 )
 
 PYRVO2_REQUIREMENTS = (
@@ -115,6 +125,16 @@ PYRVO2_REQUIREMENTS = (
             "Version 2.0",
             "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION",
         ),
+    ),
+    ArchiveRequirement(
+        label="pyrvo2 provenance record",
+        path_suffix="UPSTREAM.md",
+        markers=("upstream_repository", "source_archive_sha256", "LOCAL_CHANGES.patch"),
+    ),
+    ArchiveRequirement(
+        label="pyrvo2 local-change patch",
+        path_suffix="LOCAL_CHANGES.patch",
+        markers=("diff -ruN", "third_party/python-rvo2"),
     ),
 )
 
@@ -147,13 +167,27 @@ def _archive_members(archive: Path) -> dict[str, str]:
     raise DistributionLicenseError(f"unsupported archive type: {archive.name}")
 
 
-def _matching_members(members: dict[str, str], suffix: str) -> dict[str, str]:
-    """Return members whose normalized archive path ends with the required project path."""
-    return {
-        name: content
-        for name, content in members.items()
-        if PurePosixPath(name).as_posix().endswith(suffix)
-    }
+def _matching_members(archive: Path, members: dict[str, str], suffix: str) -> dict[str, str]:
+    """Return members at the canonical wheel-license or source-root path."""
+    required_parts = PurePosixPath(suffix).parts
+    matching: dict[str, str] = {}
+    for name, content in members.items():
+        parts = PurePosixPath(name).parts
+        if archive.suffix == ".whl":
+            try:
+                licenses_index = parts.index("licenses")
+            except ValueError:
+                continue
+            if licenses_index == 0 or parts[licenses_index - 1].find(".dist-info") == -1:
+                continue
+            payload_parts = parts[licenses_index + 1 :]
+        else:
+            if len(parts) < 2:
+                continue
+            payload_parts = parts[1:]
+        if payload_parts == required_parts:
+            matching[name] = content
+    return matching
 
 
 def _check_archive(
@@ -167,7 +201,7 @@ def _check_archive(
 
     errors: list[str] = []
     for requirement in requirements:
-        matches = _matching_members(members, requirement.path_suffix)
+        matches = _matching_members(archive, members, requirement.path_suffix)
         if not matches:
             errors.append(
                 f"{archive.name}: missing {requirement.label} payload "

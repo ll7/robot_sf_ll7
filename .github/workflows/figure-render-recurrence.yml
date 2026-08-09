@@ -8,12 +8,11 @@ name: Figure-render recurrence guard
 # environment. The job is blocking: it fails when any eligible command drifts, escapes its output
 # root, times out, or exits with an unexpected code. Excluded entries are never executed.
 #
-# Network/scheduler-credential boundary: the job passes no secrets and sets UV_OFFLINE so uv never
-# reaches the network; the guard additionally builds a minimal credential-free environment for every
-# executed command (no SLURM/cloud/token variables are inherited). GitHub-hosted runners retain
-# ambient network, but the guard's commands are contracted to run offline from committed inputs, so a
-# command that requires network access is treated as a recurrence failure rather than silently
-# allowed. The claim boundary is workflow recurrence + write containment only.
+# Network/scheduler-credential boundary: the recurrence guard is launched through the fail-closed
+# Linux network-namespace helper, which denies sockets for the guard and every executed descendant.
+# The guard additionally builds a minimal credential-free environment (no SLURM/cloud/token variables
+# are inherited) and forces uv offline. The claim boundary is workflow recurrence + write containment
+# only.
 
 on:
   pull_request:
@@ -24,6 +23,16 @@ on:
       - "tests/dev/test_check_figure_render_recurrence.py"
       - "docs/context/evidence/issue_6770_figure_render_recurrence_report.json"
       - "docs/context/catalog.yaml"
+      - "scripts/benchmark/build_horizon_timestep_ablation_report.py"
+      - "scripts/benchmark/build_forecast_calibration_from_cv_comparison.py"
+      - "docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/comparison_report.json"
+      - "scripts/benchmark/run_cv_forecast_eval.py"
+      - "scripts/validation/validate_forecast_risk_calibration_filter.py"
+      - "scripts/benchmark/build_horizon_timestep_denominator_report.py"
+      - "scripts/validation/check_simulator_dependence_validity_boundary.py"
+      - "scripts/benchmark/export_event_ledger_reconciliation.py"
+      - "tests/benchmark/fixtures/event_ledger_reconciliation/reconciled_episodes.jsonl"
+      - "tests/benchmark/fixtures/event_ledger_reconciliation/violating_exact_collision_zero_count.jsonl"
       - ".github/workflows/figure-render-recurrence.yml"
   schedule:
     - cron: "23 5 * * 3"
@@ -61,12 +70,25 @@ jobs:
       - name: Verify the registry drift gate (read-only input)
         run: uv run python scripts/dev/build_figure_render_registry.py --check
 
-      - name: Run the recurrence guard (no secrets; UV_OFFLINE blocks uv network access)
+      - name: Verify the OS-level network-deny boundary
+        run: |
+          scripts/dev/run_without_network.sh python -c '
+          import socket
+
+          for address in (("1.1.1.1", 443), ("8.8.8.8", 53)):
+              try:
+                  with socket.create_connection(address, timeout=1):
+                      raise SystemExit(f"network unexpectedly reachable: {address}")
+              except OSError:
+                  pass
+          '
+
+      - name: Run the recurrence guard (no secrets; network namespace + UV_OFFLINE)
         env:
           UV_OFFLINE: "1"
         run: |
           set -o pipefail
-          uv run python scripts/dev/check_figure_render_recurrence.py \
+          scripts/dev/run_without_network.sh uv run python scripts/dev/check_figure_render_recurrence.py \
             --registry docs/context/figure_render_registry.v1.yaml \
             --report docs/context/evidence/issue_6770_figure_render_recurrence_report.json \
             2>&1 | tee output/figure_render_recurrence.log

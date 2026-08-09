@@ -221,6 +221,15 @@ def _is_under(path: Path, root: Path) -> bool:
     return True
 
 
+def _repo_relative_or_original(path: Path) -> str:
+    """Serialize repository-local paths portably while preserving external validation targets."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def _is_bytecode(path: Path) -> bool:
     """Return True for benign Python bytecode artifacts (``__pycache__`` / ``*.pyc``)."""
     return "__pycache__" in path.parts or path.name.endswith(".pyc")
@@ -950,11 +959,7 @@ def _build_report(
         "generated_at": now_iso(),
         "source_commit": head,
         "registry_source_commit": registry_source_commit,
-        "registry_path": (
-            registry_path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
-            if _is_under(registry_path.resolve(), REPO_ROOT.resolve())
-            else str(registry_path)
-        ),
+        "registry_path": _repo_relative_or_original(registry_path),
         "issue": ISSUE_NUMBER,
         "route_evidence_only": True,
         "claim_boundary": (
@@ -973,7 +978,7 @@ def _build_report(
         "negative_control_warnings": negative_control_warnings,
         "commands": [o.to_report() for o in command_outcomes],
         "exclusions": _exclusions_from_registry(registry),
-        "report_path": str(report_path),
+        "report_path": _repo_relative_or_original(report_path),
     }
 
 

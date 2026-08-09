@@ -3,7 +3,8 @@
 Covers the recurrence contract end-to-end with synthetic fixtures (NOT the real nine commands):
 success, timeout, missing output, extra output, path escape, input drift, unsafe command,
 negative-control handling, empty-eligible fail-closed, structural validation, the strace
-write-tracker, output redirection, and stable registry-order reporting.
+write-tracker, output redirection, stable registry-order reporting, workflow trigger coverage, and
+portable report provenance.
 
 The real committed registry is also exercised once as a regression smoke (mirrors the CI guard
 command), proving the nine recurrence-eligible entries reproduce under isolation.
@@ -14,8 +15,10 @@ command), proving the nine recurrence-eligible entries reproduce under isolation
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import warnings
@@ -29,6 +32,9 @@ SCRIPT = (
 )
 REGISTRY = (
     Path(__file__).resolve().parents[2] / "docs" / "context" / "figure_render_registry.v1.yaml"
+)
+WORKFLOW = (
+    Path(__file__).resolve().parents[2] / ".github" / "workflows" / "figure-render-recurrence.yml"
 )
 
 sys.path.insert(0, str(SCRIPT.parent))
@@ -520,6 +526,83 @@ def test_structural_error_on_missing_registry(tmp_path):
     report, exit_code, _ = _run(tmp_path, tmp_path / "does_not_exist.yaml")
     assert exit_code == 2
     assert report["structural_error"].startswith("registry_load_error:")
+
+
+def test_pull_request_paths_cover_all_eligible_inputs():
+    """Every committed input of an eligible entry must trigger the pull-request guard."""
+    if not WORKFLOW.is_file() or not REGISTRY.is_file():
+        pytest.skip("figure-render workflow or registry is absent")
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow_events = workflow.get("on", workflow.get(True, {}))
+    trigger_paths = workflow_events["pull_request"]["paths"]
+    eligible_inputs = {
+        item["path"]
+        for entry in yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))["entries"]
+        if entry.get("recurrence_eligible") is True
+        for item in entry.get("inputs", [])
+    }
+    missing = sorted(
+        path
+        for path in eligible_inputs
+        if not any(fnmatch.fnmatchcase(path, pattern) for pattern in trigger_paths)
+    )
+    assert not missing, f"eligible inputs missing from pull_request.paths: {missing}"
+
+
+def test_network_sandbox_contract_is_declared_and_fail_closed():
+    """The CI workflow must probe and use the fail-closed OS-level network sandbox."""
+    workflow_text = WORKFLOW.read_text(encoding="utf-8")
+    sandbox = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "run_without_network.sh"
+    assert sandbox.is_file()
+    assert "Verify the OS-level network-deny boundary" in workflow_text
+    assert workflow_text.count("scripts/dev/run_without_network.sh") >= 2
+    assert "unshare --net" in sandbox.read_text(encoding="utf-8")
+
+
+def test_network_sandbox_denies_socket_access_when_available():
+    """A usable Linux sandbox must deny outbound sockets; unavailable sandboxes fail closed in CI."""
+    if sys.platform != "linux" or shutil.which("unshare") is None:
+        pytest.skip("Linux unshare is unavailable")
+    sandbox = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "run_without_network.sh"
+    proc = subprocess.run(
+        [
+            str(sandbox),
+            sys.executable,
+            "-c",
+            (
+                "import socket; "
+                "s=socket.socket(); s.settimeout(1); "
+                "\ntry: s.connect(('1.1.1.1', 443))\n"
+                "except OSError: raise SystemExit(0)\n"
+                "else: raise SystemExit(1)"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode == 125:
+        pytest.skip("network-deny sandbox is unavailable on this host")
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_tracked_report_paths_are_repository_relative():
+    """Tracked recurrence provenance must not expose an absolute worktree path."""
+    report = guard._build_report(
+        registry_path=guard.REGISTRY_DEFAULT,
+        report_path=guard.REPORT_DEFAULT.resolve(),
+        head="test-head",
+        registry={"entries": []},
+        command_outcomes=[],
+        negative_control_warnings=[],
+        zero_entry_policy=None,
+        structural_error=None,
+    )
+    assert report["registry_path"] == "docs/context/figure_render_registry.v1.yaml"
+    assert (
+        report["report_path"]
+        == "docs/context/evidence/issue_6770_figure_render_recurrence_report.json"
+    )
 
 
 # ---------------------------------------------------------------------------

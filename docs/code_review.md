@@ -166,8 +166,7 @@ Two distinct concepts are being conflated. Keep them separate:
   solver ran.
 - **Solver-execution is a runtime concept.** It records *whether the MPC
   solver actually ran and produced the commands*. This is what the #5579
-canary
-  "native execution" clause guards.
+  canary "native execution" clause guards.
 
 The canonical `prediction_mpc` planner is registry-declared adapter-only:
 `supports_native_commands: False`, `default_execution_mode: "adapter"`
@@ -205,9 +204,9 @@ algorithms. It does **not** relax the underlying requirement:
   native command path is still required. Option A does not excuse a
   native-capable planner from its native path.
 - Fallback or degraded execution **never** satisfies this criterion in either
-case
-  (native-command or adapter-only). A run that fell back, skipped the solver,
-  or executed in a degraded mode is a failure of the criterion, not a pass.
+  case (native-command or adapter-only). A run that fell back, skipped the
+  solver, or executed in a degraded mode is a failure of the criterion, not a
+  pass.
 
 ### Reviewer Probe Guidance
 

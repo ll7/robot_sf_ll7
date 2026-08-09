@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -88,7 +87,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _load_resolvable_baseline(baseline_path: Path) -> tuple[dict | None, int]:
+def _load_resolvable_baseline(baseline_path: Path, ratchet) -> tuple[dict | None, int]:
     """Load the baseline for resolution, returning ``(baseline, exit_code)``.
 
     ``exit_code`` is 0 with a loaded baseline, or a non-zero infra/refuse code with the
@@ -101,7 +100,11 @@ def _load_resolvable_baseline(baseline_path: Path) -> tuple[dict | None, int]:
             file=sys.stderr,
         )
         return None, 2
-    raw = baseline_path.read_text(encoding="utf-8")
+    try:
+        raw = baseline_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        print(f"ERROR: could not read baseline {baseline_path}: {exc}", file=sys.stderr)
+        return None, 2
     if baseline_has_conflict_markers(raw):
         # A conflicted baseline may hide net-new findings from either side, so we do not
         # auto-resolve it. Point at the explicit regenerate command (still mechanical).
@@ -115,9 +118,12 @@ def _load_resolvable_baseline(baseline_path: Path) -> tuple[dict | None, int]:
         )
         return None, 1
     try:
-        return json.loads(raw), 0
-    except json.JSONDecodeError as exc:
-        print(f"ERROR: baseline {baseline_path} is not valid JSON: {exc}", file=sys.stderr)
+        return ratchet.load_baseline(baseline_path), 0
+    except (OSError, UnicodeError, ValueError) as exc:
+        print(
+            f"ERROR: baseline {baseline_path} failed structural validation: {exc}",
+            file=sys.stderr,
+        )
         return None, 2
 
 
@@ -168,7 +174,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ratchet = _load_ratchet_module(RATCHET_PATH)
     registry_root = repo_root / ratchet.DEFAULT_REGISTRY_ROOT
 
-    baseline, code = _load_resolvable_baseline(baseline_path)
+    baseline, code = _load_resolvable_baseline(baseline_path, ratchet)
     if code != 0:
         return code
     report, code = _gather_report(ratchet, args, repo_root)

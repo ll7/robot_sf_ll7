@@ -87,10 +87,6 @@ DEFAULT_BASELINE = Path("scripts/validation/evidence_registry_baseline.json")
 DEFAULT_LINTER = Path("scripts/tools/lint_evidence_registry.py")
 DEFAULT_REGISTRY_ROOT = Path("docs/context/evidence")
 DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions.yaml")
-# Evidence-file suffixes the registry linter scans (scripts/tools/lint_evidence_registry.py).
-# The manifest tracks exactly this set so a baseline refresh stays a pure function of the
-# evidence tree the linter actually audits (issue #6839).
-EVIDENCE_SUFFIXES = (".csv", ".json", ".md", ".yaml", ".yml")
 
 
 def _repo_root() -> Path:
@@ -189,30 +185,26 @@ def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:
 def evidence_tree_manifest(registry_root: Path) -> dict[str, Any]:
     """Return a compact, deterministic manifest of the audited evidence files.
 
-    The manifest is keyed on the *sorted set of registry-relative evidence file
-    paths* -- exactly the ``.json/.yaml/.yml/.md/.csv`` documents the registry
-    linter scans. It is path-based rather than content-based on purpose: adding
-    or removing any evidence file changes the manifest (so a baseline refresh
-    is required and stays a pure function of the evidence tree), while editing
-    an existing file's contents is left to the findings ratchet, which already
-    catches net-new integrity findings. This closes the issue #6839 gap: a PR
-    that adds or removes files under ``docs/context/evidence/`` without
-    refreshing the baseline now fails its own ratchet gate pre-merge instead of
-    reddening main after merge.
+    The manifest is keyed on the *sorted set of every regular,
+    registry-relative file* under the evidence root. It is path-based rather
+    than content-based on purpose: adding or removing any evidence file changes
+    the manifest (so a baseline refresh is required and stays a pure function
+    of the evidence tree), while editing an existing file's contents is left to
+    the findings ratchet, which already catches net-new integrity findings. This
+    closes the issue #6839 gap: a PR that adds or removes any file under
+    ``docs/context/evidence/`` without refreshing the baseline now fails its own
+    ratchet gate pre-merge instead of reddening main after merge.
     """
     root = registry_root.resolve()
     files: list[str] = []
     if root.exists():
         files = sorted(
-            path.relative_to(root).as_posix()
-            for path in root.rglob("*")
-            if path.is_file() and path.suffix.lower() in EVIDENCE_SUFFIXES
+            path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()
         )
     joined = "\n".join(files)
     return {
         "count": len(files),
         "sha256": hashlib.sha256(joined.encode("utf-8")).hexdigest(),
-        "file_suffixes": list(EVIDENCE_SUFFIXES),
     }
 
 
@@ -300,9 +292,52 @@ def build_baseline_payload(
     return payload
 
 
+def _validate_finding_counts(path: Path, findings_by_path: dict[Any, Any]) -> None:
+    """Validate the nested finding-count mapping consumed by the ratchet."""
+    for evidence_path, codes in findings_by_path.items():
+        if not isinstance(evidence_path, str) or not evidence_path:
+            raise ValueError(f"Baseline {path} has an invalid findings path key.")
+        if not isinstance(codes, dict):
+            raise ValueError(
+                f"Baseline {path} has an invalid finding-code mapping for '{evidence_path}'."
+            )
+        for code, count in codes.items():
+            if not isinstance(code, str) or not code:
+                raise ValueError(
+                    f"Baseline {path} has an invalid finding code for '{evidence_path}'."
+                )
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise ValueError(
+                    f"Baseline {path} has an invalid finding count for '{evidence_path}'/{code}."
+                )
+
+
+def _validate_baseline_metadata(path: Path, data: dict[str, Any]) -> None:
+    """Validate optional metadata mappings that the ratchet reads directly."""
+    summary = data.get("summary")
+    if summary is not None and not isinstance(summary, dict):
+        raise ValueError(f"Baseline {path} has an invalid 'summary' mapping.")
+
+    evidence_tree = data.get("evidence_tree")
+    if evidence_tree is None:
+        return
+    if not isinstance(evidence_tree, dict):
+        raise ValueError(f"Baseline {path} has an invalid 'evidence_tree' mapping.")
+    count = evidence_tree.get("count")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise ValueError(f"Baseline {path} has an invalid evidence_tree count.")
+    if not isinstance(evidence_tree.get("sha256"), str) or not evidence_tree["sha256"]:
+        raise ValueError(f"Baseline {path} has an invalid evidence_tree sha256.")
+
+
 def load_baseline(path: Path) -> dict[str, Any]:
-    """Load and minimally validate a baseline file."""
-    data = json.loads(path.read_text(encoding="utf-8"))
+    """Load and validate the structure consumed by the ratchet checks."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"Could not read baseline {path}: {exc}") from exc
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Baseline {path} is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Baseline {path} must be a JSON object, got {type(data).__name__}.")
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -310,8 +345,11 @@ def load_baseline(path: Path) -> dict[str, Any]:
             f"Unsupported baseline schema_version in {path}: "
             f"got {data.get('schema_version')}, expected {SCHEMA_VERSION}"
         )
-    if not isinstance(data.get("findings_by_path"), dict):
+    findings_by_path = data.get("findings_by_path")
+    if not isinstance(findings_by_path, dict):
         raise ValueError(f"Baseline {path} is missing a valid 'findings_by_path' mapping.")
+    _validate_finding_counts(path, findings_by_path)
+    _validate_baseline_metadata(path, data)
     return data
 
 

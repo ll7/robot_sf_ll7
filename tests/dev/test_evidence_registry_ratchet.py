@@ -547,7 +547,7 @@ def test_strict_ci_policy_has_zero_active_findings_on_clean_main(
 
 
 def test_evidence_tree_manifest_is_path_based_and_stable(tmp_path: Path) -> None:
-    """The manifest keys on sorted evidence file paths, not file contents."""
+    """The manifest keys on every sorted evidence-file path, not file contents."""
     root = tmp_path / "evidence"
     (root / "bundle_a").mkdir(parents=True)
     (root / "bundle_a" / "a.json").write_text('{"x": 1}', encoding="utf-8")
@@ -562,12 +562,12 @@ def test_evidence_tree_manifest_is_path_based_and_stable(tmp_path: Path) -> None
     assert ratchet.evidence_tree_manifest(root) == before
 
     # Adding or removing a file changes the manifest (so a refresh is required).
-    (root / "bundle_c.csv").write_text("c\n", encoding="utf-8")
+    (root / "bundle_c.jsonl").write_text('{"event": "c"}\n', encoding="utf-8")
     after_add = ratchet.evidence_tree_manifest(root)
     assert after_add["count"] == 3
     assert after_add["sha256"] != before["sha256"]
 
-    (root / "bundle_c.csv").unlink()
+    (root / "bundle_c.jsonl").unlink()
     assert ratchet.evidence_tree_manifest(root) == before
 
 
@@ -676,7 +676,7 @@ def test_pr_adding_evidence_files_without_baseline_refresh_fails_pre_merge(
     assert "evidence_tree manifest tracks 1 evidence files" in write0.stdout
 
     # PR #6733 shape: add a NEW evidence file, leave the baseline untouched.
-    (evidence / "run_meta.json").write_text('{"campaign_id": "issue_6733"}', encoding="utf-8")
+    (evidence / "run_meta.txt").write_text("campaign_id: issue_6733\n", encoding="utf-8")
     check_drift = subprocess.run(
         [
             sys.executable,

@@ -18,6 +18,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 RESOLVER = ROOT / "scripts" / "dev" / "resolve_evidence_registry_baseline.py"
 RATCHET = ROOT / "scripts" / "dev" / "evidence_registry_ratchet.py"
@@ -206,3 +208,35 @@ def test_resolver_errors_on_malformed_baseline(tmp_path: Path) -> None:
     result = _run_resolver(repo, report_path, baseline)
     assert result.returncode == 2
     assert "not valid JSON" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("payload", "diagnostic"),
+    [
+        ({}, "schema_version"),
+        ({"schema_version": 1}, "findings_by_path"),
+        ({"schema_version": 1, "findings_by_path": {"bundle": []}}, "finding-code mapping"),
+        (
+            {"schema_version": 1, "findings_by_path": {"bundle": {"code": "one"}}},
+            "finding count",
+        ),
+        (
+            {"schema_version": 1, "findings_by_path": {}, "evidence_tree": []},
+            "evidence_tree",
+        ),
+    ],
+)
+def test_resolver_errors_on_structurally_invalid_json_baseline(
+    tmp_path: Path, payload: dict, diagnostic: str
+) -> None:
+    """Valid JSON with an invalid baseline shape fails with the infra exit code."""
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps(payload), encoding="utf-8")
+    report_path = _write_report(tmp_path, [])
+
+    result = _run_resolver(tmp_path, report_path, baseline)
+
+    assert result.returncode == 2
+    assert "failed structural validation" in result.stderr
+    assert diagnostic in result.stderr
+    assert "Traceback" not in result.stderr

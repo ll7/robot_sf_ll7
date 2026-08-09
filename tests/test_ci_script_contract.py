@@ -89,7 +89,10 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
 
     assert 'dist_mode="${PYTEST_XDIST_DIST:-load}"' in script_text
     assert "Invalid PYTEST_XDIST_DIST value" in script_text
-    assert 'cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")' in script_text
+    assert "cmd=(uv run pytest)" in script_text
+    assert 'if [[ "$pytest_execution_mode" == "xdist" ]]; then' in script_text
+    assert 'cmd+=(-n "$worker_spec" --dist "$dist_mode")' in script_text
+    assert 'if [[ "$worker_spec" == "1" ]]; then' in script_text
     assert "PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup" in script_text
     assert "--lane core|optional|all" in script_text
     assert "ROBOT_SF_TEST_LANE=core|optional|all" in script_text
@@ -268,6 +271,7 @@ def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> Non
         "Invalid PYTEST_XDIST_DIST value 'invalid-mode' "
         "(expected load|worksteal|loadscope|loadfile|loadgroup)."
     ) in result.stderr
+    assert "Resolved pytest workers" not in result.stderr
     assert "Resolved pytest-xdist workers" not in result.stderr
     assert "resolve_pytest_workers.py" not in result.stderr
 
@@ -296,8 +300,8 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
             [
                 "#!/usr/bin/env bash",
                 'if [[ "$1" == "run" && "$2" == "python" ]]; then',
-                '  printf "1\\n"',
-                "  exit 0",
+                '  echo "worker resolver must not rewrite explicit serial mode" >&2',
+                "  exit 98",
                 "fi",
                 'printf "%s\\n" "$*" > "$UV_CAPTURED_ARGS"',
             ]
@@ -374,6 +378,10 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
 
     assert result.returncode == 0, result.stderr
     pytest_args = captured_args.read_text(encoding="utf-8")
+    padded_pytest_args = f" {pytest_args} "
+    assert " -n " not in padded_pytest_args
+    assert " --dist " not in padded_pytest_args
+    assert "in-process serial (pytest-xdist disabled)" in result.stderr
     assert "tests/test_new_top_level.py" in pytest_args
     assert "tests/test_optional_top_level.py" not in pytest_args
     assert "tests/ped_npc" in pytest_args
@@ -393,7 +401,7 @@ def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     tmp_path: Path,
 ) -> None:
-    """Serial fallback must not inherit parallel flags or hide serial failures (issue #5633)."""
+    """Coverage-finalization fallback must be true no-xdist and fail closed (#6526)."""
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -438,6 +446,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 "  count=$((count + 1))",
                 '  printf "%s\\n" "$count" > "$UV_COUNT_FILE"',
                 '  printf "%s\\n" "$*" >> "$UV_CAPTURED_ARGS"',
+                '  echo "sqlite3.OperationalError: unable to open database file" >&2',
                 '  echo "Segmentation fault (core dumped)" >&2',
                 "  exit 1",
                 "fi",
@@ -474,8 +483,12 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     calls = captured_args.read_text(encoding="utf-8").splitlines()
     assert len(calls) == 2
     assert "-n 2" in calls[0]
-    assert "-n 1" in calls[1]
+    assert "--dist load" in calls[0]
+    padded_serial_call = f" {calls[1]} "
+    assert " -n " not in padded_serial_call
+    assert " --dist " not in padded_serial_call
     assert "-n 2" not in calls[1]
+    assert "pytest-xdist disabled" in result.stderr
     assert "parallel diagnostic observed" in result.stderr
     assert "serial diagnostic observed" in result.stderr
 

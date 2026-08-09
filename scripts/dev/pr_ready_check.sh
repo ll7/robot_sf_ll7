@@ -30,10 +30,10 @@ Environment variables:
                       Set to "0" to skip open-state verification for linked
                       follow-up issues when PR_READY_PR_BODY_FILE is set.
   PR_READY_SERIAL_FALLBACK
-                      Set to "1" to auto-rerun serially when parallel pytest
-                      workers crash (issue #5633), separating an env crash from
-                      real failures. Disabled by default; the gate stays
-                      fail-closed and only reports the crash diagnostic.
+                      Set to "1" to auto-rerun in-process without pytest-xdist
+                      when parallel workers crash (issue #5633), separating an
+                      env crash from real failures. Disabled by default; the
+                      gate stays fail-closed and only reports the diagnostic.
 EOF
 }
 
@@ -391,6 +391,29 @@ fi
 uv run python "$SCRIPT_DIR/check_perf_evidence.py" "${perf_args[@]}"
 uv run python "$SCRIPT_DIR/check_fast_results_claim_map.py"
 "$SCRIPT_DIR/ruff_fix_format.sh"
+
+# Keep coverage.py's SQLite database outside pytest's managed temporary roots.
+# The readiness wrapper owns this absolute path and removes it only when every
+# pytest lane, coverage report, changed-file coverage check, and freshness gate
+# has finished. Tests are therefore free to clean their process temp roots
+# without invalidating coverage worker finalization (issue #6526).
+pr_ready_coverage_dir=""
+cleanup_pr_ready_coverage() {
+  if [[ -n "$pr_ready_coverage_dir" && -d "$pr_ready_coverage_dir" ]]; then
+    rm -rf -- "$pr_ready_coverage_dir"
+  fi
+}
+coverage_tmp_parent="${TMPDIR:-/tmp}"
+if [[ ! -d "$coverage_tmp_parent" ]]; then
+  printf 'Coverage temporary parent does not exist: %s\n' "$coverage_tmp_parent" >&2
+  exit 2
+fi
+pr_ready_coverage_dir="$(mktemp -d "$coverage_tmp_parent/robot-sf-pr-ready-coverage.XXXXXX")"
+pr_ready_coverage_dir="$(cd "$pr_ready_coverage_dir" && pwd -P)"
+export COVERAGE_FILE="$pr_ready_coverage_dir/.coverage"
+trap cleanup_pr_ready_coverage EXIT
+printf 'Using readiness-owned coverage database: %s\n' "$COVERAGE_FILE" >&2
+
 printf 'Running core readiness lane.\n' >&2
 ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core
 if [[ ${#optional_changed_files[@]} -gt 0 ]]; then

@@ -109,6 +109,26 @@ def _run(tmp_path: Path, registry: Path, *, zero_entry_policy: str | None = None
     return report, exit_code, report_path
 
 
+def _network_namespace_prefix() -> list[str] | None:
+    """Return a usable fail-closed network-namespace command prefix, if available."""
+    if sys.platform != "linux":
+        return None
+    unshare = shutil.which("unshare")
+    if unshare is None:
+        return None
+    user_prefix = [unshare, "--user", "--map-root-user", "--net", "--"]
+    probe = subprocess.run([*user_prefix, "true"], capture_output=True, text=True, check=False)
+    if probe.returncode == 0:
+        return user_prefix
+    sudo = shutil.which("sudo")
+    if sudo is None:
+        return None
+    sudo_probe = subprocess.run([sudo, "-n", "true"], capture_output=True, text=True, check=False)
+    if sudo_probe.returncode == 0 and Path("/usr/bin/unshare").is_file():
+        return [sudo, "-n", "/usr/bin/unshare", "--net", "--"]
+    return None
+
+
 def _out_cmd(script: Path, declared_output: str, extra_args: list[str] | None = None) -> list[str]:
     """Build a relative argv that runs a writer script with ``--out <declared>``.
 
@@ -550,23 +570,26 @@ def test_pull_request_paths_cover_all_eligible_inputs():
 
 
 def test_network_sandbox_contract_is_declared_and_fail_closed():
-    """The CI workflow must probe and use the fail-closed OS-level network sandbox."""
+    """The CI workflow must own and use the fail-closed OS-level network sandbox."""
     workflow_text = WORKFLOW.read_text(encoding="utf-8")
     sandbox = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "run_without_network.sh"
-    assert sandbox.is_file()
+    assert not sandbox.exists()
     assert "Verify the OS-level network-deny boundary" in workflow_text
-    assert workflow_text.count("scripts/dev/run_without_network.sh") >= 2
-    assert "unshare --net" in sandbox.read_text(encoding="utf-8")
+    assert "run_without_network()" in workflow_text
+    assert "unshare --user --map-root-user --net -- true" in workflow_text
+    assert "sudo -n /usr/bin/unshare --net --" in workflow_text
+    assert "/usr/bin/env -i" in workflow_text
+    assert "scripts/dev/run_without_network.sh" not in workflow_text
 
 
 def test_network_sandbox_denies_socket_access_when_available():
     """A usable Linux sandbox must deny outbound sockets; unavailable sandboxes fail closed in CI."""
-    if sys.platform != "linux" or shutil.which("unshare") is None:
-        pytest.skip("Linux unshare is unavailable")
-    sandbox = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "run_without_network.sh"
+    prefix = _network_namespace_prefix()
+    if prefix is None:
+        pytest.skip("fail-closed Linux network namespace is unavailable")
     proc = subprocess.run(
         [
-            str(sandbox),
+            *prefix,
             sys.executable,
             "-c",
             (
@@ -581,8 +604,6 @@ def test_network_sandbox_denies_socket_access_when_available():
         text=True,
         check=False,
     )
-    if proc.returncode == 125:
-        pytest.skip("network-deny sandbox is unavailable on this host")
     assert proc.returncode == 0, proc.stderr
 
 

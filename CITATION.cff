@@ -7,13 +7,15 @@ type: software
 authors:
   - name: Lennart Luttkus
 repository-code: https://github.com/ll7/robot_sf_ll7
-license: MIT
+license: GPL-3.0-only
 # Kept in lockstep with the latest full release tag (plain X.Y.Z) by the
-# release workflow and scripts/dev/check_version_alignment.py. The git
-# tag/release line is the single source of truth for the version; the
+# release workflow and scripts/dev/check_version_alignment.py. An explicit,
+# non-authorizing preparation marker may stage the next target on an untagged
+# tree while maintainer approval is pending; tag-time alignment remains strict.
+# The git tag/release line is the single source of truth for the version; the
 # benchmark release protocol context lives in the title/abstract, not here.
-version: 0.0.3
-date-released: 2026-03-26
+version: 0.0.5
+date-released: 2026-08-09
 abstract: >-
   Social navigation simulation and benchmark tooling with a paper-facing,
   pre-1.0 benchmark release protocol.

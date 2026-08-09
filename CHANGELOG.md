@@ -18,19 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   implementation does not rerun simulation or promote replay values to
   benchmark evidence.
 
-* **Issue #6154 release 0.0.5 evidence bundle.** Assembled the draft release
-  evidence bundle from the three reverified frozen candidates (Issue #6153):
-  Issue #5034 control-action-latency metric evidence, Issue #5305 certified
-  adversarial archive (17 entries), and Issue #5592 cross-matrix preregistration.
-  Issue #5416 is excluded because its current acceptance checker is blocked. The bundle
-  includes per-candidate reference manifests, SHA-256 checksums, release
-  checksum manifest (`configs/releases/release_0_0_5_checksum_manifest.yaml`),
-  preflight checklist (`configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml`),
-  and catalog registration. Zenodo concept DOI: 10.5281/zenodo.19482025. See
-  `docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md` for
-  plain-language summary and verification commands. It does not publish a tag,
-  GitHub Release, or Zenodo version.
-
 * **repo-hygiene #6321: publish and register legacy `model/` checkpoints as durable
   artifacts (Phase A of #6268, additive).** Every tracked legacy binary checkpoint under `model/`
   that previously had no durable registry/release provenance is now published as a byte-identical
@@ -3394,6 +3381,21 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
 * Robot / multi-robot environments now gracefully fallback to `simple_reward` when `reward_func=None` is passed via factory functions, preventing a `TypeError: 'NoneType' object is not callable` during `env.step` (affects new classic interactions PPO visualization demo).
 
 ---
+
+## [0.0.5] - 2026-08-09
+
+### Added
+
+* **Issue #6154 release 0.0.5 evidence bundle.** This release-preparation
+  package preserves the three reverified frozen candidates: Issue #5034
+  control-action-latency metric evidence, Issue #5305 certified adversarial
+  archive (17 entries), and Issue #5592 cross-matrix preregistration. Issue
+  #5416 remains excluded because its current acceptance checker is blocked. The
+  package includes per-candidate reference manifests, SHA-256 checksums, the
+  release checksum manifest, and the fail-closed preflight checklist. See
+  `docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md`
+  for the verification commands. This entry prepares the release metadata; it
+  does not itself publish a tag, GitHub Release, or Zenodo version.
 
 ## Guidelines for Contributors
 

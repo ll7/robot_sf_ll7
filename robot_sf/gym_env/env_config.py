@@ -286,19 +286,31 @@ try:
     from robot_sf.gym_env.unified_config import (
         RobotSimulationConfig as EnvSettingsNew,
     )
-
-    # These can be used as drop-in replacements for gradual migration
-    __all__ = [
-        "BaseEnvSettings",
-        # New unified config classes for forward compatibility
-        "BaseSimulationConfig",
-        "EnvSettings",
-        "EnvSettingsNew",
-        "PedEnvSettings",
-        "PedEnvSettingsNew",
-        "RobotEnvSettings",
-        "RobotEnvSettingsNew",
-    ]
 except ImportError:
-    # If unified_config is not available, just export the original classes
-    __all__ = ["BaseEnvSettings", "EnvSettings", "PedEnvSettings", "RobotEnvSettings"]
+    # If unified_config is not available, keep the forward-compatibility aliases
+    # importable so the static public export surface below stays resolvable.
+    BaseSimulationConfig = None  # type: ignore[assignment]
+    RobotEnvSettingsNew = None  # type: ignore[assignment]
+    PedEnvSettingsNew = None  # type: ignore[assignment]
+    EnvSettingsNew = None  # type: ignore[assignment]
+
+# Explicit public export surface: the reviewed environment config classes plus the
+# symbols re-exported for existing consumers. The forward-compatibility aliases above
+# can be used as drop-in replacements for gradual migration.
+__all__ = [
+    "BaseEnvSettings",
+    "BaseSimulationConfig",
+    "BicycleDriveRobot",
+    "BicycleDriveSettings",
+    "DifferentialDriveRobot",
+    "DifferentialDriveSettings",
+    "EnvSettings",
+    "EnvSettingsNew",
+    "LidarScannerSettings",
+    "MapDefinitionPool",
+    "PedEnvSettings",
+    "PedEnvSettingsNew",
+    "RobotEnvSettings",
+    "RobotEnvSettingsNew",
+    "SimulationSettings",
+]

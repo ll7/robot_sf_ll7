@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 import math
 import pathlib
 import subprocess
@@ -18,6 +17,7 @@ from robot_sf.benchmark.fidelity_sensitivity import (
     metric_drift,
 )
 from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
+from robot_sf.evidence.writers import write_json, write_text
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -238,11 +238,8 @@ def format_markdown(report: Mapping[str, Any]) -> str:
 def write_report(report: Mapping[str, Any], output_dir: pathlib.Path) -> None:
     """Write the JSON payload and Markdown summary."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "smoke_report.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (output_dir / "README.md").write_text(format_markdown(report), encoding="utf-8")
+    write_json(output_dir / "smoke_report.json", report)
+    write_text(output_dir / "README.md", format_markdown(report), issue_ref="robot_sf#3207")
 
 
 def _git_head() -> str:

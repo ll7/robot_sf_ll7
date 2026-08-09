@@ -1,0 +1,516 @@
+# Machine-readable frozen promotion contract for the issue #5303 adversarial v1 search.
+#
+# Plain-language summary: this freezes (before any new outcomes are generated) one
+# executable, falsifiable contract that asks whether the existing Optuna/TPE search
+# finds more fully certified, independently confirmed weak points than the existing
+# random search for scenario_adaptive_hybrid_orca_v2_collision_guard on the held-out
+# classic_group_crossing_medium family, under a matched candidate and simulator-time
+# budget. TPE = Tree-structured Parzen Estimator (the existing Optuna sampler).
+#
+# This file is the frozen source of truth. Its SHA-256 is recorded in the side-effect-free
+# preregistration manifest (docs/context/evidence/issue_5303_search_promotion_preregistration/)
+# and is recomputed by robot_sf/benchmark/issue_5303_search_promotion_preregistration.py at every
+# check. Any field change is a contract change and requires re-preregistration before any
+# step-3 outcome is generated.
+schema_version: issue_5303_search_promotion_contract.v1
+issue: 5303
+parent_issue: 5303
+step: 2
+task_id: issue-5303-step-2-search-promotion-preregistration
+frozen_on: "2026-07-24"
+evidence_boundary: proposal_preflight_only
+# What this preregistration does NOT establish. A positive step-3 result would support only
+# the narrow target/family/budget statement in claim_under_test; it never supports transfer,
+# minimax ranking, or paper-facing claims.
+not_a_claim_of:
+  - tpe_superiority_established
+  - cross_planner_transfer
+  - minimax_or_portfolio_ranking
+  - paper_or_dissertation_or_benchmark_wide_claim
+
+claim_under_test: >
+  Under a frozen family-disjoint design and matched candidate (64 per search seed per
+  method) and simulator-time budgets, the existing Optuna/TPE search yields more fully
+  certified and independently confirmed weak points than the existing random search for
+  scenario_adaptive_hybrid_orca_v2_collision_guard on the held-out classic_group_crossing_medium
+  family, using exactly three search seeds per method and a constraints-first objective
+  ordering (collision/severe intrusion, then liveness/goal completion, then comfort/efficiency).
+
+# ---------------------------------------------------------------------------
+# Entry gate: the corrected #6139 recertification. Hashes are recomputed at check
+# time; the self-declared hash is read from the receipt and cross-checked.
+# ---------------------------------------------------------------------------
+entry_gate:
+  blocking_issue: 6139
+  blocking_issue_state: merged
+  recertification_receipt_path: docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json
+  # SHA-256 of the receipt FILE raw bytes (recomputed by the preflight; tamper-evident).
+  recertification_receipt_file_sha256: 0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe
+  # Self-declared canonical-content hash recorded inside the receipt by #6139 tooling.
+  recertification_self_declared_sha256: 7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0
+  certified_archive_path: docs/context/evidence/issue_5305_certified_archive/archive.json
+  certified_archive_sha256: 79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445
+  record_count: 17
+  eligible_count: 8
+  eligible_floor: 2
+  entry_gate_satisfied: true
+
+# ---------------------------------------------------------------------------
+# Target and neutral reference planner (existing configs, reused by reference).
+# ---------------------------------------------------------------------------
+target_planner:
+  name: scenario_adaptive_hybrid_orca_v2_collision_guard
+  config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+  base_algo: hybrid_rule_local_planner
+
+neutral_reference_planner:
+  name: scenario_adaptive_orca_v1
+  config_path: configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml
+  base_algo: orca
+  role: solvable_reference_proving_target_specificity
+
+# ---------------------------------------------------------------------------
+# Input provenance. These raw-file SHA-256 values are checked before any future
+# diagnostic execution. The list includes the target/reference configs, both
+# family sources, search space, certifier/objective, comparison and direct search
+# runners, accounting analysis surfaces, and the side-effect-free preflight/check CLI
+# needed to make the handoff executable and auditable.
+# ---------------------------------------------------------------------------
+input_provenance:
+  algorithm: sha256_raw_file_bytes
+  required_inputs:
+    - id: target_planner_config
+      path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+      sha256: d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe
+    - id: neutral_reference_planner_config
+      path: configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml
+      sha256: 2a130d331df6778f73d13d5cb12c811e8b6290fbba1fbc8595e019cbcd500401
+    - id: fit_family_config
+      path: configs/scenarios/archetypes/classic_cross_trap.yaml
+      sha256: 2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060
+    - id: fresh_family_config
+      path: configs/scenarios/archetypes/classic_group_crossing.yaml
+      sha256: 370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8
+    - id: diagnostic_scenario_template
+      path: configs/adversarial/issue_5303_classic_group_crossing_medium.yaml
+      sha256: 22eee6b350a9314db73514fc871fee66a97d2695811cbfadd87b4484155d32e3
+    - id: search_space
+      path: configs/adversarial/issue_5303_search_promotion_space.yaml
+      sha256: 04906a154f88c17b5d2797a4d6d934f5b6b74cc25d7e99796bd603f9823f2106
+    - id: certification_runner
+      path: robot_sf/adversarial/certification.py
+      sha256: 075f19c69b5d0021b9608f22dbbc4817da9651cb9a8eb52acfcfc616ccb355c8
+    - id: objective_registry
+      path: robot_sf/adversarial/objectives.py
+      sha256: 7c5bbdb5d19c548fcf492306efc6c89d712b28047866cb51787cdeab1a05125c
+    - id: diagnostic_runner
+      path: scripts/tools/compare_adversarial_samplers.py
+      sha256: 01e2477c5741a5404d793b1e8341cb1f2ec714051453790b946e5a8a0a4cc828
+    - id: adversarial_search_runner
+      path: robot_sf/adversarial/search.py
+      sha256: 0a926d30f304bf7fa2e8065ba6e2f7bfdab31c7c46c1dfe85bb9ac8ec34a0160
+    - id: promotion_analysis_module
+      path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
+      sha256: a8fe9e70249a924e2f4b6dd0334ad2ef34cfc10a11bc6d1e21e7d077d6146812
+    - id: promotion_analysis_cli
+      path: scripts/tools/analyze_issue_5303_search_promotion.py
+      sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
+    - id: preflight_module
+      path: robot_sf/benchmark/issue_5303_search_promotion_preregistration.py
+      sha256: 16a193ea5047273202474182ef13aac0ff916e563165d5ea7d7e3fc2311f5f73
+    - id: contract_check_cli
+      path: scripts/tools/check_issue_5303_search_promotion_preregistration.py
+      sha256: 112a4c5ff0b8fd19f43ba34bc750344c193a218c8d1903a0eb837359b53f4bd5
+
+# ---------------------------------------------------------------------------
+# Family split: fit/tuning disjoint from fresh outcomes. Eligible archive IDs are
+# read from the #6139 receipt and must match exactly.
+# ---------------------------------------------------------------------------
+family_split:
+  fit_tuning_warm_start_family: classic_cross_trap_medium
+  fresh_outcome_family: classic_group_crossing_medium
+  fit_family_config: configs/scenarios/archetypes/classic_cross_trap.yaml
+  fresh_outcome_family_config: configs/scenarios/archetypes/classic_group_crossing.yaml
+  disjointness: family_disjoint_with_no_seed_or_archive_id_overlap
+  fit_family_eligible_records:
+    - issue5305_classic_cross_trap_medium_fbbd96687d61
+    - issue5305_classic_cross_trap_medium_fe24f0ff86a1
+  fresh_outcome_family_eligible_records:
+    - issue5305_classic_group_crossing_medium_0405a12b9e1b
+    - issue5305_classic_group_crossing_medium_16c4a20e71aa
+    - issue5305_classic_group_crossing_medium_58a4877312cc
+    - issue5305_classic_group_crossing_medium_5b9f237a8aee
+    - issue5305_classic_group_crossing_medium_d8b09e0e988a
+    - issue5305_classic_group_crossing_medium_fc6bf8300e51
+  excluded_records_count: 9
+  excluded_reasons:
+    - stress_only
+    - knife_edge
+  do_not_reuse_issue_3275_outcomes: true
+
+# ---------------------------------------------------------------------------
+# Controls. Rejection controls must not yield discoveries; the certifier negative
+# control must be rejected and may never be a candidate or denominator row.
+# ---------------------------------------------------------------------------
+controls:
+  rejection_controls:
+    - family: doorway
+      config: configs/scenarios/archetypes/classic_doorway.yaml
+      seeds: [128, 130]
+      role: must_not_yield_discoveries_counted_as_weak_points
+  certifier_negative_control:
+    family: francis2023_blind_corner
+    config: configs/scenarios/single/francis2023_blind_corner.yaml
+    map: maps/svg_maps/francis2023/francis2023_blind_corner.svg
+    role: certifier_must_reject_never_a_candidate_or_denominator_row
+
+# ---------------------------------------------------------------------------
+# Methods: existing samplers reused by reference only. No new optimizer.
+# ---------------------------------------------------------------------------
+methods:
+  entries:
+    - name: optuna
+      role: existing_tpe_tree_structured_parzen_estimator
+      sampler_class: robot_sf.adversarial.samplers.OptunaCandidateSampler
+      builder: robot_sf.adversarial.samplers.build_sampler
+    - name: random
+      role: existing_dependency_light_random_search
+      sampler_class: robot_sf.adversarial.samplers.RandomCandidateSampler
+      builder: robot_sf.adversarial.samplers.build_sampler
+  allowed_methods_only: [optuna, random]
+  identical_warm_start_for_both_methods: true
+  warm_start_source: fit_family_eligible_records_only
+
+# ---------------------------------------------------------------------------
+# Matched budget. Exactly 64 candidates per search seed per method, exactly 3 seeds.
+# ---------------------------------------------------------------------------
+budget:
+  candidate_budget_per_search_seed_per_method: 64
+  search_seeds_per_method: 3
+  search_seeds: [530301, 530302, 530303]
+  total_candidates_per_method: 192
+
+# ---------------------------------------------------------------------------
+# Simulator-time cap (existing SearchConfig defaults, reused by reference).
+# ---------------------------------------------------------------------------
+simulator_time_cap:
+  horizon_steps: 100
+  dt_s: 0.1
+  simulator_time_cap_s: 10.0
+  source: existing SearchConfig defaults (horizon=100, dt=0.1)
+
+# ---------------------------------------------------------------------------
+# Candidate space, feasibility rules, normalization, duplicate handling.
+# ---------------------------------------------------------------------------
+candidate_space_and_feasibility:
+  search_space_schema: adversarial-search-space.v1
+  candidate_space_structure_ref: configs/adversarial/issue_5303_search_promotion_space.yaml
+  identical_for_both_methods: true
+  feasibility_rules:
+    - corrected_swept_envelope_full_polyline_clearance
+    - runtime_simulator_obstacle_collision
+    - search_space_validation
+  require_certification: true
+  certifier: corrected_scenario_cert_v1_from_merged_issue_6139
+  normalization: canonical_json_sorted_key_sha256_per_candidate_before_accounting
+  duplicate_handling: global_within_arm_normalized_config_hash_for_unique_candidate_endpoint
+  duplicate_accounting: >
+    Every scheduled attempt remains in its method's intention-to-search denominator.
+    Identical normalized configurations are collapsed only for the secondary
+    unique-candidate endpoint, globally within an arm across all three search seeds;
+    they are never silently removed from the primary denominator.
+  identical_candidate_space_feasibility_and_simulator_time_cap_for_both_methods: true
+
+# ---------------------------------------------------------------------------
+# Constraints-first objective ordering. Step 3 (#6145) must register exactly this
+# named objective before the frozen command runs; no weighted comfort/SNQI may
+# compensate for a collision or zero goal completion.
+# ---------------------------------------------------------------------------
+objective:
+  name: constraints_first_lexicographic_v1
+  ordering: constraints_first_lexicographic
+  tiers:
+    - tier: 1
+      name: collision_or_severe_intrusion
+      kind: hard_constraint
+      veto: true
+    - tier: 2
+      name: liveness_or_goal_completion
+      kind: liveness
+      no_soft_compensation_when_tier_1_fails: true
+    - tier: 3
+      name: comfort_and_efficiency
+      kind: soft
+      compensates_hard_constraint_or_zero_goal_completion: false
+  scalar_diagnostic_only: worst_case_snqi
+  rule: no_weighted_comfort_or_snqi_improvement_compensates_for_collision_or_zero_goal_completion
+
+# ---------------------------------------------------------------------------
+# The seven counted-weak-point gates. All must pass; the gate set is fail-closed.
+# ---------------------------------------------------------------------------
+counted_weak_point_gates:
+  fail_closed: true
+  confirmation:
+    fresh_confirmation_seeds: 5
+    seeds_distinct_from_search_seeds: true
+    no_retries: true
+    mechanism_threshold_seeds: 4_of_5
+    neutral_reference_threshold_seeds: 4_of_5
+    second_recorded_execution_context_required: true
+  gates:
+    - id: 1
+      name: corrected_scenario_path_certification
+      rule: candidate passes corrected swept-envelope and runtime simulator-collision certification
+    - id: 2
+      name: deterministic_replay
+      rule: exact deterministic-replay signature agreement
+    - id: 3
+      name: target_failure_in_at_least_4_of_5_seeds_no_retries
+      rule: target planner fails in at least 4 of 5 fresh confirmation seeds with no retries
+    - id: 4
+      name: same_primary_mechanism_in_at_least_4_of_5_seeds
+      rule: the same primary failure mechanism reproduces in at least 4 of 5 seeds
+    - id: 5
+      name: neutral_reference_planner_succeeds_in_at_least_4_of_5_seeds
+      rule: the neutral reference planner succeeds in at least 4 of 5 of the same seeds
+    - id: 6
+      name: shortlist_passes_threshold_in_second_execution_context
+      rule: the shortlist passes the same threshold in a second recorded execution context
+    - id: 7
+      name: no_excluded_row_class
+      rule: no fallback, degraded, unavailable, geometry_artifact, knife_edge, stress_only, or duplicate classification
+  excluded_row_classes_never_discoveries_but_remain_primary_denominator:
+    - fallback
+    - degraded
+    - unavailable
+    - geometry_artifact
+    - knife_edge
+    - stress_only
+    - duplicate
+
+# ---------------------------------------------------------------------------
+# Estimand, uncertainty, null tests, attrition, minimally important improvement.
+# ---------------------------------------------------------------------------
+estimand:
+  primary: tpe_minus_random_difference_in_unique_fully_admitted_weak_points
+  unit: unique_fully_admitted_weak_point
+  denominator: intention_to_search_192_scheduled_attempts_per_method
+  primary_denominator_policy: all_scheduled_attempts_including_missing_invalid_and_attrition
+  unique_endpoint_deduplication: global_within_arm_normalized_config_hash_across_all_search_seeds
+  clustering: candidate_level_clustering_across_search_seeds
+  independent_unit: search_seed
+  counted_only_when_all_seven_gates_pass: true
+
+uncertainty:
+  method: nonparametric_bootstrap_over_seed_clusters
+  cluster_unit: search_seed
+  clusters_per_method: 3
+  interval: 95_percent_percentile_bootstrap
+  confidence_level: 0.95
+  resamples: 10000
+
+null_tests:
+  tests:
+    - name: shuffled_outcome_seed_permutation
+      unit: search_seed
+    - name: ranking_permutation_seed
+      unit: search_seed
+  sidedness: two_sided
+  threshold_p: 0.05
+  both_required: true
+
+missing_invalid_attrition:
+  handling: fail_closed
+  included_in_primary_denominator: true
+  excluded_from_primary_denominator: false
+  reason_recorded: true
+  no_optional_seeds: true
+  no_outcome_dependent_replacement_or_exclusion: true
+  complete_case_analysis: secondary_sensitivity_only_never_primary
+
+# ---------------------------------------------------------------------------
+# Complete per-attempt record emitted by the executable diagnostic runner.
+# The primary evidence-grade endpoint remains stopped, but a diagnostic row must
+# still carry enough provenance and exclusion state to make missingness visible.
+# ---------------------------------------------------------------------------
+outcome_row_schema:
+  schema_version: issue_5303_search_promotion_outcome_row.v1
+  required_fields:
+    - schema_version
+    - row_id
+    - arm
+    - method
+    - search_seed
+    - candidate_index
+    - normalized_candidate_config_sha256
+    - candidate
+    - scenario_family
+    - scenario_config_path
+    - scenario_config_sha256
+    - search_space_path
+    - search_space_sha256
+    - target_planner_config_path
+    - target_planner_config_sha256
+    - neutral_reference_planner_config_path
+    - neutral_reference_planner_config_sha256
+    - execution_stage
+    - execution_seed
+    - seed_lineage
+    - execution_mode
+    - readiness_status
+    - availability_status
+    - constraints_first_outcome
+    - objective
+    - objective_value
+    - primary_failure_mechanism
+    - stable_attribution_evidence
+    - certification
+    - recertification_lineage
+    - deterministic_replay
+    - confirmation_target
+    - confirmation_reference
+    - second_execution_context
+    - execution_commit
+    - execution_context_label
+    - admission_decision
+    - exclusion_reason
+    - immutable_record_sha256
+
+minimally_important_improvement:
+  unit: additional_unique_fully_admitted_weak_point
+  value: 1
+  applies_to: tpe_minus_random_difference
+
+decision_rule:
+  outcomes: [promote, stop, inconclusive]
+  promote_requires_all_positive_gate_conditions: true
+
+# ---------------------------------------------------------------------------
+# The positive gate is frozen EXACTLY as proposed. Thresholds are NOT weakened.
+# ---------------------------------------------------------------------------
+positive_gate:
+  admitted_weak_points_floor: 2
+  tpe_minus_random_difference: positive
+  ci_95_excludes_zero: true
+  both_null_tests_p_le_0_05: true
+  thresholds_weakened: false
+
+# ---------------------------------------------------------------------------
+# Power analysis (recomputed by the preflight). This is the honest reason the
+# positive gate is not robustly testable under exactly three search seeds.
+# ---------------------------------------------------------------------------
+power_analysis:
+  n_seeds_per_method: 3
+  total_labeled_seeds: 6
+  permutation_arrangements_C_6_3: 20
+  min_one_sided_permutation_p: 0.05
+  min_two_sided_permutation_p: 0.10
+  null_test_threshold: 0.05
+  two_sided_can_reject_at_threshold: false
+  one_sided_only_at_single_most_extreme_arrangement: true
+  bootstrap_ci_clusters_per_method: 3
+  ci_robustly_excludes_zero: false
+  positive_gate_robustly_testable: false
+  conclusion: >
+    With exactly three search seeds per method, candidate-level clustering makes the
+    search seed the independent unit, so each null test permutes six labeled seeds.
+    There are C(6,3)=20 arrangements: the minimum two-sided p-value is 2/20=0.10,
+    which exceeds the 0.05 threshold, and the minimum one-sided p-value is 1/20=0.05
+    only at the single most-extreme arrangement. The 95% bootstrap interval over
+    three seed clusters is not robust. The positive gate (both null tests at p<=0.05
+    AND a 95% interval excluding zero) is therefore not robustly testable under the
+    frozen budget.
+
+# ---------------------------------------------------------------------------
+# Per the issue's explicit instruction, because the positive gate is not robustly
+# testable, the future run is declared diagnostic/inconclusive here, before any
+# outcome. Thresholds are kept frozen; only the run classification is declared.
+# ---------------------------------------------------------------------------
+future_run_declaration:
+  status: diagnostic_inconclusive
+  reason: positive_gate_not_robustly_testable_under_exactly_three_search_seeds
+  thresholds_not_weakened: true
+  promotion_sequence_status: stopped_before_evidence_grade_promotion_campaign
+  evidence_grade_step3_authorized: false
+  separately_justified_diagnostic_search_run:
+    authorized: false
+    purpose: >
+      Validate the frozen adapter-mode search-stage handoff, input provenance, and complete
+      intention-to-search accounting without treating it as a promotion campaign.
+    fixed_decision: inconclusive
+    never_authorizes: [promote, transfer_claim, evidence_grade_comparison]
+    required_exclusion_reason: diagnostic_only_no_replay_reference_or_second_context
+    stop_rule: >
+      Any missing, invalid, fallback, degraded, unavailable, or provenance-mismatched
+      attempt remains recorded in the 192-attempt arm denominator and yields an
+      inconclusive diagnostic result; it is not retried, replaced, or excluded.
+  re_preregistration_required_to_claim_promote: true
+  declare_before_outcomes: true
+
+forbidden_in_this_step:
+  - planner_execution
+  - adversarial_search_campaign
+  - replay_or_confirmation_run
+  - slurm_or_sbatch_or_srun_submission
+  - evaluation_outcome_import_or_read
+
+# ---------------------------------------------------------------------------
+# Historical Step-3 command bindings and expected artifact locations retained
+# for the command/schema proof required by #6144. They do not authorize #6145
+# or any diagnostic execution. The output paths are future artifacts; they are
+# not read in this step.
+# ---------------------------------------------------------------------------
+step3_execution:
+  campaign_issue: 6145
+  runner_ref: scripts/tools/compare_adversarial_samplers.py
+  analysis_ref: scripts/tools/analyze_issue_5303_search_promotion.py
+  execution_kind: separately_justified_diagnostic_search_stage_only
+  promotion_campaign_status: stopped
+  diagnostic_objective: constraints_first_lexicographic_v1
+  required_execution_mode: adapter
+  runner_note: >
+    This command is retained only as the diagnostic search-stage handoff binding
+    required by #6144; this contract does not authorize invoking it. If a future
+    reviewed decision separately authorizes the diagnostic, it registers
+    constraints_first_lexicographic_v1, uses the corrected certifier from merged
+    #6139, pins the held-out classic_group_crossing_medium template and target
+    planner config, and records every scheduled attempt. It does not execute
+    replay, target/reference confirmation, or a second execution context and
+    therefore cannot promote.
+  diagnostic_search_command: >
+    uv run python scripts/tools/compare_adversarial_samplers.py
+    --contract configs/adversarial/issue_5303_search_promotion_contract.yaml
+    --policy hybrid_rule_local_planner
+    --algo-config configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    --reference-algo-config configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml
+    --scenario-template configs/adversarial/issue_5303_classic_group_crossing_medium.yaml
+    --scenario-family classic_group_crossing_medium
+    --search-space configs/adversarial/issue_5303_search_promotion_space.yaml
+    --sampler random --sampler optuna
+    --budget 64
+    --seed 530301 --seed 530302 --seed 530303
+    --objective constraints_first_lexicographic_v1
+    --horizon 100 --dt 0.1
+    --require-certification
+    --benchmark-profile experimental
+    --issue-5303-diagnostic-only
+    --execution-context-label diagnostic_adapter_context_a
+    --warm-start-archive docs/context/evidence/issue_5305_certified_archive/archive.json
+    --warm-start-record issue5305_classic_cross_trap_medium_fbbd96687d61
+    --warm-start-record issue5305_classic_cross_trap_medium_fe24f0ff86a1
+    --output-dir output/adversarial/issue_5303_search_promotion
+    --out-json output/adversarial/issue_5303_search_promotion/report.json
+    --out-md output/adversarial/issue_5303_search_promotion/comparison_table.md
+    --outcomes-jsonl output/adversarial/issue_5303_search_promotion/outcomes.jsonl
+  analysis_command: >
+    uv run python scripts/tools/analyze_issue_5303_search_promotion.py
+    --contract configs/adversarial/issue_5303_search_promotion_contract.yaml
+    --outcomes output/adversarial/issue_5303_search_promotion/outcomes.jsonl
+    --output output/adversarial/issue_5303_search_promotion/analysis.json
+  expected_artifacts:
+    output_dir: output/adversarial/issue_5303_search_promotion
+    report_json: output/adversarial/issue_5303_search_promotion/report.json
+    comparison_table_md: output/adversarial/issue_5303_search_promotion/comparison_table.md
+    outcomes_jsonl: output/adversarial/issue_5303_search_promotion/outcomes.jsonl
+    analysis_json: output/adversarial/issue_5303_search_promotion/analysis.json
+  outcome_classification_by_preregistration: diagnostic_inconclusive_only

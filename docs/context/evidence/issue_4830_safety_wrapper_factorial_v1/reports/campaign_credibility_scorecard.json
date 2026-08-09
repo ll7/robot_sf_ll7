@@ -1,0 +1,85 @@
+{
+  "schema_version": "campaign_credibility_scorecard.v1",
+  "standard_reference": "NASA-STD-7009B-inspired credibility assessment",
+  "campaign_id": "issue4830_safety_wrapper_factorial_v1",
+  "overall_score": 1.5,
+  "overall_status": "partial",
+  "claim_boundary": "Scorecard is reporting metadata for campaign credibility dimensions; it is not benchmark proof, paper evidence, or real-world validation.",
+  "factors": [
+    {
+      "factor_id": "verification",
+      "factor": "Verification",
+      "description": "Repository and campaign checks supporting correct implementation.",
+      "status": "weak",
+      "score": 1,
+      "scale": "not_assessed | weak | partial | strong | not_applicable",
+      "justification": "Report was generated from structured campaign summary/table artifacts; test-suite evidence is not embedded in the campaign artifact.",
+      "evidence": [
+        "campaign_summary_json=output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/campaign_summary.json",
+        "campaign_table_csv=output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/campaign_table.csv"
+      ]
+    },
+    {
+      "factor_id": "validation",
+      "factor": "Validation",
+      "description": "Comparison against trusted real-world or independent reference data.",
+      "status": "not_assessed",
+      "score": null,
+      "scale": "not_assessed | weak | partial | strong | not_applicable",
+      "justification": "No campaign artifact supplied enough evidence for this factor.",
+      "evidence": []
+    },
+    {
+      "factor_id": "input_pedigree",
+      "factor": "Input pedigree",
+      "description": "Pinned inputs, hashes, manifests, and source provenance.",
+      "status": "partial",
+      "score": 2,
+      "scale": "not_assessed | weak | partial | strong | not_applicable",
+      "justification": "Campaign records git commit and scenario matrix hash; external input lineage remains limited to recorded artifacts.",
+      "evidence": [
+        "git_hash=8b5ce0b1ca5b7845ae05b0fdc07761079c75d380",
+        "scenario_matrix_hash=c10df617a87c",
+        "campaign_manifest=output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/campaign_manifest.json"
+      ]
+    },
+    {
+      "factor_id": "uncertainty_characterization",
+      "factor": "Uncertainty characterization",
+      "description": "Seed repetition, confidence intervals, or variance analysis.",
+      "status": "partial",
+      "score": 2,
+      "scale": "not_assessed | weak | partial | strong | not_applicable",
+      "justification": "Campaign records 3 seed(s) and seed-variability artifacts when available; no claim beyond campaign-level uncertainty.",
+      "evidence": [
+        "seed_count=3",
+        "seed_variability_json=output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/seed_variability_by_scenario.json",
+        "statistical_sufficiency_json=output/benchmarks/camera_ready/issue4830_safety_wrapper_factorial_v1/reports/statistical_sufficiency.json"
+      ]
+    },
+    {
+      "factor_id": "results_robustness",
+      "factor": "Results robustness",
+      "description": "Coverage across planners, scenarios, and non-success classifications.",
+      "status": "weak",
+      "score": 1,
+      "scale": "not_assessed | weak | partial | strong | not_applicable",
+      "justification": "Campaign reports 6/6 successful planner row(s); fallback/degraded rows remain caveats, not success evidence.",
+      "evidence": [
+        "total_runs=6",
+        "successful_runs=6",
+        "row_status_summary={'successful_evidence_rows': 6, 'accepted_unavailable_rows': 0, 'unexpected_failed_rows': 0, 'fallback_or_degraded_rows': 0}"
+      ]
+    },
+    {
+      "factor_id": "use_history",
+      "factor": "Use history",
+      "description": "Prior accepted use of this campaign configuration or equivalent evidence.",
+      "status": "not_assessed",
+      "score": null,
+      "scale": "not_assessed | weak | partial | strong | not_applicable",
+      "justification": "No campaign artifact supplied enough evidence for this factor.",
+      "evidence": []
+    }
+  ]
+}

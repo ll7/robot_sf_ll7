@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
     BaseContext,
@@ -135,6 +135,7 @@ from robot_sf.benchmark.map_runner_policies import hybrid_global_rl as _hybrid_g
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
+from robot_sf.benchmark.map_runner_policies import socnav_family as _socnav_family_builder
 from robot_sf.benchmark.map_runner_policy_actions import (
     ppo_action_to_unicycle as _ppo_action_to_unicycle_impl,
 )
@@ -221,7 +222,10 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.planner.dwa import DWAPlannerAdapter, build_dwa_config
+from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for tests.
+    DWAPlannerAdapter,
+    build_dwa_config,
+)
 from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter  # noqa: F401
 from robot_sf.planner.grid_route import (  # noqa: F401
     GridRoutePlannerAdapter,
@@ -233,11 +237,11 @@ from robot_sf.planner.guarded_ppo import (
     build_guarded_ppo_fallback,
     build_guarded_ppo_prior,
 )
-from robot_sf.planner.hybrid_orca_sampler import (
+from robot_sf.planner.hybrid_orca_sampler import (  # noqa: F401 - registry re-export.
     HybridORCASamplerAdapter,
     build_hybrid_orca_sampler_build_config,
 )
-from robot_sf.planner.hybrid_portfolio import (
+from robot_sf.planner.hybrid_portfolio import (  # noqa: F401 - registry re-export.
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
 )
@@ -250,7 +254,7 @@ from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,
 )
-from robot_sf.planner.nmpc_social import (
+from robot_sf.planner.nmpc_social import (  # noqa: F401 - registry re-export.
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
 )
@@ -258,7 +262,14 @@ from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
 )
-from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
+from robot_sf.planner.protocol import (
+    DIAGNOSTICS_UNAVAILABLE_KEY,
+    DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+    PLANNER_TYPE_KEY,
+    BaselineStepToLocalAdapter,
+    normalize_planner_diagnostics,
+)
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter  # noqa: F401 - registry re-export.
 from robot_sf.planner.safety_barrier import (  # noqa: F401
     SafetyBarrierPlannerAdapter,
     build_safety_barrier_config,
@@ -269,19 +280,19 @@ from robot_sf.planner.safety_shield import (
     shield_contract_metadata,
     update_shield_stats,
 )
-from robot_sf.planner.social_navigation_pyenvs_force_model import (
+from robot_sf.planner.social_navigation_pyenvs_force_model import (  # noqa: F401
     SocialNavigationPyEnvsForceModelAdapter,
     build_social_navigation_pyenvs_force_model_config,
 )
-from robot_sf.planner.social_navigation_pyenvs_hsfm import (
+from robot_sf.planner.social_navigation_pyenvs_hsfm import (  # noqa: F401
     SocialNavigationPyEnvsHSFMAdapter,
     build_social_navigation_pyenvs_hsfm_config,
 )
-from robot_sf.planner.social_navigation_pyenvs_orca import (
+from robot_sf.planner.social_navigation_pyenvs_orca import (  # noqa: F401
     SocialNavigationPyEnvsORCAAdapter,
     build_social_navigation_pyenvs_orca_config,
 )
-from robot_sf.planner.socnav import (
+from robot_sf.planner.socnav import (  # noqa: F401 - registry re-export.
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
@@ -483,13 +494,16 @@ _load_synthetic_actuation_profile = _load_synthetic_actuation_profile_impl
 _load_latency_stress_profile = _load_latency_profile
 
 
-class _ExternalMPCAdapter:
+class _ExternalMPCAdapter(BaselineStepToLocalAdapter):
     """Bridge an external MPC wrapper into the map-runner adapter contract.
 
     The external wrapper is expected to expose ``step(obs) -> dict`` while the
     benchmark runner expects ``plan(obs) -> (linear, angular)``. The adapter also
     normalizes the upstream observation into the structured Robot SF payload used
-    by the other external planner bridges.
+    by the other external planner bridges. The canonical baseline adapter owns
+    the lifecycle and ``step()``/``plan()`` construction; the two injected
+    callbacks retain the external-MPC observation and heading-aware projection
+    semantics at this benchmark boundary.
     """
 
     def __init__(
@@ -500,42 +514,44 @@ class _ExternalMPCAdapter:
         robot_kinematics: str | None,
         planner_name: str,
     ) -> None:
-        """Store the wrapped external MPC planner and its adapter configuration."""
-        self._planner = planner
+        """Construct the canonical adapter with external-MPC boundary callbacks."""
         self._algo_config = algo_config
         self._robot_kinematics = robot_kinematics
         self._planner_name = planner_name
+        self._current_observation: dict[str, Any] | None = None
+        super().__init__(
+            planner,
+            planner_type=planner_name,
+            step_executor=self._step_external_mpc,
+            action_projector=self._project_external_mpc_action,
+        )
 
-    def reset(self, *, seed: int | None = None) -> None:
-        """Reset the wrapped planner if it exposes the standard hook."""
-        if hasattr(self._planner, "reset"):
-            if seed is None:
-                self._planner.reset()
-            else:
-                try:
-                    self._planner.reset(seed=seed)
-                except TypeError:
-                    self._planner.reset()
-
-    def close(self) -> None:
-        """Release wrapped planner resources if available."""
-        if hasattr(self._planner, "close"):
-            self._planner.close()
-
-    def plan(self, obs: dict[str, Any]) -> tuple[float, float]:
-        """Produce a map-runner command from an external MPC planner step.
+    def _step_external_mpc(self, planner: Any, obs: dict[str, Any]) -> Any:
+        """Forward the canonical observation through the external-MPC format.
 
         Returns:
-            tuple[float, float]: Projected ``(linear, angular)`` command.
+            The external planner's action mapping.
         """
-        action = self._planner.step(_obs_to_external_mpc_format(obs))
+        self._current_observation = obs
+        return planner.step(_obs_to_external_mpc_format(obs))
+
+    def _project_external_mpc_action(
+        self,
+        action: Any,
+        planner_type: str,
+    ) -> tuple[float, float]:
+        """Preserve the external-MPC heading-aware action projection.
+
+        Returns:
+            The projected ``(linear, angular)`` command.
+        """
+        if self._current_observation is None:
+            raise RuntimeError("external-MPC action projection context is not initialized")
         if not isinstance(action, dict):
-            raise TypeError(
-                f"{self._planner_name} returned unsupported action payload: {type(action)}"
-            )
+            raise TypeError(f"{planner_type} returned unsupported action payload: {type(action)}")
         linear, angular, _conversion_mode = _ppo_action_to_unicycle(
             action,
-            obs,
+            self._current_observation,
             self._algo_config,
             robot_kinematics=self._robot_kinematics,
             project_command=False,
@@ -861,7 +877,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
             "status": "ok",
             "learned_policy_contract": learned_contract,
         }
-    except Exception as exc:
+    except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)
         if not _is_socnav_algorithm(algo):
             raise
         message = (
@@ -891,7 +907,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
                     "policy": policy,
                     "learned_policy_contract": learned_contract,
                 }
-            except Exception as fallback_exc:
+            except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)
                 raise RuntimeError(
                     f"{message} Fallback attempt also failed: {fallback_exc}",
                 ) from fallback_exc
@@ -1917,7 +1933,7 @@ def _build_holonomic_world_velocity_policy(
     return _policy, meta
 
 
-def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
+def _build_socnav_family_adapter(
     algo_key: str,
     algo: str,
     algo_config: dict[str, Any],
@@ -1926,14 +1942,15 @@ def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
 ) -> Any:
     """Construct the SocNav-family planner adapter for ``algo_key``.
 
-    Covers the classical/adapter planners that build an adapter object and share the
-    common adapter policy tail (ORCA/HRVO, force models, SoNIC/GenSafeNav/CrowdNav,
-    SACADRL, prediction, hybrid portfolios, NMPC, and the RVO placeholder). A couple of
-    branches mutate ``meta`` in place (prediction overrides, selector boundary,
+    Delegates to the data-driven registry in
+    ``robot_sf.benchmark.map_runner_policies.socnav_family`` (issue #6467), which
+    replaces the former hand-written dispatch chain. Behavior is preserved exactly:
+    unknown keys raise ``ValueError`` mentioning the original label, and a couple of
+    specs mutate ``meta`` in place (prediction overrides, selector boundary,
     placeholder status).
 
     Args:
-        algo_key: Lowercased algorithm key used for branching.
+        algo_key: Lowercased algorithm key used for registry lookup.
         algo: Original algorithm label (used only for the unknown-algorithm error).
         algo_config: Algorithm configuration payload.
         meta: Algorithm metadata dict; mutated in place for a few planner variants.
@@ -1942,163 +1959,13 @@ def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
         Any: The constructed planner adapter.
     """
     socnav_cfg = _build_socnav_config(algo_config)
-
-    if algo_key in {"socnav_sampling", "sampling"}:
-        # Keep `socnav_sampling` as the native in-repo sampling adapter baseline.
-        # `socnav_bench` is the upstream SocNavBench wrapper.
-        adapter = SamplingPlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"social_force", "sf"}:
-        adapter = SocialForcePlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"orca"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_orca_nonholonomic"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        config = deepcopy(socnav_cfg)
-        config.orca_heading_slowdown = 0.8
-        config.orca_commit_distance = 1.8
-        config.orca_commit_lateral_gain = 0.6
-        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_orca_dd"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        config = deepcopy(socnav_cfg)
-        config.orca_time_horizon = 3.0
-        config.orca_neighbor_dist = 8.0
-        config.orca_max_neighbors = 6
-        config.orca_stall_speed_threshold = 0.1
-        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_orca_relaxed"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        config = deepcopy(socnav_cfg)
-        config.orca_time_horizon = 8.0
-        config.orca_obstacle_range = 8.0
-        config.orca_obstacle_threshold = 0.6
-        config.orca_head_on_bias = 0.4
-        config.orca_symmetry_bias = 0.15
-        adapter = ORCAPlannerAdapter(config=config, allow_fallback=allow_fallback)
-    elif algo_key in {"socnav_hrvo"}:
-        adapter = HRVOPlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"hrvo"}:
-        adapter = HRVOPlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
-        adapter = SocialNavigationPyEnvsORCAAdapter(
-            config=build_social_navigation_pyenvs_orca_config(algo_config)
-        )
-    elif algo_key in {
-        "social_navigation_pyenvs_socialforce",
-        "social_nav_pyenvs_socialforce",
-    }:
-        adapter = SocialNavigationPyEnvsForceModelAdapter(
-            config=build_social_navigation_pyenvs_force_model_config(
-                algo_config,
-                default_policy_name="socialforce",
-            )
-        )
-    elif algo_key in {
-        "social_navigation_pyenvs_sfm_helbing",
-        "social_nav_pyenvs_sfm_helbing",
-    }:
-        adapter = SocialNavigationPyEnvsForceModelAdapter(
-            config=build_social_navigation_pyenvs_force_model_config(
-                algo_config,
-                default_policy_name="sfm_helbing",
-            )
-        )
-    elif algo_key in {
-        "social_navigation_pyenvs_hsfm_new_guo",
-        "social_nav_pyenvs_hsfm_new_guo",
-    }:
-        adapter = SocialNavigationPyEnvsHSFMAdapter(
-            config=build_social_navigation_pyenvs_hsfm_config(
-                algo_config,
-                default_policy_name="hsfm_new_guo",
-            )
-        )
-    elif algo_key in {"crowdnav_height"}:
-        crowdnav_adapter_cls, crowdnav_config_builder = _crowdnav_height_symbols()
-        adapter = crowdnav_adapter_cls(config=crowdnav_config_builder(algo_config))
-    elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
-        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
-        adapter = sonic_adapter_cls(config=sonic_config_builder(algo_config))
-    elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
-        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
-        adapter = sonic_adapter_cls(
-            config=sonic_config_builder(
-                {
-                    **algo_config,
-                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
-                    "model_name": algo_config.get("model_name", "Ours_GST"),
-                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
-                }
-            )
-        )
-    elif algo_key in {
-        "gensafenav_gst_predictor_rand",
-        "gensafe_gst_predictor_rand",
-        "gst_predictor_rand",
-    }:
-        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
-        adapter = sonic_adapter_cls(
-            config=sonic_config_builder(
-                {
-                    **algo_config,
-                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
-                    "model_name": algo_config.get("model_name", "GST_predictor_rand"),
-                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
-                }
-            )
-        )
-    elif algo_key in {"sacadrl", "sa_cadrl"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = SACADRLPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key == "prediction_planner":
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = PredictionPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-        meta.update(_prediction_planner_metadata_overrides(algo_config))
-    elif algo_key == "hybrid_portfolio":
-        allow_fallback = bool(algo_config.get("allow_fallback", True))
-        hybrid_cfg = build_hybrid_portfolio_build_config(algo_config)
-        adapter = HybridPortfolioAdapter(
-            hybrid_config=hybrid_cfg.hybrid,
-            risk_dwa=RiskDWAPlannerAdapter(config=hybrid_cfg.risk_dwa),
-            mppi=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
-            orca=ORCAPlannerAdapter(config=hybrid_cfg.socnav, allow_fallback=allow_fallback),
-            prediction=PredictionPlannerAdapter(
-                config=hybrid_cfg.socnav, allow_fallback=allow_fallback
-            ),
-        )
-    elif algo_key == "planner_selector_v2_diagnostic":
-        adapter = _build_planner_selector_v2_adapter(algo_config)
-        meta["selector_boundary"] = {
-            "diagnostic_only": True,
-            "benchmark_strength": False,
-            "learned_policy_used": False,
-            "claim_boundary": "diagnostic_only_not_benchmark_success",
-        }
-    elif algo_key == "hybrid_orca_sampler":
-        allow_fallback = bool(algo_config.get("allow_fallback", True))
-        hybrid_cfg = build_hybrid_orca_sampler_build_config(algo_config)
-        adapter = HybridORCASamplerAdapter(
-            config=hybrid_cfg.guard,
-            orca_adapter=ORCAPlannerAdapter(
-                config=hybrid_cfg.socnav,
-                allow_fallback=allow_fallback,
-            ),
-            sampler_adapter=MPPISocialPlannerAdapter(config=hybrid_cfg.mppi),
-        )
-    elif algo_key in {"socnav_bench"}:
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"nmpc_social", "nmpc"}:
-        adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(algo_config))
-    elif algo_key == "dwa":
-        adapter = DWAPlannerAdapter(config=build_dwa_config(algo_config))
-    elif algo_key == "rvo":
-        adapter = SamplingPlannerAdapter(config=socnav_cfg)
-        meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})
-    else:
-        raise ValueError(f"Unknown map-based algorithm '{algo}'.")
-    return adapter
+    return _socnav_family_builder.build_socnav_family_adapter(
+        algo_key=algo_key,
+        algo=algo,
+        algo_config=algo_config,
+        meta=meta,
+        socnav_cfg=socnav_cfg,
+    )
 
 
 def _build_common_adapter_policy(  # noqa: C901
@@ -2198,14 +2065,28 @@ def _build_common_adapter_policy(  # noqa: C901
         def _planner_stats() -> dict[str, Any]:
             """Expose generic adapter diagnostics for episode metadata.
 
+            Propagated through the canonical #6492 ``normalize_planner_diagnostics``
+            so the SocNav-family adapter arm shares one fail-closed diagnostics
+            schema (string ``planner_type``) with the runner native-command arm;
+            every counter the adapter already carries is preserved unchanged.
+
             Returns:
                 dict[str, Any]: Adapter diagnostic payload.
             """
             diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
-            runtime = dict(diagnostics) if isinstance(diagnostics, dict) else {}
             foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
-            if isinstance(foresight, dict):
-                runtime.update(foresight)
+            runtime = normalize_planner_diagnostics(
+                diagnostics, fallback_planner_type=type(adapter).__name__
+            )
+            if isinstance(foresight, Mapping):
+                for key, value in foresight.items():
+                    if key in {
+                        PLANNER_TYPE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_KEY,
+                        DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
+                    }:
+                        continue
+                    runtime[key] = value
             return runtime
 
         _policy._planner_stats = _planner_stats

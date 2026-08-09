@@ -55,3 +55,8 @@ def douglas_peucker(path: Sequence[Vec2D], epsilon: float) -> list[Vec2D]:
     _recursive(0, len(pts) - 1, keep_indices)
     keep_indices = sorted(set(keep_indices))
     return [tuple(pts[i]) for i in keep_indices]
+
+
+__all__ = [
+    "douglas_peucker",
+]

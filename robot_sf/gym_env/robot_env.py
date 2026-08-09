@@ -16,7 +16,6 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -81,6 +80,21 @@ _TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
 _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
 _GridObstacleCacheKey = tuple[int, int, int]
 _GridObstacleCacheValue = tuple[list[Line2D], list[ShapelyPolygon]]
+
+__all__ = [
+    "EnvSettings",
+    "RobotEnv",
+    "VisualizableSimState",
+    "_FlatteningObservationWrapper",
+    "_attach_goal_posterior_planner_input",
+    "_build_goal_posterior_planner_input",
+    "_build_step_info",
+    "_flatten_nested_dict_obs",
+    "_flatten_nested_dict_spaces",
+    "_flatten_occupancy_grid_metadata",
+    "_make_telemetry_run_id",
+    "_stable_config_hash",
+]
 
 
 # Helper to compute a stable, short hash for env_config
@@ -1046,16 +1060,15 @@ class RobotEnv(BaseEnv):
             ped_positions = step_ped_positions
             ped_radii = getattr(self.simulator, "ped_radii", None)
             if ped_radii is None:
-                ped_radii = [0.35] * len(ped_positions)
-            pedestrians = [
-                (tuple(pos), radius) for pos, radius in zip(ped_positions, ped_radii, strict=True)
-            ]
+                ped_radii = np.full(len(ped_positions), 0.35)
+            else:
+                ped_radii = np.asarray(ped_radii, dtype=float)
             # Get updated robot pose (already in RobotPose format: ((x, y), theta))
             robot_pose = self.simulator.robot_poses[0]
             # Regenerate grid (allow grid config to opt into ego frame)
             self.occupancy_grid.generate(
                 obstacles=obstacles,
-                pedestrians=pedestrians,
+                pedestrians=(np.asarray(ped_positions, dtype=float), ped_radii),
                 robot_pose=robot_pose,
                 ego_frame=False,
                 obstacle_polygons=obstacle_polygons,
@@ -1172,18 +1185,15 @@ class RobotEnv(BaseEnv):
                 ped_positions = self.simulator.ped_pos
                 ped_radii = getattr(self.simulator, "ped_radii", None)
                 if ped_radii is None:
-                    # Default pedestrian radius if not available
-                    ped_radii = [0.35] * len(ped_positions)
-                pedestrians = [
-                    (tuple(pos), radius)
-                    for pos, radius in zip(ped_positions, ped_radii, strict=True)
-                ]
+                    ped_radii = np.full(len(ped_positions), 0.35)
+                else:
+                    ped_radii = np.asarray(ped_radii, dtype=float)
                 # Get robot pose (already in RobotPose format: ((x, y), theta))
                 robot_pose = self.simulator.robot_poses[0]
                 # Generate grid (allow grid config to opt into ego frame)
                 self.occupancy_grid.generate(
                     obstacles=obstacles,
-                    pedestrians=pedestrians,
+                    pedestrians=(np.asarray(ped_positions, dtype=float), ped_radii),
                     robot_pose=robot_pose,
                     ego_frame=False,
                     obstacle_polygons=obstacle_polygons,
@@ -1196,8 +1206,9 @@ class RobotEnv(BaseEnv):
                         _flatten_occupancy_grid_metadata(self.occupancy_grid.metadata_observation())
                     )
                     logger.debug(
-                        f"Initial occupancy grid generated: "
-                        f"obstacles={len(obstacles)}, pedestrians={len(pedestrians)}"
+                        "Initial occupancy grid generated: obstacles={}, pedestrians={}",
+                        len(obstacles),
+                        len(ped_positions),
                     )
             obs = self._attach_asymmetric_critic_state(obs)
             self._latest_observation = obs
@@ -1414,7 +1425,8 @@ class RobotEnv(BaseEnv):
             timestep=self.state.timestep,
             robot_action=action,
             robot_pose=self.simulator.robot_poses[0],
-            pedestrian_positions=deepcopy(self.simulator.ped_pos),
+            # NumPy-native copy avoids deepcopy's pickle overhead (issue #6460)
+            pedestrian_positions=np.asarray(self.simulator.ped_pos).copy(),
             ray_vecs=ray_vecs_np,
             ped_actions=ped_actions_np,
             time_per_step_in_secs=self.env_config.sim_config.time_per_step_in_secs,

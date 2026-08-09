@@ -451,3 +451,6 @@ class FastPysfWrapper:
             self._force_grid_caches.clear()
         else:
             self._force_grid_caches.pop(name, None)
+
+
+__all__ = ["FastPysfWrapper"]

@@ -1,0 +1,5 @@
+{
+  "expected_reason_code": "fallback_or_degraded_success",
+  "schema_version": "robot_sf_ecosystem_negative_fixture.v1",
+  "variant_id": "fallback_or_degraded_success"
+}

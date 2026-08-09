@@ -390,8 +390,15 @@ prevents merging a PR whose CI ran against a stale main:
   provide `gh pr update-branch`, use the guarded repository helper after recording the current
   head SHA. The drop-in `scripts/dev/update_pr_branch_safely.sh <number> --expected-head-sha <sha>`
   tries `gh`/`gh api` update-branch first and falls back to a lease-protected local rebase/push when
-  that path is unavailable (issue #5775). The older REST-only `scripts/dev/update_pr_branch.py` is
-  kept for environments where the REST `update-branch` endpoint works.
+  that path is unavailable (issue #5775). If the PR source branch was deleted on the remote, the
+  helper detects the missing `refs/heads/<head-ref>` after the expected-head guard passes and
+  restores it with a plain (non-force) push of the immutable PR head SHA, which it already verified
+  equal to `--expected-head-sha`; the restore is reported in the JSON result (`source_ref_restored`,
+  additive `source_ref_restore_failed` / `source_ref_restore` values) and the normal update path
+  runs afterwards. Cross-fork PRs with a deleted head branch and unreachable immutable head SHAs
+  fail closed with a machine-readable error instead of attempting a restore (issue #6689). The
+  older REST-only `scripts/dev/update_pr_branch.py` is kept for environments where the REST
+  `update-branch` endpoint works.
 
 **Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
 PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule
@@ -1546,7 +1553,16 @@ For the reproducible, commit-stamped aggregate of all quality signals (test resu
 
 ### Logging & Observability (Principle XII)
 
-The canonical logging facade is **Loguru**. Library code (anything under `robot_sf/` or wrappers over `fast-pysf`) must not use bare `print()` for informational or warning messages. Acceptable `print()` exceptions: (1) short CLI entry scripts in `scripts/` or `examples/` where stdout is the UX, (2) early bootstrap failures before logging configuration, (3) tests explicitly asserting stdout content. Migration of stray prints to `from loguru import logger` with `logger.info|warning|error` is treated as maintenance (PATCH) unless it changes user‑visible contract output.
+The canonical logging facade is **Loguru**. Library code (anything under `robot_sf/` or wrappers over `fast-pysf`) must not use bare `print()` for informational or warning messages. The Ruff `T201` rule is enabled to enforce this; every surviving `print()` in `robot_sf/` is an intentional exception that must be **locally justified**.
+
+Acceptable `print()` exception categories (issue #6478, maintainer option B):
+1. **Human-facing CLI stdout** — CLI entry points where stdout is the UX (e.g. `robot_sf/benchmark/cli.py`, `robot_sf/examples_cli.py`, `robot_sf/benchmark/snqi/cli.py`). Suppressed via a `pyproject.toml` `[tool.ruff.lint.per-file-ignores]` entry.
+2. **Machine-readable stdout** — JSON/Markdown report emission meant to be piped or redirected (e.g. `forecast_lane_inventory.py`, `issue_5578_speed_tier_synthesis.py`). Suppressed per-file or with an inline `# noqa: T201 - CLI output`.
+3. **Subprocess JSON IPC** — a worker subprocess writing a JSON result to stdout for its parent process (e.g. `camera_ready/resource_lifecycle.py`). Inline `# noqa: T201 - subprocess JSON IPC to parent process`.
+4. **Loguru-unavailable fallback** — a fallback logger body that runs only when Loguru cannot be imported, where using Loguru would be circular (e.g. `episode_replay_figure.py::_LoggerFallback`). Inline `# noqa: T201 - loguru unavailable in fallback logger`.
+5. **Early bootstrap failures** before logging configuration, and **tests** explicitly asserting stdout content.
+
+Never reroute categories 1–3 to Loguru: that moves machine-readable or human-facing stdout off stdout and breaks piping, redirection, and subprocess consumers. Migration of any *stray* (un-justified) print to `from loguru import logger` with `logger.info|warning|error` is maintenance (PATCH) unless it changes user-visible contract output.
 
 Guidelines:
  - Prefer structured context (e.g., `logger.info("Reset complete seed={seed} scenario={sid}")`).

@@ -45,37 +45,38 @@ class TestReadinessCLI:
     def test_default_config_is_resolved_from_script_location(self, tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)
         code = main([])
-        assert code == 1
+        assert code == 0
         out = capsys.readouterr().out
-        assert "NOT READY" in out
-        assert "#5351" in out
+        assert "READY" in out
+        assert "#5351" not in out
 
-    def test_real_config_exits_nonzero_on_open_dependencies(self, capsys):
-        """The landed packet is blocked only on the open #5351 dependency -> exit 1."""
+    def test_real_config_exits_zero_after_dependency_reconciliation(self, capsys):
+        """The landed packet is ready for a fresh submission packet."""
         code = main(["--config", str(CONFIG_PATH)])
-        assert code == 1
+        assert code == 0
         out = capsys.readouterr().out
-        assert "NOT READY" in out
-        assert "#5351" in out
+        assert "READY" in out
+        assert "#5351" not in out
 
     def test_json_flag_emits_machine_readable_report(self, capsys):
         code = main(["--config", str(CONFIG_PATH), "--json"])
-        assert code == 1
+        assert code == 0
         report = json.loads(capsys.readouterr().out)
         assert report["issue"] == 5355
-        assert report["ready"] is False
+        assert report["ready"] is True
         assert report["criteria"]["preregistration_config_valid"]["ready"] is True
-        assert report["criteria"]["dependencies_resolved"]["ready"] is False
-        assert any("#5351" in blocker for blocker in report["blockers"])
+        assert report["criteria"]["dependencies_resolved"]["ready"] is True
+        assert report["criteria"]["hierarchical_input_gate_reconciled"]["ready"] is True
+        assert report["blockers"] == []
 
     def test_out_writes_report_artifact(self, tmp_path, capsys):
         out_path = tmp_path / "nested" / "readiness.json"
         code = main(["--config", str(CONFIG_PATH), "--out", str(out_path)])
-        assert code == 1
+        assert code == 0
         assert out_path.is_file()
         written = json.loads(out_path.read_text(encoding="utf-8"))
         assert written["config_path"] == str(CONFIG_PATH)
-        assert written["ready"] is False
+        assert written["ready"] is True
 
     def test_resolved_dependencies_pass_with_successor_rows_present(self, tmp_path, capsys):
         """Resolved dependencies plus the landed successor rows make the gate ready."""
@@ -95,44 +96,39 @@ class TestReadinessCLI:
         assert code == 1
 
 
-class TestResolved5353Reconciliation:
-    """Regression coverage for issue #5483: the #5353 capability-matrix
-    dependency is resolved and the gate reports #5351 as the sole remaining
-    blocker, still failing closed until analysis and the campaign complete.
-    """
+class TestResolvedDependencyReconciliation:
+    """Regression coverage for the closed #5351 and #5353 dependencies."""
 
     def test_5353_no_longer_blocks_the_gate(self, capsys):
         """After reconciliation, the readiness report must NOT cite #5353 as a blocker."""
         code = main(["--config", str(CONFIG_PATH), "--json"])
-        assert code == 1
+        assert code == 0
         report = json.loads(capsys.readouterr().out)
         blockers = report["blockers"]
         assert not any("#5353" in blocker for blocker in blockers)
-        assert report["criteria"]["dependencies_resolved"]["ready"] is False
+        assert report["criteria"]["dependencies_resolved"]["ready"] is True
 
-    def test_5351_remains_the_only_dependency_blocker(self, capsys):
-        """The sole remaining dependency blocker must be #5351 (hierarchical analysis)."""
+    def test_closed_dependencies_no_longer_block(self, capsys):
+        """Closed dependencies must not remain in the readiness blockers."""
         code = main(["--config", str(CONFIG_PATH), "--json"])
-        assert code == 1
+        assert code == 0
         report = json.loads(capsys.readouterr().out)
         dep_blockers = [b for b in report["blockers"] if b.startswith("dependencies_resolved:")]
-        assert len(dep_blockers) == 1
-        assert "#5351" in dep_blockers[0]
-        assert "#5353" not in dep_blockers[0]
+        assert dep_blockers == []
 
-    def test_gate_still_fails_closed_with_5351_open(self, capsys):
-        """Resolving #5353 alone is insufficient: the gate stays NOT READY."""
+    def test_gate_reports_review_gate_without_promoting_claims(self, capsys):
+        """Readiness does not remove the separate #5351 human-review gate."""
         code = main(["--config", str(CONFIG_PATH)])
-        assert code == 1
+        assert code == 0
         out = capsys.readouterr().out
-        assert "NOT READY" in out
-        assert "#5351" in out
+        assert "READY" in out
+        assert "#5351" not in out
 
-    def test_5353_resolved_status_in_config(self):
-        """The tracked factorial config must declare #5353 resolved and #5351 open."""
+    def test_closed_dependency_statuses_in_config(self):
+        """The tracked factorial config must declare both dependencies resolved."""
         import yaml
 
         payload = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
         statuses = {int(d["issue"]): str(d.get("status")) for d in payload["dependencies"]}
+        assert statuses[5351] == "resolved"
         assert statuses[5353] == "resolved"
-        assert statuses[5351] == "open"

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from PIL import Image
 from robot_sf.benchmark.artifact_catalog import (
     ArtifactCatalog,
     ArtifactCatalogEntry,
+    FigureSemantics,
     load_artifact_catalog,
 )
 
@@ -43,6 +45,7 @@ class FigureQA:
     artifact_id: str
     check: str
     message: str
+    severity: str = "error"
 
 
 def check_figure_file(
@@ -120,6 +123,7 @@ def check_figure_entry(
     catalog_dir: Path,
     required_formats: frozenset[str] = _DEFAULT_REQUIRED_FORMATS,
     allowed_formats: frozenset[str] = _DEFAULT_ALLOWED_FORMATS,
+    semantic_checks: bool = False,
 ) -> list[FigureQA]:
     """Run QA checks on a single catalog figure entry.
 
@@ -129,6 +133,7 @@ def check_figure_entry(
         catalog_dir: Directory used to resolve relative file paths.
         required_formats: Output formats that every figure entry must include.
         allowed_formats:  Output formats permitted for figure entries.
+        semantic_checks: Whether to validate artifact_catalog.v2 figure metadata.
 
     Returns:
         List of ``FigureQA`` results.  Empty means all checks passed.
@@ -137,6 +142,8 @@ def check_figure_entry(
         return []
 
     issues: list[FigureQA] = []
+    if semantic_checks:
+        issues.extend(_check_figure_semantics(entry))
     output_formats = {output_key.lower() for output_key in entry.outputs}
     for required_format in sorted(required_formats):
         if required_format not in output_formats:
@@ -183,6 +190,131 @@ def check_figure_entry(
     return issues
 
 
+def _check_figure_semantics(entry: ArtifactCatalogEntry) -> list[FigureQA]:
+    """Validate declared v2 publication metadata without inspecting pixels.
+
+    Returns:
+        Stable metadata-QA findings. Empty means the declaration is internally
+        consistent, apart from explicitly unavailable accessibility metadata.
+    """
+
+    semantics = entry.figure_semantics
+    if semantics is None:
+        return [
+            FigureQA(
+                entry.artifact_id,
+                "semantic_metadata",
+                "artifact_catalog.v2 figure is missing figure_semantics metadata",
+            )
+        ]
+
+    issues = _check_semantic_scalar_fields(entry, semantics)
+    if semantics.comparison:
+        issues.extend(_check_comparison_semantics(entry, semantics))
+    issues.extend(_check_accessibility_semantics(entry, semantics))
+    return issues
+
+
+def _check_semantic_scalar_fields(
+    entry: ArtifactCatalogEntry,
+    semantics: FigureSemantics,
+) -> list[FigureQA]:
+    """Validate scalar figure-semantic declarations.
+
+    Returns:
+        Scalar metadata findings.
+    """
+
+    issues: list[FigureQA] = []
+    if not semantics.metric_id.strip():
+        issues.append(FigureQA(entry.artifact_id, "semantic_metric", "metric_id must be non-empty"))
+    if not semantics.unit.strip():
+        issues.append(FigureQA(entry.artifact_id, "semantic_unit", "unit must be non-empty"))
+    if semantics.support < 0:
+        issues.append(
+            FigureQA(entry.artifact_id, "semantic_support", "support must be non-negative")
+        )
+    if semantics.denominator < 0:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_denominator",
+                "denominator must be non-negative",
+            )
+        )
+    if semantics.support > semantics.denominator:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_support",
+                "support cannot exceed denominator",
+            )
+        )
+    if not semantics.tie_policy.strip():
+        issues.append(FigureQA(entry.artifact_id, "semantic_ties", "tie_policy must be non-empty"))
+    return issues
+
+
+def _check_comparison_semantics(
+    entry: ArtifactCatalogEntry,
+    semantics: FigureSemantics,
+) -> list[FigureQA]:
+    """Validate comparison-specific uncertainty and legend declarations.
+
+    Returns:
+        Comparison metadata findings.
+    """
+
+    issues: list[FigureQA] = []
+    if not semantics.uncertainty_declared:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_uncertainty",
+                "comparison figures must declare uncertainty",
+            )
+        )
+    if not semantics.legend_series:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_legend",
+                "comparison figures must declare legend series identities",
+            )
+        )
+    if not semantics.legend_complete:
+        issues.append(
+            FigureQA(
+                entry.artifact_id,
+                "semantic_legend",
+                "legend completeness must be true for comparison figures",
+            )
+        )
+    return issues
+
+
+def _check_accessibility_semantics(
+    entry: ArtifactCatalogEntry,
+    semantics: FigureSemantics,
+) -> list[FigureQA]:
+    """Report accessibility metadata that cannot be checked deterministically.
+
+    Returns:
+        An unavailable finding when no deterministic palette contract exists.
+    """
+
+    if semantics.accessibility_palette_contract is not None:
+        return []
+    return [
+        FigureQA(
+            entry.artifact_id,
+            "semantic_accessibility",
+            "no deterministic accessibility palette contract was declared",
+            severity="unavailable",
+        )
+    ]
+
+
 def validate_figures_in_catalog(
     catalog: ArtifactCatalog,
     *,
@@ -211,6 +343,7 @@ def validate_figures_in_catalog(
                 catalog_dir=catalog_dir,
                 required_formats=required_formats,
                 allowed_formats=allowed_formats,
+                semantic_checks=catalog.schema_version == "artifact_catalog.v2",
             )
         )
     return issues
@@ -440,6 +573,22 @@ _DEFECT_TYPE_SATURATED_COLOR_COUNT = "saturated_color_count"
 _SEVERITY_ERROR = "error"
 _SEVERITY_WARN = "warn"
 
+# These tags identify annotation/reference-line interactions that are deliberate
+# parts of the trace-scene renderer.  They are downgraded to warnings only when
+# the renderer opts in with an explicit artist gid; ordinary text-on-line
+# overlaps remain hard defects.
+_INTENTIONAL_TEXT_LINE_TEXT_GIDS = frozenset(
+    {
+        "trace-scene-pedestrian-label",
+        "trace-scene-time-label",
+        "trace-scene-reference-label",
+        "trace-scene-key-frame-label",
+        "trace-scene-zone-label",
+    }
+)
+_INTENTIONAL_TEXT_LINE_LINE_GIDS = frozenset({"trace-scene-label-leader"})
+_INTENTIONAL_TEXT_MARKER_TEXT_GIDS = frozenset({"trace-scene-time-label"})
+
 _TEXT_OVERLAP_TOLERANCE_PX = 2.0
 _TEXT_LINE_OVERLAP_TOLERANCE_PX = 1.0
 _TEXT_MARKER_OVERLAP_TOLERANCE_PX = 1.0
@@ -540,7 +689,7 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
         max_severity: ``"error"`` (default) or ``"warn"``.
 
     Raises:
-        AssertionError: When at least one defect meets the severity threshold.
+        ValueError: When at least one defect meets the severity threshold.
     """
     severity_order = {_SEVERITY_WARN: 0, _SEVERITY_ERROR: 1}
     threshold = severity_order.get(max_severity, 1)
@@ -553,9 +702,10 @@ def assert_clean(fig: object, *, max_severity: str = _SEVERITY_ERROR) -> None:
     )
     failing = [d for d in defects if severity_order.get(d.severity, 1) >= threshold]
     summary = "; ".join(f"[{d.defect_type}] {d.message}" for d in failing)
-    assert not failing, (
-        f"Figure has {len(failing)} defect(s) at severity >= {max_severity}: {summary}"
-    )
+    if failing:
+        raise ValueError(
+            f"Figure has {len(failing)} defect(s) at severity >= {max_severity}: {summary}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -683,19 +833,37 @@ def _check_text_line_overlap(
 
     for text_artist in text_artists:
         text_bbox = text_artist.get_window_extent(renderer)
+        cx, cy = _bbox_center(text_bbox)
+        label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
+        intentional_overlap = False
+        nonintentional_overlap = False
         for line in lines:
             if _line_bbox_overlaps_text(line, text_bbox, ax, renderer, tolerance):
-                cx, cy = _bbox_center(text_bbox)
-                label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
-                defects.append(
-                    FigureDefect(
-                        defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
-                        severity=_SEVERITY_ERROR,
-                        message=f"Text {label!r} overlaps a line artist.",
-                        location=(cx, cy),
-                    )
+                intentional = (
+                    text_artist.get_gid() in _INTENTIONAL_TEXT_LINE_TEXT_GIDS
+                    and line.get_gid() in _INTENTIONAL_TEXT_LINE_LINE_GIDS
                 )
-                break
+                if not intentional:
+                    defects.append(
+                        FigureDefect(
+                            defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
+                            severity=_SEVERITY_ERROR,
+                            message=f"Text {label!r} overlaps a line artist.",
+                            location=(cx, cy),
+                        )
+                    )
+                    nonintentional_overlap = True
+                    break
+                intentional_overlap = True
+        if intentional_overlap and not nonintentional_overlap:
+            defects.append(
+                FigureDefect(
+                    defect_type=_DEFECT_TYPE_TEXT_LINE_OVERLAP,
+                    severity=_SEVERITY_WARN,
+                    message=f"Expected annotation overlap: Text {label!r} overlaps a line artist.",
+                    location=(cx, cy),
+                )
+            )
 
 
 def _line_bbox_overlaps_text(
@@ -712,10 +880,11 @@ def _line_bbox_overlaps_text(
     if len(xdata) < 2:
         return False
 
-    transform = ax.transData
     for idx in range(len(xdata) - 1):
-        p0 = transform.transform((float(xdata[idx]), float(ydata[idx])))
-        p1 = transform.transform((float(xdata[idx + 1]), float(ydata[idx + 1])))
+        p0 = line.get_transform().transform((float(xdata[idx]), float(ydata[idx])))
+        p1 = line.get_transform().transform((float(xdata[idx + 1]), float(ydata[idx + 1])))
+        if not all(math.isfinite(float(value)) for value in (*p0, *p1)):
+            continue
         if _segment_intersects_bbox(p0, p1, text_bbox, tolerance):
             return True
     return False
@@ -790,11 +959,16 @@ def _check_text_marker_overlap(
                 if _point_in_bbox(px, py, text_bbox, tolerance):
                     cx, cy = _bbox_center(text_bbox)
                     label = text_artist.get_text()[:40] if text_artist.get_text() else "<empty>"
+                    intentional = text_artist.get_gid() in _INTENTIONAL_TEXT_MARKER_TEXT_GIDS
                     defects.append(
                         FigureDefect(
                             defect_type=_DEFECT_TYPE_TEXT_MARKER_OVERLAP,
-                            severity=_SEVERITY_ERROR,
-                            message=f"Text {label!r} overlaps a scatter marker.",
+                            severity=_SEVERITY_WARN if intentional else _SEVERITY_ERROR,
+                            message=(
+                                f"Expected annotation overlap: Text {label!r} overlaps a scatter marker."
+                                if intentional
+                                else f"Text {label!r} overlaps a scatter marker."
+                            ),
                             location=(cx, cy),
                         )
                     )

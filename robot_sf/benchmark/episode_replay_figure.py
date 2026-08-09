@@ -64,22 +64,22 @@ except ImportError:
         @staticmethod
         def info(msg: str) -> None:
             """Log info message."""
-            print(f"INFO: {msg}")  # noqa: T201
+            print(f"INFO: {msg}")  # noqa: T201 - loguru unavailable in fallback logger
 
         @staticmethod
         def warning(msg: str) -> None:
             """Log warning message."""
-            print(f"WARNING: {msg}")  # noqa: T201
+            print(f"WARNING: {msg}")  # noqa: T201 - loguru unavailable in fallback logger
 
         @staticmethod
         def error(msg: str) -> None:
             """Log error message."""
-            print(f"ERROR: {msg}")  # noqa: T201
+            print(f"ERROR: {msg}")  # noqa: T201 - loguru unavailable in fallback logger
 
         @staticmethod
         def debug(msg: str) -> None:
             """Log debug message."""
-            print(f"DEBUG: {msg}")  # noqa: T201
+            print(f"DEBUG: {msg}")  # noqa: T201 - loguru unavailable in fallback logger
 
     logger = _LoggerFallback()  # type: ignore[misc,assignment]
 

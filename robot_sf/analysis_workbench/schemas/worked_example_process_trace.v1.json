@@ -1,0 +1,1327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/worked_example_process_trace.v1.json",
+  "title": "Robot SF Worked Example Process Trace v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "process_trace_id",
+    "analysis_input_contract",
+    "analysis_input_sha256",
+    "source_trace",
+    "evidence_boundary",
+    "source_coordinate_frame",
+    "units",
+    "claim_boundary",
+    "profiles",
+    "coordinate_frames",
+    "encounters",
+    "frames",
+    "diagnostics",
+    "event_anchors",
+    "event_anchor_hierarchy",
+    "pair_compatibility"
+  ],
+  "properties": {
+    "schema_version": {"const": "worked_example_process_trace.v1"},
+    "process_trace_id": {"type": "string", "minLength": 1},
+    "analysis_input_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "source_trace_content_sha256",
+        "route",
+        "conflict",
+        "pair_trace",
+        "encounter_report",
+        "focal_actor_id",
+        "focal_encounter_id",
+        "pair_comparison_grain"
+      ],
+      "properties": {
+        "schema_version": {"const": "worked_example_process_trace_analysis_input.v1"},
+        "source_trace_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "route": {"$ref": "#/$defs/geometry_input_contract"},
+        "conflict": {"$ref": "#/$defs/geometry_input_contract"},
+        "pair_trace": {"$ref": "#/$defs/analysis_pair_input"},
+        "encounter_report": {"$ref": "#/$defs/analysis_report_input"},
+        "focal_actor_id": {"type": ["string", "null"]},
+        "focal_encounter_id": {"type": ["string", "null"]},
+        "pair_comparison_grain": {
+          "enum": ["matched_planner_pair", "matched_realization_pair", null]
+        }
+      }
+    },
+    "analysis_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "trace_id",
+        "coordinate_frame",
+        "units",
+        "content_sha256",
+        "content_receipt",
+        "run_config_contract",
+        "source"
+      ],
+      "properties": {
+        "schema_version": {"const": "simulation_trace_export.v1"},
+        "trace_id": {"type": "string", "minLength": 1},
+        "coordinate_frame": {"type": "string", "minLength": 1},
+        "units": {"type": "object"},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "content_receipt": {"$ref": "#/$defs/trace_content_receipt"},
+        "run_config_contract": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "reason"],
+              "properties": {
+                "status": {"const": "unavailable"},
+                "reason": {"type": "string"},
+                "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+                "observed_time_step_s": {"type": "number", "exclusiveMinimum": 0},
+                "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "source": {"const": "planner.run_config"}
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "time_step_s", "config_digest", "source"],
+              "properties": {
+                "status": {"const": "available"},
+                "time_step_s": {"type": "number", "exclusiveMinimum": 0},
+                "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "source": {"const": "planner.run_config"}
+              }
+            }
+          ]
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scenario_id", "seed", "planner_id", "episode_id", "generated_by"],
+          "properties": {
+            "scenario_id": {"type": "string"},
+            "seed": {"type": "integer"},
+            "planner_id": {"type": "string"},
+            "episode_id": {"type": "string"},
+            "generated_by": {"type": "string"}
+          }
+        }
+      }
+    },
+    "evidence_boundary": {"const": "analysis_workbench_only"},
+    "source_coordinate_frame": {"type": "string", "minLength": 1},
+    "units": {"type": "object"},
+    "claim_boundary": {"const": "Diagnostic renderer-neutral process quantities derived from admitted trace fields. Not calibrated AMMV safety thresholds, collision probabilities, causal attribution, or replacement benchmark metrics."},
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_anchor_profile",
+        "threshold_profile",
+        "phase_profile",
+        "reversal_profile",
+        "safety_surrogate_profile"
+      ],
+      "properties": {
+        "event_anchor_profile": {"$ref": "#/$defs/profile"},
+        "threshold_profile": {"$ref": "#/$defs/profile"},
+        "phase_profile": {"$ref": "#/$defs/profile"},
+        "reversal_profile": {"$ref": "#/$defs/profile"},
+        "safety_surrogate_profile": {"$ref": "#/$defs/profile"}
+      }
+    },
+    "coordinate_frames": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["world", "route", "conflict", "relative_interaction"],
+      "properties": {
+        "world": {"$ref": "#/$defs/availability"},
+        "route": {"$ref": "#/$defs/geometry_availability"},
+        "conflict": {"$ref": "#/$defs/geometry_availability"},
+        "relative_interaction": {"$ref": "#/$defs/availability"}
+      }
+    },
+    "encounters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["focal", "global_minimum_over_all_actors", "actor_switch_events"],
+      "properties": {
+        "focal": {"$ref": "#/$defs/focal_encounter"},
+        "global_minimum_over_all_actors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "series"],
+          "properties": {
+            "status": {"type": "string"},
+            "reason": {"type": "string"},
+            "series": {"type": "array", "items": {"type": "object"}}
+          }
+        },
+        "actor_switch_events": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "frame_index",
+          "step",
+          "time_s",
+          "source_coordinates",
+          "encounter_interval",
+          "world",
+          "route",
+          "conflict",
+          "relative_interaction",
+          "global_minimum_actor",
+          "commands",
+          "event_alignment"
+        ],
+        "properties": {
+          "frame_index": {"type": "integer"},
+          "step": {"type": "integer"},
+          "time_s": {"type": "number"},
+          "source_coordinates": {"$ref": "#/$defs/source_coordinates_frame"},
+          "encounter_interval": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason"],
+            "properties": {
+              "status": {"enum": ["in_interval", "outside_interval"]},
+              "reason": {"type": "string"}
+            }
+          },
+          "world": {"$ref": "#/$defs/world_frame"},
+          "route": {"$ref": "#/$defs/route_frame"},
+          "conflict": {"$ref": "#/$defs/conflict_frame"},
+          "relative_interaction": {"$ref": "#/$defs/relative_interaction"},
+          "global_minimum_actor": {"$ref": "#/$defs/global_minimum_actor"},
+          "commands": {"$ref": "#/$defs/commands_frame"},
+          "event_alignment": {"$ref": "#/$defs/event_alignment"}
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_proxy_surface_clearance_m",
+        "threshold_exposure",
+        "route_progress",
+        "stall",
+        "conflict_zone_occupancy",
+        "reversal_counts"
+        ,"coverage"
+      ],
+      "properties": {
+        "minimum_proxy_surface_clearance_m": {"type": ["number", "null"]},
+        "threshold_exposure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile_version",
+            "threshold_m",
+            "duration_s",
+            "integrated_clearance_deficit_m_s",
+            "status"
+          ],
+          "properties": {
+            "profile_version": {"type": "string"},
+            "threshold_m": {"type": "number"},
+            "duration_s": {"type": ["number", "null"]},
+            "integrated_clearance_deficit_m_s": {"type": ["number", "null"]},
+            "status": {"type": "string"},
+            "reason": {"type": "string"}
+          }
+        },
+        "route_progress": {"$ref": "#/$defs/route_progress"},
+        "stall": {"$ref": "#/$defs/stall_diagnostic"},
+        "conflict_zone_occupancy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "robot_duration_s", "focal_actor_duration_s"],
+          "properties": {
+            "status": {"type": "string"},
+            "reason": {"type": "string"},
+            "robot_duration_s": {"type": ["number", "null"]},
+            "focal_actor_duration_s": {"type": ["number", "null"]}
+          }
+        },
+        "reversal_counts": {"$ref": "#/$defs/reversal_counts"}
+        ,"coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frame_count", "relative_interaction", "proxy_surface_clearance"],
+          "properties": {
+            "frame_count": {"type": "integer", "minimum": 0},
+            "relative_interaction": {"$ref": "#/$defs/coverage_record"},
+            "proxy_surface_clearance": {"$ref": "#/$defs/coverage_record"}
+          }
+        }
+      }
+    },
+    "event_anchors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "event_type",
+          "detector_profile_version",
+          "status",
+          "confidence",
+          "actor_id",
+          "zone_id",
+          "source_fields",
+          "event_relative_time",
+          "visual_anchor_eligibility"
+        ],
+        "properties": {
+          "event_id": {"type": "string"},
+          "event_type": {
+            "enum": [
+              "minimum_clearance",
+              "first_material_deceleration",
+              "first_material_turn_response",
+              "conflict_zone_entry",
+              "exact_collision_event",
+              "first_safety_predicate_breach",
+              "proxy_overlap_event",
+              "sustained_stall_onset",
+              "recovery_onset",
+              "terminal_event"
+            ]
+          },
+          "detector_profile_version": {"type": "string"},
+          "status": {"enum": ["available", "unavailable", "not_observed"]},
+          "confidence": {"type": "string"},
+          "time_s": {"type": "number"},
+          "step": {"type": "integer"},
+          "actor_id": {"type": ["string", "null"]},
+          "zone_id": {"type": ["string", "null"]},
+          "reason": {"type": "string"},
+          "collision_observed": {"type": "boolean"},
+          "collision_partner_id": {"type": ["string", "null"]},
+          "collision_partner_type": {"type": ["string", "null"]},
+          "focal_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason"],
+            "properties": {
+              "status": {"enum": ["available", "unavailable"]},
+              "reason": {"type": "string"},
+              "actor_id": {"type": "string"}
+            }
+          },
+          "source_fields": {"type": "array", "items": {"type": "string"}},
+          "event_relative_time": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status"],
+            "properties": {
+              "status": {"enum": ["available", "unavailable"]},
+              "anchor_time_s": {"type": "number"},
+              "tau_s": {"type": "number"},
+              "reason": {"type": "string"}
+            }
+          },
+          "visual_anchor_eligibility": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["eligible", "reason"],
+            "properties": {
+              "eligible": {"type": "boolean"},
+              "reason": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "event_anchor_hierarchy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "fallback_order", "available_anchors", "selected_anchor", "anchor_time_s"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "fallback_order": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "available_anchors": {"type": "array", "items": {"$ref": "#/$defs/hierarchy_anchor"}},
+        "selected_anchor": {"anyOf": [{"$ref": "#/$defs/hierarchy_anchor"}, {"type": "null"}]},
+        "anchor_time_s": {"type": ["number", "null"]}
+      }
+    },
+    "pair_compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_version",
+        "status",
+        "comparison_grain",
+        "provenance_gate",
+        "right_source_trace",
+        "initial_state_equivalence",
+        "route_spawn_separation",
+        "shared_prefix",
+        "valid_common_event_anchors",
+        "right_event_anchors",
+        "right_coordinate_input_contract",
+        "divergence_interpretation"
+      ],
+      "properties": {
+        "profile_version": {"type": "string"},
+        "status": {"enum": ["available", "unavailable", "incompatible"]},
+        "reason": {"type": "string"},
+        "comparison_grain": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["grain_id"],
+          "properties": {
+            "grain_id": {"enum": ["matched_planner_pair", "matched_realization_pair", "undeclared"]}
+          }
+        },
+        "provenance_gate": {"$ref": "#/$defs/pair_provenance_gate"},
+        "right_source_trace": {"$ref": "#/$defs/pair_source_trace"},
+        "initial_state_equivalence": {"$ref": "#/$defs/pair_initial_state_equivalence"},
+        "route_spawn_separation": {"$ref": "#/$defs/pair_route_spawn_separation"},
+        "shared_prefix": {"$ref": "#/$defs/pair_shared_prefix"},
+        "valid_common_event_anchors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/common_event_anchor"}
+        },
+        "right_event_anchors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/event_receipt"}
+        },
+        "right_coordinate_input_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["route", "conflict"],
+          "properties": {
+            "route": {"$ref": "#/$defs/geometry_input_contract"},
+            "conflict": {"$ref": "#/$defs/geometry_input_contract"}
+          }
+        },
+        "duration_normalization": {"type": "object"},
+        "divergence_interpretation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowed", "reason"],
+          "properties": {
+            "allowed": {"type": "boolean"},
+            "reason": {"type": "string"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "event_alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "anchor_event_id": {"type": "string"},
+        "anchor_event_type": {"type": "string"},
+        "anchor_time_s": {"type": "number"},
+        "tau_s": {"type": "number"},
+        "reason": {"type": "string"}
+      }
+    },
+    "hierarchy_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rank", "event_type", "event_id", "time_s", "selection_role"],
+      "properties": {
+        "rank": {"type": "integer", "minimum": 0},
+        "event_type": {
+          "enum": [
+            "exact_collision_event",
+            "minimum_clearance",
+            "first_safety_predicate_breach",
+            "sustained_stall_onset",
+            "terminal_event"
+          ]
+        },
+        "event_id": {"type": "string"},
+        "time_s": {"type": "number"},
+        "selection_role": {"enum": ["first_safety_predicate_breach", "fallback_anchor"]}
+      }
+    },
+    "focal_encounter": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "actor_id": {"type": "string"},
+        "encounter_id": {"type": ["string", "null"]},
+        "declared_encounter": {"type": "object"},
+        "actor_contiguity": {"$ref": "#/$defs/actor_contiguity"}
+      }
+    },
+    "actor_contiguity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "actor_id",
+            "contiguous",
+            "missing_steps",
+            "reason",
+            "computed_available_duration_s",
+            "computed_min_proxy_surface_clearance_m",
+            "canonical_encounter_record_status"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "actor_id": {"type": "string"},
+            "contiguous": {"type": "boolean"},
+            "missing_steps": {"type": "array", "items": {"type": "integer"}},
+            "reason": {"type": "string"},
+            "computed_available_duration_s": {"type": ["number", "null"]},
+            "computed_min_proxy_surface_clearance_m": {"type": ["number", "null"]},
+            "canonical_encounter_record_status": {
+              "enum": ["available", "unavailable"]
+            }
+          }
+        }
+      ]
+    },
+    "pair_provenance_gate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "compatible", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "compatible": {"const": false},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "compatible",
+            "checks",
+            "availability",
+            "time_step_contracts",
+            "comparison_grain",
+            "left_trace_id",
+            "right_trace_id",
+            "left_content_sha256",
+            "right_content_sha256"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "compatible": {"type": "boolean"},
+            "checks": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {"type": "boolean"}
+            },
+            "availability": {"type": "object"},
+            "time_step_contracts": {"type": "object"},
+            "comparison_grain": {
+              "enum": ["matched_planner_pair", "matched_realization_pair"]
+            },
+            "left_trace_id": {"type": "string"},
+            "right_trace_id": {"type": "string"},
+            "left_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "right_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      ]
+    },
+    "pair_initial_state_equivalence": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "equivalent": {"type": "boolean"},
+        "actor_id_sets_equal": {"type": "boolean"},
+        "robot_position_delta_m": {"type": ["number", "null"]},
+        "robot_velocity_delta_mps": {"type": ["number", "null"]},
+        "robot_heading_delta_rad": {"type": ["number", "null"]},
+        "robot_radius_delta_m": {"type": ["number", "null"]},
+        "max_actor_position_delta_m": {"type": ["number", "null"]},
+        "max_actor_velocity_delta_mps": {"type": ["number", "null"]},
+        "max_actor_radius_delta_m": {"type": ["number", "null"]},
+        "position_tolerance_m": {"type": "number"},
+        "heading_tolerance_rad": {"type": "number"},
+        "actor_position_delta_m": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        },
+        "actor_velocity_delta_mps": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        },
+        "actor_radius_delta_m": {
+          "type": "object",
+          "additionalProperties": {"type": ["number", "null"]}
+        }
+      }
+    },
+    "pair_route_spawn_separation": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "scenario_provenance_compatible": {"type": "boolean"},
+        "scenario_id_equal": {"type": "boolean"},
+        "planner_id_left": {"type": "string"},
+        "planner_id_right": {"type": "string"},
+        "seed_left": {"type": "integer"},
+        "seed_right": {"type": "integer"},
+        "initial_robot_separation_m": {"type": ["number", "null"]},
+        "max_initial_actor_separation_m": {"type": ["number", "null"]}
+      }
+    },
+    "pair_shared_prefix": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "shared_prefix": {"type": "boolean"},
+        "matched_steps": {"type": "integer", "minimum": 0},
+        "required_steps": {"type": "integer", "minimum": 0},
+        "position_tolerance_m": {"type": "number"},
+        "heading_tolerance_rad": {"type": "number"}
+      }
+    },
+    "coverage_record": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "available_frame_count", "missing_frame_count"],
+      "properties": {
+        "status": {"enum": ["complete", "partial", "unavailable"]},
+        "frame_count": {"type": "integer", "minimum": 0},
+        "available_frame_count": {"type": "integer", "minimum": 0},
+        "missing_frame_count": {"type": "integer", "minimum": 0},
+        "reason": {"type": "string"}
+      }
+    },
+    "actor_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "heading", "velocity", "radius_m"],
+      "properties": {
+        "position": {"$ref": "#/$defs/vector2_or_empty"},
+        "heading": {"type": ["number", "null"]},
+        "velocity": {"$ref": "#/$defs/vector2_or_empty"},
+        "radius_m": {"type": ["number", "null"]}
+      }
+    },
+    "vector2_or_empty": {
+      "type": "array",
+      "items": {"type": "number"},
+      "oneOf": [{"minItems": 0, "maxItems": 0}, {"minItems": 2, "maxItems": 2}]
+    },
+    "source_coordinates_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate_frame", "robot", "focal_actor_id", "focal_actor", "contextual_actors"],
+      "properties": {
+        "coordinate_frame": {"type": "string", "minLength": 1},
+        "robot": {"$ref": "#/$defs/actor_state"},
+        "focal_actor_id": {"type": ["string", "null"]},
+        "focal_actor": {"anyOf": [{"$ref": "#/$defs/actor_state"}, {"type": "null"}]},
+        "contextual_actors": {"type": "array", "items": {"$ref": "#/$defs/source_actor_state"}}
+      }
+    },
+    "source_actor_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor_id", "position", "heading", "velocity", "radius_m"],
+      "properties": {
+        "actor_id": {"type": "string"},
+        "position": {"$ref": "#/$defs/vector2_or_empty"},
+        "heading": {"type": ["number", "null"]},
+        "velocity": {"$ref": "#/$defs/vector2_or_empty"},
+        "radius_m": {"type": ["number", "null"]}
+      }
+    },
+    "world_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "robot", "focal_actor"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "robot": {"$ref": "#/$defs/actor_state"},
+        "focal_actor": {"anyOf": [{"$ref": "#/$defs/actor_state"}, {"type": "null"}]}
+      }
+    },
+    "line_segment_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "start", "end"],
+      "properties": {
+        "type": {"const": "line_segment"},
+        "start": {"$ref": "#/$defs/vector2"},
+        "end": {"$ref": "#/$defs/vector2"}
+      }
+    },
+    "polyline_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "points"],
+      "properties": {
+        "type": {"const": "polyline"},
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/vector2"}
+        }
+      }
+    },
+    "route_geometry": {
+      "oneOf": [
+        {"$ref": "#/$defs/line_segment_geometry"},
+        {"$ref": "#/$defs/polyline_geometry"}
+      ]
+    },
+    "geometry_fixture_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "fixture_id"],
+      "properties": {
+        "kind": {"const": "fixture_only"},
+        "fixture_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "geometry_canonical_source_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source_artifact_ref", "source_content_sha256", "selector"],
+      "properties": {
+        "kind": {"const": "canonical_source"},
+        "source_artifact_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable repo-relative reference or non-file logical URI."
+        },
+        "source_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "selector": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": ["string", "number", "boolean"]}
+        }
+      }
+    },
+    "geometry_upstream_binding": {
+      "oneOf": [
+        {"$ref": "#/$defs/geometry_fixture_binding"},
+        {"$ref": "#/$defs/geometry_canonical_source_binding"}
+      ]
+    },
+    "geometry_registry_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "registry_id",
+        "artifact_ref",
+        "content_sha256",
+        "entry_id",
+        "entry_sha256",
+        "coordinate_frame",
+        "geometry_kind",
+        "resolved_geometry",
+        "upstream_binding",
+        "owner_validation"
+      ],
+      "properties": {
+        "schema_version": {"const": "process_trace_geometry_registry.v1"},
+        "registry_id": {"type": "string", "minLength": 1},
+        "artifact_ref": {"type": "string", "minLength": 1},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "entry_id": {"type": "string", "minLength": 1},
+        "entry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "coordinate_frame": {"const": "world"},
+        "geometry_kind": {"enum": ["line_segment", "polyline", "circle"]},
+        "resolved_geometry": {"type": "object"},
+        "upstream_binding": {"$ref": "#/$defs/geometry_upstream_binding"},
+        "owner_validation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "reason"],
+              "properties": {
+                "status": {"const": "fixture_only"},
+                "reason": {"const": "fixture_binding_not_canonical_owner"}
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "source_artifact_ref",
+                "source_content_sha256",
+                "selector",
+                "geometry_sha256"
+              ],
+              "properties": {
+                "status": {"const": "verified"},
+                "source_artifact_ref": {"type": "string", "minLength": 1},
+                "source_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "selector": {"type": "object", "minProperties": 1},
+                "geometry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "circle_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "center", "radius_m"],
+      "properties": {
+        "type": {"const": "circle"},
+        "center": {"$ref": "#/$defs/vector2"},
+        "radius_m": {"type": "number"}
+      }
+    },
+    "vector2": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "route_frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"},
+            "source_coordinate_frame": {"type": "string"},
+            "geometry_checksum": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "route_id",
+            "provenance_id",
+            "registry_checksum",
+            "registry",
+            "geometry",
+            "s_m",
+            "n_m",
+            "progress_rate_mps",
+            "focal_actor_status",
+            "focal_actor_s_m",
+            "focal_actor_n_m",
+            "focal_actor_progress_rate_mps"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "route_id": {"type": "string"},
+            "provenance_id": {"type": "string"},
+            "registry_checksum": {"type": "string"},
+            "registry": {"$ref": "#/$defs/geometry_registry_receipt"},
+            "geometry": {"$ref": "#/$defs/route_geometry"},
+            "source_coordinate_frame": {"type": "string"},
+            "geometry_checksum": {"type": "string"},
+            "s_m": {"type": "number"},
+            "n_m": {"type": "number"},
+            "progress_rate_mps": {"type": ["number", "null"]},
+            "focal_actor_status": {"enum": ["available", "unavailable"]},
+            "focal_actor_reason": {"type": "string"},
+            "focal_actor_s_m": {"type": ["number", "null"]},
+            "focal_actor_n_m": {"type": ["number", "null"]},
+            "focal_actor_progress_rate_mps": {"type": ["number", "null"]}
+          }
+        }
+      ]
+    },
+    "conflict_frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"},
+            "source_coordinate_frame": {"type": "string"},
+            "geometry_checksum": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "zone_id",
+            "provenance_id",
+            "registry_checksum",
+            "registry",
+            "geometry",
+            "robot_signed_distance_to_zone_m",
+            "focal_actor_signed_distance_to_zone_m",
+            "focal_actor_status"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "zone_id": {"type": "string"},
+            "provenance_id": {"type": "string"},
+            "registry_checksum": {"type": "string"},
+            "registry": {"$ref": "#/$defs/geometry_registry_receipt"},
+            "geometry": {"$ref": "#/$defs/circle_geometry"},
+            "source_coordinate_frame": {"type": "string"},
+            "geometry_checksum": {"type": "string"},
+            "robot_signed_distance_to_zone_m": {"type": "number"},
+            "focal_actor_signed_distance_to_zone_m": {"type": ["number", "null"]},
+            "focal_actor_status": {"enum": ["available", "unavailable"]},
+            "focal_actor_reason": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "relative_interaction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "actor_id",
+            "relative_longitudinal_m",
+            "relative_lateral_m",
+            "center_distance_m",
+            "proxy_surface_clearance_m",
+            "proxy_surface_clearance_status",
+            "proxy_surface_clearance_reason",
+            "clearance_semantics",
+            "center_distance_semantics",
+            "geometric_body_clearance_status",
+            "geometric_body_clearance_reason",
+            "robot_radius_m",
+            "focal_actor_radius_m"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "actor_id": {"type": "string"},
+            "relative_longitudinal_m": {"type": "number"},
+            "relative_lateral_m": {"type": "number"},
+            "center_distance_m": {"type": "number"},
+            "proxy_surface_clearance_m": {"type": ["number", "null"]},
+            "proxy_surface_clearance_status": {"enum": ["available", "unavailable"]},
+            "proxy_surface_clearance_reason": {"type": "string"},
+            "clearance_semantics": {"type": "string"},
+            "center_distance_semantics": {"type": "string"},
+            "geometric_body_clearance_status": {"enum": ["available", "unavailable"]},
+            "geometric_body_clearance_reason": {"type": "string"},
+            "robot_radius_m": {"type": ["number", "null"]},
+            "focal_actor_radius_m": {"type": ["number", "null"]},
+            "relative_velocity_status": {"enum": ["available", "unavailable"]},
+            "relative_velocity_reason": {"type": "string"},
+            "radial_closing_speed_mps": {"type": ["number", "null"]},
+            "closest_approach": {"type": "object"},
+            "relative_velocity_longitudinal_mps": {"type": ["number", "null"]},
+            "relative_velocity_lateral_mps": {"type": ["number", "null"]},
+            "relative_velocity_convention": {"type": "string"},
+            "closing_speed_convention": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "global_minimum_actor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "actor_id", "center_distance_m"],
+          "properties": {
+            "status": {"const": "available"},
+            "actor_id": {"type": "string"},
+            "center_distance_m": {"type": "number"}
+          }
+        }
+      ]
+    },
+    "commands_frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "commanded", "executed", "executed_status"],
+          "properties": {
+            "status": {"const": "available"},
+            "commanded": {"type": "object"},
+            "executed": {"type": ["object", "null"]},
+            "executed_status": {"enum": ["available", "unavailable"]}
+          }
+        }
+      ]
+    },
+    "route_progress": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "start_s_m", "end_s_m", "delta_s_m"],
+          "properties": {
+            "status": {"const": "available"},
+            "start_s_m": {"type": "number"},
+            "end_s_m": {"type": "number"},
+            "delta_s_m": {"type": "number"}
+          }
+        }
+      ]
+    },
+    "stall_diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_version",
+        "status",
+        "reason",
+        "stall_min_duration_s",
+        "sustained_stall_duration_s",
+        "speed_coverage",
+        "sustained_stall_onset_step"
+      ],
+      "properties": {
+        "profile_version": {"type": "string"},
+        "status": {"enum": ["available", "unavailable", "not_observed"]},
+        "reason": {"type": "string"},
+        "stall_min_duration_s": {"type": "number"},
+        "sustained_stall_duration_s": {"type": ["number", "null"]},
+        "speed_coverage": {"$ref": "#/$defs/coverage_record"},
+        "sustained_stall_onset_step": {"type": ["integer", "null"]}
+      }
+    },
+    "reversal_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_version",
+        "direction_semantics",
+        "status",
+        "reason",
+        "heading_reversal_count",
+        "velocity_reversal_count"
+      ],
+      "properties": {
+        "profile_version": {"type": "string"},
+        "direction_semantics": {"type": "string"},
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "heading_reversal_count": {"type": ["integer", "null"], "minimum": 0},
+        "velocity_reversal_count": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "common_event_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_type",
+        "detector_profile_version",
+        "actor_id",
+        "zone_id",
+        "source_fields",
+        "status",
+        "left_event_id",
+        "right_event_id"
+      ],
+      "properties": {
+        "event_type": {"type": "string"},
+        "detector_profile_version": {"type": "string"},
+        "actor_id": {"type": ["string", "null"]},
+        "zone_id": {"type": ["string", "null"]},
+        "collision_partner_type": {"type": ["string", "null"]},
+        "collision_partner_id": {"type": ["string", "null"]},
+        "source_fields": {"type": "array", "items": {"type": "string"}},
+        "status": {"const": "available"},
+        "left_event_id": {"type": "string"},
+        "right_event_id": {"type": "string"}
+      }
+    },
+    "pair_source_trace": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "schema_version",
+            "trace_id",
+            "coordinate_frame",
+            "units",
+            "content_sha256",
+            "content_receipt",
+            "source"
+          ],
+          "properties": {
+            "status": {"const": "available"},
+            "schema_version": {"const": "simulation_trace_export.v1"},
+            "trace_id": {"type": "string"},
+            "coordinate_frame": {"type": "string", "minLength": 1},
+            "units": {"type": "object"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "content_receipt": {"$ref": "#/$defs/trace_content_receipt"},
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["scenario_id", "seed", "planner_id", "episode_id", "generated_by"],
+              "properties": {
+                "scenario_id": {"type": "string"},
+                "seed": {"type": "integer"},
+                "planner_id": {"type": "string"},
+                "episode_id": {"type": "string"},
+                "generated_by": {"type": "string"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "event_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "event_type",
+        "detector_profile_version",
+        "time_s",
+        "step",
+        "confidence",
+        "actor_id",
+        "zone_id",
+        "source_fields",
+        "status",
+        "event_relative_time",
+        "visual_anchor_eligibility"
+      ],
+      "properties": {
+        "event_id": {"type": "string"},
+        "event_type": {"type": "string"},
+        "detector_profile_version": {"type": "string"},
+        "time_s": {"type": "number"},
+        "step": {"type": "integer"},
+        "confidence": {"type": "string"},
+        "actor_id": {"type": ["string", "null"]},
+        "zone_id": {"type": ["string", "null"]},
+        "collision_partner_type": {"type": ["string", "null"]},
+        "collision_partner_id": {"type": ["string", "null"]},
+        "source_fields": {"type": "array", "items": {"type": "string"}},
+        "status": {"const": "available"},
+        "event_relative_time": {"type": "object"},
+        "visual_anchor_eligibility": {"type": "object"}
+      }
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"}
+      }
+    },
+    "geometry_availability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "reason", "input_contract"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "input_contract": {"$ref": "#/$defs/geometry_input_contract"}
+      }
+    },
+    "geometry_input_contract": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "not_supplied"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["status", "provenance_id", "registry_checksum", "geometry", "registry"],
+          "properties": {
+            "status": {"enum": ["supplied", "supplied_unregistered"]},
+            "provenance_id": {"type": ["string", "null"]},
+            "registry_checksum": {"type": ["string", "null"]},
+            "geometry": {"type": "object"},
+            "registry": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["artifact_ref", "content_sha256", "entry_id", "entry_sha256"],
+              "properties": {
+                "artifact_ref": {"type": ["string", "null"]},
+                "content_sha256": {"type": ["string", "null"]},
+                "entry_id": {"type": ["string", "null"]},
+                "entry_sha256": {"type": ["string", "null"]}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "trace_content_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "content_contract", "nonfinite_numbers"],
+      "properties": {
+        "schema_version": {"const": "simulation_trace_export_receipt.v1"},
+        "content_contract": {"type": "object"},
+        "nonfinite_numbers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "value"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^/"},
+              "value": {"enum": ["nan", "inf", "-inf"]}
+            }
+          }
+        }
+      }
+    },
+    "analysis_pair_input": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "not_supplied"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "content_sha256", "content_receipt"],
+          "properties": {
+            "status": {"const": "supplied"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "content_receipt": {"$ref": "#/$defs/trace_content_receipt"}
+          }
+        }
+      ]
+    },
+    "analysis_report_input": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {"status": {"const": "not_supplied"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "content_sha256",
+            "content_contract",
+            "expected_input_checksum"
+          ],
+          "properties": {
+            "status": {"const": "supplied"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "content_contract": {"type": "object"},
+            "expected_input_checksum": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["profile_version"],
+      "properties": {"profile_version": {"type": "string", "minLength": 1}}
+    }
+  }
+}

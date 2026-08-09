@@ -95,18 +95,26 @@ def rasterize_line_segment(
         # Endpoint outside grid bounds after clipping (should not happen but defend anyway)
         return False
 
-    # Bresenham's line algorithm
-    cells = _bresenham_line(row0, col0, row1, col1)
+    # Bresenham's line algorithm (vectorized)
+    rows, cols = _bresenham_line(row0, col0, row1, col1)
 
-    # Set occupancy for all cells on the line
-    for row, col in cells:
-        if 0 <= row < config.grid_height and 0 <= col < config.grid_width:
-            grid_array[row, col] = max(grid_array[row, col], value)
+    # Set occupancy for all cells on the line, skipping cells outside the grid
+    valid = (rows >= 0) & (rows < config.grid_height) & (cols >= 0) & (cols < config.grid_width)
+    if np.any(valid):
+        rows_valid = rows[valid]
+        cols_valid = cols[valid]
+        grid_array[rows_valid, cols_valid] = np.maximum(grid_array[rows_valid, cols_valid], value)
     return True
 
 
-def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> list[tuple[int, int]]:
-    """Bresenham's line algorithm for discrete line rasterization.
+def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> tuple[np.ndarray, np.ndarray]:
+    """Vectorized Bresenham's line algorithm for discrete line rasterization.
+
+    Produces exactly the cell sequence of the classic all-octant integer
+    Bresenham walk (error term ``err = dx - dy``; step along the dominant axis
+    every iteration, step along the minor axis when ``2 * err < dx``
+    respectively ``2 * err > -dy``), but computes all cells with NumPy instead
+    of a per-cell Python loop (issue #6460).
 
     Args:
         row0: Starting row index.
@@ -115,36 +123,31 @@ def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> list[tuple[in
         col1: Ending column index.
 
     Returns:
-        List of (row, col) tuples along the line
+        Tuple of ``(rows, cols)`` integer arrays along the line.
 
     References:
         https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
     """
-    cells = []
-
     dx = abs(col1 - col0)
     dy = abs(row1 - row0)
     sx = 1 if col0 < col1 else -1
     sy = 1 if row0 < row1 else -1
-    err = dx - dy
 
-    row, col = row0, col0
+    if dx == 0 and dy == 0:
+        return np.array([row0], dtype=np.int64), np.array([col0], dtype=np.int64)
 
-    while True:
-        cells.append((row, col))
+    if dx >= dy:
+        # Column-dominant: one column step per iteration.
+        steps = np.arange(dx + 1, dtype=np.int64)
+        cols = col0 + sx * steps
+        rows = row0 + sy * ((2 * steps * dy + dx - 1) // (2 * dx))
+    else:
+        # Row-dominant: one row step per iteration.
+        steps = np.arange(dy + 1, dtype=np.int64)
+        rows = row0 + sy * steps
+        cols = col0 + sx * ((2 * steps * dx + dy - 1) // (2 * dy))
 
-        if row == row1 and col == col1:
-            break
-
-        e2 = 2 * err
-        if e2 > -dy:
-            err -= dy
-            col += sx
-        if e2 < dx:
-            err += dx
-            row += sy
-
-    return cells
+    return rows, cols
 
 
 def _clip_line_to_rect(
@@ -248,17 +251,18 @@ def rasterize_circle(
     # The helper function handles bounds checking and clipping internally,
     # correctly detecting overlap even when circle center is outside grid
     try:
-        affected_cells = get_affected_cells(
+        row_indices, col_indices = get_affected_cells(
             center[0], center[1], radius, config, grid_origin_x, grid_origin_y
         )
     except ValueError as e:
         logger.debug(f"Circle {circle} does not intersect grid: {e}")
         return
 
-    # Set occupancy for all affected cells
-    for row, col in affected_cells:
-        if 0 <= row < config.grid_height and 0 <= col < config.grid_width:
-            grid_array[row, col] = max(grid_array[row, col], value)
+    # Set occupancy for all affected cells using vectorized indexing
+    if len(row_indices) > 0:
+        grid_array[row_indices, col_indices] = np.maximum(
+            grid_array[row_indices, col_indices], value
+        )
 
 
 def rasterize_obstacles(
@@ -350,6 +354,63 @@ def rasterize_pedestrians(
             logger.warning(f"Failed to rasterize pedestrian {pedestrian}: {e}")
 
     logger.debug(f"Rasterized {count}/{len(pedestrians)} pedestrians")
+    return count
+
+
+def rasterize_pedestrians_array(
+    positions: np.ndarray,
+    radii: np.ndarray,
+    grid_array: np.ndarray,
+    config: GridConfig,
+    grid_origin_x: float = 0.0,
+    grid_origin_y: float = 0.0,
+    value: float = 1.0,
+) -> int:
+    """Rasterize pedestrian circles from NumPy arrays without list materialization.
+
+    Accepts position and radius arrays directly so callers (e.g. ``RobotEnv``)
+    can skip the per-step ``[(tuple(pos), r) for ...]`` list comprehension
+    (issue #6493).
+
+    Args:
+        positions: Pedestrian center positions with shape ``(N, 2)``.
+        radii: Pedestrian radii with shape ``(N,)``.
+        grid_array: 2D grid array to modify ``[H, W]``.
+        config: Grid configuration.
+        grid_origin_x: Grid origin X in world frame.
+        grid_origin_y: Grid origin Y in world frame.
+        value: Occupancy value to set (default: 1.0).
+
+    Returns:
+        Number of pedestrians successfully rasterized.
+    """
+    if not isinstance(positions, np.ndarray) or not isinstance(radii, np.ndarray):
+        raise TypeError("positions and radii must be NumPy arrays")
+    if positions.ndim != 2 or positions.shape[1] != 2:
+        raise ValueError(f"positions must have shape (N, 2), got {positions.shape}")
+    if radii.ndim != 1 or radii.shape[0] != positions.shape[0]:
+        raise ValueError(
+            "radii must have shape (N,) matching positions, "
+            f"got {radii.shape} for {positions.shape}"
+        )
+
+    count = 0
+    num_peds = positions.shape[0]
+    for i in range(num_peds):
+        try:
+            rasterize_circle_fast(
+                ((float(positions[i, 0]), float(positions[i, 1])), float(radii[i])),
+                grid_array,
+                config,
+                grid_origin_x,
+                grid_origin_y,
+                value,
+            )
+            count += 1
+        except (ValueError, IndexError, TypeError) as e:
+            logger.warning("Failed to rasterize pedestrian {}: {}", i, e)
+
+    logger.debug("Rasterized {}/{} pedestrians", count, num_peds)
     return count
 
 
@@ -535,3 +596,16 @@ def _points_in_polygon(
     flat_y = mesh_y.ravel()
     flat_mask = _shp_contains_xy(poly, flat_x, flat_y)
     return flat_mask.reshape(mesh_x.shape)
+
+
+__all__ = [
+    "_bresenham_line",
+    "rasterize_circle",
+    "rasterize_circle_fast",
+    "rasterize_line_segment",
+    "rasterize_obstacles",
+    "rasterize_pedestrians",
+    "rasterize_pedestrians_array",
+    "rasterize_polygon",
+    "rasterize_robot",
+]

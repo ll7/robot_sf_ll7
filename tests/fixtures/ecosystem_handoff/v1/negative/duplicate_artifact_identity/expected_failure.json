@@ -1,0 +1,5 @@
+{
+  "expected_reason_code": "duplicate_artifact_identity",
+  "schema_version": "robot_sf_ecosystem_negative_fixture.v1",
+  "variant_id": "duplicate_artifact_identity"
+}

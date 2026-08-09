@@ -13,6 +13,8 @@ from typing import Any
 _LAZY_EXPORTS = {
     "LocalPlannerProtocol": "robot_sf.planner.protocol",
     "BaselineStepToLocalAdapter": "robot_sf.planner.protocol",
+    "BaselineActionProjector": "robot_sf.planner.protocol",
+    "BaselineStepExecutor": "robot_sf.planner.protocol",
     "normalize_planner_diagnostics": "robot_sf.planner.protocol",
     "ClassicGlobalPlanner": "robot_sf.planner.classic_global_planner",
     "ClassicPlannerConfig": "robot_sf.planner.classic_global_planner",

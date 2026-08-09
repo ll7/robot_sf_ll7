@@ -107,3 +107,12 @@ def lateral_offset_to_segment(
         return None
     relative = point - segment_start
     return float(abs(segment[0] * relative[1] - segment[1] * relative[0]) / length)
+
+
+__all__ = [
+    "lateral_offset_to_segment",
+    "route_float",
+    "route_point",
+    "route_progress_pair",
+    "route_tangent_heading",
+]

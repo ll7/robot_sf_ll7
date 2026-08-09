@@ -13,6 +13,7 @@ Usage::
         --output-dir docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15
 """
 
+# evidence-writer-exempt: insertion-order JSON contract - json.dump without sort_keys preserves the committed field order that shared write_json (sort_keys=True) would reorder.
 from __future__ import annotations
 
 import argparse
@@ -228,7 +229,12 @@ def _git_head() -> str:
             check=False,
         )
         return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
+        # Narrowed from `except Exception` (#6690): OSError covers git-binary /
+        # spawn failures and SubprocessError covers the timeout=5 contract
+        # (TimeoutExpired; CalledProcessError is impossible with check=False).
+        # Programmer errors such as ValueError must propagate instead of
+        # silently dropping provenance.
         return ""
 
 
@@ -361,7 +367,7 @@ def evaluate_ablation_cell(
             dt_s=actual_dt,
             baseline_function=baseline_fn,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - per-cell fail-closed isolation (#6690)
         cell["status"] = "evaluation_error"
         cell["limitation"] = str(exc)
         cell["runtime_s"] = time.perf_counter() - start_time

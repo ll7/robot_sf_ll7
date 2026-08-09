@@ -116,3 +116,16 @@ def sample_desired_pedestrian_speeds(
     else:
         speeds = np.full(num_peds, float(mean), dtype=float)
     return np.clip(speeds, 0.0, float(high))
+
+
+__all__ = [
+    "PED_SPEED_TIER_BRISK",
+    "PED_SPEED_TIER_HIGH",
+    "PED_SPEED_TIER_SLOW",
+    "PED_SPEED_TIER_STD",
+    "PED_SPEED_TIER_TYPICAL",
+    "SUPPORTED_PED_SPEED_TIERS",
+    "desired_speed_params_for_tier",
+    "normalize_ped_speed_tier",
+    "sample_desired_pedestrian_speeds",
+]

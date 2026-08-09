@@ -1,0 +1,31 @@
+{
+  "eligible_count": 9,
+  "eligible_ids": [
+    "docs_context_evidence_issue_2837_horizon_timestep_ablation_2026-06-15_README_md__cmd1_7fa1f21a",
+    "docs_context_evidence_issue_2865_forecast_calibration_report_2026-06-15_README_md__cmd1_ae6ca2f2",
+    "docs_context_evidence_issue_2868_semantic_metadata_fixtures_2026-06-15_README_md__cmd1_447840f3",
+    "docs_context_evidence_issue_2869_forecast_risk_calibration_filter_2026-06-15_README_md__cmd1_fb074256",
+    "docs_context_evidence_issue_2903_horizon_denominator_health_2026-06-16_README_md__cmd1_13b50431",
+    "docs_context_evidence_issue_2937_horizon_denominator_health_2026-06-16_README_md__cmd1_28236d14",
+    "docs_context_evidence_issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29_README_md__cmd1_8d846b56",
+    "docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd1_92e66dae",
+    "docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd2_fccbfb79"
+  ],
+  "exclusion_reason_counts": {
+    "missing_committed_fixture": 10,
+    "non_deterministic_contract": 8,
+    "unsafe_command": 4
+  },
+  "generated_at": "2026-08-08T12:40:49+00:00",
+  "ineligible_count": 22,
+  "issue": 6769,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "route_evidence_only": true,
+  "schema": "issue_6769_figure_render_registry_audit.v1",
+  "source_class_counts": {
+    "build_command_txt": 2,
+    "readme_reproduction": 29
+  },
+  "source_commit": "250e8563e6127ebcd4a695b284e535ef3075854a",
+  "total_entries": 31
+}

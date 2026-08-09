@@ -324,7 +324,7 @@ def get_affected_cells(
     config: GridConfig,
     grid_origin_x: float = 0.0,
     grid_origin_y: float = 0.0,
-) -> list[tuple[int, int]]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Get grid cells affected by a circular region.
 
     Correctly handles circles whose centers are outside the grid bounds
@@ -340,7 +340,8 @@ def get_affected_cells(
         grid_origin_y: Grid origin Y (default: 0.0)
 
     Returns:
-        List of (row, col) tuples for affected cells
+        Tuple of ``(row_indices, col_indices)`` NumPy integer arrays for
+        affected cells (issue #6493).
 
     Notes:
         - Uses circle-rectangle intersection (proper geometric overlap)
@@ -351,16 +352,16 @@ def get_affected_cells(
         >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> # Circle fully inside
-        >>> cells = get_affected_cells(5.0, 5.0, 0.3, config)
-        >>> len(cells)
+        >>> rows, cols = get_affected_cells(5.0, 5.0, 0.3, config)
+        >>> len(rows)
         36
         >>> # Circle center outside but overlapping
-        >>> cells2 = get_affected_cells(10.5, 5.0, 1.0, config)
-        >>> len(cells2)
+        >>> rows2, cols2 = get_affected_cells(10.5, 5.0, 1.0, config)
+        >>> len(rows2)
         78
     """
     if radius <= 0:
-        return []
+        return np.empty(0, dtype=np.intp), np.empty(0, dtype=np.intp)
 
     # Clamp center coordinates to grid bounds for iteration purposes
     # This ensures we can compute a valid starting cell even when center is outside
@@ -384,7 +385,7 @@ def get_affected_cells(
     col_max = min(config.grid_width - 1, center_col + cell_radius)
 
     if row_min > row_max or col_min > col_max:
-        return []
+        return np.empty(0, dtype=np.intp), np.empty(0, dtype=np.intp)
 
     rows = np.arange(row_min, row_max + 1)
     cols = np.arange(col_min, col_max + 1)
@@ -404,7 +405,16 @@ def get_affected_cells(
     mask = dist_sq <= radius**2
 
     row_indices, col_indices = np.nonzero(mask)
-    return [
-        (int(rows[row_idx]), int(cols[col_idx]))
-        for row_idx, col_idx in zip(row_indices, col_indices, strict=False)
-    ]
+    return rows[row_indices], cols[col_indices]
+
+
+__all__ = [
+    "clip_to_grid",
+    "ego_to_world",
+    "get_affected_cells",
+    "get_grid_bounds",
+    "grid_indices_to_world",
+    "is_within_grid",
+    "world_to_ego",
+    "world_to_grid_indices",
+]

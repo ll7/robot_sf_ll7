@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run and rebuild the issue #4183 hybrid_global_rl diagnostic packet."""
 
+# evidence-writer-exempt: YAML algorithm-config artifact (algo config is serialized with yaml.safe_dump, which has no shared-writer equivalent); shared writers only cover JSON/CSV/text/SHA256SUMS.
 from __future__ import annotations
 
 import argparse

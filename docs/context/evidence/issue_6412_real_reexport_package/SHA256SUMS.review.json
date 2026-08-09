@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6412_real_reexport_package/SHA256SUMS",
+  "artifact_sha256": "016f2b2ebe16caa5a2ca2544177793b1474f117178a3b536592c7c4d92fd7e3b",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

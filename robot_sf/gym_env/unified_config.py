@@ -38,6 +38,18 @@ from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
 
+__all__ = [
+    "BaseSimulationConfig",
+    "EnvSettings",
+    "GridConfig",
+    "ImageRobotConfig",
+    "MultiRobotConfig",
+    "ObservationVisibilitySettings",
+    "PedestrianSimulationConfig",
+    "RobotSimulationConfig",
+    "sync_pedestrian_obstacle_force_alias",
+]
+
 PED_OBSTACLE_FORCE_ALIAS_WARNING = (
     "peds_have_obstacle_forces is deprecated; use peds_have_static_obstacle_forces instead."
 )

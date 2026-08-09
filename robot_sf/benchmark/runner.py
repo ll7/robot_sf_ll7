@@ -96,6 +96,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import set_global_seed
+from robot_sf.planner.protocol import BaselineStepToLocalAdapter, normalize_planner_diagnostics
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -327,7 +328,7 @@ def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
         return None
     try:
         diagnostics = diagnostics_fn()
-    except Exception:  # pragma: no cover - diagnostics must not break policy execution
+    except Exception:  # pragma: no cover  # noqa: BLE001 - diagnostics must not break execution
         return None
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
 
@@ -357,7 +358,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
         if callable(ensure_load):
             ensure_load()
         conn.send(("init_ok", _planner_foresight_diagnostics(planner)))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - child worker must send structured init errors
         try:
             conn.send(("init_error", (type(exc).__name__, str(exc))))
         except (BrokenPipeError, EOFError, OSError):
@@ -379,7 +380,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
             try:
                 action = planner.step(payload)
                 conn.send(("ok", (action, _planner_foresight_diagnostics(planner))))
-            except Exception as exc:  # pragma: no cover - defensive child-process path
+            except Exception as exc:  # pragma: no cover  # noqa: BLE001 - planner step isolation
                 conn.send(("error", (type(exc).__name__, str(exc))))
     finally:
         conn.close()
@@ -416,8 +417,9 @@ class _PlannerStepProcess:
             Planner action payload returned by the worker process.
         """
         self._ensure_worker()
-        assert self._conn is not None
-        assert self._process is not None
+        # Internal worker invariants established by _ensure_worker().
+        if self._conn is None or self._process is None:  # pragma: no cover
+            raise RuntimeError("planner step worker did not initialize")  # pragma: no cover
         try:
             self._conn.send(("step", obs))
         except (BrokenPipeError, EOFError, OSError) as exc:
@@ -716,7 +718,10 @@ class _NativeCommandPolicy:
         Returns:
             Decoded response text without the line terminator.
         """
-        assert process.stdout is not None
+        if process.stdout is None:  # pragma: no cover
+            raise RuntimeError(  # pragma: no cover
+                "persistent native-command worker has no stdout pipe"
+            )
         deadline = time.monotonic() + self._timeout_s
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ)
@@ -777,7 +782,10 @@ class _NativeCommandPolicy:
         try:
             if self._persistent:
                 process = self._ensure_process()
-                assert process.stdin is not None
+                if process.stdin is None:  # pragma: no cover
+                    raise RuntimeError(  # pragma: no cover
+                        "persistent native-command worker has no stdin pipe"
+                    )
                 process.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
                 process.stdin.flush()
                 stdout = self._readline_with_timeout(process)
@@ -1004,9 +1012,10 @@ def _stack_or_zero(
         return stack_fn(traj)
     else:
         # Ensure empty_shape[0] == 0 for lazy evaluation
-        assert empty_shape[0] == 0, (
-            "empty_shape should have zero in the first dimension for lazy evaluation"
-        )
+        if empty_shape[0] != 0:
+            raise ValueError(
+                "empty_shape should have zero in the first dimension for lazy evaluation"
+            )
         # Return a zero-length array with the correct shape and dtype
         return np.empty(empty_shape)
 
@@ -1250,9 +1259,10 @@ def _step_planner_with_retry(
             return {"vx": 0.0, "vy": 0.0}
 
 
-def _build_baseline_policy_fn(
+def _build_baseline_policy_fn(  # noqa: PLR0913
     *,
     algo: str,
+    planner: Any,
     observation_cls: type,
     step_runner: _PlannerStepProcess | None,
     timeout_metadata: dict[str, Any],
@@ -1266,6 +1276,48 @@ def _build_baseline_policy_fn(
     Returns:
         Policy function callable.
     """
+
+    # Keep the benchmark-specific execution and command projection at the
+    # harness boundary while routing the construction through the canonical
+    # baseline adapter. The executor remains process-isolated and retains the
+    # existing timeout/retry/fallback accounting; the projector retains the
+    # runner's world-velocity semantics, including heading-aware unicycle
+    # actions and holonomic velocity clamping.
+    projection_context: dict[str, Any] = {}
+
+    def _step_executor(_planner: Any, observation: Any) -> Any:
+        """Execute a baseline step through the existing isolated retry path.
+
+        Returns:
+            The planner action mapping or the existing zero-velocity fallback.
+        """
+        return _step_planner_with_retry(
+            step_runner, observation, algo, timeout_metadata, metadata, retry_budget
+        )
+
+    def _action_projector(action: Any, _planner_type: str) -> tuple[float, float]:
+        """Project an action using the current runner state without changing semantics.
+
+        Returns:
+            The existing two-dimensional world-velocity command.
+        """
+        if not projection_context:
+            raise RuntimeError("baseline action projection context is not initialized")
+        velocity = _action_to_velocity(
+            action,
+            projection_context["robot_pos"],
+            projection_context["robot_vel"],
+            projection_context["robot_goal"],
+            algo,
+        )
+        return float(velocity[0]), float(velocity[1])
+
+    adapter = BaselineStepToLocalAdapter(
+        planner,
+        planner_type=algo,
+        step_executor=_step_executor,
+        action_projector=_action_projector,
+    )
 
     def policy_fn(
         robot_pos: np.ndarray,
@@ -1289,10 +1341,25 @@ def _build_baseline_policy_fn(
             robot_radius=robot_radius,
             ped_radius=ped_radius,
         )
-        action = _step_planner_with_retry(
-            step_runner, obs, algo, timeout_metadata, metadata, retry_budget
+        projection_context.update(
+            robot_pos=robot_pos,
+            robot_vel=robot_vel,
+            robot_goal=robot_goal,
         )
-        return _action_to_velocity(action, robot_pos, robot_vel, robot_goal, algo)
+        command = adapter.plan(obs)
+        return np.asarray(command, dtype=float)
+
+    def _close_policy() -> None:
+        """Close the isolated worker and wrapped planner exactly once."""
+        if step_runner is not None:
+            step_runner.close()
+        adapter.close()
+
+    policy_fn.close = _close_policy  # type: ignore[attr-defined]
+    policy_fn._planner_close = _close_policy  # type: ignore[attr-defined]
+    policy_fn._planner_adapter = adapter  # type: ignore[attr-defined]
+    if callable(getattr(planner, "diagnostics", None)):
+        policy_fn.diagnostics = adapter.diagnostics  # type: ignore[attr-defined]
 
     return policy_fn
 
@@ -1388,6 +1455,7 @@ def _create_baseline_planner_policy(
 
     policy_fn = _build_baseline_policy_fn(
         algo=algo,
+        planner=planner,
         observation_cls=Observation,
         step_runner=step_runner,
         timeout_metadata=timeout_metadata,
@@ -1397,8 +1465,6 @@ def _create_baseline_planner_policy(
         ped_radius=ped_radius,
     )
 
-    if step_runner is not None:
-        policy_fn.close = step_runner.close  # type: ignore[attr-defined]
     # Issue #6190: expose the predictive planner's live foresight-model-load
     # provenance on the policy closure. PPO executes behind ``step_runner``;
     # its encoder mutates in the forked child, so the parent planner is stale and
@@ -2115,11 +2181,16 @@ def run_episode(  # noqa: PLR0913
 
     # Refresh live native-command diagnostics into the episode metadata so the
     # per-step runtime/exit counters captured during the episode are recorded.
+    # Route the payload through the canonical #6492 diagnostics normalizer so the
+    # native-command arm shares one fail-closed propagation path with the
+    # map-runner adapter arm: every payload carries a string ``planner_type`` and
+    # any normalization loss is recorded explicitly rather than silently dropped.
     policy_diag = getattr(robot_policy, "diagnostics", None)
     if callable(policy_diag):
         live_diag = policy_diag()
-        if isinstance(live_diag, dict):
-            algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
+        algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = normalize_planner_diagnostics(
+            live_diag, fallback_planner_type=algo
+        )
 
     # Issue #6190: refresh the predictive planner's foresight-model-load
     # provenance (captured during the episode) so ``enrich_algorithm_metadata``
@@ -2323,9 +2394,9 @@ def _run_batch_sequential(  # noqa: C901, D417
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, True, None)
-                except Exception:  # pragma: no cover - progress best-effort
+                except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                     pass
-        except Exception as e:  # pragma: no cover - error path
+        except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises
             logger.exception(
                 "Benchmark batch job failed in serial execution: scenario_id={} seed={}",
                 sc.get("id", "unknown"),
@@ -2341,7 +2412,7 @@ def _run_batch_sequential(  # noqa: C901, D417
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, False, repr(e))
-                except Exception:  # pragma: no cover
+                except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                     pass
 
             # Circuit breaker logic
@@ -2425,9 +2496,9 @@ def _run_batch_parallel(  # noqa: C901
                 if progress_cb is not None:
                     try:
                         progress_cb(idx, total, sc, seed, True, None)
-                    except Exception:  # pragma: no cover
+                    except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                         pass
-            except Exception as e:  # pragma: no cover
+            except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises
                 logger.exception(
                     "Benchmark batch job failed in parallel execution: scenario_id={} seed={}",
                     sc.get("id", "unknown"),
@@ -2443,7 +2514,7 @@ def _run_batch_parallel(  # noqa: C901
                 if progress_cb is not None:
                     try:
                         progress_cb(idx, total, sc, seed, False, repr(e))
-                    except Exception:  # pragma: no cover
+                    except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress
                         pass
                 if fail_fast:
                     for f in future_to_job:

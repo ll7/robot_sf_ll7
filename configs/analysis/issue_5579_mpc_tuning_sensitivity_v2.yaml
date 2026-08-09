@@ -1,0 +1,251 @@
+schema_version: issue_5579_mpc_tuning_sensitivity.v2
+issue: 5579
+study_id: issue_5579_mpc_tuning_budget_sensitivity_v2
+status: preregistration
+
+# This packet makes the under-tuning test reproducible without changing the
+# benchmark runner, metric semantics, or paper-facing configuration.
+claim_boundary: >-
+  Diagnostic bounded sensitivity contract. A completed run can describe the
+  tested fixed scenario slice and the tuning-selected configuration, but it
+  cannot establish a benchmark ranking, structural planner superiority, or a
+  paper/dissertation claim. Fallback, degraded, failed, and unavailable rows
+  are excluded from the success comparison and keep the report blocked.
+
+execution_boundary:
+  full_benchmark_campaign_run_in_this_pr: false
+  slurm_or_gpu_submission_in_this_pr: false
+  paper_or_dissertation_claim_edit_in_this_pr: false
+  bounded_local_run_allowed: true
+
+scenario_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_ids:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+  seeds: [101, 102, 103]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+
+tuning_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_ids:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+  seeds: [101, 102, 103]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+  scenario_list_hash: 113e8f7e23948d12aaf453a8d05c1d48b870d5cbace6b07714df24df782e9490
+
+held_out_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  seed_set: paper_eval_s10
+  seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+  # Frozen eligible matrix (48 source scenarios minus the three tuning IDs).
+  scenario_ids:
+    - classic_bottleneck_high
+    - classic_bottleneck_low
+    - classic_cross_trap_low
+    - classic_cross_trap_medium
+    - classic_doorway_high
+    - classic_doorway_low
+    - classic_doorway_medium
+    - classic_group_crossing_high
+    - classic_group_crossing_low
+    - classic_group_crossing_medium
+    - classic_head_on_corridor_low
+    - classic_head_on_corridor_medium
+    - classic_merging_low
+    - classic_merging_medium
+    - classic_overtaking_low
+    - classic_overtaking_medium
+    - classic_realworld_double_bottleneck_high
+    - classic_station_platform_medium
+    - classic_t_intersection_low
+    - classic_t_intersection_medium
+    - classic_urban_crossing_medium
+    - francis2023_accompanying_peer
+    - francis2023_blind_corner
+    - francis2023_circular_crossing
+    - francis2023_crowd_navigation
+    - francis2023_down_path
+    - francis2023_entering_elevator
+    - francis2023_entering_room
+    - francis2023_exiting_elevator
+    - francis2023_exiting_room
+    - francis2023_following_human
+    - francis2023_frontal_approach
+    - francis2023_intersection_no_gesture
+    - francis2023_intersection_proceed
+    - francis2023_join_group
+    - francis2023_leading_human
+    - francis2023_leave_group
+    - francis2023_narrow_doorway
+    - francis2023_narrow_hallway
+    - francis2023_parallel_traffic
+    - francis2023_pedestrian_obstruction
+    - francis2023_pedestrian_overtaking
+    - francis2023_perpendicular_traffic
+    - francis2023_robot_crowding
+    - francis2023_robot_overtaking
+  scenario_list_hash: 316cc6bfd0fb8e55dc2a5dc8467f9239db599edef5840427b1083185b470cbc2
+  excluded_scenarios:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+
+canary:
+  seed: 101
+  required_eligible_episodes: 6
+  target_eligible_ratio: "6/6"
+  stop_on_ineligible: true
+  # "Native solver execution" in the 2026-08-03 #5579 freeze means the target arm's
+  # own prediction-MPC solver produced every command in the target environment, with
+  # valid provenance, finite commands, a successful solver/control update, and no
+  # fallback or solver failure. It is NOT the benchmark command-space `execution_mode`
+  # field, which only reports whether planner commands are projected into the robot
+  # command space. The canonical `prediction_mpc` planner is registry-declared as an
+  # adapter-projected unicycle_vw planner, so binding the gate to `execution_mode:
+  # native` would make it unsatisfiable by construction and would silently convert the
+  # campaign stop rule into a permanent block. The contract below is the reachable one
+  # and is cross-checked against the runtime planner registry by the validator, so the
+  # gate can never drift into an unreachable state again.
+  solver_execution:
+    solver_execution_mode: prediction_mpc_native_solver
+    solver_planner_adapter: PredictionMPCPlannerAdapter
+    planner_execution_mode: adapter
+    supports_native_commands: false
+    benchmark_execution_mode: adapter
+    benchmark_readiness_status: adapter
+    require_valid_provenance: true
+    require_finite_commands: true
+    require_solver_update: true
+    require_control_update: true
+    forbid_solver_failure: true
+    forbid_fallback: true
+
+inference:
+  inference_population: fixed_declared_held_out_suite
+  estimand: paired_delta
+  primary_metric: route_complete_and_collision_free
+  resampling_unit: paired_seed_block
+  bootstrap:
+    method: paired_seed_block_percentile_bootstrap
+    confidence_level: 0.95
+    replicates: 2000
+    # Frozen resampling seed so the held-out interval/p-value read is reproducible.
+    seed: 20260803
+  multiplicity:
+    method: holm_bonferroni
+    family: target_arm_vs_incumbent_arm
+    familywise_alpha: 0.05
+    contrast_count: 8
+    contrasts:
+      - {target_arm: prediction_mpc, incumbent_arm: scenario_adaptive_hybrid_orca_v1}
+      - {target_arm: prediction_mpc, incumbent_arm: scenario_adaptive_hybrid_orca_v2_collision_guard}
+      - {target_arm: prediction_mpc, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape}
+      - {target_arm: prediction_mpc, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape_continuous}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: scenario_adaptive_hybrid_orca_v1}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: scenario_adaptive_hybrid_orca_v2_collision_guard}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape}
+      - {target_arm: prediction_mpc_cbf, incumbent_arm: hybrid_rule_v3_fast_progress_static_escape_continuous}
+
+# The target arms are the two prediction-aware MPC rows added to the h600
+# extended roster. Every sensitivity point is applied to both base configs.
+target_arms:
+  - key: prediction_mpc
+    algo: prediction_mpc
+    algo_config_path: configs/algos/prediction_mpc_cv.yaml
+  - key: prediction_mpc_cbf
+    algo: prediction_mpc
+    algo_config_path: configs/algos/prediction_mpc_cv_cbf_collision_cone.yaml
+
+# The four h600 hybrid arms are the incumbent band. They are evaluated at their
+# incumbent configs; they do not consume any of the 20 MPC candidate points.
+incumbent_arms:
+  - key: scenario_adaptive_hybrid_orca_v1
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+  - key: hybrid_rule_v3_fast_progress_static_escape
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+
+search:
+  design: bounded_grid_subset
+  candidate_count: 20
+  top_parameters:
+    - max_linear_speed
+    - horizon_steps
+    - pedestrian_safety_margin
+  parameter_levels:
+    max_linear_speed: [0.75, 0.9, 1.2]
+    horizon_steps: [4, 6, 8]
+    pedestrian_safety_margin: [0.25, 0.35, 0.45]
+  candidate_points:
+    - id: incumbent
+      overrides: {}
+    - id: speed_low
+      overrides: {max_linear_speed: 0.75}
+    - id: speed_high
+      overrides: {max_linear_speed: 1.2}
+    - id: horizon_low
+      overrides: {horizon_steps: 4}
+    - id: horizon_high
+      overrides: {horizon_steps: 8}
+    - id: margin_low
+      overrides: {pedestrian_safety_margin: 0.25}
+    - id: margin_high
+      overrides: {pedestrian_safety_margin: 0.45}
+    - id: speed_low_horizon_low
+      overrides: {max_linear_speed: 0.75, horizon_steps: 4}
+    - id: speed_low_margin_low
+      overrides: {max_linear_speed: 0.75, pedestrian_safety_margin: 0.25}
+    - id: speed_high_horizon_high
+      overrides: {max_linear_speed: 1.2, horizon_steps: 8}
+    - id: speed_high_margin_high
+      overrides: {max_linear_speed: 1.2, pedestrian_safety_margin: 0.45}
+    - id: horizon_low_margin_low
+      overrides: {horizon_steps: 4, pedestrian_safety_margin: 0.25}
+    - id: horizon_high_margin_high
+      overrides: {horizon_steps: 8, pedestrian_safety_margin: 0.45}
+    - id: speed_high_horizon_low_margin_low
+      overrides: {max_linear_speed: 1.2, horizon_steps: 4, pedestrian_safety_margin: 0.25}
+    - id: speed_low_horizon_high_margin_high
+      overrides: {max_linear_speed: 0.75, horizon_steps: 8, pedestrian_safety_margin: 0.45}
+    - id: speed_high_horizon_high_margin_low
+      overrides: {max_linear_speed: 1.2, horizon_steps: 8, pedestrian_safety_margin: 0.25}
+    - id: speed_low_horizon_low_margin_high
+      overrides: {max_linear_speed: 0.75, horizon_steps: 4, pedestrian_safety_margin: 0.45}
+    - id: speed_high_horizon_low_margin_high
+      overrides: {max_linear_speed: 1.2, horizon_steps: 4, pedestrian_safety_margin: 0.45}
+    - id: speed_low_horizon_high_margin_low
+      overrides: {max_linear_speed: 0.75, horizon_steps: 8, pedestrian_safety_margin: 0.25}
+    - id: speed_high_horizon_high_margin_high
+      overrides: {max_linear_speed: 1.2, horizon_steps: 8, pedestrian_safety_margin: 0.45}
+
+comparison:
+  primary_metric: route_complete_and_collision_free
+  success_fields: [outcome.route_complete, outcome.collision_event]
+  higher_is_better: true
+  hybrid_band_read:
+    structural_if: both_tuning_selected_mpc_rates_below_all_incumbent_rates
+    budget_bound_if: both_tuning_selected_mpc_rates_at_or_above_all_incumbent_rates
+    otherwise: mixed_or_inconclusive
+  fallback_degraded_policy: exclude_from_success_evidence
+
+artifacts:
+  raw_output_root: output/benchmarks/issue_5579_mpc_tuning_sensitivity_v2
+  durable_evidence_root: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-08-03

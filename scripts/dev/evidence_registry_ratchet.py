@@ -162,6 +162,13 @@ def load_report(path: Path) -> dict[str, Any]:
     summary = data.get("summary", {})
     if not isinstance(summary, dict):
         raise RuntimeError(f"Report JSON '{path}' has an invalid 'summary' mapping")
+    if "findings" in summary:
+        findings = summary["findings"]
+        if isinstance(findings, bool) or not isinstance(findings, int) or findings < 0:
+            raise RuntimeError(
+                f"Report JSON '{path}' has an invalid 'summary.findings'; "
+                "expected a non-negative integer"
+            )
     return data
 
 
@@ -201,10 +208,13 @@ def evidence_tree_manifest(registry_root: Path) -> dict[str, Any]:
         files = sorted(
             path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()
         )
-    joined = "\n".join(files)
+    # Hash a structured JSON array rather than a newline-delimited string. A bare join
+    # aliases the distinct path sets {"a", "b"} and {"a\nb"}; JSON escaping keeps
+    # each path boundary unambiguous even when a filename contains a newline.
+    serialized = json.dumps(files, ensure_ascii=True, separators=(",", ":"))
     return {
         "count": len(files),
-        "sha256": hashlib.sha256(joined.encode("utf-8")).hexdigest(),
+        "sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
     }
 
 
@@ -228,7 +238,9 @@ def check_evidence_tree_manifest(
             "`scripts/dev/evidence_registry_ratchet.py --write-baseline` to "
             "enable add/remove drift detection for evidence files."
         ]
-    if baseline_tree.get("sha256") != current.get("sha256"):
+    if baseline_tree.get("count") != current.get("count") or baseline_tree.get(
+        "sha256"
+    ) != current.get("sha256"):
         return [
             (
                 "evidence tree changed without a matching baseline refresh: "
@@ -317,6 +329,17 @@ def _validate_baseline_metadata(path: Path, data: dict[str, Any]) -> None:
     summary = data.get("summary")
     if summary is not None and not isinstance(summary, dict):
         raise ValueError(f"Baseline {path} has an invalid 'summary' mapping.")
+    if isinstance(summary, dict) and "total_findings" in summary:
+        total_findings = summary["total_findings"]
+        if (
+            isinstance(total_findings, bool)
+            or not isinstance(total_findings, int)
+            or total_findings < 0
+        ):
+            raise ValueError(
+                f"Baseline {path} has an invalid 'summary.total_findings'; "
+                "expected a non-negative integer."
+            )
 
     evidence_tree = data.get("evidence_tree")
     if evidence_tree is None:
@@ -535,7 +558,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    baseline = load_baseline(baseline_path)
+    try:
+        baseline = load_baseline(baseline_path)
+    except ValueError as exc:
+        print(f"ERROR: could not load baseline: {exc}", file=sys.stderr)
+        return 2
     findings_failures, notices = check_against_baseline(aggregate(report), baseline)
     manifest_failures, manifest_notices = check_evidence_tree_manifest(
         evidence_tree_manifest(registry_root), baseline

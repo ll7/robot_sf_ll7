@@ -224,6 +224,14 @@ def test_resolver_errors_on_malformed_baseline(tmp_path: Path) -> None:
             {"schema_version": 1, "findings_by_path": {}, "evidence_tree": []},
             "evidence_tree",
         ),
+        (
+            {
+                "schema_version": 1,
+                "findings_by_path": {},
+                "summary": {"total_findings": "not-a-number"},
+            },
+            "summary.total_findings",
+        ),
     ],
 )
 def test_resolver_errors_on_structurally_invalid_json_baseline(

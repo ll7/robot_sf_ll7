@@ -311,7 +311,14 @@ def test_cli_check_reports_infra_error_when_report_missing(tmp_path: Path) -> No
 
 @pytest.mark.parametrize(
     "report",
-    [[], None, {"issues": None}, {"issues": [None]}, {"summary": []}],
+    [
+        [],
+        None,
+        {"issues": None},
+        {"issues": [None]},
+        {"summary": []},
+        {"summary": {"findings": "not-a-number"}, "issues": []},
+    ],
 )
 def test_cli_check_reports_infra_error_for_malformed_report(tmp_path: Path, report: object) -> None:
     """Malformed report JSON fails with the documented infra-error exit code."""
@@ -337,6 +344,45 @@ def test_cli_check_reports_infra_error_for_malformed_report(tmp_path: Path, repo
         cwd=ROOT,
     )
     assert proc.returncode == 2
+
+
+def test_cli_check_reports_infra_error_for_malformed_baseline_summary(tmp_path: Path) -> None:
+    """A non-numeric baseline total returns the infra code without a traceback."""
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "summary": {"total_findings": "not-a-number"},
+                "findings_by_path": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps({"summary": {"findings": 0}, "issues": []}), encoding="utf-8")
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--check",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+
+    assert proc.returncode == 2
+    assert "summary.total_findings" in proc.stderr
+    assert "Traceback" not in proc.stderr
 
 
 # --- issue #5952 acceptance: clean-main baseline drift guard -----------------------
@@ -571,17 +617,36 @@ def test_evidence_tree_manifest_is_path_based_and_stable(tmp_path: Path) -> None
     assert ratchet.evidence_tree_manifest(root) == before
 
 
+def test_evidence_tree_manifest_uses_unambiguous_path_serialization(tmp_path: Path) -> None:
+    """Distinct path sets cannot collide merely because a path contains a newline."""
+    two_files = tmp_path / "two_files"
+    two_files.mkdir()
+    (two_files / "a").write_text("", encoding="utf-8")
+    (two_files / "b").write_text("", encoding="utf-8")
+
+    one_file = tmp_path / "one_file"
+    one_file.mkdir()
+    (one_file / "a\nb").write_text("", encoding="utf-8")
+
+    two_manifest = ratchet.evidence_tree_manifest(two_files)
+    one_manifest = ratchet.evidence_tree_manifest(one_file)
+
+    assert two_manifest["count"] == 2
+    assert one_manifest["count"] == 1
+    assert two_manifest["sha256"] != one_manifest["sha256"]
+
+
 def test_evidence_tree_manifest_handles_missing_root(tmp_path: Path) -> None:
     """A missing registry root yields an empty, stable manifest."""
     manifest = ratchet.evidence_tree_manifest(tmp_path / "does_not_exist")
     assert manifest["count"] == 0
-    assert manifest["sha256"] == hashlib.sha256(b"").hexdigest()
+    assert manifest["sha256"] == hashlib.sha256(b"[]").hexdigest()
 
 
 def test_check_evidence_tree_manifest_fails_when_tree_grew() -> None:
     """A baseline manifest that no longer matches the live tree fails (issue #6839)."""
-    current = {"count": 2, "sha256": "live", "file_suffixes": []}
-    baseline = {"evidence_tree": {"count": 1, "sha256": "stale", "file_suffixes": []}}
+    current = {"count": 2, "sha256": "same", "file_suffixes": []}
+    baseline = {"evidence_tree": {"count": 1, "sha256": "same", "file_suffixes": []}}
     failures, notices = ratchet.check_evidence_tree_manifest(current, baseline)
     assert len(failures) == 1
     assert "evidence tree changed without a matching baseline refresh" in failures[0]

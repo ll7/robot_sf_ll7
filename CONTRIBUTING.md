@@ -93,8 +93,9 @@ Worked examples (re-check the labels on GitHub before acting):
 ### The authoritative gate lives in the orchestrator repository
 
 The dispatch verdict that matters operationally is produced by the **preparation gate in the
-orchestrator repository** (`scripts/ll7_factory_v2_policy.py`), not by this repository. In
-simplified form, that gate returns `ready` only when `state:ready` is present *and* the issue's
+orchestrator repository** (`ll7_factory_v2_policy.py`, kept in that repository's `scripts/`
+directory), not by this repository. In simplified form, that gate returns `ready` only when
+`state:ready` is present *and* the issue's
 state is coherent, and returns `prepare` otherwise. `prepare` is the fall-through verdict for
 "missing `state:ready`" — **not** a statement that the issue is unblocked — so a `prepare` verdict
 and a `state:blocked` label agree with each other rather than contradicting.
@@ -112,8 +113,8 @@ Any future audit that asks "what was the latest preparation verdict for this iss
 `snapshot:%` on every sweep, so an `observed_at`-ordered "latest" lookup that does not exclude them
 reads the cycle's own intent back as if a worker had produced it. The correct predicate is
 `preparation_id NOT LIKE 'snapshot:%'` (the trap and the predicate are documented in the
-orchestrator's `scripts/ll7_factory_v2.py`). Excluding snapshot rows is what keeps a
-gate-versus-label comparison honest.
+orchestrator's `ll7_factory_v2.py` script, under that repository's `scripts/` directory).
+Excluding snapshot rows is what keeps a gate-versus-label comparison honest.
 
 ---
 

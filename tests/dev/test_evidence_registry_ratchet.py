@@ -13,6 +13,10 @@ baseline carries an explicit remediate-or-baseline disposition in the review com
 the downward ratchet cannot silently re-drift by grandfathering unreviewed files.
 """
 
+# evidence-writer-exempt: these tests intentionally write synthetic evidence-tree and
+# baseline JSON fixtures only under pytest tmp_path to exercise checker diagnostics;
+# the fixtures must keep exact raw bytes (including malformed/conflict content).
+
 from __future__ import annotations
 
 import hashlib

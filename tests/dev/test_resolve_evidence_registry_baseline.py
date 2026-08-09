@@ -7,6 +7,10 @@ path, the conflict-marker guard, and the missing/malformed-baseline error paths 
 synthetic ``--report`` (no live linter scan) so the suite stays fast.
 """
 
+# evidence-writer-exempt: these tests intentionally write synthetic evidence-tree and
+# baseline JSON fixtures only under pytest tmp_path to exercise resolver diagnostics;
+# the fixtures must keep exact raw bytes (including malformed/conflict content).
+
 from __future__ import annotations
 
 import json

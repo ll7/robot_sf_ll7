@@ -7,7 +7,10 @@ on:
       - "uv.lock"
       - "fast-pysf/pyproject.toml"
       - "fast-pysf/uv.lock"
+      - "third_party/python-rvo2/pyproject.toml"
+      - "third_party/python-rvo2/setup.py"
       - "third_party/python-rvo2/requirements.txt"
+      - "third_party/socnavbench/LICENSING.yaml"
       - ".github/dependabot.yml"
       - ".github/workflows/dependency-review.yml"
   workflow_dispatch:
@@ -35,4 +38,21 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: critical
+          # Keep dependency changes within the repository's GPLv3-compatible
+          # redistribution policy. This is a change-review guard; the complete
+          # locked-environment inventory remains a release-time evidence gate.
+          allow-licenses: >-
+            Apache-2.0,
+            BSD-2-Clause,
+            BSD-3-Clause,
+            ISC,
+            LGPL-2.1-only,
+            LGPL-2.1-or-later,
+            LGPL-3.0-only,
+            LGPL-3.0-or-later,
+            MIT,
+            MPL-2.0,
+            PSF-2.0,
+            GPL-3.0-only,
+            GPL-3.0-or-later
           comment-summary-in-pr: false

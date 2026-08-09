@@ -9,6 +9,10 @@ This fork contains additional logic in `Agent.cpp` so agents can set a `collabCo
 - `collabCoeff < 0`: anti-cooperative agent, will ignore its own prefVel and try to collide with the nearest agent (position-wise),
 collabCoeff trades off mimicing the other agent (collab=0 ==> prefVel = other->veloc) vs. trying to hit immediately (collab=-inf ==> prefVel=relPos)
 
+The collaboration-coefficient extension and the build-wrapper changes are Robot
+SF local modifications to the Apache-2.0 upstream source. See `UPSTREAM.md` and
+`LOCAL_CHANGES.patch` for the pinned source identity and reproducible diff.
+
 ----------
 
 

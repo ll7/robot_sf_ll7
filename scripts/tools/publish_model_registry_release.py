@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
 import shutil
 import subprocess
+import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -166,7 +168,12 @@ def _copy_model_asset(source_path: Path, target_path: Path) -> None:
 
 
 def _model_metadata(
-    entry: dict[str, Any], *, asset_name: str, sha256: str, size_bytes: int
+    entry: dict[str, Any],
+    *,
+    asset_name: str,
+    sha256: str,
+    size_bytes: int,
+    legal_bundle_name: str,
 ) -> dict:
     """Build a small per-model metadata payload for release publication."""
     keep_keys = [
@@ -182,14 +189,144 @@ def _model_metadata(
         "wandb_entity",
         "wandb_project",
         "wandb_file",
+        "licensing",
     ]
     metadata = {key: entry.get(key) for key in keep_keys if key in entry}
     metadata["release_asset"] = {
         "asset_name": asset_name,
+        "legal_bundle": legal_bundle_name,
         "sha256": sha256,
         "size_bytes": size_bytes,
     }
     return metadata
+
+
+MODEL_LICENSING_REQUIRED_FIELDS = (
+    "license_spdx",
+    "copyright",
+    "redistribution_basis",
+    "source_repository",
+    "source_revision",
+    "source_archive_sha256",
+    "weights_origin",
+    "training_code_license",
+    "training_data",
+    "license_file",
+    "model_card_file",
+)
+
+
+def _validate_model_licensing(entry: dict[str, Any], *, repo_root: Path) -> list[str]:
+    """Return fail-closed licensing gaps for one publishable model row."""
+    model_id = str(entry.get("model_id", "unknown-model"))
+    licensing = entry.get("licensing")
+    if not isinstance(licensing, dict):
+        return [f"{model_id}: licensing mapping is required before publication"]
+
+    issues = [
+        f"{model_id}: licensing.{field} is required"
+        for field in MODEL_LICENSING_REQUIRED_FIELDS
+        if field not in licensing or licensing[field] in (None, "", [], {})
+    ]
+    training_data = licensing.get("training_data")
+    if isinstance(training_data, dict):
+        for field in ("provenance", "license_spdx"):
+            if training_data.get(field) in (None, "", [], {}):
+                issues.append(f"{model_id}: licensing.training_data.{field} is required")
+    else:
+        issues.append(f"{model_id}: licensing.training_data must be a mapping")
+
+    for field in ("license_file", "model_card_file"):
+        issue = _validate_repository_file(
+            licensing.get(field),
+            repo_root=repo_root,
+            model_id=model_id,
+            label=f"licensing.{field}",
+        )
+        if issue:
+            issues.append(issue)
+
+    notices = licensing.get("included_notices")
+    if not isinstance(notices, list) or any(not isinstance(item, str) for item in notices):
+        issues.append(f"{model_id}: licensing.included_notices must be a list of paths")
+    else:
+        for notice in notices:
+            issue = _validate_repository_file(
+                notice,
+                repo_root=repo_root,
+                model_id=model_id,
+                label="licensing notice",
+            )
+            if issue:
+                issues.append(issue)
+    return issues
+
+
+def _validate_repository_file(
+    raw_path: Any, *, repo_root: Path, model_id: str, label: str
+) -> str | None:
+    """Validate one required legal file path and return a user-facing issue."""
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return f"{model_id}: {label} is required"
+    path = Path(raw_path)
+    resolved = (repo_root / path).resolve() if not path.is_absolute() else path.resolve()
+    try:
+        resolved.relative_to(repo_root.resolve())
+    except ValueError:
+        return f"{model_id}: {label} must stay inside the repository: {raw_path}"
+    if not resolved.is_file():
+        return f"{model_id}: {label} does not exist: {raw_path}"
+    return None
+
+
+def _path_from_registry(raw_path: str, *, repo_root: Path) -> Path:
+    """Resolve a validated registry path inside the repository."""
+    path = Path(raw_path)
+    return (repo_root / path).resolve() if not path.is_absolute() else path.resolve()
+
+
+def _write_legal_bundle(
+    entry: dict[str, Any], *, staging_dir: Path, repo_root: Path
+) -> tuple[Path, str]:
+    """Write license, model-card, provenance, and notice evidence for one model."""
+    model_id = _safe_component(str(entry["model_id"]))
+    licensing = dict(entry["licensing"])
+    bundle_path = staging_dir / f"{model_id}-legal.tar.gz"
+    with tarfile.open(bundle_path, mode="w:gz") as archive:
+        members = [
+            (
+                "LICENSE",
+                _path_from_registry(licensing["license_file"], repo_root=repo_root),
+            ),
+            (
+                "MODEL_CARD.md",
+                _path_from_registry(licensing["model_card_file"], repo_root=repo_root),
+            ),
+        ]
+        for notice in licensing.get("included_notices", []):
+            notice_path = _path_from_registry(notice, repo_root=repo_root)
+            members.append((f"notices/{notice_path.name}", notice_path))
+
+        provenance = (
+            json.dumps(
+                {
+                    "schema_version": "robot-sf-model-provenance.v1",
+                    "model_id": entry["model_id"],
+                    "licensing": licensing,
+                },
+                indent=2,
+                sort_keys=True,
+            ).encode("utf-8")
+            + b"\n"
+        )
+        provenance_info = tarfile.TarInfo("PROVENANCE.json")
+        provenance_info.size = len(provenance)
+        provenance_info.mtime = 0
+        archive.addfile(provenance_info, fileobj=io.BytesIO(provenance))
+
+        for member_name, member_path in members:
+            archive.add(member_path, arcname=member_name, recursive=False)
+    return bundle_path, bundle_path.name
 
 
 def _release_url(repo: str, tag: str, asset_name: str) -> str:
@@ -241,11 +378,21 @@ def _stage_assets(args: argparse.Namespace, registry_data: dict[str, Any]) -> di
             skipped.append({"model_id": model_id, "reason": str(error)})
             continue
 
+        licensing_issues = _validate_model_licensing(entry, repo_root=repo_root)
+        if licensing_issues:
+            raise ValueError(
+                "Model publication blocked by missing licensing evidence: "
+                + "; ".join(licensing_issues)
+            )
+
         asset_name = _asset_name_for(entry, source_path)
         staged_model = staging_dir / asset_name
         _copy_model_asset(source_path, staged_model)
         sha256 = _sha256(staged_model)
         size_bytes = staged_model.stat().st_size
+        legal_bundle, legal_bundle_name = _write_legal_bundle(
+            entry, staging_dir=staging_dir, repo_root=repo_root
+        )
         metadata_name = f"{_safe_component(model_id)}-metadata.json"
         metadata_path = staging_dir / metadata_name
         metadata = _model_metadata(
@@ -253,12 +400,14 @@ def _stage_assets(args: argparse.Namespace, registry_data: dict[str, Any]) -> di
             asset_name=asset_name,
             sha256=sha256,
             size_bytes=size_bytes,
+            legal_bundle_name=legal_bundle_name,
         )
         _write_text(metadata_path, json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
         checksum_lines.append(f"{sha256}  {asset_name}")
+        checksum_lines.append(f"{_sha256(legal_bundle)}  {legal_bundle_name}")
         checksum_lines.append(f"{_sha256(metadata_path)}  {metadata_name}")
-        upload_assets.extend([str(staged_model), str(metadata_path)])
+        upload_assets.extend([str(staged_model), str(legal_bundle), str(metadata_path)])
         release_pointer = {
             "repo": args.repo,
             "tag": args.tag,
@@ -267,6 +416,7 @@ def _stage_assets(args: argparse.Namespace, registry_data: dict[str, Any]) -> di
             "sha256": sha256,
             "size_bytes": size_bytes,
             "metadata_asset": metadata_name,
+            "legal_bundle": legal_bundle_name,
             "published_at_utc": now,
         }
         registry_updates[model_id] = release_pointer
@@ -276,6 +426,7 @@ def _stage_assets(args: argparse.Namespace, registry_data: dict[str, Any]) -> di
                 "source_path": str(source_path),
                 "asset_name": asset_name,
                 "metadata_asset": metadata_name,
+                "legal_bundle": legal_bundle_name,
                 "sha256": sha256,
                 "size_bytes": size_bytes,
                 "release_asset_url": release_pointer["url"],

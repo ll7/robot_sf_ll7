@@ -30,6 +30,8 @@
  * <http://gamma.cs.unc.edu/RVO2/>
  */
 
+/* Robot SF local modification: collaboration-coefficient API and behavior. */
+
 #include "RVOSimulator.h"
 
 #include "Agent.h"

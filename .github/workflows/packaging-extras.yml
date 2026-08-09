@@ -5,6 +5,11 @@ on:
     paths:
       - "pyproject.toml"
       - "uv.lock"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
+      - "fast-pysf/LICENSE"
+      - "third_party/python-rvo2/LICENSE"
+      - "third_party/socnavbench/LICENSE"
       - "robot_sf/common/optional_import.py"
       - "robot_sf/common/__init__.py"
       - "robot_sf/benchmark/doctor.py"
@@ -12,6 +17,8 @@ on:
       - "robot_sf/nav/osm_map_builder.py"
       - "robot_sf/render/**"
       - "scripts/validation/wheel_install_smoke.sh"
+      - "scripts/tools/check_distribution_licenses.py"
+      - "tests/tools/test_check_distribution_licenses.py"
       - ".github/workflows/packaging-extras.yml"
   workflow_dispatch:
 
@@ -54,12 +61,20 @@ jobs:
       - name: Free runner disk space
         run: bash scripts/dev/free_github_runner_space.sh
 
-      - name: Build Robot SF wheel
+      - name: Build Robot SF wheel and sdist
         run: uv build
 
       - name: Build vendored ORCA companion wheel
         if: matrix.extra == 'all'
         run: python -m pip wheel --no-deps --wheel-dir dist third_party/python-rvo2
+
+      - name: Check distribution licenses
+        if: matrix.extra != 'all'
+        run: python scripts/tools/check_distribution_licenses.py dist
+
+      - name: Check distribution licenses and pyrvo2 companion
+        if: matrix.extra == 'all'
+        run: python scripts/tools/check_distribution_licenses.py dist --require-pyrvo2
 
       - name: Install and probe isolated extra
         env:

@@ -29,7 +29,8 @@
     },
     "runner_command": "uv run python scripts/adversarial/run_proposal_vs_random_issue_2921.py --contract configs/adversarial/issue_3275_same_planner_contract.json --expected-candidate-manifest-hashes docs/context/evidence/issue_3275_same_planner_held_out/candidate_manifest_bindings.v2.json --evaluation-outcomes docs/context/evidence/issue_3275_same_planner_held_out/independent_outcomes.json",
     "runner_exit_code": 0,
-    "runner_state": "blocked"
+    "runner_state": "blocked",
+    "runner_state_note": "blocked only because independent_outcomes.json is intentionally absent (no native outcomes fabricated); the binding-matched run without the outcomes path is state=active (see frozen_input_verification.candidate_pool_reproduction_evidence)"
   },
   "candidate_manifest_lineage": {
     "candidates": [
@@ -557,9 +558,24 @@
     "scenario_family": "classic_cross_trap_medium"
   },
   "frozen_input_verification": {
-    "arm_overlap_ids": [],
-    "arm_overlap_policy": "disjoint_by_candidate",
-    "candidate_pool_reproduces_frozen_arms": false,
+    "candidate_pool_reproduces_frozen_arms": true,
+    "candidate_pool_reproduction_evidence": {
+      "arm_overlap_ids": [],
+      "arm_overlap_policy": "disjoint_by_candidate",
+      "external_binding_available": true,
+      "external_binding_reason": "ok",
+      "proposal_ids_head": [
+        "pool_39",
+        "pool_44",
+        "pool_57"
+      ],
+      "random_ids_head": [
+        "pool_12",
+        "pool_28",
+        "pool_30"
+      ],
+      "runner_state": "active"
+    },
     "check_contract_ok": true,
     "contract_path": "configs/adversarial/issue_3275_same_planner_contract.json",
     "contract_sha256_expected": "2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8",
@@ -567,7 +583,7 @@
     "contract_sha256_observed": "2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8",
     "frozen_execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
     "frozen_execution_commit_is_ancestor_of_head": true,
-    "head_commit": "05b552353cc1bc553bc1b121392eaee4cb9f323d",
+    "head_commit": "92f69aa5bfb8a45aaf4d3dbd3029be4af7684992",
     "pre_correction_archive_sha256_expected": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
     "pre_correction_archive_sha256_observed": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
     "recertification_artifact_sha256_expected": "0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe",
@@ -580,7 +596,7 @@
   "lineage": {
     "archive_registration_pr": 5905,
     "certified_archive_issue": 5305,
-    "code_head_commit": "05b552353cc1bc553bc1b121392eaee4cb9f323d",
+    "code_head_commit": "92f69aa5bfb8a45aaf4d3dbd3029be4af7684992",
     "contract_issue": 6103,
     "environment": {
       "evidence_directory": "docs/context/evidence/issue_3275_same_planner_held_out",

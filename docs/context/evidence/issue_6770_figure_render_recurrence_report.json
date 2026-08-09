@@ -6,7 +6,7 @@
       "declared_outputs": [
         "docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15"
       ],
-      "duration_seconds": 1.119,
+      "duration_seconds": 3.177,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -25,7 +25,7 @@
         "docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.json",
         "docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.md"
       ],
-      "duration_seconds": 0.165,
+      "duration_seconds": 0.369,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -43,7 +43,7 @@
       "declared_outputs": [
         "docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15"
       ],
-      "duration_seconds": 1.118,
+      "duration_seconds": 3.026,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -61,7 +61,7 @@
       "declared_outputs": [
         "docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15"
       ],
-      "duration_seconds": 1.068,
+      "duration_seconds": 2.929,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -79,7 +79,7 @@
       "declared_outputs": [
         "docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16"
       ],
-      "duration_seconds": 1.118,
+      "duration_seconds": 3.122,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -97,7 +97,7 @@
       "declared_outputs": [
         "docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16"
       ],
-      "duration_seconds": 1.067,
+      "duration_seconds": 2.972,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -115,7 +115,7 @@
       "declared_outputs": [
         "docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/decision_packet.json"
       ],
-      "duration_seconds": 0.114,
+      "duration_seconds": 0.165,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -133,7 +133,7 @@
       "declared_outputs": [
         "docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/reconciled_fixture_reconciliation.jsonl"
       ],
-      "duration_seconds": 0.165,
+      "duration_seconds": 0.164,
       "error_reason": null,
       "exit_code": 0,
       "expected_exit_code": 0,
@@ -258,18 +258,18 @@
   ],
   "executed_count": 9,
   "failed_count": 0,
-  "generated_at": "2026-08-09T03:35:29+00:00",
+  "generated_at": "2026-08-09T05:53:03+00:00",
   "issue": 6770,
   "negative_control_count": 1,
   "negative_control_warnings": [],
   "passed_count": 9,
   "registry_path": "docs/context/figure_render_registry.v1.yaml",
   "registry_source_commit": "250e8563e6127ebcd4a695b284e535ef3075854a",
-  "report_path": "/home/luttkule/git/robot_sf_ll7.worktrees/lease-6770-501b75d70f74/docs/context/evidence/issue_6770_figure_render_recurrence_report.json",
+  "report_path": "docs/context/evidence/issue_6770_figure_render_recurrence_report.json",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "route_evidence_only": true,
   "schema": "issue_6770_figure_render_recurrence_report.v1",
-  "source_commit": "05b552353cc1bc553bc1b121392eaee4cb9f323d",
+  "source_commit": "f5d3203ca18cfc4678a8ca0ebf544bcdbb11fc14",
   "strace_used": true,
   "structural_error": null,
   "total_entries": 31,

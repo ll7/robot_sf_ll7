@@ -233,6 +233,31 @@ def _recommended_context_pack(number: int, labels: list[str], title: str) -> str
     return f"docs/context/issue_{number}* if present, otherwise docs/context/INDEX.md"
 
 
+def _validate_explicit_rest_issue(issue: Any, *, requested_number: int) -> str | None:
+    """Return an error for malformed successful REST issue payloads."""
+    if not isinstance(issue, dict):
+        return "REST issue response was not an object"
+    issue_number = issue.get("number")
+    if type(issue_number) is not int or issue_number < 1:
+        return "REST issue response has no positive integer number"
+    if issue_number != requested_number:
+        return (
+            f"REST issue response number {issue_number} does not match requested issue "
+            f"{requested_number}"
+        )
+    for field in ("title", "body", "state", "url"):
+        if not isinstance(issue.get(field), str):
+            return f"REST issue response field {field!r} is not a string"
+    state = issue["state"].strip().upper()
+    if state not in {"OPEN", "CLOSED"}:
+        return f"REST issue response has unknown state {issue['state']!r}"
+    for field in ("labels", "assignees"):
+        values = issue.get(field)
+        if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+            return f"REST issue response field {field!r} is not a list of strings"
+    return None
+
+
 def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict[str, Any]:
     """Fetch one issue and return a compact orchestration snapshot.
 
@@ -242,12 +267,31 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
     quota is exhausted but the REST API is healthy (issue #6845). Missing,
     malformed, and REST-failed responses remain fail-closed error rows.
     """
-    issue = gh_issue_rest.fetch_issue(number, repo=repo)
+    try:
+        issue = gh_issue_rest.fetch_issue(number, repo=repo)
+    except (TypeError, ValueError, KeyError) as exc:
+        return {
+            "number": number,
+            "status": "error",
+            "error": f"REST issue read returned malformed data: {exc}",
+        }
+    if not isinstance(issue, dict):
+        return {
+            "number": number,
+            "status": "error",
+            "error": "REST issue read returned a non-object response",
+        }
     if issue.get("status") != "ok":
         return {
             "number": number,
             "status": "error",
             "error": str(issue.get("error", "REST issue read failed")),
+        }
+    if error := _validate_explicit_rest_issue(issue, requested_number=number):
+        return {
+            "number": number,
+            "status": "error",
+            "error": f"REST issue read returned malformed data: {error}",
         }
     # The REST reader already normalizes labels/assignees to sorted name lists and
     # uppercases state; re-sorting and re-applying ``_issue_state`` keep the

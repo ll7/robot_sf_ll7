@@ -249,6 +249,49 @@ def test_snapshot_issues_reads_rest_when_graphql_quota_exhausted() -> None:
     mock_gh.assert_not_called()
 
 
+def test_snapshot_issues_fails_closed_on_malformed_rest_success_payload() -> None:
+    """A status=ok response must contain the complete normalized issue contract."""
+    rest_issue = {
+        "status": "ok",
+        "title": "malformed explicit response",
+        "body": "body",
+        "state": "OPEN",
+        "url": "https://github.test/issues/6819",
+        "labels": [],
+        "assignees": [],
+    }
+    with (
+        patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest,
+        patch("scripts.dev.snapshot_issue_batch.status_issue") as claim,
+    ):
+        mock_rest.fetch_issue.return_value = rest_issue
+        payload = snapshot_issues([6819], repo="ll7/robot_sf_ll7", body_limit=300, remote="origin")
+
+    row = payload["issues"][0]
+    assert row == {
+        "number": 6819,
+        "status": "error",
+        "error": "REST issue read returned malformed data: REST issue response has no positive integer number",
+    }
+    claim.assert_not_called()
+
+
+def test_snapshot_issues_fails_closed_when_rest_reader_raises_value_error() -> None:
+    """A normalization ValueError must become an error row rather than escape the CLI."""
+    with (
+        patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest,
+        patch("scripts.dev.snapshot_issue_batch.status_issue") as claim,
+    ):
+        mock_rest.fetch_issue.side_effect = ValueError("invalid issue number")
+        payload = snapshot_issues([6819], repo="ll7/robot_sf_ll7", body_limit=300, remote="origin")
+
+    row = payload["issues"][0]
+    assert row["status"] == "error"
+    assert row["number"] == 6819
+    assert "invalid issue number" in row["error"]
+    claim.assert_not_called()
+
+
 def test_snapshot_claimable_issues_fail_closed_for_closed_and_unknown_state() -> None:
     """Claimable list rows must fail closed when gh returns non-open or missing states."""
     issue_list = [

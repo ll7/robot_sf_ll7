@@ -13,9 +13,12 @@ import pytest
 
 from robot_sf.benchmark.continual_adaptation_campaign import (
     ContinualAdaptationCampaignError,
-    build_continual_adaptation_evidence,
+    ContinualAdaptationEvidenceBundle,
     prepare_promotion_manifest,
     validate_promotion_readiness,
+)
+from robot_sf.benchmark.continual_adaptation_campaign import (
+    build_continual_adaptation_evidence as _build_continual_adaptation_evidence,
 )
 from robot_sf.research.continual_adaptation_protocol import (
     CONTINUAL_ADAPTATION_RUN_SCHEMA_VERSION,
@@ -23,6 +26,10 @@ from robot_sf.research.continual_adaptation_protocol import (
     check_continual_adaptation_run,
     derive_adapted_policy_identifier,
     load_continual_adaptation_run,
+)
+from robot_sf.research.ppo_continual_adaptation_manifest import (
+    PPOContinualAdaptationSpec,
+    build_ppo_continual_adaptation_manifest,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -36,6 +43,18 @@ _WRAPPER_DIGEST = "b" * 64
 
 def _checksum(digest: str = _BASELINE_DIGEST) -> dict:
     return {"algorithm": "sha256", "digest": digest}
+
+
+def _build_evidence(
+    manifest: dict,
+    **kwargs: object,
+) -> ContinualAdaptationEvidenceBundle:
+    """Build evidence from exact deterministic integration-fixture bytes."""
+    options = dict(kwargs)
+    options.setdefault("nominal_content", b'{"result_type":"nominal"}\n')
+    options.setdefault("shift_content", b'{"result_type":"shift"}\n')
+    options.setdefault("forgetting_content", b'{"result_type":"forgetting"}\n')
+    return _build_continual_adaptation_evidence(manifest, **options)
 
 
 def _manifest() -> dict:
@@ -85,7 +104,7 @@ def _manifest() -> dict:
 def test_campaign_evidence_satisfies_protocol_promotion_gate() -> None:
     """End-to-end: campaign evidence wired into a manifest passes the protocol gate."""
     manifest = _manifest()
-    evidence = build_continual_adaptation_evidence(
+    evidence = _build_evidence(
         manifest,
         nominal_uri="runs/nominal.json",
         shift_uri="runs/shift.json",
@@ -106,7 +125,7 @@ def test_evidence_bundle_names_derived_identifier_accepted_by_validator() -> Non
     """The evidence bundle policy_identifier matches the validator-derived identifier."""
     manifest = _manifest()
     derived = derive_adapted_policy_identifier(manifest)
-    evidence = build_continual_adaptation_evidence(
+    evidence = _build_evidence(
         manifest,
         nominal_uri="runs/nominal.json",
         shift_uri="runs/shift.json",
@@ -123,8 +142,8 @@ def test_evidence_bundle_names_derived_identifier_accepted_by_validator() -> Non
 def test_fallback_execution_fails_closed_at_campaign_layer() -> None:
     """Fallback execution mode is rejected before reaching the protocol layer."""
     manifest = _manifest()
-    with pytest.raises(ContinualAdaptationCampaignError, match="fallback.*degraded"):
-        build_continual_adaptation_evidence(
+    with pytest.raises(ContinualAdaptationCampaignError, match="allowed native record"):
+        _build_evidence(
             manifest,
             nominal_uri="runs/nominal.json",
             shift_uri="runs/shift.json",
@@ -138,8 +157,8 @@ def test_fallback_execution_fails_closed_at_campaign_layer() -> None:
 def test_degraded_execution_fails_closed_at_campaign_layer() -> None:
     """Degraded execution mode is rejected before reaching the protocol layer."""
     manifest = _manifest()
-    with pytest.raises(ContinualAdaptationCampaignError, match="fallback.*degraded"):
-        build_continual_adaptation_evidence(
+    with pytest.raises(ContinualAdaptationCampaignError, match="allowed native record"):
+        _build_evidence(
             manifest,
             nominal_uri="runs/nominal.json",
             shift_uri="runs/shift.json",
@@ -150,10 +169,34 @@ def test_degraded_execution_fails_closed_at_campaign_layer() -> None:
         )
 
 
+def test_merged_ppo_manifest_generator_connects_to_metadata_bundle() -> None:
+    """The merged PPO manifest builder is a supported upstream source."""
+    manifest = build_ppo_continual_adaptation_manifest(
+        PPOContinualAdaptationSpec(
+            run_id="continual_adaptation_campaign_issue_6657",
+            issue=6657,
+        )
+    )
+    evidence = _build_evidence(
+        manifest,
+        nominal_uri="runs/nominal.json",
+        shift_uri="runs/shift.json",
+        forgetting_uri="runs/forgetting.json",
+        evidence_bundle_uri="evidence/bundle.yaml",
+        evidence_bundle_identifier="evidence_v1",
+    )
+    promoted = prepare_promotion_manifest(manifest, evidence)
+    report = check_continual_adaptation_run(promoted)
+
+    assert report.protocol_status == PROTOCOL_STATUS_VALID
+    assert report.promotion_ready is True
+    assert report.derived_adapted_policy_identifier != report.baseline_policy_identifier
+
+
 def test_validate_promotion_readiness_on_valid_manifest() -> None:
     """validate_promotion_readiness confirms a correctly wired manifest."""
     manifest = _manifest()
-    evidence = build_continual_adaptation_evidence(
+    evidence = _build_evidence(
         manifest,
         nominal_uri="runs/nominal.json",
         shift_uri="runs/shift.json",
@@ -175,6 +218,14 @@ def test_validate_promotion_readiness_on_incomplete_manifest() -> None:
     validation = validate_promotion_readiness(manifest)
     assert not validation.is_promotion_ready
     assert len(validation.blockers) > 0
+
+
+def test_experimental_manifest_is_valid_but_not_promotion_ready() -> None:
+    """A blocker-free experimental manifest must not be mislabeled ready."""
+    validation = validate_promotion_readiness(_manifest())
+
+    assert not validation.is_promotion_ready
+    assert validation.blockers == []
 
 
 def test_committed_fixture_passes_promotion_gate() -> None:

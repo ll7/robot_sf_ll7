@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6657_continual_adaptation_campaign/evidence_bundle.yaml",
-  "artifact_sha256": "ed444c2ca0051e3a0087a027d938d42b3a192984fa7f9e28feba8e1e3036ac85",
+  "artifact_sha256": "45210b4679d0352f99093a1b86b591a7b39b18ca2a4f54ad2cfcf92f659411bb",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

@@ -16,6 +16,7 @@ from scripts.dev.check_version_alignment import (
     git_all_tags,
     latest_release_tag,
     load_citation_version,
+    load_release_preparation_version,
     numeric_version_from_tag,
 )
 
@@ -138,6 +139,29 @@ def test_evaluate_aligned_when_head_untagged() -> None:
     assert problems == []
 
 
+def test_evaluate_accepts_explicit_untagged_release_preparation() -> None:
+    """A marked future target may stage metadata without authorizing publication."""
+    problems = evaluate(
+        head_tags=[],
+        all_tags=["0.0.3"],
+        package_version="0.0.4.dev2+gdeadbee",
+        citation_version="0.0.5",
+        release_preparation_version="0.0.5",
+    )
+    assert problems == []
+
+
+def test_evaluate_rejects_unmarked_future_citation() -> None:
+    """A future citation version remains drift unless the marker is explicit."""
+    problems = evaluate(
+        head_tags=[],
+        all_tags=["0.0.3"],
+        package_version="0.0.4.dev2+gdeadbee",
+        citation_version="0.0.5",
+    )
+    assert any("CITATION.cff" in problem for problem in problems)
+
+
 def test_evaluate_flags_package_not_derived_from_tag() -> None:
     """A build whose version ignores the HEAD tag is drift."""
     problems = evaluate(
@@ -218,6 +242,7 @@ def test_repo_citation_matches_latest_release_tag() -> None:
         pytest.skip("no full release tags available in this checkout")
 
     citation_version = load_citation_version(DEFAULT_CITATION)
+    preparation_version = load_release_preparation_version()
     # head_tags=[] scopes this guard to CITATION alignment only, independent of
     # whether HEAD currently sits on a release tag or of the installed package.
     problems = evaluate(
@@ -225,5 +250,6 @@ def test_repo_citation_matches_latest_release_tag() -> None:
         all_tags=all_tags,
         package_version=numeric_version_from_tag(latest),
         citation_version=citation_version,
+        release_preparation_version=preparation_version,
     )
     assert problems == [], problems

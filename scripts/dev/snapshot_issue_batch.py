@@ -82,13 +82,33 @@ def _assignees(issue: dict[str, Any]) -> list[str]:
     )
 
 
+def _issue_state(issue: dict[str, Any]) -> str:
+    """Return the normalized GitHub issue state, or an empty string when unknown."""
+    state = issue.get("state")
+    if not isinstance(state, str):
+        return ""
+    return state.strip().upper()
+
+
+def _non_open_state_classification(state: str) -> tuple[str, str] | None:
+    """Return a fail-closed classification for missing or non-open issue state."""
+    if not state:
+        return "state_unknown", "issue state missing or unknown; skip autonomous claim"
+    if state != "OPEN":
+        return "closed", f"issue state is {state}; skip autonomous claim"
+    return None
+
+
 def _issue_classification(
     *,
     assignees: list[str],
     claim: dict[str, Any],
     labels: list[str],
+    state: str,
 ) -> tuple[str, str]:
     """Return a short claimability classification and rationale."""
+    if state_classification := _non_open_state_classification(state):
+        return state_classification
     if assignees:
         return "assigned", "assigned; skip auto-claim"
     if _is_blocked_external_issue(labels):
@@ -237,18 +257,20 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
     labels = _labels(issue)
     assignees = _assignees(issue)
+    state = _issue_state(issue)
     claim = status_issue(number, remote=remote)
     classification, reason = _issue_classification(
         assignees=assignees,
         claim=claim,
         labels=labels,
+        state=state,
     )
     excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
     return {
         "number": issue.get("number", number),
         "status": "ok",
         "title": issue.get("title", ""),
-        "state": issue.get("state", ""),
+        "state": state,
         "url": issue.get("url", ""),
         "labels": labels,
         "assignees": assignees,
@@ -275,6 +297,7 @@ def _snapshot_from_issue_list(
 
     labels = _labels(issue)
     assignees = _assignees(issue)
+    state = _issue_state(issue)
     claim = (
         claim_statuses.get(number)
         if claim_statuses is not None
@@ -293,12 +316,13 @@ def _snapshot_from_issue_list(
         assignees=assignees,
         claim=claim,
         labels=labels,
+        state=state,
     )
     return {
         "number": number,
         "status": "ok",
         "title": issue.get("title", ""),
-        "state": issue.get("state", ""),
+        "state": state,
         "url": issue.get("url", ""),
         "labels": labels,
         "assignees": assignees,

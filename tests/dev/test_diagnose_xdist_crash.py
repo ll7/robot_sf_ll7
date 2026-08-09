@@ -191,6 +191,34 @@ def test_render_diagnostic_includes_runtime_fingerprint_and_issue() -> None:
     assert "fail-closed" in rendered
 
 
+def test_render_diagnostic_distinguishes_one_xdist_worker_from_true_serial() -> None:
+    """One xdist worker and no-xdist serial execution must never be conflated."""
+    runtime = dxc.RuntimeSnapshot("3.13.0", "Linux", "x86_64", 32)
+    one_xdist_worker = dxc.build_diagnostic(
+        log_text="Segmentation fault\n",
+        requested_workers="1",
+        dist_mode="load",
+        execution_mode="xdist",
+        runtime=runtime,
+    )
+    true_serial = dxc.build_diagnostic(
+        log_text="2 failed, 98 passed\n",
+        requested_workers="1",
+        dist_mode="load",
+        execution_mode="no-xdist",
+        runtime=runtime,
+        serialized_ok=False,
+    )
+
+    xdist_rendered = dxc.render_diagnostic(one_xdist_worker)
+    serial_rendered = dxc.render_diagnostic(true_serial)
+    assert "pytest-xdist with one worker (-n 1" in xdist_rendered
+    assert "in-process serial pytest" in serial_rendered
+    assert "pytest-xdist disabled; no -n/--dist flags" in serial_rendered
+    assert "fail-closed" in serial_rendered
+    assert true_serial.to_dict()["execution_mode"] == "no-xdist"
+
+
 def test_render_diagnostic_no_crash_still_actionable() -> None:
     """With no crash signature, the message must not claim an env crash."""
     diag = dxc.build_diagnostic(
@@ -259,6 +287,33 @@ def test_cli_json_output_is_parsable() -> None:
     assert "abort" in payload["crash_classes"]
     assert payload["is_environment_crash"] is True
     assert "runtime" in payload
+
+
+def test_cli_json_reports_true_no_xdist_execution() -> None:
+    """The CLI schema should preserve the caller's true serial execution mode."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--json",
+            "--log-text",
+            "2 failed, 98 passed",
+            "--requested-workers",
+            "1",
+            "--execution-mode",
+            "no-xdist",
+            "--serialized-ok",
+            "false",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["execution_mode"] == "no-xdist"
+    assert payload["serialized_ok"] is False
 
 
 def test_cli_reads_log_file(tmp_path) -> None:

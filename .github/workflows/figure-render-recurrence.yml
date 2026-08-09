@@ -1,0 +1,80 @@
+name: Figure-render recurrence guard
+
+# Isolated recurrence guard for recurrence-eligible figure-render commands (issue #6770).
+#
+# Executes ONLY the entries marked ``recurrence_eligible: true`` in the canonical v1 figure-render
+# registry (issue #6769) in isolated temporary output roots, enforcing committed-input hashes,
+# timeouts, declared-output presence, no extra/escaped writes, and a minimal credential-free
+# environment. The job is blocking: it fails when any eligible command drifts, escapes its output
+# root, times out, or exits with an unexpected code. Excluded entries are never executed.
+#
+# Network/scheduler-credential boundary: the job passes no secrets and sets UV_OFFLINE so uv never
+# reaches the network; the guard additionally builds a minimal credential-free environment for every
+# executed command (no SLURM/cloud/token variables are inherited). GitHub-hosted runners retain
+# ambient network, but the guard's commands are contracted to run offline from committed inputs, so a
+# command that requires network access is treated as a recurrence failure rather than silently
+# allowed. The claim boundary is workflow recurrence + write containment only.
+
+on:
+  pull_request:
+    paths:
+      - "docs/context/figure_render_registry.v1.yaml"
+      - "scripts/dev/check_figure_render_recurrence.py"
+      - "scripts/dev/build_figure_render_registry.py"
+      - "tests/dev/test_check_figure_render_recurrence.py"
+      - "docs/context/evidence/issue_6770_figure_render_recurrence_report.json"
+      - "docs/context/catalog.yaml"
+      - ".github/workflows/figure-render-recurrence.yml"
+  schedule:
+    - cron: "23 5 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  figure-render-recurrence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Ensure strace (required for deterministic write containment)
+        run: |
+          if ! command -v strace >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y strace
+          fi
+          strace --version
+
+      - name: Verify the registry drift gate (read-only input)
+        run: uv run python scripts/dev/build_figure_render_registry.py --check
+
+      - name: Run the recurrence guard (no secrets; UV_OFFLINE blocks uv network access)
+        env:
+          UV_OFFLINE: "1"
+        run: |
+          set -o pipefail
+          uv run python scripts/dev/check_figure_render_recurrence.py \
+            --registry docs/context/figure_render_registry.v1.yaml \
+            --report docs/context/evidence/issue_6770_figure_render_recurrence_report.json \
+            2>&1 | tee output/figure_render_recurrence.log
+
+      - name: Upload recurrence log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: figure-render-recurrence-log
+          path: output/figure_render_recurrence.log
+          if-no-files-found: warn

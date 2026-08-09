@@ -35,9 +35,13 @@ Findings are keyed by ``(path, code)``:
 * A file whose findings are fully remediated disappears from the current report;
   ``--write-baseline`` drops it so the baseline only ever shrinks.
 
-A brand-new evidence file that is integrity-clean never trips the gate (it has
-no findings), so normal evidence growth is unrestricted; only new *findings*
-are blocked.
+A brand-new evidence file that is integrity-clean never trips the *findings*
+gate (it has no findings), so integrity growth is unrestricted. However, the
+baseline also records an ``evidence_tree`` manifest (issue #6839): adding or
+removing any file under ``docs/context/evidence/`` without refreshing the
+baseline fails the gate on the causing PR, so a stale hand-committed baseline
+can never redden main after merge. The fix is one command,
+``--write-baseline``, which the failure message names.
 
 Exit codes
 ----------
@@ -66,6 +70,7 @@ The committed baseline lives at
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -82,6 +87,10 @@ DEFAULT_BASELINE = Path("scripts/validation/evidence_registry_baseline.json")
 DEFAULT_LINTER = Path("scripts/tools/lint_evidence_registry.py")
 DEFAULT_REGISTRY_ROOT = Path("docs/context/evidence")
 DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions.yaml")
+# Evidence-file suffixes the registry linter scans (scripts/tools/lint_evidence_registry.py).
+# The manifest tracks exactly this set so a baseline refresh stays a pure function of the
+# evidence tree the linter actually audits (issue #6839).
+EVIDENCE_SUFFIXES = (".csv", ".json", ".md", ".yaml", ".yml")
 
 
 def _repo_root() -> Path:
@@ -177,15 +186,88 @@ def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:
     return {path: dict(sorted(codes.items())) for path, codes in sorted(by_path.items())}
 
 
-def build_baseline_payload(report: dict[str, Any]) -> dict[str, Any]:
-    """Build the versioned baseline JSON payload from a linter report."""
+def evidence_tree_manifest(registry_root: Path) -> dict[str, Any]:
+    """Return a compact, deterministic manifest of the audited evidence files.
+
+    The manifest is keyed on the *sorted set of registry-relative evidence file
+    paths* -- exactly the ``.json/.yaml/.yml/.md/.csv`` documents the registry
+    linter scans. It is path-based rather than content-based on purpose: adding
+    or removing any evidence file changes the manifest (so a baseline refresh
+    is required and stays a pure function of the evidence tree), while editing
+    an existing file's contents is left to the findings ratchet, which already
+    catches net-new integrity findings. This closes the issue #6839 gap: a PR
+    that adds or removes files under ``docs/context/evidence/`` without
+    refreshing the baseline now fails its own ratchet gate pre-merge instead of
+    reddening main after merge.
+    """
+    root = registry_root.resolve()
+    files: list[str] = []
+    if root.exists():
+        files = sorted(
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+            if path.is_file() and path.suffix.lower() in EVIDENCE_SUFFIXES
+        )
+    joined = "\n".join(files)
+    return {
+        "count": len(files),
+        "sha256": hashlib.sha256(joined.encode("utf-8")).hexdigest(),
+        "file_suffixes": list(EVIDENCE_SUFFIXES),
+    }
+
+
+def check_evidence_tree_manifest(
+    current: dict[str, Any],
+    baseline: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    """Return ``(failures, notices)`` for the evidence-tree manifest ratchet.
+
+    When the committed baseline carries an ``evidence_tree`` manifest, the live
+    evidence tree must match it exactly: any add/remove/rename of an evidence
+    file without a baseline refresh is a hard failure, so the drift is
+    attributed to the causing PR pre-merge (issue #6839). A baseline that
+    predates manifest tracking (no ``evidence_tree`` field) is advisory -- it
+    cannot enforce the manifest, but it does not weaken the findings ratchet.
+    """
+    baseline_tree = baseline.get("evidence_tree")
+    if not isinstance(baseline_tree, dict) or "sha256" not in baseline_tree:
+        return [], [
+            "baseline has no evidence_tree manifest; regenerate it with "
+            "`scripts/dev/evidence_registry_ratchet.py --write-baseline` to "
+            "enable add/remove drift detection for evidence files."
+        ]
+    if baseline_tree.get("sha256") != current.get("sha256"):
+        return [
+            (
+                "evidence tree changed without a matching baseline refresh: "
+                f"{current.get('count')} evidence files now vs "
+                f"{baseline_tree.get('count')} in the baseline. A PR that adds "
+                "or removes files under docs/context/evidence/ must refresh "
+                "scripts/validation/evidence_registry_baseline.json in the same "
+                "change so the baseline stays a machine-generated function of "
+                "the evidence tree (issue #6839)."
+            )
+        ], []
+    return [], []
+
+
+def build_baseline_payload(
+    report: dict[str, Any],
+    registry_root: Path | None = None,
+) -> dict[str, Any]:
+    """Build the versioned baseline JSON payload from a linter report.
+
+    When ``registry_root`` is provided, the payload records an ``evidence_tree``
+    manifest of the audited evidence files so the ratchet can fail a PR that
+    adds or removes evidence files without refreshing the baseline (issue #6839).
+    """
     findings_by_path = aggregate(report)
     by_code: Counter[str] = Counter()
     for codes in findings_by_path.values():
         for code, count in codes.items():
             by_code[code] += count
     summary = report.get("summary", {})
-    return {
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "linter": DEFAULT_LINTER.as_posix(),
@@ -200,7 +282,11 @@ def build_baseline_payload(report: dict[str, Any]) -> dict[str, Any]:
             "refresh this baseline with "
             "`scripts/dev/evidence_registry_ratchet.py --write-baseline` to "
             "lock in the reduction; the blocking evidence-registry workflow "
-            "enforces the ratchet on its configured paths."
+            "enforces the ratchet on its configured paths. The payload also "
+            "carries an evidence_tree manifest (issue #6839): adding or removing "
+            "any file under docs/context/evidence/ without refreshing this "
+            "baseline fails the ratchet on the causing PR, so a stale baseline "
+            "can never redden main after merge."
         ),
         "summary": {
             "total_findings": int(summary.get("findings", 0)),
@@ -209,6 +295,9 @@ def build_baseline_payload(report: dict[str, Any]) -> dict[str, Any]:
         },
         "findings_by_path": findings_by_path,
     }
+    if registry_root is not None:
+        payload["evidence_tree"] = evidence_tree_manifest(registry_root)
+    return payload
 
 
 def load_baseline(path: Path) -> dict[str, Any]:
@@ -353,16 +442,15 @@ def _report_check(
     for notice in notices:
         print(f"NOTICE: {notice}")
     if failures:
-        print(
-            "\nevidence-registry ratchet FAILED (net-new integrity findings):",
-            file=sys.stderr,
-        )
+        print("\nevidence-registry ratchet FAILED:", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         print(
-            "\nRemediate the new findings, or refresh the baseline with "
-            "`scripts/dev/evidence_registry_ratchet.py --write-baseline` if the "
-            "increase is intentional and reviewed.",
+            "\nFix: regenerate the baseline from a full-history checkout with the "
+            "single command\n"
+            "    uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline\n"
+            "then commit scripts/validation/evidence_registry_baseline.json in this PR. "
+            "The baseline is derived data -- never hand-edit it (issue #6839).",
             file=sys.stderr,
         )
         return 1
@@ -386,15 +474,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_aggregate(report)
         return 0
 
-    payload = build_baseline_payload(report)
+    registry_root = repo_root / DEFAULT_REGISTRY_ROOT
 
     if args.write_baseline:
+        payload = build_baseline_payload(report, registry_root)
         baseline_path.parent.mkdir(parents=True, exist_ok=True)
         write_json(baseline_path, payload)
+        manifest = payload["evidence_tree"]
         print(
             f"Wrote evidence-registry baseline to {baseline_path}: "
             f"{payload['summary']['total_findings']} findings across "
-            f"{payload['summary']['files_with_findings']} files."
+            f"{payload['summary']['files_with_findings']} files; "
+            f"evidence_tree manifest tracks {manifest['count']} evidence files."
         )
         return 0
 
@@ -407,7 +498,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     baseline = load_baseline(baseline_path)
-    failures, notices = check_against_baseline(aggregate(report), baseline)
+    findings_failures, notices = check_against_baseline(aggregate(report), baseline)
+    manifest_failures, manifest_notices = check_evidence_tree_manifest(
+        evidence_tree_manifest(registry_root), baseline
+    )
+    failures = [*findings_failures, *manifest_failures]
+    notices = [*notices, *manifest_notices]
     return _report_check(report, baseline, failures, notices)
 
 

@@ -15,6 +15,7 @@ the downward ratchet cannot silently re-drift by grandfathering unreviewed files
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -371,12 +372,21 @@ def test_committed_baseline_reproduces_from_write_baseline(
     ``test_strict_ci_policy_has_zero_active_findings_on_clean_main``. Only the byte-for-byte
     reproduce assertion is downgraded.
     """
-    regenerated = ratchet.build_baseline_payload(live_lint_report)
+    regenerated = ratchet.build_baseline_payload(live_lint_report, ROOT / "docs/context/evidence")
     committed = json.loads(BASELINE.read_text(encoding="utf-8"))
     # Compare the machine-generated fields (generated_at is a timestamp by design).
+    # evidence_tree is filesystem-derived (not git-state-derived), so it is stable
+    # across checkouts and is part of the machine-reproducible contract (issue #6839):
+    # the committed baseline must be exactly what --write-baseline regenerates.
     drifted = [
         key
-        for key in ("findings_by_path", "summary", "linter", "schema_version")
+        for key in (
+            "findings_by_path",
+            "summary",
+            "linter",
+            "schema_version",
+            "evidence_tree",
+        )
         if committed.get(key) != regenerated.get(key)
     ]
     if drifted:
@@ -527,3 +537,266 @@ def test_strict_ci_policy_has_zero_active_findings_on_clean_main(
     """
     assert live_strict_report["summary"]["findings"] == 0
     assert live_strict_report["issues"] == []
+
+
+# --- issue #6839: evidence-tree manifest ratchet (fail on the PR, not on main) --------
+
+
+def test_evidence_tree_manifest_is_path_based_and_stable(tmp_path: Path) -> None:
+    """The manifest keys on sorted evidence file paths, not file contents."""
+    root = tmp_path / "evidence"
+    (root / "bundle_a").mkdir(parents=True)
+    (root / "bundle_a" / "a.json").write_text('{"x": 1}', encoding="utf-8")
+    (root / "bundle_b").mkdir(parents=True)
+    (root / "bundle_b" / "b.md").write_text("# b\n", encoding="utf-8")
+    before = ratchet.evidence_tree_manifest(root)
+    assert before["count"] == 2
+
+    # Editing an existing file's contents must NOT change the manifest: that case
+    # is owned by the findings ratchet, which already catches net-new findings.
+    (root / "bundle_a" / "a.json").write_text('{"x": 2}', encoding="utf-8")
+    assert ratchet.evidence_tree_manifest(root) == before
+
+    # Adding or removing a file changes the manifest (so a refresh is required).
+    (root / "bundle_c.csv").write_text("c\n", encoding="utf-8")
+    after_add = ratchet.evidence_tree_manifest(root)
+    assert after_add["count"] == 3
+    assert after_add["sha256"] != before["sha256"]
+
+    (root / "bundle_c.csv").unlink()
+    assert ratchet.evidence_tree_manifest(root) == before
+
+
+def test_evidence_tree_manifest_handles_missing_root(tmp_path: Path) -> None:
+    """A missing registry root yields an empty, stable manifest."""
+    manifest = ratchet.evidence_tree_manifest(tmp_path / "does_not_exist")
+    assert manifest["count"] == 0
+    assert manifest["sha256"] == hashlib.sha256(b"").hexdigest()
+
+
+def test_check_evidence_tree_manifest_fails_when_tree_grew() -> None:
+    """A baseline manifest that no longer matches the live tree fails (issue #6839)."""
+    current = {"count": 2, "sha256": "live", "file_suffixes": []}
+    baseline = {"evidence_tree": {"count": 1, "sha256": "stale", "file_suffixes": []}}
+    failures, notices = ratchet.check_evidence_tree_manifest(current, baseline)
+    assert len(failures) == 1
+    assert "evidence tree changed without a matching baseline refresh" in failures[0]
+    assert "2 evidence files now vs 1 in the baseline" in failures[0]
+    assert notices == []
+
+
+def test_check_evidence_tree_manifest_passes_when_manifest_matches() -> None:
+    """A live manifest that matches the baseline manifest holds the gate."""
+    current = {"count": 5, "sha256": "same", "file_suffixes": []}
+    baseline = {"evidence_tree": {"count": 5, "sha256": "same", "file_suffixes": []}}
+    failures, notices = ratchet.check_evidence_tree_manifest(current, baseline)
+    assert failures == []
+    assert notices == []
+
+
+def test_check_evidence_tree_manifest_advisory_when_baseline_lacks_manifest() -> None:
+    """A baseline predating manifest tracking is advisory, not a hard failure."""
+    current = {"count": 5, "sha256": "live", "file_suffixes": []}
+    baseline: dict[str, object] = {"findings_by_path": {}}
+    failures, notices = ratchet.check_evidence_tree_manifest(current, baseline)
+    assert failures == []
+    assert len(notices) == 1
+    assert "evidence_tree manifest" in notices[0]
+
+
+def test_committed_baseline_evidence_tree_manifest_matches_live_tree() -> None:
+    """The committed baseline's evidence_tree manifest matches the live evidence tree.
+
+    Non-slow (no linter scan): enumerates the real evidence files (~1900) and
+    compares to the committed baseline manifest. This is the fast pre-merge
+    signal for issue #6839 -- it runs in the required fast-feedback gate on PRs,
+    so a PR that adds or removes evidence files without refreshing the baseline
+    fails here, on the PR, instead of reddening main after merge via the slow
+    findings check that only runs post-merge.
+    """
+    baseline = ratchet.load_baseline(BASELINE)
+    expected = baseline.get("evidence_tree")
+    assert isinstance(expected, dict) and expected.get("sha256"), (
+        "committed baseline is missing the evidence_tree manifest; regenerate with "
+        "`scripts/dev/evidence_registry_ratchet.py --write-baseline`."
+    )
+    live = ratchet.evidence_tree_manifest(ROOT / "docs/context/evidence")
+    assert live["sha256"] == expected["sha256"], (
+        "committed baseline evidence_tree manifest does not match the live evidence "
+        "tree: a PR added or removed files under docs/context/evidence/ without "
+        "refreshing scripts/validation/evidence_registry_baseline.json. Regenerate "
+        "with `scripts/dev/evidence_registry_ratchet.py --write-baseline`."
+    )
+    assert live["count"] == expected["count"]
+
+
+def test_pr_adding_evidence_files_without_baseline_refresh_fails_pre_merge(
+    tmp_path: Path,
+) -> None:
+    """Regression for issue #6733 / #6839: added evidence files, untouched baseline.
+
+    Reproduces the #6733 shape exactly: a PR adds a file under
+    docs/context/evidence/ and leaves scripts/validation/evidence_registry_baseline.json
+    untouched. The ratchet ``--check`` must exit 1 (fail pre-merge, not after merge
+    on clean main), name the regeneration command, and recover after a single
+    ``--write-baseline`` refresh. Uses a synthetic ``--report`` so it is fast
+    (non-slow) and runs in the required PR gate.
+    """
+    repo = tmp_path
+    evidence = repo / "docs" / "context" / "evidence" / "issue_6733_reexport"
+    evidence.mkdir(parents=True)
+    (evidence / "campaign.json").write_text('{"campaign_id": "issue_6733"}', encoding="utf-8")
+    report = {"summary": {"findings": 0}, "issues": []}
+    report_path = repo / "report.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    baseline = repo / "baseline.json"
+
+    write0 = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert write0.returncode == 0, write0.stderr
+    assert "evidence_tree manifest tracks 1 evidence files" in write0.stdout
+
+    # PR #6733 shape: add a NEW evidence file, leave the baseline untouched.
+    (evidence / "run_meta.json").write_text('{"campaign_id": "issue_6733"}', encoding="utf-8")
+    check_drift = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--check",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert check_drift.returncode == 1, (
+        "ratchet must FAIL pre-merge when evidence files are added without a "
+        f"baseline refresh.\nstdout:\n{check_drift.stdout}\nstderr:\n{check_drift.stderr}"
+    )
+    assert "evidence tree changed without a matching baseline refresh" in check_drift.stderr
+    assert "scripts/dev/evidence_registry_ratchet.py --write-baseline" in check_drift.stderr
+
+    # The one-command fix: refresh the baseline, then --check passes again.
+    refresh = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert refresh.returncode == 0, refresh.stderr
+    assert "evidence_tree manifest tracks 2 evidence files" in refresh.stdout
+
+    check_ok = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--check",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert check_ok.returncode == 0, check_ok.stderr
+    assert "ratchet passed" in check_ok.stdout
+
+
+def test_pr_removing_evidence_files_without_baseline_refresh_fails_pre_merge(
+    tmp_path: Path,
+) -> None:
+    """Removing an evidence file without a baseline refresh also fails pre-merge.
+
+    The issue #6839 acceptance criterion covers both adds and removes; this locks
+    the remove direction so a stale baseline cannot slip through either way.
+    """
+    repo = tmp_path
+    evidence = repo / "docs" / "context" / "evidence" / "bundle"
+    evidence.mkdir(parents=True)
+    (evidence / "keep.json").write_text("{}", encoding="utf-8")
+    (evidence / "drop.json").write_text("{}", encoding="utf-8")
+    report = {"summary": {"findings": 0}, "issues": []}
+    report_path = repo / "report.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    baseline = repo / "baseline.json"
+
+    write0 = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert write0.returncode == 0, write0.stderr
+
+    # Remove an evidence file, leave the baseline untouched.
+    (evidence / "drop.json").unlink()
+    check_drift = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--check",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert check_drift.returncode == 1, (
+        "ratchet must FAIL pre-merge when an evidence file is removed without a "
+        f"baseline refresh.\nstderr:\n{check_drift.stderr}"
+    )
+    assert "evidence tree changed without a matching baseline refresh" in check_drift.stderr

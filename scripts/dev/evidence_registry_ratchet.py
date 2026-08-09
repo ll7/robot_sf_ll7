@@ -360,6 +360,13 @@ def _validate_baseline_metadata(path: Path, data: dict[str, Any]) -> None:
                 f"Baseline {path} has an invalid 'summary.total_findings'; "
                 "expected a non-negative integer."
             )
+        actual_total = sum(sum(codes.values()) for codes in data["findings_by_path"].values())
+        if total_findings != actual_total:
+            raise ValueError(
+                f"Baseline {path} has inconsistent 'summary.total_findings': "
+                f"summary.total_findings={total_findings}, but findings_by_path contains "
+                f"{actual_total} findings."
+            )
 
     evidence_tree = data.get("evidence_tree")
     if evidence_tree is None:

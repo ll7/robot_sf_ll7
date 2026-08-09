@@ -193,6 +193,23 @@ def test_load_baseline_rejects_non_dict_findings(tmp_path: Path) -> None:
         ratchet.load_baseline(bad)
 
 
+def test_load_baseline_rejects_inconsistent_summary_total(tmp_path: Path) -> None:
+    """A baseline total must agree with the nested per-file finding counts."""
+    bad = tmp_path / "baseline.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "summary": {"total_findings": 2},
+                "findings_by_path": {"a.json": {"missing_commit": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="inconsistent 'summary.total_findings'"):
+        ratchet.load_baseline(bad)
+
+
 # --- CLI end-to-end (no live linter; uses --report) --------------------------------
 
 

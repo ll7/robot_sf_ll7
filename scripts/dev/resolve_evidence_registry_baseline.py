@@ -202,14 +202,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     manifest_failures, _ = ratchet.check_evidence_tree_manifest(
         ratchet.evidence_tree_manifest(registry_root), baseline
     )
-    if not manifest_failures:
+    has_manifest = isinstance(baseline.get("evidence_tree"), dict)
+    if not manifest_failures and has_manifest:
         print(
             "resolve: baseline is already current (findings and evidence_tree manifest match); "
             "nothing to regenerate."
         )
         return 0
 
-    # Safe to regenerate: findings reconcile, only the evidence_tree manifest is stale.
+    if not has_manifest:
+        print(
+            "resolve: baseline has no evidence_tree manifest; upgrading it from the current "
+            "evidence tree."
+        )
+
+    # Safe to regenerate: findings reconcile, and the evidence_tree manifest is stale or absent.
     return _regenerate_and_verify(ratchet, registry_root, baseline_path, report)
 
 

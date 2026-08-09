@@ -190,6 +190,33 @@ def test_resolver_reports_already_current_baseline(tmp_path: Path) -> None:
     assert "already current" in result.stdout
 
 
+def test_resolver_upgrades_legacy_baseline_without_manifest(tmp_path: Path) -> None:
+    """A legacy baseline is upgraded so future evidence-tree drift is protected."""
+    repo = tmp_path
+    evidence = repo / "docs" / "context" / "evidence" / "bundle"
+    evidence.mkdir(parents=True)
+    (evidence / "a.json").write_text("{}", encoding="utf-8")
+    report_path = _write_report(repo, [])
+    baseline = repo / "baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "summary": {"total_findings": 0},
+                "findings_by_path": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_resolver(repo, report_path, baseline)
+
+    assert result.returncode == 0, result.stderr
+    assert "has no evidence_tree manifest" in result.stdout
+    upgraded = json.loads(baseline.read_text(encoding="utf-8"))
+    assert upgraded["evidence_tree"]["count"] == 1
+
+
 def test_resolver_errors_on_missing_baseline(tmp_path: Path) -> None:
     """A missing baseline is an infra error (exit 2), not a silent regenerate."""
     repo = tmp_path

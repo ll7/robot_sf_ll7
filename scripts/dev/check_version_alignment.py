@@ -58,6 +58,11 @@ def numeric_version_from_tag(tag: str) -> str | None:
     return match.group("num") if match else None
 
 
+def exact_numeric_version(value: str) -> str | None:
+    """Return ``value`` only when it is an unprefixed exact ``X.Y.Z`` string."""
+    return value if numeric_version_from_tag(value) == value else None
+
+
 def is_release_candidate(tag: str) -> bool:
     """Return ``True`` for release-candidate tags (``rcX.Y.Z``).
 
@@ -157,8 +162,8 @@ def evaluate(
     else:
         latest_num = numeric_version_from_tag(latest)
         if base_version(citation_version) != latest_num:
-            citation_num = numeric_version_from_tag(citation_version)
-            preparation_num = numeric_version_from_tag(release_preparation_version or "")
+            citation_num = exact_numeric_version(citation_version)
+            preparation_num = exact_numeric_version(release_preparation_version or "")
             latest_key = tuple(int(part) for part in (latest_num or "0.0.0").split("."))
             citation_key = (
                 tuple(int(part) for part in citation_num.split(".")) if citation_num else None
@@ -280,9 +285,8 @@ def load_release_preparation_version(path: Path = DEFAULT_RELEASE_PREPARATION) -
     if data.get("publication_authorized") is not False:
         return None
     release_tag = data.get("release_tag")
-    release_version = (
-        numeric_version_from_tag(str(release_tag)) if release_tag is not None else None
-    )
+    release_value = str(release_tag) if release_tag is not None else ""
+    release_version = exact_numeric_version(release_value)
     if release_version is None:
         raise ValueError(f"{path} requires a numeric release_tag")
     return release_version

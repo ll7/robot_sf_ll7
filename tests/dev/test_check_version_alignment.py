@@ -13,6 +13,7 @@ from scripts.dev.check_version_alignment import (
     REPO_ROOT,
     base_version,
     evaluate,
+    exact_numeric_version,
     git_all_tags,
     latest_release_tag,
     load_citation_version,
@@ -90,6 +91,12 @@ def test_base_version(version: str, expected: str) -> None:
     assert base_version(version) == expected
 
 
+@pytest.mark.parametrize("value", ["v0.0.5", "rc0.0.5", " 0.0.5"])
+def test_exact_numeric_version_rejects_prefixed_or_padded_values(value: str) -> None:
+    """Preparation metadata must use an exact unprefixed X.Y.Z value."""
+    assert exact_numeric_version(value) is None
+
+
 def test_latest_release_tag_excludes_candidates() -> None:
     """rc tags are pre-releases and must not win the latest-release election."""
     tags = ["0.0.1", "0.0.2", "rc0.0.3", "v0.0.1", "artifact/foo"]
@@ -158,6 +165,19 @@ def test_evaluate_rejects_unmarked_future_citation() -> None:
         all_tags=["0.0.3"],
         package_version="0.0.4.dev2+gdeadbee",
         citation_version="0.0.5",
+    )
+    assert any("CITATION.cff" in problem for problem in problems)
+
+
+@pytest.mark.parametrize("value", ["v0.0.5", "rc0.0.5"])
+def test_evaluate_rejects_prefixed_preparation_target(value: str) -> None:
+    """The staged-target exception accepts only an exact full-release value."""
+    problems = evaluate(
+        head_tags=[],
+        all_tags=["0.0.3"],
+        package_version="0.0.4.dev2+gdeadbee",
+        citation_version=value,
+        release_preparation_version=value,
     )
     assert any("CITATION.cff" in problem for problem in problems)
 
@@ -241,6 +261,26 @@ publication_authorized: true
     )
 
     assert load_release_preparation_version(marker) is None
+
+
+@pytest.mark.parametrize("release_tag", ["v0.0.5", "rc0.0.5"])
+def test_load_release_preparation_version_rejects_prefixed_target(
+    tmp_path: Path, release_tag: str
+) -> None:
+    """The preparation marker must bind exactly to the future full-release target."""
+    marker = tmp_path / "release_preparation.yaml"
+    marker.write_text(
+        f"""
+schema_version: release_preparation.v1
+release_tag: "{release_tag}"
+status: awaiting_maintainer_approval
+publication_authorized: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="numeric release_tag"):
+        load_release_preparation_version(marker)
 
 
 def test_repo_citation_matches_latest_release_tag() -> None:

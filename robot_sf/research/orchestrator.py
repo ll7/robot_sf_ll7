@@ -386,8 +386,10 @@ class ReportOrchestrator:
             try:
                 seed_val = int(manifest["seed"])
             except (ValueError, TypeError):
-                logger.warning(
-                    "Skipping %s manifest with non-integer seed: %s", label, manifest.get("seed")
+                # Surface the caught exception's traceback: the label and seed value
+                # were previously discarded by the printf-% template (#6837).
+                logger.opt(exception=True).warning(
+                    "Skipping {} manifest with non-integer seed: {}", label, manifest.get("seed")
                 )
                 continue
             manifest_map[seed_val] = manifest

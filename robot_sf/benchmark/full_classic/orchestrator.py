@@ -203,7 +203,7 @@ def _compute_git_hash(root: Path) -> str:
                 git_hash = content[:12]
     except OSError as exc:
         # Filesystem access errors -> return unknown but log for diagnostics
-        logger.debug("_compute_git_hash fs access error: %s", exc)
+        logger.debug("_compute_git_hash fs access error: {}", exc)
     except (RuntimeError, TypeError):  # pragma: no cover - defensive
         # Unexpected but plausible runtime/type errors -> log at debug and continue
         logger.debug("_compute_git_hash unexpected error")

@@ -54,7 +54,7 @@ def simulation_view_ready() -> bool:  # T030
         # but log at debug level for diagnostics.
         try:
             logger = importlib.import_module("loguru").logger
-            logger.debug("simulation_view_ready probe failed: %s", exc)
+            logger.debug("simulation_view_ready probe failed: {}", exc)  # noqa: PLE1205 - loguru brace style
         except ImportError:
             # If logger import fails, silently ignore to remain graceful
             pass

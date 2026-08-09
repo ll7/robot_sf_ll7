@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from loguru import logger
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -411,3 +412,55 @@ def test_circuit_breaker_threshold_validation_is_fail_closed() -> None:
     assert normalize_circuit_breaker_threshold(0) == 0
     with pytest.raises(ValueError, match="non-negative"):
         normalize_circuit_breaker_threshold(-1)
+
+
+@pytest.mark.base_sensitive
+def test_circuit_breaker_warning_interpolates_signature_and_counters(tmp_path: Path) -> None:
+    """The breaker warning must carry the interpolated signature and counters (issue #6837).
+
+    Loguru interpolates with ``str.format`` brace style. The circuit-breaker warning
+    previously used printf ``%`` placeholders with positional arguments, so loguru
+    found no ``{}`` field, silently discarded every argument, and emitted the
+    template literally -- losing the failure signature and all four counters. This
+    asserts the emitted loguru record contains the interpolated values, not the
+    literal ``%s``/``%d`` placeholders.
+    """
+    captured: list[str] = []
+
+    def capture_message(message) -> None:
+        """Capture warning records emitted by the serial batch runner."""
+        captured.append(message.record["message"])
+
+    def failing_worker(job) -> None:
+        """Fail with an identical signature so the circuit breaker trips."""
+        del job
+        raise RuntimeError("forced identical circuit-breaker failure")
+
+    handle = logger.add(capture_message, level="WARNING")
+    try:
+        with patch(f"{_RUNNER_MOD}._run_job_worker", side_effect=failing_worker):
+            _wrote, _failures, abort_meta = _run_batch_sequential(
+                [(_dummy_scenario("scenario-1"), 11), (_dummy_scenario("scenario-2"), 22)],
+                out_path=tmp_path / "episodes.jsonl",
+                schema=_dummy_schema(),
+                fixed_params=_dummy_fixed_params(),
+                progress_cb=None,
+                fail_fast=False,
+                circuit_breaker_threshold=2,
+            )
+    finally:
+        logger.remove(handle)
+
+    # The breaker must actually trip on the second identical failure.
+    assert abort_meta is not None
+    breaker_messages = [msg for msg in captured if "Circuit breaker tripped" in msg]
+    assert breaker_messages, "no circuit-breaker warning record was captured"
+    message = breaker_messages[0]
+
+    # Regression core: the failure signature and counters must be interpolated,
+    # not emitted as the literal printf placeholders (issue #6837).
+    assert "RuntimeError" in message, message
+    assert "2 consecutive identical failures" in message, message
+    assert "Aborting arm after 2/2 jobs" in message, message
+    assert "%s" not in message, message
+    assert "%d" not in message, message

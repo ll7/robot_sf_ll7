@@ -269,7 +269,7 @@ class SimulationView:
             if raw in {"none", "", "-1"}:
                 self.max_frames = None
                 logger.debug(
-                    "ROBOT_SF_MAX_VIDEO_FRAMES set to '%s' -> disabling frame cap (max_frames=None)",
+                    "ROBOT_SF_MAX_VIDEO_FRAMES set to '{}' -> disabling frame cap (max_frames=None)",
                     env_cap,
                 )
             else:
@@ -279,12 +279,14 @@ class SimulationView:
                         raise ValueError
                     self.max_frames = parsed
                     logger.debug(
-                        "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames=%d",
+                        "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames={}",
                         parsed,
                     )
                 except (ValueError, TypeError):
-                    logger.warning(
-                        "Invalid ROBOT_SF_MAX_VIDEO_FRAMES value '%s' (expected positive int or 'none'). Using default %s.",
+                    # Surface the caught exception's traceback: the invalid value and
+                    # default were previously discarded by the printf-% template (#6837).
+                    logger.opt(exception=True).warning(
+                        "Invalid ROBOT_SF_MAX_VIDEO_FRAMES value '{}' (expected positive int or 'none'). Using default {}.",
                         env_cap,
                         self.max_frames,
                     )
@@ -330,7 +332,7 @@ class SimulationView:
             mode = getattr(self, attr_name)
             if mode not in valid_modes:
                 logger.warning(
-                    "Invalid %s '%s'; falling back to 'circle'.",
+                    "Invalid {} '{}'; falling back to 'circle'.",
                     attr_name,
                     mode,
                 )
@@ -338,7 +340,7 @@ class SimulationView:
         valid_obs_modes = {"auto", "lidar", "grid", "image"}
         if self.observation_space_mode not in valid_obs_modes:
             logger.warning(
-                "Invalid observation_space_mode '%s'; falling back to 'auto'.",
+                "Invalid observation_space_mode '{}'; falling back to 'auto'.",
                 self.observation_space_mode,
             )
             self.observation_space_mode = "auto"
@@ -572,7 +574,7 @@ class SimulationView:
                 est_bytes = int(self.width * self.height * 3 * len(self.frames))
                 est_gb = est_bytes / (1024**3)
                 logger.warning(
-                    "Max video frame buffer reached (max_frames=%d, ~%.2f GiB est). "
+                    "Max video frame buffer reached (max_frames={}, ~{:.2f} GiB est). "
                     "Halting further frame capture to prevent excessive memory use. "
                     "You can raise this via SimulationView(max_frames=...) or disable via max_frames=None.",
                     self.max_frames,
@@ -670,7 +672,7 @@ class SimulationView:
                         )
                 except (TypeError, ValueError) as exc:
                     # Defensive: conversion/summation failed for unexpected frame data
-                    logger.debug("Frame sample check failed: %s", exc)
+                    logger.debug("Frame sample check failed: {}", exc)
         if return_frames:
             intermediate_frames = self.frames
         self._handle_quit()
@@ -844,7 +846,7 @@ class SimulationView:
             warning_key = f"{entity}:missing:{sprite_path}"
             if warning_key not in self._sprite_warning_once:
                 logger.warning(
-                    "Sprite for %s not found at '%s'; using circle fallback.",
+                    "Sprite for {} not found at '{}'; using circle fallback.",
                     entity,
                     sprite_path,
                 )
@@ -858,7 +860,7 @@ class SimulationView:
             warning_key = f"{entity}:load:{sprite_path}"
             if warning_key not in self._sprite_warning_once:
                 logger.warning(
-                    "Failed loading sprite for %s from '%s' (%s); using circle fallback.",
+                    "Failed loading sprite for {} from '{}' ({}); using circle fallback.",
                     entity,
                     sprite_path,
                     exc,

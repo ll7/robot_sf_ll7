@@ -1621,6 +1621,121 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
     assert all("gh pr" not in call for call in call_lines)
 
 
+def test_gh_comment_issue_uses_rest_api(tmp_path: Path) -> None:
+    """Issue comment publication must use REST validation and issue comments, not ``gh issue comment``.
+
+    Mirrors ``test_gh_comment_pr_uses_rest_api`` so the issue path is provably
+    quota-independent: under a mocked environment where GraphQL is exhausted but
+    REST remains available, it invokes only ``gh api`` REST calls (no
+    ``gh issue comment``, no GraphQL) to validate the target and publish.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        "printf '%s\\n' '{\"id\": 1, \"number\": 6843}'\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST issue comment body\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    # REST validation lookup (GET repos/<owner>/<repo>/issues/<number>) precedes the POST.
+    assert call_lines[0].startswith("api repos/ll7/robot_sf_ll7/issues/6843")
+    assert "--method POST" not in call_lines[0]
+    # Publication uses the REST issue-comments endpoint with the body file.
+    assert "api --method POST repos/ll7/robot_sf_ll7/issues/6843/comments" in call_lines[1]
+    assert "-F body=@" in call_lines[1]
+    # The issue path must never fall back to ``gh issue comment`` (which routes
+    # through GraphQL under quota exhaustion) nor issue any GraphQL call.
+    assert all("issue comment" not in call for call in call_lines)
+    assert all("graphql" not in call.lower() for call in call_lines)
+
+
+def test_gh_comment_issue_fail_closed_on_missing(tmp_path: Path) -> None:
+    """Issue path must exit nonzero and skip the POST when the target is missing/unknown.
+
+    When the REST issue lookup reports a missing or unknown target, the script
+    fails closed (nonzero exit) and never publishes a comment, so a degraded
+    GraphQL lookup cannot masquerade as a successful publication.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        # A publication POST must never be reached when validation fails; if it
+        # somehow is, surface a distinct non-matching exit so the assertion fails.
+        'case "$*" in\n'
+        '  *"--method POST"*) echo "POST reached despite failed validation" >&2; exit 5 ;;\n'
+        '  *) echo "HTTP 404: Not Found" >&2; exit 1 ;;\n'
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("must not be posted\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "9999999",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "could not be resolved through the REST API" in result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    # Only the REST validation lookup is recorded; no POST and no ``gh issue comment``.
+    assert any(call.startswith("api repos/ll7/robot_sf_ll7/issues/9999999") for call in call_lines)
+    assert not any("--method POST" in call for call in call_lines)
+    assert not any("issue comment" in call for call in call_lines)
+
+
 # Help-behaviour contract tests.
 
 HELP_COVERED_SCRIPTS = [

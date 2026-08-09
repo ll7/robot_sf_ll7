@@ -11,6 +11,7 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
+from scripts.dev import gh_issue_rest
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.issue_claim import short_claim_ref, status_issue
 
@@ -233,30 +234,26 @@ def _recommended_context_pack(number: int, labels: list[str], title: str) -> str
 
 
 def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict[str, Any]:
-    """Fetch one issue and return a compact orchestration snapshot."""
-    result = _gh(
-        [
-            "issue",
-            "view",
-            str(number),
-            "--repo",
-            repo,
-            "--json",
-            "number,title,body,state,labels,url,assignees",
-        ]
-    )
-    if result.returncode != 0:
+    """Fetch one issue and return a compact orchestration snapshot.
+
+    The explicit read routes through the REST-backed normalized reader
+    :func:`scripts.dev.gh_issue_rest.fetch_issue` instead of the GraphQL-backed
+    ``gh issue view --json``, so explicit snapshots keep succeeding when GraphQL
+    quota is exhausted but the REST API is healthy (issue #6845). Missing,
+    malformed, and REST-failed responses remain fail-closed error rows.
+    """
+    issue = gh_issue_rest.fetch_issue(number, repo=repo)
+    if issue.get("status") != "ok":
         return {
             "number": number,
             "status": "error",
-            "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+            "error": str(issue.get("error", "REST issue read failed")),
         }
-    try:
-        issue = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
-    labels = _labels(issue)
-    assignees = _assignees(issue)
+    # The REST reader already normalizes labels/assignees to sorted name lists and
+    # uppercases state; re-sorting and re-applying ``_issue_state`` keep the
+    # snapshot contract stable and defensive against future reader drift.
+    labels = sorted(issue.get("labels") or [])
+    assignees = sorted(issue.get("assignees") or [])
     state = _issue_state(issue)
     claim = status_issue(number, remote=remote)
     classification, reason = _issue_classification(

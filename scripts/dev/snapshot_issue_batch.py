@@ -257,19 +257,20 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
     labels = _labels(issue)
     assignees = _assignees(issue)
+    state = _issue_state(issue)
     claim = status_issue(number, remote=remote)
     classification, reason = _issue_classification(
         assignees=assignees,
         claim=claim,
         labels=labels,
-        state=_issue_state(issue),
+        state=state,
     )
     excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
     return {
         "number": issue.get("number", number),
         "status": "ok",
         "title": issue.get("title", ""),
-        "state": issue.get("state", ""),
+        "state": state,
         "url": issue.get("url", ""),
         "labels": labels,
         "assignees": assignees,
@@ -296,6 +297,7 @@ def _snapshot_from_issue_list(
 
     labels = _labels(issue)
     assignees = _assignees(issue)
+    state = _issue_state(issue)
     claim = (
         claim_statuses.get(number)
         if claim_statuses is not None
@@ -314,13 +316,13 @@ def _snapshot_from_issue_list(
         assignees=assignees,
         claim=claim,
         labels=labels,
-        state=_issue_state(issue),
+        state=state,
     )
     return {
         "number": number,
         "status": "ok",
         "title": issue.get("title", ""),
-        "state": issue.get("state", ""),
+        "state": state,
         "url": issue.get("url", ""),
         "labels": labels,
         "assignees": assignees,

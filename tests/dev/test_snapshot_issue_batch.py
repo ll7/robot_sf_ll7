@@ -178,7 +178,7 @@ def test_snapshot_issues_fail_closed_for_closed_issue_state() -> None:
         "number": 2680,
         "title": "closed but otherwise claimable issue",
         "body": "closed issue body",
-        "state": "CLOSED",
+        "state": " closed ",
         "url": "https://github.test/issues/2680",
         "labels": [{"name": "workflow"}],
         "assignees": [],
@@ -221,9 +221,17 @@ def test_snapshot_claimable_issues_fail_closed_for_closed_and_unknown_state() ->
         },
         {
             "number": 2683,
+            "title": "malformed state claimable-looking issue",
+            "state": None,
+            "url": "https://github.test/issues/2683",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2684,
             "title": "open issue remains claimable",
             "state": "OPEN",
-            "url": "https://github.test/issues/2683",
+            "url": "https://github.test/issues/2684",
             "labels": [],
             "assignees": [],
         },
@@ -236,18 +244,21 @@ def test_snapshot_claimable_issues_fail_closed_for_closed_and_unknown_state() ->
                 2681: _claim_status(2681),
                 2682: _claim_status(2682),
                 2683: _claim_status(2683),
+                2684: _claim_status(2684),
             }
             payload = snapshot_claimable_issues(
                 repo="ll7/robot_sf_ll7",
                 remote="origin",
                 body_limit=150,
-                limit=3,
+                limit=4,
             )
 
     classifications = [issue["classification"] for issue in payload["issues"]]
-    assert classifications == ["closed", "state_unknown", "claimable"]
+    assert classifications == ["closed", "state_unknown", "state_unknown", "claimable"]
+    assert [issue["state"] for issue in payload["issues"]] == ["CLOSED", "", "", "OPEN"]
     assert payload["issues"][0]["reason"] == "issue state is CLOSED; skip autonomous claim"
     assert payload["issues"][1]["reason"] == "issue state missing or unknown; skip autonomous claim"
+    assert payload["issues"][2]["reason"] == "issue state missing or unknown; skip autonomous claim"
 
 
 def test_snapshot_claimable_issues_uses_one_batch_claim_lookup() -> None:

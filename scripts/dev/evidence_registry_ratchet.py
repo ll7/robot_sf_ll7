@@ -102,6 +102,40 @@ def _repo_root() -> Path:
     return Path(proc.stdout.strip())
 
 
+def _validate_report(data: Any, source: str) -> dict[str, Any]:
+    """Validate the linter report schema before the ratchet consumes it."""
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Report {source} must be a dictionary, got {type(data).__name__}")
+
+    issues = data.get("issues")
+    if not isinstance(issues, list):
+        raise RuntimeError(f"Report {source} has an invalid or missing 'issues' list")
+    for index, issue in enumerate(issues):
+        if not isinstance(issue, dict):
+            raise RuntimeError(f"Report {source} has a non-mapping issue at index {index}")
+        for field in ("path", "code"):
+            value = issue.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise RuntimeError(
+                    f"Report {source} has an invalid issue {field!r} at index {index}"
+                )
+
+    summary = data.get("summary")
+    if not isinstance(summary, dict):
+        raise RuntimeError(f"Report {source} has an invalid or missing 'summary' mapping")
+    findings = summary.get("findings")
+    if isinstance(findings, bool) or not isinstance(findings, int) or findings < 0:
+        raise RuntimeError(
+            f"Report {source} has an invalid 'summary.findings'; expected a non-negative integer"
+        )
+    if findings != len(issues):
+        raise RuntimeError(
+            f"Report {source} has inconsistent findings metadata: "
+            f"summary.findings={findings}, but issues contains {len(issues)} entries"
+        )
+    return data
+
+
 def run_linter(repo_root: Path) -> dict[str, Any]:
     """Run the evidence-registry linter and return its parsed JSON report.
 
@@ -133,11 +167,12 @@ def run_linter(repo_root: Path) -> dict[str, Any]:
             f"exit 0 even with findings).\nstderr:\n{proc.stderr[:2000]}"
         )
     try:
-        return json.loads(proc.stdout)
+        data = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(
             f"Could not parse linter JSON output: {exc}\nstdout head:\n{proc.stdout[:1000]}"
         ) from exc
+    return _validate_report(data, f"linter output from '{linter}'")
 
 
 def load_report(path: Path) -> dict[str, Any]:
@@ -154,22 +189,7 @@ def load_report(path: Path) -> dict[str, Any]:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Could not parse report JSON '{path}': {exc}") from exc
-    if not isinstance(data, dict):
-        raise RuntimeError(f"Report JSON '{path}' must be a dictionary, got {type(data).__name__}")
-    issues = data.get("issues", [])
-    if not isinstance(issues, list) or any(not isinstance(issue, dict) for issue in issues):
-        raise RuntimeError(f"Report JSON '{path}' has an invalid 'issues' list")
-    summary = data.get("summary", {})
-    if not isinstance(summary, dict):
-        raise RuntimeError(f"Report JSON '{path}' has an invalid 'summary' mapping")
-    if "findings" in summary:
-        findings = summary["findings"]
-        if isinstance(findings, bool) or not isinstance(findings, int) or findings < 0:
-            raise RuntimeError(
-                f"Report JSON '{path}' has an invalid 'summary.findings'; "
-                "expected a non-negative integer"
-            )
-    return data
+    return _validate_report(data, f"JSON '{path}'")
 
 
 def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:

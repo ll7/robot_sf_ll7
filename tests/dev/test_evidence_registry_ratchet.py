@@ -314,10 +314,13 @@ def test_cli_check_reports_infra_error_when_report_missing(tmp_path: Path) -> No
     [
         [],
         None,
+        {},
         {"issues": None},
         {"issues": [None]},
         {"summary": []},
         {"summary": {"findings": "not-a-number"}, "issues": []},
+        {"summary": {"findings": 1}, "issues": []},
+        {"summary": {"findings": 1}, "issues": [{"path": [], "code": "missing_commit"}]},
     ],
 )
 def test_cli_check_reports_infra_error_for_malformed_report(tmp_path: Path, report: object) -> None:
@@ -344,6 +347,19 @@ def test_cli_check_reports_infra_error_for_malformed_report(tmp_path: Path, repo
         cwd=ROOT,
     )
     assert proc.returncode == 2
+
+
+def test_run_linter_reports_malformed_output_as_infra_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The live linter path uses the same fail-closed report validation as --report."""
+    completed = subprocess.CompletedProcess(
+        args=["fake-linter"], returncode=0, stdout=json.dumps({}), stderr=""
+    )
+    monkeypatch.setattr(ratchet.subprocess, "run", lambda *args, **kwargs: completed)
+
+    with pytest.raises(RuntimeError, match="invalid or missing 'issues'"):
+        ratchet.run_linter(tmp_path)
 
 
 def test_cli_check_reports_infra_error_for_malformed_baseline_summary(tmp_path: Path) -> None:

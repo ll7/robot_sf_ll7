@@ -160,6 +160,7 @@ class Diagnostic:
     requested_workers: str
     dist_mode: str
     runtime: RuntimeSnapshot
+    execution_mode: str = "xdist"
     raw_excerpts: tuple[str, ...] = ()
     recommendation: str | None = None
     serialized_ok: bool | None = None
@@ -176,6 +177,7 @@ class Diagnostic:
             "is_environment_crash": self.is_environment_crash,
             "requested_workers": self.requested_workers,
             "dist_mode": self.dist_mode,
+            "execution_mode": self.execution_mode,
             "recommendation": self.recommendation,
             "serialized_ok": self.serialized_ok,
             "raw_excerpts": list(self.raw_excerpts),
@@ -301,6 +303,7 @@ def build_diagnostic(
     log_text: str,
     requested_workers: str = "auto",
     dist_mode: str = "load",
+    execution_mode: str = "xdist",
     runtime: RuntimeSnapshot | None = None,
     serialized_ok: bool | None = None,
 ) -> Diagnostic:
@@ -313,16 +316,97 @@ def build_diagnostic(
         requested_workers=requested_workers,
         dist_mode=dist_mode,
         runtime=runtime,
+        execution_mode=execution_mode,
         raw_excerpts=first_matching_lines(log_text),
         recommendation=recommendation,
         serialized_ok=serialized_ok,
     )
 
 
+def _execution_mode_line(diag: Diagnostic) -> str:
+    """Describe xdist and true serial execution without conflating them."""
+    if diag.execution_mode == "no-xdist":
+        return (
+            "Execution mode: in-process serial pytest (pytest-xdist disabled; no -n/--dist flags)."
+        )
+    if diag.requested_workers == "1":
+        return f"Execution mode: pytest-xdist with one worker (-n 1, dist={diag.dist_mode})."
+    return f"Execution mode: pytest-xdist (-n {diag.requested_workers}, dist={diag.dist_mode})."
+
+
+def _environment_crash_verdict(diag: Diagnostic) -> list[str]:
+    """Return fail-closed guidance for an environment/native crash."""
+    if diag.execution_mode == "no-xdist":
+        lines = [
+            "This environment/native-extension failure reproduced during true "
+            "in-process serial pytest with pytest-xdist disabled."
+        ]
+    else:
+        lines = [
+            "This is an environment/native-extension failure under pytest-xdist, "
+            "not an ordinary test assertion failure."
+        ]
+    lines.append("It must not be read as a passed gate or as skipped validation (fail-closed).")
+    if diag.serialized_ok is True:
+        lines.append(
+            "Serial rerun passed: the local full suite completed; the parallel "
+            "crash was environment-only. Record this as a degraded/local caveat, "
+            "not as benchmark evidence."
+        )
+        return lines
+    if diag.serialized_ok is False:
+        lines.append(
+            "True no-xdist serial rerun still failed: those are real failures that "
+            "must be fixed before the gate can pass."
+        )
+        return lines
+    lines.append(
+        "Recommended next step: separate the environment crash from real "
+        "failures by re-running serially:"
+    )
+    if diag.recommendation == "serial":
+        lines.append("  PYTEST_NUM_WORKERS=1 scripts/dev/run_tests_parallel.sh ...")
+    else:
+        lines.append(
+            "  PYTEST_NUM_WORKERS=1 (or a smaller worker count) "
+            "scripts/dev/run_tests_parallel.sh ..."
+        )
+    lines.append(
+        "If serial passes, the local full suite completed (env-only crash); if "
+        "it fails with assertion errors, those are real and must be fixed."
+    )
+    return lines
+
+
+def _diagnostic_verdict(diag: Diagnostic) -> list[str]:
+    """Return the final diagnostic verdict lines."""
+    if diag.is_environment_crash:
+        return _environment_crash_verdict(diag)
+    if diag.crash_classes:
+        return [
+            "Captured output shows a non-environment crash class; investigate the "
+            "failing test rather than the runtime/concurrency combination."
+        ]
+    if diag.serialized_ok is True and diag.execution_mode == "no-xdist":
+        return [
+            "No crash signature was found in the completed true no-xdist serial rerun. "
+            "The original parallel run remains a failed/degraded gate."
+        ]
+    if diag.serialized_ok is False and diag.execution_mode == "no-xdist":
+        return [
+            "The true no-xdist serial rerun failed without a crash signature; treat its "
+            "test or collection errors as real failures (fail-closed)."
+        ]
+    return [
+        "No crash signature was found; if the gate reported failure it is an "
+        "ordinary test/collection failure, not the parallel-worker crash tracked here."
+    ]
+
+
 def render_diagnostic(diag: Diagnostic) -> str:
     """Render the diagnostic as a human-readable, fail-closed message."""
     lines: list[str] = []
-    lines.append("[pr_ready_check] pytest-xdist crash diagnostic (issue #5633)")
+    lines.append("[pr_ready_check] pytest crash diagnostic (issue #5633)")
     if diag.crash_classes:
         lines.append("Detected crash signature(s): " + ", ".join(diag.crash_classes))
     else:
@@ -338,7 +422,7 @@ def render_diagnostic(diag: Diagnostic) -> str:
         lines.append(f"  native extensions: {ext_str}")
     else:
         lines.append("  native extensions: none detected")
-    lines.append(f"Requested concurrency: -n {diag.requested_workers} (dist={diag.dist_mode})")
+    lines.append(_execution_mode_line(diag))
     if diag.raw_excerpts:
         lines.append("")
         lines.append("First matching log lines:")
@@ -346,50 +430,7 @@ def render_diagnostic(diag: Diagnostic) -> str:
             lines.append(f"  | {excerpt}")
     lines.append("")
 
-    if diag.is_environment_crash:
-        lines.append(
-            "This is an environment/native-extension failure under parallel pytest "
-            "workers, not an ordinary test assertion failure."
-        )
-        lines.append("It must not be read as a passed gate or as skipped validation (fail-closed).")
-        if diag.serialized_ok is True:
-            lines.append(
-                "Serial rerun passed: the local full suite completed; the parallel "
-                "crash was environment-only. Record this as a degraded/local caveat, "
-                "not as benchmark evidence."
-            )
-        elif diag.serialized_ok is False:
-            lines.append(
-                "Serial rerun still failed with ordinary assertion errors: those are "
-                "real failures and must be fixed before the gate can pass."
-            )
-        else:
-            lines.append(
-                "Recommended next step: separate the environment crash from real "
-                "failures by re-running serially:"
-            )
-            if diag.recommendation == "serial":
-                lines.append("  PYTEST_NUM_WORKERS=1 scripts/dev/run_tests_parallel.sh ...")
-            else:
-                lines.append(
-                    "  PYTEST_NUM_WORKERS=1 (or a smaller worker count) "
-                    "scripts/dev/run_tests_parallel.sh ..."
-                )
-            lines.append(
-                "If serial passes, the local full suite completed (env-only crash); if "
-                "it fails with assertion errors, those are real and must be fixed."
-            )
-    elif diag.crash_classes:
-        lines.append(
-            "Captured output shows a non-environment crash class; investigate the "
-            "failing test rather than the runtime/concurrency combination."
-        )
-    else:
-        lines.append(
-            "No crash signature was found; if the gate reported failure it is an "
-            "ordinary test/collection failure, not the parallel-worker crash tracked "
-            "here."
-        )
+    lines.extend(_diagnostic_verdict(diag))
     return "\n".join(lines)
 
 
@@ -426,6 +467,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dist-mode",
         default="load",
         help="pytest-xdist distribution mode (load, worksteal, ...).",
+    )
+    parser.add_argument(
+        "--execution-mode",
+        choices=("xdist", "no-xdist"),
+        default="xdist",
+        help="Whether pytest used xdist workers or true in-process serial execution.",
     )
     parser.add_argument(
         "--serialized-ok",
@@ -466,6 +513,7 @@ def main(argv: list[str] | None = None) -> int:
         log_text=log_text,
         requested_workers=args.requested_workers,
         dist_mode=args.dist_mode,
+        execution_mode=args.execution_mode,
         runtime=runtime,
         serialized_ok=serialized_ok,
     )

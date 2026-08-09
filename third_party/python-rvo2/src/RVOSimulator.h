@@ -30,6 +30,8 @@
  * <http://gamma.cs.unc.edu/RVO2/>
  */
 
+/* Robot SF local modification: collaboration-coefficient API. */
+
 #ifndef RVO_RVO_SIMULATOR_H_
 #define RVO_RVO_SIMULATOR_H_
 

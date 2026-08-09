@@ -30,6 +30,8 @@
  * <http://gamma.cs.unc.edu/RVO2/>
  */
 
+/* Robot SF local modification: collaboration-coefficient state. */
+
 #ifndef RVO_AGENT_H_
 #define RVO_AGENT_H_
 

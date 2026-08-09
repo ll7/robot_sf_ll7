@@ -1,0 +1,540 @@
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/CMakeLists.txt third_party/python-rvo2/CMakeLists.txt
+--- upstream-python-rvo2/CMakeLists.txt	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/CMakeLists.txt	2026-08-09 08:16:10.124155292 +0200
+@@ -29,8 +29,9 @@
+ #
+ # <http://gamma.cs.unc.edu/RVO2/>
+ #
++# Robot SF local modification: CMake minimum version raised to 3.5.
+ 
+-cmake_minimum_required(VERSION 2.8)
++cmake_minimum_required(VERSION 3.5)
+ project(RVO)
+ 
+ include(CTest)
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/README.md third_party/python-rvo2/README.md
+--- upstream-python-rvo2/README.md	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/README.md	2026-08-09 08:16:10.125155308 +0200
+@@ -6,9 +6,13 @@
+ - `collabCoeff = 0.5`: standard ORCA (each agent does 1/2 the work)
+ - `collabCoeff in (0, 0.5)`: less cooperative agent, will barely adjust its velocity to avoid others
+ - `collabCoeff = 0`: non-cooperative, will just follow its prefVel
+-- `collabCoeff < 0`: anti-cooperative agent, will ignore its own prefVel and try to collide with the nearest agent (position-wise), 
++- `collabCoeff < 0`: anti-cooperative agent, will ignore its own prefVel and try to collide with the nearest agent (position-wise),
+ collabCoeff trades off mimicing the other agent (collab=0 ==> prefVel = other->veloc) vs. trying to hit immediately (collab=-inf ==> prefVel=relPos)
+ 
++The collaboration-coefficient extension and the build-wrapper changes are Robot
++SF local modifications to the Apache-2.0 upstream source. See `UPSTREAM.md` and
++`LOCAL_CHANGES.patch` for the pinned source identity and reproducible diff.
++
+ ----------
+ 
+ 
+@@ -124,9 +128,9 @@
+ 
+ The RVO2 authors may be contacted via:
+ 
+-Jur van den Berg, Stephen J. Guy, Jamie Snape, Ming C. Lin, and Dinesh Manocha  
+-Dept. of Computer Science  
+-201 S. Columbia St.  
+-Frederick P. Brooks, Jr. Computer Science Bldg.  
+-Chapel Hill, N.C. 27599-3175  
++Jur van den Berg, Stephen J. Guy, Jamie Snape, Ming C. Lin, and Dinesh Manocha
++Dept. of Computer Science
++201 S. Columbia St.
++Frederick P. Brooks, Jr. Computer Science Bldg.
++Chapel Hill, N.C. 27599-3175
+ United States of America
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/_rvo2_cmake_build.py third_party/python-rvo2/_rvo2_cmake_build.py
+--- upstream-python-rvo2/_rvo2_cmake_build.py	1970-01-01 01:00:00.000000000 +0100
++++ third_party/python-rvo2/_rvo2_cmake_build.py	2026-08-09 08:09:15.261637808 +0200
+@@ -0,0 +1,83 @@
++"""Helpers for the vendored python-rvo2 CMake build wrapper."""
++
++from __future__ import annotations
++
++import os
++import shutil
++import subprocess
++from pathlib import Path
++
++_CMAKE_COMMAND_PREFIX = "CMAKE_COMMAND:INTERNAL="
++_SYSTEM_CMAKE_CANDIDATES = (
++    Path("/usr/bin/cmake"),
++    Path("/usr/local/bin/cmake"),
++    Path("/opt/homebrew/bin/cmake"),
++)
++
++
++def _is_executable(path: Path) -> bool:
++    return path.is_file() and os.access(path, os.X_OK)
++
++
++def read_cached_cmake_command(cache_path: Path) -> Path | None:
++    """Return the cached CMake command path when ``CMakeCache.txt`` records one."""
++    if not cache_path.exists():
++        return None
++
++    for line in cache_path.read_text(encoding="utf-8", errors="replace").splitlines():
++        if line.startswith(_CMAKE_COMMAND_PREFIX):
++            command = line[len(_CMAKE_COMMAND_PREFIX) :].strip()
++            return Path(command) if command else None
++    return None
++
++
++def cmake_cache_is_stale(build_dir: Path) -> bool:
++    """Return true when the cached CMake executable is recorded but missing."""
++    cached_command = read_cached_cmake_command(build_dir / "CMakeCache.txt")
++    return cached_command is not None and not cached_command.exists()
++
++
++def remove_stale_cmake_build_dir(build_dir: Path) -> bool:
++    """Delete ``build_dir`` when its cache references a missing CMake executable.
++
++    Returns:
++        True when the build directory was deleted, otherwise False.
++    """
++    if not cmake_cache_is_stale(build_dir):
++        return False
++
++    shutil.rmtree(build_dir)
++    return True
++
++
++def resolve_cmake_executable() -> str:
++    """Return a resolvable CMake executable, preferring persistent system paths."""
++    for env_var in ("ROBOT_SF_CMAKE", "CMAKE_EXECUTABLE"):
++        configured = os.environ.get(env_var)
++        if configured:
++            path = Path(configured)
++            if _is_executable(path):
++                return str(path)
++            raise RuntimeError(f"{env_var} points to a non-executable CMake path: {configured}")
++
++    for candidate in _SYSTEM_CMAKE_CANDIDATES:
++        if _is_executable(candidate):
++            return str(candidate)
++
++    cmake = shutil.which("cmake")
++    if cmake:
++        return cmake
++
++    raise RuntimeError("Could not find a CMake executable. Install cmake or set ROBOT_SF_CMAKE.")
++
++
++def configure_and_build_rvo2(build_dir: Path) -> None:
++    """Self-heal stale CMake state, then configure and build the vendored RVO2 library."""
++    build_dir = build_dir.resolve()
++    remove_stale_cmake_build_dir(build_dir)
++    build_dir.mkdir(parents=True, exist_ok=True)
++
++    cmake = resolve_cmake_executable()
++    if not (build_dir / "CMakeCache.txt").exists():
++        subprocess.check_call([cmake, "../..", "-DCMAKE_CXX_FLAGS=-fPIC"], cwd=build_dir)
++    subprocess.check_call([cmake, "--build", "."], cwd=build_dir)
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/doc/stylesheet.css third_party/python-rvo2/doc/stylesheet.css
+--- upstream-python-rvo2/doc/stylesheet.css	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/doc/stylesheet.css	2026-08-09 08:09:15.261847906 +0200
+@@ -1472,4 +1472,3 @@
+     display:inline;
+   }
+ }
+-
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/example.py third_party/python-rvo2/example.py
+--- upstream-python-rvo2/example.py	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/example.py	2026-08-09 08:09:15.261847906 +0200
+@@ -35,4 +35,3 @@
+     positions = ['(%5.3f, %5.3f)' % sim.getAgentPosition(agent_no)
+                  for agent_no in (a0, a1, a2, a3)]
+     print('step=%2i  t=%.3f  %s' % (step, sim.getGlobalTime(), '  '.join(positions)))
+-
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/examples/Roadmap.cpp third_party/python-rvo2/examples/Roadmap.cpp
+--- upstream-python-rvo2/examples/Roadmap.cpp	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/examples/Roadmap.cpp	2026-08-09 08:09:15.261991556 +0200
+@@ -49,6 +49,7 @@
+ #include <cstdlib>
+ #include <map>
+ #include <vector>
++#include <random>
+ 
+ #if RVO_OUTPUT_TIME_AND_POSITIONS
+ #include <iostream>
+@@ -314,8 +315,19 @@
+ 		/*
+ 		 * Perturb a little to avoid deadlocks due to perfect symmetry.
+ 		 */
+-		float angle = std::rand() * 2.0f * M_PI / RAND_MAX;
+-		float dist = std::rand() * 0.0001f / RAND_MAX;
++	#ifdef _OPENMP
++		static thread_local std::mt19937 rng(
++			static_cast<unsigned int>(std::time(nullptr)) +
++			static_cast<unsigned int>(omp_get_thread_num()));
++	#else
++		static thread_local std::mt19937 rng(
++			static_cast<unsigned int>(std::time(nullptr)));
++	#endif
++		std::uniform_real_distribution<float> angle_dist(
++			0.0f, 2.0f * static_cast<float>(M_PI));
++		std::uniform_real_distribution<float> dist_dist(0.0f, 0.0001f);
++		float angle = angle_dist(rng);
++		float dist = dist_dist(rng);
+ 
+ 		sim->setAgentPrefVelocity(i, sim->getAgentPrefVelocity(i) +
+ 		                          dist * RVO::Vector2(std::cos(angle), std::sin(angle)));
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/pyproject.toml third_party/python-rvo2/pyproject.toml
+--- upstream-python-rvo2/pyproject.toml	1970-01-01 01:00:00.000000000 +0100
++++ third_party/python-rvo2/pyproject.toml	2026-08-09 08:09:15.261991556 +0200
+@@ -0,0 +1,8 @@
++[build-system]
++requires = [
++  "setuptools>=83.0.0",
++  "wheel",
++  "Cython>=3.0.0",
++  "cmake>=4.4.0",
++]
++build-backend = "setuptools.build_meta"
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/setup.py third_party/python-rvo2/setup.py
+--- upstream-python-rvo2/setup.py	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/setup.py	2026-08-09 08:19:34.211470205 +0200
+@@ -1,37 +1,88 @@
+-from setuptools import setup, Extension
++from pathlib import Path
++import sys
++
++from setuptools import Extension, setup
+ from setuptools.command.build_ext import build_ext as _build_ext
+ from Cython.Build import cythonize
+ 
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++from _rvo2_cmake_build import configure_and_build_rvo2
++
++
++def _macos_sdkroot() -> str | None:
++    import os
++    import sys
++
++    if sys.platform != "darwin":
++        return None
++    try:
++        import subprocess
++
++        sdkroot = subprocess.check_output(
++            ["xcrun", "--sdk", "macosx", "--show-sdk-path"], text=True
++        ).strip()
++    except Exception:
++        return None
++    if sdkroot and os.path.exists(sdkroot):
++        return sdkroot
++    return None
++
++
++def _ensure_macos_sdk() -> None:
++    import os
++    import sys
++
++    if sys.platform != "darwin":
++        return
++
++    sdkroot = os.environ.get("SDKROOT")
++    if sdkroot and os.path.exists(sdkroot):
++        return
++
++    try:
++        import subprocess
++
++        sdkroot = subprocess.check_output(
++            ["xcrun", "--sdk", "macosx", "--show-sdk-path"], text=True
++        ).strip()
++    except Exception:
++        return
++
++    if sdkroot and os.path.exists(sdkroot):
++        os.environ["SDKROOT"] = sdkroot
++        os.environ.setdefault("CMAKE_OSX_SYSROOT", sdkroot)
++
+ 
+ class BuildRvo2Ext(_build_ext):
+     """Builds RVO2 before our module."""
+ 
+     def run(self):
+         # Build RVO2
+-        import os
+-        import os.path
+-        import subprocess
+-
+-        build_dir = os.path.abspath('build/RVO2')
+-        if not os.path.exists(build_dir):
+-            os.makedirs(build_dir)
+-            subprocess.check_call(['cmake', '../..', '-DCMAKE_CXX_FLAGS=-fPIC'],
+-                                  cwd=build_dir)
+-        subprocess.check_call(['cmake', '--build', '.'], cwd=build_dir)
++        _ensure_macos_sdk()
++        configure_and_build_rvo2(Path("build/RVO2"))
+ 
+         _build_ext.run(self)
+ 
+ 
++_SDKROOT = _macos_sdkroot()
++_SDKROOT_ARGS = ['-isysroot', _SDKROOT] if _SDKROOT else []
++
+ extensions = [
+-    Extension('rvo2', ['src/*.pyx'],
+-              include_dirs=['src'],
+-              libraries=['RVO'],
+-              library_dirs=['build/RVO2/src'],
+-              extra_compile_args=['-fPIC']),
++    Extension(
++        'rvo2',
++        ['src/*.pyx'],
++        include_dirs=['src'],
++        libraries=['RVO'],
++        library_dirs=['build/RVO2/src'],
++        extra_compile_args=['-fPIC', *_SDKROOT_ARGS],
++        extra_link_args=[*_SDKROOT_ARGS],
++    ),
+ ]
+ 
+ setup(
+     name="pyrvo2",
++    license="Apache-2.0",
++    license_files=["LICENSE"],
+     ext_modules=cythonize(extensions),
+     cmdclass={'build_ext': BuildRvo2Ext},
+     classifiers=[
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/src/Agent.cpp third_party/python-rvo2/src/Agent.cpp
+--- upstream-python-rvo2/src/Agent.cpp	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/src/Agent.cpp	2026-08-09 08:16:10.126155324 +0200
+@@ -30,6 +30,8 @@
+  * <http://gamma.cs.unc.edu/RVO2/>
+  */
+ 
++/* Robot SF local modification: collaboration-coefficient behavior. */
++
+ #include "Agent.h"
+ 
+ #include "KdTree.h"
+@@ -372,7 +374,7 @@
+             }
+             else{
+                 float minDistSq = std::numeric_limits<float>::infinity();
+-                size_t closestAgentIndex;
++                size_t closestAgentIndex = 0;
+                 for (size_t i = 0; i < agentNeighbors_.size(); ++i) {
+                     const Agent *const other = agentNeighbors_[i].second;
+                     float distSq = absSq(other->position_ - position_);
+@@ -386,7 +388,7 @@
+ 
+ 
+                 // // Method 1: Move along vector in direction of vb+(pb-pa), normalized to maxspeed, scaled by -collabCoeff
+-                // // Issue: Choosing a low collabCoeff (close to 0) probably will make the chosen direction not actually enter the VO  
++                // // Issue: Choosing a low collabCoeff (close to 0) probably will make the chosen direction not actually enter the VO
+                 // prefVelocity_ = normalize(other->velocity_+relativePosition)*(-std::max(-1.f, collabCoeff_))*maxSpeed_;
+ 
+                 // Method 2: Add two linear constraints for the two legs of the VO, but facing inward so the optimizer
+@@ -398,18 +400,28 @@
+                 const float distSq = absSq(relativePosition);
+                 const float combinedRadius = radius_ + other->radius_;
+                 const float combinedRadiusSq = sqr(combinedRadius);
+-                const float leg = std::sqrt(distSq - combinedRadiusSq);
++                const Vector2 direction = distSq > 0.0f ? normalize(relativePosition) : Vector2(1.0f, 0.0f);
+                 Line line;
+-                /* left leg. */
+-                line.direction = -Vector2(relativePosition.x() * leg - relativePosition.y() * combinedRadius, relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
+-                line.point = other->velocity_ + relativePosition;
+-                orcaLines_.push_back(line);
+-                /* right leg. */
+-                line.direction = Vector2(relativePosition.x() * leg + relativePosition.y() * combinedRadius, -relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
+-                line.point = other->velocity_ + relativePosition;
+-                orcaLines_.push_back(line);
++                if (distSq <= combinedRadiusSq) {
++                    line.direction = Vector2(-direction.y(), direction.x());
++                    line.point = other->velocity_ + relativePosition;
++                    orcaLines_.push_back(line);
++                    line.direction = -line.direction;
++                    orcaLines_.push_back(line);
++                }
++                else {
++                    const float leg = std::sqrt(distSq - combinedRadiusSq);
++                    /* left leg. */
++                    line.direction = -Vector2(relativePosition.x() * leg - relativePosition.y() * combinedRadius, relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
++                    line.point = other->velocity_ + relativePosition;
++                    orcaLines_.push_back(line);
++                    /* right leg. */
++                    line.direction = Vector2(relativePosition.x() * leg + relativePosition.y() * combinedRadius, -relativePosition.x() * combinedRadius + relativePosition.y() * leg) / distSq;
++                    line.point = other->velocity_ + relativePosition;
++                    orcaLines_.push_back(line);
++                }
+ 
+-                prefVelocity_ = other->velocity_ + (-collabCoeff_)*normalize(relativePosition);
++                prefVelocity_ = other->velocity_ + (-collabCoeff_) * direction;
+ 
+             }
+         }
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/src/Agent.h third_party/python-rvo2/src/Agent.h
+--- upstream-python-rvo2/src/Agent.h	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/src/Agent.h	2026-08-09 08:16:10.126155324 +0200
+@@ -30,6 +30,8 @@
+  * <http://gamma.cs.unc.edu/RVO2/>
+  */
+ 
++/* Robot SF local modification: collaboration-coefficient state. */
++
+ #ifndef RVO_AGENT_H_
+ #define RVO_AGENT_H_
+ 
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/src/Definitions.h third_party/python-rvo2/src/Definitions.h
+--- upstream-python-rvo2/src/Definitions.h	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/src/Definitions.h	2026-08-09 08:09:15.262717307 +0200
+@@ -68,7 +68,11 @@
+ 	inline float distSqPointLineSegment(const Vector2 &a, const Vector2 &b,
+ 										const Vector2 &c)
+ 	{
+-		const float r = ((c - a) * (b - a)) / absSq(b - a);
++		const float segLenSq = absSq(b - a);
++		if (segLenSq < RVO_EPSILON) {
++			return absSq(c - a);
++		}
++		const float r = ((c - a) * (b - a)) / segLenSq;
+ 
+ 		if (r < 0.0f) {
+ 			return absSq(c - a);
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/src/RVOSimulator.cpp third_party/python-rvo2/src/RVOSimulator.cpp
+--- upstream-python-rvo2/src/RVOSimulator.cpp	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/src/RVOSimulator.cpp	2026-08-09 08:16:10.127155340 +0200
+@@ -30,6 +30,8 @@
+  * <http://gamma.cs.unc.edu/RVO2/>
+  */
+ 
++/* Robot SF local modification: collaboration-coefficient API and behavior. */
++
+ #include "RVOSimulator.h"
+ 
+ #include "Agent.h"
+@@ -251,7 +253,7 @@
+ 	{
+ 		return agents_[agentNo]->timeHorizonObst_;
+ 	}
+-	
++
+ 	float RVOSimulator::getAgentCollabCoeff(size_t agentNo) const
+ 	{
+ 		return agents_[agentNo]->collabCoeff_;
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/src/RVOSimulator.h third_party/python-rvo2/src/RVOSimulator.h
+--- upstream-python-rvo2/src/RVOSimulator.h	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/src/RVOSimulator.h	2026-08-09 08:16:10.128155356 +0200
+@@ -30,6 +30,8 @@
+  * <http://gamma.cs.unc.edu/RVO2/>
+  */
+ 
++/* Robot SF local modification: collaboration-coefficient API. */
++
+ #ifndef RVO_RVO_SIMULATOR_H_
+ #define RVO_RVO_SIMULATOR_H_
+ 
+@@ -351,20 +353,21 @@
+ 		float getAgentTimeHorizonObst(size_t agentNo) const;
+ 
+ 		/**
+-		 * \brief      Returns the two-dimensional linear velocity of a
+-		 *             specified agent.
++		 * \brief      Returns the collaboration coefficient of an agent
+ 		 * \param      agentNo         The number of the agent whose
+-		 *                             two-dimensional linear velocity is to be
++		 *                             collaboration coefficient is to be
+ 		 *                             retrieved.
+-		 * \return     The present two-dimensional linear velocity of the agent.
++		 * \return     The present collaboration coefficient of the agent.
+ 		 */
+ 		float getAgentCollabCoeff(size_t agentNo) const;
++
+ 		/**
+-		 * \brief      Returns the collaboration coefficient of an agent
++		 * \brief      Returns the two-dimensional linear velocity of a
++		 *             specified agent.
+ 		 * \param      agentNo         The number of the agent whose
+-		 *                             collaboration coefficient is to be
++		 *                             two-dimensional linear velocity is to be
+ 		 *                             retrieved.
+-		 * \return     The present collaboration coefficient of the agent.
++		 * \return     The present two-dimensional linear velocity of the agent.
+ 		 */
+ 		const Vector2 &getAgentVelocity(size_t agentNo) const;
+ 
+@@ -566,23 +569,23 @@
+ 		void setAgentTimeHorizonObst(size_t agentNo, float timeHorizonObst);
+ 
+ 		/**
+-		 * \brief      Sets the two-dimensional linear velocity of a specified
++		 * \brief      Sets the collaboration coefficient of a specified
+ 		 *             agent.
+ 		 * \param      agentNo         The number of the agent whose
+-		 *                             two-dimensional linear velocity is to be
++		 *                             collaboration coefficient is to be
+ 		 *                             modified.
+-		 * \param      velocity        The replacement two-dimensional linear
+-		 *                             velocity.
++		 * \param      collabCoeff        The replacement collaboration coefficient.
+ 		 */
+ 		void setAgentCollabCoeff(size_t agentNo, float collabCoeff);
+ 
+ 		/**
+-		 * \brief      Sets the collaboration coefficient of a specified
++		 * \brief      Sets the two-dimensional linear velocity of a specified
+ 		 *             agent.
+ 		 * \param      agentNo         The number of the agent whose
+-		 *                             collaboration coefficient is to be
++		 *                             two-dimensional linear velocity is to be
+ 		 *                             modified.
+-		 * \param      collabCoeff        The replacement collaboration coefficient.
++		 * \param      velocity        The replacement two-dimensional linear
++		 *                             velocity.
+ 		 */
+ 		void setAgentVelocity(size_t agentNo, const Vector2 &velocity);
+ 
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/src/Vector2.h third_party/python-rvo2/src/Vector2.h
+--- upstream-python-rvo2/src/Vector2.h	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/src/Vector2.h	2026-08-09 08:09:15.262717307 +0200
+@@ -325,7 +325,11 @@
+ 	 */
+ 	inline Vector2 normalize(const Vector2 &vector)
+ 	{
+-		return vector / abs(vector);
++		const float len = abs(vector);
++		if (len > 0.0f) {
++			return vector / len;
++		}
++		return Vector2();
+ 	}
+ }
+ 
+diff -ruN '--exclude=build' '--exclude=__pycache__' '--exclude=*.egg-info' '--exclude=rvo2.cpp' '--exclude=UPSTREAM.md' '--exclude=LOCAL_CHANGES.patch' upstream-python-rvo2/src/rvo2.pyx third_party/python-rvo2/src/rvo2.pyx
+--- upstream-python-rvo2/src/rvo2.pyx	2020-01-26 18:24:26.000000000 +0100
++++ third_party/python-rvo2/src/rvo2.pyx	2026-08-09 08:16:10.128155356 +0200
+@@ -1,4 +1,6 @@
+ # distutils: language = c++
++# Robot SF local modification: expose the collaboration-coefficient API.
++
+ from libcpp.vector cimport vector
+ from libcpp cimport bool
+ 
+@@ -89,6 +91,11 @@
+                                         timeHorizon, timeHorizonObst, radius,
+                                         maxSpeed, c_velocity)
+ 
++    def __dealloc__(self):
++        if self.thisptr != NULL:
++            del self.thisptr
++            self.thisptr = NULL
++
+     def addAgent(self, tuple pos, neighborDist=None,
+                  maxNeighbors=None, timeHorizon=None,
+                  timeHorizonObst=None, radius=None, maxSpeed=None,
+@@ -207,8 +214,6 @@
+         self.thisptr.setAgentMaxSpeed(agent_no, max_speed)
+     def setAgentNeighborDist(self, size_t agent_no, float neighbor_dist):
+         self.thisptr.setAgentNeighborDist(agent_no, neighbor_dist)
+-    def setAgentNeighborDist(self, size_t agent_no, float neighbor_dist):
+-        self.thisptr.setAgentNeighborDist(agent_no, neighbor_dist)
+     def setAgentPosition(self, size_t agent_no, tuple position):
+         cdef Vector2 c_pos = Vector2(position[0], position[1])
+         self.thisptr.setAgentPosition(agent_no, c_pos)

@@ -35,10 +35,16 @@ License: MIT (see LICENSE)
 - obstacles/sbpd_map.py
 - optCtrl/lqr.py
 - params/central_params.py
+- params/__init__.py
+- params/dataset_params.ini
+- params/episode_params_val.ini
+- params/.default_params.ini
+- params/user_params.ini
 - planners/planner.py
 - planners/sampling_planner.py
 - sbpd/sbpd_renderer.py
 - sbpd/sbpd.py
+- sbpd/__init__.py
 - simulators/sim_state.py
 - systems/dubins_3d.py
 - systems/dubins_car.py
@@ -60,3 +66,6 @@ License: MIT (see LICENSE)
 - waypoint_grids/base.py
 - waypoint_grids/projected_image_space_grid.py
 - waypoint_grids/uniform_sampling_grid.py
+
+The repository-local package marker `__init__.py` and the `dotmap.py` compatibility shim are
+Robot SF additions; they are listed as local files in `LICENSING.yaml`.

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_decision_packet.json",
+  "artifact_sha256": "f10bad2a6158939f9b4ab459eef5a73d8143ebf44e57c44f5aaf5eba4b120dd4",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

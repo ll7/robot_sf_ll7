@@ -357,6 +357,77 @@ def test_pr_ready_check_keeps_core_only_changes_on_the_core_lane(preflight_repo:
     assert "No committed changed files require the optional-extra lane." in result.stderr
 
 
+def test_pr_ready_coverage_database_parent_survives_lanes_and_reporting(
+    preflight_repo: Path,
+    tmp_path: Path,
+) -> None:
+    """Readiness owns one absolute coverage DB until every lane and report completes."""
+    lifetime_log = preflight_repo / ".home" / "coverage-lifetime.log"
+    coverage_tmp = tmp_path / "coverage-tmp"
+    coverage_tmp.mkdir()
+
+    lane_stub = preflight_repo / "scripts" / "dev" / "run_tests_parallel.sh"
+    lane_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        '[[ "$COVERAGE_FILE" == /* ]] || { echo "coverage path is not absolute" >&2; exit 41; }\n'
+        'coverage_parent="$(dirname "$COVERAGE_FILE")"\n'
+        '[[ -d "$coverage_parent" ]] || { echo "coverage parent missing in lane" >&2; exit 42; }\n'
+        'if [[ -s "$COVERAGE_LIFETIME_LOG" ]]; then\n'
+        '  first_path="$(sed -n \'1s/^[^:]*://p\' "$COVERAGE_LIFETIME_LOG")"\n'
+        '  [[ "$first_path" == "$COVERAGE_FILE" ]] || { echo "coverage path changed" >&2; exit 43; }\n'
+        "fi\n"
+        'touch "$COVERAGE_FILE"\n'
+        'printf "lane:%s\\n" "$COVERAGE_FILE" >> "$COVERAGE_LIFETIME_LOG"\n',
+        encoding="utf-8",
+    )
+    lane_stub.chmod(0o755)
+
+    report_stub = preflight_repo / "scripts" / "dev" / "check_changed_coverage.sh"
+    report_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'coverage_parent="$(dirname "$COVERAGE_FILE")"\n'
+        '[[ -d "$coverage_parent" ]] || { echo "coverage parent missing in report" >&2; exit 44; }\n'
+        '[[ -f "$COVERAGE_FILE" ]] || { echo "coverage database missing in report" >&2; exit 45; }\n'
+        'printf "report:%s\\n" "$COVERAGE_FILE" >> "$COVERAGE_LIFETIME_LOG"\n',
+        encoding="utf-8",
+    )
+    report_stub.chmod(0o755)
+
+    changed_file = preflight_repo / "tests" / "planner" / "test_coverage_lifetime.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("def test_optional(): pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "optional coverage lifetime fixture")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "COVERAGE_FILE": "relative/unstable/.coverage",
+            "COVERAGE_LIFETIME_LOG": str(lifetime_log),
+            "PR_READY_MODE": "interim",
+            "TMPDIR": str(coverage_tmp),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    records = lifetime_log.read_text(encoding="utf-8").splitlines()
+    assert [record.split(":", maxsplit=1)[0] for record in records] == [
+        "lane",
+        "lane",
+        "report",
+    ]
+    coverage_paths = [Path(record.split(":", maxsplit=1)[1]) for record in records]
+    assert len(set(coverage_paths)) == 1
+    coverage_file = coverage_paths[0]
+    assert coverage_file.is_absolute()
+    assert coverage_file.parent.parent == coverage_tmp
+    assert not coverage_file.parent.exists()
+
+
 def test_interim_mode_reports_dirty_paths_excluded_from_changed_file_gates(
     preflight_repo: Path,
 ) -> None:

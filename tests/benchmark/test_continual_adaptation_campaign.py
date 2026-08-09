@@ -582,6 +582,17 @@ class TestCampaignCli:
 
         assert campaign_cli.main() == 1
 
+    def test_output_paths_must_remain_distinct_even_with_overwrite(self, tmp_path: Path) -> None:
+        """Overwrite permission cannot collapse two integrity roles onto one file."""
+        shared_output = tmp_path / "shared.yaml"
+
+        with pytest.raises(ContinualAdaptationCampaignError, match="must be distinct"):
+            campaign_cli._preflight_output_collisions(
+                (shared_output, shared_output),
+                overwrite=True,
+            )
+        assert not shared_output.exists()
+
     def test_blocked_promotion_validation_writes_no_artifacts(
         self,
         tmp_path: Path,

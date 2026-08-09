@@ -300,9 +300,14 @@ def _preflight_output_collisions(
     overwrite: bool,
 ) -> None:
     """Reject known multi-output collisions before the first write."""
+    resolved_outputs = [path.resolve() for path in outputs if path is not None]
+    if len(resolved_outputs) != len(set(resolved_outputs)):
+        raise ContinualAdaptationCampaignError(
+            "evidence and promotion-manifest output paths must be distinct"
+        )
     if overwrite:
         return
-    existing_outputs = [path for path in outputs if path is not None and path.exists()]
+    existing_outputs = [path for path in resolved_outputs if path.exists()]
     if existing_outputs:
         raise ContinualAdaptationCampaignError(
             f"refusing to overwrite existing campaign outputs: {existing_outputs}"

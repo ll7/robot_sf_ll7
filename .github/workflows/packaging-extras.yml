@@ -10,6 +10,7 @@ on:
       - "fast-pysf/LICENSE"
       - "third_party/python-rvo2/LICENSE"
       - "third_party/socnavbench/LICENSE"
+      - "third_party/socnavbench/LICENSES/Apache-2.0.txt"
       - "robot_sf/common/optional_import.py"
       - "robot_sf/common/__init__.py"
       - "robot_sf/benchmark/doctor.py"

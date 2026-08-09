@@ -116,6 +116,31 @@ def test_publish_model_registry_release_stages_assets_and_manifest(
     assert plan["upload_command"][0:3] == ["gh", "release", "upload"]
 
 
+def test_legal_bundle_is_byte_reproducible(tmp_path: Path, monkeypatch) -> None:
+    """Repeated staging of the same rights evidence must preserve its checksum."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path))
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    args = [
+        "--registry-path",
+        str(registry_path),
+        "--tag",
+        "artifact/models-test",
+        "--staging-dir",
+        str(tmp_path / "staging-one"),
+    ]
+    publish_model_registry_release.main(args)
+    first = (tmp_path / "staging-one" / "demo_model-legal.tar.gz").read_bytes()
+    args[-1] = str(tmp_path / "staging-two")
+    publish_model_registry_release.main(args)
+    second = (tmp_path / "staging-two" / "demo_model-legal.tar.gz").read_bytes()
+
+    assert first == second
+
+
 def test_publish_model_registry_release_updates_registry_output(
     tmp_path: Path,
     monkeypatch,

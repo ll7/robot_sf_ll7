@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import io
 import json
 import re
@@ -357,6 +358,17 @@ def _path_from_registry(raw_path: str, *, repo_root: Path) -> Path:
     return (repo_root / path).resolve() if not path.is_absolute() else path.resolve()
 
 
+def _normalize_tar_member(info: tarfile.TarInfo) -> tarfile.TarInfo:
+    """Strip host-specific metadata so legal bundles are byte-reproducible."""
+    info.mtime = 0
+    info.uid = 0
+    info.gid = 0
+    info.uname = ""
+    info.gname = ""
+    info.mode = 0o644
+    return info
+
+
 def _write_legal_bundle(
     entry: dict[str, Any], *, staging_dir: Path, repo_root: Path
 ) -> tuple[Path, str]:
@@ -364,7 +376,11 @@ def _write_legal_bundle(
     model_id = _safe_component(str(entry["model_id"]))
     licensing = dict(entry["licensing"])
     bundle_path = staging_dir / f"{model_id}-legal.tar.gz"
-    with tarfile.open(bundle_path, mode="w:gz") as archive:
+    with (
+        bundle_path.open("wb") as raw,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed,
+        tarfile.open(fileobj=compressed, mode="w") as archive,
+    ):
         members = [
             (
                 "LICENSE",
@@ -393,11 +409,16 @@ def _write_legal_bundle(
         )
         provenance_info = tarfile.TarInfo("PROVENANCE.json")
         provenance_info.size = len(provenance)
-        provenance_info.mtime = 0
+        _normalize_tar_member(provenance_info)
         archive.addfile(provenance_info, fileobj=io.BytesIO(provenance))
 
         for member_name, member_path in members:
-            archive.add(member_path, arcname=member_name, recursive=False)
+            archive.add(
+                member_path,
+                arcname=member_name,
+                recursive=False,
+                filter=_normalize_tar_member,
+            )
     return bundle_path, bundle_path.name
 
 

@@ -17,12 +17,28 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
     assert "workflow_dispatch" in trigger
     assert "pull_request" in trigger
     paths = set(trigger["pull_request"]["paths"])
-    assert {
+    expected_paths = {
         "third_party/python-rvo2/pyproject.toml",
         "third_party/python-rvo2/setup.py",
+        "third_party/python-rvo2/requirements.txt",
         "third_party/socnavbench/LICENSING.yaml",
-    } <= paths
+    }
+    assert expected_paths <= paths
 
     allow_licenses = workflow["jobs"]["review"]["steps"][-1]["with"]["allow-licenses"]
     allowed = {item.strip() for item in allow_licenses.split(",")}
-    assert {"Apache-2.0", "MIT", "GPL-3.0-only"} <= allowed
+    assert allowed == {
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "ISC",
+        "LGPL-2.1-only",
+        "LGPL-2.1-or-later",
+        "LGPL-3.0-only",
+        "LGPL-3.0-or-later",
+        "MIT",
+        "MPL-2.0",
+        "PSF-2.0",
+        "GPL-3.0-only",
+        "GPL-3.0-or-later",
+    }

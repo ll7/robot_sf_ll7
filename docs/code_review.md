@@ -218,9 +218,9 @@ benchmark-facing questions are instead: did the fail-closed
 adapter shape matched the registry, all six fail-closed flags held), and was
 no fallback/degraded execution counted as success? If yes, the "native
 execution" clause is satisfied for an adapter-only algorithm. If a review still
-reads the frozen #5579 body text alone, note that the coordinator-side issue-body
-amendment to state the adapter-only interpretation inline is pending; until that
-mutation lands, the durable in-repo reading is this section plus issue #6828.
+reads the frozen #5579 body text alone, use that coordinator-side issue-body
+amendment, this section, and issue #6828 together as the durable reading of the
+adapter-only interpretation.
 
 ## Proof Requirements By Change Type
 

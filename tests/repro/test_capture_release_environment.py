@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 from scripts.repro.capture_release_environment import (
     _lock_resolved_packages,
     _project_constraints,
+    _resolved_tag_commit,
     _runtime_record,
 )
 
@@ -97,3 +99,26 @@ def test_runtime_record_fails_closed_without_package_inventory(tmp_path: Path) -
 
     with pytest.raises(ValueError, match="package inventory"):
         _runtime_record(path)
+
+
+def test_resolved_tag_commit_peels_annotated_tag(tmp_path: Path) -> None:
+    """Tag-side packets must bind annotated and lightweight tags to a commit SHA."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        completed = subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+        )
+        return completed.stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.email", "agent@example.invalid")
+    git("config", "user.name", "Robot SF test")
+    (repo / "payload.txt").write_text("release\n", encoding="utf-8")
+    git("add", "payload.txt")
+    git("commit", "-qm", "release")
+    commit_sha = git("rev-parse", "HEAD")
+    git("tag", "-a", "0.0.5", "-m", "0.0.5")
+
+    assert _resolved_tag_commit(repo, "0.0.5") == commit_sha

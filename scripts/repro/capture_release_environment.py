@@ -99,6 +99,18 @@ def _uv_version() -> str | None:
     return completed.stdout.strip() or None
 
 
+def _resolved_tag_commit(repo_root: Path, release_tag: str) -> str | None:
+    """Resolve a lightweight or annotated tag to its commit, when present."""
+    tag_ref = f"refs/tags/{release_tag}^{{commit}}"
+    completed = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "--verify", tag_ref],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else None
+
+
 def _verification_environment() -> dict[str, Any]:
     """Capture the current interpreter and installed distribution inventory."""
     packages = sorted(
@@ -163,14 +175,7 @@ def build_packet(
     lockfile = repo_root / "uv.lock"
     resolved_packages = _lock_resolved_packages(lockfile)
     records = [_runtime_record(path) for path in campaign_runtime_records]
-    tag_ref = f"refs/tags/{release_tag}"
-    tag_result = subprocess.run(
-        ["git", "-C", str(repo_root), "rev-parse", "--verify", tag_ref],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    resolved_tag = tag_result.stdout.strip() if tag_result.returncode == 0 else None
+    resolved_tag = _resolved_tag_commit(repo_root, release_tag)
 
     return {
         "schema_version": "release_environment_packet.v1",

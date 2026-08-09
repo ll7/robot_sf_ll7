@@ -312,7 +312,11 @@ def main(argv: list[str] | None = None) -> int:
     all_tags = git_all_tags()
     package_version = installed_package_version()
     citation_version = load_citation_version(args.citation)
-    release_preparation_version = load_release_preparation_version()
+    release_preparation_version = (
+        load_release_preparation_version()
+        if args.citation.resolve() == DEFAULT_CITATION.resolve()
+        else None
+    )
 
     problems = evaluate(
         head_tags,

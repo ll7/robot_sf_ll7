@@ -227,6 +227,22 @@ def test_load_citation_version_rejects_invalid_yaml(tmp_path: Path) -> None:
         load_citation_version(citation)
 
 
+def test_load_release_preparation_version_requires_non_authorizing_status(tmp_path: Path) -> None:
+    """Only an approval-waiting marker with explicit false authorization is active."""
+    marker = tmp_path / "release_preparation.yaml"
+    marker.write_text(
+        """
+schema_version: release_preparation.v1
+release_tag: "0.0.5"
+status: approved
+publication_authorized: true
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert load_release_preparation_version(marker) is None
+
+
 def test_repo_citation_matches_latest_release_tag() -> None:
     """The committed CITATION.cff must match the repo's latest release tag.
 

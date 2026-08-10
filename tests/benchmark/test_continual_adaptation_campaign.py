@@ -5,6 +5,9 @@ behaviour on fallback/degraded execution, and the promotion-gate round-trip
 through ``check_continual_adaptation_run``.
 """
 
+# evidence-writer-exempt: tests write synthetic and malformed campaign fixtures
+# only under pytest tmp_path; they do not generate or modify repository evidence.
+
 from __future__ import annotations
 
 import hashlib

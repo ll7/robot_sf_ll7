@@ -24,6 +24,7 @@ def test_socnavbench_manifest_makes_mixed_license_scope_explicit() -> None:
         if path.is_file()
         and path.relative_to(root_files).parts[0] not in excluded
         and not path.relative_to(root_files).as_posix().startswith("LICENSES/")
+        and "__pycache__" not in path.relative_to(root_files).parts
     }
     inventory = set(manifest["upstream_files"]) | {item["path"] for item in manifest["local_files"]}
     assert actual_files <= inventory

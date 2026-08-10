@@ -35,9 +35,13 @@ Findings are keyed by ``(path, code)``:
 * A file whose findings are fully remediated disappears from the current report;
   ``--write-baseline`` drops it so the baseline only ever shrinks.
 
-A brand-new evidence file that is integrity-clean never trips the gate (it has
-no findings), so normal evidence growth is unrestricted; only new *findings*
-are blocked.
+A brand-new evidence file that is integrity-clean never trips the *findings*
+gate (it has no findings), so integrity growth is unrestricted. However, the
+baseline also records an ``evidence_tree`` manifest (issue #6839): adding or
+removing any file under ``docs/context/evidence/`` without refreshing the
+baseline fails the gate on the causing PR, so a stale hand-committed baseline
+can never redden main after merge. The fix is one command,
+``--write-baseline``, which the failure message names.
 
 Exit codes
 ----------
@@ -66,6 +70,7 @@ The committed baseline lives at
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -95,6 +100,40 @@ def _repo_root() -> Path:
     if proc.returncode != 0:
         raise RuntimeError("Could not determine git repository root.")
     return Path(proc.stdout.strip())
+
+
+def _validate_report(data: Any, source: str) -> dict[str, Any]:
+    """Validate the linter report schema before the ratchet consumes it."""
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Report {source} must be a dictionary, got {type(data).__name__}")
+
+    issues = data.get("issues")
+    if not isinstance(issues, list):
+        raise RuntimeError(f"Report {source} has an invalid or missing 'issues' list")
+    for index, issue in enumerate(issues):
+        if not isinstance(issue, dict):
+            raise RuntimeError(f"Report {source} has a non-mapping issue at index {index}")
+        for field in ("path", "code"):
+            value = issue.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise RuntimeError(
+                    f"Report {source} has an invalid issue {field!r} at index {index}"
+                )
+
+    summary = data.get("summary")
+    if not isinstance(summary, dict):
+        raise RuntimeError(f"Report {source} has an invalid or missing 'summary' mapping")
+    findings = summary.get("findings")
+    if isinstance(findings, bool) or not isinstance(findings, int) or findings < 0:
+        raise RuntimeError(
+            f"Report {source} has an invalid 'summary.findings'; expected a non-negative integer"
+        )
+    if findings != len(issues):
+        raise RuntimeError(
+            f"Report {source} has inconsistent findings metadata: "
+            f"summary.findings={findings}, but issues contains {len(issues)} entries"
+        )
+    return data
 
 
 def run_linter(repo_root: Path) -> dict[str, Any]:
@@ -128,11 +167,12 @@ def run_linter(repo_root: Path) -> dict[str, Any]:
             f"exit 0 even with findings).\nstderr:\n{proc.stderr[:2000]}"
         )
     try:
-        return json.loads(proc.stdout)
+        data = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(
             f"Could not parse linter JSON output: {exc}\nstdout head:\n{proc.stdout[:1000]}"
         ) from exc
+    return _validate_report(data, f"linter output from '{linter}'")
 
 
 def load_report(path: Path) -> dict[str, Any]:
@@ -149,15 +189,7 @@ def load_report(path: Path) -> dict[str, Any]:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"Could not parse report JSON '{path}': {exc}") from exc
-    if not isinstance(data, dict):
-        raise RuntimeError(f"Report JSON '{path}' must be a dictionary, got {type(data).__name__}")
-    issues = data.get("issues", [])
-    if not isinstance(issues, list) or any(not isinstance(issue, dict) for issue in issues):
-        raise RuntimeError(f"Report JSON '{path}' has an invalid 'issues' list")
-    summary = data.get("summary", {})
-    if not isinstance(summary, dict):
-        raise RuntimeError(f"Report JSON '{path}' has an invalid 'summary' mapping")
-    return data
+    return _validate_report(data, f"JSON '{path}'")
 
 
 def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:
@@ -177,15 +209,89 @@ def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:
     return {path: dict(sorted(codes.items())) for path, codes in sorted(by_path.items())}
 
 
-def build_baseline_payload(report: dict[str, Any]) -> dict[str, Any]:
-    """Build the versioned baseline JSON payload from a linter report."""
+def evidence_tree_manifest(registry_root: Path) -> dict[str, Any]:
+    """Return a compact, deterministic manifest of the audited evidence files.
+
+    The manifest is keyed on the *sorted set of every regular,
+    registry-relative file* under the evidence root. It is path-based rather
+    than content-based on purpose: adding or removing any evidence file changes
+    the manifest (so a baseline refresh is required and stays a pure function
+    of the evidence tree), while editing an existing file's contents is left to
+    the findings ratchet, which already catches net-new integrity findings. This
+    closes the issue #6839 gap: a PR that adds or removes any file under
+    ``docs/context/evidence/`` without refreshing the baseline now fails its own
+    ratchet gate pre-merge instead of reddening main after merge.
+    """
+    root = registry_root.resolve()
+    files: list[str] = []
+    if root.exists():
+        files = sorted(
+            path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()
+        )
+    # Hash a structured JSON array rather than a newline-delimited string. A bare join
+    # aliases the distinct path sets {"a", "b"} and {"a\nb"}; JSON escaping keeps
+    # each path boundary unambiguous even when a filename contains a newline.
+    serialized = json.dumps(files, ensure_ascii=True, separators=(",", ":"))
+    return {
+        "count": len(files),
+        "sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
+    }
+
+
+def check_evidence_tree_manifest(
+    current: dict[str, Any],
+    baseline: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    """Return ``(failures, notices)`` for the evidence-tree manifest ratchet.
+
+    When the committed baseline carries an ``evidence_tree`` manifest, the live
+    evidence tree must match it exactly: any add/remove/rename of an evidence
+    file without a baseline refresh is a hard failure, so the drift is
+    attributed to the causing PR pre-merge (issue #6839). A baseline that
+    predates manifest tracking (no ``evidence_tree`` field) is advisory -- it
+    cannot enforce the manifest, but it does not weaken the findings ratchet.
+    """
+    baseline_tree = baseline.get("evidence_tree")
+    if not isinstance(baseline_tree, dict) or "sha256" not in baseline_tree:
+        return [], [
+            "baseline has no evidence_tree manifest; regenerate it with "
+            "`scripts/dev/evidence_registry_ratchet.py --write-baseline` to "
+            "enable add/remove drift detection for evidence files."
+        ]
+    if baseline_tree.get("count") != current.get("count") or baseline_tree.get(
+        "sha256"
+    ) != current.get("sha256"):
+        return [
+            (
+                "evidence tree changed without a matching baseline refresh: "
+                f"{current.get('count')} evidence files now vs "
+                f"{baseline_tree.get('count')} in the baseline. A PR that adds "
+                "or removes files under docs/context/evidence/ must refresh "
+                "scripts/validation/evidence_registry_baseline.json in the same "
+                "change so the baseline stays a machine-generated function of "
+                "the evidence tree (issue #6839)."
+            )
+        ], []
+    return [], []
+
+
+def build_baseline_payload(
+    report: dict[str, Any],
+    registry_root: Path | None = None,
+) -> dict[str, Any]:
+    """Build the versioned baseline JSON payload from a linter report.
+
+    When ``registry_root`` is provided, the payload records an ``evidence_tree``
+    manifest of the audited evidence files so the ratchet can fail a PR that
+    adds or removes evidence files without refreshing the baseline (issue #6839).
+    """
     findings_by_path = aggregate(report)
     by_code: Counter[str] = Counter()
     for codes in findings_by_path.values():
         for code, count in codes.items():
             by_code[code] += count
     summary = report.get("summary", {})
-    return {
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "linter": DEFAULT_LINTER.as_posix(),
@@ -200,7 +306,11 @@ def build_baseline_payload(report: dict[str, Any]) -> dict[str, Any]:
             "refresh this baseline with "
             "`scripts/dev/evidence_registry_ratchet.py --write-baseline` to "
             "lock in the reduction; the blocking evidence-registry workflow "
-            "enforces the ratchet on its configured paths."
+            "enforces the ratchet on its configured paths. The payload also "
+            "carries an evidence_tree manifest (issue #6839): adding or removing "
+            "any file under docs/context/evidence/ without refreshing this "
+            "baseline fails the ratchet on the causing PR, so a stale baseline "
+            "can never redden main after merge."
         ),
         "summary": {
             "total_findings": int(summary.get("findings", 0)),
@@ -209,11 +319,75 @@ def build_baseline_payload(report: dict[str, Any]) -> dict[str, Any]:
         },
         "findings_by_path": findings_by_path,
     }
+    if registry_root is not None:
+        payload["evidence_tree"] = evidence_tree_manifest(registry_root)
+    return payload
+
+
+def _validate_finding_counts(path: Path, findings_by_path: dict[Any, Any]) -> None:
+    """Validate the nested finding-count mapping consumed by the ratchet."""
+    for evidence_path, codes in findings_by_path.items():
+        if not isinstance(evidence_path, str) or not evidence_path:
+            raise ValueError(f"Baseline {path} has an invalid findings path key.")
+        if not isinstance(codes, dict):
+            raise ValueError(
+                f"Baseline {path} has an invalid finding-code mapping for '{evidence_path}'."
+            )
+        for code, count in codes.items():
+            if not isinstance(code, str) or not code:
+                raise ValueError(
+                    f"Baseline {path} has an invalid finding code for '{evidence_path}'."
+                )
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise ValueError(
+                    f"Baseline {path} has an invalid finding count for '{evidence_path}'/{code}."
+                )
+
+
+def _validate_baseline_metadata(path: Path, data: dict[str, Any]) -> None:
+    """Validate optional metadata mappings that the ratchet reads directly."""
+    summary = data.get("summary")
+    if summary is not None and not isinstance(summary, dict):
+        raise ValueError(f"Baseline {path} has an invalid 'summary' mapping.")
+    if isinstance(summary, dict) and "total_findings" in summary:
+        total_findings = summary["total_findings"]
+        if (
+            isinstance(total_findings, bool)
+            or not isinstance(total_findings, int)
+            or total_findings < 0
+        ):
+            raise ValueError(
+                f"Baseline {path} has an invalid 'summary.total_findings'; "
+                "expected a non-negative integer."
+            )
+        actual_total = sum(sum(codes.values()) for codes in data["findings_by_path"].values())
+        if total_findings != actual_total:
+            raise ValueError(
+                f"Baseline {path} has inconsistent 'summary.total_findings': "
+                f"summary.total_findings={total_findings}, but findings_by_path contains "
+                f"{actual_total} findings."
+            )
+
+    evidence_tree = data.get("evidence_tree")
+    if evidence_tree is None:
+        return
+    if not isinstance(evidence_tree, dict):
+        raise ValueError(f"Baseline {path} has an invalid 'evidence_tree' mapping.")
+    count = evidence_tree.get("count")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise ValueError(f"Baseline {path} has an invalid evidence_tree count.")
+    if not isinstance(evidence_tree.get("sha256"), str) or not evidence_tree["sha256"]:
+        raise ValueError(f"Baseline {path} has an invalid evidence_tree sha256.")
 
 
 def load_baseline(path: Path) -> dict[str, Any]:
-    """Load and minimally validate a baseline file."""
-    data = json.loads(path.read_text(encoding="utf-8"))
+    """Load and validate the structure consumed by the ratchet checks."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"Could not read baseline {path}: {exc}") from exc
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Baseline {path} is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Baseline {path} must be a JSON object, got {type(data).__name__}.")
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -221,8 +395,11 @@ def load_baseline(path: Path) -> dict[str, Any]:
             f"Unsupported baseline schema_version in {path}: "
             f"got {data.get('schema_version')}, expected {SCHEMA_VERSION}"
         )
-    if not isinstance(data.get("findings_by_path"), dict):
+    findings_by_path = data.get("findings_by_path")
+    if not isinstance(findings_by_path, dict):
         raise ValueError(f"Baseline {path} is missing a valid 'findings_by_path' mapping.")
+    _validate_finding_counts(path, findings_by_path)
+    _validate_baseline_metadata(path, data)
     return data
 
 
@@ -353,16 +530,15 @@ def _report_check(
     for notice in notices:
         print(f"NOTICE: {notice}")
     if failures:
-        print(
-            "\nevidence-registry ratchet FAILED (net-new integrity findings):",
-            file=sys.stderr,
-        )
+        print("\nevidence-registry ratchet FAILED:", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         print(
-            "\nRemediate the new findings, or refresh the baseline with "
-            "`scripts/dev/evidence_registry_ratchet.py --write-baseline` if the "
-            "increase is intentional and reviewed.",
+            "\nFix: regenerate the baseline from a full-history checkout with the "
+            "single command\n"
+            "    uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline\n"
+            "then commit scripts/validation/evidence_registry_baseline.json in this PR. "
+            "The baseline is derived data -- never hand-edit it (issue #6839).",
             file=sys.stderr,
         )
         return 1
@@ -386,15 +562,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_aggregate(report)
         return 0
 
-    payload = build_baseline_payload(report)
+    registry_root = repo_root / DEFAULT_REGISTRY_ROOT
 
     if args.write_baseline:
+        payload = build_baseline_payload(report, registry_root)
         baseline_path.parent.mkdir(parents=True, exist_ok=True)
         write_json(baseline_path, payload)
+        manifest = payload["evidence_tree"]
         print(
             f"Wrote evidence-registry baseline to {baseline_path}: "
             f"{payload['summary']['total_findings']} findings across "
-            f"{payload['summary']['files_with_findings']} files."
+            f"{payload['summary']['files_with_findings']} files; "
+            f"evidence_tree manifest tracks {manifest['count']} evidence files."
         )
         return 0
 
@@ -406,8 +585,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    baseline = load_baseline(baseline_path)
-    failures, notices = check_against_baseline(aggregate(report), baseline)
+    try:
+        baseline = load_baseline(baseline_path)
+    except ValueError as exc:
+        print(f"ERROR: could not load baseline: {exc}", file=sys.stderr)
+        return 2
+    findings_failures, notices = check_against_baseline(aggregate(report), baseline)
+    manifest_failures, manifest_notices = check_evidence_tree_manifest(
+        evidence_tree_manifest(registry_root), baseline
+    )
+    failures = [*findings_failures, *manifest_failures]
+    notices = [*notices, *manifest_notices]
     return _report_check(report, baseline, failures, notices)
 
 

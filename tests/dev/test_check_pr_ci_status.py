@@ -1132,3 +1132,135 @@ def test_fetch_ci_status_rest_failure_is_labeled(monkeypatch: pytest.MonkeyPatch
     data = _fetch_ci_status("5")
     assert data["status"] == "error"
     assert data["error_kind"] == "graphql_quota_exhausted"
+
+
+def test_fetch_ci_status_marks_completed_run_with_stale_job_status_as_lag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Completed-success workflow steps are diagnostic lag, not a green CI rollup."""
+    payload = {
+        "number": 6885,
+        "title": "stale job status",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "friction",
+        "headRefOid": "abc123",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "fast-feedback (1)",
+                "workflowName": "CI",
+                "startedAt": "2026-08-11T14:23:36Z",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/123/job/456",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    api_payloads = {
+        "actions/runs/123": {"status": "completed", "conclusion": "success"},
+        "actions/jobs/456": {
+            "status": "in_progress",
+            "conclusion": None,
+            "steps": [
+                {"name": "Unit tests", "status": "completed", "conclusion": "success"},
+                {"name": "Complete job", "status": "completed", "conclusion": "success"},
+            ],
+        },
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        api_payloads.get,
+    )
+
+    data = _fetch_ci_status("6885")
+
+    assert data["checks"]["overall"] == "pending"
+    assert data["checks"]["pending_reason"] == "status_propagation_lag"
+    assert data["checks"]["status_propagation_lag"] == [
+        {
+            "name": "fast-feedback (1)",
+            "details_url": "https://github.com/example/repo/actions/runs/123/job/456",
+            "run_id": 123,
+            "job_id": 456,
+            "parent_run_status": "completed",
+            "parent_run_conclusion": "success",
+            "job_status": "in_progress",
+            "final_step": "Complete job",
+            "final_step_conclusion": "success",
+        }
+    ]
+    assert "pending_reason: status_propagation_lag" in _format_human(data)
+
+
+def test_main_keeps_status_propagation_lag_fail_closed(
+    capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The distinct lag state still returns the pending exit code for bounded polling."""
+    payload = {
+        "number": 6885,
+        "title": "stale job status",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "friction",
+        "headRefOid": "abc123",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "startedAt": "2026-08-11T14:23:36Z",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/123/job/456",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {"status": "completed", "conclusion": "success"}
+            if path == "actions/runs/123"
+            else {
+                "status": "in_progress",
+                "conclusion": None,
+                "steps": [
+                    {"name": "Unit tests", "status": "completed", "conclusion": "success"},
+                    {"name": "Complete job", "status": "completed", "conclusion": "success"},
+                ],
+            }
+            if path == "actions/jobs/456"
+            else None
+        ),
+    )
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.sleep", lambda _: None)
+
+    rc = main(
+        [
+            "6885",
+            "--json",
+            "--expected-head-sha",
+            "abc123",
+            "--poll-attempts",
+            "2",
+            "--poll-interval",
+            "0",
+        ]
+    )
+
+    assert rc == 2
+    payloads = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert payloads[-1]["checks"]["overall"] == "pending"
+    assert payloads[-1]["monitor"]["pending_reason"] == "status_propagation_lag"
+    assert payloads[-1]["monitor"]["terminal_reason"] == "status_propagation_lag"

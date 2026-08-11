@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -23,6 +24,10 @@ FAILURE_CONCLUSIONS = {
     "startup_failure",
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
+_ACTIONS_JOB_URL_RE = re.compile(
+    r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:$|[/?#])"
+)
+_TERMINAL_STEP_CONCLUSIONS = {"neutral", "skipped", "success"}
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -189,6 +194,87 @@ def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
         return None
 
 
+def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
+    """Return evidence for a completed-success workflow whose job record is still pending.
+
+    GitHub can leave a check-run/job lifecycle status in ``in_progress`` after the parent
+    workflow and every job step have completed successfully. This is diagnostic evidence only:
+    callers keep the CI rollup fail-closed as pending and use the returned fields to distinguish
+    status propagation lag from ordinary work still running.
+    """
+    match = _ACTIONS_JOB_URL_RE.search(details_url)
+    if match is None:
+        return None
+
+    run_id = match.group("run_id")
+    job_id = match.group("job_id")
+    run = _rest_api_get(f"actions/runs/{run_id}")
+    job = _rest_api_get(f"actions/jobs/{job_id}")
+    if not isinstance(run, dict) or not isinstance(job, dict):
+        return None
+    if str(run.get("status", "") or "").lower() != "completed":
+        return None
+    if str(run.get("conclusion", "") or "").lower() != "success":
+        return None
+    if str(job.get("status", "") or "").lower() != "in_progress":
+        return None
+
+    steps = job.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return None
+    if any(
+        not isinstance(step, dict)
+        or str(step.get("status", "") or "").lower() != "completed"
+        or str(step.get("conclusion", "") or "").lower() not in _TERMINAL_STEP_CONCLUSIONS
+        for step in steps
+    ):
+        return None
+    final_step = steps[-1]
+    if (
+        not isinstance(final_step, dict)
+        or str(final_step.get("name", "") or "") != "Complete job"
+        or str(final_step.get("conclusion", "") or "").lower() != "success"
+    ):
+        return None
+
+    return {
+        "run_id": int(run_id),
+        "job_id": int(job_id),
+        "parent_run_status": "completed",
+        "parent_run_conclusion": "success",
+        "job_status": "in_progress",
+        "final_step": "Complete job",
+        "final_step_conclusion": "success",
+    }
+
+
+def _status_propagation_lag_details(rollup: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Inspect pending GitHub Actions checks for completed-success propagation lag."""
+    details: list[dict[str, Any]] = []
+    for check in rollup:
+        if _rollup_status(check) not in PENDING_STATUSES:
+            continue
+        details_url = str(check.get("detailsUrl") or check.get("targetUrl") or "")
+        evidence = _status_propagation_lag_evidence(details_url)
+        if evidence is not None:
+            details.append({"name": _rollup_name(check), "details_url": details_url, **evidence})
+    return details
+
+
+def _annotate_status_propagation_lag(
+    checks: dict[str, Any], rollup: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Attach a distinct, fail-closed status for stale successful workflow job records."""
+    lag_details = _status_propagation_lag_details(rollup)
+    if not lag_details:
+        return checks
+    pending_count = sum(_rollup_status(check) in PENDING_STATUSES for check in rollup)
+    checks["status_propagation_lag"] = lag_details
+    if len(lag_details) == pending_count:
+        checks["pending_reason"] = "status_propagation_lag"
+    return checks
+
+
 def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, Any], int]:
     """Build the ``checks`` summary (and superseded count) from raw REST check-run dicts."""
     rollup = [
@@ -242,6 +328,7 @@ def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, A
         "names": sorted(name_counts),
         "details": details,
     }
+    _annotate_status_propagation_lag(checks, effective)
     return checks, superseded_count
 
 
@@ -365,6 +452,16 @@ def _fetch_ci_status(
         }
         for check in rollup
     ]
+    checks = {
+        "total": len(rollup),
+        "superseded": superseded_count,
+        "overall": overall,
+        "by_conclusion": conclusions,
+        "by_status": states,
+        "names": sorted(name_counts),
+        "details": check_details,
+    }
+    _annotate_status_propagation_lag(checks, rollup)
 
     return {
         "status": "ok",
@@ -374,15 +471,7 @@ def _fetch_ci_status(
         "mergeable": data.get("mergeable", "unknown"),
         "branch": data.get("headRefName", ""),
         "head_sha": data.get("headRefOid", ""),
-        "checks": {
-            "total": len(rollup),
-            "superseded": superseded_count,
-            "overall": overall,
-            "by_conclusion": conclusions,
-            "by_status": states,
-            "names": sorted(name_counts),
-            "details": check_details,
-        },
+        "checks": checks,
         "reviews": review_states,
     }
 
@@ -416,6 +505,9 @@ def _add_monitor_metadata(
         "deadline_epoch_seconds": deadline_epoch_seconds,
         "route_evidence_only": True,
     }
+    pending_reason = data.get("checks", {}).get("pending_reason")
+    if pending_reason:
+        data["monitor"]["pending_reason"] = pending_reason
 
 
 def _format_human(data: dict[str, Any]) -> str:
@@ -441,6 +533,10 @@ def _format_human(data: dict[str, Any]) -> str:
     lines.append(
         f"  checks: {overall}  |  {total} total  |  {conclusion_str}  |  status: {status_str}"
     )
+    pending_reason = checks.get("pending_reason")
+    if pending_reason:
+        lag_count = len(checks.get("status_propagation_lag", []))
+        lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {lag_count}")
     superseded = checks.get("superseded", 0)
     if superseded:
         lines.append(f"  ignored {superseded} superseded GitHub Actions check run(s)")
@@ -478,6 +574,24 @@ def _terminal_reason(
     if local_stop:
         return "max_wall_seconds"
     return None
+
+
+def _monitor_terminal_reason(
+    data: dict[str, Any],
+    *,
+    overall: str | None,
+    attempt: int,
+    attempts: int,
+    local_stop: bool,
+) -> str | None:
+    """Classify a polling stop, preserving a distinct status-propagation diagnosis."""
+    terminal_reason = _terminal_reason(overall, attempt, attempts, local_stop)
+    if (
+        terminal_reason == "attempt_exhausted"
+        and data.get("checks", {}).get("pending_reason") == "status_propagation_lag"
+    ):
+        return "status_propagation_lag"
+    return terminal_reason
 
 
 def _guard_head_sha(data: dict[str, Any], expected_head_sha: str) -> bool:
@@ -560,7 +674,13 @@ def _poll_ci_status(
             break
         overall = data.get("checks", {}).get("overall")
         sleep_seconds, local_stop = _bounded_sleep_seconds(poll_interval, wall_deadline)
-        terminal_reason = _terminal_reason(overall, attempt, attempts, local_stop)
+        terminal_reason = _monitor_terminal_reason(
+            data,
+            overall=overall,
+            attempt=attempt,
+            attempts=attempts,
+            local_stop=local_stop,
+        )
         if overall == "pending" and attempt < attempts and local_stop:
             data["monitor"]["local_stop_reason"] = "max_wall_seconds"
         if terminal_reason:

@@ -173,7 +173,7 @@ SEMANTIC_DRIFT_MUTATIONS: dict[str, tuple[tuple[str, ...], object]] = {
     ),
     "outcome_row_lineage_incomplete": (
         ("outcome_row_schema", "required_fields"),
-        [field for field in sorted(_outcome_row_fields()) if field != "seed_lineage"],
+        [field for field in _outcome_row_fields() if field != "seed_lineage"],
     ),
     "positive_gate_weakened": (("positive_gate", "admitted_weak_points_floor"), 0),
     "thresholds_weakened": (("positive_gate", "thresholds_weakened"), True),
@@ -283,14 +283,15 @@ def test_manifest_contract_hash_matches_file() -> None:
     assert manifest["base_commit"] == _frozen_contract()["base_commit"]
 
 
-def test_semantic_drift_mutations_fail_closed(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", sorted(SEMANTIC_DRIFT_MUTATIONS))
+def test_semantic_drift_mutations_fail_closed(name: str, tmp_path: Path) -> None:
     """Every frozen-field mutation is rejected fail-closed after re-hashing the contract."""
-    for name, (path, value) in SEMANTIC_DRIFT_MUTATIONS.items():
-        contract = _frozen_contract()
-        _set_nested_contract_value(contract, path, value)
-        result = _preflight_rehashed_contract(tmp_path, contract, name)
-        assert result.blocked, f"mutation {name!r} did not fail closed"
-        assert not result.ready, f"mutation {name!r} reported ready"
+    path, value = SEMANTIC_DRIFT_MUTATIONS[name]
+    contract = _frozen_contract()
+    _set_nested_contract_value(contract, path, value)
+    result = _preflight_rehashed_contract(tmp_path, contract, name)
+    assert result.blocked, f"mutation {name!r} did not fail closed"
+    assert not result.ready, f"mutation {name!r} reported ready"
 
 
 def test_missing_contract_fails_closed(tmp_path: Path) -> None:
@@ -382,12 +383,33 @@ def test_cli_identity_emission_is_pure() -> None:
         node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main"
     ]
     assert main_functions, "the check CLI must expose a main(argv) entry point"
-    identities_functions = [
+    parse_args_functions = [
         node
         for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "parse_args"
     ]
-    assert identities_functions, "the check CLI must parse --identities through argparse"
+    assert parse_args_functions, "the check CLI must parse --identities through argparse"
+    identity_branches = [
+        node
+        for node in ast.walk(main_functions[0])
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Attribute)
+        and isinstance(node.test.value, ast.Name)
+        and node.test.value.id == "args"
+        and node.test.attr == "identities"
+    ]
+    assert len(identity_branches) == 1, "the CLI must have one explicit identity-emission branch"
+    identity_source = ast.get_source_segment(cli_source, identity_branches[0]) or ""
+    assert "identity_manifest_bytes" in identity_source
+    for forbidden in (
+        "preflight_issue_5303_powered_contract",
+        "args.contract",
+        "args.manifest",
+        "args.receipt",
+    ):
+        assert forbidden not in identity_source, (
+            f"identity branch loads forbidden input: {forbidden}"
+        )
     assert "--identities" in cli_source
 
 
@@ -464,6 +486,35 @@ def test_cli_check_and_identity_emission(tmp_path: Path, capsys: pytest.CaptureF
     emitted = json.loads(capsys.readouterr().out)
     assert emitted["scheduled_attempt_count"] == EXPECTED_TOTAL_SCHEDULED_ATTEMPTS
     assert len(emitted["identities"]) == EXPECTED_TOTAL_SCHEDULED_ATTEMPTS
+
+
+def test_cli_identity_validation_uses_emitted_manifest_bytes(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """Duplicate bytes in the emitted manifest fail before the CLI writes them."""
+    import scripts.tools.check_issue_5303_search_promotion_contract_v2 as cli
+
+    payload = json.loads(identity_manifest_bytes())
+    payload["identities"][-1]["identity_sha256"] = payload["identities"][0]["identity_sha256"]
+    mutated_bytes = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    monkeypatch.setattr(cli, "identity_manifest_bytes", lambda: mutated_bytes)
+
+    assert cli.main(["--identities"]) == 1
+    assert "not unique" in capsys.readouterr().err
+
+
+def test_cli_output_oserror_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    """An output-path write failure uses the CLI's fail-closed exit code."""
+    import scripts.tools.check_issue_5303_search_promotion_contract_v2 as cli
+
+    def raise_oserror(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated output failure")
+
+    monkeypatch.setattr(cli, "dump_preflight_payload", raise_oserror)
+    assert cli.main(["--repo-root", str(REPO_ROOT), "--output", str(tmp_path / "report.json")]) == 2
+    assert "FAILED: simulated output failure" in capsys.readouterr().err
 
 
 def test_cli_rejects_v1_contract_for_promotion_capable_execution(

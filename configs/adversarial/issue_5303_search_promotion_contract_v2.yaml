@@ -152,7 +152,7 @@ input_provenance:
       sha256: 836cf43ec9ce1063986a5ef32d0e0faca66bb8b2cbf9c4451b2874bc27fd9de4
     - id: powered_contract_check_cli
       path: scripts/tools/check_issue_5303_search_promotion_contract_v2.py
-      sha256: eb282d7e6dfc3566defe3d66ab1eac04af214221fdd813a86094e2aa98268670
+      sha256: 1f88149400e81284d37615814fe2e9b03a768cce7214e02ba7a210e1bb53b8db
     - id: historical_contract
       path: configs/adversarial/issue_5303_search_promotion_contract.yaml
       sha256: 9b47d4e4e863f2accbbf348baaa60456eb73ba8b2ab39a8f4b4f746bbe8ab400

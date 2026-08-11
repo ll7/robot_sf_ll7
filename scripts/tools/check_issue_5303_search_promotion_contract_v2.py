@@ -37,7 +37,6 @@ from robot_sf.benchmark.issue_5303_search_promotion_preregistration_v2 import (
     dump_preflight_payload,
     identity_manifest_bytes,
     preflight_issue_5303_powered_contract,
-    scheduled_search_identities,
 )
 
 
@@ -98,7 +97,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     if args.identities:
-        identities = scheduled_search_identities()
+        manifest_bytes = identity_manifest_bytes()
+        manifest = json.loads(manifest_bytes)
+        identities = manifest.get("identities") if isinstance(manifest, dict) else None
+        if not isinstance(identities, list):
+            print("FAILED: identity manifest does not contain an identities list", file=sys.stderr)
+            return 1
         if len(identities) != EXPECTED_TOTAL_SCHEDULED_ATTEMPTS:
             print(
                 f"FAILED: expected exactly {EXPECTED_TOTAL_SCHEDULED_ATTEMPTS} scheduled "
@@ -114,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        sys.stdout.buffer.write(identity_manifest_bytes())
+        sys.stdout.buffer.write(manifest_bytes)
         return 0
 
     try:
@@ -124,10 +128,10 @@ def main(argv: list[str] | None = None) -> int:
             manifest_path=args.manifest,
             repo_root=args.repo_root,
         )
+        dump_preflight_payload(result, args.output)
     except OSError as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
         return 2
-    dump_preflight_payload(result, args.output)
     print(json.dumps(result.to_payload(), sort_keys=True))
     return 0 if result.ready else 1
 

@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from robot_sf.benchmark.adversarial_package_b_gap_packet import build_package_b_gap_packet
+from robot_sf.benchmark.adversarial.adversarial_package_b_gap_packet import (
+    build_package_b_gap_packet,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts/tools/prepare_package_b_post_readiness_gap_packet.py"

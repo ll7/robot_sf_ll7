@@ -33,6 +33,9 @@ default and changes nothing about existing pedestrian models.
     adversary.
   - `BoundedResidualAdversary` — the stateful controller that holds the
     macro-action proposal and enforces every hard bound each physics step.
+  - `ResidualAdversaryBehaviorSummary` — resettable,
+    `residual_adversary_behavior.v1` diagnostic accounting for applied residual
+    norms, targeted rows, proposal adjustments, and finite/bound-safe status.
   - Pure, individually-testable bound helpers: `clamp_magnitude`,
     `rate_limit_jerk`, `bound_speed`, `bound_heading_change`,
     `bound_route_deviation`, `project_residual_displacement_walkable`,
@@ -107,17 +110,23 @@ The seed field on `ResidualAdversaryConfig` is reserved for future randomized
 policies (CMA-ES, MCTS, PPO); the bundled scripted policy does not consume it.
 
 **Output / claim-status**: These tests prove capability-only smoke evidence —
-runtime wiring, finite-state behavior, and bound enforcement for the deterministic
-scripted policy. This is **not** benchmark, safety, stress-strength, or
-paper-facing evidence. The YAML example is a documented parameter template: copy
-its `residual_adversary` mapping beneath a scenario's `simulation_config` key.
-The scenario loader validates that nested mapping before passing it to the
-runtime config.
+runtime wiring, finite-state behavior, bound enforcement, and the
+`residual_adversary_behavior.v1` diagnostic summary for the deterministic scripted
+policy. The summary reports `steps`, `macro_actions`, `targeted_row_fraction`,
+applied residual norm mean/max/integral, `nonzero_fraction`,
+`proposal_adjustment_fraction`, and `finite`/`bound_safe` status. It is reset with
+the controller and does not enter episode records or benchmark metrics. This is
+**not** benchmark, safety, stress-strength, or paper-facing evidence. The YAML
+example is a documented parameter template: copy its `residual_adversary`
+mapping beneath a scenario's `simulation_config` key. The scenario loader
+validates that nested mapping before passing it to the runtime config.
 
 ## Claim boundary (what this slice does NOT do)
 
 This is a capability-only slice. It makes **no** benchmark, planner-ranking,
-safety, or paper-facing claim. It defines **no** new stress-case metric. It
+safety, or paper-facing claim. Its behavior summary is diagnostic controller
+accounting, not a stress-case metric or benchmark episode field. It defines
+**no** new stress-case metric. It
 implements **no** CMA-ES/MCTS search-baseline adversary and **no** PPO/learned
 adversary. It runs **no** matched-compute comparison against the open-loop
 scenario-optimization pipeline. Naming discipline: "reactive adversarial stress

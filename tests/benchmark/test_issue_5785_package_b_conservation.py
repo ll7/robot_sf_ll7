@@ -13,7 +13,7 @@ import tarfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.adversarial_package_b_report import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_report import (
     retrieve_package_b_raw_artifacts,
     validate_package_b_report,
     verify_package_b_candidate_replay_inventory,

@@ -17,6 +17,9 @@ notebooks to insert/update entries without manual YAML editing.
 - `commit`: git commit hash for reproducibility.
 - `github_release` metadata (optional): preferred public retrieval pointer for promoted or
   preserved artifacts. Include `repo`, `tag`, `asset_name`, `url`, `sha256`, and `size_bytes`.
+- `licensing` (required before public model publication): explicit weights license, copyright,
+  redistribution basis, source revision/checksum, training-data terms, and repository-relative
+  legal-file paths used to build the release legal bundle. Missing rights evidence blocks publishing.
 - W&B metadata (optional): lineage and private/backfill provenance. Prefer `wandb_artifact_path`
   when preserving W&B provenance; otherwise use either `wandb_run_path` or `wandb_entity` +
   `wandb_project` + `wandb_run_id`.

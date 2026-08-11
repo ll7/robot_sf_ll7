@@ -81,6 +81,8 @@ extensions = [
 
 setup(
     name="pyrvo2",
+    license="Apache-2.0",
+    license_files=["LICENSE", "UPSTREAM.md", "LOCAL_CHANGES.patch"],
     ext_modules=cythonize(extensions),
     cmdclass={'build_ext': BuildRvo2Ext},
     classifiers=[

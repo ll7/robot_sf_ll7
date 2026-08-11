@@ -23,6 +23,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
+from robot_sf.evidence.writers import write_csv, write_json
 from scripts.validation import check_issue_5416_sipp_four_geometry_packet as packet_checker
 
 ISSUE = 5416
@@ -729,9 +730,7 @@ def build_analysis(
 
 
 def _write_artifacts(report: Mapping[str, Any], output_dir: Path) -> None:
-    (output_dir / "summary.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    write_json(output_dir / "summary.json", report)
     exclusions = []
     for item in report["denominator_exclusions"]:
         exclusions.append(
@@ -744,22 +743,18 @@ def _write_artifacts(report: Mapping[str, Any], output_dir: Path) -> None:
                 "reasons": "; ".join(item.get("reasons", [])),
             }
         )
-    with (output_dir / "denominator_exclusions.csv").open(
-        "w", newline="", encoding="utf-8"
-    ) as handle:
-        writer = csv.DictWriter(
-            handle, fieldnames=("source", "scenario_id", "seed", "planner_id", "key", "reasons")
-        )
-        writer.writeheader()
-        writer.writerows(exclusions)
+    exclusions_path = output_dir / "denominator_exclusions.csv"
+    if exclusions:
+        write_csv(exclusions_path, exclusions)
+    else:
+        with exclusions_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=("source", "scenario_id", "seed", "planner_id", "key", "reasons"),
+            )
+            writer.writeheader()
     comparisons = report["paired_comparisons"]
-    with (output_dir / "paired_comparison.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=sorted({key for item in comparisons for key in item}) or ["scenario_id"],
-        )
-        writer.writeheader()
-        writer.writerows(comparisons)
+    write_csv(output_dir / "paired_comparison.csv", comparisons)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

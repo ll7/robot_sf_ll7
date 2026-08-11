@@ -80,6 +80,30 @@ def test_fetch_issue_normalizes_rest_fields_to_gh_json_shape() -> None:
     assert payload["author_association"] == "OWNER"
 
 
+@pytest.mark.parametrize("raw_number", [None, 0, "5021", "not-an-integer"])
+def test_fetch_issue_fails_closed_on_malformed_number(raw_number: object) -> None:
+    """A REST issue number must be a positive JSON integer matching the request."""
+    raw = _raw_issue()
+    raw["number"] = raw_number
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(raw))
+        payload = fetch_issue(5021)
+    assert payload["status"] == "error"
+    assert payload["number"] == 5021
+    assert "malformed" in payload["error"]
+
+
+def test_fetch_issue_fails_closed_on_mismatched_number() -> None:
+    """A successful endpoint response for a different issue must not be accepted."""
+    raw = _raw_issue(number=5092)
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(raw))
+        payload = fetch_issue(5021)
+    assert payload["status"] == "error"
+    assert payload["number"] == 5021
+    assert "does not match" in payload["error"]
+
+
 def test_fetch_issue_fails_closed_on_nonzero_exit() -> None:
     """A nonzero gh api exit should surface as a clear error payload, not raise."""
     with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
@@ -551,7 +575,7 @@ def test_fetch_issue_with_comments_propagates_comments_error() -> None:
     """If the comments read fails, the combined helper must propagate the error."""
     with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
         mock_api.side_effect = [
-            _proc(stdout=json.dumps(_raw_issue())),
+            _proc(stdout=json.dumps(_raw_issue(number=5186))),
             _proc(returncode=1, stderr="rate limit exceeded"),
         ]
         payload = fetch_issue_with_comments(5186)

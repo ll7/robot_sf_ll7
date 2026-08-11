@@ -1736,6 +1736,116 @@ def test_gh_comment_issue_fail_closed_on_missing(tmp_path: Path) -> None:
     assert not any("issue comment" in call for call in call_lines)
 
 
+def test_gh_comment_succeeds_with_empty_post_response(tmp_path: Path) -> None:
+    """Successful REST POST with empty response body must exit 0 (issue #6891).
+
+    ``gh api`` may fail to parse an empty or malformed response body even when
+    the REST POST succeeded and the comment was created.  The helper must
+    suppress response output and return the POST exit code deterministically,
+    preventing a duplicate retry surface.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    # Validation succeeds. Without --silent, emulate the CLI's parse failure
+    # after a successful POST; --silent is the contract under test.
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        'case "$*" in\n'
+        '  *"--method POST"*)\n'
+        '    if [[ "$*" == *"--silent"* ]]; then exit 0; fi\n'
+        '    echo "unexpected end of JSON input" >&2\n'
+        "    exit 1\n"
+        "    ;;\n"
+        "  *) printf '%s\\n' '{\"id\":1}' ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("posted despite empty response\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{os.pathsep}{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6877",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert any("--method POST" in call for call in call_lines)
+    assert any("--silent" in call for call in call_lines)
+    assert any("repos/ll7/robot_sf_ll7/issues/6877/comments" in call for call in call_lines)
+
+
+def test_gh_comment_fails_on_nonzero_post_exit(tmp_path: Path) -> None:
+    """A nonzero REST POST exit code must propagate (not be swallowed by empty-response handling).
+
+    The helper must not hide a genuine POST failure behind the empty-response
+    guard introduced for issue #6891.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        'case "$*" in\n'
+        '  *"--method POST"*) echo "HTTP 500: Internal Server Error" >&2; exit 1 ;;\n'
+        "  *) printf '%s\\n' '{\"id\":1}' ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("should fail\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{os.pathsep}{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6877",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert any("--method POST" in call for call in call_lines)
+
+
 # Help-behaviour contract tests.
 
 HELP_COVERED_SCRIPTS = [

@@ -137,7 +137,7 @@ def test_release_issue_succeeds_when_claim_ref_is_already_absent(
 
     monkeypatch.setattr(issue_claim, "_run", fake_run)
 
-    payload = issue_claim.release_issue(123, remote="origin")
+    payload = issue_claim.release_issue(123, remote="origin", reason="abandoned")
 
     assert payload["ok"] is True
     assert payload["claimed"] is False
@@ -159,6 +159,13 @@ def test_release_issue_deletes_existing_claim_ref(monkeypatch: pytest.MonkeyPatc
                 stdout="abc123\trefs/heads/agent-claims/issue-123\n",
                 stderr="",
             )
+        if command[0:3] == ["gh", "pr", "list"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="[]",
+                stderr="",
+            )
         return issue_claim.CommandResult(
             command=tuple(command),
             returncode=0,
@@ -168,12 +175,95 @@ def test_release_issue_deletes_existing_claim_ref(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(issue_claim, "_run", fake_run)
 
-    payload = issue_claim.release_issue(123, remote="origin")
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
 
     assert payload["ok"] is True
     assert payload["claimed"] is False
     assert payload["stdout"] == "deleted"
     assert calls[-1] == ["git", "push", "origin", ":refs/heads/agent-claims/issue-123"]
+
+
+def test_release_requires_terminal_reason_without_deleting_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        return issue_claim.CommandResult(
+            command=tuple(command),
+            returncode=0,
+            stdout=(
+                "abc123\trefs/heads/agent-claims/issue-123\n"
+                if command[0:2] == ["git", "ls-remote"]
+                else ""
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(123, remote="origin")
+
+    assert payload["ok"] is False
+    assert payload["error"] == "terminal_release_reason_required"
+    assert len(calls) == 1
+
+
+def test_release_retains_claim_when_open_pr_covers_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout='[{"number": 456, "body": "Refs #123", "closingIssuesReferences": []}]',
+                stderr="",
+            )
+        raise AssertionError("claim ref must not be deleted while a PR is open")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"].startswith("open_covering_pr_exists")
+    assert payload["covering_prs"] == [456]
+    assert [command[0:3] for command in calls] == [
+        ["git", "ls-remote", "--heads"],
+        ["gh", "pr", "list"],
+    ]
+
+
+def test_build_open_pr_command_is_read_only() -> None:
+    assert issue_claim.build_open_pr_command(repo="ll7/robot_sf_ll7") == [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "--state",
+        "open",
+        "--limit",
+        "500",
+        "--json",
+        "number,body,closingIssuesReferences",
+    ]
 
 
 def test_main_returns_failure_when_acquire_push_fails(monkeypatch: pytest.MonkeyPatch) -> None:

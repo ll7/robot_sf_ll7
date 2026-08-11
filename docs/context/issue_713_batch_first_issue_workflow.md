@@ -166,16 +166,19 @@ After acquiring a claim, make it visible to humans and other agents by moving th
 - intended implementation branch or worktree;
 - stale-claim cleanup condition.
 
-After a PR is open and duplicate-PR checks can see that the issue is covered, release the transient
-claim:
+Opening a PR does not release the claim. The claim remains owned while the PR is open, so a second
+implementation cannot race between PR creation and merge. Release it only after the delivery reaches
+a terminal state, and name that state explicitly:
 
 ```bash
-uv run python scripts/dev/issue_claim.py release <issue-number>
+uv run python scripts/dev/issue_claim.py release <issue-number> --reason merged
+# or --reason closed / --reason abandoned
 ```
 
-Only release another run's claim after checking that there is no open PR, no recent claimant comment,
-and the claim is clearly stale or abandoned. Do not use Project #5 status or labels as the mutex;
-they are useful visibility and routing metadata, but they are not atomic across two PCs.
+The helper performs a fresh read-only open-PR coverage check and fails closed when the snapshot is
+unavailable or an explicit covering PR is still open. Only an explicitly terminal `merged`, `closed`,
+or `abandoned` reason may release the ref. Do not use Project #5 status or labels as the mutex; they
+are useful visibility and routing metadata, but they are not atomic across two PCs.
 
 ## Diagnostic Boundary
 

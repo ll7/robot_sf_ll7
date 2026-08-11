@@ -22,7 +22,9 @@ import yaml
 
 from robot_sf.ped_npc.residual_adversary import (
     DEFAULT_MACRO_ACTION_DT_S,
+    RESIDUAL_ADVERSARY_BEHAVIOR_SCHEMA_VERSION,
     BoundedResidualAdversary,
+    ResidualAdversaryBehaviorSummary,
     ResidualAdversaryConfig,
     ResidualAdversaryObservation,
     ResidualBoundConflictError,
@@ -522,6 +524,10 @@ def test_controller_fail_closed_on_non_finite_state() -> None:
             np.array([1.0]),
             ROBOT_POSE,
         )
+    summary = adversary.behavior_summary
+    assert summary.status == "invalid"
+    assert summary.finite is False
+    assert summary.bound_safe is False
 
 
 def test_controller_fail_closed_on_non_finite_robot_pose() -> None:
@@ -546,6 +552,9 @@ def test_controller_fail_closed_on_non_finite_robot_pose() -> None:
             np.array([1.0]),
             ((0.0, 0.0), float("nan")),
         )
+    assert adversary.behavior_summary.status == "invalid"
+    assert adversary.behavior_summary.finite is False
+    assert adversary.behavior_summary.bound_safe is False
 
 
 def test_controller_fail_closed_on_non_finite_policy_output() -> None:
@@ -562,6 +571,9 @@ def test_controller_fail_closed_on_non_finite_policy_output() -> None:
         adversary.step_residual(
             np.array([[1.0, 1.0]]), np.zeros((1, 2)), np.array([1.0]), ROBOT_POSE
         )
+    assert adversary.behavior_summary.status == "invalid"
+    assert adversary.behavior_summary.finite is False
+    assert adversary.behavior_summary.bound_safe is False
 
 
 def test_policy_observation_arrays_are_read_only_snapshots() -> None:
@@ -1069,6 +1081,71 @@ def test_reset_clears_held_state() -> None:
     adversary.reset()
     assert adversary.step_index == 0
     assert adversary.macro_action_index == 0
+    summary = adversary.behavior_summary
+    assert summary.status == "valid"
+    assert summary.steps == 0
+    assert summary.macro_actions == 0
+    assert summary.applied_residual_norm_mean == 0.0
+    assert summary.applied_residual_norm_max == 0.0
+    assert summary.applied_residual_norm_integral == 0.0
+    assert summary.nonzero_fraction == 0.0
+    assert summary.proposal_adjustment_fraction == 0.0
+    assert summary.finite is True
+    assert summary.bound_safe is True
+
+
+def test_behavior_summary_reports_bounded_deterministic_residuals_and_resets() -> None:
+    """The diagnostic summary is finite, reproducible, and resettable."""
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]], dtype=float)
+    velocities = np.array([[0.5, 0.0], [0.0, 0.3]], dtype=float)
+    max_speeds = np.array([1.5, 1.2])
+    config = _load_example_residual_config(seed=42)
+
+    def run_summary() -> ResidualAdversaryBehaviorSummary:
+        adversary = BoundedResidualAdversary(
+            config=config,
+            policy=ScriptedPullResidualAdversaryPolicy(max_pull_accel_mps2=1.5),
+            dt_s=0.1,
+            num_peds=positions.shape[0],
+        )
+        for _ in range(20):
+            adversary.step_residual(
+                positions.copy(), velocities.copy(), max_speeds.copy(), ROBOT_POSE
+            )
+        return adversary.behavior_summary
+
+    summary_a = run_summary()
+    summary_b = run_summary()
+    assert summary_a.to_dict() == summary_b.to_dict()
+    assert summary_a.schema_version == RESIDUAL_ADVERSARY_BEHAVIOR_SCHEMA_VERSION
+    assert summary_a.status == "valid"
+    assert summary_a.steps == 20
+    assert summary_a.macro_actions == 4
+    assert summary_a.targeted_row_fraction == pytest.approx(1.0)
+    assert summary_a.applied_residual_norm_mean > 0.0
+    assert summary_a.applied_residual_norm_max <= config.max_residual_accel_mps2 + 1e-9
+    assert summary_a.applied_residual_norm_integral > 0.0
+    assert 0.0 < summary_a.nonzero_fraction <= 1.0
+    assert 0.0 <= summary_a.proposal_adjustment_fraction <= 1.0
+    assert summary_a.finite is True
+    assert summary_a.bound_safe is True
+
+    reset_adversary = BoundedResidualAdversary(
+        config=config,
+        policy=ScriptedPullResidualAdversaryPolicy(max_pull_accel_mps2=1.5),
+        dt_s=0.1,
+        num_peds=positions.shape[0],
+    )
+    for _ in range(20):
+        reset_adversary.step_residual(
+            positions.copy(), velocities.copy(), max_speeds.copy(), ROBOT_POSE
+        )
+    reset_adversary.reset()
+    assert reset_adversary.behavior_summary.steps == 0
+    assert reset_adversary.behavior_summary.macro_actions == 0
+    assert reset_adversary.behavior_summary.targeted_row_fraction == pytest.approx(1.0)
+    assert reset_adversary.behavior_summary.finite is True
+    assert reset_adversary.behavior_summary.bound_safe is True
 
 
 def test_empty_crowd_returns_empty_residual() -> None:

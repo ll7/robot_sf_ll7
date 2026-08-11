@@ -70,8 +70,12 @@ Then branch by task type:
 - `.agents/skills/goal-issue-discovery/`, `.agents/skills/goal-issue-implementation/`, and
   `.agents/skills/goal-pr-review/`: autonomous goal loops for issue discovery, sequential issue
   implementation, and PR readiness review
-- `.agents/skills/issue-audit/`: user-in-the-loop open-issue refinement that asks one
-  readiness-blocking question at a time
+- `.agents/skills/issue-audit-autonomous/`: unattended, evidence-supported open-issue cleanup
+  that emits the shared pending-decision queue
+- `.agents/skills/issue-audit/`: interactive maintainer refinement that presents one
+  `issue_decision_envelope.v1` at a time, applies the exact answer, and verifies the result
+- `docs/context/issue_audit_contract.md` and `scripts/dev/issue_audit_core.py`: shared issue-audit
+  policy and deterministic plan/readback backbone
 - `.agents/skills/autoresearch/` and `.agents/skills/auto-improvement/`: repo-local skills for
   measurable improvement loops and smaller refinement passes
 - `.agents/skills/context-map/` and `.agents/skills/what-context-needed/`: context-gathering skills

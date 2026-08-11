@@ -27,6 +27,7 @@ Read these first when working in this workflow:
 - [docs/ai/agent_workflow_entrypoints.md](agent_workflow_entrypoints.md)
 - [docs/context/README.md](../context/README.md)
 - [docs/context/issue_713_batch_first_issue_workflow.md](../context/issue_713_batch_first_issue_workflow.md)
+- [docs/context/issue_audit_contract.md](../context/issue_audit_contract.md)
 - [docs/context/issue_728_coding_agents_compatibility.md](../context/issue_728_coding_agents_compatibility.md)
 - [docs/context/pr_first_pass_review_audit_2026-05-14.md](../context/pr_first_pass_review_audit_2026-05-14.md)
 - [docs/project_prioritization.md](../project_prioritization.md)

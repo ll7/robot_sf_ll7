@@ -41,7 +41,7 @@ resolve_agent_artifact_dir() {
 }
 
 # Cheap shell preflight: verify that test-collection dependencies (duckdb,
-# pyarrow) are importable before expensive pytest collection runs.  Exit 2
+# pyarrow, pandas) are importable before expensive pytest collection runs.  Exit 2
 # with a concise message on failure so agents see the blocker immediately.
 # Set PR_READY_SKIP_PREFLIGHT=1 to bypass this check.
 preflight_check_test_deps() {
@@ -56,7 +56,7 @@ import importlib.util
 
 missing = [
     module_name
-    for module_name in ("duckdb", "pyarrow")
+    for module_name in ("duckdb", "pyarrow", "pandas")
     if importlib.util.find_spec(module_name) is None
 ]
 if missing:
@@ -64,7 +64,7 @@ if missing:
     raise SystemExit(1)
 PY
   )"; then
-    printf 'Final PR readiness requires analytics dependencies: duckdb and pyarrow.\n' >&2
+    printf 'Final PR readiness requires analytics dependencies: duckdb, pyarrow, and pandas.\n' >&2
     printf 'Missing or unavailable modules: %s\n' "$missing" >&2
     printf 'Run `uv sync --all-extras` in this worktree, then rerun final PR readiness.\n' >&2
     exit 2

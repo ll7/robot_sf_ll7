@@ -110,6 +110,75 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     assert any(log_dir.glob("perf/*.json"))
 
 
+@pytest.mark.parametrize(
+    ("config_name", "policy_id", "total_timesteps", "every_steps", "job_type", "tags"),
+    [
+        (
+            "expert_ppo_issue_791_attention_head_promotion_128k.yaml",
+            "ppo_expert_issue_791_attention_head_promotion_128k",
+            131072,
+            65536,
+            "expert-ppo-128k-promotion",
+            ["issue-791", "attention-head", "ppo", "promotion-128k"],
+        ),
+        (
+            "expert_ppo_issue_791_attention_head_promotion_256k.yaml",
+            "ppo_expert_issue_791_attention_head_promotion_256k",
+            262144,
+            32768,
+            "expert-ppo-256k-promotion",
+            ["issue-791", "attention-head", "ppo", "promotion-256k"],
+        ),
+    ],
+)
+def test_issue_6484_base_config_preserves_resolved_variants(
+    config_name: str,
+    policy_id: str,
+    total_timesteps: int,
+    every_steps: int,
+    job_type: str,
+    tags: list[str],
+) -> None:
+    """Base inheritance must preserve the frozen pre-refactor config mappings."""
+    config_path = (Path("configs/training/ppo/ablations") / config_name).resolve()
+    baseline_path = Path(__file__).with_name(
+        "_baseline_issue_6484_attention_head_promotion_resolved.json"
+    )
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    resolved_mapping = _load_expert_training_config_mapping(config_path)
+    resolved_fingerprint = hashlib.sha256(
+        json.dumps(resolved_mapping, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert resolved_fingerprint == baseline["variants"][config_name]
+
+    config = load_expert_training_config(config_path)
+    assert config.policy_id == policy_id
+    assert config.total_timesteps == total_timesteps
+    assert config.evaluation.step_schedule == ((None, every_steps),)
+    assert resolved_mapping["tracking"]["wandb"]["job_type"] == job_type
+    assert resolved_mapping["tracking"]["wandb"]["tags"] == tags
+
+
+def test_issue_6484_short_budget_variants_keep_distinct_overrides() -> None:
+    """The two inherited variants retain different budgets and evaluation cadence."""
+    config_dir = Path("configs/training/ppo/ablations")
+    short = _load_expert_training_config_mapping(
+        (config_dir / "expert_ppo_issue_791_attention_head_promotion_128k.yaml").resolve()
+    )
+    long = _load_expert_training_config_mapping(
+        (config_dir / "expert_ppo_issue_791_attention_head_promotion_256k.yaml").resolve()
+    )
+
+    assert short["total_timesteps"] == 131072
+    assert long["total_timesteps"] == 262144
+    assert short["evaluation"]["step_schedule"] == [{"every_steps": 65536}]
+    assert long["evaluation"]["step_schedule"] == [{"every_steps": 32768}]
+    assert short["policy_id"] != long["policy_id"]
+    assert short["tracking"]["wandb"]["job_type"] != long["tracking"]["wandb"]["job_type"]
+
+
 def test_load_expert_training_config_supports_resume_and_scenario_sampling(tmp_path) -> None:
     """Loader should resolve warm-start checkpoints and weighted sampler config."""
     resume_dir = tmp_path / "resume"
@@ -2408,3 +2477,56 @@ def test_issue_6683_candidate_matrix_lineage_keeps_runner_semantics() -> None:
     assert rebuilt.evaluation_episodes == 5
     assert rebuilt.hold_out_scenarios == ()
     assert rebuilt.step_schedule == ((None, 48000),)
+
+
+_ISSUE_6904_CONFIG_PATHS = [
+    "configs/training/benchmark_orca_classic_cross_trap_subset.yaml",
+    "configs/training/benchmark_orca_classic_crossing_subset.yaml",
+    "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml",
+    "configs/training/ppo_imitation/expert_ppo.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m_random.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_radius_0_6.yaml",
+]
+
+
+def _issue_6904_baseline() -> dict:
+    """Load and validate the frozen pre-change resolved-config baseline."""
+    baseline_path = Path("tests/integration/_baseline_issue_6904_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert baseline["field_removed"] == "evaluation.frequency_episodes"
+    assert set(baseline["variants"]) == set(_ISSUE_6904_CONFIG_PATHS)
+    assert set(baseline["pre_change_frequency_episodes"]) == set(_ISSUE_6904_CONFIG_PATHS)
+    return baseline
+
+
+def test_issue_6904_baseline_records_removed_frequency_values() -> None:
+    """The baseline records the ignored values removed from all ten configs."""
+    baseline = _issue_6904_baseline()
+    values = baseline["pre_change_frequency_episodes"]
+    assert values["configs/training/benchmark_orca_classic_cross_trap_subset.yaml"] == 1
+    assert values["configs/training/benchmark_orca_classic_crossing_subset.yaml"] == 1
+    assert {values[path] for path in _ISSUE_6904_CONFIG_PATHS[2:]} == {10}
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6904_CONFIG_PATHS)
+def test_issue_6904_frequency_episodes_drop_preserves_resolved_behavior(rel_path: str) -> None:
+    """Removing the ignored field preserves every other resolved config value."""
+    baseline = _issue_6904_baseline()
+    config_path = Path(rel_path)
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert raw["evaluation"].get("step_schedule")
+
+    resolved = _load_expert_training_config_mapping(config_path)
+    assert "frequency_episodes" not in resolved.get("evaluation", {})
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+    assert actual_fingerprint == baseline["variants"][rel_path]
+
+    config = load_expert_training_config(config_path)
+    assert config.evaluation.step_schedule
+    assert config.evaluation.frequency_episodes == 0

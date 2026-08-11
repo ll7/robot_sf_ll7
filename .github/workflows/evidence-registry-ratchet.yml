@@ -14,6 +14,16 @@ name: Evidence-registry ratchet
 # net-new integrity finding that the baseline does not grandfather; either remediate the
 # finding or refresh the baseline with `evidence_registry_ratchet.py --write-baseline` and
 # record the new file's disposition in evidence_registry_baseline_review.yaml.
+#
+# Issue #6839: the baseline is derived data (a pure function of the evidence tree), so a
+# hand-committed drift used to redden main after every evidence merge. The ratchet now also
+# fails a PR that adds or removes ANY file under docs/context/evidence/ without refreshing
+# the baseline's evidence_tree manifest in the same change -- the failure is attributed to
+# the causing PR pre-merge (Option 2: fail-closed and attributed to the cause), never to
+# clean main. The single documented fix, run from a full-history checkout, is:
+#   uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline
+# then commit scripts/validation/evidence_registry_baseline.json. The baseline is derived
+# data -- never hand-edit it.
 
 on:
   pull_request:

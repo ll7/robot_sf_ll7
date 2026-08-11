@@ -18,7 +18,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.adversarial_package_b_report import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_report import (
     RAW_ARTIFACT_METADATA_FILENAME,
     retrieve_package_b_raw_artifacts,
     verify_package_b_candidate_replay_inventory,

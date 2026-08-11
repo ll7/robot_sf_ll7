@@ -13,10 +13,13 @@ from robot_sf.benchmark.multi_amv import (
     MultiAmvSettings,
     ensure_multi_amv_planner_supported,
     inter_robot_metrics,
+    inter_robot_pair_metrics,
+    is_multi_robot_eligible_episode,
     multi_amv_episode_extension,
     multi_amv_planner_support,
     multi_amv_planner_support_inventory,
     multi_amv_settings_from_scenario,
+    multi_robot_eligible_episode_summary,
 )
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.gym_env.unified_config import MultiRobotConfig, RobotSimulationConfig
@@ -545,3 +548,226 @@ def test_read_jsonl_rejects_non_object_records(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="not a JSON object"):
         _read_jsonl(path)
+
+
+def test_inter_robot_pair_metrics_preserves_pair_identity_with_three_robots() -> None:
+    """Per-pair metrics should return one entry per unordered pair with correct identity."""
+    positions = np.array(
+        [
+            [[0.0, 0.0], [3.0, 0.0], [5.0, 0.0]],
+            [[0.0, 0.0], [0.2, 0.0], [5.0, 0.0]],
+            [[0.0, 0.0], [0.2, 0.0], [5.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    settings = MultiAmvSettings(
+        num_robots=3,
+        collision_distance_m=0.4,
+        near_miss_distance_m=1.0,
+    )
+    results = inter_robot_pair_metrics(positions, settings=settings)
+
+    assert len(results) == 3
+    assert results[0]["pair"] == (0, 1)
+    assert results[1]["pair"] == (0, 2)
+    assert results[2]["pair"] == (1, 2)
+    assert results[0]["collision_events"] >= 1
+    assert results[1]["collision_events"] == 0
+    assert results[2]["collision_events"] == 0
+
+
+def test_inter_robot_pair_metrics_contiguous_overlap_counted_once() -> None:
+    """A single contiguous collision run should produce exactly one event."""
+    positions = np.array(
+        [
+            [[0.0, 0.0], [2.0, 0.0]],
+            [[0.0, 0.0], [0.3, 0.0]],
+            [[0.0, 0.0], [0.3, 0.0]],
+            [[0.0, 0.0], [0.3, 0.0]],
+            [[0.0, 0.0], [2.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    settings = MultiAmvSettings(num_robots=2, collision_distance_m=0.4, near_miss_distance_m=1.0)
+    results = inter_robot_pair_metrics(positions, settings=settings)
+
+    assert len(results) == 1
+    assert results[0]["pair"] == (0, 1)
+    assert results[0]["collision_events"] == 1
+
+
+def test_inter_robot_pair_metrics_separated_reentry_counted_as_new_event() -> None:
+    """Separation followed by re-entry should produce two distinct collision events."""
+    positions = np.array(
+        [
+            [[0.0, 0.0], [2.0, 0.0]],
+            [[0.0, 0.0], [0.3, 0.0]],
+            [[0.0, 0.0], [2.0, 0.0]],
+            [[0.0, 0.0], [0.3, 0.0]],
+            [[0.0, 0.0], [2.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    settings = MultiAmvSettings(num_robots=2, collision_distance_m=0.4, near_miss_distance_m=1.0)
+    results = inter_robot_pair_metrics(positions, settings=settings)
+
+    assert len(results) == 1
+    assert results[0]["pair"] == (0, 1)
+    assert results[0]["collision_events"] == 2
+    assert results[0]["min_distance_m"] == pytest.approx(0.3)
+
+
+def test_inter_robot_pair_metrics_single_robot_returns_empty() -> None:
+    """A single robot should produce zero pairs."""
+    positions = np.array([[[0.0, 0.0]], [[1.0, 0.0]]], dtype=float)
+    settings = MultiAmvSettings(num_robots=1)
+    results = inter_robot_pair_metrics(positions, settings=settings)
+
+    assert results == []
+
+
+def test_inter_robot_pair_metrics_near_miss_events() -> None:
+    """Near-miss events should be counted separately from collision events."""
+    positions = np.array(
+        [
+            [[0.0, 0.0], [5.0, 0.0]],
+            [[0.0, 0.0], [0.8, 0.0]],
+            [[0.0, 0.0], [5.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    settings = MultiAmvSettings(num_robots=2, collision_distance_m=0.4, near_miss_distance_m=1.0)
+    results = inter_robot_pair_metrics(positions, settings=settings)
+
+    assert results[0]["collision_events"] == 0
+    assert results[0]["near_miss_events"] == 1
+
+
+def test_is_multi_robot_eligible_episode_requires_two_robots() -> None:
+    """Single-robot episodes should not be eligible."""
+    record = {
+        "metrics": {"inter_robot": {"robot_count": 1.0}},
+        "steps": 5,
+    }
+    assert is_multi_robot_eligible_episode(record) is False
+
+
+def test_is_multi_robot_eligible_episode_requires_at_least_one_step() -> None:
+    """Zero-step episodes should not be eligible even with two robots."""
+    record = {
+        "metrics": {"inter_robot": {"robot_count": 2.0}},
+        "steps": 0,
+    }
+    assert is_multi_robot_eligible_episode(record) is False
+
+
+def test_is_multi_robot_eligible_episode_accepts_valid_record() -> None:
+    """Two-robot episodes with at least one step should be eligible."""
+    record = {
+        "metrics": {"inter_robot": {"robot_count": 2.0}},
+        "steps": 10,
+    }
+    assert is_multi_robot_eligible_episode(record) is True
+
+
+def test_is_multi_robot_eligible_episode_handles_missing_fields() -> None:
+    """Records missing inter_robot or steps should not be eligible."""
+    assert is_multi_robot_eligible_episode({}) is False
+    assert is_multi_robot_eligible_episode({"metrics": {}}) is False
+    assert is_multi_robot_eligible_episode({"metrics": {"inter_robot": {}}}) is False
+
+
+def test_multi_robot_eligible_episode_summary_zero_denominator() -> None:
+    """Empty or ineligible records should produce zero-denominator with fraction 0.0."""
+    summary = multi_robot_eligible_episode_summary([])
+
+    assert summary["eligible_episodes"] == 0
+    assert summary["episodes_with_collision_events"] == 0
+    assert summary["collision_event_fraction"] == 0.0
+
+
+def test_multi_robot_eligible_episode_summary_counts_correctly() -> None:
+    """Eligible episodes should be counted and collision presence detected."""
+    records = [
+        {
+            "metrics": {"inter_robot": {"robot_count": 2.0, "inter_robot_collision_events": 0.0}},
+            "steps": 10,
+        },
+        {
+            "metrics": {"inter_robot": {"robot_count": 2.0, "inter_robot_collision_events": 1.0}},
+            "steps": 20,
+        },
+        {
+            "metrics": {"inter_robot": {"robot_count": 1.0, "inter_robot_collision_events": 0.0}},
+            "steps": 10,
+        },
+    ]
+    summary = multi_robot_eligible_episode_summary(records)
+
+    assert summary["eligible_episodes"] == 2
+    assert summary["episodes_with_collision_events"] == 1
+    assert summary["collision_event_fraction"] == pytest.approx(0.5)
+
+
+def test_multi_robot_eligible_episode_summary_includes_per_pair_when_provided() -> None:
+    """Per-pair results should be included in summary when provided."""
+    pair_data = [
+        {"pair": (0, 1), "collision_events": 2, "near_miss_events": 0, "min_distance_m": 0.1}
+    ]
+    summary = multi_robot_eligible_episode_summary([], per_pair_results=pair_data)
+
+    assert summary["per_pair_events"] == pair_data
+
+
+def test_multi_robot_eligible_episode_summary_backward_compat_existing_inter_robot() -> None:
+    """Existing inter_robot metrics format should be compatible with eligibility check."""
+    record = {
+        "metrics": {
+            "inter_robot": {
+                "robot_count": 2.0,
+                "pair_count": 1.0,
+                "inter_robot_collision_events": 3.0,
+                "deadlock_detected": False,
+            }
+        },
+        "steps": 5,
+    }
+    assert is_multi_robot_eligible_episode(record) is True
+
+
+def test_build_multi_amv_episode_record_includes_inter_robot_pairs() -> None:
+    """Episode records should include per-pair data in metrics when provided."""
+    settings = MultiAmvSettings(num_robots=2)
+    inter_robot = {
+        "robot_count": 2.0,
+        "pair_count": 1.0,
+        "min_inter_robot_distance_m": 0.3,
+        "inter_robot_collision_events": 1.0,
+        "inter_robot_near_miss_events": 0.0,
+        "deadlock_steps": 0.0,
+        "deadlock_detected": False,
+    }
+    pair_data = [
+        {"pair": (0, 1), "collision_events": 1, "near_miss_events": 0, "min_distance_m": 0.3}
+    ]
+    record = build_multi_amv_episode_record(
+        scenario_id="test_scenario",
+        seed=42,
+        horizon=10,
+        steps_recorded=11,
+        settings=settings,
+        inter_robot=inter_robot,
+        inter_robot_pairs=pair_data,
+        planner_family="goal_controller_smoke",
+        planner_status="goal_controller_smoke",
+        wall_time_sec=0.5,
+    )
+
+    diagnostics = record["metrics"]["inter_robot_collision_diagnostics"]
+    assert diagnostics["evidence_status"] == "diagnostic_only"
+    assert diagnostics["thresholds"]["collision_distance_m"] == pytest.approx(0.4)
+    assert diagnostics["episode_summary"]["per_pair_events"] == pair_data
+    assert diagnostics["episode_summary"]["eligible_episodes"] == 1
+    assert diagnostics["episode_summary"]["episodes_with_collision_events"] == 1
+    assert diagnostics["episode_summary"]["collision_event_fraction"] == pytest.approx(1.0)
+    assert record["metrics"]["inter_robot"]["inter_robot_collision_events"] == 1.0

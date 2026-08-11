@@ -4891,6 +4891,7 @@ entries:
   status: evidence
   freshness: maintained
   area: workflow_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6769_figure_render_registry_audit.json
   status: evidence
   freshness: evidence

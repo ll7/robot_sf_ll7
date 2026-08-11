@@ -261,6 +261,64 @@ def multi_amv_settings_from_scenario(scenario: dict[str, Any]) -> MultiAmvSettin
     return settings
 
 
+def inter_robot_pair_metrics(
+    robot_positions: np.ndarray,
+    *,
+    settings: MultiAmvSettings,
+) -> list[dict[str, Any]]:
+    """Compute per-pair collision-event metrics preserving pair identity.
+
+    For every unordered pair ``(i, j)`` with ``i < j``, count the number of
+    distinct collision events and near-miss events. An event is defined by
+    geometric overlap transitions in the pairwise distance time-series:
+
+    * Non-overlap to overlap (distance drops below threshold) starts one event.
+    * Contiguous overlap (distance stays below threshold across consecutive
+      steps) remains part of the same event.
+    * Separation and re-entry (distance rises above threshold then drops below
+      again) starts a new event.
+
+    These are geometric position-based counts, not runtime collision flags from
+    the simulator. They measure whether robot center-point circles overlap at a
+    given simulation step, independent of the simulator's collision detection
+    pipeline.
+
+    Args:
+        robot_positions: Array shaped ``(steps, robots, 2)`` of 2-D positions
+            per robot per simulation step.
+        settings: Thresholds for collision and near-miss distances.
+
+    Returns:
+        A list of dicts, one per unordered pair. Each dict contains:
+
+        * ``pair``: ``(i, j)`` tuple identifying the robot pair.
+        * ``collision_events``: number of contiguous collision runs.
+        * ``near_miss_events``: number of contiguous near-miss runs.
+        * ``min_distance_m``: minimum pairwise distance across all steps.
+    """
+    positions = np.asarray(robot_positions, dtype=float)
+    if positions.ndim != 3 or positions.shape[2] != 2:
+        raise ValueError("robot_positions must have shape (steps, robots, 2).")
+    steps, robots, _ = positions.shape
+    results: list[dict[str, Any]] = []
+    for i in range(robots):
+        for j in range(i + 1, robots):
+            dists = np.linalg.norm(positions[:, i, :] - positions[:, j, :], axis=1)
+            collision_mask = dists < settings.collision_distance_m
+            near_miss_mask = (dists >= settings.collision_distance_m) & (
+                dists < settings.near_miss_distance_m
+            )
+            results.append(
+                {
+                    "pair": (i, j),
+                    "collision_events": _count_true_runs(collision_mask),
+                    "near_miss_events": _count_true_runs(near_miss_mask),
+                    "min_distance_m": float(np.min(dists)) if steps > 0 else float("nan"),
+                }
+            )
+    return results
+
+
 def inter_robot_metrics(
     robot_positions: np.ndarray,
     *,
@@ -268,6 +326,11 @@ def inter_robot_metrics(
     settings: MultiAmvSettings,
 ) -> dict[str, float | bool]:
     """Compute minimal inter-robot safety/deadlock metrics from trajectories.
+
+    Aggregates collision/near-miss event counts across all unordered robot
+    pairs. Each pair's contribution uses the same contiguous-run counting as
+    :func:`inter_robot_pair_metrics`, but the aggregate loses pair identity.
+    Use :func:`inter_robot_pair_metrics` when pair-level provenance is needed.
 
     Args:
         robot_positions: Array shaped ``(steps, robots, 2)``.
@@ -335,6 +398,85 @@ def inter_robot_metrics(
         "deadlock_steps": float(deadlock_steps),
         "deadlock_detected": bool(deadlock_detected),
     }
+
+
+def is_multi_robot_eligible_episode(record: dict[str, Any]) -> bool:
+    """Return whether an episode record qualifies as a multi-robot eligible episode.
+
+    An eligible episode has at least two robots and at least one completed
+    simulation step (``steps >= 1``). Episodes with zero steps or a single
+    robot cannot produce inter-robot collision events and are excluded from
+    denominators.
+
+    Args:
+        record: A benchmark episode record dict.
+
+    Returns:
+        ``True`` if the record meets the eligibility criteria.
+    """
+    metrics = record.get("metrics")
+    if not isinstance(metrics, dict):
+        return False
+    inter_robot = metrics.get("inter_robot")
+    if not isinstance(inter_robot, dict):
+        return False
+    robot_count = inter_robot.get("robot_count")
+    steps = record.get("steps")
+    try:
+        return float(robot_count) >= 2.0 and int(steps) >= 1
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def multi_robot_eligible_episode_summary(
+    records: list[dict[str, Any]],
+    *,
+    per_pair_results: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Summarize eligible-episode counts and collision-event presence.
+
+    Computes the denominator for inter-robot collision-event reporting:
+
+    * ``eligible_episodes``: count of episodes with at least two robots and
+      at least one simulation step.
+    * ``episodes_with_collision_events``: count of eligible episodes where at
+      least one robot pair experienced at least one collision event.
+    * ``collision_event_fraction``: the fraction of eligible episodes with at
+      least one collision event. Returns ``0.0`` when the denominator is zero
+      (safe zero-denominator behaviour).
+    * ``per_pair_events``: optional list of per-pair event dicts from
+      :func:`inter_robot_pair_metrics`, included when provided.
+
+    This is diagnostic-only evidence. It does not claim coordination
+    efficiency, pedestrian disruption, or benchmark promotion.
+
+    Args:
+        records: List of benchmark episode record dicts.
+        per_pair_results: Optional per-pair collision-event results to attach.
+
+    Returns:
+        Summary dict with eligible-episode denominator, collision-event
+        presence counts, and safe zero-denominator handling.
+    """
+    eligible = [r for r in records if is_multi_robot_eligible_episode(r)]
+    eligible_count = len(eligible)
+    with_collision = 0
+    for rec in eligible:
+        metrics = rec.get("metrics")
+        inter_robot = metrics.get("inter_robot") if isinstance(metrics, dict) else None
+        if isinstance(inter_robot, dict):
+            events = float(inter_robot.get("inter_robot_collision_events", 0.0) or 0.0)
+            if events > 0.0:
+                with_collision += 1
+    fraction = float(with_collision) / float(eligible_count) if eligible_count > 0 else 0.0
+    result: dict[str, Any] = {
+        "eligible_episodes": eligible_count,
+        "episodes_with_collision_events": with_collision,
+        "collision_event_fraction": fraction,
+    }
+    if per_pair_results is not None:
+        result["per_pair_events"] = per_pair_results
+    return result
 
 
 def multi_amv_episode_extension(

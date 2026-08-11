@@ -8,9 +8,9 @@ Evidence grade: not benchmark evidence. No paper, metric, or safety claim.
 This slice adds one alternative diagnostic objective proxy,
 `minimize_predicted_robot_distance`, to the existing deterministic finite-budget
 grid search baseline (#6911). The proxy ranks candidates by how close the
-bounded-displacement endpoint places the targeted pedestrian to the robot, using
-only positions and the robot pose already available at the search seam. No
-planner or episode-state coupling is introduced.
+one-step predicted pedestrian position places the targeted pedestrian to the
+robot, using positions, velocities, and the robot pose already available at the
+search seam. No planner or episode-state coupling is introduced.
 
 ## What ships (the contract)
 
@@ -21,8 +21,9 @@ planner or episode-state coupling is introduced.
     supported set; rejects unsupported or malformed values.
   - `_evaluate_candidate` accepts an `objective_proxy` keyword. For
     `minimize_predicted_robot_distance` it computes the negative Euclidean
-    distance from the bounded-displacement endpoint to the robot position,
-    preserving the existing maximise-convention ranking.
+    distance from the one-step predicted position (nominal velocity displacement
+    plus bounded residual displacement) to the robot position, preserving the
+    existing maximise-convention ranking.
   - `FiniteGridSearchPolicy.propose_residual` passes the configured proxy
     through to `_evaluate_candidate`.
   - `SearchDiagnosticRecord` and `to_json` emit the objective proxy name so
@@ -41,11 +42,12 @@ planner or episode-state coupling is introduced.
 ### Proxy selection: predicted robot proximity
 
 The chosen proxy uses one-step predicted pedestrian proximity to the robot:
-`predicted_position = position + bounded_residual * dt_s^2`, then
-`score = -||predicted_position - robot_position||`. This is a one-step
+`predicted_position = position + velocity * dt_s + bounded_residual * dt_s^2`,
+then `score = -||predicted_position - robot_position||`. This is a one-step
 observable interaction signal from inputs already present at the search seam
-(`positions`, `robot_pose`, `dt_s`, `bounded_residual`). It does not require
-planner access, episode-state coupling, or a scientific stress metric.
+(`positions`, `velocities`, `robot_pose`, `dt_s`, `bounded_residual`). It does
+not require planner access, episode-state coupling, or a scientific stress
+metric.
 
 ### Negative distance convention
 

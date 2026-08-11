@@ -257,10 +257,13 @@ def _evaluate_candidate(
     objective_proxy:
         Name of the diagnostic objective used to score the candidate.
         ``maximize_residual_magnitude`` returns the Euclidean norm of the
-        bounded residual at the targeted pedestrian.  ``minimize_predicted_robot_distance``
-        returns the negative Euclidean distance from the bounded-displacement
-        endpoint to the robot position, so the existing maximise convention
-        selects candidates that place the pedestrian closest to the robot.
+        bounded residual at the targeted pedestrian.
+        ``minimize_predicted_robot_distance`` returns the negative Euclidean
+        distance from the one-step predicted position (nominal velocity
+        displacement ``velocities * dt_s`` plus bounded residual displacement
+        ``bounded * dt_s²``) to the robot position, so the existing maximise
+        convention selects candidates that place the pedestrian closest to the
+        robot.
     robot_pose:
         Robot position and heading, required when ``objective_proxy`` is
         ``minimize_predicted_robot_distance``.
@@ -300,8 +303,11 @@ def _evaluate_candidate(
         if objective_proxy == "minimize_predicted_robot_distance":
             if robot_pose is None:
                 raise ValueError("robot_pose is required for minimize_predicted_robot_distance")
-            bounded_displacement = bounded[target_idx] * (context.dt_s * context.dt_s)
-            predicted_position = context.positions[target_idx] + bounded_displacement
+            nominal_displacement = context.velocities[target_idx] * context.dt_s
+            residual_displacement = bounded[target_idx] * (context.dt_s * context.dt_s)
+            predicted_position = (
+                context.positions[target_idx] + nominal_displacement + residual_displacement
+            )
             robot_position = np.asarray(robot_pose[0], dtype=float)
             if robot_position.shape != (2,) or not np.all(np.isfinite(robot_position)):
                 raise ValueError("robot_pose position must have shape (2,) with finite values")

@@ -771,12 +771,13 @@ def test_evaluate_candidate_minimize_predicted_robot_distance_valid() -> None:
 
 
 def test_evaluate_candidate_minimize_predicted_robot_distance_zero() -> None:
-    """A zero candidate gives zero displacement; score equals negative original distance."""
+    """A zero candidate gives zero residual; predicted position is the nominal one-step endpoint."""
     config = ResidualAdversaryConfig(is_active=True)
     positions = np.array([[3.0, 1.0]])
     velocities = np.array([[0.5, 0.0]])
     max_speeds = np.array([1.5])
     candidate = np.array([0.0, 0.0])
+    dt_s = 0.1
     score, is_valid = _evaluate_candidate(
         candidate,
         0,
@@ -785,15 +786,60 @@ def test_evaluate_candidate_minimize_predicted_robot_distance_zero() -> None:
             velocities=velocities,
             max_speeds=max_speeds,
             residual_config=config,
-            dt_s=0.1,
+            dt_s=dt_s,
             robot_pose=((0.0, 0.0), 0.0),
         ),
         objective_proxy="minimize_predicted_robot_distance",
         robot_pose=((0.0, 0.0), 0.0),
     )
     assert is_valid is True
-    expected_distance = float(np.linalg.norm(np.array([3.0, 1.0]) - np.array([0.0, 0.0])))
+    # One-step predicted position: nominal velocity displacement + zero residual.
+    predicted = positions[0] + velocities[0] * dt_s
+    expected_distance = float(np.linalg.norm(predicted - np.array([0.0, 0.0])))
     assert score == pytest.approx(-expected_distance)
+
+
+def test_evaluate_candidate_predicted_position_includes_nominal_velocity() -> None:
+    """Regression: the one-step predicted position includes nominal velocity displacement.
+
+    Under the old formula (positions + bounded * dt_s**2 only), a pedestrian
+    with velocity toward the robot but zero residual would be scored as if the
+    velocity had no effect on the next position.  This test places the robot
+    directly ahead of the pedestrian's velocity so the nominal displacement
+    reduces the distance; under the old formula the score would equal the
+    static distance, failing the assertion.
+    """
+    config = ResidualAdversaryConfig(is_active=True)
+    # Pedestrian at x=2 moving toward robot at x=0 with v=-1 m/s along x.
+    positions = np.array([[2.0, 0.0]])
+    velocities = np.array([[-1.0, 0.0]])
+    max_speeds = np.array([2.0])
+    dt_s = 0.1
+    candidate = np.array([0.0, 0.0])  # zero residual
+    score, is_valid = _evaluate_candidate(
+        candidate,
+        0,
+        _CandidateEvaluationContext(
+            positions=positions,
+            velocities=velocities,
+            max_speeds=max_speeds,
+            residual_config=config,
+            dt_s=dt_s,
+            robot_pose=((0.0, 0.0), 0.0),
+        ),
+        objective_proxy="minimize_predicted_robot_distance",
+        robot_pose=((0.0, 0.0), 0.0),
+    )
+    assert is_valid is True
+    # One-step predicted: [2.0, 0] + [-1.0, 0] * 0.1 = [1.9, 0].
+    # Distance to robot at origin = 1.9.  Old formula would give 2.0.
+    predicted = positions[0] + velocities[0] * dt_s  # [1.9, 0.0]
+    expected_distance = float(np.linalg.norm(predicted))
+    assert expected_distance == pytest.approx(1.9)
+    assert score == pytest.approx(-expected_distance)
+    # Guard: the old formula (ignoring velocity) would produce -2.0.
+    old_formula_distance = float(np.linalg.norm(positions[0]))
+    assert score != pytest.approx(-old_formula_distance, abs=1e-9)
 
 
 def test_evaluate_candidate_minimize_predicted_robot_distance_two_distinct_scores() -> None:

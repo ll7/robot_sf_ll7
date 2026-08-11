@@ -1,11 +1,11 @@
 version: 1
-generated_at: '2026-08-11T16:21:52+00:00'
+generated_at: '2026-08-11T16:39:13+00:00'
 generator: scripts/dev/build_figure_render_registry.py
 issue: 6769
 claim_boundary: Workflow reproducibility metadata only. No figure, benchmark, or publication claim is
   produced. recurrence_eligible means only safe, deterministic, local, committed-input recurrence candidacy.
 provenance:
-  source_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  source_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
   issue: 6769
 entries:
 - id: docs_context_evidence_issue_5447_ch7_case_capsules_build_command_v1_txt__cmd1_6c792a9b
@@ -29,7 +29,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_5447_ch7_case_capsules_build_command_v1_txt__cmd2_7b5b13af
   source_class: build_command_txt
   source_path: docs/context/evidence/issue_5447_ch7_case_capsules/build_command.v1.txt
@@ -60,7 +60,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd1_0535d6e6
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
@@ -93,7 +93,7 @@ entries:
   classification_notes:
   - command writes to the untracked output/ root
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd2_02aa81d2
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
@@ -126,7 +126,7 @@ entries:
   classification_notes:
   - command writes to the untracked output/ root
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd3_921930f5
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
@@ -161,7 +161,7 @@ entries:
   classification_notes:
   - command writes to the untracked output/ root
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_1344_paired_amv_primary_2026-05-20_README_md__cmd4_8a001f3b
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
@@ -196,7 +196,7 @@ entries:
   classification_notes:
   - command writes to the untracked output/ root
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2444_ammv_divergence_2026-06-23_README_md__cmd1_1bd521a8
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
@@ -218,7 +218,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2444_ammv_divergence_2026-06-23_README_md__cmd2_a8eb8623
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
@@ -238,7 +238,7 @@ entries:
   classification_notes:
   - 'referenced path missing: output/issue_2444_ammv_divergence/ammv_divergence_classification.json'
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2444_ammv_divergence_2026-06-23_README_md__cmd3_e911e4a2
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
@@ -263,7 +263,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2704_progress_gated_topology_successor_README_md__cmd1_9669de18
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2704_progress_gated_topology_successor/README.md
@@ -305,7 +305,7 @@ entries:
   classification_notes:
   - command uses shell environment-assignment prefix
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2704_progress_gated_topology_successor_README_md__cmd2_36147cfb
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2704_progress_gated_topology_successor/README.md
@@ -347,7 +347,7 @@ entries:
   classification_notes:
   - command uses shell environment-assignment prefix
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2751_topology_reselection_runtime_README_md__cmd1_99e7ede0
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2751_topology_reselection_runtime/README.md
@@ -371,7 +371,7 @@ entries:
   classification_notes:
   - command references a placeholder path
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2752_topology_reselection_mechanism_README_md__cmd1_99e7ede0
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2752_topology_reselection_mechanism/README.md
@@ -395,7 +395,7 @@ entries:
   classification_notes:
   - command references a placeholder path
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2753_signalized_crossing_metrics_README_md__cmd1_c31b529c
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2753_signalized_crossing_metrics/README.md
@@ -417,7 +417,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2799_signalized_runtime_README_md__cmd1_05cf0eec
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2799_signalized_runtime/README.md
@@ -449,7 +449,7 @@ entries:
   classification_notes:
   - command writes to the untracked output/ root
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2837_horizon_timestep_ablation_2026-06-15_README_md__cmd1_7fa1f21a
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/README.md
@@ -477,7 +477,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2865_forecast_calibration_report_2026-06-15_README_md__cmd1_ae6ca2f2
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/README.md
@@ -511,7 +511,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2868_semantic_metadata_fixtures_2026-06-15_README_md__cmd1_447840f3
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/README.md
@@ -540,7 +540,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2869_forecast_risk_calibration_filter_2026-06-15_README_md__cmd1_fb074256
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15/README.md
@@ -564,7 +564,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2903_horizon_denominator_health_2026-06-16_README_md__cmd1_13b50431
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/README.md
@@ -594,7 +594,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_2937_horizon_denominator_health_2026-06-16_README_md__cmd1_28236d14
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16/README.md
@@ -624,7 +624,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29_README_md__cmd1_8d846b56
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/README.md
@@ -656,7 +656,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_3275_rerun_closure_2026-07-03_README_md__cmd1_53b553b9
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_3275_rerun_closure_2026-07-03/README.md
@@ -689,7 +689,7 @@ entries:
   classification_notes:
   - command writes to the untracked output/ root
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd1_92e66dae
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/README.md
@@ -718,7 +718,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd2_fccbfb79
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/README.md
@@ -747,7 +747,7 @@ entries:
   exclusion_reason: null
   classification_notes: []
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_3544_signalized_failure_pack_real_runtime_metrics_README_md__cmd1_8933a7f3
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_3544_signalized_failure_pack_real/runtime_metrics/README.md
@@ -774,7 +774,7 @@ entries:
   classification_notes:
   - 'referenced path missing: output/benchmarks/issue_3544_signalized_trace_run/episodes.jsonl'
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_3978_snqi_v1_recalibration_README_md__cmd1_c7b3b872
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_3978_snqi_v1_recalibration/README.md
@@ -803,7 +803,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_4013_learned_model_based_planning_README_md__cmd1_e194aa46
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_4013_learned_model_based_planning/README.md
@@ -825,7 +825,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_5088_braking_authority_sensitivity_smoke_README_md__cmd1_9d2ea7ed
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_5088_braking_authority_sensitivity_smoke/README.md
@@ -852,7 +852,7 @@ entries:
   classification_notes:
   - command uses shell environment-assignment prefix
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_5303_search_promotion_powered_preregistration_README_md__cmd1_543d9a7a
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_5303_search_promotion_powered_preregistration/README.md
@@ -874,7 +874,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_5303_search_promotion_powered_preregistration_README_md__cmd2_6a6ffd25
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_5303_search_promotion_powered_preregistration/README.md
@@ -897,7 +897,7 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_5446_release_0_0_3_candidates_README_md__cmd1_86ddd7b2
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_5446_release_0_0_3_candidates/README.md
@@ -925,7 +925,7 @@ entries:
   classification_notes:
   - command uses an absolute path argument
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6
 - id: docs_context_evidence_issue_5447_ch7_case_capsules_README_md__cmd1_6c792a9b
   source_class: readme_reproduction
   source_path: docs/context/evidence/issue_5447_ch7_case_capsules/README.md
@@ -947,4 +947,4 @@ entries:
   classification_notes:
   - command declares no explicit expected output
   provenance_status: discovered
-  last_verified_commit: a5ac8f94c569a0cd10b7e231a30e7b24d214ae0e
+  last_verified_commit: c07d206bdddae416b7fe7ca1818239961ceae3e6

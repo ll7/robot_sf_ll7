@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -23,6 +24,7 @@ from robot_sf.ped_npc.residual_adversary import (
     ResidualAdversaryConfig,
 )
 from robot_sf.ped_npc.residual_search import (
+    SUPPORTED_OBJECTIVE_PROXIES,
     FiniteGridSearchPolicy,
     ResidualSearchConfig,
     SearchDiagnosticRecord,
@@ -248,6 +250,27 @@ def test_evaluate_candidate_non_finite_returns_invalid() -> None:
             dt_s=0.1,
             robot_pose=ROBOT_POSE,
         ),
+    )
+    assert is_valid is False
+    assert score == 0.0
+
+
+def test_evaluate_candidate_unsupported_proxy_returns_invalid() -> None:
+    """An internal unsupported proxy cannot silently fall back to magnitude."""
+    config = ResidualAdversaryConfig(is_active=True)
+    context = _CandidateEvaluationContext(
+        positions=np.array([[3.0, 1.0]]),
+        velocities=np.array([[0.5, 0.0]]),
+        max_speeds=np.array([1.5]),
+        residual_config=config,
+        dt_s=0.1,
+        robot_pose=ROBOT_POSE,
+    )
+    score, is_valid = _evaluate_candidate(
+        np.array([0.1, 0.1]),
+        0,
+        context,
+        objective_proxy="unsupported_proxy",
     )
     assert is_valid is False
     assert score == 0.0
@@ -479,7 +502,7 @@ def test_search_evaluates_each_candidate_through_bounded_controller(monkeypatch)
     calls: list[dict[str, object]] = []
     controller_type = residual_search.BoundedResidualAdversary
 
-    def spy_controller(*args, **kwargs):
+    def spy_controller(*args: Any, **kwargs: Any) -> BoundedResidualAdversary:
         calls.append(dict(kwargs))
         return controller_type(*args, **kwargs)
 
@@ -697,3 +720,400 @@ def test_search_config_from_yaml_round_trip() -> None:
     assert search_config.seed == 42
     assert search_config.grid_points_per_dim == 3
     assert search_config.max_candidates == 9
+
+
+# ---------------------------------------------------------------------------
+# Alternative objective proxy: minimize_predicted_robot_distance
+# ---------------------------------------------------------------------------
+
+
+def test_search_config_rejects_unsupported_objective_proxy() -> None:
+    """An unsupported objective proxy must fail closed."""
+    with pytest.raises(ValueError, match="not in supported set"):
+        ResidualSearchConfig(objective_proxy="unsupported_proxy")
+
+
+def test_search_config_accepts_minimize_predicted_robot_distance() -> None:
+    """The new proxy is accepted by the config validator."""
+    config = ResidualSearchConfig(objective_proxy="minimize_predicted_robot_distance")
+    assert config.objective_proxy == "minimize_predicted_robot_distance"
+
+
+def test_supported_objective_proxies_contains_both() -> None:
+    """Both recognised proxies appear in the supported set."""
+    assert "maximize_residual_magnitude" in SUPPORTED_OBJECTIVE_PROXIES
+    assert "minimize_predicted_robot_distance" in SUPPORTED_OBJECTIVE_PROXIES
+
+
+def test_evaluate_candidate_minimize_predicted_robot_distance_valid() -> None:
+    """A finite candidate produces a finite negative-distance score."""
+    config = ResidualAdversaryConfig(is_active=True)
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]])
+    velocities = np.array([[0.5, 0.0], [0.0, 0.3]])
+    max_speeds = np.array([1.5, 1.2])
+    candidate = np.array([0.3, 0.3])
+    score, is_valid = _evaluate_candidate(
+        candidate,
+        0,
+        _CandidateEvaluationContext(
+            positions=positions,
+            velocities=velocities,
+            max_speeds=max_speeds,
+            residual_config=config,
+            dt_s=0.1,
+            robot_pose=((0.0, 0.0), 0.0),
+        ),
+        objective_proxy="minimize_predicted_robot_distance",
+        robot_pose=((0.0, 0.0), 0.0),
+    )
+    assert is_valid is True
+    assert score <= 0.0
+    assert np.isfinite(score)
+
+
+def test_evaluate_candidate_minimize_predicted_robot_distance_zero() -> None:
+    """A zero candidate gives zero residual; predicted position is the nominal one-step endpoint."""
+    config = ResidualAdversaryConfig(is_active=True)
+    positions = np.array([[3.0, 1.0]])
+    velocities = np.array([[0.5, 0.0]])
+    max_speeds = np.array([1.5])
+    candidate = np.array([0.0, 0.0])
+    dt_s = 0.1
+    score, is_valid = _evaluate_candidate(
+        candidate,
+        0,
+        _CandidateEvaluationContext(
+            positions=positions,
+            velocities=velocities,
+            max_speeds=max_speeds,
+            residual_config=config,
+            dt_s=dt_s,
+            robot_pose=((0.0, 0.0), 0.0),
+        ),
+        objective_proxy="minimize_predicted_robot_distance",
+        robot_pose=((0.0, 0.0), 0.0),
+    )
+    assert is_valid is True
+    # One-step predicted position: nominal velocity displacement + zero residual.
+    predicted = positions[0] + velocities[0] * dt_s
+    expected_distance = float(np.linalg.norm(predicted - np.array([0.0, 0.0])))
+    assert score == pytest.approx(-expected_distance)
+
+
+def test_evaluate_candidate_predicted_position_includes_nominal_velocity() -> None:
+    """Regression: the one-step predicted position includes nominal velocity displacement.
+
+    Under the old formula (positions + bounded * dt_s**2 only), a pedestrian
+    with velocity toward the robot but zero residual would be scored as if the
+    velocity had no effect on the next position.  This test places the robot
+    directly ahead of the pedestrian's velocity so the nominal displacement
+    reduces the distance; under the old formula the score would equal the
+    static distance, failing the assertion.
+    """
+    config = ResidualAdversaryConfig(is_active=True)
+    # Pedestrian at x=2 moving toward robot at x=0 with v=-1 m/s along x.
+    positions = np.array([[2.0, 0.0]])
+    velocities = np.array([[-1.0, 0.0]])
+    max_speeds = np.array([2.0])
+    dt_s = 0.1
+    candidate = np.array([0.0, 0.0])  # zero residual
+    score, is_valid = _evaluate_candidate(
+        candidate,
+        0,
+        _CandidateEvaluationContext(
+            positions=positions,
+            velocities=velocities,
+            max_speeds=max_speeds,
+            residual_config=config,
+            dt_s=dt_s,
+            robot_pose=((0.0, 0.0), 0.0),
+        ),
+        objective_proxy="minimize_predicted_robot_distance",
+        robot_pose=((0.0, 0.0), 0.0),
+    )
+    assert is_valid is True
+    # One-step predicted: [2.0, 0] + [-1.0, 0] * 0.1 = [1.9, 0].
+    # Distance to robot at origin = 1.9.  Old formula would give 2.0.
+    predicted = positions[0] + velocities[0] * dt_s  # [1.9, 0.0]
+    expected_distance = float(np.linalg.norm(predicted))
+    assert expected_distance == pytest.approx(1.9)
+    assert score == pytest.approx(-expected_distance)
+    # Guard: the old formula (ignoring velocity) would produce -2.0.
+    old_formula_distance = float(np.linalg.norm(positions[0]))
+    assert score != pytest.approx(-old_formula_distance, abs=1e-9)
+
+
+def test_evaluate_candidate_minimize_predicted_robot_distance_two_distinct_scores() -> None:
+    """Two different grid candidates produce two distinct finite scores on a representative grid."""
+    config = ResidualAdversaryConfig(is_active=True)
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]])
+    velocities = np.array([[0.5, 0.0], [0.0, 0.3]])
+    max_speeds = np.array([1.5, 1.2])
+    ctx = _CandidateEvaluationContext(
+        positions=positions,
+        velocities=velocities,
+        max_speeds=max_speeds,
+        residual_config=config,
+        dt_s=0.1,
+        robot_pose=((0.0, 0.0), 0.0),
+    )
+    candidate_a = np.array([1.5, 0.0])
+    candidate_b = np.array([-1.5, 0.0])
+    score_a, valid_a = _evaluate_candidate(
+        candidate_a,
+        0,
+        ctx,
+        objective_proxy="minimize_predicted_robot_distance",
+        robot_pose=((0.0, 0.0), 0.0),
+    )
+    score_b, valid_b = _evaluate_candidate(
+        candidate_b,
+        0,
+        ctx,
+        objective_proxy="minimize_predicted_robot_distance",
+        robot_pose=((0.0, 0.0), 0.0),
+    )
+    assert valid_a is True
+    assert valid_b is True
+    assert np.isfinite(score_a)
+    assert np.isfinite(score_b)
+    assert score_a != score_b
+
+
+def test_search_minimize_predicted_robot_distance_is_deterministic() -> None:
+    """Two independent runs with the same config produce byte-equivalent diagnostic JSON."""
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]], dtype=float)
+    velocities = np.array([[0.5, 0.0], [0.0, 0.3]], dtype=float)
+    max_speeds = np.array([1.5, 1.2])
+
+    records = []
+    for _ in range(2):
+        search_config = ResidualSearchConfig(
+            seed=42,
+            objective_proxy="minimize_predicted_robot_distance",
+            grid_points_per_dim=3,
+            max_candidates=9,
+        )
+        residual_config = ResidualAdversaryConfig(is_active=True, seed=42)
+        policy = FiniteGridSearchPolicy(
+            search_config=search_config,
+            residual_config=residual_config,
+            dt_s=0.1,
+            num_peds=2,
+        )
+        adversary = BoundedResidualAdversary(
+            config=residual_config,
+            policy=policy,
+            dt_s=0.1,
+            num_peds=2,
+        )
+        for _ in range(5):
+            adversary.step_residual(
+                positions.copy(), velocities.copy(), max_speeds.copy(), ROBOT_POSE
+            )
+        records.append(policy.last_record.to_json())
+
+    assert records[0] == records[1]
+
+
+def test_search_minimize_predicted_robot_distance_record_shows_proxy() -> None:
+    """The diagnostic record contains the correct objective_proxy name."""
+    search_config = ResidualSearchConfig(
+        seed=42,
+        objective_proxy="minimize_predicted_robot_distance",
+        grid_points_per_dim=3,
+        max_candidates=9,
+    )
+    residual_config = ResidualAdversaryConfig(is_active=True)
+    policy = FiniteGridSearchPolicy(
+        search_config=search_config,
+        residual_config=residual_config,
+        dt_s=0.1,
+        num_peds=1,
+    )
+    observation = type(
+        "Obs",
+        (),
+        {
+            "positions": np.array([[3.0, 1.0]]),
+            "velocities": np.array([[0.5, 0.0]]),
+            "max_speeds": np.array([1.5]),
+            "target_ped_mask": np.array([True]),
+            "robot_pose": ROBOT_POSE,
+            "sim_time_s": 0.0,
+            "step_index": 0,
+            "macro_action_index": 0,
+        },
+    )()
+    policy.propose_residual(observation)
+    record = policy.last_record
+    assert record.objective_proxy == "minimize_predicted_robot_distance"
+
+
+def test_search_minimize_predicted_robot_distance_budget_accounting() -> None:
+    """Budget accounting holds for the new proxy: accepted + rejected + invalid == total."""
+    search_config = ResidualSearchConfig(
+        seed=42,
+        objective_proxy="minimize_predicted_robot_distance",
+        grid_points_per_dim=3,
+        max_candidates=9,
+    )
+    residual_config = ResidualAdversaryConfig(is_active=True)
+    policy = FiniteGridSearchPolicy(
+        search_config=search_config,
+        residual_config=residual_config,
+        dt_s=0.1,
+        num_peds=1,
+    )
+    observation = type(
+        "Obs",
+        (),
+        {
+            "positions": np.array([[5.0, 5.0]]),
+            "velocities": np.array([[0.0, 0.0]]),
+            "max_speeds": np.array([1.5]),
+            "target_ped_mask": np.array([True]),
+            "robot_pose": ROBOT_POSE,
+            "sim_time_s": 0.0,
+            "step_index": 0,
+            "macro_action_index": 0,
+        },
+    )()
+    result = policy.propose_residual(observation)
+    record = policy.last_record
+    assert record.total_evaluated == record.accepted + record.rejected + record.invalid
+    assert result.shape == (1, 2)
+    assert np.all(np.isfinite(result))
+
+
+def test_search_minimize_predicted_robot_distance_evaluates_each_candidate(monkeypatch) -> None:
+    """Every enumerated candidate is checked by the full runtime controller."""
+    from robot_sf.ped_npc import residual_search
+
+    calls: list[dict[str, object]] = []
+    controller_type = residual_search.BoundedResidualAdversary
+
+    def spy_controller(*args, **kwargs):
+        calls.append(dict(kwargs))
+        return controller_type(*args, **kwargs)
+
+    monkeypatch.setattr(residual_search, "BoundedResidualAdversary", spy_controller)
+    search_config = ResidualSearchConfig(
+        seed=42,
+        objective_proxy="minimize_predicted_robot_distance",
+        grid_points_per_dim=3,
+        max_candidates=9,
+    )
+    residual_config = ResidualAdversaryConfig(is_active=True)
+    policy = FiniteGridSearchPolicy(
+        search_config=search_config,
+        residual_config=residual_config,
+        dt_s=0.1,
+        num_peds=1,
+    )
+    observation = type(
+        "Obs",
+        (),
+        {
+            "positions": np.array([[3.0, 1.0]]),
+            "velocities": np.array([[0.5, 0.0]]),
+            "max_speeds": np.array([1.5]),
+            "target_ped_mask": np.array([True]),
+            "robot_pose": ROBOT_POSE,
+            "sim_time_s": 0.0,
+            "step_index": 0,
+            "macro_action_index": 0,
+        },
+    )()
+
+    policy.propose_residual(observation)
+
+    assert len(calls) == 9
+    assert all(call["config"] is residual_config for call in calls)
+
+
+def test_search_minimize_predicted_robot_distance_residual_respects_bounds() -> None:
+    """The applied residual respects acceleration bounds under the new proxy."""
+    search_config = ResidualSearchConfig(
+        seed=42,
+        objective_proxy="minimize_predicted_robot_distance",
+        grid_points_per_dim=5,
+        max_candidates=25,
+        action_min_mps2=-2.0,
+        action_max_mps2=2.0,
+    )
+    residual_config = ResidualAdversaryConfig(
+        is_active=True,
+        max_residual_accel_mps2=1.0,
+    )
+    policy = FiniteGridSearchPolicy(
+        search_config=search_config,
+        residual_config=residual_config,
+        dt_s=0.1,
+        num_peds=2,
+    )
+    adversary = BoundedResidualAdversary(
+        config=residual_config,
+        policy=policy,
+        dt_s=0.1,
+        num_peds=2,
+    )
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]])
+    velocities = np.array([[0.5, 0.0], [0.0, 0.3]])
+    max_speeds = np.array([1.5, 1.2])
+
+    for _ in range(20):
+        residual = adversary.step_residual(
+            positions.copy(), velocities.copy(), max_speeds.copy(), ROBOT_POSE
+        )
+        norms = np.linalg.norm(residual, axis=1)
+        assert np.all(norms <= 1.0 + 1e-9), f"acceleration bound violated: {norms}"
+
+
+def test_search_minimize_predicted_robot_distance_different_from_magnitude() -> None:
+    """The two proxies produce different selections on the representative grid."""
+    positions = np.array([[3.0, 0.0]])
+    velocities = np.array([[0.0, 0.0]])
+    max_speeds = np.array([1.5])
+    residual_config = ResidualAdversaryConfig(is_active=True)
+    results = []
+    for objective_proxy in (
+        "maximize_residual_magnitude",
+        "minimize_predicted_robot_distance",
+    ):
+        search_config = ResidualSearchConfig(
+            seed=42,
+            objective_proxy=objective_proxy,
+            grid_points_per_dim=3,
+            max_candidates=9,
+        )
+        policy = FiniteGridSearchPolicy(
+            search_config=search_config,
+            residual_config=residual_config,
+            dt_s=0.1,
+            num_peds=1,
+        )
+        observation = type(
+            "Obs",
+            (),
+            {
+                "positions": positions,
+                "velocities": velocities,
+                "max_speeds": max_speeds,
+                "target_ped_mask": np.array([True]),
+                "robot_pose": ROBOT_POSE,
+                "sim_time_s": 0.0,
+                "step_index": 0,
+                "macro_action_index": 0,
+            },
+        )()
+        results.append(policy.propose_residual(observation))
+
+    assert not np.array_equal(results[0], results[1])
+
+
+def test_search_config_digest_differs_for_different_proxy() -> None:
+    """Two configs with different objective proxies produce different digests."""
+    config_a = ResidualSearchConfig(seed=42, objective_proxy="maximize_residual_magnitude")
+    config_b = ResidualSearchConfig(seed=42, objective_proxy="minimize_predicted_robot_distance")
+    assert compute_config_digest(config_a) != compute_config_digest(config_b)

@@ -124,10 +124,72 @@ scenario-optimization pipeline. Naming discipline: "reactive adversarial stress
 testing", **not** "most-likely failure search" (the latter would require a
 calibrated pedestrian-behavior probability model we do not have).
 
+## Grid-search baseline (issue #6911, first search-baseline slice)
+
+`robot_sf/ped_npc/residual_search_baseline.py` ships the smallest useful,
+deterministic, config-first residual search-baseline slice. It implements
+`ResidualAdversaryPolicy` via `GridSearchResidualPolicy` and evaluates a small
+explicit action grid of candidate residual accelerations against a simple
+objective proxy.
+
+**Algorithm**: For each macro-action boundary, for each targeted pedestrian
+independently:
+
+1. Enumerate `num_directions` (default 8) evenly-spaced angular directions in
+   `[0, 2*pi)`.
+2. For each direction, evaluate `num_magnitudes` (default 3) magnitude levels
+   from `0` to `max_residual_accel_mps2`.
+3. Score each candidate with the objective proxy (lower is better):
+   `-weight_approach * approach_speed + weight_distance * distance_to_robot`.
+4. Select the candidate with the lowest score (closest approach).
+5. Emit a zero-residual candidate as a baseline comparison.
+
+**Objective proxy**: Negative weighted approach closeness — a heuristic, NOT a
+calibrated pedestrian-behavior probability model. It combines approach speed
+(velocity component toward the robot after applying the candidate) and distance
+to the robot.
+
+**Deterministic contract**: Given a fixed seed, action grid, budget, and macro
+cadence, repeated runs produce identical proposal sequences and diagnostic
+metadata. The seed deterministically orders candidate evaluation, and the
+finite macro budget is enforced: after it is exhausted the policy emits zero
+proposals without evaluating more candidates.
+
+**Diagnostic records**: Each macro-action boundary emits a JSON-serializable
+record with config identity/schema, optional source revision, algorithm and
+objective identifiers, seed, explicit candidate order, grid size, budget, bound
+settings, and accepted/rejected/invalid candidate counts. The
+`write_diagnostics(path)` helper writes the full accumulated diagnostics and
+records whether the finite budget was exhausted.
+
+**Config**: `configs/adversarial/issue_4360_residual_search_baseline.yaml`
+
+**Tests**: `tests/adversarial/test_residual_search_baseline.py` — config
+validation, deterministic repeated output, fail-closed invalid candidates,
+bound-preserving integration with `BoundedResidualAdversary`, diagnostic
+record emission, and JSON serialization.
+
+**Canonical smoke command**:
+
+```bash
+uv run pytest tests/adversarial/test_residual_search_baseline.py \
+  tests/adversarial/test_residual_adversary.py \
+  tests/sim/test_residual_adversary_wiring.py -q
+```
+
+**Claim boundary**: Capability-only. No benchmark, metric, schema,
+planner-ranking, safety, or paper-facing claim. The objective proxy is a
+heuristic, not a calibrated model. No CMA-ES/MCTS or PPO adversary and no
+matched-compute comparison. Objective/metric synthesis, matched-compute
+comparison, planner integration, PPO, and benchmark campaigns remain deferred.
+
 ## Deferred slices (pre-registered plan)
 
 - CMA-ES or MCTS search-baseline adversary — sequenced **before** any PPO
-  adversary — will implement `ResidualAdversaryPolicy`.
+  adversary — will implement `ResidualAdversaryPolicy`. The grid-search
+  baseline (issue #6911) is the first search-baseline slice; CMA-ES/MCTS
+  remain separate candidate algorithms to evaluate after this deterministic
+  interface smoke.
 - PPO / learned adversary — only after the search baseline is measured.
 - Matched-compute comparison vs open-loop scenario optimization (the claim to
   test: reactivity finds failures open-loop search cannot, at equal simulator

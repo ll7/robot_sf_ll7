@@ -1,0 +1,53 @@
+# Deterministic finite-budget grid-search baseline for the residual adversary seam
+# (issue #6911). Capability-only slice: no benchmark, planner-ranking, safety, or
+# paper-facing claim. The objective proxy is a heuristic (negative weighted approach
+# closeness), NOT a calibrated pedestrian-behavior probability model.
+schema_version: residual_search_baseline.v1
+issue: 6911
+parent_issue: 4360
+claim_boundary: >
+  Capability-only: deterministic grid-search baseline over the residual
+  adversary seam. No benchmark, metric, schema, planner-ranking, safety, or
+  paper-facing claim. No learned policy (PPO, etc.). No matched-compute
+  comparison. Objective proxy is a heuristic, not a calibrated model.
+naming: reactive_adversarial_stress_testing
+residual_search_baseline:
+  config_id: issue_4360_residual_search_baseline
+  schema_version: residual_search_baseline.v1
+  source_revision: null  # Bind to the source commit when a run is materialized.
+  algorithm: grid_search_baseline_v1
+  objective: negative_approach_closeness
+  num_directions: 8
+  num_magnitudes: 3
+  weight_approach: 1.0
+  weight_distance: 0.5
+  seed: 42
+  max_macro_budget: 1000
+residual_adversary:
+  is_active: true
+  macro_action_dt_s: 0.5
+  max_residual_accel_mps2: 1.5
+  max_jerk_mps3: 7.5
+  max_speed_delta_mps: 0.5
+  max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
+  max_route_deviation_m: 1.5
+  min_separation_m: 0.6
+  target_ped_idx: -1
+  obstacle_projection_margin_m: 0.1
+  seed: 42
+notes:
+  - >
+    The grid-search baseline enumerates a small explicit action grid
+    (8 directions x 3 magnitudes = 24 candidates + zero baseline) and
+    selects the best candidate per targeted pedestrian using a simple
+    objective proxy. It is NOT the CMA-ES/MCTS or PPO adversary.
+  - >
+    All candidate proposals are routed through BoundedResidualAdversary,
+    which enforces every hard bound (speed, acceleration, jerk, heading,
+    route deviation, walkable space, inter-agent separation).
+  - >
+    Diagnostic records include algorithm name, objective proxy, seed,
+    grid size, budget, and accepted/rejected/invalid counts.
+  - >
+    Off by default. Existing pedestrian-model defaults are unchanged
+    (additive opt-in only).

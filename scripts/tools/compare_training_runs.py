@@ -67,7 +67,7 @@ def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
         if path:
             if description != "canonical":
                 logger.warning(
-                    "Manifest for %s resolved via %s fallback: %s", run_id, description, path
+                    "Manifest for {} resolved via {} fallback: {}", run_id, description, path
                 )
             return path, description
 

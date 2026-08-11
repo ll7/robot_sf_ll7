@@ -133,7 +133,7 @@ def _render_pygame_overlay(grid: OccupancyGrid, robot_pose) -> None:
         pygame.image.save(surface, str(output_path))
         logger.info(f"Saved Pygame overlay to {output_path}")
     except Exception as e:
-        logger.warning("Failed to export Pygame overlay: %s", e)
+        logger.warning("Failed to export Pygame overlay: {}", e)
     finally:
         pygame.quit()
 

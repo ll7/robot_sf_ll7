@@ -49,7 +49,6 @@ convergence:
 # Evaluation cadence is time-based (0.5M steps until 3M, then every 1M).
 # The current trainer uses evaluation_episodes after training; keep these for manifests.
 evaluation:
-  frequency_episodes: 10
   evaluation_episodes: 10
   hold_out_scenarios: []
   step_schedule:

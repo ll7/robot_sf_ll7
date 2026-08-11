@@ -271,9 +271,9 @@ class JSONLRecorder:
 
         if flush_every_n is None:
             return None
-        if flush_every_n < 1:
-            logger.warning(
-                "flush_every_n=%s is invalid; defaulting to 1 for safe streaming",
+        if flush_every_n < 1:  # pragma: no cover - invalid-config diagnostic
+            logger.warning(  # noqa: PLE1205 - loguru brace style
+                "flush_every_n={} is invalid; defaulting to 1 for safe streaming",
                 flush_every_n,
             )
             return 1

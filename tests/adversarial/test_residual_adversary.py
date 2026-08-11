@@ -14,13 +14,17 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.ped_npc.residual_adversary import (
     DEFAULT_MACRO_ACTION_DT_S,
+    RESIDUAL_ADVERSARY_BEHAVIOR_SCHEMA_VERSION,
     BoundedResidualAdversary,
+    ResidualAdversaryBehaviorSummary,
     ResidualAdversaryConfig,
     ResidualAdversaryObservation,
     ResidualBoundConflictError,
@@ -37,6 +41,12 @@ from robot_sf.ped_npc.residual_adversary import (
 )
 
 ROBOT_POSE = ((0.0, 0.0), 0.0)
+RESIDUAL_CONFIG_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "configs"
+    / "adversarial"
+    / "issue_4360_residual_adversary.yaml"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -514,6 +524,10 @@ def test_controller_fail_closed_on_non_finite_state() -> None:
             np.array([1.0]),
             ROBOT_POSE,
         )
+    summary = adversary.behavior_summary
+    assert summary.status == "invalid"
+    assert summary.finite is False
+    assert summary.bound_safe is False
 
 
 def test_controller_fail_closed_on_non_finite_robot_pose() -> None:
@@ -538,6 +552,9 @@ def test_controller_fail_closed_on_non_finite_robot_pose() -> None:
             np.array([1.0]),
             ((0.0, 0.0), float("nan")),
         )
+    assert adversary.behavior_summary.status == "invalid"
+    assert adversary.behavior_summary.finite is False
+    assert adversary.behavior_summary.bound_safe is False
 
 
 def test_controller_fail_closed_on_non_finite_policy_output() -> None:
@@ -554,6 +571,9 @@ def test_controller_fail_closed_on_non_finite_policy_output() -> None:
         adversary.step_residual(
             np.array([[1.0, 1.0]]), np.zeros((1, 2)), np.array([1.0]), ROBOT_POSE
         )
+    assert adversary.behavior_summary.status == "invalid"
+    assert adversary.behavior_summary.finite is False
+    assert adversary.behavior_summary.bound_safe is False
 
 
 def test_policy_observation_arrays_are_read_only_snapshots() -> None:
@@ -1061,6 +1081,71 @@ def test_reset_clears_held_state() -> None:
     adversary.reset()
     assert adversary.step_index == 0
     assert adversary.macro_action_index == 0
+    summary = adversary.behavior_summary
+    assert summary.status == "valid"
+    assert summary.steps == 0
+    assert summary.macro_actions == 0
+    assert summary.applied_residual_norm_mean == 0.0
+    assert summary.applied_residual_norm_max == 0.0
+    assert summary.applied_residual_norm_integral == 0.0
+    assert summary.nonzero_fraction == 0.0
+    assert summary.proposal_adjustment_fraction == 0.0
+    assert summary.finite is True
+    assert summary.bound_safe is True
+
+
+def test_behavior_summary_reports_bounded_deterministic_residuals_and_resets() -> None:
+    """The diagnostic summary is finite, reproducible, and resettable."""
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]], dtype=float)
+    velocities = np.array([[0.5, 0.0], [0.0, 0.3]], dtype=float)
+    max_speeds = np.array([1.5, 1.2])
+    config = _load_example_residual_config(seed=42)
+
+    def run_summary() -> ResidualAdversaryBehaviorSummary:
+        adversary = BoundedResidualAdversary(
+            config=config,
+            policy=ScriptedPullResidualAdversaryPolicy(max_pull_accel_mps2=1.5),
+            dt_s=0.1,
+            num_peds=positions.shape[0],
+        )
+        for _ in range(20):
+            adversary.step_residual(
+                positions.copy(), velocities.copy(), max_speeds.copy(), ROBOT_POSE
+            )
+        return adversary.behavior_summary
+
+    summary_a = run_summary()
+    summary_b = run_summary()
+    assert summary_a.to_dict() == summary_b.to_dict()
+    assert summary_a.schema_version == RESIDUAL_ADVERSARY_BEHAVIOR_SCHEMA_VERSION
+    assert summary_a.status == "valid"
+    assert summary_a.steps == 20
+    assert summary_a.macro_actions == 4
+    assert summary_a.targeted_row_fraction == pytest.approx(1.0)
+    assert summary_a.applied_residual_norm_mean > 0.0
+    assert summary_a.applied_residual_norm_max <= config.max_residual_accel_mps2 + 1e-9
+    assert summary_a.applied_residual_norm_integral > 0.0
+    assert 0.0 < summary_a.nonzero_fraction <= 1.0
+    assert 0.0 <= summary_a.proposal_adjustment_fraction <= 1.0
+    assert summary_a.finite is True
+    assert summary_a.bound_safe is True
+
+    reset_adversary = BoundedResidualAdversary(
+        config=config,
+        policy=ScriptedPullResidualAdversaryPolicy(max_pull_accel_mps2=1.5),
+        dt_s=0.1,
+        num_peds=positions.shape[0],
+    )
+    for _ in range(20):
+        reset_adversary.step_residual(
+            positions.copy(), velocities.copy(), max_speeds.copy(), ROBOT_POSE
+        )
+    reset_adversary.reset()
+    assert reset_adversary.behavior_summary.steps == 0
+    assert reset_adversary.behavior_summary.macro_actions == 0
+    assert reset_adversary.behavior_summary.targeted_row_fraction == pytest.approx(1.0)
+    assert reset_adversary.behavior_summary.finite is True
+    assert reset_adversary.behavior_summary.bound_safe is True
 
 
 def test_empty_crowd_returns_empty_residual() -> None:
@@ -1095,3 +1180,136 @@ def test_scripted_pull_proposal_points_toward_robot_ahead_point() -> None:
     # Direction from (0,1) toward (1,0) is (1,-1)/sqrt(2), scaled to magnitude 1.
     expected = np.array([[1.0, -1.0]]) / math.sqrt(2.0)
     np.testing.assert_allclose(proposal, expected, atol=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic reproducibility (seeded execution contract)
+# ---------------------------------------------------------------------------
+
+
+def _load_example_residual_config(*, seed: int | None) -> ResidualAdversaryConfig:
+    """Load the checked-in issue config and bind the smoke test's explicit seed."""
+    payload = yaml.safe_load(RESIDUAL_CONFIG_PATH.read_text(encoding="utf-8"))
+    residual_config = dict(payload["residual_adversary"])
+    residual_config["seed"] = seed
+    return ResidualAdversaryConfig(**residual_config)
+
+
+def _run_residual_sequence(
+    *,
+    seed: int | None,
+    num_steps: int,
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    max_speeds: np.ndarray,
+    robot_pose: tuple,
+) -> list[np.ndarray]:
+    """Build an adversary and return the residual at each step."""
+    config = _load_example_residual_config(seed=seed)
+    adversary = BoundedResidualAdversary(
+        config=config,
+        policy=ScriptedPullResidualAdversaryPolicy(max_pull_accel_mps2=1.5),
+        dt_s=0.1,
+        num_peds=positions.shape[0],
+    )
+    residuals = []
+    for _ in range(num_steps):
+        residual = adversary.step_residual(
+            positions.copy(), velocities.copy(), max_speeds.copy(), robot_pose
+        )
+        residuals.append(residual)
+    return residuals
+
+
+def test_seeded_execution_is_deterministic_across_independent_runs() -> None:
+    """Two independent adversary instances with the same config produce identical residual sequences."""
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]], dtype=float)
+    velocities = np.array([[0.5, 0.0], [0.0, 0.3]], dtype=float)
+    max_speeds = np.array([1.5, 1.2])
+    robot_pose = ((0.0, 0.0), 0.0)
+    num_steps = 20
+
+    run_a = _run_residual_sequence(
+        seed=42,
+        num_steps=num_steps,
+        positions=positions,
+        velocities=velocities,
+        max_speeds=max_speeds,
+        robot_pose=robot_pose,
+    )
+    run_b = _run_residual_sequence(
+        seed=42,
+        num_steps=num_steps,
+        positions=positions,
+        velocities=velocities,
+        max_speeds=max_speeds,
+        robot_pose=robot_pose,
+    )
+
+    assert len(run_a) == num_steps
+    assert len(run_b) == num_steps
+    for step_idx, (res_a, res_b) in enumerate(zip(run_a, run_b, strict=True)):
+        np.testing.assert_allclose(
+            res_a,
+            res_b,
+            err_msg=f"residual mismatch at step {step_idx}",
+        )
+
+
+def test_seeded_residual_sequence_matches_config_seed_metadata() -> None:
+    """The config seed field survives construction and the sequence is reproducible."""
+    config = ResidualAdversaryConfig(is_active=True, seed=99)
+    assert config.seed == 99
+    adversary = BoundedResidualAdversary(
+        config=config,
+        policy=ScriptedPullResidualAdversaryPolicy(max_pull_accel_mps2=1.0),
+        dt_s=0.1,
+        num_peds=1,
+    )
+    positions = np.array([[2.0, 0.0]])
+    velocities = np.zeros((1, 2))
+    max_speeds = np.array([1.5])
+    first_residual = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+    # Rebuild with the same seed and inputs; the first residual must match.
+    adversary2 = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(is_active=True, seed=99),
+        policy=ScriptedPullResidualAdversaryPolicy(max_pull_accel_mps2=1.0),
+        dt_s=0.1,
+        num_peds=1,
+    )
+    second_residual = adversary2.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+    np.testing.assert_allclose(first_residual, second_residual)
+
+
+def test_config_metadata_survives_dict_round_trip() -> None:
+    """A ResidualAdversaryConfig round-trips through dict → dataclass losslessly."""
+    original = ResidualAdversaryConfig(
+        is_active=True,
+        macro_action_dt_s=0.5,
+        max_residual_accel_mps2=1.5,
+        max_jerk_mps3=7.5,
+        max_speed_delta_mps=0.5,
+        max_heading_change_per_macro_rad=math.pi / 4,
+        max_route_deviation_m=1.5,
+        min_separation_m=0.6,
+        target_ped_idx=[0, 2],
+        obstacle_projection_margin_m=0.1,
+        seed=42,
+    )
+    as_dict = {
+        "is_active": original.is_active,
+        "macro_action_dt_s": original.macro_action_dt_s,
+        "max_residual_accel_mps2": original.max_residual_accel_mps2,
+        "max_jerk_mps3": original.max_jerk_mps3,
+        "max_speed_delta_mps": original.max_speed_delta_mps,
+        "max_heading_change_per_macro_rad": original.max_heading_change_per_macro_rad,
+        "max_route_deviation_m": original.max_route_deviation_m,
+        "min_separation_m": original.min_separation_m,
+        "target_ped_idx": original.target_ped_idx,
+        "obstacle_projection_margin_m": original.obstacle_projection_margin_m,
+        "seed": original.seed,
+    }
+    restored = ResidualAdversaryConfig(**as_dict)
+    assert restored == original
+    assert restored.seed == 42
+    assert restored.target_ped_idx == [0, 2]

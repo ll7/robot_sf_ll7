@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -501,7 +502,7 @@ def test_search_evaluates_each_candidate_through_bounded_controller(monkeypatch)
     calls: list[dict[str, object]] = []
     controller_type = residual_search.BoundedResidualAdversary
 
-    def spy_controller(*args, **kwargs):
+    def spy_controller(*args: Any, **kwargs: Any) -> BoundedResidualAdversary:
         calls.append(dict(kwargs))
         return controller_type(*args, **kwargs)
 

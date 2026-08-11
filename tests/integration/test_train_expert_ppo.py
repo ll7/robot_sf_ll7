@@ -2477,3 +2477,56 @@ def test_issue_6683_candidate_matrix_lineage_keeps_runner_semantics() -> None:
     assert rebuilt.evaluation_episodes == 5
     assert rebuilt.hold_out_scenarios == ()
     assert rebuilt.step_schedule == ((None, 48000),)
+
+
+_ISSUE_6904_CONFIG_PATHS = [
+    "configs/training/benchmark_orca_classic_cross_trap_subset.yaml",
+    "configs/training/benchmark_orca_classic_crossing_subset.yaml",
+    "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml",
+    "configs/training/ppo_imitation/expert_ppo.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m_random.yaml",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_radius_0_6.yaml",
+]
+
+
+def _issue_6904_baseline() -> dict:
+    """Load and validate the frozen pre-change resolved-config baseline."""
+    baseline_path = Path("tests/integration/_baseline_issue_6904_resolved.json").resolve()
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert baseline["field_removed"] == "evaluation.frequency_episodes"
+    assert set(baseline["variants"]) == set(_ISSUE_6904_CONFIG_PATHS)
+    assert set(baseline["pre_change_frequency_episodes"]) == set(_ISSUE_6904_CONFIG_PATHS)
+    return baseline
+
+
+def test_issue_6904_baseline_records_removed_frequency_values() -> None:
+    """The baseline records the ignored values removed from all ten configs."""
+    baseline = _issue_6904_baseline()
+    values = baseline["pre_change_frequency_episodes"]
+    assert values["configs/training/benchmark_orca_classic_cross_trap_subset.yaml"] == 1
+    assert values["configs/training/benchmark_orca_classic_crossing_subset.yaml"] == 1
+    assert {values[path] for path in _ISSUE_6904_CONFIG_PATHS[2:]} == {10}
+
+
+@pytest.mark.parametrize("rel_path", _ISSUE_6904_CONFIG_PATHS)
+def test_issue_6904_frequency_episodes_drop_preserves_resolved_behavior(rel_path: str) -> None:
+    """Removing the ignored field preserves every other resolved config value."""
+    baseline = _issue_6904_baseline()
+    config_path = Path(rel_path)
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert raw["evaluation"].get("step_schedule")
+
+    resolved = _load_expert_training_config_mapping(config_path)
+    assert "frequency_episodes" not in resolved.get("evaluation", {})
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+    assert actual_fingerprint == baseline["variants"][rel_path]
+
+    config = load_expert_training_config(config_path)
+    assert config.evaluation.step_schedule
+    assert config.evaluation.frequency_episodes == 0

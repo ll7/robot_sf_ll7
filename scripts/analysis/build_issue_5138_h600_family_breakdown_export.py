@@ -66,6 +66,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.evidence.writers import write_json, write_sha256sums, write_text
 from scripts.validation.check_issue_5164_h600_source_reports import (
     ContractError,
     validate_source_reports,
@@ -446,7 +447,7 @@ def _write_markdown_table(
             cells = [str(_fmt_cell(row.get(col, ""))).replace("|", "\\|") for col in columns]
             lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#5138")
 
 
 def _build_hard_summary(family_rows: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -567,14 +568,7 @@ def _write_sha256sums(output_dir: Path) -> None:
     ``.json`` / ``.csv`` file in the dir to be listed with a matching digest).
     """
 
-    lines: list[str] = []
-    for path in sorted(output_dir.iterdir()):
-        if path.name == "SHA256SUMS" or not path.is_file():
-            continue
-        lines.append(f"{sha256_file(path)}  {path.name}")
-    (output_dir / "SHA256SUMS").write_text(
-        f"# {REVIEW_MARKER}\n" + "\n".join(lines) + "\n", encoding="utf-8"
-    )
+    write_sha256sums(output_dir)
 
 
 def _update_source_manifest(
@@ -618,9 +612,7 @@ def _update_source_manifest(
     manifest["schema_version"] = manifest.get(
         "schema_version", "issue_4195_h600_aggregation.v1.source_manifest"
     )
-    with manifest_path.open("w", encoding="utf-8") as handle:
-        json.dump(manifest, handle, indent=2, sort_keys=True)
-        handle.write("\n")
+    write_json(manifest_path, manifest)
     return manifest
 
 
@@ -638,7 +630,7 @@ def _append_readme_section(output_dir: Path, fragment: str) -> None:
     if marker in text:
         # Replace the existing block (from the marker to EOF) so re-runs are clean.
         text = text.split(marker)[0].rstrip() + "\n"
-    readme_path.write_text((text.rstrip() + "\n" + fragment).rstrip() + "\n", encoding="utf-8")
+    write_text(readme_path, (text.rstrip() + "\n" + fragment).rstrip() + "\n")
 
 
 def build_export(

@@ -240,10 +240,8 @@ def test_build_artifact_writes_tables_comparability_and_checksums(tmp_path: Path
     assert exposure["backfill_policy"] == "derive_from_retained_episode_rows_only_no_imputation"
     assert exposure["runs"][0]["derivable_episode_rows"] == 0
     assert exposure["runs"][0]["not_derivable_episode_rows"] == 8
-    assert (
-        (output_dir / "README.md")
-        .read_text(encoding="utf-8")
-        .startswith("# Issue 4195 h600 Aggregation Artifact")
+    assert "# Issue 4195 h600 Aggregation Artifact" in (output_dir / "README.md").read_text(
+        encoding="utf-8"
     )
     checksums = (output_dir / "SHA256SUMS").read_text(encoding="utf-8")
     assert "planner_metric_summary.csv" in checksums

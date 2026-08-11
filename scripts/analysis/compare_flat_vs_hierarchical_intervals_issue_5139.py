@@ -38,6 +38,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 # parent 1 = scripts/analysis, parent 2 = scripts, parent 3 = repo root.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -678,10 +680,10 @@ def write_markdown(report: ComparisonReport, path: Path) -> None:
         "```"
     )
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#5139")
 
 
-def write_json(report: ComparisonReport, path: Path) -> None:
+def _write_comparison_json(report: ComparisonReport, path: Path) -> None:
     """Write a machine-readable JSON report with provenance."""
     payload = {
         "review_marker": REVIEW_MARKER,
@@ -695,7 +697,7 @@ def write_json(report: ComparisonReport, path: Path) -> None:
         "width_ratios": report.width_ratios,
         "summary": report.summary,
     }
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    write_json(path, payload)
 
 
 def write_bundle(records: list[dict[str, Any]], path: Path) -> None:
@@ -792,10 +794,10 @@ def write_retained_markdown(report: RetainedComparisonReport, path: Path) -> Non
             "",
         ]
     )
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#5139")
 
 
-def write_retained_json(report: RetainedComparisonReport, path: Path) -> None:
+def _write_retained_comparison_json(report: RetainedComparisonReport, path: Path) -> None:
     """Write the machine-readable retained-bundle report."""
     payload = {
         "review_marker": REVIEW_MARKER,
@@ -811,7 +813,7 @@ def write_retained_json(report: RetainedComparisonReport, path: Path) -> None:
         "width_ratios": report.width_ratios,
         "summary": report.summary,
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    write_json(path, payload)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -865,7 +867,7 @@ def main(argv: list[str] | None = None) -> int:
             retained_report,
             output_dir / "retained_comparison_report.md",
         )
-        write_retained_json(
+        _write_retained_comparison_json(
             retained_report,
             output_dir / "retained_comparison_report.json",
         )
@@ -882,7 +884,7 @@ def main(argv: list[str] | None = None) -> int:
         records = build_synthetic_bundle(seed=args.seed)
         report = collect_comparisons(records, bundle_seed=args.seed)
         write_markdown(report, output_dir / "comparison_report.md")
-        write_json(report, output_dir / "comparison_report.json")
+        _write_comparison_json(report, output_dir / "comparison_report.json")
         write_bundle(records, output_dir / "synthetic_bundle.jsonl")
         rate_summary = report.summary.get("rate_metrics_hierarchical_scenario", {})
         print(f"[issue_5139] wrote synthetic artifact to {output_dir}")

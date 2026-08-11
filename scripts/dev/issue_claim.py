@@ -91,9 +91,15 @@ def build_acquire_command(issue_number: int, *, repo: str, sha: str) -> list[str
     ]
 
 
-def build_release_command(issue_number: int, *, remote: str) -> list[str]:
-    """Build the command that deletes a remote claim ref."""
-    return ["git", "push", remote, f":{claim_ref(issue_number)}"]
+def build_release_command(issue_number: int, *, remote: str, expected_sha: str) -> list[str]:
+    """Build a compare-and-delete command for the observed remote claim ref."""
+    return [
+        "git",
+        "push",
+        f"--force-with-lease={claim_ref(issue_number)}:{expected_sha}",
+        remote,
+        f":{claim_ref(issue_number)}",
+    ]
 
 
 def build_open_pr_command(*, repo: str) -> list[str]:
@@ -113,6 +119,57 @@ def build_open_pr_command(*, repo: str) -> list[str]:
     ]
 
 
+def _validate_open_pr_reference(
+    reference: Any, *, row_index: int, reference_index: int
+) -> tuple[int | None, str | None]:
+    """Validate one closing-issue reference from the GitHub CLI response."""
+    if not isinstance(reference, dict):
+        return None, f"open PR row {row_index} reference {reference_index} is not an object"
+    reference_number = reference.get("number")
+    if (
+        not isinstance(reference_number, int)
+        or isinstance(reference_number, bool)
+        or reference_number <= 0
+    ):
+        return (
+            None,
+            f"open PR row {row_index} reference {reference_index} has an invalid number",
+        )
+    return reference_number, None
+
+
+def _validate_open_pr_row(row: Any, *, index: int) -> dict[str, Any]:
+    """Validate one open-PR row before using it for claim-release safety."""
+    if not isinstance(row, dict):
+        return {"ok": False, "error": f"open PR row {index} is not an object"}
+    raw_number = row.get("number")
+    if not isinstance(raw_number, int) or isinstance(raw_number, bool) or raw_number <= 0:
+        return {"ok": False, "error": f"open PR row {index} has an invalid number"}
+    body = row.get("body")
+    if not isinstance(body, str):
+        return {"ok": False, "error": f"open PR row {index} has an invalid body"}
+    references = row.get("closingIssuesReferences")
+    if not isinstance(references, list):
+        return {
+            "ok": False,
+            "error": f"open PR row {index} has invalid closing issue references",
+        }
+    reference_numbers: list[int] = []
+    for reference_index, reference in enumerate(references):
+        reference_number, error = _validate_open_pr_reference(
+            reference, row_index=index, reference_index=reference_index
+        )
+        if error is not None:
+            return {"ok": False, "error": error}
+        reference_numbers.append(reference_number)
+    return {
+        "ok": True,
+        "number": raw_number,
+        "body": body,
+        "reference_numbers": reference_numbers,
+    }
+
+
 def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
     """Parse one authoritative open-PR response for explicit issue coverage."""
     if result.returncode != 0:
@@ -121,32 +178,27 @@ def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dic
             "covering_prs": [],
             "error": (result.stderr or result.stdout).strip(),
         }
+    raw_payload = result.stdout.strip()
+    if not raw_payload:
+        return {"ok": False, "covering_prs": [], "error": "open PR response is empty"}
     try:
-        payload = json.loads(result.stdout or "[]")
+        payload = json.loads(raw_payload)
     except json.JSONDecodeError as exc:
         return {"ok": False, "covering_prs": [], "error": str(exc)}
     if not isinstance(payload, list):
         return {"ok": False, "covering_prs": [], "error": "open PR response is not a list"}
     covering: set[int] = set()
-    for row in payload:
-        if not isinstance(row, dict) or not str(row.get("number") or "").isdigit():
-            continue
-        number = int(row["number"])
-        references = row.get("closingIssuesReferences")
-        structured_match = False
-        if isinstance(references, list):
-            structured_match = any(
-                isinstance(reference, dict)
-                and str(reference.get("number") or "").isdigit()
-                and int(reference["number"]) == int(issue_number)
-                for reference in references
-            )
-        if structured_match:
+    for index, row in enumerate(payload):
+        validated = _validate_open_pr_row(row, index=index)
+        if not validated["ok"]:
+            return {"ok": False, "covering_prs": [], "error": validated["error"]}
+        number = validated["number"]
+        if int(issue_number) in validated["reference_numbers"]:
             covering.add(number)
             continue
         if any(
             int(match.group("issue")) == int(issue_number)
-            for match in ISSUE_COVERAGE_REFERENCE.finditer(str(row.get("body") or ""))
+            for match in ISSUE_COVERAGE_REFERENCE.finditer(validated["body"])
         ):
             covering.add(number)
     return {"ok": True, "covering_prs": sorted(covering), "error": None}
@@ -320,6 +372,25 @@ def release_issue(
             "reason": reason,
         }
 
+    observed_sha = status.get("sha")
+    if not isinstance(observed_sha, str) or not observed_sha:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": None,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": "",
+            "error": "claim_status_missing_sha; do not release an unknown claim",
+            "release_class": None,
+            "reason": reason,
+        }
+
     open_prs = _run(build_open_pr_command(repo=repo))
     coverage = _open_prs_covering_issue(open_prs, issue_number=issue_number)
     if not coverage["ok"]:
@@ -359,7 +430,7 @@ def release_issue(
             "covering_prs": coverage["covering_prs"],
         }
 
-    result = _run(build_release_command(issue_number, remote=remote))
+    result = _run(build_release_command(issue_number, remote=remote, expected_sha=observed_sha))
     ok = result.returncode == 0
     return {
         "schema": "issue_claim.v1",

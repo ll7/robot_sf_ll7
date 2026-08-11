@@ -176,9 +176,11 @@ uv run python scripts/dev/issue_claim.py release <issue-number> --reason merged
 ```
 
 The helper performs a fresh read-only open-PR coverage check and fails closed when the snapshot is
-unavailable or an explicit covering PR is still open. Only an explicitly terminal `merged`, `closed`,
-or `abandoned` reason may release the ref. Do not use Project #5 status or labels as the mutex; they
-are useful visibility and routing metadata, but they are not atomic across two PCs.
+unavailable, empty, or malformed, or an explicit covering PR is still open. The final deletion uses
+the SHA observed during status as a compare-and-delete lease; if another claimant changes the ref,
+the release fails closed instead of deleting the newer claim. Only an explicitly terminal `merged`,
+`closed`, or `abandoned` reason may release the ref. Do not use Project #5 status or labels as the
+mutex; they are useful visibility and routing metadata, but they are not atomic across two PCs.
 
 ## Diagnostic Boundary
 

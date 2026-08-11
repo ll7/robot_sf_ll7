@@ -36,6 +36,15 @@ from robot_sf.ped_npc.residual_adversary import (
 _SEARCH_SCHEMA = "residual_search_diagnostic.v1"
 _ALGORITHM_NAME = "finite_grid_search_v1"
 
+SUPPORTED_OBJECTIVE_PROXIES: frozenset[str] = frozenset(
+    {"maximize_residual_magnitude", "minimize_predicted_robot_distance"}
+)
+"""Finite set of recognised diagnostic objective proxy names.
+
+Adding a new proxy requires: (1) an entry here, (2) a score branch in
+``_evaluate_candidate``, and (3) focused tests proving finite, deterministic,
+and non-degenerate behaviour on the fixed-seed grid."""
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -83,6 +92,11 @@ class ResidualSearchConfig:
             raise ValueError("algorithm_name must be a non-empty string")
         if not isinstance(self.objective_proxy, str) or not self.objective_proxy:
             raise ValueError("objective_proxy must be a non-empty string")
+        if self.objective_proxy not in SUPPORTED_OBJECTIVE_PROXIES:
+            raise ValueError(
+                f"objective_proxy {self.objective_proxy!r} not in "
+                f"supported set: {sorted(SUPPORTED_OBJECTIVE_PROXIES)}"
+            )
         if not isinstance(self.grid_points_per_dim, int) or isinstance(
             self.grid_points_per_dim, bool
         ):
@@ -226,6 +240,9 @@ def _evaluate_candidate(
     candidate_2d: np.ndarray,
     target_idx: int,
     context: _CandidateEvaluationContext,
+    *,
+    objective_proxy: str = "maximize_residual_magnitude",
+    robot_pose: tuple[tuple[float, float], float] | None = None,
 ) -> tuple[float, bool]:
     """Evaluate one candidate through an isolated bounded controller.
 
@@ -235,12 +252,25 @@ def _evaluate_candidate(
     geometry projection, and inter-agent separation. The selected proposal is
     evaluated once more by the caller's live controller.
 
+    Parameters
+    ----------
+    objective_proxy:
+        Name of the diagnostic objective used to score the candidate.
+        ``maximize_residual_magnitude`` returns the Euclidean norm of the
+        bounded residual at the targeted pedestrian.  ``minimize_predicted_robot_distance``
+        returns the negative Euclidean distance from the bounded-displacement
+        endpoint to the robot position, so the existing maximise convention
+        selects candidates that place the pedestrian closest to the robot.
+    robot_pose:
+        Robot position and heading, required when ``objective_proxy`` is
+        ``minimize_predicted_robot_distance``.
+
     Returns
     -------
     tuple[float, bool]
-        ``(score, is_valid)`` where *score* is the Euclidean norm of the
-        bounded residual at the targeted pedestrian and *is_valid* is
-        ``False`` when the candidate triggers a bound conflict.
+        ``(score, is_valid)`` where *score* is the objective-proxy value for the
+        bounded residual at the targeted pedestrian and *is_valid* is ``False``
+        when the candidate triggers a bound conflict.
     """
     try:
         candidate_array = _validate_finite_array(candidate_2d, "candidate")
@@ -265,7 +295,18 @@ def _evaluate_candidate(
             context.max_speeds,
             context.robot_pose,
         )
-        score = float(np.linalg.norm(bounded[target_idx]))
+        if objective_proxy == "minimize_predicted_robot_distance":
+            if robot_pose is None:
+                raise ValueError("robot_pose is required for minimize_predicted_robot_distance")
+            bounded_displacement = bounded[target_idx] * (context.dt_s * context.dt_s)
+            predicted_position = context.positions[target_idx] + bounded_displacement
+            robot_position = np.asarray(robot_pose[0], dtype=float)
+            if robot_position.shape != (2,) or not np.all(np.isfinite(robot_position)):
+                raise ValueError("robot_pose position must have shape (2,) with finite values")
+            distance = float(np.linalg.norm(predicted_position - robot_position))
+            score = -distance
+        else:
+            score = float(np.linalg.norm(bounded[target_idx]))
         return score, True
     except (IndexError, ResidualBoundConflictError, ValueError, TypeError):
         return 0.0, False
@@ -566,6 +607,8 @@ class FiniteGridSearchPolicy:
                     candidate,
                     int(target_idx),
                     evaluation_context,
+                    objective_proxy=self._search_config.objective_proxy,
+                    robot_pose=observation.robot_pose,
                 )
                 total_evaluated += 1
 

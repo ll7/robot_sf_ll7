@@ -1,0 +1,28 @@
+schema_version: residual_search_diagnostic.v1
+issue: 6917
+parent_issue: 6911
+claim_boundary: >
+  Diagnostic-only alternative objective proxy for finite-budget grid search
+  over residual adversary proposals.  No benchmark, metric, planner-ranking,
+  safety, or paper-facing claim.
+algorithm:
+  name: finite_grid_search_v1
+  objective_proxy: minimize_predicted_robot_distance
+  grid_points_per_dim: 3
+  max_candidates: 9
+  seed: 42
+action_bounds:
+  min_mps2: -1.5
+  max_mps2: 1.5
+residual_adversary:
+  is_active: true
+  macro_action_dt_s: 0.5
+  max_residual_accel_mps2: 1.5
+  max_jerk_mps3: 7.5
+  max_speed_delta_mps: 0.5
+  max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
+  max_route_deviation_m: 1.5
+  min_separation_m: 0.6
+  target_ped_idx: [0]
+  obstacle_projection_margin_m: 0.1
+  seed: 42

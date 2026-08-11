@@ -112,6 +112,7 @@ def test_simulator_inactive_adversary_does_not_allocate_state() -> None:
     """When off, the simulator must not build any residual adversary state."""
     sim = _build_simulator(residual_active=False)
     assert sim._residual_adversary is None
+    assert sim.residual_adversary_behavior_summary is None
     # Applying the helper on inactive config returns forces unchanged.
     forces = np.array([[1.0, 0.0], [0.0, 1.0]])
     np.testing.assert_allclose(sim._apply_residual_adversary(forces), forces)
@@ -143,6 +144,14 @@ def test_active_adversary_perturbs_but_keeps_peds_finite() -> None:
     assert sim._residual_adversary is not None
     # Cadence: 0.5 s macro-action at 0.1 s physics step => 5 steps per macro-action.
     assert sim._residual_adversary.macro_action_steps == 5
+    summary = sim.residual_adversary_behavior_summary
+    assert summary is not None
+    assert summary.schema_version == "residual_adversary_behavior.v1"
+    assert summary.status == "valid"
+    assert summary.steps == 20
+    assert summary.targeted_row_fraction == pytest.approx(1.0)
+    assert summary.finite is True
+    assert summary.bound_safe is True
 
 
 def test_active_adversary_residual_is_additive_within_accel_bound() -> None:
@@ -165,6 +174,12 @@ def test_simulator_reset_clears_residual_adversary_state() -> None:
     sim.reset_state()
     assert sim._residual_adversary.step_index == 0
     assert sim._residual_adversary.macro_action_index == 0
+    summary = sim.residual_adversary_behavior_summary
+    assert summary is not None
+    assert summary.steps == 0
+    assert summary.macro_actions == 0
+    assert summary.finite is True
+    assert summary.bound_safe is True
 
 
 def test_active_adversary_changes_forces_vs_inactive() -> None:

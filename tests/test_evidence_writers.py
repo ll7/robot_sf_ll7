@@ -176,6 +176,34 @@ class TestWriteCsv:
         assert "1,2" in lines[2]
 
 
+class TestWriteCsvEmpty:
+    """Test write_csv empty-row contracts (issue #5416 regression)."""
+
+    def test_allow_empty_preserves_empty_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "empty.csv"
+        write_csv(path, [], allow_empty=True)
+        assert path.read_text(encoding="utf-8") == ""
+
+    def test_allow_empty_with_empty_fieldnames_writes_header_only(self, tmp_path: Path) -> None:
+        path = tmp_path / "empty_header.csv"
+        write_csv(path, [], allow_empty=True, empty_fieldnames=("scenario_id",))
+        content = path.read_bytes()
+        assert content == b"scenario_id\r\n"
+        assert not content.startswith(b"# AI-GENERATED NEEDS-REVIEW")
+
+    def test_rejects_empty_by_default(self, tmp_path: Path) -> None:
+        path = tmp_path / "empty.csv"
+        with pytest.raises(ValueError, match="cannot write empty CSV"):
+            write_csv(path, [])
+
+    def test_allow_empty_with_nonempty_still_writes(self, tmp_path: Path) -> None:
+        path = tmp_path / "data.csv"
+        write_csv(path, [{"a": 1}], allow_empty=True)
+        content = path.read_text(encoding="utf-8")
+        assert "# AI-GENERATED NEEDS-REVIEW" in content
+        assert "a" in content
+
+
 class TestWriteSha256sums:
     """Test the write_sha256sums helper."""
 

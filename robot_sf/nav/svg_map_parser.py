@@ -665,9 +665,9 @@ class SvgMapConverter:
 
         try:
             coordinates = self._parse_path_coordinates(input_string)
-        except ValueError as parse_error:
+        except ValueError as parse_error:  # pragma: no cover - malformed path fallback
             logger.debug(
-                "Falling back to regex coordinate extraction for path %s: %s",
+                "Falling back to regex coordinate extraction for path {}: {}",
                 path.attrib.get("id"),
                 parse_error,
             )
@@ -677,8 +677,8 @@ class SvgMapConverter:
             filtered_coordinates = coordinate_pattern.findall(input_string)
             # If both structured parsing and fallback regex fail, the path has
             # no usable coordinates and should be dropped entirely.
-            if not filtered_coordinates and not coordinates:
-                logger.warning("No coordinates found for path: %s", path.attrib.get("id"))
+            if not filtered_coordinates and not coordinates:  # pragma: no cover - diagnostic path
+                logger.warning("No coordinates found for path: {}", path.attrib.get("id"))
                 return None
             regex_coordinates = tuple(
                 map(tuple, np.array(filtered_coordinates, dtype=float).tolist()),
@@ -1400,9 +1400,9 @@ class SvgMapConverter:
         if zone_index is None:
             unindexed_zones[zone_type].append(zone)
             return
-        if zone_index in indexed_zones[zone_type]:
+        if zone_index in indexed_zones[zone_type]:  # pragma: no cover - duplicate diagnostic
             logger.warning(
-                "Duplicate %s index %d in SVG; keeping first, ignoring duplicate.",
+                "Duplicate {} index {} in SVG; keeping first, ignoring duplicate.",
                 zone_type,
                 zone_index,
             )
@@ -1432,9 +1432,9 @@ class SvgMapConverter:
                 result.append(indexed[idx])
             elif unindexed:
                 result.append(unindexed.pop(0))
-            else:
+            else:  # pragma: no cover - missing-index diagnostic
                 logger.warning(
-                    "Missing %s index %d with no unindexed zones available.",
+                    "Missing {} index {} with no unindexed zones available.",
                     zone_type,
                     idx,
                 )

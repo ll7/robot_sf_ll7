@@ -116,6 +116,8 @@ knowledge, not every transient iteration detail.
   [issue_4932_data_driven_scenario_generation.md](issue_4932_data_driven_scenario_generation.md)
 * Issue #6054 regulation-to-scenario compilation prototype:
   [issue_6054_regulation_to_scenario.md](issue_6054_regulation_to_scenario.md)
+* Issue #6872 cross-context validity / revalidation matrix:
+  [issue_6872_cross_context_validity_matrix.md](issue_6872_cross_context_validity_matrix.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Skill Consolidation Audit Issue #3189 2026-06-20:

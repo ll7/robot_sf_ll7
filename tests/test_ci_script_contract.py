@@ -49,6 +49,7 @@ RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.
 BOOTSTRAP_WORKTREE = ROOT / "scripts" / "dev" / "bootstrap_worktree.sh"
 CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
 CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
+CI_INSTALL_HEADLESS_PACKAGES = ROOT / "scripts" / "dev" / "ci_install_headless_packages.sh"
 EVIDENCE_REGISTRY_RATCHET = ROOT / "scripts" / "dev" / "evidence_registry_ratchet.py"
 COVERAGE_GUIDE = ROOT / "docs" / "coverage_guide.md"
 DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
@@ -1734,6 +1735,126 @@ def test_gh_comment_issue_fail_closed_on_missing(tmp_path: Path) -> None:
     assert any(call.startswith("api repos/ll7/robot_sf_ll7/issues/9999999") for call in call_lines)
     assert not any("--method POST" in call for call in call_lines)
     assert not any("issue comment" in call for call in call_lines)
+
+
+def _run_headless_package_install_fixture(
+    tmp_path: Path,
+    *,
+    update_output: str,
+    update_rc: int,
+    install_rc: int,
+) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+    """Run the headless package helper against deterministic fake APT commands."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "apt-calls.txt"
+    install_marker = tmp_path / "install-called"
+
+    fake_dpkg_query = fake_bin / "dpkg-query"
+    fake_dpkg_query.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    fake_dpkg_query.chmod(0o755)
+
+    fake_sudo = fake_bin / "sudo"
+    fake_sudo.write_text(
+        '#!/usr/bin/env bash\nset -eu\nprintf \'%s\\n\' "$*" >> "$APT_CALLS"\nexec "$@"\n',
+        encoding="utf-8",
+    )
+    fake_sudo.chmod(0o755)
+
+    fake_apt_get = fake_bin / "apt-get"
+    fake_apt_get.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'if [[ "$*" == *" update" ]]; then\n'
+        "  printf '%s\\n' \"$APT_UPDATE_OUTPUT\" >&2\n"
+        '  exit "$APT_UPDATE_RC"\n'
+        "fi\n"
+        'if [[ "$*" == *" install "* ]]; then\n'
+        '  : > "$APT_INSTALL_MARKER"\n'
+        '  exit "$APT_INSTALL_RC"\n'
+        "fi\n"
+        'echo "unexpected apt-get invocation: $*" >&2\n'
+        "exit 99\n",
+        encoding="utf-8",
+    )
+    fake_apt_get.chmod(0o755)
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fake_bin}{os.pathsep}{env['PATH']}",
+            "APT_CALLS": str(calls),
+            "APT_INSTALL_MARKER": str(install_marker),
+            "APT_INSTALL_RC": str(install_rc),
+            "APT_UPDATE_OUTPUT": update_output,
+            "APT_UPDATE_RC": str(update_rc),
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(CI_INSTALL_HEADLESS_PACKAGES), "libglib2.0-0"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    return result, install_marker, calls
+
+
+def test_ci_install_headless_ignores_unrelated_third_party_403(tmp_path: Path) -> None:
+    """A Microsoft-source 403 must not prevent a usable package install."""
+    result, install_marker, calls = _run_headless_package_install_fixture(
+        tmp_path,
+        update_output=(
+            "Err:1 https://packages.microsoft.com/repos/azure-cli noble InRelease\n"
+            "  403 Forbidden [IP: 13.107.246.40 443]\n"
+            "Hit:2 http://archive.ubuntu.com/ubuntu noble InRelease"
+        ),
+        update_rc=100,
+        install_rc=0,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert install_marker.exists()
+    assert "warning=ignored_third_party_apt_403 hosts=packages.microsoft.com" in result.stdout
+    assert len([line for line in result.stdout.splitlines() if "warning=" in line]) == 1
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert any(line.endswith(" update") for line in call_lines)
+    assert any(" install " in line for line in call_lines)
+
+
+def test_ci_install_headless_preserves_requested_install_failure(tmp_path: Path) -> None:
+    """Ignoring a third-party 403 must not hide a failed requested install."""
+    result, install_marker, _ = _run_headless_package_install_fixture(
+        tmp_path,
+        update_output=(
+            "Err:1 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease\n"
+            "  403 Forbidden"
+        ),
+        update_rc=100,
+        install_rc=42,
+    )
+
+    assert result.returncode == 42
+    assert install_marker.exists()
+    assert "warning=ignored_third_party_apt_403 hosts=packages.microsoft.com" in result.stdout
+
+
+def test_ci_install_headless_fails_closed_on_non_ignorable_update_error(tmp_path: Path) -> None:
+    """An official-source update failure must still stop before installation."""
+    result, install_marker, _ = _run_headless_package_install_fixture(
+        tmp_path,
+        update_output=(
+            "Err:1 http://archive.ubuntu.com/ubuntu noble InRelease\n  500  Internal Server Error"
+        ),
+        update_rc=100,
+        install_rc=0,
+    )
+
+    assert result.returncode == 100
+    assert not install_marker.exists()
+    assert "error=apt_update_failed rc=100" in result.stderr
 
 
 # Help-behaviour contract tests.

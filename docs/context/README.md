@@ -136,6 +136,8 @@ knowledge, not every transient iteration detail.
   [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
 * Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle (Gate 3 of #6600):
   [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
+* Issue #6871 diagnosis and execution report crosswalk:
+  [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
 
 * Issue #6155 release environment packet:
   [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md)

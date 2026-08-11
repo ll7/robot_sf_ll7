@@ -85,22 +85,34 @@ proposal still produces a smooth, bounded residual.
 
 ## Reproducible runtime smoke
 
-Run the bounded, real-simulator smoke with:
+The one canonical CPU command for deterministic residual-adversary smoke uses the
+existing unit-test path with the deterministic `ScriptedPullResidualAdversaryPolicy`:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- \
-  uv run pytest tests/sim/test_residual_adversary_wiring.py \
-  -k active_adversary_perturbs_but_keeps_peds_finite -q
+  uv run pytest tests/adversarial/test_residual_adversary.py \
+  tests/sim/test_residual_adversary_wiring.py \
+  -q
 ```
 
-The test constructs the repository's `MapDefinition`, enables
-`SimulationSettings.residual_adversary`, and advances the real
-`init_simulators` path for 20 fixed-timestep steps. It proves only runtime
-wiring and finite-state behavior for the deterministic scripted policy; it is
-smoke evidence, not a benchmark, safety, or stress-strength result. The YAML
-example is a documented parameter template: copy its `residual_adversary`
-mapping beneath a scenario's `simulation_config` key. The scenario loader
-validates that nested mapping before passing it to the runtime config.
+This exercises the full bound pipeline (speed, acceleration, jerk, heading,
+route, walkable-space, inter-agent separation), macro-action cadence, opt-in
+gating, perturb-not-replace base-law preservation, and simulator wiring. The
+`ScriptedPullResidualAdversaryPolicy` is deterministic; combined with the
+fixed-timestep `BoundedResidualAdversary`, every step residual is identical
+across repeated runs with the same config and inputs. The test loads
+`configs/adversarial/issue_4360_residual_adversary.yaml`, binds its template
+`seed: null` to the fixed smoke seed `42`, and advances `20` steps at `dt=0.1 s`.
+The seed field on `ResidualAdversaryConfig` is reserved for future randomized
+policies (CMA-ES, MCTS, PPO); the bundled scripted policy does not consume it.
+
+**Output / claim-status**: These tests prove capability-only smoke evidence —
+runtime wiring, finite-state behavior, and bound enforcement for the deterministic
+scripted policy. This is **not** benchmark, safety, stress-strength, or
+paper-facing evidence. The YAML example is a documented parameter template: copy
+its `residual_adversary` mapping beneath a scenario's `simulation_config` key.
+The scenario loader validates that nested mapping before passing it to the
+runtime config.
 
 ## Claim boundary (what this slice does NOT do)
 

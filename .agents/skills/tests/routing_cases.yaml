@@ -55,6 +55,18 @@ cases:
   - gh-issue-sequencer
   negative:
   - gh-issue-autopilot
+- intent: Run unattended open-issue cleanup
+  primary: issue-audit-autonomous
+  secondary:
+  - issue-contract-maintainer
+  negative:
+  - issue-audit
+- intent: Apply one maintainer issue decision
+  primary: issue-audit
+  secondary:
+  - issue-contract-maintainer
+  negative:
+  - issue-audit-autonomous
 - intent: Analyze adversarial search campaign
   primary: adversarial-search-campaign
   secondary:

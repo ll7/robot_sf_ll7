@@ -12,7 +12,7 @@ import json
 import subprocess
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -21,6 +21,9 @@ from robot_sf.evidence.distance_convention import (
     DistanceConvention,
     require_distance_convention,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # docs/context/catalog.yaml registration (issue #6116).
 #
@@ -368,6 +371,7 @@ def write_csv(
     rows: list[dict[str, Any]],
     *,
     allow_empty: bool = False,
+    empty_fieldnames: Sequence[str] | None = None,
     catalog_area: str | None = None,
     catalog_status: str = "evidence",
     catalog_freshness: str = "evidence",
@@ -379,17 +383,29 @@ def write_csv(
     ``catalog_area`` overrides the default ``benchmark_evidence``
     classification when needed.
 
-    ``allow_empty`` preserves a caller's historical zero-byte output contract;
-    it is opt-in because an empty row list has no field names from which to
-    derive a marked CSV schema.
+    ``allow_empty`` opts into empty-row output. Without ``empty_fieldnames``,
+    this preserves a caller's historical zero-byte contract. Callers that need
+    an empty-schema header can pass ``empty_fieldnames``.
     """
+    resolved_empty_fieldnames = list(empty_fieldnames) if empty_fieldnames is not None else None
+    if resolved_empty_fieldnames is not None and not resolved_empty_fieldnames:
+        raise ValueError("empty_fieldnames must be non-empty when provided")
     if not rows and not allow_empty:
         raise ValueError(f"cannot write empty CSV: {path}")
     if not rows:
-        # Some callers have a historical zero-byte contract for empty output.  Emitting the
-        # review marker would make csv.DictReader treat it as a header, so preserve those bytes
-        # exactly when the caller opts into the compatibility path.
-        path.write_text("", encoding="utf-8")
+        if resolved_empty_fieldnames is None:
+            # Some callers have a historical zero-byte contract for empty output.  Emitting the
+            # review marker would make csv.DictReader treat it as a header, so preserve those bytes
+            # exactly when the caller opts into the compatibility path.
+            path.write_text("", encoding="utf-8")
+        else:
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=resolved_empty_fieldnames,
+                    lineterminator="\r\n",
+                )
+                writer.writeheader()
         _maybe_register(
             path,
             catalog_area=catalog_area,

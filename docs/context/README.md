@@ -116,6 +116,8 @@ knowledge, not every transient iteration detail.
   [issue_4932_data_driven_scenario_generation.md](issue_4932_data_driven_scenario_generation.md)
 * Issue #6054 regulation-to-scenario compilation prototype:
   [issue_6054_regulation_to_scenario.md](issue_6054_regulation_to_scenario.md)
+* Issue #6872 cross-context validity / revalidation matrix:
+  [issue_6872_cross_context_validity_matrix.md](issue_6872_cross_context_validity_matrix.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Skill Consolidation Audit Issue #3189 2026-06-20:
@@ -136,6 +138,10 @@ knowledge, not every transient iteration detail.
   [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
 * Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle (Gate 3 of #6600):
   [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
+* Issue #6871 diagnosis and execution report crosswalk:
+  [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
+* Issue #6875 camera-ready report crosswalk producer:
+  [issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md)
 
 * Issue #6155 release environment packet:
   [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md)

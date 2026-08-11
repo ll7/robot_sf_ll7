@@ -71,6 +71,15 @@ Current lanes report candidate and smoke accounting only:
   `degraded`, and `not_available`;
 - archive counts and rerun-readiness blocker counts when using archive tools.
 
+The residual controller also exposes a versioned
+`residual_adversary_behavior.v1` summary for diagnostic runtime accounting:
+steps, macro-actions, targeted-row fraction, applied residual norm
+mean/max/integral, nonzero fraction, proposal-to-applied adjustment fraction,
+and finite/bound-safe status. It is resettable, returned through the simulator's
+read-only `residual_adversary_behavior_summary` property after lazy allocation,
+and is not an episode-schema field or benchmark metric. Invalid, non-finite, or
+bound-unsafe execution remains diagnostic/blocker evidence only.
+
 New stress-case metrics are out of scope for this dispatchable slice.
 
 ## Canonical Commands
@@ -113,10 +122,12 @@ uv run pytest tests/adversarial/test_residual_adversary.py \
 ```
 
 This proves the bounded residual-control reactive adversary's runtime wiring,
-bound enforcement, and deterministic scripted-policy reproducibility. The
-reproducibility test loads `configs/adversarial/issue_4360_residual_adversary.yaml`,
-uses fixed seed `42`, and runs `20` fixed `0.1 s` steps. It is capability-only
-smoke evidence — not a benchmark, metric, or safety claim.
+bound enforcement, deterministic scripted-policy reproducibility, and the
+diagnostic `residual_adversary_behavior.v1` summary. The reproducibility test
+loads `configs/adversarial/issue_4360_residual_adversary.yaml`, uses fixed seed
+`42`, and runs `20` fixed `0.1 s` steps; repeated runs compare the canonical
+summary values. It is capability-only smoke evidence — not a benchmark, metric,
+or safety claim.
 
 Run the residual search-baseline deterministic CPU smoke:
 

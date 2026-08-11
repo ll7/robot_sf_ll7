@@ -572,6 +572,10 @@ so the command works from a worktree that has not run `uv sync`. The `--help` ou
 Use `--max-wall-seconds` to give long-running monitors a clean local stop path before patching or
 pushing a branch; exit code 2 means checks were still pending when the local cap expired, not that
 remote GitHub checks were cancelled or failed.
+If the parent workflow is already `completed/success` and every recorded job step ends with a
+successful `Complete job` step while GitHub still reports the job as `in_progress`, the JSON payload
+marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` and includes the
+parent-run/job IDs. This remains fail-closed pending evidence; it is not merge authorization.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and

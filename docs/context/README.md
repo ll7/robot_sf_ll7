@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
 * Issue #6871 diagnosis and execution report crosswalk:
   [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
+* Issue #6875 camera-ready report crosswalk producer:
+  [issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md)
 
 * Issue #6155 release environment packet:
   [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md)

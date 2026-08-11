@@ -273,6 +273,8 @@ def _evaluate_candidate(
         when the candidate triggers a bound conflict.
     """
     try:
+        if objective_proxy not in SUPPORTED_OBJECTIVE_PROXIES:
+            raise ValueError(f"unsupported objective proxy: {objective_proxy!r}")
         candidate_array = _validate_finite_array(candidate_2d, "candidate")
         if candidate_array.shape != (2,):
             raise ValueError("candidate must have shape (2,)")
@@ -304,9 +306,13 @@ def _evaluate_candidate(
             if robot_position.shape != (2,) or not np.all(np.isfinite(robot_position)):
                 raise ValueError("robot_pose position must have shape (2,) with finite values")
             distance = float(np.linalg.norm(predicted_position - robot_position))
+            if not np.isfinite(distance):
+                raise ValueError("predicted robot distance must be finite")
             score = -distance
         else:
             score = float(np.linalg.norm(bounded[target_idx]))
+        if not np.isfinite(score):
+            raise ValueError("objective score must be finite")
         return score, True
     except (IndexError, ResidualBoundConflictError, ValueError, TypeError):
         return 0.0, False

@@ -1,6 +1,6 @@
 schema_version: residual_search_diagnostic.v1
 issue: 6917
-parent_issue: 6911
+parent_issue: 4360
 claim_boundary: >
   Diagnostic-only alternative objective proxy for finite-budget grid search
   over residual adversary proposals.  No benchmark, metric, planner-ranking,

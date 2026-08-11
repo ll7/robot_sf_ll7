@@ -254,6 +254,27 @@ def test_evaluate_candidate_non_finite_returns_invalid() -> None:
     assert score == 0.0
 
 
+def test_evaluate_candidate_unsupported_proxy_returns_invalid() -> None:
+    """An internal unsupported proxy cannot silently fall back to magnitude."""
+    config = ResidualAdversaryConfig(is_active=True)
+    context = _CandidateEvaluationContext(
+        positions=np.array([[3.0, 1.0]]),
+        velocities=np.array([[0.5, 0.0]]),
+        max_speeds=np.array([1.5]),
+        residual_config=config,
+        dt_s=0.1,
+        robot_pose=ROBOT_POSE,
+    )
+    score, is_valid = _evaluate_candidate(
+        np.array([0.1, 0.1]),
+        0,
+        context,
+        objective_proxy="unsupported_proxy",
+    )
+    assert is_valid is False
+    assert score == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Deterministic output reproducibility
 # ---------------------------------------------------------------------------
@@ -1003,48 +1024,45 @@ def test_search_minimize_predicted_robot_distance_residual_respects_bounds() -> 
 
 
 def test_search_minimize_predicted_robot_distance_different_from_magnitude() -> None:
-    """The two proxies select different best candidates on an asymmetric grid."""
-    config = ResidualAdversaryConfig(is_active=True)
+    """The two proxies produce different selections on the representative grid."""
     positions = np.array([[3.0, 0.0]])
     velocities = np.array([[0.0, 0.0]])
     max_speeds = np.array([1.5])
-    ctx = _CandidateEvaluationContext(
-        positions=positions,
-        velocities=velocities,
-        max_speeds=max_speeds,
-        residual_config=config,
-        dt_s=0.1,
-        robot_pose=((0.0, 0.0), 0.0),
-    )
-    candidate_toward_robot = np.array([-1.5, 0.0])
-    candidate_away = np.array([1.5, 0.0])
-
-    score_mag_toward, _ = _evaluate_candidate(candidate_toward_robot, 0, ctx)
-    score_mag_away, _ = _evaluate_candidate(candidate_away, 0, ctx)
-    score_dist_toward, _ = _evaluate_candidate(
-        candidate_toward_robot,
-        0,
-        ctx,
-        objective_proxy="minimize_predicted_robot_distance",
-        robot_pose=((0.0, 0.0), 0.0),
-    )
-    score_dist_away, _ = _evaluate_candidate(
-        candidate_away,
-        0,
-        ctx,
-        objective_proxy="minimize_predicted_robot_distance",
-        robot_pose=((0.0, 0.0), 0.0),
-    )
-
-    if score_mag_toward != score_mag_away:
-        best_mag = candidate_toward_robot if score_mag_toward > score_mag_away else candidate_away
-        best_dist = (
-            candidate_toward_robot if score_dist_toward > score_dist_away else candidate_away
+    residual_config = ResidualAdversaryConfig(is_active=True)
+    results = []
+    for objective_proxy in (
+        "maximize_residual_magnitude",
+        "minimize_predicted_robot_distance",
+    ):
+        search_config = ResidualSearchConfig(
+            seed=42,
+            objective_proxy=objective_proxy,
+            grid_points_per_dim=3,
+            max_candidates=9,
         )
-        if best_mag is not None and best_dist is not None:
-            assert not np.array_equal(best_mag, best_dist), (
-                "proxies should select different candidates on an asymmetric grid"
-            )
+        policy = FiniteGridSearchPolicy(
+            search_config=search_config,
+            residual_config=residual_config,
+            dt_s=0.1,
+            num_peds=1,
+        )
+        observation = type(
+            "Obs",
+            (),
+            {
+                "positions": positions,
+                "velocities": velocities,
+                "max_speeds": max_speeds,
+                "target_ped_mask": np.array([True]),
+                "robot_pose": ROBOT_POSE,
+                "sim_time_s": 0.0,
+                "step_index": 0,
+                "macro_action_index": 0,
+            },
+        )()
+        results.append(policy.propose_residual(observation))
+
+    assert not np.array_equal(results[0], results[1])
 
 
 def test_search_config_digest_differs_for_different_proxy() -> None:

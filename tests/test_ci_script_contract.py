@@ -736,7 +736,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
             [
                 "#!/usr/bin/env bash",
                 'if [[ "$1" == "run" && "$2" == "python" ]]; then',
-                "  echo 'duckdb, pyarrow'",
+                "  echo 'duckdb, pyarrow, pandas'",
                 "  exit 1",
                 "fi",
                 "echo 'unexpected uv invocation' >&2",
@@ -793,7 +793,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
     assert result.returncode == 2
     assert "Final PR readiness requires analytics dependencies" in result.stderr
     assert "uv sync --all-extras" in result.stderr
-    assert "duckdb, pyarrow" in result.stderr
+    assert "duckdb, pyarrow, pandas" in result.stderr
     assert "ruff_fix_format" not in result.stderr
 
 
@@ -813,7 +813,7 @@ def test_pr_ready_check_rejects_process_substitution_body_paths(tmp_path: Path) 
 
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
-        "#!/usr/bin/env bash\necho 'duckdb, pyarrow' >&2\nexit 1\n",
+        "#!/usr/bin/env bash\necho 'duckdb, pyarrow, pandas' >&2\nexit 1\n",
         encoding="utf-8",
     )
     fake_uv.chmod(0o755)

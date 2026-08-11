@@ -855,9 +855,29 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
+  issue-audit-autonomous:
+    description: Autonomous open-issue audit that applies only evidence-supported label or completion
+      repairs and emits a machine-readable pending-decision queue without asking questions.
+    category: github-issue
+    kind: atomic
+    phase: context
+    requires_write: true
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: true
+      github_project: false
+      github_pr: false
+      filesystem: true
+    requires:
+    - gh
+    - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases: []
   issue-audit:
-    description: User-in-the-loop open-issue audit that asks one readiness-blocking question at a time
-      or one priority-tradeoff question at a time and updates issues as decisions are made.
+    description: Interactive maintainer issue audit that presents one issue_decision_envelope.v1 at a time, applies only an exact answer, and verifies the result.
     category: github-issue
     kind: atomic
     phase: context
@@ -880,8 +900,8 @@ skills:
   issue-contract-maintainer:
     writes:
       git: false
-      github_issue: false
-      github_project: false
+      github_issue: true
+      github_project: true
       github_pr: false
       filesystem: true
     description: Maintain GitHub issue contracts through template audits, ambiguity clarification, and
@@ -897,6 +917,7 @@ skills:
     delegates_to:
     - gh-issue-clarifier
     - gh-issue-template-auditor
+    - issue-audit-autonomous
     - issue-audit
     - issue-splitter
     output_schema: skill_run_summary.v1

@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-08
+updated_at: 2026-08-11
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -3425,6 +3425,22 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5303_search_promotion_powered_preregistration
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5303_search_promotion_powered_preregistration/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5303_search_promotion_powered_preregistration/contract_frozen.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5303_search_promotion_powered_preregistration/scheduled_search_identities.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5303_search_promotion_preregistration
   status: evidence
   freshness: evidence
@@ -3836,6 +3852,14 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json
   status: evidence
   freshness: evidence
@@ -3928,6 +3952,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6769_figure_render_registry_audit.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_6770_figure_render_recurrence_report.json
   status: evidence
   freshness: evidence
   area: workflow_evidence
@@ -4843,6 +4871,14 @@ entries:
   status: current
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/issue_6871_report_crosswalk.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_6875_report_crosswalk_producer.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_691_benchmark_fallback_policy.md
   status: current
   freshness: policy
@@ -4859,6 +4895,10 @@ entries:
   status: current
   freshness: maintained
   area: benchmark_release
+- path: docs/context/issue_audit_contract.md
+  status: current
+  freshness: policy
+  area: agent_workflow
 - path: docs/context/mechanism_closure_status.md
   status: current
   freshness: maintained

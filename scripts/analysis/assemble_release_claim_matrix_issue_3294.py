@@ -15,6 +15,7 @@ import yaml
 from robot_sf.benchmark.benchmark_row_claim import validate_leaderboard_claims
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
+from robot_sf.evidence.writers import write_json, write_text
 
 SCHEMA_VERSION = "release_claim_matrix_issue_3294.v1"
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_3294_release_claim_matrix")
@@ -641,8 +642,8 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     matrix_path = output_dir / "release_claim_matrix.json"
     markdown_path = output_dir / "release_claim_matrix.md"
-    matrix_path.write_text(json.dumps(matrix, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    markdown_path.write_text(render_markdown(matrix), encoding="utf-8")
+    write_json(matrix_path, matrix)
+    write_text(markdown_path, render_markdown(matrix))
     print(
         json.dumps(
             {

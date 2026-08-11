@@ -19,8 +19,10 @@ from robot_sf.benchmark.multi_amv import (
     MultiAmvSettings,
     ensure_multi_amv_planner_supported,
     inter_robot_metrics,
+    inter_robot_pair_metrics,
     multi_amv_episode_extension,
     multi_amv_settings_from_scenario,
+    multi_robot_eligible_episode_summary,
     paired_actuation_feasibility_ranking,
 )
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
@@ -33,6 +35,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.gym_env.environment_factory import make_multi_robot_env
 from robot_sf.gym_env.unified_config import MultiRobotConfig
+from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
@@ -87,13 +90,23 @@ def build_multi_amv_episode_record(  # noqa: PLR0913
     steps_recorded: int,
     settings: MultiAmvSettings,
     inter_robot: dict[str, float | bool],
+    inter_robot_pairs: list[dict[str, Any]] | None = None,
     planner_family: str,
     planner_status: str,
     planner_note: str | None = None,
     wall_time_sec: float,
     start_timestamp: datetime | None = None,
 ) -> dict[str, Any]:
-    """Build a canonical benchmark-style multi-AMV episode record."""
+    """Build a canonical benchmark-style multi-AMV episode record.
+
+    The record includes aggregate inter-robot metrics (``inter_robot``) and,
+    when provided, per-pair collision-event data (``inter_robot_pairs``)
+    preserving pair identity. The schema-compatible diagnostic object also
+    reports the eligible-episode denominator and collision-event fraction.
+    Pair data uses geometric overlap-transition semantics: non-overlap to
+    overlap starts one event, contiguous overlap remains one event, and
+    separated re-entry starts a new event.
+    """
     extension = multi_amv_episode_extension(
         settings=settings,
         inter_robot=inter_robot,
@@ -112,13 +125,34 @@ def build_multi_amv_episode_record(  # noqa: PLR0913
         "horizon": int(horizon),
         "multi_amv": {"settings": extension["multi_amv"]["settings"]},
     }
+    collision_diagnostics = {
+        "evidence_status": "diagnostic_only",
+        "event_semantics": "geometric_overlap_transition",
+        "thresholds": {
+            "collision_distance_m": float(settings.collision_distance_m),
+            "near_miss_distance_m": float(settings.near_miss_distance_m),
+        },
+        "episode_summary": multi_robot_eligible_episode_summary(
+            [
+                {
+                    "metrics": {"inter_robot": dict(inter_robot)},
+                    "steps": int(steps_recorded),
+                }
+            ],
+            per_pair_results=inter_robot_pairs or [],
+        ),
+    }
     record = {
         "version": "v1",
         "episode_id": f"multi_amv::{scenario_id}::{planner_family}::{seed}::{horizon}",
         "scenario_id": str(scenario_id),
         "seed": int(seed),
         "scenario_params": scenario_params,
-        "metrics": {"collisions": collision_events, "inter_robot": dict(inter_robot)},
+        "metrics": {
+            "collisions": collision_events,
+            "inter_robot": dict(inter_robot),
+            "inter_robot_collision_diagnostics": collision_diagnostics,
+        },
         "algorithm_metadata": {
             "algorithm": str(planner_family),
             "canonical_algorithm": str(planner_family),
@@ -160,19 +194,28 @@ def build_multi_amv_episode_record(  # noqa: PLR0913
 def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
     """Run the first scenario in ``scenario_path`` and return an episode record."""
     scenario = dict(load_scenarios(scenario_path)[0])
+    seed = 0
     settings = multi_amv_settings_from_scenario(scenario)
     planner_support = ensure_multi_amv_planner_supported("goal_controller_smoke")
     config = _multi_robot_config_from_scenario(scenario, scenario_path)
+    # The smoke controller reads simulator state directly, but deterministic
+    # sensor noise is part of the reproducibility contract for this path.
+    config.lidar_config = LidarScannerSettings(scan_noise=[0.0, 0.0])
     config.sim_config.sim_time_in_secs = max(
         config.sim_config.time_per_step_in_secs,
         horizon * config.sim_config.time_per_step_in_secs,
     )
-    env = make_multi_robot_env(num_robots=settings.num_robots, config=config, debug=False)
+    env = make_multi_robot_env(
+        num_robots=settings.num_robots,
+        config=config,
+        seed=seed,
+        debug=False,
+    )
     positions = []
     started = time.time()
     start_timestamp = datetime.now(UTC)
     try:
-        env.reset(seed=0)
+        env.reset(seed=seed)
         positions.append(_robot_positions(env))
         for _ in range(horizon):
             _obs, _reward, terminated, truncated, _info = env.step(_goal_actions(env))
@@ -188,14 +231,16 @@ def run_smoke(*, scenario_path: Path, horizon: int) -> dict[str, Any]:
         dt=float(config.sim_config.time_per_step_in_secs),
         settings=settings,
     )
+    pair_metrics = inter_robot_pair_metrics(robot_positions, settings=settings)
     scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
     return build_multi_amv_episode_record(
         scenario_id=scenario_id,
-        seed=0,
+        seed=seed,
         horizon=horizon,
-        steps_recorded=int(robot_positions.shape[0]),
+        steps_recorded=max(0, int(robot_positions.shape[0]) - 1),
         settings=settings,
         inter_robot=metrics,
+        inter_robot_pairs=pair_metrics,
         planner_family=planner_support.planner_family,
         planner_status="goal_controller_smoke",
         planner_note=planner_support.rationale,
@@ -301,6 +346,26 @@ def _write_report(path: Path, *, aggregates: dict[str, Any], record: dict[str, A
     ]
     for key in sorted(inter_robot):
         lines.append(f"- `{key}`: `{inter_robot[key]}`")
+    diagnostics = record["metrics"].get("inter_robot_collision_diagnostics")
+    if isinstance(diagnostics, dict):
+        lines.extend(
+            [
+                "",
+                "## Inter-Robot Collision Event Diagnostics",
+                "",
+                f"- Evidence status: `{diagnostics.get('evidence_status', 'unknown')}`",
+                f"- Event semantics: `{diagnostics.get('event_semantics', 'unknown')}`",
+            ]
+        )
+        summary = diagnostics.get("episode_summary")
+        if isinstance(summary, dict):
+            for key in (
+                "eligible_episodes",
+                "episodes_with_collision_events",
+                "collision_event_fraction",
+            ):
+                if key in summary:
+                    lines.append(f"- `{key}`: `{summary[key]}`")
     lines.extend(
         [
             "",

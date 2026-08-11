@@ -109,7 +109,7 @@ def _make_fake_bin(repo: Path, *, fail: bool = True) -> None:
             '  payload="$*"\n'
             "fi\n"
             "if [[ \"$payload\" == *'import importlib'* ]]; then\n"
-            "  echo 'duckdb, pyarrow' >&2\n"
+            "  echo 'duckdb, pyarrow, pandas' >&2\n"
             "  exit 1\n"
             "fi\n"
             "exit 0\n",
@@ -277,6 +277,7 @@ def test_preflight_helper_exits_nonzero_when_modules_are_missing() -> None:
     """The embedded Python must fail, not only print missing modules."""
     common_setup = (SCRIPTS_DEV / "common_setup.sh").read_text(encoding="utf-8")
     assert "raise SystemExit(1)" in common_setup
+    assert 'for module_name in ("duckdb", "pyarrow", "pandas")' in common_setup
 
 
 def test_preflight_fails_when_modules_missing(preflight_repo: Path) -> None:

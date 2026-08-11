@@ -14,7 +14,6 @@ convergence:
   collision_rate: 0.05
   plateau_window: 2000
 evaluation:
-  frequency_episodes: 10
   evaluation_episodes: 5
   hold_out_scenarios:
     - classic_cross_trap_medium

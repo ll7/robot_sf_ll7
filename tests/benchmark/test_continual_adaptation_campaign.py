@@ -124,25 +124,30 @@ class TestBuildResultReference:
     """Tests for :func:`build_result_reference`."""
 
     def test_builds_reference_with_content(self) -> None:
+        """A content-supplied reference gets a deterministic SHA-256 checksum."""
         ref = build_result_reference("runs/nominal.json", content="test-content")
         assert ref["uri"] == "runs/nominal.json"
         assert ref["checksum"]["algorithm"] == "sha256"
         assert len(ref["checksum"]["digest"]) == 64
 
     def test_builds_reference_with_explicit_checksum(self) -> None:
+        """An explicitly supplied checksum is accepted verbatim."""
         checksum = {"algorithm": "sha256", "digest": "c" * 64}
         ref = build_result_reference("runs/shift.json", checksum=checksum)
         assert ref["checksum"] == checksum
 
     def test_empty_uri_fails_closed(self) -> None:
+        """An empty URI cannot anchor an evidence reference."""
         with pytest.raises(ContinualAdaptationCampaignError, match="non-empty"):
             build_result_reference("", content="data")
 
     def test_neither_content_nor_checksum_fails_closed(self) -> None:
+        """A reference without content or checksum is not promotion-eligible."""
         with pytest.raises(ContinualAdaptationCampaignError, match="exactly one"):
             build_result_reference("runs/nominal.json")
 
     def test_both_content_and_checksum_fails_closed(self) -> None:
+        """Ambiguous inputs (both content and checksum) are rejected."""
         with pytest.raises(ContinualAdaptationCampaignError, match="exactly one"):
             build_result_reference(
                 "runs/nominal.json",
@@ -168,6 +173,7 @@ class TestBuildEvidenceBundleRef:
     """Tests for :func:`build_evidence_bundle_ref`."""
 
     def test_builds_complete_reference(self) -> None:
+        """An evidence bundle ref carries identifier, policy_identifier, uri, and checksum."""
         ref = build_evidence_bundle_ref(
             identifier="evidence_v1",
             uri="evidence/bundle.yaml",
@@ -181,6 +187,7 @@ class TestBuildEvidenceBundleRef:
         assert ref["checksum"]["algorithm"] == "sha256"
 
     def test_baseline_identifier_collision_fails_closed(self) -> None:
+        """An evidence bundle cannot masquerade as the baseline."""
         with pytest.raises(ContinualAdaptationCampaignError, match="must not equal"):
             build_evidence_bundle_ref(
                 identifier="ppo_baseline_v1",
@@ -191,6 +198,7 @@ class TestBuildEvidenceBundleRef:
             )
 
     def test_empty_identifier_fails_closed(self) -> None:
+        """An empty evidence bundle identifier is not promotion-eligible."""
         with pytest.raises(ContinualAdaptationCampaignError, match="non-empty"):
             build_evidence_bundle_ref(
                 identifier="",
@@ -201,6 +209,7 @@ class TestBuildEvidenceBundleRef:
             )
 
     def test_empty_policy_identifier_fails_closed(self) -> None:
+        """An empty policy_identifier cannot name the adapted policy."""
         with pytest.raises(ContinualAdaptationCampaignError, match="non-empty"):
             build_evidence_bundle_ref(
                 identifier="evidence_v1",
@@ -215,6 +224,7 @@ class TestBuildContinualAdaptationEvidence:
     """Tests for :func:`build_continual_adaptation_evidence`."""
 
     def test_builds_evidence_with_derived_identifier(self) -> None:
+        """Evidence bundle derives the adapted-policy identifier distinct from baseline."""
         manifest = _manifest()
         evidence = _build_evidence(
             manifest,
@@ -233,6 +243,7 @@ class TestBuildContinualAdaptationEvidence:
         assert evidence.blockers == []
 
     def test_evidence_bundle_ref_names_derived_identifier(self) -> None:
+        """The bundle reference policy_identifier matches the validator-derived identifier."""
         manifest = _manifest()
         derived = derive_adapted_policy_identifier(manifest)
         evidence = _build_evidence(
@@ -275,7 +286,7 @@ class TestBuildContinualAdaptationEvidence:
             )
 
     def test_missing_exact_result_content_fails_closed(self) -> None:
-        """URI strings alone cannot stand in for the bytes referenced as evidence."""
+        """URI strings without content or checksum cannot stand in for evidence bytes."""
         with pytest.raises(ContinualAdaptationCampaignError, match="exactly one"):
             _build_continual_adaptation_evidence(
                 _manifest(),
@@ -287,7 +298,7 @@ class TestBuildContinualAdaptationEvidence:
             )
 
     def test_duplicate_result_uri_fails_closed(self) -> None:
-        """Distinct result roles must not silently alias one artifact."""
+        """Distinct result roles must not alias a single artifact URI."""
         with pytest.raises(ContinualAdaptationCampaignError, match="URIs must be distinct"):
             _build_evidence(
                 _manifest(),
@@ -299,7 +310,7 @@ class TestBuildContinualAdaptationEvidence:
             )
 
     def test_non_metadata_claim_boundary_fails_closed(self) -> None:
-        """The approved implementation-only claim boundary remains explicit."""
+        """A claim boundary that is not metadata-only is rejected."""
         manifest = _manifest(claim_boundary="empirical adaptation run")
         with pytest.raises(ContinualAdaptationCampaignError, match="metadata-only"):
             _build_evidence(
@@ -312,7 +323,7 @@ class TestBuildContinualAdaptationEvidence:
             )
 
     def test_bundle_payload_and_reference_are_deterministic(self) -> None:
-        """Identical inputs produce identical payload bytes and bundle references."""
+        """Identical inputs yield identical payload bytes and bundle references."""
         kwargs = {
             "nominal_uri": "runs/nominal.json",
             "shift_uri": "runs/shift.json",
@@ -328,6 +339,7 @@ class TestBuildContinualAdaptationEvidence:
         assert "created_utc" not in first.to_dict()
 
     def test_evidence_boundary_stamped(self) -> None:
+        """The evidence boundary marks the bundle as protocol-contract-only."""
         manifest = _manifest()
         evidence = _build_evidence(
             manifest,
@@ -344,6 +356,7 @@ class TestBuildPromotionResults:
     """Tests for :func:`build_promotion_results`."""
 
     def test_builds_all_four_refs(self) -> None:
+        """Promotion results carry nominal, shift, forgetting, and evidence-bundle refs."""
         manifest = _manifest()
         evidence = _build_evidence(
             manifest,
@@ -369,6 +382,7 @@ class TestPreparePromotionManifest:
     """Tests for :func:`prepare_promotion_manifest`."""
 
     def test_sets_promote_decision_and_results(self) -> None:
+        """Prepared manifest has decision='promote' and a complete results block."""
         manifest = _manifest()
         evidence = _build_evidence(
             manifest,
@@ -384,6 +398,7 @@ class TestPreparePromotionManifest:
         assert "nominal_result" in promoted["results"]
 
     def test_original_manifest_not_mutated(self) -> None:
+        """prepare_promotion_manifest returns a new dict without side effects."""
         manifest = _manifest()
         evidence = _build_evidence(
             manifest,
@@ -402,6 +417,7 @@ class TestPromotionGateRoundTrip:
     """Round-trip: build evidence, prepare manifest, validate promotion gate."""
 
     def test_promotion_gate_passes(self) -> None:
+        """A fully wired promotion manifest passes check_continual_adaptation_run."""
         manifest = _manifest()
         evidence = _build_evidence(
             manifest,
@@ -437,6 +453,7 @@ class TestPromotionFixture:
     """Tests against the committed promotion fixture YAML."""
 
     def test_fixture_passes_promotion_gate(self) -> None:
+        """The committed fixture YAML is protocol-valid and promotion-ready."""
         from robot_sf.research.continual_adaptation_protocol import load_continual_adaptation_run
 
         manifest = load_continual_adaptation_run(PROMOTION_FIXTURE_PATH)
@@ -447,6 +464,7 @@ class TestPromotionFixture:
         assert report.blockers == []
 
     def test_fixture_evidence_bundle_names_derived_identifier(self) -> None:
+        """Fixture evidence_bundle.policy_identifier matches the derived identifier."""
         from robot_sf.research.continual_adaptation_protocol import load_continual_adaptation_run
 
         manifest = load_continual_adaptation_run(PROMOTION_FIXTURE_PATH)
@@ -497,7 +515,7 @@ class TestWriteEvidenceBundle:
     """Tests for :func:`write_evidence_bundle` and :func:`write_promotion_manifest`."""
 
     def test_write_evidence_bundle(self, tmp_path: Path) -> None:
-        """Written bundle bytes match the non-self-referential checksum."""
+        """Written bundle payload excludes its own ref and matches declared checksum."""
         manifest = _manifest()
         evidence = _build_evidence(
             manifest,
@@ -553,7 +571,7 @@ class TestWriteEvidenceBundle:
         assert loaded["promotion_decision"]["decision"] == "promote"
 
     def test_write_promotion_manifest_no_overwrite(self, tmp_path: Path) -> None:
-        """The default manifest writer uses exclusive creation semantics."""
+        """Exclusive creation rejects overwriting an existing manifest file."""
         out_path = tmp_path / "promoted.yaml"
         out_path.write_text("existing: true\n", encoding="utf-8")
 
@@ -569,7 +587,7 @@ class TestCampaignCli:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """The validation command cannot report an experimental manifest as gate-ready."""
+        """--validate exits nonzero when promotion_ready is false despite valid protocol."""
         manifest_path = tmp_path / "experimental.yaml"
         manifest_path.write_text(yaml.safe_dump(_manifest()), encoding="utf-8")
         args = SimpleNamespace(

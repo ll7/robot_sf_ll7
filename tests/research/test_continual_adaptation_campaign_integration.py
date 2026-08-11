@@ -122,7 +122,7 @@ def test_campaign_evidence_satisfies_protocol_promotion_gate() -> None:
 
 
 def test_evidence_bundle_names_derived_identifier_accepted_by_validator() -> None:
-    """The evidence bundle policy_identifier matches the validator-derived identifier."""
+    """The bundle policy_identifier matches the validator-derived identifier."""
     manifest = _manifest()
     derived = derive_adapted_policy_identifier(manifest)
     evidence = _build_evidence(

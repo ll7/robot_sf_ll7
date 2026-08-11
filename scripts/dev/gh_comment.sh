@@ -148,8 +148,12 @@ if [ "$target_type" = "pr" ]; then
     echo "Error: PR '$target_id' could not be resolved through the REST API." >&2
     exit 1
   fi
+  # Use gh's silent mode so a successful POST with an empty/malformed response
+  # body cannot surface as a client-side JSON parse failure (issue #6891).
+  gh_api_rc=0
   gh api --method POST "repos/$api_repo/issues/$target_id/comments" \
-    -F "body=@$body_file"
+    --silent -F "body=@$body_file" || gh_api_rc=$?
+  exit "$gh_api_rc"
 else
   api_repo="{owner}/{repo}"
   if [ -n "$repo_arg" ]; then
@@ -163,6 +167,10 @@ else
     echo "Error: Issue '$target_id' could not be resolved through the REST API." >&2
     exit 1
   fi
+  # Use gh's silent mode so a successful POST with an empty/malformed response
+  # body cannot surface as a client-side JSON parse failure (issue #6891).
+  gh_api_rc=0
   gh api --method POST "repos/$api_repo/issues/$target_id/comments" \
-    -F "body=@$body_file"
+    --silent -F "body=@$body_file" || gh_api_rc=$?
+  exit "$gh_api_rc"
 fi

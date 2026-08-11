@@ -4856,6 +4856,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json
   status: evidence
   freshness: evidence

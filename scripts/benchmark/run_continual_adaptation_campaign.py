@@ -228,13 +228,25 @@ def _run_generation(
         evidence_bundle_uri=evidence_bundle_uri,
     )
     promoted = _prepare_requested_promotion(manifest, evidence, args, requested_evidence_out)
+    promoted_for_input_validation = promoted or prepare_promotion_manifest(manifest, evidence)
+    verify_local_result_references(
+        promoted_for_input_validation,
+        artifact_root,
+        include_evidence_bundle=False,
+        source=args.manifest,
+    )
     _preflight_output_collisions(
         (requested_evidence_out, args.promotion_manifest_out),
         overwrite=args.overwrite,
     )
 
     if requested_evidence_out is not None:
-        path = write_evidence_bundle(evidence, requested_evidence_out, overwrite=args.overwrite)
+        path = write_evidence_bundle(
+            evidence,
+            requested_evidence_out,
+            artifact_root=artifact_root,
+            overwrite=args.overwrite,
+        )
         LOGGER.info("evidence bundle written: %s", path, extra={"output_path": str(path)})
 
     if promoted is not None and args.promotion_manifest_out is not None:

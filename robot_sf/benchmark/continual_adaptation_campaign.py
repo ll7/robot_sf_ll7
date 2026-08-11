@@ -22,7 +22,9 @@ mistaken for an executed adaptation or benchmark/paper evidence.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -144,6 +146,11 @@ def _checksum_for_content(content: str | bytes) -> dict[str, str]:
 
 def _validate_execution_mode(execution_mode: str) -> str:
     """Return normalized native mode, rejecting every other classification."""
+    if not isinstance(execution_mode, str):
+        raise ContinualAdaptationCampaignError(
+            f"execution_mode={execution_mode!r} is not an allowed native record; "
+            "execution mode must be a string"
+        )
     normalized = execution_mode.strip().lower()
     if normalized not in _ALLOWED_EXECUTION_MODES:
         raise ContinualAdaptationCampaignError(
@@ -511,6 +518,7 @@ def write_evidence_bundle(
     evidence: ContinualAdaptationEvidenceBundle,
     out_path: Path,
     *,
+    artifact_root: Path | None = None,
     overwrite: bool = False,
 ) -> Path:
     """Write the deterministic evidence bundle to *out_path*.
@@ -522,6 +530,12 @@ def write_evidence_bundle(
         ContinualAdaptationCampaignError: when the file exists and
             *overwrite* is ``False``.
     """
+    out_path = out_path.resolve()
+    _validate_evidence_bundle_output_path(
+        evidence.evidence_bundle_ref.get("uri"),
+        out_path,
+        artifact_root=artifact_root,
+    )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = evidence.to_payload_dict()
     payload_bytes = _canonical_yaml_bytes(payload)
@@ -539,6 +553,41 @@ def write_evidence_bundle(
         artifact_name="evidence bundle",
     )
     return out_path
+
+
+def _validate_evidence_bundle_output_path(
+    uri: Any,
+    out_path: Path,
+    *,
+    artifact_root: Path | None,
+) -> None:
+    """Ensure the emitted bundle path is the artifact named by its URI."""
+    if not isinstance(uri, str) or not uri.strip():
+        raise ContinualAdaptationCampaignError(
+            "evidence bundle reference uri must be non-empty", source=out_path
+        )
+    relative = Path(uri)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ContinualAdaptationCampaignError(
+            f"evidence bundle uri must be a safe repository-relative path: {uri}",
+            source=out_path,
+        )
+    resolved_out = out_path.resolve()
+    if artifact_root is not None:
+        expected = (artifact_root.resolve() / relative).resolve()
+        if resolved_out != expected:
+            raise ContinualAdaptationCampaignError(
+                f"evidence bundle output must match its declared URI: expected {expected}, "
+                f"got {resolved_out}",
+                source=out_path,
+            )
+        return
+    relative_parts = relative.parts
+    output_suffix = resolved_out.parts[-len(relative_parts) :] if relative_parts else ()
+    if len(relative_parts) > len(resolved_out.parts) or output_suffix != relative_parts:
+        raise ContinualAdaptationCampaignError(
+            f"evidence bundle output must end with its declared URI: {uri}", source=out_path
+        )
 
 
 def _resolve_local_artifact(
@@ -577,6 +626,7 @@ def verify_local_result_references(
     manifest: Mapping[str, Any],
     artifact_root: Path,
     *,
+    include_evidence_bundle: bool = True,
     source: str | Path | None = None,
 ) -> dict[str, Path]:
     """Verify every promotion reference against exact local artifact bytes.
@@ -602,7 +652,8 @@ def verify_local_result_references(
 
     resolved: dict[str, Path] = {}
     seen_uris: set[str] = set()
-    for name in (*_RESULT_REF_NAMES, "evidence_bundle"):
+    reference_names = _RESULT_REF_NAMES + (("evidence_bundle",) if include_evidence_bundle else ())
+    for name in reference_names:
         ref = results.get(name)
         if not isinstance(ref, Mapping):
             raise ContinualAdaptationCampaignError(
@@ -665,12 +716,32 @@ def _write_text_exclusively_unless_overwriting(
     overwrite: bool,
     artifact_name: str,
 ) -> None:
-    """Write text while making the default no-overwrite contract race-safe."""
-    mode = "w" if overwrite else "x"
+    """Write text with atomic publication and race-safe no-overwrite semantics."""
+    temporary_fd, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    temporary_path = Path(temporary_name)
     try:
-        with path.open(mode, encoding="utf-8") as stream:
+        with os.fdopen(temporary_fd, "w", encoding="utf-8") as stream:
             stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            if overwrite:
+                os.replace(temporary_path, path)
+            else:
+                # Hard-linking the fully written same-directory temporary file
+                # publishes it atomically while preserving O_EXCL semantics.
+                os.link(temporary_path, path)
+        except FileExistsError as exc:
+            raise ContinualAdaptationCampaignError(
+                f"{artifact_name} already exists: {path}", source=path
+            ) from exc
     except FileExistsError as exc:
         raise ContinualAdaptationCampaignError(
             f"{artifact_name} already exists: {path}", source=path
         ) from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)

@@ -11,6 +11,8 @@ through ``check_continual_adaptation_run``.
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -269,9 +271,11 @@ class TestBuildContinualAdaptationEvidence:
             "simulated",
             "",
             "FALLBACK",
+            None,
+            123,
         ],
     )
-    def test_every_non_native_status_fails_closed(self, mode: str) -> None:
+    def test_every_non_native_status_fails_closed(self, mode: object) -> None:
         """Only an explicitly native execution record may feed promotion metadata."""
         manifest = _manifest()
         with pytest.raises(ContinualAdaptationCampaignError, match="allowed native record"):
@@ -525,7 +529,7 @@ class TestWriteEvidenceBundle:
             evidence_bundle_uri="evidence/bundle.yaml",
             evidence_bundle_identifier="evidence_v1",
         )
-        out_path = tmp_path / "bundle.yaml"
+        out_path = tmp_path / "evidence" / "bundle.yaml"
         path = write_evidence_bundle(evidence, out_path)
         assert path.exists()
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -535,6 +539,8 @@ class TestWriteEvidenceBundle:
         assert "created_utc" not in loaded
         expected_digest = evidence.evidence_bundle_ref["checksum"]["digest"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected_digest
+        with pytest.raises(ContinualAdaptationCampaignError, match="declared URI"):
+            write_evidence_bundle(evidence, tmp_path / "unbound.yaml")
 
     def test_write_evidence_bundle_no_overwrite(self, tmp_path: Path) -> None:
         """The default writer refuses to replace an existing bundle."""
@@ -547,7 +553,7 @@ class TestWriteEvidenceBundle:
             evidence_bundle_uri="evidence/bundle.yaml",
             evidence_bundle_identifier="evidence_v1",
         )
-        out_path = tmp_path / "bundle.yaml"
+        out_path = tmp_path / "evidence" / "bundle.yaml"
         write_evidence_bundle(evidence, out_path)
         with pytest.raises(ContinualAdaptationCampaignError, match="already exists"):
             write_evidence_bundle(evidence, out_path)
@@ -602,6 +608,35 @@ class TestCampaignCli:
         monkeypatch.setattr(campaign_cli, "parse_args", lambda: args)
 
         assert campaign_cli.main() == 1
+
+    def test_validate_keeps_json_result_on_stdout_and_diagnostics_in_logger(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Validation emits a scriptable JSON report and logs its failure context."""
+        manifest_path = tmp_path / "experimental.yaml"
+        manifest_path.write_text(yaml.safe_dump(_manifest()), encoding="utf-8")
+        args = SimpleNamespace(
+            manifest=manifest_path,
+            validate=True,
+            artifact_root=tmp_path,
+            evidence_out=None,
+            promotion_manifest_out=None,
+            execution_mode="native",
+            overwrite=False,
+        )
+        monkeypatch.setattr(campaign_cli, "parse_args", lambda: args)
+        with caplog.at_level(logging.ERROR):
+            assert campaign_cli.main() == 1
+
+        captured = capsys.readouterr()
+        report = json.loads(captured.out)
+        assert report["promotion_ready"] is False
+        assert any("promotion gate not satisfied" in record.message for record in caplog.records)
+        assert "promotion gate not satisfied" not in captured.out
 
     def test_output_paths_must_remain_distinct_even_with_overwrite(self, tmp_path: Path) -> None:
         """Overwrite permission cannot collapse two integrity roles onto one file."""

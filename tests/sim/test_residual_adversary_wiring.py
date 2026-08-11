@@ -273,3 +273,71 @@ def test_collect_helpers_forward_geometry_from_map(monkeypatch) -> None:
     # Non-finite bounds degrade the bounds source to None.
     monkeypatch.setattr(sim.map_def, "get_map_bounds", lambda: (float("inf"), 1.0, 0.0, 1.0))
     assert sim._collect_residual_map_bounds() is None
+
+
+def test_residual_adversary_config_survives_mapping_normalization_in_sim() -> None:
+    """Config metadata (seed, bounds, target) survives dict → dataclass normalization in SimulationSettings."""
+    settings = SimulationSettings(
+        residual_adversary={
+            "is_active": True,
+            "macro_action_dt_s": 0.5,
+            "max_residual_accel_mps2": 1.5,
+            "max_jerk_mps3": 7.5,
+            "max_speed_delta_mps": 0.5,
+            "max_heading_change_per_macro_rad": 0.7853981633974483,
+            "max_route_deviation_m": 1.5,
+            "min_separation_m": 0.6,
+            "target_ped_idx": [0, 1],
+            "obstacle_projection_margin_m": 0.1,
+            "seed": 42,
+        }
+    )
+    cfg = settings.residual_adversary
+    assert isinstance(cfg, ResidualAdversaryConfig)
+    assert cfg.is_active is True
+    assert cfg.seed == 42
+    assert cfg.target_ped_idx == [0, 1]
+    assert cfg.max_residual_accel_mps2 == 1.5
+    assert cfg.max_jerk_mps3 == 7.5
+    assert cfg.min_separation_m == 0.6
+
+
+def test_residual_adversary_wired_from_dict_config_produces_bounded_residual() -> None:
+    """An active config constructed from a dict is wired into the simulator and produces bounded residuals."""
+    map_def = _minimal_map()
+    sim_config = SimulationSettings(
+        sim_time_in_secs=4.0,
+        time_per_step_in_secs=0.1,
+        difficulty=0,
+        ped_density_by_difficulty=[0.02, 0.02, 0.02, 0.02],
+        population_size=1,
+        route_spawn_distribution="spread",
+        route_spawn_seed=0,
+        residual_adversary={
+            "is_active": True,
+            "target_ped_idx": -1,
+            "max_residual_accel_mps2": 1.0,
+            "max_jerk_mps3": 1e9,
+            "seed": 7,
+        },
+    )
+    config = RobotSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"test": map_def}),
+        sim_config=sim_config,
+    )
+    sim = init_simulators(
+        config,
+        map_def,
+        num_robots=1,
+        random_start_pos=False,
+        peds_have_obstacle_forces=True,
+    )[0]
+
+    max_accel = sim.config.residual_adversary.max_residual_accel_mps2
+    for _ in range(10):
+        sim.step_once([(0.0, 0.0)])
+        residual = sim._residual_adversary.last_residual
+        if residual.size:
+            assert np.linalg.norm(residual, axis=1).max() <= max_accel + 1e-9
+    # Seed metadata survived the dict normalization path.
+    assert sim.config.residual_adversary.seed == 7

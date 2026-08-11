@@ -645,3 +645,4 @@ def test_5416_analyzer_probe_returns_eligible_rows(tmp_path: Path) -> None:
     )
     assert report["matrix"]["eligible_rows"] >= 1
     assert report["matrix"]["excluded_rows"] == 0
+    assert (tmp_path / "analysis" / "paired_comparison.csv").read_text() == ""

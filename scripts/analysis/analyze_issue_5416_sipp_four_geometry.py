@@ -754,7 +754,9 @@ def _write_artifacts(report: Mapping[str, Any], output_dir: Path) -> None:
             )
             writer.writeheader()
     comparisons = report["paired_comparisons"]
-    write_csv(output_dir / "paired_comparison.csv", comparisons)
+    # A single-arm diagnostic has no paired rows. Preserve the historical empty
+    # artifact contract explicitly; an empty comparison is not success evidence.
+    write_csv(output_dir / "paired_comparison.csv", comparisons, allow_empty=True)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -1125,6 +1125,7 @@ def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
     assert data["head_sha"] == "abc"
     assert data["checks"]["overall"] == "pending"
     assert data["checks"]["pending_reason"] == "status_propagation_lag"
+    assert data["checks"]["diagnostic"] == "check_run_stale_job_success"
     assert data["checks"]["status_propagation_lag"][0]["run_id"] == 123
     assert data["reviews"] == {"APPROVED": 1}
     assert data["route_evidence_only"] is True
@@ -1190,6 +1191,7 @@ def test_summarize_check_runs_excludes_genuine_in_progress_job_from_lag(
     assert superseded == 0
     assert checks["overall"] == "pending"
     assert "status_propagation_lag" not in checks
+    assert "diagnostic" not in checks
     assert "pending_reason" not in checks
 
 
@@ -1241,6 +1243,7 @@ def test_fetch_ci_status_marks_completed_run_with_stale_job_status_as_lag(
 
     assert data["checks"]["overall"] == "pending"
     assert data["checks"]["pending_reason"] == "status_propagation_lag"
+    assert data["checks"]["diagnostic"] == "check_run_stale_job_success"
     assert data["checks"]["status_propagation_lag"] == [
         {
             "name": "fast-feedback (1)",
@@ -1255,6 +1258,62 @@ def test_fetch_ci_status_marks_completed_run_with_stale_job_status_as_lag(
         }
     ]
     assert "pending_reason: status_propagation_lag" in _format_human(data)
+    assert "diagnostic: check_run_stale_job_success" in _format_human(data)
+
+
+def test_fetch_ci_status_marks_completed_job_with_stale_check_run_as_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale pending check-run over a completed-success job stays fail-closed and explicit."""
+    payload = {
+        "number": 6884,
+        "title": "stale check-run",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "friction",
+        "headRefOid": "abc123",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "startedAt": "2026-08-11T14:23:36Z",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/123/job/456",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {"status": "completed", "conclusion": "success"}
+            if path == "actions/runs/123"
+            else {
+                "status": "completed",
+                "conclusion": "success",
+                "steps": [
+                    {"name": "Unit tests", "status": "completed", "conclusion": "success"},
+                    {"name": "Complete job", "status": "completed", "conclusion": "success"},
+                ],
+            }
+            if path == "actions/jobs/456"
+            else None
+        ),
+    )
+
+    data = _fetch_ci_status("6884")
+
+    assert data["checks"]["overall"] == "pending"
+    assert data["checks"]["pending_reason"] == "status_propagation_lag"
+    assert data["checks"]["diagnostic"] == "check_run_stale_job_success"
+    assert data["checks"]["status_propagation_lag"][0]["job_status"] == "completed"
+    assert "fail-closed: true" in _format_human(data)
 
 
 def test_main_keeps_status_propagation_lag_fail_closed(
@@ -1321,5 +1380,7 @@ def test_main_keeps_status_propagation_lag_fail_closed(
     assert rc == 2
     payloads = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
     assert payloads[-1]["checks"]["overall"] == "pending"
+    assert payloads[-1]["checks"]["diagnostic"] == "check_run_stale_job_success"
     assert payloads[-1]["monitor"]["pending_reason"] == "status_propagation_lag"
+    assert payloads[-1]["monitor"]["diagnostic"] == "check_run_stale_job_success"
     assert payloads[-1]["monitor"]["terminal_reason"] == "status_propagation_lag"

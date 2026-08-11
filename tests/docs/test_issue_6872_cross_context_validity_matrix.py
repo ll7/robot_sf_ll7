@@ -50,11 +50,13 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _load_matrix() -> dict:
+    """Load the machine-readable matrix used by every contract assertion."""
     with open(MATRIX_PATH, encoding="utf-8") as fh:
         return yaml.safe_load(fh)
 
 
 def _load_context_note() -> str:
+    """Load the human-facing context note to verify discoverability and boundaries."""
     return CONTEXT_NOTE_PATH.read_text(encoding="utf-8")
 
 
@@ -65,22 +67,27 @@ class TestMatrixSchema:
     """Validate YAML matrix structure and required fields."""
 
     def test_matrix_file_exists(self) -> None:
+        """Verify the YAML matrix file exists at the expected path."""
         assert MATRIX_PATH.exists(), f"Matrix file not found: {MATRIX_PATH}"
 
     def test_schema_version_is_correct(self) -> None:
+        """Ensure the matrix declares the expected schema version for contract compatibility."""
         matrix = _load_matrix()
         assert matrix.get("schema_version") == "cross_context_validity_matrix.v1"
 
     def test_issue_field_is_6872(self) -> None:
+        """Verify the matrix is linked to issue #6872 for traceability."""
         matrix = _load_matrix()
         assert matrix.get("issue") == 6872
 
     def test_claim_boundary_exists(self) -> None:
+        """Ensure a non-trivial claim boundary statement prevents overclaiming."""
         matrix = _load_matrix()
         boundary = matrix.get("claim_boundary", "")
         assert isinstance(boundary, str) and len(boundary) > 50
 
     def test_axes_section_has_all_four_axes(self) -> None:
+        """Verify all four required axes are declared in the matrix."""
         matrix = _load_matrix()
         axes = matrix.get("axes", {})
         assert isinstance(axes, dict)
@@ -88,6 +95,7 @@ class TestMatrixSchema:
             assert axis_key in axes, f"Missing axis: {axis_key}"
 
     def test_each_axis_has_values(self) -> None:
+        """Ensure every axis has at least one value with key, display_name, and provenance."""
         matrix = _load_matrix()
         for axis_key, axis_def in matrix.get("axes", {}).items():
             values = axis_def.get("values", [])
@@ -98,17 +106,20 @@ class TestMatrixSchema:
                 assert "provenance" in val, f"Axis {axis_key} value missing 'provenance'"
 
     def test_cells_section_exists_and_is_nonempty(self) -> None:
+        """Verify the protocol_portability_matrix has at least one cell."""
         matrix = _load_matrix()
         cells = matrix.get("protocol_portability_matrix", {}).get("cells", [])
         assert isinstance(cells, list) and len(cells) > 0
 
     def test_canonical_configurations_exist(self) -> None:
+        """Ensure at least one canonical configuration is defined for reference paths."""
         matrix = _load_matrix()
         configs = matrix.get("canonical_configurations", {})
         configs_list = configs.get("configs", []) if isinstance(configs, dict) else configs
         assert isinstance(configs_list, list) and len(configs_list) > 0
 
     def test_no_overclaim_boundary_exists(self) -> None:
+        """Verify the no-overclaim boundary has at least five explicit constraint statements."""
         matrix = _load_matrix()
         boundary = matrix.get("no_overclaim_boundary", {})
         assert isinstance(boundary, dict)
@@ -116,6 +127,7 @@ class TestMatrixSchema:
         assert isinstance(statements, list) and len(statements) >= 5
 
     def test_status_is_draft(self) -> None:
+        """Ensure the matrix is marked draft to prevent premature benchmark claims."""
         matrix = _load_matrix()
         assert matrix.get("status") == "draft", (
             f"Expected status 'draft' for unmerged artifact, got {matrix.get('status')!r}"
@@ -129,10 +141,12 @@ class TestMatrixCells:
     """Validate cell content and fail-closed properties."""
 
     def _load_cells(self) -> list[dict]:
+        """Return the list of cell dicts from the protocol_portability_matrix."""
         matrix = _load_matrix()
         return matrix.get("protocol_portability_matrix", {}).get("cells", [])
 
     def test_all_cells_have_required_axes(self) -> None:
+        """Every cell must declare all four required axes for matrix completeness."""
         cells = self._load_cells()
         for i, cell in enumerate(cells):
             axes = cell.get("axes", {})
@@ -140,6 +154,7 @@ class TestMatrixCells:
                 assert axis_key in axes, f"Cell {i} missing axis {axis_key}"
 
     def test_all_cells_have_evidence_status(self) -> None:
+        """Verify every cell has a valid evidence_status from the allowed set."""
         cells = self._load_cells()
         for i, cell in enumerate(cells):
             status = cell.get("evidence_status")
@@ -148,6 +163,7 @@ class TestMatrixCells:
             )
 
     def test_all_cells_have_protocol_portability(self) -> None:
+        """Verify every cell has a valid protocol_portability classification."""
         cells = self._load_cells()
         for i, cell in enumerate(cells):
             pp = cell.get("protocol_portability")
@@ -156,18 +172,21 @@ class TestMatrixCells:
             )
 
     def test_all_cells_have_result_portability(self) -> None:
+        """Verify every cell has a valid result_portability classification."""
         cells = self._load_cells()
         for i, cell in enumerate(cells):
             rp = cell.get("result_portability")
             assert rp in VALID_RESULT_PORTABILITY, f"Cell {i} has invalid result_portability: {rp}"
 
     def test_all_cells_have_provenance(self) -> None:
+        """Every cell must include a provenance dict for traceability."""
         cells = self._load_cells()
         for i, cell in enumerate(cells):
             provenance = cell.get("provenance")
             assert isinstance(provenance, dict), f"Cell {i} missing or invalid provenance"
 
     def test_all_cells_have_revalidation_action(self) -> None:
+        """Each cell must have a meaningful revalidation_action describing next steps."""
         cells = self._load_cells()
         for i, cell in enumerate(cells):
             action = cell.get("revalidation_action")
@@ -203,11 +222,13 @@ class TestFailClosed:
             )
 
     def test_no_claim_boundary_statements_present(self) -> None:
+        """Ensure the matrix explicitly disclaims benchmark evidence to prevent overclaiming."""
         matrix = _load_matrix()
         statements = matrix.get("no_overclaim_boundary", {}).get("statements", [])
         assert "not benchmark evidence" in " ".join(statements).lower()
 
     def test_claim_boundary_mentions_protocol_vs_result(self) -> None:
+        """Ensure the claim boundary separates protocol portability from result transfer."""
         matrix = _load_matrix()
         boundary = matrix.get("claim_boundary", "").lower()
         assert "protocol" in boundary
@@ -221,16 +242,19 @@ class TestCanonicalConfigurations:
     """Validate canonical configuration inventory."""
 
     def _load_configs(self) -> list[dict]:
+        """Return the list of canonical configuration dicts from the matrix."""
         matrix = _load_matrix()
         return matrix.get("canonical_configurations", {}).get("configs", [])
 
     def test_each_config_has_key_and_display_name(self) -> None:
+        """Every canonical config must have a key and display_name for identification."""
         configs = self._load_configs()
         for i, cfg in enumerate(configs):
             assert "key" in cfg, f"Config {i} missing 'key'"
             assert "display_name" in cfg, f"Config {i} missing 'display_name'"
 
     def test_each_config_has_evidence_status(self) -> None:
+        """Every canonical config must declare a valid evidence_status."""
         configs = self._load_configs()
         for i, cfg in enumerate(configs):
             status = cfg.get("evidence_status")
@@ -239,6 +263,7 @@ class TestCanonicalConfigurations:
             )
 
     def test_each_config_has_coverage_notes(self) -> None:
+        """Every canonical config must include non-trivial coverage_notes for traceability."""
         configs = self._load_configs()
         for i, cfg in enumerate(configs):
             notes = cfg.get("coverage_notes", "")
@@ -254,18 +279,21 @@ class TestRelatedIssues:
     """Verify linked issues are present."""
 
     def test_related_issues_include_3207(self) -> None:
+        """Ensure issue #3207 is linked as a related cross-context issue."""
         matrix = _load_matrix()
         issues = matrix.get("related_issues", [])
         issue_nums = [iss.get("issue") for iss in issues]
         assert 3207 in issue_nums
 
     def test_related_issues_include_6472(self) -> None:
+        """Ensure issue #6472 is linked as a related cross-context issue."""
         matrix = _load_matrix()
         issues = matrix.get("related_issues", [])
         issue_nums = [iss.get("issue") for iss in issues]
         assert 6472 in issue_nums
 
     def test_related_issues_include_6473(self) -> None:
+        """Ensure issue #6473 is linked as a related cross-context issue."""
         matrix = _load_matrix()
         issues = matrix.get("related_issues", [])
         issue_nums = [iss.get("issue") for iss in issues]
@@ -279,52 +307,64 @@ class TestContextNote:
     """Validate the human-facing markdown document."""
 
     def test_context_note_exists(self) -> None:
+        """Verify the human-facing context note markdown file exists."""
         assert CONTEXT_NOTE_PATH.exists()
 
     def test_context_note_references_issue_6872(self) -> None:
+        """Ensure the context note references its parent issue #6872."""
         content = _load_context_note()
         assert "6872" in content
 
     def test_context_note_references_issue_3207(self) -> None:
+        """Ensure the context note references related issue #3207."""
         content = _load_context_note()
         assert "3207" in content
 
     def test_context_note_references_issue_6472(self) -> None:
+        """Ensure the context note references related issue #6472."""
         content = _load_context_note()
         assert "6472" in content
 
     def test_context_note_references_issue_6473(self) -> None:
+        """Ensure the context note references related issue #6473."""
         content = _load_context_note()
         assert "6473" in content
 
     def test_context_note_has_no_overclaim_boundary(self) -> None:
+        """The context note must mention the overclaim boundary for claim discipline."""
         content = _load_context_note()
         assert "no-overclaim" in content.lower() or "overclaim" in content.lower()
 
     def test_context_note_status_is_draft_candidate(self) -> None:
+        """Ensure the context note is marked draft/candidate for unmerged artifacts."""
         content = _load_context_note()
         assert "Status: draft/candidate" in content, (
             "Context note status should be 'draft/candidate' for unmerged artifact"
         )
 
     def test_context_note_has_validation_section(self) -> None:
+        """The context note must reference pytest and ruff as validation commands."""
         content = _load_context_note()
         assert "pytest" in content
         assert "ruff" in content
 
     def test_context_note_mentions_protocol_portability(self) -> None:
+        """The context note must discuss protocol portability for reader orientation."""
         content = _load_context_note()
         assert "protocol portability" in content.lower()
 
     def test_context_note_mentions_result_portability(self) -> None:
+        """The context note must discuss result portability for reader orientation."""
         content = _load_context_note()
         assert "result portability" in content.lower()
 
     def test_context_note_links_to_yaml_matrix(self) -> None:
+        """The context note must reference the YAML matrix file for discoverability."""
         content = _load_context_note()
         assert "cross_context_validity_matrix_v1.yaml" in content
 
     def test_context_note_mentions_evidence_statuses(self) -> None:
+        """The context note must document all evidence statuses used in the matrix."""
         content = _load_context_note()
         for status in ("covered", "partially_covered", "requires_revalidation", "not_evidenced"):
             assert status in content, f"Context note missing evidence status: {status}"
@@ -334,6 +374,7 @@ class TestContextNote:
 
 
 def _is_repository_local_path(ref: str) -> bool:
+    """Return True if ref matches a repository-root-relative path with no traversal."""
     if not _REPOSITORY_LOCAL_PATH_RE.match(ref):
         return False
     resolved = (REPOSITORY_ROOT / ref).resolve()
@@ -388,18 +429,21 @@ class TestProvenancePathsExist:
     """
 
     def test_cell_provenance_references_exist(self) -> None:
+        """Every repository-local provenance reference in a cell must exist on disk."""
         paths = _collect_cell_provenance_paths()
         assert paths, "No cell provenance paths found to validate"
         missing = [p for p in paths if not Path(p).exists()]
         assert not missing, f"Cell provenance paths missing on disk: {missing}"
 
     def test_canonical_config_paths_exist(self) -> None:
+        """Every canonical config_path must point to an existing file."""
         paths = _collect_canonical_config_paths()
         assert paths, "No canonical config paths found to validate"
         missing = [p for p in paths if not Path(p).exists()]
         assert not missing, f"Canonical config paths missing on disk: {missing}"
 
     def test_axis_provenance_paths_exist(self) -> None:
+        """Every axis-level provenance path (configs, source) must exist on disk."""
         paths = _collect_axis_provenance_paths()
         assert paths, "No axis provenance paths found to validate"
         missing = [p for p in paths if not Path(p).exists()]
@@ -432,6 +476,7 @@ class TestEverySiteTopologyInMatrix:
     """Every defined site_topology value should appear in at least one cell."""
 
     def test_all_site_topology_values_covered_by_cells(self) -> None:
+        """Every declared site_topology axis value must appear in at least one cell."""
         matrix = _load_matrix()
         topo_values = {
             v["key"] for v in matrix.get("axes", {}).get("site_topology", {}).get("values", [])
@@ -450,6 +495,7 @@ class TestCellAxisMembership:
     """Every cell axis value must belong to the corresponding declared axis value set."""
 
     def test_all_cell_axis_values_are_declared(self) -> None:
+        """Every cell axis value must belong to the corresponding declared axis value set."""
         matrix = _load_matrix()
         axis_value_sets: dict[str, set[str]] = {}
         for axis_key, axis_def in matrix.get("axes", {}).items():
@@ -473,6 +519,7 @@ class TestCellProvenanceReferences:
     """Every cell provenance block must contain a non-empty references list."""
 
     def test_all_cells_have_nonempty_references(self) -> None:
+        """Every cell provenance block must contain a non-empty references list."""
         cells = _load_matrix().get("protocol_portability_matrix", {}).get("cells", [])
         violations: list[str] = []
         for i, cell in enumerate(cells):

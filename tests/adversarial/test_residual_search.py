@@ -27,6 +27,7 @@ from robot_sf.ped_npc.residual_search import (
     ResidualSearchConfig,
     SearchDiagnosticRecord,
     _build_action_grid,
+    _CandidateEvaluationContext,
     _evaluate_candidate,
     compute_config_digest,
 )
@@ -136,6 +137,16 @@ def test_config_digest_differs_on_changed_field() -> None:
     assert compute_config_digest(base) != compute_config_digest(changed)
 
 
+def test_config_digest_includes_residual_bound_settings() -> None:
+    """Changing a runtime residual bound changes the combined config identity."""
+    search_config = ResidualSearchConfig()
+    residual_a = ResidualAdversaryConfig(is_active=True, max_jerk_mps3=7.5)
+    residual_b = ResidualAdversaryConfig(is_active=True, max_jerk_mps3=3.0)
+    assert compute_config_digest(search_config, residual_a) != compute_config_digest(
+        search_config, residual_b
+    )
+
+
 def test_config_digest_is_hex_16() -> None:
     """The digest is a 16-character hex string."""
     digest = compute_config_digest(ResidualSearchConfig())
@@ -176,10 +187,22 @@ def test_action_grid_deterministic() -> None:
 def test_evaluate_candidate_valid() -> None:
     """A zero candidate within bounds evaluates as valid."""
     config = ResidualAdversaryConfig(is_active=True)
+    positions = np.array([[3.0, 1.0], [2.0, 4.0]])
     velocities = np.array([[0.5, 0.0], [0.0, 0.3]])
     max_speeds = np.array([1.5, 1.2])
     candidate = np.array([0.1, 0.1])
-    score, is_valid = _evaluate_candidate(candidate, 0, 2, velocities, max_speeds, config, 0.1, 5)
+    score, is_valid = _evaluate_candidate(
+        candidate,
+        0,
+        _CandidateEvaluationContext(
+            positions=positions,
+            velocities=velocities,
+            max_speeds=max_speeds,
+            residual_config=config,
+            dt_s=0.1,
+            robot_pose=ROBOT_POSE,
+        ),
+    )
     assert is_valid is True
     assert score >= 0.0
 
@@ -187,10 +210,22 @@ def test_evaluate_candidate_valid() -> None:
 def test_evaluate_candidate_zero_candidate() -> None:
     """A zero candidate produces zero score."""
     config = ResidualAdversaryConfig(is_active=True)
+    positions = np.array([[3.0, 1.0]])
     velocities = np.array([[0.5, 0.0]])
     max_speeds = np.array([1.5])
     candidate = np.array([0.0, 0.0])
-    score, is_valid = _evaluate_candidate(candidate, 0, 1, velocities, max_speeds, config, 0.1, 5)
+    score, is_valid = _evaluate_candidate(
+        candidate,
+        0,
+        _CandidateEvaluationContext(
+            positions=positions,
+            velocities=velocities,
+            max_speeds=max_speeds,
+            residual_config=config,
+            dt_s=0.1,
+            robot_pose=ROBOT_POSE,
+        ),
+    )
     assert is_valid is True
     assert score == pytest.approx(0.0)
 
@@ -198,10 +233,22 @@ def test_evaluate_candidate_zero_candidate() -> None:
 def test_evaluate_candidate_non_finite_returns_invalid() -> None:
     """A non-finite candidate is counted as invalid, not promoted."""
     config = ResidualAdversaryConfig(is_active=True)
+    positions = np.array([[3.0, 1.0]])
     velocities = np.array([[0.5, 0.0]])
     max_speeds = np.array([1.5])
     candidate = np.array([float("nan"), 0.0])
-    score, is_valid = _evaluate_candidate(candidate, 0, 1, velocities, max_speeds, config, 0.1, 5)
+    score, is_valid = _evaluate_candidate(
+        candidate,
+        0,
+        _CandidateEvaluationContext(
+            positions=positions,
+            velocities=velocities,
+            max_speeds=max_speeds,
+            residual_config=config,
+            dt_s=0.1,
+            robot_pose=ROBOT_POSE,
+        ),
+    )
     assert is_valid is False
     assert score == 0.0
 
@@ -356,6 +403,9 @@ def test_diagnostic_record_to_dict_fields() -> None:
         source_revision="deadbeef",
         grid_points_per_dim=3,
         action_bounds={"min_mps2": -1.5, "max_mps2": 1.5},
+        bound_settings={"max_jerk_mps3": 7.5, "target_ped_idx": [0]},
+        candidate_order=["ped_0:grid_000"],
+        candidate_actions_mps2=[[-1.5, -1.5]],
         budget=9,
         num_targeted_peds=1,
         total_evaluated=9,
@@ -375,6 +425,9 @@ def test_diagnostic_record_to_dict_fields() -> None:
     assert d["invalid"] == 1
     assert d["action_bounds"]["min_mps2"] == -1.5
     assert d["action_bounds"]["max_mps2"] == 1.5
+    assert d["bound_settings"]["max_jerk_mps3"] == 7.5
+    assert d["candidate_order"] == ["ped_0:grid_000"]
+    assert d["candidate_actions_mps2"] == [[-1.5, -1.5]]
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +472,47 @@ def test_search_counts_invalid_candidates() -> None:
     assert np.all(np.isfinite(result))
 
 
+def test_search_evaluates_each_candidate_through_bounded_controller(monkeypatch) -> None:
+    """Every enumerated candidate is checked by the full runtime controller."""
+    from robot_sf.ped_npc import residual_search
+
+    calls: list[dict[str, object]] = []
+    controller_type = residual_search.BoundedResidualAdversary
+
+    def spy_controller(*args, **kwargs):
+        calls.append(dict(kwargs))
+        return controller_type(*args, **kwargs)
+
+    monkeypatch.setattr(residual_search, "BoundedResidualAdversary", spy_controller)
+    search_config = ResidualSearchConfig(grid_points_per_dim=3, max_candidates=9)
+    residual_config = ResidualAdversaryConfig(is_active=True)
+    policy = FiniteGridSearchPolicy(
+        search_config=search_config,
+        residual_config=residual_config,
+        dt_s=0.1,
+        num_peds=1,
+    )
+    observation = type(
+        "Obs",
+        (),
+        {
+            "positions": np.array([[3.0, 1.0]]),
+            "velocities": np.array([[0.5, 0.0]]),
+            "max_speeds": np.array([1.5]),
+            "target_ped_mask": np.array([True]),
+            "robot_pose": ROBOT_POSE,
+            "sim_time_s": 0.0,
+            "step_index": 0,
+            "macro_action_index": 0,
+        },
+    )()
+
+    policy.propose_residual(observation)
+
+    assert len(calls) == 9
+    assert all(call["config"] is residual_config for call in calls)
+
+
 def test_search_no_targets_returns_zeros() -> None:
     """When no pedestrians are targeted, all outputs are zero and accounting is empty."""
     search_config = ResidualSearchConfig(seed=42)
@@ -447,6 +541,37 @@ def test_search_no_targets_returns_zeros() -> None:
     np.testing.assert_array_equal(result, np.zeros((2, 2)))
     assert policy.last_record.num_targeted_peds == 0
     assert policy.last_record.total_evaluated == 0
+
+
+def test_search_budget_is_total_cap_across_targets() -> None:
+    """A multi-target proposal never evaluates more candidates than its budget."""
+    search_config = ResidualSearchConfig(grid_points_per_dim=3, max_candidates=3)
+    residual_config = ResidualAdversaryConfig(is_active=True, target_ped_idx=-1)
+    policy = FiniteGridSearchPolicy(
+        search_config=search_config,
+        residual_config=residual_config,
+        dt_s=0.1,
+        num_peds=3,
+    )
+    observation = type(
+        "Obs",
+        (),
+        {
+            "positions": np.array([[3.0, 1.0], [2.0, 4.0], [4.0, 2.0]]),
+            "velocities": np.array([[0.5, 0.0], [0.0, 0.3], [0.2, 0.1]]),
+            "max_speeds": np.array([1.5, 1.2, 1.4]),
+            "target_ped_mask": np.array([True, True, True]),
+            "robot_pose": ROBOT_POSE,
+            "sim_time_s": 0.0,
+            "step_index": 0,
+            "macro_action_index": 0,
+        },
+    )()
+
+    policy.propose_residual(observation)
+
+    assert policy.last_record.total_evaluated == 3
+    assert len(policy.last_record.candidate_order) == 3
 
 
 # ---------------------------------------------------------------------------

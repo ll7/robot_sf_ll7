@@ -24,13 +24,13 @@ Force wiring is unchanged.
   - `ResidualSearchConfig` — validated, frozen config with algorithm name,
     objective proxy, grid resolution, budget, seed, and action bounds.
   - `FiniteGridSearchPolicy` — deterministic grid-search policy implementing
-    `ResidualAdversaryPolicy`.  Evaluates candidates through the non-stateful
-    bound pipeline (`clamp_magnitude`, `bound_speed`,
-    `bound_heading_change`).  Jerk, route, walkable-space, and separation
-    bounds are enforced by the controller.
+    `ResidualAdversaryPolicy`. Every candidate is evaluated by an isolated
+    `BoundedResidualAdversary`, so candidate accounting uses the same
+    acceleration, jerk, speed, heading, route, walkable-space, and separation
+    contract as the runtime controller.
   - `SearchDiagnosticRecord` — compact, deterministic JSON record with schema
-    version, config digest, seed, source revision, candidate accounting, and
-    bound settings.
+    version, config digest, seed, source revision, candidate/action ordering,
+    candidate accounting, and all residual bound settings.
   - `compute_config_digest` — SHA-256 digest of the canonical config
     serialisation for reproducibility tracking.
 - `configs/adversarial/issue_6911_residual_search.yaml` — versioned config
@@ -58,25 +58,34 @@ planner vulnerability, or safety.
 
 ### Per-pedestrian independent search
 
-Each targeted pedestrian is searched independently.  This keeps the budget
-predictable (`max_candidates // num_targeted_peds` per pedestrian) and avoids
-joint-space combinatorial explosion.  The controller enforces pairwise
-separation after the search returns.
+Each targeted pedestrian is searched independently. This keeps the budget
+predictable while avoiding joint-space combinatorial explosion. The configured
+budget is a total cap for the proposal, and candidate/action order is retained
+in the diagnostic record. The live controller enforces pairwise separation
+again after the search returns.
 
-### Jerk bound is controller-enforced
+### Candidate bound evaluation
 
-The jerk bound is stateful (depends on the previous residual) and is enforced
-by `BoundedResidualAdversary.step_residual()` after the policy returns.  The
-search policy does not evaluate the jerk bound during candidate selection.
+Each grid candidate is evaluated by a fresh `BoundedResidualAdversary` with a
+fixed one-candidate policy. This applies the stateful jerk, geometry, and
+separation pipeline before the diagnostic objective is computed. The selected
+candidate is then evaluated once more by the live controller, which carries the
+actual prior residual state.
 
 ## Diagnostic record schema
+
+The candidate/action arrays below are abbreviated to keep the schema example
+compact; the emitted record contains the complete evaluated order.
 
 ```json
 {
   "accepted": 3,
   "action_bounds": {"max_mps2": 1.5, "min_mps2": -1.5},
   "algorithm_name": "finite_grid_search_v1",
+  "bound_settings": {"max_jerk_mps3": 7.5, "target_ped_idx": [0]},
   "budget": 9,
+  "candidate_actions_mps2": [[-1.5, -1.5], [0.0, -1.5]],
+  "candidate_order": ["ped_0:grid_000", "ped_0:grid_001"],
   "config_digest": "abcdef0123456789",
   "grid_points_per_dim": 3,
   "invalid": 0,
@@ -90,9 +99,9 @@ search policy does not evaluate the jerk bound during candidate selection.
 }
 ```
 
-All keys are alphabetically sorted.  No timestamps or absolute paths appear in
-the canonical record.  Repeated runs from the same config and seed produce
-byte-equivalent JSON.
+All keys are alphabetically sorted. No timestamps or absolute paths appear in
+the canonical record. Candidate/action order is explicit, and repeated runs
+from the same config and seed produce byte-equivalent JSON.
 
 ## Canonical smoke command
 

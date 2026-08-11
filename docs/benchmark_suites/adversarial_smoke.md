@@ -32,6 +32,7 @@ paper-facing claim.
 | Failure archive | `scripts/tools/curate_adversarial_failure_archive.py`, `robot_sf/adversarial/archive.py` | Compact `adversarial_failure_archive.v1` replay pointers for selected failures | Archive curation only; raw bundles stay local unless separately promoted. |
 | Rerun readiness | `scripts/validation/check_failure_archive_rerun_readiness.py`, `scripts/adversarial/produce_rerun_closure_packet.py` | Fail-closed checks for disjoint certified archive reruns | Readiness or diagnostic blocker packet, not model-quality evidence. |
 | Residual adversary smoke | `robot_sf/ped_npc/residual_adversary.py`, `tests/adversarial/test_residual_adversary.py`, `tests/sim/test_residual_adversary_wiring.py` | Deterministic bounded residual-control reactive adversary: bound pipeline, macro-action cadence, opt-in gating, perturb-not-replace, simulator wiring | Capability-only smoke evidence; no benchmark, metric, or safety claim. |
+| Residual search-baseline smoke | `robot_sf/ped_npc/residual_search.py`, `configs/adversarial/issue_6911_residual_search.yaml`, `docs/context/issue_6911_residual_search.md` | Tiny deterministic finite-grid proposal search; every candidate is evaluated through `BoundedResidualAdversary` and emits portable candidate/bound accounting | Capability-only diagnostic evidence; no stress-strength, planner-ranking, benchmark, safety, or paper claim. |
 
 ## Scenarios And Seeds
 

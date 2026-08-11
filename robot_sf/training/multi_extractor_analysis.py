@@ -66,7 +66,7 @@ def load_eval_history(extractor_dir: Path) -> EvalHistory | None:
         mean_rewards = [float(r) for r in rewards_flat.mean(axis=1).tolist()]
         return EvalHistory(timesteps=timesteps, mean_rewards=mean_rewards)
     except (OSError, ValueError) as exc:  # pragma: no cover - defensive logging
-        logger.warning("Failed to load eval history from %s: %s", path, exc)
+        logger.warning("Failed to load eval history from {}: {}", path, exc)
         return None
 
 
@@ -145,7 +145,7 @@ def generate_figures(
 
         return {"learning_curve": learning_curve, "reward_distribution": reward_hist}
     except (OSError, ValueError, RuntimeError) as exc:  # pragma: no cover - defensive
-        logger.warning("Failed to generate figures for %s: %s", extractor_name, exc)
+        logger.warning("Failed to generate figures for {}: {}", extractor_name, exc)
         return {}
 
 

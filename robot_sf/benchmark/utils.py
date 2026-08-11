@@ -412,7 +412,7 @@ def _git_hash_fallback() -> str:
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
         return out.decode().strip()
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
-        logger.debug("_git_hash_fallback failed: %s", exc)
+        logger.debug("_git_hash_fallback failed: {}", exc)
         return "unknown"
 
 
@@ -479,8 +479,8 @@ def index_existing(out_path: Path) -> set[str]:
                     ids.add(eid)
     except FileNotFoundError:
         return set()
-    except OSError as exc:
-        logger.debug("index_existing failed reading %s: %s", out_path, exc)
+    except OSError as exc:  # pragma: no cover - defensive logging fallback
+        logger.debug("index_existing failed reading {}: {}", out_path, exc)
         return set()
     return ids
 

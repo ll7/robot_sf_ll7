@@ -270,6 +270,7 @@ def _annotate_status_propagation_lag(
         return checks
     pending_count = sum(_rollup_status(check) in PENDING_STATUSES for check in rollup)
     checks["status_propagation_lag"] = lag_details
+    checks["diagnostic"] = "check_run_stale_job_success"
     if len(lag_details) == pending_count:
         checks["pending_reason"] = "status_propagation_lag"
     return checks
@@ -508,6 +509,9 @@ def _add_monitor_metadata(
     pending_reason = data.get("checks", {}).get("pending_reason")
     if pending_reason:
         data["monitor"]["pending_reason"] = pending_reason
+    diagnostic = data.get("checks", {}).get("diagnostic")
+    if diagnostic:
+        data["monitor"]["diagnostic"] = diagnostic
 
 
 def _format_human(data: dict[str, Any]) -> str:
@@ -544,6 +548,9 @@ def _format_human(data: dict[str, Any]) -> str:
                 f"run {lag.get('run_id')} job {lag.get('job_id')}  |  "
                 f"{lag.get('final_step', 'unknown')}/{lag.get('final_step_conclusion', 'unknown')}"
             )
+    diagnostic = checks.get("diagnostic")
+    if diagnostic:
+        lines.append(f"  diagnostic: {diagnostic}  |  fail-closed: true")
     superseded = checks.get("superseded", 0)
     if superseded:
         lines.append(f"  ignored {superseded} superseded GitHub Actions check run(s)")

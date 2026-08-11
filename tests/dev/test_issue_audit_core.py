@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from scripts.dev.issue_audit_core import (
+    _run_command,
+    _run_gh,
     apply_mutations,
+    attach_issue_comments,
     build_audit_plan,
     build_decision_envelope,
     build_pending_decision_queue,
@@ -23,6 +26,9 @@ from scripts.dev.issue_audit_core import (
     select_next_pending_decision,
     validate_decision_envelope,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _issue(
@@ -45,6 +51,7 @@ def _issue(
 
 
 def test_state_contradiction_prefers_observed_active_work() -> None:
+    """Active work wins over a contradictory ready label to avoid false readiness."""
     classification = classify_issue(
         _issue(
             101,
@@ -66,6 +73,7 @@ def test_state_contradiction_prefers_observed_active_work() -> None:
 
 
 def test_active_work_never_promotes_acceptance_text_to_ready() -> None:
+    """Acceptance text cannot promote an issue while an active claim is present."""
     classification = classify_issue(
         _issue(
             102,
@@ -80,6 +88,7 @@ def test_active_work_never_promotes_acceptance_text_to_ready() -> None:
 
 
 def test_stale_running_state_is_preserved_and_not_promoted_to_ready() -> None:
+    """A stale running label remains uncertain instead of being guessed complete."""
     classification = classify_issue(
         _issue(
             103,
@@ -96,6 +105,7 @@ def test_stale_running_state_is_preserved_and_not_promoted_to_ready() -> None:
 
 
 def test_state_qualifiers_are_preserved_during_execution_state_cleanup() -> None:
+    """Composable state qualifiers survive cleanup of mutually exclusive states."""
     classification = classify_issue(
         _issue(
             104,
@@ -120,6 +130,7 @@ def test_state_qualifiers_are_preserved_during_execution_state_cleanup() -> None
 
 
 def test_missing_optional_job_visibility_preserves_slurm_issue_without_blocker_claim() -> None:
+    """Unavailable SLURM visibility blocks promotion without inventing a blocker."""
     classification = classify_issue(
         _issue(
             111,
@@ -136,6 +147,7 @@ def test_missing_optional_job_visibility_preserves_slurm_issue_without_blocker_c
 
 
 def test_gate_matching_does_not_pair_unrelated_status_and_topic_lines() -> None:
+    """Gate detection requires issue-local topic and status evidence in one context."""
     proven = classify_issue(
         _issue(
             112,
@@ -159,6 +171,7 @@ def test_gate_matching_does_not_pair_unrelated_status_and_topic_lines() -> None:
 
 
 def test_gate_matching_ignores_aggregate_reports_and_conditional_rules() -> None:
+    """Aggregate reports and hypothetical rules do not become current issue gates."""
     report = classify_issue(
         _issue(
             114,
@@ -184,6 +197,7 @@ def test_gate_matching_ignores_aggregate_reports_and_conditional_rules() -> None
 
 
 def test_decision_detection_distinguishes_resolved_records_from_open_gates() -> None:
+    """Resolved decision records do not keep an issue in the pending queue."""
     resolved = classify_issue(
         _issue(116, body="## Maintainer Decision\nDecision: defer.\nDecision reaffirmed."),
         available_labels={"decision-required"},
@@ -233,6 +247,7 @@ def test_decision_detection_distinguishes_resolved_records_from_open_gates() -> 
 
 
 def test_blocker_replaces_single_stale_execution_state() -> None:
+    """A proven blocker replaces one stale execution state with its blocker state."""
     classification = classify_issue(
         _issue(
             118,
@@ -254,6 +269,7 @@ def test_blocker_replaces_single_stale_execution_state() -> None:
 
 
 def test_type_mirror_requires_complete_valid_archetype_metadata() -> None:
+    """Type labels mirror only complete, valid archetype metadata."""
     fence = chr(96) * 3
     valid_body = (
         "## Archetype Metadata\n\n"
@@ -281,6 +297,8 @@ def test_type_mirror_requires_complete_valid_archetype_metadata() -> None:
 
 
 def test_comment_discovery_is_bounded_and_rest_normalized() -> None:
+    """Comment discovery preserves REST metadata within the bounded read contract."""
+
     def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
         assert input_text is None
         assert args[0] == "api"
@@ -315,7 +333,42 @@ def test_comment_discovery_is_bounded_and_rest_normalized() -> None:
     assert metadata["errors"] == []
 
 
+def test_comment_inventory_reports_degraded_reads_as_unavailable() -> None:
+    """Failed comment reads cannot be mistaken for an empty decision thread."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(args, 1, "", "comment endpoint unavailable")
+
+    issues = [_issue(109)]
+    metadata = attach_issue_comments("ll7/robot_sf_ll7", issues, runner=runner)
+
+    assert metadata["available"] is False
+    assert metadata["errors"]
+    assert issues[0]["comments"] == []
+
+
+def test_command_timeouts_return_failures_instead_of_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Command timeouts preserve fail-closed result handling for callers."""
+
+    def raise_timeout(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(args[0], kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(subprocess, "run", raise_timeout)
+
+    gh_result = _run_gh(["api", "repos/ll7/robot_sf_ll7/issues"])
+    command_result = _run_command(["squeue", "--json"])
+
+    assert gh_result.returncode == 124
+    assert "timed out" in gh_result.stderr
+    assert command_result.returncode == 124
+    assert "timed out" in command_result.stderr
+
+
 def test_decision_queue_is_machine_readable_and_project_free() -> None:
+    """Pending decisions expose evidence while keeping Project #5 out of scope."""
     plan = build_audit_plan(
         {
             "repo": "ll7/robot_sf_ll7",
@@ -350,6 +403,7 @@ def test_decision_queue_is_machine_readable_and_project_free() -> None:
 
 
 def test_decision_envelope_is_sorted_bound_to_plan_and_source_backed() -> None:
+    """Envelopes are deterministic, digest-bound, and limited to source-backed options."""
     plan = build_audit_plan(
         {
             "repo": "ll7/robot_sf_ll7",
@@ -409,7 +463,46 @@ def test_decision_envelope_is_sorted_bound_to_plan_and_source_backed() -> None:
         parse_decision_answer(envelope, "#204: C")
 
 
+def test_documented_options_require_explicit_markers() -> None:
+    """Bare list prose is not promoted to a maintainer choice token."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(
+                    209,
+                    labels=["decision-required"],
+                    body=(
+                        "Maintainer decision required.\n"
+                        "- A: ordinary prose, not an option\n"
+                        "B) ordinary prose, not an option\n"
+                        "I. Introduction\n"
+                        "Option A: use the native path.\n"
+                        "Option B: use the adapter."
+                    ),
+                )
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["decision-required"],
+            "inventory": {},
+        }
+    )
+
+    envelope = build_decision_envelope(plan)
+    assert envelope is not None
+    assert envelope["status"] == "ready"
+    assert [option["token"] for option in envelope["decision"]["documented_options"]] == [
+        "A",
+        "B",
+    ]
+
+
 def test_decision_envelope_rejects_stale_plan_and_live_issue_state() -> None:
+    """Plan and live-label changes invalidate an envelope before answer application."""
     plan = build_audit_plan(
         {
             "repo": "ll7/robot_sf_ll7",
@@ -447,6 +540,7 @@ def test_decision_envelope_rejects_stale_plan_and_live_issue_state() -> None:
 
 
 def test_decision_envelope_marks_undocumented_choices_and_incomplete_inventory() -> None:
+    """Missing choices or inventory evidence fail closed instead of yielding policy."""
     plan = build_audit_plan(
         {
             "repo": "ll7/robot_sf_ll7",
@@ -469,7 +563,10 @@ def test_decision_envelope_marks_undocumented_choices_and_incomplete_inventory()
     assert envelope["inventory_errors"]
 
 
-def test_envelope_cli_emits_machine_readable_payload(tmp_path: Any, capsys: Any) -> None:
+def test_envelope_cli_emits_machine_readable_payload(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The envelope CLI emits the versioned machine-readable handoff."""
     plan = build_audit_plan(
         {
             "repo": "ll7/robot_sf_ll7",
@@ -499,6 +596,7 @@ def test_envelope_cli_emits_machine_readable_payload(tmp_path: Any, capsys: Any)
 
 
 def test_closure_requires_documented_completion_condition() -> None:
+    """Merged work closes an issue only with an explicit completion condition."""
     merged = [{"number": 901, "title": "Fixes #104", "merged_at": "2026-08-11T10:00:00Z"}]
     issue = _issue(104, body="## Definition of Done\n- [ ] verify the change")
 
@@ -513,6 +611,7 @@ def test_closure_requires_documented_completion_condition() -> None:
 
 
 def test_parent_closure_requires_documented_condition_and_closed_children() -> None:
+    """Parent closure requires its literal close condition and closed children."""
     merged = [{"number": 902, "title": "Fixes #105", "merged_at": "2026-08-11T10:00:00Z"}]
     issue = _issue(105, title="Parent roadmap", body="Child issue #106")
 
@@ -523,12 +622,14 @@ def test_parent_closure_requires_documented_condition_and_closed_children() -> N
 
 
 def test_label_endpoint_uri_escapes_colon() -> None:
+    """Label deletion encodes colon-bearing names for the REST endpoint."""
     assert label_api_path("ll7/robot_sf_ll7", 106, "state:running") == (
         "repos/ll7/robot_sf_ll7/issues/106/labels/state%3Arunning"
     )
 
 
 def test_apply_uses_encoded_delete_and_reads_back() -> None:
+    """Mutation application uses URI-safe writes and verifies the live readback."""
     calls: list[tuple[list[str], str | None]] = []
 
     def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
@@ -546,30 +647,29 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
             )
         raise AssertionError(f"unexpected command: {args}")
 
-    result = apply_mutations(
-        {
-            "schema": "issue_audit_plan.v1",
-            "repo": "ll7/robot_sf_ll7",
-            "mutations": [
-                {
-                    "operation": "remove_label",
-                    "issue": 106,
-                    "value": "state:ready",
-                    "reason": "active work selects running",
-                    "evidence": ["open PR #903"],
-                },
-                {
-                    "operation": "add_label",
-                    "issue": 106,
-                    "value": "state:running",
-                    "reason": "active work observed",
-                    "evidence": ["open PR #903"],
-                },
-            ],
-            "truncation_or_errors": [],
-        },
-        runner=runner,
-    )
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "remove_label",
+                "issue": 106,
+                "value": "state:ready",
+                "reason": "active work selects running",
+                "evidence": ["open PR #903"],
+            },
+            {
+                "operation": "add_label",
+                "issue": 106,
+                "value": "state:running",
+                "reason": "active work observed",
+                "evidence": ["open PR #903"],
+            },
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+    result = apply_mutations(plan, runner=runner)
 
     assert result["ok"] is True
     assert [args for args, _ in calls if args[:3] == ["api", "-X", "DELETE"]] == [
@@ -586,20 +686,53 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
 
 
 def test_incomplete_plan_fails_closed_before_mutation() -> None:
-    result = apply_mutations(
-        {
-            "schema": "issue_audit_plan.v1",
-            "repo": "ll7/robot_sf_ll7",
-            "mutations": [],
-            "truncation_or_errors": ["issues"],
-        }
-    )
+    """Incomplete plans are rejected before any mutation can be attempted."""
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [],
+        "truncation_or_errors": ["issues"],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+    result = apply_mutations(plan)
 
     assert result["ok"] is False
     assert result["applied"] == []
 
 
+def test_apply_rejects_stale_plan_digest_before_mutation() -> None:
+    """Edited plan files cannot reach the GitHub mutation runner."""
+    calls: list[tuple[list[str], str | None]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append((args, input_text))
+        raise AssertionError("stale plan must be rejected before invoking the runner")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+    plan["mutations"].append(
+        {
+            "operation": "add_label",
+            "issue": 110,
+            "value": "state:blocked",
+        }
+    )
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "stale" in result["reason"]
+    assert calls == []
+
+
 def test_pending_queue_can_record_readback_confirmed_safe_mutations() -> None:
+    """The queue carries autonomous mutations confirmed by the apply readback."""
     queue = build_pending_decision_queue(
         {
             "pending_decisions": [

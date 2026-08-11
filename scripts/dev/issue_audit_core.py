@@ -156,8 +156,8 @@ CHECKBOX_PATTERN = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s+", re.MULTILINE)
 UNCHECKED_CHECKBOX_PATTERN = re.compile(r"^\s*[-*]\s+\[ \]\s+", re.MULTILINE)
 ISSUE_REF_PATTERN = re.compile(r"(?<![\w-])#(\d+)\b|(?:issue|issues)[ -](\d+)\b", re.IGNORECASE)
 OPTION_LINE_PATTERN = re.compile(
-    r"^\s*(?:[-*]\s+)?(?:\*\*)?(?:option\s+)?"
-    r"(?:\(([A-Z])\)|([A-Z])(?:[.:)\-]))\s+"
+    r"^\s*(?:[-*]\s+)?(?:\*\*)?"
+    r"(?:\(([A-Z])\)|option\s+([A-Z])(?:[.:)\-])?)\s+"
     r"(?:\*\*)?(?P<label>.+?)(?:\*\*)?\s*$",
     re.IGNORECASE,
 )
@@ -197,6 +197,13 @@ def _run_gh(args: list[str], input_text: str | None = None) -> subprocess.Comple
             "",
             "gh CLI not found on PATH; install GitHub CLI and authenticate it",
         )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            ["gh", *args],
+            124,
+            "",
+            f"gh command timed out after {exc.timeout}s",
+        )
 
 
 def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -205,6 +212,13 @@ def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
         return subprocess.run(args, capture_output=True, text=True, timeout=30, check=False)
     except FileNotFoundError:
         return subprocess.CompletedProcess(args, 127, "", f"{args[0]} not found on PATH")
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            args,
+            124,
+            "",
+            f"{args[0]} command timed out after {exc.timeout}s",
+        )
 
 
 def _parse_json(result: subprocess.CompletedProcess[str], *, what: str) -> tuple[Any | None, str]:
@@ -523,6 +537,7 @@ def attach_issue_comments(
         metadata["row_count"] += len(comments)
         metadata["truncated"] = bool(metadata["truncated"] or comment_meta.get("truncated"))
         metadata["errors"].extend(comment_meta.get("errors", []))
+    metadata["available"] = not metadata["errors"] and not metadata["truncated"]
     return metadata
 
 
@@ -1452,6 +1467,36 @@ def apply_mutations(
     """
     if plan.get("schema") != PLAN_SCHEMA:
         raise ValueError(f"expected {PLAN_SCHEMA}")
+    recorded_digest = str(plan.get("plan_digest") or "")
+    if not recorded_digest:
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": "plan is missing plan_digest; regenerate it before applying",
+            "applied": [],
+            "failures": ["missing plan_digest"],
+            "readback": [],
+        }
+    try:
+        current_digest = compute_plan_digest(plan)
+    except ValueError as exc:
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": str(exc),
+            "applied": [],
+            "failures": [str(exc)],
+            "readback": [],
+        }
+    if recorded_digest != current_digest:
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": "stale plan_digest does not match the plan contents; regenerate it before applying",
+            "applied": [],
+            "failures": ["stale plan_digest"],
+            "readback": [],
+        }
     if plan.get("truncation_or_errors"):
         return {
             "schema": "issue_audit_apply.v1",

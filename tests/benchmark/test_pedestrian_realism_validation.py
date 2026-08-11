@@ -1131,6 +1131,8 @@ def test_proxemic_distribution_distance_excludes_nonfinite() -> None:
 
     # The same invalid pedestrian-frame observation is excluded once per arm.
     assert result["excluded_nonfinite_count"] == 2
+    assert result["status"] == "ok"
+    assert result["sim_sample_count"] == 1
 
 
 def test_proxemic_distribution_distance_no_mutation() -> None:
@@ -1221,8 +1223,13 @@ def test_scorecard_omits_distribution_metrics_when_crowds_absent() -> None:
     assert "proxemic_distribution_distance" not in scorecard.metrics
 
 
-def test_build_dataset_scorecard_adds_distribution_only_when_ok() -> None:
-    """build_dataset_scorecard adds distribution fields only when status is ok."""
+def test_build_dataset_scorecard_preserves_supplied_distribution_results() -> None:
+    """Include supplied distribution results, including explicit empty results.
+
+    Inclusion depends on the argument being supplied, not on its status. An
+    explicit ``empty`` result must be preserved so its controlled reason is not
+    lost.
+    """
 
     sd_ok = {"metric_id": "speed_distribution_distance", "status": "ok", "distance": 0.5}
     pd_ok = {"metric_id": "proxemic_distribution_distance", "status": "ok", "distance": 0.3}
@@ -1251,3 +1258,4 @@ def test_build_dataset_scorecard_adds_distribution_only_when_ok() -> None:
         speed_distribution=sd_empty,
     )
     assert sc2.metrics["speed_distribution_distance"]["status"] == "empty"
+    assert "proxemic_distribution_distance" not in sc2.metrics

@@ -1019,21 +1019,25 @@ def _proxemic_empty_reason(positions: np.ndarray, arm_name: str) -> str:
 def _empirical_wasserstein_1d(a: np.ndarray, b: np.ndarray) -> float:
     """Unweighted empirical 1-Wasserstein distance over finite 1-D samples.
 
-    Both arms are deterministically sorted.  The empirical quantile functions
+    Both arms are filtered to finite samples and deterministically sorted. The empirical
+    quantile functions
     are integrated over the union of their step boundaries, which handles
     unequal sample counts without histogram bins. This is a descriptive
     distribution distance, not a pass/fail threshold.
+
+    Raises:
+        ValueError: If either arm has no finite sample.
 
     Returns:
         The scalar Wasserstein-1 distance in the units of the input samples.
     """
 
-    sa = np.sort(np.asarray(a, dtype=float).ravel())
-    sb = np.sort(np.asarray(b, dtype=float).ravel())
-    sa = sa[np.isfinite(sa)]
-    sb = sb[np.isfinite(sb)]
+    flat_a = np.asarray(a, dtype=float).ravel()
+    flat_b = np.asarray(b, dtype=float).ravel()
+    sa = np.sort(flat_a[np.isfinite(flat_a)])
+    sb = np.sort(flat_b[np.isfinite(flat_b)])
     if sa.size == 0 or sb.size == 0:
-        return 0.0
+        raise ValueError("both arms must contain at least one finite sample")
     index_a = 0
     index_b = 0
     position = 0.0
@@ -1193,10 +1197,10 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
     :mod:`robot_sf.data.external.eth_ucy_trajectories`).
 
     Pass the simulation and real crowd arrays together via ``crowds`` (a
-    :class:`RealismCrowdInputs`); ``None`` arrays on either side make the
-    corresponding distribution metrics are omitted (fail-closed), so a partial
-    run still produces a labeled scorecard. A missing real reference is never
-    reported as a passing realism result.
+    :class:`RealismCrowdInputs`). If arrays on either side are ``None``, the
+    orchestrator omits the corresponding distribution metrics (fail-closed), and
+    a partial run still produces a labeled scorecard. A missing real reference is
+    never reported as a passing realism result.
 
     The optional ``reconstruction`` mapping is serialized as a content-light readiness
     summary; it does not change any metric computation or promote benchmark evidence.
@@ -1957,6 +1961,9 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
             f"- claim boundary: {diagnostic.get('claim_boundary', 'diagnostic-only')}",
             "",
         ]
+        empty_reason = diagnostic.get("empty_reason")
+        if empty_reason:
+            lines.insert(len(lines) - 1, f"- empty reason: {empty_reason}")
     if sc["notes"]:
         lines += ["## Notes", ""]
         lines += [f"- {note}" for note in sc["notes"]]

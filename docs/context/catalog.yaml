@@ -1123,6 +1123,10 @@ entries:
   status: current
   freshness: policy
   area: agent_workflow
+- path: docs/context/issue_audit_contract.md
+  status: current
+  freshness: policy
+  area: agent_workflow
 - path: docs/context/issue_2909_github_payload_overfetch_audit.md
   status: current
   freshness: maintained

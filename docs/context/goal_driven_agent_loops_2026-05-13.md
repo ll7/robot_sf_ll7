@@ -114,10 +114,12 @@ on low-risk maintenance.
 issue must carry an evidence grade: `observed`, `inferred`, or `proposal`. The grade prevents
 speculative ideas from being presented as measured defects or benchmark regressions.
 
-`issue-audit` is not a default `/goal` loop. It is a user-in-the-loop refinement workflow that
-orders open issues by readiness blockers and asks exactly one user-facing question at a time. It
-updates issue bodies, labels, comments, Project #5 metadata, and follow-up issues as decisions are
-made.
+`issue-audit-autonomous` is the deterministic cleanup phase, not a default `/goal` implementation
+loop. It inventories open issues and related execution evidence, applies only safe label/closure
+repairs, and emits a pending-decision queue without asking questions or writing Project #5.
+`issue-audit` consumes that queue as the user-in-the-loop refinement workflow: it asks at most one
+focused question at a time, applies the exact answer, and verifies issue state. Read
+`docs/context/issue_audit_contract.md` for the shared plan and authority boundary.
 
 `goal-issue-implementation` processes issues sequentially. It selects one eligible issue, creates
 one branch, implements, validates, checks generated artifacts, commits, pushes, and opens one PR

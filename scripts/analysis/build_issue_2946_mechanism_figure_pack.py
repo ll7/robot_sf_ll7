@@ -8,12 +8,15 @@ import csv
 import hashlib
 import json
 import math
+import shutil
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import matplotlib
+
+from robot_sf.evidence.writers import write_json, write_text
 
 matplotlib.use("Agg")
 matplotlib.rcParams["svg.hashsalt"] = "issue-2946-mechanism-figure-pack"
@@ -68,7 +71,7 @@ def copy_panel(src: Path, dst: Path) -> dict[str, Any]:
     """Copy a tracked PNG panel into the pack and return output provenance."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     data = src.read_bytes()
-    dst.write_bytes(data)
+    shutil.copyfile(src, dst)
     return {
         "source": str(src),
         "destination": str(dst),
@@ -479,8 +482,7 @@ def main() -> int:
     }
 
     figure_manifest_path = output_dir / "figure_pack_manifest.json"
-    with figure_manifest_path.open("w", encoding="utf-8") as f:
-        json.dump(source_metadata, f, indent=2)
+    write_json(figure_manifest_path, source_metadata)
 
     output_manifest = {
         "output_dir": str(output_dir),
@@ -489,26 +491,41 @@ def main() -> int:
         "first_run_manifest": str(figure_manifest_path),
         "command": "uv run python scripts/analysis/build_issue_2946_mechanism_figure_pack.py",
     }
-    with (output_dir / "README.md").open("w", encoding="utf-8") as f:
-        f.write("# Issue #2946 Mechanism-Evidence Figure Pack\n")
-        f.write(f"Generated: {source_metadata['generated_at']}\n\n")
-        f.write("## Figures\n\n")
-        for key, value in figure_catalog.items():
-            f.write(f"- {key}: `{Path(value['path']).name}`\n")
-            f.write(f"  - title: {value['title']}\n")
-            f.write(f"  - claim_boundary: {value['claim_boundary']}\n")
-            f.write(f"  - sources: {', '.join(value['sources'])}\n\n")
-        f.write("## Reproducibility\n\n")
-        f.write("Run: `uv run python scripts/analysis/build_issue_2946_mechanism_figure_pack.py`\n")
-        f.write(f"Manifest: `{figure_manifest_path}`\n")
-        f.write("\n## Follow-up Boundaries\n\n")
-        f.write(
-            "This pack closes the first diagnostic figure-pack request for Issue #2946. "
-            "Broader mechanism-evidence claims remain routed to existing follow-up lanes "
-            "Issue #2444, Issue #2754, and Issue #2924.\n"
+    readme_lines = [
+        "# Issue #2946 Mechanism-Evidence Figure Pack",
+        f"Generated: {source_metadata['generated_at']}",
+        "",
+        "## Figures",
+        "",
+    ]
+    for key, value in figure_catalog.items():
+        readme_lines.extend(
+            [
+                f"- {key}: `{Path(value['path']).name}`",
+                f"  - title: {value['title']}",
+                f"  - claim_boundary: {value['claim_boundary']}",
+                f"  - sources: {', '.join(value['sources'])}",
+                "",
+            ]
         )
-    with (output_dir / "figure_pack_metadata.json").open("w", encoding="utf-8") as f:
-        json.dump(output_manifest, f, indent=2)
+    readme_lines.extend(
+        [
+            "## Reproducibility",
+            "",
+            "Run: `uv run python scripts/analysis/build_issue_2946_mechanism_figure_pack.py`",
+            f"Manifest: `{figure_manifest_path}`",
+            "",
+            "## Follow-up Boundaries",
+            "",
+            (
+                "This pack closes the first diagnostic figure-pack request for Issue #2946. "
+                "Broader mechanism-evidence claims remain routed to existing follow-up lanes "
+                "Issue #2444, Issue #2754, and Issue #2924."
+            ),
+        ]
+    )
+    write_text(output_dir / "README.md", "\n".join(readme_lines) + "\n", issue_ref="robot_sf#2946")
+    write_json(output_dir / "figure_pack_metadata.json", output_manifest)
 
     print(f"Wrote figure pack to {output_dir}")
     return 0

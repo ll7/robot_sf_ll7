@@ -1,0 +1,30 @@
+schema_version: case-workbench.v1
+interestingness:
+  scalar_profile: exploratory-triage.v1
+  weights:
+    surface_clearance_min: 2.0
+    outcome_salience: 1.0
+    control_effort: 0.25
+portfolio:
+  max_cases: 12
+  roles:
+    - seed_sensitivity
+    - planner_upset
+    - safety_boundary
+    - metric_disagreement
+    - cross_cell_inversion
+    - representative_control
+  require_trace_coverage: complete
+  allow_shared_prefix_false: true
+comparison:
+  require_matching_initial_state: true
+  require_matching_config_digest: true
+  shared_prefix: false
+publication:
+  profile: doorway_seed_pair.v1
+  renderer: matplotlib
+  include_difference_curve: false
+  include_normalized_duration: false
+admission:
+  status: proposed
+  overlay_schema_version: case-admission-overlay.v1

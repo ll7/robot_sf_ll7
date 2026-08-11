@@ -612,14 +612,16 @@ def _prepare_campaign_planner_variant_run(
             planner.benchmark_profile,
             effective_workers,
         )
-    scoped_scenarios = [
-        _scenario_with_kinematics(
-            sc,
+    scoped_scenarios = []
+    for scenario in context.scenarios:
+        scoped = _scenario_with_kinematics(
+            scenario,
             kinematics=kinematics,
             holonomic_command_mode=cfg.holonomic_command_mode,
         )
-        for sc in context.scenarios
-    ]
+        if cfg.telemetry is not None:
+            scoped["telemetry"] = dict(cfg.telemetry)
+        scoped_scenarios.append(scoped)
     return _CampaignPlannerVariantRun(
         kinematics=kinematics,
         active_observation_mode=active_observation_mode,

@@ -60,6 +60,7 @@ else:
     _BASELINE_IMPORT_ERROR = None
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility export.
     _CIRCUIT_BREAKER_MSG_PREFIX_LEN,
     DEFAULT_CIRCUIT_BREAKER_THRESHOLD,
@@ -116,6 +117,7 @@ def _apply_track_metadata_to_scenarios(
     observation_level: str | None,
     benchmark_track: str | None,
     track_schema_version: str | None,
+    telemetry: dict[str, object] | None = None,
 ) -> list[dict[str, Any]]:
     """Attach track metadata to scenario payloads used for rows and resume identity.
 
@@ -127,6 +129,7 @@ def _apply_track_metadata_to_scenarios(
         and observation_level is None
         and benchmark_track is None
         and track_schema_version is None
+        and telemetry is None
     ):
         return scenarios
     tracked: list[dict[str, Any]] = []
@@ -140,6 +143,11 @@ def _apply_track_metadata_to_scenarios(
             payload["benchmark_track"] = benchmark_track
         if track_schema_version is not None:
             payload["track_schema_version"] = track_schema_version
+        if telemetry is not None:
+            metadata = payload.get("metadata")
+            metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            metadata["telemetry"] = normalize_telemetry_profile(telemetry).to_mapping()
+            payload["metadata"] = metadata
         tracked.append(payload)
     return tracked
 
@@ -2792,6 +2800,7 @@ def run_batch(  # noqa: PLR0913
     latency_stress_profile: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    telemetry: dict[str, Any] | None = None,
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,
@@ -2828,6 +2837,7 @@ def run_batch(  # noqa: PLR0913
         observation_level=observation_level,
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
+        telemetry=telemetry,
     )
 
     # Map-based scenario detection: delegate to map runner
@@ -2859,6 +2869,7 @@ def run_batch(  # noqa: PLR0913
             circuit_breaker_threshold=circuit_breaker_threshold,
             record_planner_decision_trace=record_planner_decision_trace,
             record_simulation_step_trace=record_simulation_step_trace,
+            telemetry=telemetry,
             workers=workers,
             resume=resume,
             safety_wrapper=safety_wrapper,

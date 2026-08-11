@@ -5692,6 +5692,132 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
         assert norm1 == norm2, f"Episode {i} records differ: {norm1} vs {norm2}"
 
 
+def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The opt-in analysis profile adds data only; legacy actions/outcomes stay identical."""
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+
+    class _DummySim:
+        """Minimal deterministic simulator state for the profile regression."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((1, 2), dtype=float)
+
+    class _DummyEnv:
+        """Deterministic environment with one terminal step."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            """Return the same observation for both profile variants."""
+            _ = seed
+            return {
+                "robot": {
+                    "position": np.array([0.0, 0.0], dtype=np.float32),
+                    "heading": np.array([0.0], dtype=np.float32),
+                    "speed": np.array([0.0, 0.0], dtype=np.float32),
+                    "radius": np.array([0.5], dtype=np.float32),
+                },
+                "goal": {
+                    "current": np.array([2.0, 0.0], dtype=np.float32),
+                    "next": np.array([0.0, 0.0], dtype=np.float32),
+                },
+                "pedestrians": {
+                    "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                    "velocities": np.zeros((1, 2), dtype=np.float32),
+                    "radius": np.array([0.4], dtype=np.float32),
+                    "count": np.array([1.0], dtype=np.float32),
+                },
+                "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+            }, {}
+
+        def step(self, action):
+            """Terminate with a deterministic successful outcome."""
+            _ = action
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            """Close the no-op environment."""
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1, "ped_radius": 0.4})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0, max_angular_speed=1.0, command_mode="vx_vy"
+            ),
+        },
+    )
+    scenario = {
+        "name": "analysis_trace_profile",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        "simulation_config": {"max_episode_steps": 1},
+        "seeds": [1],
+    }
+    schema_path = tmp_path / "episode.schema.json"
+    schema_path.write_text('{"type":"object"}', encoding="utf-8")
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics", lambda metrics, **kwargs: metrics
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0]], dtype=float),
+    )
+    off_path = tmp_path / "off.jsonl"
+    on_path = tmp_path / "on.jsonl"
+    common = {
+        "scenarios_or_path": [scenario],
+        "schema_path": schema_path,
+        "algo": "hrvo",
+        "algo_config_path": "configs/algos/hrvo_camera_ready.yaml",
+        "benchmark_profile": "experimental",
+        "workers": 1,
+        "resume": False,
+        "record_simulation_step_trace": True,
+    }
+    run_map_batch(out_path=off_path, **common)
+    run_map_batch(
+        out_path=on_path,
+        telemetry={"analysis_trace": "all", "planner_debug_trace": "none"},
+        **common,
+    )
+    off = json.loads(off_path.read_text(encoding="utf-8").splitlines()[0])
+    on = json.loads(on_path.read_text(encoding="utf-8").splitlines()[0])
+    assert off["outcome"] == on["outcome"]
+    assert (
+        off["algorithm_metadata"]["simulation_step_trace"]
+        == on["algorithm_metadata"]["simulation_step_trace"]
+    )
+    assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0
+
+
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:
     """Holonomic vx/vy conversion should include angular intent via midpoint heading."""
 

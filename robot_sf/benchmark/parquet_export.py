@@ -1,17 +1,20 @@
 """Parquet analytics export for benchmark episode JSONL records."""
 
-# ruff: noqa: DOC201
+# ruff: noqa: DOC201, C901, PLR0912, PLR0915
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import combinations, pairwise
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.analysis_trace import trace_coverage
 from robot_sf.benchmark.errors import EpisodeRecordInputError
 
 try:  # Optional analytics dependency; validated when export is invoked.
@@ -22,6 +25,7 @@ except ModuleNotFoundError:  # pragma: no cover - environment dependent
     pq = None
 
 EXPORT_SCHEMA_VERSION = "benchmark_parquet_export.v1"
+CAMPAIGN_RESULT_STORE_SCHEMA_VERSION = "campaign-result-store.v2"
 
 _TABLE_FILENAMES = {
     "episodes": "episodes.parquet",
@@ -40,6 +44,17 @@ class ParquetExportResult:
     table_paths: dict[str, Path]
     metadata_path: Path
     duckdb_examples_path: Path
+
+
+@dataclass(frozen=True)
+class CampaignResultStoreV2Result:
+    """Summary of a provenance-first campaign result store."""
+
+    output_dir: Path
+    record_count: int
+    table_paths: dict[str, Path]
+    manifest_path: Path
+    checksum_path: Path
 
 
 def export_episodes_jsonl_to_parquet(
@@ -100,6 +115,1076 @@ def export_episodes_jsonl_to_parquet(
         metadata_path=metadata_path,
         duckdb_examples_path=duckdb_examples_path,
     )
+
+
+_CAMPAIGN_V2_TABLE_FILENAMES = {
+    "episodes": "episodes.parquet",
+    "steps": "steps.parquet",
+    "actors": "actors.parquet",
+    "events": "events.parquet",
+    "features": "features.parquet",
+    "cells": "cells.parquet",
+    "comparisons": "comparisons.parquet",
+}
+
+
+def export_campaign_result_store_v2(
+    input_paths: Sequence[str | Path] | str | Path,
+    output_dir: str | Path,
+    *,
+    study_id: str = "campaign",
+    command: str = "",
+    overwrite: bool = False,
+) -> CampaignResultStoreV2Result:
+    """Build the canonical v2 campaign store from episode JSONL records.
+
+    This is an additive companion to the existing Parquet export.  The JSONL
+    remains the source of truth; v2 adds normalized state, event, feature, cell,
+    and comparison tables while preserving unavailable historical fields.
+    """
+
+    pa_mod, pq_mod = _load_pyarrow()
+    paths = _normalize_paths(input_paths)
+    out_dir = Path(output_dir)
+    table_paths = {
+        name: out_dir / filename for name, filename in _CAMPAIGN_V2_TABLE_FILENAMES.items()
+    }
+    manifest_path = out_dir / "manifest.json"
+    checksum_path = out_dir / "SHA256SUMS"
+    _ensure_can_write([*table_paths.values(), manifest_path, checksum_path], overwrite)
+    records = _read_jsonl_files(paths)
+    tables = _build_campaign_v2_rows(records, paths)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    schemas = _campaign_v2_schemas(pa_mod)
+    for table_name, rows in tables.items():
+        pq_mod.write_table(
+            pa_mod.Table.from_pylist(rows, schema=schemas[table_name]),
+            table_paths[table_name],
+        )
+    manifest = {
+        "schema_version": CAMPAIGN_RESULT_STORE_SCHEMA_VERSION,
+        "study_id": str(study_id),
+        "command": str(command),
+        "source_files": [{"path": str(path), "sha256": _path_sha256(path)} for path in paths],
+        "tables": {
+            name: {"file": path.name, "rows": len(tables[name])}
+            for name, path in table_paths.items()
+        },
+        "unavailable_policy": "missing historical fields are typed unavailable; never inferred",
+        "duckdb": "query Parquet tables directly with read_parquet()",
+    }
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    checksums = [
+        f"{_path_sha256(path)}  {path.name}" for path in [*table_paths.values(), manifest_path]
+    ]
+    checksum_path.write_text("\n".join(checksums) + "\n", encoding="utf-8")
+    return CampaignResultStoreV2Result(
+        output_dir=out_dir,
+        record_count=len(records),
+        table_paths=table_paths,
+        manifest_path=manifest_path,
+        checksum_path=checksum_path,
+    )
+
+
+def _campaign_v2_schemas(pa_mod: Any) -> dict[str, Any]:
+    """Return stable schemas for the v2 normalized tables."""
+
+    string = pa_mod.string()
+    number = pa_mod.float64()
+    integer = pa_mod.int64()
+    boolean = pa_mod.bool_()
+    return {
+        "episodes": pa_mod.schema(
+            [
+                ("run_id", string),
+                ("episode_id", string),
+                ("planner", string),
+                ("scenario_id", string),
+                ("scenario_family", string),
+                ("seed", integer),
+                ("row_status", string),
+                ("artifact_uri", string),
+                ("artifact_sha256", string),
+                ("trace_coverage_json", string),
+                ("outcome_json", string),
+                ("provenance_json", string),
+                ("execution_status", string),
+            ]
+        ),
+        "steps": pa_mod.schema(
+            [
+                ("episode_id", string),
+                ("step", integer),
+                ("time_s", number),
+                ("robot_x", number),
+                ("robot_y", number),
+                ("heading_rad", number),
+                ("robot_vx", number),
+                ("robot_vy", number),
+                ("requested_linear_m_s", number),
+                ("requested_turn_rate_rad_s", number),
+                ("applied_linear_m_s", number),
+                ("applied_turn_rate_rad_s", number),
+                ("coordinate_frame", string),
+                ("units_json", string),
+            ]
+        ),
+        "actors": pa_mod.schema(
+            [
+                ("episode_id", string),
+                ("step", integer),
+                ("actor_id", string),
+                ("actor_kind", string),
+                ("x", number),
+                ("y", number),
+                ("vx", number),
+                ("vy", number),
+                ("heading_rad", number),
+                ("radius_m", number),
+            ]
+        ),
+        "events": pa_mod.schema(
+            [
+                ("episode_id", string),
+                ("event_id", string),
+                ("event_type", string),
+                ("time_s", number),
+                ("status", string),
+                ("reason", string),
+                ("details_json", string),
+            ]
+        ),
+        "features": pa_mod.schema(
+            [
+                ("episode_id", string),
+                ("feature_name", string),
+                ("value_number", number),
+                ("units", string),
+                ("profile_version", string),
+                ("status", string),
+                ("unavailable_reason", string),
+            ]
+        ),
+        "cells": pa_mod.schema(
+            [
+                ("cell_id", string),
+                ("planner", string),
+                ("scenario_id", string),
+                ("outcome_counts_json", string),
+                ("entropy", number),
+                ("seed_count", integer),
+                ("uncertainty_json", string),
+                ("boundary_context_json", string),
+                ("representative_episode_id", string),
+                ("representative_status", string),
+                ("boundary_status", string),
+                ("outlier_status", string),
+            ]
+        ),
+        "comparisons": pa_mod.schema(
+            [
+                ("comparison_id", string),
+                ("left_episode_id", string),
+                ("right_episode_id", string),
+                ("compatibility_status", string),
+                ("reason", string),
+                ("outcome_delta", number),
+                ("clearance_delta_m", number),
+                ("event_time_shift_s", number),
+                ("trajectory_separation_m", number),
+                ("control_sequence_difference", number),
+                ("progress_delta_m", number),
+                ("shared_prefix", boolean),
+            ]
+        ),
+    }
+
+
+def _build_campaign_v2_rows(
+    records: Sequence[dict[str, Any]], paths: Sequence[Path]
+) -> dict[str, list[dict[str, Any]]]:
+    """Normalize records into the seven v2 tables."""
+
+    source_uri = str(paths[0]) if paths else ""
+    source_sha = _path_sha256(paths[0]) if paths and paths[0].is_file() else None
+    episodes: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
+    actors: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    features: list[dict[str, Any]] = []
+    by_cell: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for record in records:
+        episode_id = str(record.get("episode_id") or "")
+        planner = _resolve_algo(record) or "unknown"
+        scenario_id = _string_or_none(record.get("scenario_id")) or "unknown"
+        scenario_family = _resolve_scenario_family(record) or scenario_id
+        coverage = trace_coverage(record)
+        provenance = (
+            record.get("provenance") if isinstance(record.get("provenance"), Mapping) else {}
+        )
+        explicit_artifact_sha = _string_or_none(provenance.get("artifact_sha256"))
+        row_status = str(record.get("row_status") or record.get("status") or "native")
+        if row_status not in {
+            "native",
+            "adapter",
+            "diagnostic_only",
+            "fallback",
+            "degraded",
+            "unavailable",
+            "failed",
+        }:
+            row_status = "adapter"
+        episodes.append(
+            {
+                "run_id": str(
+                    record.get("run_id") or provenance.get("run_id") or source_sha or "unknown"
+                ),
+                "episode_id": episode_id,
+                "planner": planner,
+                "scenario_id": scenario_id,
+                "scenario_family": scenario_family,
+                "seed": _int_or_none(record.get("seed")),
+                "row_status": row_status,
+                "artifact_uri": _string_or_none(provenance.get("artifact_uri")) or source_uri,
+                "artifact_sha256": explicit_artifact_sha,
+                "trace_coverage_json": _json_or_none(coverage),
+                "outcome_json": _json_or_none(record.get("outcome")),
+                "provenance_json": _json_or_none(provenance),
+                "execution_status": str(record.get("status") or "unknown"),
+            }
+        )
+        trace = (
+            record.get("algorithm_metadata", {}).get("analysis_trace")
+            if isinstance(record.get("algorithm_metadata"), Mapping)
+            else None
+        )
+        trace_steps = trace.get("steps") if isinstance(trace, Mapping) else None
+        if isinstance(trace_steps, list) and coverage.get("status") == "complete":
+            for raw_step in trace_steps:
+                if not isinstance(raw_step, Mapping):
+                    continue
+                step_row, actor_rows = _campaign_step_rows(episode_id, raw_step)
+                steps.append(step_row)
+                actors.extend(actor_rows)
+            for index, raw_event in (
+                enumerate(trace.get("events", [])) if isinstance(trace.get("events"), list) else []
+            ):
+                if isinstance(raw_event, Mapping):
+                    events.append(_campaign_event_row(episode_id, index, raw_event))
+        else:
+            events.append(
+                {
+                    "episode_id": episode_id,
+                    "event_id": "trace-unavailable",
+                    "event_type": "telemetry",
+                    "time_s": None,
+                    "status": "unavailable",
+                    "reason": str(coverage.get("reason") or "trace_unavailable"),
+                    "details_json": None,
+                }
+            )
+        episode_features = _campaign_feature_rows(record, episode_id, trace_steps, coverage)
+        features.extend(episode_features)
+        by_cell.setdefault((planner, scenario_id), []).append(record)
+
+    cells = _campaign_cell_rows(by_cell)
+    comparisons = _campaign_comparison_rows(records)
+    return {
+        "episodes": episodes,
+        "steps": steps,
+        "actors": actors,
+        "events": events,
+        "features": features,
+        "cells": cells,
+        "comparisons": comparisons,
+    }
+
+
+def _campaign_step_rows(
+    episode_id: str, step: Mapping[str, Any]
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Flatten one trace step into state and actor rows."""
+
+    robot = step.get("robot") if isinstance(step.get("robot"), Mapping) else {}
+    controls = step.get("controls") if isinstance(step.get("controls"), Mapping) else {}
+    requested = controls.get("requested") if isinstance(controls.get("requested"), Mapping) else {}
+    applied = controls.get("applied") if isinstance(controls.get("applied"), Mapping) else {}
+    position = robot.get("position") if isinstance(robot.get("position"), list) else [None, None]
+    velocity = robot.get("velocity") if isinstance(robot.get("velocity"), list) else [None, None]
+    step_row = {
+        "episode_id": episode_id,
+        "step": _int_or_none(step.get("step")),
+        "time_s": _float_or_none(step.get("time_s")),
+        "robot_x": _float_or_none(position[0] if len(position) > 0 else None),
+        "robot_y": _float_or_none(position[1] if len(position) > 1 else None),
+        "heading_rad": _float_or_none(robot.get("heading")),
+        "robot_vx": _float_or_none(velocity[0] if len(velocity) > 0 else None),
+        "robot_vy": _float_or_none(velocity[1] if len(velocity) > 1 else None),
+        "requested_linear_m_s": _float_or_none(requested.get("linear_m_s")),
+        "requested_turn_rate_rad_s": _float_or_none(requested.get("turn_rate_rad_s")),
+        "applied_linear_m_s": _float_or_none(applied.get("linear_m_s")),
+        "applied_turn_rate_rad_s": _float_or_none(applied.get("turn_rate_rad_s")),
+        "coordinate_frame": "world",
+        "units_json": _json_or_none({"position": "m", "velocity": "m/s", "time": "s"}),
+    }
+    actor_rows: list[dict[str, Any]] = []
+    actor_rows.append(_campaign_actor_row(episode_id, step, "robot", "robot", robot))
+    pedestrians = step.get("pedestrians") if isinstance(step.get("pedestrians"), list) else []
+    for index, actor in enumerate(pedestrians):
+        if isinstance(actor, Mapping):
+            actor_rows.append(
+                _campaign_actor_row(
+                    episode_id,
+                    step,
+                    str(actor.get("actor_id") or f"pedestrian-{index}"),
+                    "pedestrian",
+                    actor,
+                )
+            )
+    return step_row, actor_rows
+
+
+def _campaign_actor_row(
+    episode_id: str, step: Mapping[str, Any], actor_id: str, kind: str, actor: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Build one actor row."""
+
+    position = actor.get("position") if isinstance(actor.get("position"), list) else [None, None]
+    velocity = actor.get("velocity") if isinstance(actor.get("velocity"), list) else [None, None]
+    return {
+        "episode_id": episode_id,
+        "step": _int_or_none(step.get("step")),
+        "actor_id": actor_id,
+        "actor_kind": kind,
+        "x": _float_or_none(position[0] if len(position) > 0 else None),
+        "y": _float_or_none(position[1] if len(position) > 1 else None),
+        "vx": _float_or_none(velocity[0] if len(velocity) > 0 else None),
+        "vy": _float_or_none(velocity[1] if len(velocity) > 1 else None),
+        "heading_rad": _float_or_none(actor.get("heading")),
+        "radius_m": _float_or_none(actor.get("radius_m")),
+    }
+
+
+def _campaign_event_row(episode_id: str, index: int, event: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize a typed trace event."""
+
+    return {
+        "episode_id": episode_id,
+        "event_id": str(event.get("event_id") or event.get("id") or f"event-{index:04d}"),
+        "event_type": str(event.get("event_type") or event.get("type") or "unknown"),
+        "time_s": _float_or_none(event.get("time_s")),
+        "status": str(event.get("status") or "observed"),
+        "reason": _string_or_none(event.get("reason")),
+        "details_json": _json_or_none(event),
+    }
+
+
+def _campaign_feature_rows(
+    record: Mapping[str, Any], episode_id: str, trace_steps: Any, coverage: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Derive interpretable feature rows, with typed unavailable reasons."""
+
+    profile = "case-workbench-metrics.v1"
+    rows: list[dict[str, Any]] = []
+    if not isinstance(trace_steps, list) or coverage.get("status") != "complete":
+        for name, units in (
+            ("surface_clearance_min", "m"),
+            ("progress", "m"),
+            ("control_effort", "mixed"),
+            ("event_time", "s"),
+            ("ttc_min", "s"),
+            ("cpa_min", "m"),
+            ("closing_speed_max", "m/s"),
+            ("braking_response_time", "s"),
+            ("turning_response_time", "s"),
+            ("critical_duration_integral", "s"),
+            ("stall_duration", "s"),
+            ("reversal_count", "count"),
+            ("detour_ratio", "ratio"),
+            ("clipping_steps", "count"),
+            ("fallback_steps", "count"),
+            ("event_time", "s"),
+            ("outcome_score", "indicator"),
+        ):
+            rows.append(
+                {
+                    "episode_id": episode_id,
+                    "feature_name": name,
+                    "value_number": None,
+                    "units": units,
+                    "profile_version": profile,
+                    "status": "unavailable",
+                    "unavailable_reason": str(coverage.get("reason") or "trace_unavailable"),
+                }
+            )
+        return rows
+    clearance_values: list[float] = []
+    speeds: list[float] = []
+    applied_speeds: list[float] = []
+    turns: list[float] = []
+    start_xy: tuple[float, float] | None = None
+    end_xy: tuple[float, float] | None = None
+    for step in trace_steps:
+        if not isinstance(step, Mapping):
+            continue
+        robot = step.get("robot") if isinstance(step.get("robot"), Mapping) else {}
+        pos = robot.get("position") if isinstance(robot.get("position"), list) else []
+        if len(pos) >= 2 and all(isinstance(v, (int, float)) for v in pos[:2]):
+            xy = (float(pos[0]), float(pos[1]))
+            start_xy = xy if start_xy is None else start_xy
+            end_xy = xy
+        velocity = robot.get("velocity") if isinstance(robot.get("velocity"), list) else []
+        if len(velocity) >= 2 and all(isinstance(v, (int, float)) for v in velocity[:2]):
+            speeds.append(float((float(velocity[0]) ** 2 + float(velocity[1]) ** 2) ** 0.5))
+        controls = step.get("controls") if isinstance(step.get("controls"), Mapping) else {}
+        applied = controls.get("applied") if isinstance(controls.get("applied"), Mapping) else {}
+        applied_linear = applied.get("linear_m_s")
+        if isinstance(applied_linear, (int, float)):
+            applied_speeds.append(abs(float(applied_linear)))
+        turn = applied.get("turn_rate_rad_s")
+        if isinstance(turn, (int, float)):
+            turns.append(abs(float(turn)))
+        for actor in (
+            step.get("pedestrians", []) if isinstance(step.get("pedestrians"), list) else []
+        ):
+            if not isinstance(actor, Mapping):
+                continue
+            actor_pos = actor.get("position") if isinstance(actor.get("position"), list) else []
+            if (
+                len(pos) >= 2
+                and len(actor_pos) >= 2
+                and all(isinstance(v, (int, float)) for v in [*pos[:2], *actor_pos[:2]])
+            ):
+                robot_radius = float(robot.get("radius_m") or 0.0)
+                actor_radius = float(actor.get("radius_m") or 0.0)
+                distance = (
+                    (float(pos[0]) - float(actor_pos[0])) ** 2
+                    + (float(pos[1]) - float(actor_pos[1])) ** 2
+                ) ** 0.5
+                clearance_values.append(distance - robot_radius - actor_radius)
+    dt = (
+        _float_or_none(record.get("dt"))
+        or _float_or_none(
+            record.get("scenario_params", {}).get("run_dt")
+            if isinstance(record.get("scenario_params"), Mapping)
+            else None
+        )
+        or 0.1
+    )
+    progress = (
+        None
+        if start_xy is None or end_xy is None
+        else ((end_xy[0] - start_xy[0]) ** 2 + (end_xy[1] - start_xy[1]) ** 2) ** 0.5
+    )
+    metric_mapping = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
+    recorded_clearance = _mapping_number(
+        metric_mapping, "surface_clearance_min", "min_surface_clearance", "min_separation"
+    )
+    recorded_progress = _mapping_number(
+        metric_mapping, "progress", "route_progress", "distance_travelled"
+    )
+    event_time = _first_trace_event_time(record, trace_steps)
+    outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
+    outcome_score = (
+        1.0
+        if outcome.get("success") or outcome.get("route_complete")
+        else (-1.0 if outcome.get("collision") else 0.0)
+    )
+    traveled = _trace_path_length(trace_steps)
+    route_length = _mapping_number(
+        metric_mapping, "shortest_path_length", "route_length", "optimal_path_length"
+    )
+    detour_ratio = None
+    if route_length is not None and route_length > 0.0 and traveled is not None:
+        detour_ratio = traveled / route_length
+    values = {
+        "surface_clearance_min": (
+            recorded_clearance
+            if recorded_clearance is not None
+            else (min(clearance_values) if clearance_values else None),
+            "m",
+        ),
+        "applied_linear_speed_mean": (
+            sum(applied_speeds) / len(applied_speeds) if applied_speeds else None,
+            "m/s",
+        ),
+        "applied_turn_rate_abs_integral": (sum(turns) * dt if turns else None, "rad"),
+        "progress": (recorded_progress if recorded_progress is not None else progress, "m"),
+        "control_effort": (
+            (sum(applied_speeds) * dt + sum(turns) * dt) if applied_speeds or turns else None,
+            "mixed",
+        ),
+        "event_time": (event_time, "s"),
+        "outcome_score": (outcome_score, "indicator"),
+        "detour_ratio": (detour_ratio, "ratio"),
+    }
+    advanced = _advanced_trace_features(trace_steps, dt=dt)
+    if detour_ratio is not None:
+        advanced["detour_ratio"] = (detour_ratio, "ratio")
+    values.update(advanced)
+    for name, (value, units) in values.items():
+        rows.append(
+            {
+                "episode_id": episode_id,
+                "feature_name": name,
+                "value_number": value,
+                "units": units,
+                "profile_version": profile,
+                "status": "available" if value is not None else "unavailable",
+                "unavailable_reason": None
+                if value is not None
+                else "source_trace_missing_metric_fields",
+            }
+        )
+    return rows
+
+
+def derive_episode_metrics(record: Mapping[str, Any]) -> dict[str, float]:
+    """Return available v2 feature values for one episode without writing files."""
+
+    metadata = record.get("algorithm_metadata")
+    trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+    trace_steps = trace.get("steps") if isinstance(trace, Mapping) else None
+    coverage = record.get("trace_coverage")
+    if not isinstance(coverage, Mapping):
+        coverage = trace_coverage(dict(record))
+    rows = _campaign_feature_rows(
+        record,
+        str(record.get("episode_id") or ""),
+        trace_steps,
+        coverage,
+    )
+    return {
+        str(row["feature_name"]): float(row["value_number"])
+        for row in rows
+        if isinstance(row.get("value_number"), (int, float))
+        and not isinstance(row.get("value_number"), bool)
+    }
+
+
+def _advanced_trace_features(
+    trace_steps: list[Any], *, dt: float
+) -> dict[str, tuple[float | None, str]]:
+    """Derive timing/control features from fields present in an analysis trace."""
+
+    speeds: list[float] = []
+    signed_speeds: list[float] = []
+    turn_times: list[float] = []
+    ttc_values: list[float] = []
+    cpa_values: list[float] = []
+    clearance_values: list[float] = []
+    closing_speeds: list[float] = []
+    clipping_steps = 0
+    fallback_steps = 0
+    for step in trace_steps:
+        if not isinstance(step, Mapping):
+            continue
+        robot = step.get("robot") if isinstance(step.get("robot"), Mapping) else {}
+        velocity = robot.get("velocity") if isinstance(robot.get("velocity"), list) else []
+        if len(velocity) >= 2 and all(isinstance(v, (int, float)) for v in velocity[:2]):
+            vx, vy = float(velocity[0]), float(velocity[1])
+            speeds.append(float(math.hypot(vx, vy)))
+            heading = robot.get("heading")
+            if isinstance(heading, (int, float)):
+                signed_speeds.append(vx * math.cos(float(heading)) + vy * math.sin(float(heading)))
+            else:
+                signed_speeds.append(float("nan"))
+        controls = step.get("controls") if isinstance(step.get("controls"), Mapping) else {}
+        applied = controls.get("applied") if isinstance(controls.get("applied"), Mapping) else {}
+        if not signed_speeds or not math.isfinite(signed_speeds[-1]):
+            applied_linear = applied.get("linear_m_s")
+            if isinstance(applied_linear, (int, float)):
+                if signed_speeds:
+                    signed_speeds[-1] = float(applied_linear)
+                else:
+                    signed_speeds.append(float(applied_linear))
+        if (
+            isinstance(applied.get("turn_rate_rad_s"), (int, float))
+            and abs(float(applied["turn_rate_rad_s"])) > 1e-9
+        ):
+            turn_times.append(float(step.get("time_s") or 0.0))
+        planner = step.get("planner") if isinstance(step.get("planner"), Mapping) else {}
+        amv = planner.get("amv") if isinstance(planner.get("amv"), Mapping) else {}
+        clipping_steps += int(bool(amv.get("command_clipped") or amv.get("yaw_rate_saturated")))
+        fallback_steps += int(
+            str(planner.get("execution_mode") or "").lower() in {"fallback", "degraded"}
+        )
+        rp = robot.get("position") if isinstance(robot.get("position"), list) else []
+        rv = robot.get("velocity") if isinstance(robot.get("velocity"), list) else []
+        for actor in (
+            step.get("pedestrians", []) if isinstance(step.get("pedestrians"), list) else []
+        ):
+            if not isinstance(actor, Mapping):
+                continue
+            ap = actor.get("position") if isinstance(actor.get("position"), list) else []
+            av = actor.get("velocity") if isinstance(actor.get("velocity"), list) else []
+            if len(rp) < 2 or len(ap) < 2 or len(rv) < 2 or len(av) < 2:
+                continue
+            rel_p = (float(ap[0]) - float(rp[0]), float(ap[1]) - float(rp[1]))
+            rel_v = (float(av[0]) - float(rv[0]), float(av[1]) - float(rv[1]))
+            distance = math.hypot(*rel_p)
+            robot_radius = float(robot.get("radius_m") or 0.0)
+            actor_radius = float(actor.get("radius_m") or 0.0)
+            clearance = distance - robot_radius - actor_radius
+            clearance_values.append(clearance)
+            vv = rel_v[0] ** 2 + rel_v[1] ** 2
+            if vv <= 1e-12:
+                cpa_values.append(distance)
+                continue
+            tau = max(0.0, -(rel_p[0] * rel_v[0] + rel_p[1] * rel_v[1]) / vv)
+            cpa_values.append(math.hypot(rel_p[0] + tau * rel_v[0], rel_p[1] + tau * rel_v[1]))
+            if distance > 1e-12:
+                closing_speed = max(0.0, -(rel_p[0] * rel_v[0] + rel_p[1] * rel_v[1]) / distance)
+                closing_speeds.append(closing_speed)
+            contact_time = _time_to_contact(rel_p, rel_v, robot_radius + actor_radius)
+            if contact_time is not None:
+                ttc_values.append(contact_time)
+    braking_time = None
+    for index in range(1, len(speeds)):
+        if speeds[index] < speeds[index - 1] - 1e-9:
+            braking_time = float(index) * dt
+            break
+    stall_duration = sum(dt for speed in speeds if speed < 1e-3)
+    finite_signed = [value for value in signed_speeds if math.isfinite(value)]
+    reversal_count = sum(
+        1
+        for before, after in pairwise(finite_signed)
+        if abs(before) > 1e-3 and abs(after) > 1e-3 and before * after < 0.0
+    )
+    return {
+        "ttc_min": (min(ttc_values) if ttc_values else None, "s"),
+        "cpa_min": (min(cpa_values) if cpa_values else None, "m"),
+        "closing_speed_max": (max(closing_speeds) if closing_speeds else None, "m/s"),
+        "braking_response_time": (braking_time, "s"),
+        "turning_response_time": (min(turn_times) if turn_times else None, "s"),
+        "critical_duration_integral": (sum(dt for value in clearance_values if value <= 0.5), "s")
+        if clearance_values
+        else (None, "s"),
+        "stall_duration": (stall_duration if speeds else None, "s"),
+        "reversal_count": (float(reversal_count) if finite_signed else None, "count"),
+        "detour_ratio": (None, "ratio"),
+        "clipping_steps": (float(clipping_steps), "count"),
+        "fallback_steps": (float(fallback_steps), "count"),
+    }
+
+
+def _time_to_contact(
+    relative_position: tuple[float, float],
+    relative_velocity: tuple[float, float],
+    radius: float,
+) -> float | None:
+    """Return the earliest non-negative time at which two discs touch."""
+
+    px, py = relative_position
+    vx, vy = relative_velocity
+    radius = max(0.0, float(radius))
+    c = px * px + py * py - radius * radius
+    if c <= 0.0:
+        return 0.0
+    a = vx * vx + vy * vy
+    if a <= 1.0e-12:
+        return None
+    b = px * vx + py * vy
+    if b >= 0.0:
+        return None
+    discriminant = b * b - a * c
+    if discriminant < 0.0:
+        return None
+    root = math.sqrt(max(0.0, discriminant))
+    first = (-b - root) / a
+    return first if first >= 0.0 else None
+
+
+def _campaign_cell_rows(
+    by_cell: Mapping[tuple[str, str], list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Aggregate outcome mixtures and entropy per planner/scenario cell."""
+
+    rows: list[dict[str, Any]] = []
+    for (planner, scenario_id), records in sorted(by_cell.items()):
+        counts: dict[str, int] = {}
+        for record in records:
+            outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
+            label = str(
+                outcome.get("termination_reason")
+                or record.get("termination_reason")
+                or record.get("status")
+                or "unknown"
+            )
+            counts[label] = counts.get(label, 0) + 1
+        total = sum(counts.values())
+        entropy = (
+            -sum(
+                (count / total) * math.log2(count / total)
+                for count in counts.values()
+                if count and total
+            )
+            if total
+            else None
+        )
+        representative, representative_status = _cell_medoid(records)
+        boundary_status = _cell_boundary_status(records)
+        rows.append(
+            {
+                "cell_id": f"{scenario_id}::{planner}",
+                "planner": planner,
+                "scenario_id": scenario_id,
+                "outcome_counts_json": _json_or_none(dict(sorted(counts.items()))),
+                "entropy": entropy,
+                "seed_count": len(records),
+                "uncertainty_json": _json_or_none(
+                    {"source": "canonical_aggregate", "status": "unavailable"}
+                ),
+                "boundary_context_json": _json_or_none(
+                    {
+                        "status": boundary_status,
+                        "source": "outcome_and_clearance",
+                        "geometry_adapter": "unavailable",
+                    }
+                ),
+                "representative_episode_id": representative,
+                "representative_status": representative_status,
+                "boundary_status": boundary_status,
+                "outlier_status": (
+                    "candidate" if len(records) >= 3 else "unavailable:insufficient_replicates"
+                ),
+            }
+        )
+    return rows
+
+
+def _cell_medoid(records: Sequence[Mapping[str, Any]]) -> tuple[str | None, str]:
+    """Select a deterministic metric medoid for one scenario/planner cell."""
+
+    if not records:
+        return None, "unavailable:no_records"
+    vectors = []
+    for record in records:
+        metrics = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
+        vectors.append(
+            (
+                _mapping_number(metrics, "surface_clearance_min", "min_surface_clearance"),
+                _mapping_number(metrics, "progress", "route_progress"),
+                _mapping_number(metrics, "control_effort", "action_effort"),
+                str(record.get("episode_id") or ""),
+            )
+        )
+    centers = []
+    for index in range(3):
+        values = sorted(value[index] for value in vectors if value[index] is not None)
+        centers.append(values[len(values) // 2] if values else None)
+    ranked = sorted(
+        vectors,
+        key=lambda value: (
+            sum(
+                abs(float(value[index]) - float(centers[index]))
+                for index in range(3)
+                if value[index] is not None and centers[index] is not None
+            ),
+            value[3],
+        ),
+    )
+    return ranked[0][3], "medoid"
+
+
+def _cell_boundary_status(records: Sequence[Mapping[str, Any]]) -> str:
+    """Classify observed outcome/clearance boundary context without geometry claims."""
+
+    labels = {
+        str(
+            (record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}).get(
+                "termination_reason"
+            )
+            or record.get("termination_reason")
+            or record.get("status")
+            or "unknown"
+        )
+        for record in records
+    }
+    clearances = []
+    for record in records:
+        metrics = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
+        value = _mapping_number(metrics, "surface_clearance_min", "min_surface_clearance")
+        if value is not None:
+            clearances.append(value)
+    if len(labels) > 1:
+        return "mixed_outcomes"
+    if clearances and min(clearances) <= 0.0 <= max(clearances):
+        return "clearance_boundary"
+    return "not_observed"
+
+
+def _campaign_comparison_rows(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Create conservative pair receipts; incompatible starts are never compared."""
+
+    grouped: dict[tuple[str, int | None], list[dict[str, Any]]] = {}
+    for record in records:
+        key = (str(record.get("scenario_id") or "unknown"), _int_or_none(record.get("seed")))
+        grouped.setdefault(key, []).append(record)
+    rows: list[dict[str, Any]] = []
+    for key, group in sorted(
+        grouped.items(), key=lambda item: (item[0][0], item[0][1] is None, item[0][1] or 0)
+    ):
+        ordered = sorted(
+            group, key=lambda row: (str(row.get("algo") or ""), str(row.get("episode_id") or ""))
+        )
+        for left, right in combinations(ordered, 2):
+            if str(left.get("algo") or "") == str(right.get("algo") or ""):
+                continue
+            compatible, reason = _comparison_compatibility(left, right)
+            deltas = _comparison_deltas(left, right) if compatible else {}
+            rows.append(
+                {
+                    "comparison_id": f"{left.get('episode_id')}__{right.get('episode_id')}",
+                    "left_episode_id": str(left.get("episode_id") or ""),
+                    "right_episode_id": str(right.get("episode_id") or ""),
+                    "compatibility_status": "compatible" if compatible else "incompatible",
+                    "reason": None if compatible else reason,
+                    "outcome_delta": deltas.get("outcome_delta"),
+                    "clearance_delta_m": deltas.get("clearance_delta_m"),
+                    "event_time_shift_s": deltas.get("event_time_shift_s"),
+                    "trajectory_separation_m": deltas.get("trajectory_separation_m"),
+                    "control_sequence_difference": deltas.get("control_sequence_difference"),
+                    "progress_delta_m": deltas.get("progress_delta_m"),
+                    "shared_prefix": False,
+                }
+            )
+    return rows
+
+
+def _comparison_compatibility(
+    left: Mapping[str, Any], right: Mapping[str, Any]
+) -> tuple[bool, str]:
+    """Check the receipts required before deriving pair deltas."""
+
+    left_trace = _analysis_trace(left)
+    right_trace = _analysis_trace(right)
+    if left_trace is None or right_trace is None:
+        return False, "analysis_trace_unavailable"
+    left_config = _string_or_none(left.get("config_hash")) or _string_or_none(
+        left_trace.get("config_hash")
+    )
+    right_config = _string_or_none(right.get("config_hash")) or _string_or_none(
+        right_trace.get("config_hash")
+    )
+    if left_config is None or right_config is None or left_config != right_config:
+        return False, "config_digest_mismatch"
+    left_start = _trace_start_signature(left_trace)
+    right_start = _trace_start_signature(right_trace)
+    if left_start is None or right_start is None or not _close_nested(left_start, right_start):
+        return False, "initial_state_mismatch"
+    return True, ""
+
+
+def _comparison_deltas(
+    left: Mapping[str, Any], right: Mapping[str, Any]
+) -> dict[str, float | None]:
+    """Derive absolute-time, index-aligned deltas without time warping."""
+
+    left_trace = _analysis_trace(left)
+    right_trace = _analysis_trace(right)
+    if left_trace is None or right_trace is None:
+        return {}
+    left_metrics = _trace_comparison_metrics(left, left_trace)
+    right_metrics = _trace_comparison_metrics(right, right_trace)
+    aligned = _aligned_trace_pairs(left_trace, right_trace)
+    trajectory = None
+    control = None
+    if aligned:
+        trajectory = sum(
+            math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1])) for a, b in aligned
+        ) / len(aligned)
+        control_values = [
+            abs(float(a[2]) - float(b[2])) + abs(float(a[3]) - float(b[3]))
+            for a, b in aligned
+            if a[2] is not None and a[3] is not None and b[2] is not None and b[3] is not None
+        ]
+        control = sum(control_values) / len(control_values) if control_values else None
+    return {
+        "outcome_delta": _outcome_number(right) - _outcome_number(left),
+        "clearance_delta_m": _difference(
+            right_metrics.get("clearance"), left_metrics.get("clearance")
+        ),
+        "event_time_shift_s": _difference(
+            right_metrics.get("event_time"), left_metrics.get("event_time")
+        ),
+        "trajectory_separation_m": trajectory,
+        "control_sequence_difference": control,
+        "progress_delta_m": _difference(
+            right_metrics.get("progress"), left_metrics.get("progress")
+        ),
+    }
+
+
+def _analysis_trace(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Return the complete analysis trace when present."""
+
+    metadata = record.get("algorithm_metadata")
+    trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+    coverage = record.get("trace_coverage")
+    if not isinstance(trace, Mapping) or not isinstance(trace.get("steps"), list):
+        return None
+    if isinstance(coverage, Mapping) and coverage.get("status") != "complete":
+        return None
+    return trace
+
+
+def _trace_start_signature(trace: Mapping[str, Any]) -> tuple[Any, ...] | None:
+    """Build a comparable signature for the serialized initial state."""
+
+    steps = trace.get("steps")
+    if not isinstance(steps, list) or not steps or not isinstance(steps[0], Mapping):
+        return None
+    first = steps[0]
+    robot = first.get("robot") if isinstance(first.get("robot"), Mapping) else None
+    if robot is None:
+        return None
+    position = robot.get("position") if isinstance(robot.get("position"), list) else None
+    if not isinstance(position, list) or len(position) < 2:
+        return None
+    actors = []
+    for actor in first.get("pedestrians", []) if isinstance(first.get("pedestrians"), list) else []:
+        if not isinstance(actor, Mapping):
+            return None
+        actor_position = actor.get("position") if isinstance(actor.get("position"), list) else None
+        if not isinstance(actor_position, list) or len(actor_position) < 2:
+            return None
+        actors.append(
+            (
+                str(actor.get("actor_id") or ""),
+                float(actor_position[0]),
+                float(actor_position[1]),
+                float(actor.get("radius_m") or 0.0),
+            )
+        )
+    return (
+        float(position[0]),
+        float(position[1]),
+        float(robot.get("heading") or 0.0),
+        float(robot.get("radius_m") or 0.0),
+        tuple(sorted(actors)),
+    )
+
+
+def _close_nested(left: Any, right: Any, *, tolerance: float = 1.0e-9) -> bool:
+    """Compare nested numeric signatures without accepting missing values."""
+
+    if isinstance(left, tuple) and isinstance(right, tuple):
+        return len(left) == len(right) and all(
+            _close_nested(a, b, tolerance=tolerance) for a, b in zip(left, right, strict=True)
+        )
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return (
+            math.isfinite(float(left))
+            and math.isfinite(float(right))
+            and abs(float(left) - float(right)) <= tolerance
+        )
+    return left == right
+
+
+def _aligned_trace_pairs(
+    trace_left: Mapping[str, Any], trace_right: Mapping[str, Any]
+) -> list[
+    tuple[
+        tuple[float, float, float | None, float | None],
+        tuple[float, float, float | None, float | None],
+    ]
+]:
+    """Align traces by absolute time/index; never warp or normalize duration."""
+
+    left_steps = trace_left.get("steps")
+    right_steps = trace_right.get("steps")
+    if not isinstance(left_steps, list) or not isinstance(right_steps, list):
+        return []
+    pairs = []
+    for left_step, right_step in zip(left_steps, right_steps, strict=False):
+        if not isinstance(left_step, Mapping) or not isinstance(right_step, Mapping):
+            continue
+        left_time = _float_or_none(left_step.get("time_s"))
+        right_time = _float_or_none(right_step.get("time_s"))
+        if left_time is None or right_time is None or abs(left_time - right_time) > 1.0e-9:
+            continue
+        left_robot = left_step.get("robot") if isinstance(left_step.get("robot"), Mapping) else {}
+        right_robot = (
+            right_step.get("robot") if isinstance(right_step.get("robot"), Mapping) else {}
+        )
+        left_position = (
+            left_robot.get("position") if isinstance(left_robot.get("position"), list) else []
+        )
+        right_position = (
+            right_robot.get("position") if isinstance(right_robot.get("position"), list) else []
+        )
+        if len(left_position) < 2 or len(right_position) < 2:
+            continue
+        left_controls = (
+            left_step.get("controls") if isinstance(left_step.get("controls"), Mapping) else {}
+        )
+        right_controls = (
+            right_step.get("controls") if isinstance(right_step.get("controls"), Mapping) else {}
+        )
+        left_control = (
+            left_controls.get("applied")
+            if isinstance(left_controls.get("applied"), Mapping)
+            else {}
+        )
+        right_control = (
+            right_controls.get("applied")
+            if isinstance(right_controls.get("applied"), Mapping)
+            else {}
+        )
+        pairs.append(
+            (
+                (
+                    float(left_position[0]),
+                    float(left_position[1]),
+                    _float_or_none(left_control.get("linear_m_s")),
+                    _float_or_none(left_control.get("turn_rate_rad_s")),
+                ),
+                (
+                    float(right_position[0]),
+                    float(right_position[1]),
+                    _float_or_none(right_control.get("linear_m_s")),
+                    _float_or_none(right_control.get("turn_rate_rad_s")),
+                ),
+            )
+        )
+    return pairs
+
+
+def _trace_comparison_metrics(
+    record: Mapping[str, Any], trace: Mapping[str, Any]
+) -> dict[str, float | None]:
+    """Compute pairwise scalar metrics from one complete trace."""
+
+    features = _campaign_feature_rows(
+        record, str(record.get("episode_id") or ""), trace.get("steps"), {"status": "complete"}
+    )
+    values = {str(row["feature_name"]): row.get("value_number") for row in features}
+    return {
+        "clearance": _float_or_none(values.get("surface_clearance_min")),
+        "progress": _float_or_none(values.get("progress")),
+        "event_time": _float_or_none(values.get("event_time")),
+    }
+
+
+def _difference(right: float | None, left: float | None) -> float | None:
+    """Subtract two values only when both are observed."""
+
+    return None if right is None or left is None else float(right) - float(left)
+
+
+def _outcome_number(record: Mapping[str, Any]) -> float:
+    """Map terminal outcomes to a descriptive numeric delta."""
+
+    outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
+    if outcome.get("success") is True or outcome.get("route_complete") is True:
+        return 1.0
+    if outcome.get("collision") is True:
+        return -1.0
+    return 0.0
 
 
 def _load_pyarrow() -> tuple[Any, Any]:
@@ -349,6 +1434,72 @@ def _float_or_none(value: Any) -> float | None:
     if isinstance(value, int | float):
         return float(value)
     return None
+
+
+def _mapping_number(mapping: Mapping[str, Any], *keys: str) -> float | None:
+    """Return the first finite numeric value from a mapping."""
+
+    for key in keys:
+        value = _float_or_none(mapping.get(key))
+        if value is not None and math.isfinite(value):
+            return value
+    return None
+
+
+def _trace_path_length(trace_steps: Any) -> float | None:
+    """Compute absolute robot path length from consecutive recorded states."""
+
+    positions: list[tuple[float, float]] = []
+    if not isinstance(trace_steps, list):
+        return None
+    for step in trace_steps:
+        robot = (
+            step.get("robot")
+            if isinstance(step, Mapping) and isinstance(step.get("robot"), Mapping)
+            else {}
+        )
+        position = robot.get("position") if isinstance(robot.get("position"), list) else []
+        if len(position) >= 2 and all(isinstance(value, (int, float)) for value in position[:2]):
+            positions.append((float(position[0]), float(position[1])))
+    if len(positions) < 2:
+        return 0.0 if positions else None
+    return sum(
+        math.hypot(after[0] - before[0], after[1] - before[1])
+        for before, after in pairwise(positions)
+    )
+
+
+def _first_trace_event_time(record: Mapping[str, Any], trace_steps: Any) -> float | None:
+    """Return the earliest observed safety/event time without inferring one."""
+
+    candidates: list[float] = []
+    trace = (
+        record.get("algorithm_metadata", {}).get("analysis_trace")
+        if isinstance(record.get("algorithm_metadata"), Mapping)
+        else None
+    )
+    events = trace.get("events") if isinstance(trace, Mapping) else None
+    if isinstance(events, list):
+        for event in events:
+            if isinstance(event, Mapping):
+                value = _float_or_none(event.get("time_s"))
+                if value is not None and math.isfinite(value):
+                    candidates.append(value)
+    if isinstance(trace_steps, list):
+        for step in trace_steps:
+            if (
+                isinstance(step, Mapping)
+                and isinstance(step.get("events"), list)
+                and step["events"]
+            ):
+                value = _float_or_none(step.get("time_s"))
+                if value is not None and math.isfinite(value):
+                    candidates.append(value)
+    metric_mapping = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
+    metric_time = _mapping_number(metric_mapping, "event_time", "first_collision_time")
+    if metric_time is not None:
+        candidates.append(metric_time)
+    return min(candidates) if candidates else None
 
 
 def _string_or_none(value: Any) -> str | None:

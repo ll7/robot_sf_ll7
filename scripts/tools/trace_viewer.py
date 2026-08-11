@@ -29,6 +29,7 @@ project dependency change.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import re
@@ -346,6 +347,127 @@ def prepared_episode_dirs(
             adapter.build_bundle(episodes_jsonl, seed, bundle_dir)
             adapted_dirs.append(bundle_dir)
         yield adapted_dirs
+
+
+@contextmanager
+def prepared_package_dirs(
+    package: Path,
+    *,
+    case_id: str | None,
+) -> Iterator[list[Path]]:
+    """Adapt a case-workbench package into the existing viewer bundle contract."""
+
+    proposal_path = package / "proposal.json"
+    if not proposal_path.is_file():
+        raise TraceViewerError(f"case-workbench package has no proposal.json: {package}")
+    proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+    all_cases = [case for case in proposal.get("portfolio", []) if isinstance(case, dict)]
+    cases = all_cases
+    if case_id:
+        selected = next(
+            (case for case in all_cases if str(case.get("case_id")) == str(case_id)), None
+        )
+        if selected is None:
+            cases = []
+        else:
+            pair_ids = selected.get("comparison_pair_ids")
+            if isinstance(pair_ids, list) and pair_ids:
+                pair_id_set = {str(value) for value in pair_ids}
+                cases = [case for case in all_cases if str(case.get("case_id")) in pair_id_set]
+            else:
+                cases = [selected]
+    if not cases:
+        raise TraceViewerError(f"case-workbench package has no case {case_id or '<any>'}")
+    with tempfile.TemporaryDirectory(prefix="robot_sf_trace_viewer_package_") as temp_dir:
+        root = Path(temp_dir)
+        dirs: list[Path] = []
+        for label, case in zip(("A", "B"), cases[:2], strict=False):
+            trace = case.get("trace")
+            if not isinstance(trace, dict) or not isinstance(trace.get("steps"), list):
+                raise TraceViewerError(f"case {case.get('case_id')} has no analysis trace")
+            bundle = root / f"episode_{label}"
+            bundle.mkdir(parents=True, exist_ok=True)
+            frames = [frame for frame in trace["steps"] if isinstance(frame, dict)]
+            derived_rows = _package_derived_rows(frames)
+            metadata = {
+                "schema_version": "case-workbench-viewer-input.v1",
+                "scenario_id": case.get("scenario_id") or trace.get("scenario_id"),
+                "seed": case.get("seed"),
+                "planner": case.get("planner") or trace.get("planner"),
+                "git_commit": trace.get("git_hash"),
+                "episode_status": case.get("outcome", {}).get("label", "unknown"),
+                "summary": {
+                    "scenario_id": case.get("scenario_id"),
+                    "episode_status": case.get("outcome", {}).get("label", "unknown"),
+                },
+                "coordinate_frame": trace.get("coordinate_frame", "world"),
+                "shared_prefix": False,
+            }
+            trace_series = {
+                "schema_version": "case-workbench-viewer-input.v1",
+                "metadata": metadata,
+                "frames": frames,
+                "derived_rows": derived_rows,
+                "review_marker": "AI-GENERATED",
+            }
+            (bundle / "trace_series.json").write_text(
+                json.dumps(trace_series, indent=2, sort_keys=True), encoding="utf-8"
+            )
+            metadata_json = dict(metadata)
+            metadata_json["review_marker"] = "AI-GENERATED"
+            (bundle / "metadata.json").write_text(
+                json.dumps(metadata_json, indent=2, sort_keys=True), encoding="utf-8"
+            )
+            dirs.append(bundle)
+        yield dirs
+
+
+def _package_derived_rows(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Derive only the legacy viewer columns from package trace fields."""
+
+    rows: list[dict[str, Any]] = []
+    for frame in frames:
+        robot = frame.get("robot") if isinstance(frame.get("robot"), dict) else {}
+        robot_pos = (
+            robot.get("position") if isinstance(robot.get("position"), list) else [None, None]
+        )
+        distances: list[tuple[float, str]] = []
+        for index, actor in enumerate(
+            frame.get("pedestrians", []) if isinstance(frame.get("pedestrians"), list) else []
+        ):
+            if not isinstance(actor, dict):
+                continue
+            pos = actor.get("position") if isinstance(actor.get("position"), list) else []
+            if (
+                len(pos) < 2
+                or len(robot_pos) < 2
+                or not all(isinstance(v, (int, float)) for v in [*pos[:2], *robot_pos[:2]])
+            ):
+                continue
+            distance = math.hypot(
+                float(pos[0]) - float(robot_pos[0]), float(pos[1]) - float(robot_pos[1])
+            )
+            distances.append((distance, str(actor.get("actor_id") or actor.get("id") or index)))
+        nearest = min(distances, default=(None, None))
+        velocity = robot.get("velocity") if isinstance(robot.get("velocity"), list) else []
+        rows.append(
+            {
+                "step": frame.get("step"),
+                "time_s": frame.get("time_s"),
+                "robot_x_m": robot_pos[0] if len(robot_pos) > 0 else None,
+                "robot_y_m": robot_pos[1] if len(robot_pos) > 1 else None,
+                "robot_heading_rad": robot.get("heading"),
+                "executed_speed_m_s": math.hypot(float(velocity[0]), float(velocity[1]))
+                if len(velocity) >= 2 and all(isinstance(v, (int, float)) for v in velocity[:2])
+                else None,
+                "min_robot_ped_distance_m": nearest[0],
+                "nearest_pedestrian_id": nearest[1],
+                "pedestrian_count": len(frame.get("pedestrians", []))
+                if isinstance(frame.get("pedestrians"), list)
+                else 0,
+            }
+        )
+    return rows
 
 
 def select_focal_pedestrians(cases: Sequence[EpisodeCase]) -> FocalSelection:
@@ -1013,6 +1135,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--package",
+        type=Path,
+        help="case-workbench package produced by robot_sf_bench analyze-cases",
+    )
+    parser.add_argument(
+        "--case-id",
+        default=None,
+        help="Optional case id to select from --package",
+    )
+    parser.add_argument(
         "--seed",
         action="append",
         default=[],
@@ -1032,16 +1164,26 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     """Run the trace-viewer CLI."""
     args = _build_parser().parse_args(argv)
     try:
+        if args.package is not None:
+            if args.bundle_dirs or args.episodes_jsonl is not None or args.seed:
+                raise TraceViewerError(
+                    "--package is mutually exclusive with bundle and JSONL inputs"
+                )
+            bundle_context = prepared_package_dirs(args.package.resolve(), case_id=args.case_id)
+        else:
+            if args.case_id is not None:
+                raise TraceViewerError("--case-id requires --package")
+            bundle_context = prepared_episode_dirs(
+                bundle_dirs=args.bundle_dirs,
+                episodes_jsonl=args.episodes_jsonl,
+                seeds=args.seed,
+            )
         rr, rrb = _import_rerun()
-        with prepared_episode_dirs(
-            bundle_dirs=args.bundle_dirs,
-            episodes_jsonl=args.episodes_jsonl,
-            seeds=args.seed,
-        ) as bundle_dirs:
+        with bundle_context as bundle_dirs:
             cases = load_episode_bundles(bundle_dirs)
             recording = rr.RecordingStream(APPLICATION_ID)
             server_guard = _configure_recording_sink(

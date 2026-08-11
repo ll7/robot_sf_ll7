@@ -26,17 +26,20 @@ from robot_sf.benchmark.pedestrian_realism_validation import (
     RealismScorecard,
     RealismStagedDatasetReference,
     RealismTrackPair,
+    build_dataset_scorecard,
     build_track_reconstruction_plan,
     fundamental_diagram_comparison,
     lane_formation_comparison,
     lane_formation_score_curve,
     match_tracks,
+    proxemic_distribution_distance,
     render_scorecard_markdown,
     resample_track,
     run_realism_validation,
     run_realism_validation_from_staged_dataset,
     run_realism_validation_from_track_set,
     speed_density_points,
+    speed_distribution_distance,
     trajectory_rmse,
     write_realism_scorecard,
 )
@@ -879,3 +882,372 @@ def _gridded_real(track_set: EthUcyTrackSet) -> tuple[np.ndarray, np.ndarray]:
     )
 
     return grid(track_set, RealismMetricConfig())
+
+
+# --------------------------------------------------------------------------- #
+# Speed-distribution distance (issue #6774)
+# --------------------------------------------------------------------------- #
+
+_SPEED_VEL_3x2 = np.asarray(
+    [
+        [[1.0, 0.0], [0.0, 1.0]],
+        [[2.0, 0.0], [0.0, 2.0]],
+        [[3.0, 0.0], [0.0, 3.0]],
+    ],
+    dtype=float,
+)
+
+
+def test_speed_distribution_distance_zero_for_identical_inputs() -> None:
+    """Identical velocity arrays produce distance approximately zero."""
+
+    result = speed_distribution_distance(_SPEED_VEL_3x2, _SPEED_VEL_3x2)
+
+    assert result["status"] == "ok"
+    assert result["distance"] == pytest.approx(0.0, abs=1e-9)
+    assert result["sim_sample_count"] == 6
+    assert result["real_sample_count"] == 6
+    assert result["units"] == "m/s"
+    assert result["evidence_status"] == "diagnostic-only"
+
+
+def test_speed_distribution_distance_known_shift() -> None:
+    """A constant velocity shift produces the known Wasserstein distance."""
+
+    sim = np.zeros((2, 2, 2), dtype=float)
+    sim[:, :, 0] = 1.0  # speed 1.0 for all pedestrians
+    real = np.zeros((2, 2, 2), dtype=float)
+    real[:, :, 0] = 2.0  # speed 2.0 for all pedestrians
+
+    result = speed_distribution_distance(sim, real)
+
+    assert result["status"] == "ok"
+    assert result["distance"] == pytest.approx(1.0, abs=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("shape", "expected_count"),
+    [
+        ((1, 1, 2), 1),
+        ((3, 2, 2), 6),
+        ((2, 4, 2), 8),
+    ],
+)
+def test_speed_distribution_distance_sample_count_matches_shape(
+    shape: tuple[int, int, int], expected_count: int
+) -> None:
+    """Speed sample count equals T * K for a (T, K, 2) velocity array."""
+
+    vel = np.ones(shape, dtype=float)
+    result = speed_distribution_distance(vel, vel)
+
+    assert result["sim_sample_count"] == expected_count
+    assert result["real_sample_count"] == expected_count
+
+
+def test_speed_distribution_distance_excludes_nonfinite() -> None:
+    """Non-finite velocity entries are excluded and counted."""
+
+    vel = np.ones((2, 2, 2), dtype=float)
+    vel[0, 0, 0] = np.nan
+    vel[1, 1, 1] = np.inf
+    result = speed_distribution_distance(vel, vel)
+
+    assert result["status"] == "ok"
+    assert result["excluded_nonfinite_count"] == 4  # 2 non-finite in sim + 2 in real (same array)
+    assert result["sim_sample_count"] == 2  # 4 total - 2 non-finite norms
+
+
+def test_speed_distribution_distance_empty_when_all_nonfinite() -> None:
+    """A fully non-finite input produces empty status with controlled reason."""
+
+    vel = np.full((2, 2, 2), np.nan, dtype=float)
+    result = speed_distribution_distance(vel, vel)
+
+    assert result["status"] == "empty"
+    assert result["distance"] is None
+    assert "no finite speed samples" in result["empty_reason"]
+
+
+def test_speed_distribution_distance_preserves_available_arm_count() -> None:
+    """An empty reference arm does not erase finite simulation samples."""
+
+    sim = np.ones((1, 2, 2), dtype=float)
+    real = np.full((1, 2, 2), np.nan, dtype=float)
+    result = speed_distribution_distance(sim, real)
+
+    assert result["status"] == "empty"
+    assert result["sim_sample_count"] == 2
+    assert result["real_sample_count"] == 0
+
+
+def test_speed_distribution_distance_no_mutation() -> None:
+    """Input velocity arrays are not mutated by the function."""
+
+    vel = _SPEED_VEL_3x2.copy()
+    original = vel.copy()
+    speed_distribution_distance(vel, vel)
+
+    np.testing.assert_array_equal(vel, original)
+
+
+def test_speed_distribution_distance_statistics() -> None:
+    """Arm statistics include mean, std, quantiles, and count."""
+
+    vel = np.zeros((3, 1, 2), dtype=float)
+    vel[:, 0, 0] = [1.0, 2.0, 3.0]
+    result = speed_distribution_distance(vel, vel)
+
+    assert result["status"] == "ok"
+    stats = result["sim"]
+    assert stats["count"] == 3
+    assert stats["mean"] == pytest.approx(2.0, abs=1e-9)
+    assert stats["std"] == pytest.approx(np.std([1.0, 2.0, 3.0]), abs=1e-9)
+    assert stats["quantile_050"] == pytest.approx(2.0, abs=1e-9)
+
+
+def test_speed_distribution_distance_rejects_wrong_shape() -> None:
+    """A velocity array with wrong shape raises ValueError."""
+
+    with pytest.raises(ValueError, match="shape"):
+        speed_distribution_distance(np.ones((3, 2)), np.ones((3, 2)))
+
+
+# --------------------------------------------------------------------------- #
+# Proxemic-distribution distance (issue #6774)
+# --------------------------------------------------------------------------- #
+
+
+def test_proxemic_distribution_distance_zero_for_identical_inputs() -> None:
+    """Identical position arrays produce distance approximately zero."""
+
+    pos = np.asarray(
+        [
+            [[0.0, 0.0], [1.0, 0.0]],
+            [[0.0, 1.0], [1.0, 1.0]],
+        ],
+        dtype=float,
+    )
+    result = proxemic_distribution_distance(pos, pos)
+
+    assert result["status"] == "ok"
+    assert result["distance"] == pytest.approx(0.0, abs=1e-9)
+    assert result["units"] == "m"
+    assert result["evidence_status"] == "diagnostic-only"
+
+
+def test_proxemic_distribution_distance_known_shift() -> None:
+    """Shifting all real positions by a constant offset changes pairwise distances."""
+
+    sim = np.asarray(
+        [
+            [[0.0, 0.0], [3.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    real = np.asarray(
+        [
+            [[0.0, 0.0], [4.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    result = proxemic_distribution_distance(sim, real)
+
+    assert result["status"] == "ok"
+    assert result["distance"] == pytest.approx(1.0, abs=1e-9)
+
+
+def test_proxemic_pair_enumeration_excludes_diagonal() -> None:
+    """For K pedestrians in a frame, K*(K-1)/2 unordered pairs are counted."""
+
+    # 3 pedestrians at distinct positions in 1 frame => 3 pairs
+    pos = np.asarray(
+        [
+            [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        ],
+        dtype=float,
+    )
+    result = proxemic_distribution_distance(pos, pos)
+
+    assert result["status"] == "ok"
+    assert result["sim_sample_count"] == 3  # C(3,2) = 3
+
+
+def test_proxemic_preserves_coincident_zero_distance() -> None:
+    """Coincident distinct pedestrians produce a zero-distance pair sample."""
+
+    pos = np.asarray(
+        [
+            [[0.0, 0.0], [0.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    result = proxemic_distribution_distance(pos, pos)
+
+    assert result["status"] == "ok"
+    assert result["distance"] == pytest.approx(0.0, abs=1e-9)
+    assert result["sim_sample_count"] == 1
+
+
+def test_proxemic_skips_frames_with_fewer_than_two_observed() -> None:
+    """Frames with fewer than two observed pedestrians contribute no pairs."""
+
+    pos = np.asarray(
+        [
+            [[0.0, 0.0], [np.nan, np.nan]],  # only 1 observed => skip
+            [[0.0, 0.0], [1.0, 0.0]],  # 2 observed => 1 pair
+        ],
+        dtype=float,
+    )
+    result = proxemic_distribution_distance(pos, pos)
+
+    assert result["status"] == "ok"
+    assert result["sim_sample_count"] == 1
+
+
+def test_proxemic_distribution_distance_empty_when_single_pedestrian() -> None:
+    """Fewer than two pedestrians in every frame yields empty proxemic result."""
+
+    pos = np.ones((3, 1, 2), dtype=float)
+    result = proxemic_distribution_distance(pos, pos)
+
+    assert result["status"] == "empty"
+    assert result["distance"] is None
+    assert "fewer than two finite pedestrians" in result["empty_reason"]
+
+
+def test_proxemic_distribution_distance_excludes_nonfinite() -> None:
+    """Non-finite position entries are excluded and counted."""
+
+    pos = np.asarray(
+        [
+            [[0.0, 0.0], [1.0, 0.0]],
+            [[0.0, 0.0], [1.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    pos[0, 0, 0] = np.nan
+    result = proxemic_distribution_distance(pos, pos)
+
+    # The same invalid pedestrian-frame observation is excluded once per arm.
+    assert result["excluded_nonfinite_count"] == 2
+
+
+def test_proxemic_distribution_distance_no_mutation() -> None:
+    """Input position arrays are not mutated by the function."""
+
+    pos = np.asarray(
+        [
+            [[0.0, 0.0], [1.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    original = pos.copy()
+    proxemic_distribution_distance(pos, pos)
+
+    np.testing.assert_array_equal(pos, original)
+
+
+def test_proxemic_distribution_distance_rejects_wrong_shape() -> None:
+    """A position array with wrong shape raises ValueError."""
+
+    with pytest.raises(ValueError, match="shape"):
+        proxemic_distribution_distance(np.ones((3, 2)), np.ones((3, 2)))
+
+
+def test_proxemic_distribution_distance_multi_frame_sum() -> None:
+    """Multi-frame arrays sum pairs across all frames."""
+
+    # 2 frames, 2 pedestrians each => 2 frames * C(2,2) = 2 pairs
+    pos = np.asarray(
+        [
+            [[0.0, 0.0], [1.0, 0.0]],
+            [[0.0, 0.0], [2.0, 0.0]],
+        ],
+        dtype=float,
+    )
+    result = proxemic_distribution_distance(pos, pos)
+
+    assert result["status"] == "ok"
+    assert result["sim_sample_count"] == 2
+
+
+# --------------------------------------------------------------------------- #
+# Scorecard compatibility (issue #6774)
+# --------------------------------------------------------------------------- #
+
+
+def test_scorecard_includes_distribution_metrics_when_crowds_available() -> None:
+    """Scorecard includes speed/proxemic distribution fields when both arms present."""
+
+    pos, vel = _crowd(steps=4, k=3, speed=1.0, lateral=np.linspace(0.0, 1.0, 3))
+    scorecard = run_realism_validation(
+        dataset_id="synthetic/dist_diag",
+        crowds=RealismCrowdInputs(
+            sim_positions=pos,
+            sim_velocities=vel,
+            real_positions=pos,
+            real_velocities=vel,
+        ),
+        reference_source="synthetic self-consistency",
+    )
+
+    assert scorecard.status == "ok"
+    assert "speed_distribution_distance" in scorecard.metrics
+    assert "proxemic_distribution_distance" in scorecard.metrics
+    sd = scorecard.metrics["speed_distribution_distance"]
+    assert sd["status"] == "ok"
+    assert sd["distance"] == pytest.approx(0.0, abs=1e-9)
+    pd = scorecard.metrics["proxemic_distribution_distance"]
+    assert pd["status"] == "ok"
+    assert pd["distance"] == pytest.approx(0.0, abs=1e-9)
+    markdown = render_scorecard_markdown(scorecard)
+    assert "Speed-Distribution Distance" in markdown
+    assert "Proxemic-Distribution Distance" in markdown
+
+
+def test_scorecard_omits_distribution_metrics_when_crowds_absent() -> None:
+    """Scorecard omits distribution metrics when crowd arrays are not provided."""
+
+    pair = _line_track(0, (0.0, 1.0))
+    scorecard = run_realism_validation(
+        dataset_id="synthetic/no_crowds",
+        rmse_pairs=[pair],
+        reference_source="synthetic",
+    )
+
+    assert scorecard.status == "ok"
+    assert "speed_distribution_distance" not in scorecard.metrics
+    assert "proxemic_distribution_distance" not in scorecard.metrics
+
+
+def test_build_dataset_scorecard_adds_distribution_only_when_ok() -> None:
+    """build_dataset_scorecard adds distribution fields only when status is ok."""
+
+    sd_ok = {"metric_id": "speed_distribution_distance", "status": "ok", "distance": 0.5}
+    pd_ok = {"metric_id": "proxemic_distribution_distance", "status": "ok", "distance": 0.3}
+    sd_empty = {"metric_id": "speed_distribution_distance", "status": "empty"}
+
+    sc = build_dataset_scorecard(
+        dataset_id="test",
+        config=RealismMetricConfig(),
+        rmse_metrics=None,
+        fundamental_diagram=None,
+        lane_formation=None,
+        reference_source="test",
+        speed_distribution=sd_ok,
+        proxemic_distribution=pd_ok,
+    )
+    assert "speed_distribution_distance" in sc.metrics
+    assert "proxemic_distribution_distance" in sc.metrics
+
+    sc2 = build_dataset_scorecard(
+        dataset_id="test",
+        config=RealismMetricConfig(),
+        rmse_metrics=None,
+        fundamental_diagram=None,
+        lane_formation=None,
+        reference_source="test",
+        speed_distribution=sd_empty,
+    )
+    assert sc2.metrics["speed_distribution_distance"]["status"] == "empty"

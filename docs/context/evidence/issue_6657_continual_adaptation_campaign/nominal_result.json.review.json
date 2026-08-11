@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_6657_continual_adaptation_campaign/nominal_result.json",
+  "artifact_sha256": "be75bf0d30953b10c537204940bd53e33f20fe9b8ba93772f653d639a18acdc4",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

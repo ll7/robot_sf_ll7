@@ -27,6 +27,7 @@ arms:
       objective_proxy: maximize_residual_magnitude
       grid_points_per_dim: 3
       max_candidates: 9
+      seed: 42
     residual_adversary:
       is_active: true
       macro_action_dt_s: 0.5
@@ -36,8 +37,9 @@ arms:
       max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
       max_route_deviation_m: 1.5
       min_separation_m: 0.6
-      target_ped_idx: [0]
+      target_ped_idx: [0]  # deliberate single-target matched-cost choice; see note
       obstacle_projection_margin_m: 0.1
+      seed: 42
   reactive:
     label: residual_search_reactive
     description: >
@@ -49,6 +51,7 @@ arms:
       objective_proxy: maximize_residual_magnitude
       grid_points_per_dim: 3
       max_candidates: 9
+      seed: 42
     residual_adversary:
       is_active: true
       macro_action_dt_s: 0.5
@@ -58,17 +61,20 @@ arms:
       max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
       max_route_deviation_m: 1.5
       min_separation_m: 0.6
-      target_ped_idx: [0]
+      target_ped_idx: [0]  # deliberate single-target matched-cost choice; see note
       obstacle_projection_margin_m: 0.1
+      seed: 42
 scenario:
   template: configs/scenarios/templates/crossing_ttc.yaml
+  template_id: crossing_ttc_template
+  template_seed: 123
   search_space: configs/adversarial/crossing_ttc_space.yaml
-  scenario_ids:
-    - crossing_ttc_low
-    - crossing_ttc_medium
   description: >
-    Frozen crossing/TTC scenario family inherited from the parent #4360
-    dispatchable inventory.  Scenario IDs are frozen for this packet.
+    Frozen crossing/TTC scenario family defined by the checked-in template
+    (crossing_ttc_template, seed 123) and search space from issue #6911 /
+    #4360.  The template produces a single scenario identity; the search
+    space defines the adversary's parameterisation bounds.  No generated
+    manifest is claimed.
 simulation:
   dt_s: 0.1
   physics_steps_per_macro_action: 5
@@ -77,12 +83,17 @@ simulation:
     Fixed timestep and episode length.  0.1 s physics step, 5 steps per
     0.5 s macro-action, 50 total steps (5.0 s episode).
 budget:
-  total_candidate_evaluations: 9
-  per_arm_candidate_evaluations: 9
+  macro_actions_per_episode: 10
+  candidates_per_macro_action_per_arm: 9
+  candidates_per_arm_per_episode: 90
+  total_candidates_all_arms_per_episode: 180
   description: >
-    Matched compute budget: each arm evaluates exactly 9 candidate residual
-    proposals per macro-action boundary.  The budget is not vacuous — it
-    equals grid_points_per_dim ** 2 for the 2-D residual action space.
+    Matched compute budget derived from simulation geometry: 50 total sim
+    steps divided by 5 physics steps per macro-action gives 10 macro-actions
+    per episode.  Each arm evaluates 9 candidate residual proposals per
+    macro-action boundary (grid_points_per_dim ** 2 = 3 ** 2 for the 2-D
+    residual action space).  Per-arm episode total is 10 * 9 = 90.
+    All-arms episode total is 90 * 2 = 180.
 seeds:
   frozen_scenario_seeds:
     - 1101
@@ -93,7 +104,9 @@ seeds:
   description: >
     Frozen seed set for reproducibility.  Scenario seeds control pedestrian
     initialisation; search and adversary seeds control the deterministic
-    grid-search enumeration and residual policy state.
+    grid-search enumeration and residual policy state.  Both arms'
+    residual_search.seed and residual_adversary.seed are set to 42, matching
+    these packet-level seed values.
 bounds_identity:
   residual_bounds:
     max_residual_accel_mps2: 1.5
@@ -107,15 +120,24 @@ bounds_identity:
     Hard residual bounds are identical across both arms.  The objective proxy
     is the same diagnostic magnitude proxy.  Bounds and objective are frozen
     and must not be relaxed without a new packet version.
+target_ped_idx_note: >
+  Both arms set target_ped_idx to [0] (single-target matched-cost choice).
+  This deliberately differs from the upstream issue_4360_residual_adversary
+  example which uses -1 (all-target).  The single-target setting ensures
+  both arms perturb exactly one pedestrian, making the comparison cost
+  matched per targeted agent.
 provenance:
   parent_issue: 4360
+  scenario_template: configs/scenarios/templates/crossing_ttc.yaml
   residual_search_config: configs/adversarial/issue_6911_residual_search.yaml
   residual_adversary_config: configs/adversarial/issue_4360_residual_adversary.yaml
+  search_space: configs/adversarial/crossing_ttc_space.yaml
   dispatchable_inventory: configs/adversarial/issue_4360_dispatchable_repro_seeds.yaml
   description: >
-    This packet reuses the residual-search config (issue #6911) and the
-    residual-adversary config (issue #4360) without introducing new runtime
-    modules or optimizer integrations.
+    This packet reuses the scenario template (crossing_ttc_template, seed 123),
+    the residual-search config (issue #6911), the residual-adversary config
+    (issue #4360), and the search space without introducing new runtime modules
+    or optimizer integrations.
 explicit_exclusions:
   benchmark_execution: forbidden_until_domain_approval
   slurm_campaign: forbidden_until_domain_approval

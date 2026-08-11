@@ -1,9 +1,11 @@
 """Focused contract tests for the matched-budget comparison packet (#6921).
 
 These tests verify the versioned comparison packet is well-formed: required
-fields are present, the budget mapping is non-vacuous, no residual bounds or
-benchmark claim boundary are relaxed, exclusions are complete, and the
-domain-approval gate is present.
+fields are present, the budget arithmetic is consistent and derived from
+simulation geometry, no residual bounds or benchmark claim boundary are
+relaxed, exclusions are complete, provenance paths resolve, both arms'
+max-candidates match the budget, arm budgets are equal, seeds are frozen
+and match across arms, and the domain-approval gate is present.
 
 This is a diagnostic-only specification slice: it makes no benchmark, metric,
 planner-ranking, safety, or paper-facing claim and runs no campaign.
@@ -19,12 +21,8 @@ import yaml
 from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
 from robot_sf.ped_npc.residual_search import ResidualSearchConfig
 
-PACKET_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "configs"
-    / "adversarial"
-    / "issue_6921_matched_compute_packet.yaml"
-)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PACKET_PATH = REPO_ROOT / "configs" / "adversarial" / "issue_6921_matched_compute_packet.yaml"
 
 
 @pytest.fixture()
@@ -71,10 +69,13 @@ def test_packet_has_arms(packet: dict) -> None:
 
 
 def test_packet_has_scenario(packet: dict) -> None:
-    """Scenario section must be present."""
+    """Scenario section must reference the checked-in template."""
     assert "scenario" in packet
     assert "template" in packet["scenario"]
-    assert "scenario_ids" in packet["scenario"]
+    assert "template_id" in packet["scenario"]
+    assert packet["scenario"]["template_id"] == "crossing_ttc_template"
+    assert "template_seed" in packet["scenario"]
+    assert packet["scenario"]["template_seed"] == 123
 
 
 def test_packet_has_simulation(packet: dict) -> None:
@@ -82,12 +83,17 @@ def test_packet_has_simulation(packet: dict) -> None:
     assert "simulation" in packet
     assert "dt_s" in packet["simulation"]
     assert "total_sim_steps" in packet["simulation"]
+    assert "physics_steps_per_macro_action" in packet["simulation"]
 
 
 def test_packet_has_budget(packet: dict) -> None:
-    """Budget section must be present."""
+    """Budget section must have explicit derived fields."""
     assert "budget" in packet
-    assert "total_candidate_evaluations" in packet["budget"]
+    budget = packet["budget"]
+    assert "macro_actions_per_episode" in budget
+    assert "candidates_per_macro_action_per_arm" in budget
+    assert "candidates_per_arm_per_episode" in budget
+    assert "total_candidates_all_arms_per_episode" in budget
 
 
 def test_packet_has_seeds(packet: dict) -> None:
@@ -95,6 +101,7 @@ def test_packet_has_seeds(packet: dict) -> None:
     assert "seeds" in packet
     assert "frozen_scenario_seeds" in packet["seeds"]
     assert "search_seed" in packet["seeds"]
+    assert "residual_adversary_seed" in packet["seeds"]
 
 
 def test_packet_has_bounds_identity(packet: dict) -> None:
@@ -127,28 +134,225 @@ def test_packet_has_validation_command(packet: dict) -> None:
     assert "pytest" in packet["validation_command"]
 
 
+def test_packet_has_target_ped_idx_note(packet: dict) -> None:
+    """A target_ped_idx_note must document the single-target choice."""
+    assert "target_ped_idx_note" in packet
+    assert "single-target" in packet["target_ped_idx_note"]
+
+
 # ---------------------------------------------------------------------------
-# Budget mapping non-vacuity
+# Budget arithmetic — derived from simulation geometry
 # ---------------------------------------------------------------------------
 
 
-def test_budget_total_is_positive(packet: dict) -> None:
-    """Total candidate evaluations must be > 0."""
-    assert packet["budget"]["total_candidate_evaluations"] > 0
+def test_budget_macro_actions_per_episode(packet: dict) -> None:
+    """Macro-actions per episode must equal total_sim_steps / physics_steps_per_macro_action."""
+    sim = packet["simulation"]
+    budget = packet["budget"]
+    expected = sim["total_sim_steps"] // sim["physics_steps_per_macro_action"]
+    assert budget["macro_actions_per_episode"] == expected
+    assert expected == 10
 
 
-def test_budget_per_arm_is_positive(packet: dict) -> None:
-    """Per-arm candidate evaluations must be > 0."""
-    assert packet["budget"]["per_arm_candidate_evaluations"] > 0
+def test_budget_candidates_per_macro_action(packet: dict) -> None:
+    """Candidates per macro-action per arm must equal grid_points_per_dim ** 2."""
+    budget = packet["budget"]
+    for arm_key in ("open_loop", "reactive"):
+        grid_pts = packet["arms"][arm_key]["residual_search"]["grid_points_per_dim"]
+        expected = grid_pts**2
+        assert budget["candidates_per_macro_action_per_arm"] == expected
+        assert expected == 9
 
 
-def test_budget_per_arm_matches_grid_resolution(packet: dict) -> None:
-    """Per-arm budget must equal grid_points_per_dim ** 2 for both arms."""
-    grid_points = packet["arms"]["open_loop"]["residual_search"]["grid_points_per_dim"]
-    expected = grid_points**2
-    assert packet["budget"]["per_arm_candidate_evaluations"] == expected
-    grid_points_reactive = packet["arms"]["reactive"]["residual_search"]["grid_points_per_dim"]
-    assert packet["budget"]["per_arm_candidate_evaluations"] == grid_points_reactive**2
+def test_budget_per_arm_episode_total(packet: dict) -> None:
+    """Per-arm episode total must equal macro_actions * candidates_per_macro_action."""
+    budget = packet["budget"]
+    expected = budget["macro_actions_per_episode"] * budget["candidates_per_macro_action_per_arm"]
+    assert budget["candidates_per_arm_per_episode"] == expected
+    assert expected == 90
+
+
+def test_budget_all_arms_episode_total(packet: dict) -> None:
+    """All-arms episode total must equal per_arm_episode_total * num_arms."""
+    budget = packet["budget"]
+    num_arms = len(packet["arms"])
+    expected = budget["candidates_per_arm_per_episode"] * num_arms
+    assert budget["total_candidates_all_arms_per_episode"] == expected
+    assert expected == 180
+
+
+def test_budget_non_vacuous(packet: dict) -> None:
+    """Budget values must all be positive."""
+    budget = packet["budget"]
+    assert budget["macro_actions_per_episode"] > 0
+    assert budget["candidates_per_macro_action_per_arm"] > 0
+    assert budget["candidates_per_arm_per_episode"] > 0
+    assert budget["total_candidates_all_arms_per_episode"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Arm budget match — max_candidates equals per-macro-action budget
+# ---------------------------------------------------------------------------
+
+
+def test_arms_max_candidates_match_budget(packet: dict) -> None:
+    """Both arms' max_candidates must equal the budget candidates_per_macro_action."""
+    budget = packet["budget"]
+    for arm_key in ("open_loop", "reactive"):
+        max_cand = packet["arms"][arm_key]["residual_search"]["max_candidates"]
+        assert max_cand == budget["candidates_per_macro_action_per_arm"], (
+            f"{arm_key} max_candidates={max_cand} != "
+            f"budget candidates_per_macro_action={budget['candidates_per_macro_action_per_arm']}"
+        )
+
+
+def test_arms_budgets_are_equal(packet: dict) -> None:
+    """Both arms must have identical max_candidates and grid_points_per_dim."""
+    ol = packet["arms"]["open_loop"]["residual_search"]
+    re = packet["arms"]["reactive"]["residual_search"]
+    assert ol["max_candidates"] == re["max_candidates"]
+    assert ol["grid_points_per_dim"] == re["grid_points_per_dim"]
+
+
+# ---------------------------------------------------------------------------
+# Seed fields — present in arms and match packet seeds
+# ---------------------------------------------------------------------------
+
+
+def test_arms_have_search_seed(packet: dict) -> None:
+    """Both arms' residual_search must carry a seed field."""
+    for arm_key in ("open_loop", "reactive"):
+        rs = packet["arms"][arm_key]["residual_search"]
+        assert "seed" in rs, f"{arm_key} residual_search missing seed"
+
+
+def test_arms_have_adversary_seed(packet: dict) -> None:
+    """Both arms' residual_adversary must carry a seed field."""
+    for arm_key in ("open_loop", "reactive"):
+        ra = packet["arms"][arm_key]["residual_adversary"]
+        assert "seed" in ra, f"{arm_key} residual_adversary missing seed"
+
+
+def test_arm_search_seeds_match_packet_seed(packet: dict) -> None:
+    """Both arms' residual_search.seed must equal the packet search_seed."""
+    packet_seed = packet["seeds"]["search_seed"]
+    for arm_key in ("open_loop", "reactive"):
+        arm_seed = packet["arms"][arm_key]["residual_search"]["seed"]
+        assert arm_seed == packet_seed, (
+            f"{arm_key} residual_search.seed={arm_seed} != packet search_seed={packet_seed}"
+        )
+
+
+def test_arm_adversary_seeds_match_packet_seed(packet: dict) -> None:
+    """Both arms' residual_adversary.seed must equal the packet residual_adversary_seed."""
+    packet_seed = packet["seeds"]["residual_adversary_seed"]
+    for arm_key in ("open_loop", "reactive"):
+        arm_seed = packet["arms"][arm_key]["residual_adversary"]["seed"]
+        assert arm_seed == packet_seed, (
+            f"{arm_key} residual_adversary.seed={arm_seed} != "
+            f"packet residual_adversary_seed={packet_seed}"
+        )
+
+
+def test_search_and_adversary_seeds_are_equal(packet: dict) -> None:
+    """Packet search_seed and residual_adversary_seed must be equal (42)."""
+    assert packet["seeds"]["search_seed"] == packet["seeds"]["residual_adversary_seed"]
+
+
+# ---------------------------------------------------------------------------
+# Provenance and template path resolution
+# ---------------------------------------------------------------------------
+
+
+def test_provenance_scenario_template_resolves(packet: dict) -> None:
+    """The provenance scenario_template path must exist on disk."""
+    rel = packet["provenance"]["scenario_template"]
+    path = REPO_ROOT / rel
+    assert path.exists(), f"Provenance scenario_template not found: {path}"
+
+
+def test_provenance_residual_search_config_resolves(packet: dict) -> None:
+    """The provenance residual_search_config path must exist on disk."""
+    rel = packet["provenance"]["residual_search_config"]
+    path = REPO_ROOT / rel
+    assert path.exists(), f"Provenance residual_search_config not found: {path}"
+
+
+def test_provenance_residual_adversary_config_resolves(packet: dict) -> None:
+    """The provenance residual_adversary_config path must exist on disk."""
+    rel = packet["provenance"]["residual_adversary_config"]
+    path = REPO_ROOT / rel
+    assert path.exists(), f"Provenance residual_adversary_config not found: {path}"
+
+
+def test_provenance_search_space_resolves(packet: dict) -> None:
+    """The provenance search_space path must exist on disk."""
+    rel = packet["provenance"]["search_space"]
+    path = REPO_ROOT / rel
+    assert path.exists(), f"Provenance search_space not found: {path}"
+
+
+def test_provenance_dispatchable_inventory_resolves(packet: dict) -> None:
+    """The provenance dispatchable_inventory path must exist on disk."""
+    rel = packet["provenance"]["dispatchable_inventory"]
+    path = REPO_ROOT / rel
+    assert path.exists(), f"Provenance dispatchable_inventory not found: {path}"
+
+
+def test_scenario_template_path_resolves(packet: dict) -> None:
+    """The scenario.template path must exist on disk."""
+    rel = packet["scenario"]["template"]
+    path = REPO_ROOT / rel
+    assert path.exists(), f"Scenario template not found: {path}"
+
+
+def test_scenario_search_space_path_resolves(packet: dict) -> None:
+    """The scenario.search_space path must exist on disk."""
+    rel = packet["scenario"]["search_space"]
+    path = REPO_ROOT / rel
+    assert path.exists(), f"Scenario search_space not found: {path}"
+
+
+def test_scenario_template_contains_template_id(packet: dict) -> None:
+    """The template YAML must define the named template_id used in the packet."""
+    rel = packet["scenario"]["template"]
+    template = yaml.safe_load((REPO_ROOT / rel).read_text(encoding="utf-8"))
+    scenario_names = [s["name"] for s in template.get("scenarios", [])]
+    assert packet["scenario"]["template_id"] in scenario_names, (
+        f"template_id {packet['scenario']['template_id']!r} not in template "
+        f"scenario names: {scenario_names}"
+    )
+
+
+def test_scenario_template_seed_matches(packet: dict) -> None:
+    """The template YAML seed must match the packet template_seed."""
+    rel = packet["scenario"]["template"]
+    template = yaml.safe_load((REPO_ROOT / rel).read_text(encoding="utf-8"))
+    template_seeds = template["scenarios"][0].get("seeds", [])
+    assert packet["scenario"]["template_seed"] in template_seeds, (
+        f"packet template_seed {packet['scenario']['template_seed']} "
+        f"not in template seeds: {template_seeds}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# target_ped_idx — deliberate single-target choice
+# ---------------------------------------------------------------------------
+
+
+def test_target_ped_idx_is_single_target(packet: dict) -> None:
+    """Both arms must use target_ped_idx [0], not the upstream -1 all-target."""
+    for arm_key in ("open_loop", "reactive"):
+        tp = packet["arms"][arm_key]["residual_adversary"]["target_ped_idx"]
+        assert tp == [0], f"{arm_key} target_ped_idx={tp}, expected [0]"
+
+
+def test_upstream_default_is_all_target() -> None:
+    """The upstream adversary config uses -1 (all-target), confirming the
+    packet's [0] is a deliberate divergence."""
+    adv_cfg_path = REPO_ROOT / "configs" / "adversarial" / "issue_4360_residual_adversary.yaml"
+    adv = yaml.safe_load(adv_cfg_path.read_text(encoding="utf-8"))
+    assert adv["residual_adversary"]["target_ped_idx"] == -1
 
 
 # ---------------------------------------------------------------------------
@@ -160,10 +364,7 @@ def test_residual_bounds_match_adversary_config(packet: dict) -> None:
     """Frozen residual bounds must match the upstream adversary config."""
     bounds = packet["bounds_identity"]["residual_bounds"]
     adversary_cfg_path = (
-        Path(__file__).resolve().parents[2]
-        / "configs"
-        / "adversarial"
-        / "issue_4360_residual_adversary.yaml"
+        REPO_ROOT / "configs" / "adversarial" / "issue_4360_residual_adversary.yaml"
     )
     adversary_payload = yaml.safe_load(adversary_cfg_path.read_text(encoding="utf-8"))
     upstream = adversary_payload["residual_adversary"]
@@ -269,10 +470,12 @@ def test_open_loop_residual_search_config_round_trip(packet: dict) -> None:
         objective_proxy=rs["objective_proxy"],
         grid_points_per_dim=rs["grid_points_per_dim"],
         max_candidates=rs["max_candidates"],
+        seed=rs["seed"],
     )
     assert config.algorithm_name == "finite_grid_search_v1"
     assert config.grid_points_per_dim == 3
     assert config.max_candidates == 9
+    assert config.seed == 42
 
 
 def test_reactive_residual_search_config_round_trip(packet: dict) -> None:
@@ -283,10 +486,12 @@ def test_reactive_residual_search_config_round_trip(packet: dict) -> None:
         objective_proxy=rs["objective_proxy"],
         grid_points_per_dim=rs["grid_points_per_dim"],
         max_candidates=rs["max_candidates"],
+        seed=rs["seed"],
     )
     assert config.algorithm_name == "finite_grid_search_v1"
     assert config.grid_points_per_dim == 3
     assert config.max_candidates == 9
+    assert config.seed == 42
 
 
 def test_residual_adversary_config_round_trip(packet: dict) -> None:
@@ -298,19 +503,22 @@ def test_residual_adversary_config_round_trip(packet: dict) -> None:
         assert config.macro_action_dt_s == 0.5
         assert config.max_residual_accel_mps2 == 1.5
         assert config.max_jerk_mps3 == 7.5
+        assert config.seed == 42
 
 
 # ---------------------------------------------------------------------------
-# Scenario frozen IDs
+# Scenario frozen identity
 # ---------------------------------------------------------------------------
 
 
-def test_scenario_ids_are_frozen(packet: dict) -> None:
-    """Scenario IDs must be explicitly listed and non-empty."""
-    ids = packet["scenario"]["scenario_ids"]
-    assert isinstance(ids, list)
-    assert len(ids) >= 1
-    assert all(isinstance(s, str) for s in ids)
+def test_scenario_template_id_is_frozen(packet: dict) -> None:
+    """Scenario template_id must be the checked-in crossing_ttc_template."""
+    assert packet["scenario"]["template_id"] == "crossing_ttc_template"
+
+
+def test_scenario_template_seed_is_frozen(packet: dict) -> None:
+    """Scenario template_seed must be 123 (the template's declared seed)."""
+    assert packet["scenario"]["template_seed"] == 123
 
 
 def test_frozen_scenario_seeds(packet: dict) -> None:

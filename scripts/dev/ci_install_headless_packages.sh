@@ -52,14 +52,20 @@ fi
 cat "$apt_update_log"
 
 if [[ "$apt_update_rc" -ne 0 ]]; then
+  apt_update_other_errors=()
   third_party_403_hosts=()
-  while IFS= read -r host; do
-    [[ -z "$host" ]] && continue
-    case "$host" in
+  while IFS=$'\t' read -r error_kind host; do
+    [[ -z "$error_kind" ]] && continue
+    if [[ "$error_kind" != "403" ]]; then
+      apt_update_other_errors+=("${host:-unknown}")
+      continue
+    fi
+    case "${host:-}" in
       ubuntu.com|*.ubuntu.com|debian.org|*.debian.org|canonical.com|*.canonical.com)
+        apt_update_other_errors+=("${host:-unknown}")
         ;;
       *)
-        third_party_403_hosts+=("$host")
+        third_party_403_hosts+=("${host:-unknown}")
         ;;
     esac
   done < <(
@@ -70,26 +76,49 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
         sub(/:.*/, "", url)
         return url
       }
+      function emit_pending() {
+        if (pending_host == "") {
+          return
+        }
+        if (tolower(pending_status) ~ /(403([^0-9]|$)|forbidden)/) {
+          print "403\t" pending_host
+        } else {
+          print "other\t" pending_host
+        }
+        pending_host = ""
+        pending_status = ""
+      }
       {
         line = $0
-        if (match(line, /https?:\/\/[^[:space:]]+/)) {
-          pending_host = host_from_url(substr(line, RSTART, RLENGTH))
-          if (tolower(line) ~ /(403|forbidden)/) {
-            print pending_host
-            pending_host = ""
+        if (line ~ /^(Err:|W: Failed to fetch)/) {
+          emit_pending()
+          if (match(line, /https?:\/\/[^[:space:]]+/)) {
+            pending_host = host_from_url(substr(line, RSTART, RLENGTH))
+            pending_status = line
+          } else {
+            print "other\tunknown"
           }
-        } else if (pending_host != "" && tolower(line) ~ /(403|forbidden)/) {
-          print pending_host
-          pending_host = ""
-        } else if (line ~ /^(Err:|W:|Get:|Hit:|Ign:)/) {
-          pending_host = ""
+          next
+        }
+        if (line ~ /^(Get:|Hit:|Ign:)/) {
+          emit_pending()
+          next
+        }
+        if (pending_host != "") {
+          pending_status = pending_status " " line
+          if (tolower(line) ~ /(403([^0-9]|$)|forbidden)/) {
+            emit_pending()
+          }
         }
       }
+      END { emit_pending() }
     ' "$apt_update_log" | sort -u
   )
 
-  if [[ ${#third_party_403_hosts[@]} -eq 0 ]]; then
-    echo "ci_install_headless_packages error=apt_update_failed rc=${apt_update_rc}" >&2
+  if [[ ${#apt_update_other_errors[@]} -gt 0 || ${#third_party_403_hosts[@]} -eq 0 ]]; then
+    IFS=,
+    echo "ci_install_headless_packages error=apt_update_failed rc=${apt_update_rc} sources=${apt_update_other_errors[*]:-unknown}" >&2
+    unset IFS
     exit "$apt_update_rc"
   fi
 

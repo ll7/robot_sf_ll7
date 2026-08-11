@@ -1857,6 +1857,26 @@ def test_ci_install_headless_fails_closed_on_non_ignorable_update_error(tmp_path
     assert "error=apt_update_failed rc=100" in result.stderr
 
 
+def test_ci_install_headless_fails_closed_on_mixed_update_errors(tmp_path: Path) -> None:
+    """A tolerated third-party 403 must not mask another source failure."""
+    result, install_marker, _ = _run_headless_package_install_fixture(
+        tmp_path,
+        update_output=(
+            "Err:1 https://packages.microsoft.com/repos/azure-cli noble InRelease\n"
+            "  403 Forbidden\n"
+            "Err:2 http://archive.ubuntu.com/ubuntu noble InRelease\n"
+            "  500  Internal Server Error"
+        ),
+        update_rc=100,
+        install_rc=0,
+    )
+
+    assert result.returncode == 100
+    assert not install_marker.exists()
+    assert "error=apt_update_failed rc=100" in result.stderr
+    assert "archive.ubuntu.com" in result.stderr
+
+
 # Help-behaviour contract tests.
 
 HELP_COVERED_SCRIPTS = [

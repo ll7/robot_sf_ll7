@@ -103,6 +103,12 @@ All keys are alphabetically sorted. No timestamps or absolute paths appear in
 the canonical record. Candidate/action order is explicit, and repeated runs
 from the same config and seed produce byte-equivalent JSON.
 
+Accounting semantics are explicit: `accepted` counts valid candidates that
+improved the current best objective-proxy score, `rejected` counts valid
+candidates that did not improve it, and `invalid` counts candidates rejected
+by the bounded controller or malformed-input validation. These counts sum to
+`total_evaluated`; they are search bookkeeping, not stress-case metrics.
+
 ## Canonical smoke command
 
 ```bash

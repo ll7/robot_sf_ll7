@@ -72,8 +72,8 @@ Then branch by task type:
   implementation, and PR readiness review
 - `.agents/skills/issue-audit-autonomous/`: unattended, evidence-supported open-issue cleanup
   that emits the shared pending-decision queue
-- `.agents/skills/issue-audit/`: interactive maintainer refinement that asks at most one
-  readiness-blocking question at a time and verifies the exact answer
+- `.agents/skills/issue-audit/`: interactive maintainer refinement that presents one
+  `issue_decision_envelope.v1` at a time, applies the exact answer, and verifies the result
 - `docs/context/issue_audit_contract.md` and `scripts/dev/issue_audit_core.py`: shared issue-audit
   policy and deterministic plan/readback backbone
 - `.agents/skills/autoresearch/` and `.agents/skills/auto-improvement/`: repo-local skills for

@@ -5,12 +5,13 @@ points:
 
 - issue-audit-autonomous performs evidence-supported cleanup and emits a
   pending-decision queue.
-- issue-audit is the maintainer-facing loop that applies one explicit answer
-  at a time.
+- issue-audit is the maintainer-facing loop that presents one decision envelope
+  and applies one explicit answer at a time.
 
 Both entry points consume the same issue_audit_plan.v1 produced by
-scripts/dev/issue_audit_core.py. The classifier, not either skill prompt, owns
-the decision about whether a label repair is safe.
+scripts/dev/issue_audit_core.py. The interactive path projects the next queue
+row into issue_decision_envelope.v1. The classifier, not either skill prompt,
+owns the decision about whether a label repair is safe.
 
 ## Authority boundary
 
@@ -154,15 +155,47 @@ Each pending decision is shaped so a background run can hand it to the
 interactive skill without guessing:
 
     issue: "#123"
+    number: 123
+    title: "..."
+    url: "https://github.com/ll7/robot_sf_ll7/issues/123"
+    state: open
+    labels: ["decision-required"]
+    classification: decision-required
     decision_required: true
     question_source: "issue body/comments"
     blocking_evidence: "..."
+    evidence_sources: []
+    documented_options: []
     safe_mutations_applied: []
 
 The plan is deterministic for a fixed inventory. It contains evidence and
 reasons for every safe mutation. apply_mutations refuses incomplete plans,
 enforces a mutation budget, uses REST for issue/label writes, and reads every
 touched issue back. Project changes are intentionally absent.
+
+## Decision envelope
+
+The interactive path presents exactly one `issue_decision_envelope.v1` at a
+time. The envelope is a factual projection of the pending queue, not a new
+policy layer. It contains the plan digest, deterministic issue-number queue
+position, live-snapshot state and labels, bounded body/comment source excerpts,
+documented option tokens, confirmed autonomous mutations, an exact answer
+format, and the verification contract.
+
+The envelope is `ready` only when the inventory is complete and at least two
+explicit options are documented by the issue body or comments. If the source
+does not document a choice set, the envelope is `needs_clarification`; the
+interactive skill may ask one focused clarification question but must not
+invent a policy option or apply an answer. A truncated inventory, a relevant
+unavailable SLURM inventory, a stale plan digest, or changed live issue state
+is fail-closed.
+
+The answer format is `#<issue-number>: <option-token>`. The token must be one
+of the source-backed options in the envelope. Before applying it, the
+interactive path refreshes the issue, compares state and labels with the
+envelope, applies only the stated answer, reads the result back, and reruns
+the shared classifier. Project #5 writes remain false unless separately and
+explicitly requested under the existing Project contract.
 
 ## Routing
 

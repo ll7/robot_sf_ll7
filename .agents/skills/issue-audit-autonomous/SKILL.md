@@ -46,10 +46,13 @@ issue_audit_plan.v1.
    The executor refuses incomplete plans, enforces a bounded mutation budget,
    uses URI-safe REST label paths, and reads every touched issue back.
 4. Build the pending-decision queue from pending_decisions. For each entry,
-   include the exact issue body/comment source, blocking evidence, and the
-   safe mutations actually confirmed by readback. The core helper
+   include the issue title/URL, current classification and labels, bounded
+   issue body/comment source metadata, blocking evidence, documented options,
+   and the safe mutations actually confirmed by readback. The core helper
    build_pending_decision_queue(plan, applied_mutations=...) performs this
-   merge. Use this shape:
+   merge. The interactive skill projects the first row into
+   issue_decision_envelope.v1; do not answer or reorder the queue here. The
+   minimum handoff shape remains:
 
        issue: "#123"
        decision_required: true

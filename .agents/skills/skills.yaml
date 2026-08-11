@@ -877,7 +877,7 @@ skills:
     output_schema: skill_run_summary.v1
     aliases: []
   issue-audit:
-    description: Interactive maintainer issue audit that consumes one decision queue entry, asks at most one focused question, applies the exact answer, and verifies the result.
+    description: Interactive maintainer issue audit that presents one issue_decision_envelope.v1 at a time, applies only an exact answer, and verifies the result.
     category: github-issue
     kind: atomic
     phase: context

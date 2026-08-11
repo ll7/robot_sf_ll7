@@ -13,7 +13,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Execute one selected issue to ready PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
 | Clarify or repair issue contracts | `issue-contract-maintainer` | legacy aliases only when explicitly named |
 | Run unattended issue cleanup | `issue-audit-autonomous` | `issue-audit` |
-| Apply one maintainer issue decision | `issue-audit` | `issue-contract-maintainer` |
+| Present/apply one maintainer decision envelope | `issue-audit` | `issue-contract-maintainer` |
 | Fix PR review comments | `gh-pr-comment-fixer` | `pr-ready-check` |
 | Merge a PR carrying the merge-ready label | `gh-pr-merger` | `goal-pr-review` |
 | Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
@@ -151,7 +151,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `gh-issue-template-auditor` | atomic | context | yes | no | no | none | Review existing GitHub issues against the repo's issue-template contract and repair underspecified issues when the fix is clear. |
 | `goal-issue-discovery` | orchestrator | analysis | yes | no | no | `gh-issue-creator`, `gh-issue-sequencer`, `gh-issue-priority-assessor`, `agentic-eval`, `auto-improvement`, `autoresearch`, `context-map` | Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities and creates evidence-graded GitHub issues; not for implementation. |
 | `goal-issue-implementation` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `gh-issue-autopilot`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `gh-issue-creator`, `context-note-maintainer`, `issue-splitter` | Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements one scoped issue at a time, validates, pushes, and opens PRs. |
-| `issue-audit` | atomic | context | yes | no | no | none | Interactive maintainer issue audit that consumes one decision queue entry, asks at most one focused question, applies the exact answer, and verifies the result. |
+| `issue-audit` | atomic | context | yes | no | no | none | Interactive maintainer issue audit that presents one issue_decision_envelope.v1 at a time, applies only an exact answer, and verifies the result. |
 | `issue-audit-autonomous` | atomic | context | yes | no | no | none | Autonomous open-issue audit that applies only evidence-supported label or completion repairs and emits a machine-readable pending-decision queue without asking questions. |
 | `issue-contract-maintainer` | orchestrator | planning | yes | no | no | `gh-issue-clarifier`, `gh-issue-template-auditor`, `issue-audit-autonomous`, `issue-audit`, `issue-splitter` | Maintain GitHub issue contracts through template audits, ambiguity clarification, and user-decision application. |
 | `issue-splitter` | atomic | planning | yes | no | no | `gh-issue-creator` | Split a parent, epic, decision, or research issue into the smallest independently implementable child issue with duplicate checks and conservative parent linking. |

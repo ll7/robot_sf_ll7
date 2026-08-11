@@ -6,14 +6,22 @@ import json
 import subprocess
 from typing import Any
 
+import pytest
+
 from scripts.dev.issue_audit_core import (
     apply_mutations,
     build_audit_plan,
+    build_decision_envelope,
     build_pending_decision_queue,
     classify_issue,
     closure_evidence,
+    compute_plan_digest,
     discover_issue_comments,
     label_api_path,
+    main,
+    parse_decision_answer,
+    select_next_pending_decision,
+    validate_decision_envelope,
 )
 
 
@@ -28,6 +36,8 @@ def _issue(
         "number": number,
         "title": title,
         "state": "open",
+        "url": f"https://github.com/ll7/robot_sf_ll7/issues/{number}",
+        "author": "maintainer",
         "labels": labels or [],
         "body": body,
         "comments": [],
@@ -101,9 +111,7 @@ def test_state_qualifiers_are_preserved_during_execution_state_cleanup() -> None
     )
 
     assert classification.execution_state_labels == ("state:blocked",)
-    assert {"state:needs-artifact-promotion", "state:review"}.issubset(
-        classification.state_labels
-    )
+    assert {"state:needs-artifact-promotion", "state:review"}.issubset(classification.state_labels)
     assert not any(
         mutation["operation"] == "remove_label"
         and mutation["value"] in {"state:needs-artifact-promotion", "state:review"}
@@ -172,9 +180,7 @@ def test_gate_matching_ignores_aggregate_reports_and_conditional_rules() -> None
         available_labels={"state:blocked", "state:blocked-external-input"},
     )
     assert current.classification == "blocked"
-    assert {mutation["value"] for mutation in current.mutations} == {
-        "state:blocked-external-input"
-    }
+    assert {mutation["value"] for mutation in current.mutations} == {"state:blocked-external-input"}
 
 
 def test_decision_detection_distinguishes_resolved_records_from_open_gates() -> None:
@@ -240,8 +246,7 @@ def test_blocker_replaces_single_stale_execution_state() -> None:
         },
     )
     assert {
-        (mutation["operation"], mutation["value"])
-        for mutation in classification.mutations
+        (mutation["operation"], mutation["value"]) for mutation in classification.mutations
     } == {
         ("remove_label", "state:running"),
         ("add_label", "state:blocked-external-input"),
@@ -283,13 +288,29 @@ def test_comment_discovery_is_bounded_and_rest_normalized() -> None:
         return subprocess.CompletedProcess(
             args,
             0,
-            json.dumps([{"body": "Maintainer decision required.", "user": {"login": "owner"}}]),
+            json.dumps(
+                [
+                    {
+                        "body": "Maintainer decision required.",
+                        "user": {"login": "owner"},
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110#issuecomment-1",
+                        "created_at": "2026-08-11T10:00:00Z",
+                    }
+                ]
+            ),
             "",
         )
 
     comments, metadata = discover_issue_comments("ll7/robot_sf_ll7", 110, runner=runner)
 
-    assert comments == [{"body": "Maintainer decision required.", "user": "owner"}]
+    assert comments == [
+        {
+            "body": "Maintainer decision required.",
+            "user": "owner",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/110#issuecomment-1",
+            "created_at": "2026-08-11T10:00:00Z",
+        }
+    ]
     assert metadata["truncated"] is False
     assert metadata["errors"] == []
 
@@ -326,6 +347,155 @@ def test_decision_queue_is_machine_readable_and_project_free() -> None:
         "decision-required label present; issue text: Maintainer decision"
     )
     assert pending["safe_mutations_applied"] == []
+
+
+def test_decision_envelope_is_sorted_bound_to_plan_and_source_backed() -> None:
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(
+                    205,
+                    labels=["decision-required"],
+                    body="Maintainer decision required.\n(A) Keep the issue open.\n(B) Close it.",
+                ),
+                _issue(
+                    204,
+                    labels=["decision-required"],
+                    body="Maintainer decision required.\n(A) Use the native path.\n(B) Use the adapter.",
+                ),
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["decision-required"],
+            "inventory": {},
+        }
+    )
+
+    assert plan["plan_digest"] == compute_plan_digest(plan)
+    selected = select_next_pending_decision(plan)
+    assert selected is not None
+    assert selected[0:2] == (0, 2)
+    assert selected[2]["issue"] == "#204"
+    scoped = select_next_pending_decision(plan, issue_scope=[205])
+    assert scoped is not None
+    assert scoped[0:2] == (0, 1)
+    assert scoped[2]["issue"] == "#205"
+
+    envelope = build_decision_envelope(plan)
+    assert envelope is not None
+    assert envelope["schema"] == "issue_decision_envelope.v1"
+    assert envelope["status"] == "ready"
+    assert envelope["queue"] == {
+        "position": 1,
+        "total": 2,
+        "remaining_after": 1,
+        "ordering": "issue_number_ascending",
+    }
+    assert envelope["issue"]["labels"] == ["decision-required"]
+    assert [option["token"] for option in envelope["decision"]["documented_options"]] == [
+        "A",
+        "B",
+    ]
+    assert envelope["decision"]["evidence_sources"][0]["kind"] == "body"
+    assert envelope["answer_contract"]["format"] == "#204: <option-token>"
+    assert envelope["verification"]["project5_writes"] is False
+
+    assert parse_decision_answer(envelope, "#204: A") == {"issue": "#204", "option": "A"}
+    with pytest.raises(ValueError, match="not documented"):
+        parse_decision_answer(envelope, "#204: C")
+
+
+def test_decision_envelope_rejects_stale_plan_and_live_issue_state() -> None:
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(
+                    206,
+                    labels=["decision-required"],
+                    body="Maintainer decision required.\n(A) Keep open.\n(B) Close.",
+                )
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["decision-required"],
+            "inventory": {},
+        }
+    )
+    envelope = build_decision_envelope(plan)
+    assert envelope is not None
+    assert validate_decision_envelope(
+        envelope, plan=plan, live_issue=_issue(206, labels=["decision-required"])
+    )["ok"]
+
+    changed = json.loads(json.dumps(plan))
+    changed["issues"][0]["title"] = "Changed after envelope"
+    with pytest.raises(ValueError, match="stale"):
+        build_decision_envelope(plan, expected_plan_digest=compute_plan_digest(changed))
+
+    changed_issue = _issue(206, labels=["state:blocked", "decision-required"])
+    validation = validate_decision_envelope(envelope, plan=plan, live_issue=changed_issue)
+    assert validation["ok"] is False
+    assert any("labels changed" in error for error in validation["errors"])
+
+
+def test_decision_envelope_marks_undocumented_choices_and_incomplete_inventory() -> None:
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(207, labels=["decision-required"], body="Maintainer decision required.")
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["decision-required"],
+            "inventory": {"issues": {"errors": ["partial page"]}},
+        }
+    )
+    envelope = build_decision_envelope(plan)
+    assert envelope is not None
+    assert envelope["status"] == "blocked_incomplete_inventory"
+    assert envelope["answer_contract"]["allowed_tokens"] == []
+    assert envelope["inventory_errors"]
+
+
+def test_envelope_cli_emits_machine_readable_payload(tmp_path: Any, capsys: Any) -> None:
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(
+                    208,
+                    labels=["decision-required"],
+                    body="Maintainer decision required.\n(A) Keep open.\n(B) Close.",
+                )
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["decision-required"],
+            "inventory": {},
+        }
+    )
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+    assert main(["envelope", str(plan_path)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema"] == "issue_decision_envelope.v1"
+    assert payload["issue"]["number"] == 208
 
 
 def test_closure_requires_documented_completion_condition() -> None:

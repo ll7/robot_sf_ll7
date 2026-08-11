@@ -20,6 +20,7 @@ use the plan as a dry-run artifact or apply only the operations it contains.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -39,6 +40,8 @@ DEFAULT_MAX_PAGES = 10
 DEFAULT_MAX_COMMENT_PAGES = 3
 DEFAULT_MAX_MUTATIONS = 250
 PLAN_SCHEMA = "issue_audit_plan.v1"
+ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
+MAX_SOURCE_EXCERPT = 280
 
 STATE_PREFIX = "state:"
 RESOURCE_PREFIX = "resource:"
@@ -152,6 +155,16 @@ READY_HEADING_PATTERN = re.compile(
 CHECKBOX_PATTERN = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s+", re.MULTILINE)
 UNCHECKED_CHECKBOX_PATTERN = re.compile(r"^\s*[-*]\s+\[ \]\s+", re.MULTILINE)
 ISSUE_REF_PATTERN = re.compile(r"(?<![\w-])#(\d+)\b|(?:issue|issues)[ -](\d+)\b", re.IGNORECASE)
+OPTION_LINE_PATTERN = re.compile(
+    r"^\s*(?:[-*]\s+)?(?:\*\*)?(?:option\s+)?"
+    r"(?:\(([A-Z])\)|([A-Z])(?:[.:)\-]))\s+"
+    r"(?:\*\*)?(?P<label>.+?)(?:\*\*)?\s*$",
+    re.IGNORECASE,
+)
+DECISION_SOURCE_PATTERN = re.compile(
+    r"\b(?:decision|required|needed|pending|choose|select|approve|confirm|option|policy|scope)\b",
+    re.IGNORECASE,
+)
 PARENT_TITLE_PATTERN = re.compile(
     r"\b(parent|roadmap|epic|tracking|multi[- ]slice|umbrella)\b", re.IGNORECASE
 )
@@ -235,9 +248,123 @@ def _label_names(raw: object) -> list[str]:
     return sorted(set(names))
 
 
+def _compact_excerpt(text: object, *, limit: int = MAX_SOURCE_EXCERPT) -> str:
+    """Normalize and bound evidence text before placing it in a plan or envelope."""
+    compact = " ".join(str(text or "").split())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[: max(1, limit - 3)].rstrip()}..."
+
+
+def _issue_source_rows(issue: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Return bounded source metadata for an issue body and its comments."""
+    sources = [
+        {
+            "id": "body",
+            "kind": "body",
+            "url": str(issue.get("url") or ""),
+            "author": str(issue.get("author") or ""),
+            "created_at": "",
+            "text": str(issue.get("body") or ""),
+        }
+    ]
+    comments = issue.get("comments")
+    if isinstance(comments, Sequence) and not isinstance(comments, (str, bytes)):
+        for index, comment in enumerate(comments):
+            if isinstance(comment, Mapping):
+                sources.append(
+                    {
+                        "id": f"comment:{index}",
+                        "kind": "comment",
+                        "url": str(comment.get("url") or ""),
+                        "author": str(comment.get("user") or comment.get("author") or ""),
+                        "created_at": str(comment.get("created_at") or ""),
+                        "text": str(comment.get("body") or ""),
+                    }
+                )
+            elif isinstance(comment, str):
+                sources.append(
+                    {
+                        "id": f"comment:{index}",
+                        "kind": "comment",
+                        "url": "",
+                        "author": "",
+                        "created_at": "",
+                        "text": comment,
+                    }
+                )
+    return sources
+
+
+def _decision_source_rows(issue: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Return source excerpts that support a pending maintainer decision."""
+    sources: list[dict[str, str]] = []
+    for source in _issue_source_rows(issue):
+        matching_lines = [
+            _compact_excerpt(line)
+            for line in str(source["text"]).splitlines()
+            if line.strip() and DECISION_SOURCE_PATTERN.search(line)
+        ]
+        for excerpt in matching_lines[:3]:
+            sources.append(
+                {
+                    "source_id": source["id"],
+                    "kind": source["kind"],
+                    "url": source["url"],
+                    "author": source["author"],
+                    "created_at": source["created_at"],
+                    "excerpt": excerpt,
+                }
+            )
+    if not sources and DECISION_LABEL in set(_label_names(issue.get("labels"))):
+        sources.append(
+            {
+                "source_id": "label:decision-required",
+                "kind": "label",
+                "url": str(issue.get("url") or ""),
+                "author": "",
+                "created_at": "",
+                "excerpt": "decision-required label present",
+            }
+        )
+    return sources
+
+
+def _documented_options(issue: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Extract explicit option lines without inventing a maintainer policy."""
+    options: list[dict[str, Any]] = []
+    seen_tokens: set[str] = set()
+    for source in _issue_source_rows(issue):
+        for line in str(source["text"]).splitlines():
+            match = OPTION_LINE_PATTERN.match(line)
+            if not match:
+                continue
+            token = str(match.group(1) or match.group(2) or "").upper()
+            label = _compact_excerpt(match.group("label"))
+            if not token or not label or token in seen_tokens:
+                continue
+            seen_tokens.add(token)
+            options.append(
+                {
+                    "token": token,
+                    "label": label,
+                    "source_id": source["id"],
+                    "source": {
+                        "kind": source["kind"],
+                        "url": source["url"],
+                        "author": source["author"],
+                        "created_at": source["created_at"],
+                        "excerpt": _compact_excerpt(line),
+                    },
+                }
+            )
+    return options
+
+
 def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Project a GitHub issue row onto the plan's stable issue shape."""
     url = str(raw.get("html_url") or raw.get("url") or "")
+    author = str((raw.get("user") or {}).get("login") or raw.get("author") or "")
     raw_assignees = raw.get("assignees")
     assignees = raw_assignees if isinstance(raw_assignees, list) else []
     raw_comments = raw.get("comments")
@@ -248,6 +375,7 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
         "body": str(raw.get("body") or ""),
         "state": str(raw.get("state") or "").lower(),
         "url": url,
+        "author": author,
         "labels": _label_names(raw.get("labels")),
         "assignees": sorted(
             str(item.get("login"))
@@ -258,6 +386,8 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
             {
                 "body": str(item.get("body") or ""),
                 "user": str((item.get("user") or {}).get("login") or ""),
+                "url": str(item.get("html_url") or item.get("url") or ""),
+                "created_at": str(item.get("created_at") or ""),
             }
             for item in comments
             if isinstance(item, Mapping)
@@ -357,6 +487,8 @@ def discover_issue_comments(
         {
             "body": str(row.get("body") or ""),
             "user": str((row.get("user") or {}).get("login") or ""),
+            "url": str(row.get("html_url") or row.get("url") or ""),
+            "created_at": str(row.get("created_at") or ""),
         }
         for row in rows
     ]
@@ -626,6 +758,7 @@ def _gate_evidence(text: str) -> list[dict[str, str]]:
             blocker = next((term for term in blockers if term in line), None)
             if not topic:
                 continue
+
             def near(left: str, right: str) -> bool:
                 return bool(
                     re.search(
@@ -1220,10 +1353,17 @@ def build_audit_plan(
             open_issue_numbers=open_numbers,
             available_labels=available_labels,
         )
+        issue_labels = _label_names(issue.get("labels"))
+        decision_sources = _decision_source_rows(issue)
+        documented_options = _documented_options(issue)
         row = {
             "number": int(issue.get("number", 0)),
             "title": str(issue.get("title") or ""),
             "url": str(issue.get("url") or ""),
+            "state": str(issue.get("state") or "").lower(),
+            "labels": issue_labels,
+            "decision_sources": decision_sources,
+            "documented_options": documented_options,
             **classified.to_dict(),
         }
         classifications.append(row)
@@ -1233,10 +1373,19 @@ def build_audit_plan(
             pending.append(
                 {
                     "issue": f"#{classified.issue}",
+                    "number": classified.issue,
+                    "title": str(issue.get("title") or ""),
+                    "url": str(issue.get("url") or ""),
+                    "state": str(issue.get("state") or "").lower(),
+                    "labels": issue_labels,
+                    "classification": classified.classification,
                     "decision_required": True,
                     "question_source": "issue body/comments",
                     "blocking_evidence": "; ".join(classified.decision_evidence)
                     or "decision gate detected",
+                    "decision_evidence": list(classified.decision_evidence),
+                    "evidence_sources": decision_sources,
+                    "documented_options": documented_options,
                     "safe_mutations_applied": [],
                 }
             )
@@ -1256,7 +1405,7 @@ def build_audit_plan(
     if len(mutations) > max_mutations:
         mutations = mutations[:max_mutations]
         truncated.append("mutation_budget")
-    return {
+    plan = {
         "schema": PLAN_SCHEMA,
         "repo": str(inventory.get("repo") or DEFAULT_REPO),
         "mode": mode,
@@ -1280,6 +1429,8 @@ def build_audit_plan(
             "truncated_or_error_sources": len(set(truncated)),
         },
     }
+    plan["plan_digest"] = compute_plan_digest(plan)
+    return plan
 
 
 def label_api_path(repo: str, issue_number: int, label: str) -> str:
@@ -1439,7 +1590,223 @@ def build_pending_decision_queue(
         issue = str(row.get("issue") or "")
         row["safe_mutations_applied"] = applied_by_issue.get(issue, [])
         queue.append(row)
-    return queue
+    return sorted(queue, key=lambda row: _pending_issue_number(row.get("issue")))
+
+
+def compute_plan_digest(plan: Mapping[str, Any]) -> str:
+    """Return the canonical digest used to bind an envelope to one plan."""
+    payload = {key: value for key, value in plan.items() if key != "plan_digest"}
+    try:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"plan is not JSON-canonicalizable: {exc}") from exc
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _pending_issue_number(value: object) -> int:
+    """Normalize a pending queue issue reference for deterministic ordering."""
+    match = re.search(r"\d+", str(value or ""))
+    return int(match.group(0)) if match else 2**31 - 1
+
+
+def select_next_pending_decision(
+    plan: Mapping[str, Any],
+    *,
+    issue_scope: Iterable[int] | None = None,
+    applied_mutations: Iterable[Mapping[str, Any]] = (),
+) -> tuple[int, int, dict[str, Any]] | None:
+    """Select one queue entry by issue number, never by Project #5 ordering."""
+    queue = build_pending_decision_queue(plan, applied_mutations=applied_mutations)
+    allowed = {int(number) for number in issue_scope} if issue_scope is not None else None
+    scoped_queue = [
+        row
+        for row in queue
+        if allowed is None or _pending_issue_number(row.get("issue")) in allowed
+    ]
+    if not scoped_queue:
+        return None
+    return 0, len(scoped_queue), scoped_queue[0]
+
+
+def _envelope_inventory_errors(plan: Mapping[str, Any], row: Mapping[str, Any]) -> list[str]:
+    """Return inventory failures that make this decision envelope unsafe."""
+    errors: list[str] = []
+    truncation = plan.get("truncation_or_errors")
+    if isinstance(truncation, list) and truncation:
+        errors.append("plan inventory is truncated or contains errors")
+    uncertainties = set(plan.get("inventory_uncertainties") or [])
+    labels = set(_label_names(row.get("labels")))
+    if "jobs" in uncertainties and "resource:slurm" in labels:
+        errors.append("SLURM inventory is unavailable for a resource:slurm issue")
+    return errors
+
+
+def build_decision_envelope(
+    plan: Mapping[str, Any],
+    *,
+    issue_scope: Iterable[int] | None = None,
+    expected_plan_digest: str | None = None,
+    applied_mutations: Iterable[Mapping[str, Any]] = (),
+) -> dict[str, Any] | None:
+    """Build the next factual, machine-readable maintainer decision envelope."""
+    if plan.get("schema") != PLAN_SCHEMA:
+        raise ValueError(f"expected {PLAN_SCHEMA} plan")
+    recorded_digest = str(plan.get("plan_digest") or "")
+    if not recorded_digest:
+        raise ValueError("plan is missing plan_digest; regenerate it before presenting a decision")
+    current_digest = compute_plan_digest(plan)
+    if recorded_digest != current_digest:
+        raise ValueError("plan_digest does not match the plan contents")
+    if expected_plan_digest and expected_plan_digest != current_digest:
+        raise ValueError("plan digest is stale; refresh the inventory before presenting a decision")
+
+    selected = select_next_pending_decision(
+        plan,
+        issue_scope=issue_scope,
+        applied_mutations=applied_mutations,
+    )
+    if selected is None:
+        return None
+    index, total, row = selected
+    issue_number = _pending_issue_number(row.get("issue"))
+    if issue_number >= 2**31 - 1:
+        raise ValueError("pending decision has no valid issue number")
+    inventory_errors = _envelope_inventory_errors(plan, row)
+    sources = row.get("evidence_sources")
+    sources = (
+        [dict(source) for source in sources if isinstance(source, Mapping)]
+        if isinstance(sources, list)
+        else []
+    )
+    options = row.get("documented_options")
+    options = (
+        [dict(option) for option in options if isinstance(option, Mapping)]
+        if isinstance(options, list)
+        else []
+    )
+    source_excerpt = next(
+        (str(source.get("excerpt") or "") for source in sources if source.get("excerpt")),
+        str(row.get("blocking_evidence") or "decision gate detected"),
+    )
+    if inventory_errors:
+        status = "blocked_incomplete_inventory"
+    elif len(options) < 2:
+        status = "needs_clarification"
+    else:
+        status = "ready"
+    return {
+        "schema": ENVELOPE_SCHEMA,
+        "plan_schema": PLAN_SCHEMA,
+        "plan_digest": current_digest,
+        "repo": str(plan.get("repo") or DEFAULT_REPO),
+        "status": status,
+        "queue": {
+            "position": index + 1,
+            "total": total,
+            "remaining_after": max(0, total - index - 1),
+            "ordering": "issue_number_ascending",
+        },
+        "issue": {
+            "number": issue_number,
+            "display": f"#{issue_number}",
+            "title": str(row.get("title") or ""),
+            "url": str(row.get("url") or ""),
+            "state": str(row.get("state") or "").lower(),
+            "labels": _label_names(row.get("labels")),
+            "classification": str(row.get("classification") or "decision-required"),
+        },
+        "decision": {
+            "required": True,
+            "question": f"Which documented option should be applied to #{issue_number}?",
+            "question_source": str(row.get("question_source") or "issue body/comments"),
+            "blocking_evidence": str(row.get("blocking_evidence") or "decision gate detected"),
+            "source_excerpt": source_excerpt,
+            "evidence_sources": sources,
+            "documented_options": options,
+            "safe_mutations_applied": list(row.get("safe_mutations_applied") or []),
+        },
+        "answer_contract": {
+            "format": f"#{issue_number}: <option-token>",
+            "allowed_tokens": [
+                str(option.get("token")) for option in options if option.get("token")
+            ],
+            "exact_match_required": True,
+        },
+        "verification": {
+            "refresh_issue_before_apply": True,
+            "compare_state_and_labels": True,
+            "rerun_shared_classifier": True,
+            "project5_writes": False,
+        },
+        "forbidden_inferences": [
+            "research priority",
+            "provenance or benchmark interpretation",
+            "rights or compute authorization",
+            "Project #5 ordering or field values",
+        ],
+        "inventory_errors": inventory_errors,
+    }
+
+
+def validate_decision_envelope(
+    envelope: Mapping[str, Any],
+    *,
+    plan: Mapping[str, Any] | None = None,
+    live_issue: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Check plan binding and live issue state before applying an answer."""
+    errors: list[str] = []
+    if envelope.get("schema") != ENVELOPE_SCHEMA:
+        errors.append(f"expected {ENVELOPE_SCHEMA} envelope")
+    envelope_digest = str(envelope.get("plan_digest") or "")
+    if not envelope_digest:
+        errors.append("envelope is missing plan_digest")
+    if plan is not None:
+        try:
+            observed_digest = compute_plan_digest(plan)
+        except ValueError as exc:
+            errors.append(str(exc))
+        else:
+            if envelope_digest != observed_digest:
+                errors.append("envelope plan digest does not match the current plan")
+    expected_issue = envelope.get("issue") if isinstance(envelope.get("issue"), Mapping) else {}
+    expected_number = _pending_issue_number(expected_issue.get("number"))
+    if live_issue is not None:
+        actual_number = _pending_issue_number(live_issue.get("number"))
+        if actual_number != expected_number:
+            errors.append("live issue number does not match the envelope")
+        expected_state = str(expected_issue.get("state") or "").lower()
+        actual_state = str(live_issue.get("state") or "").lower()
+        if expected_state and actual_state != expected_state:
+            errors.append("live issue state changed since the envelope was created")
+        expected_labels = set(_label_names(expected_issue.get("labels")))
+        actual_labels = set(_label_names(live_issue.get("labels")))
+        if expected_labels != actual_labels:
+            errors.append("live issue labels changed since the envelope was created")
+    return {"ok": not errors, "errors": errors}
+
+
+def parse_decision_answer(envelope: Mapping[str, Any], answer: str) -> dict[str, str]:
+    """Parse the exact issue/option answer contract emitted by an envelope."""
+    if envelope.get("status") != "ready":
+        raise ValueError("envelope is not ready for an answer")
+    match = re.fullmatch(r"\s*#(\d+)\s*:\s*([A-Za-z][A-Za-z0-9_-]*)\s*", answer or "")
+    if not match:
+        raise ValueError("answer must match '#<issue-number>: <option-token>'")
+    issue_number = int(match.group(1))
+    issue = envelope.get("issue") if isinstance(envelope.get("issue"), Mapping) else {}
+    expected_number = _pending_issue_number(issue.get("number"))
+    if issue_number != expected_number:
+        raise ValueError("answer issue number does not match the envelope")
+    token = match.group(2).upper()
+    contract = envelope.get("answer_contract")
+    allowed = {
+        str(value).upper()
+        for value in (contract.get("allowed_tokens") if isinstance(contract, Mapping) else [])
+    }
+    if token not in allowed:
+        raise ValueError(f"answer option {token!r} is not documented by the envelope")
+    return {"issue": f"#{issue_number}", "option": token}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -1469,6 +1836,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     apply_parser = subparsers.add_parser("apply", help="apply a previously emitted plan")
     apply_parser.add_argument("plan", type=Path)
     apply_parser.add_argument("--max-mutations", type=int, default=DEFAULT_MAX_MUTATIONS)
+    envelope_parser = subparsers.add_parser(
+        "envelope", help="emit the next maintainer decision envelope from a plan"
+    )
+    envelope_parser.add_argument("plan", type=Path)
+    envelope_parser.add_argument("--issue", dest="issue_scope", action="append", type=int)
+    envelope_parser.add_argument("--expected-plan-digest")
+    envelope_parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if args.command == "plan":
         plan = build_audit_plan(
@@ -1488,6 +1862,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(rendered, end="")
         return 2 if plan["truncation_or_errors"] else 0
+    if args.command == "envelope":
+        try:
+            envelope = build_decision_envelope(
+                _load_json(args.plan),
+                issue_scope=args.issue_scope,
+                expected_plan_digest=args.expected_plan_digest,
+            )
+        except ValueError as exc:
+            print(json.dumps({"schema": ENVELOPE_SCHEMA, "error": str(exc)}, indent=2))
+            return 2
+        payload = envelope or {
+            "schema": ENVELOPE_SCHEMA,
+            "status": "empty",
+            "reason": "no pending decisions in the requested scope",
+        }
+        rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        if args.output:
+            args.output.write_text(rendered, encoding="utf-8")
+        else:
+            print(rendered, end="")
+        return 0 if envelope is None or envelope["status"] == "ready" else 2
     result = apply_mutations(_load_json(args.plan), max_mutations=args.max_mutations)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["ok"] else 2

@@ -67,7 +67,7 @@ def render_readme(registry: dict[str, Any]) -> str:
         "| Execute one selected issue to ready PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |",
         "| Clarify or repair issue contracts | `issue-contract-maintainer` | legacy aliases only when explicitly named |",
         "| Run unattended issue cleanup | `issue-audit-autonomous` | `issue-audit` |",
-        "| Apply one maintainer issue decision | `issue-audit` | `issue-contract-maintainer` |",
+        "| Present/apply one maintainer decision envelope | `issue-audit` | `issue-contract-maintainer` |",
         "| Fix PR review comments | `gh-pr-comment-fixer` | `pr-ready-check` |",
         "| Merge a PR carrying the merge-ready label | `gh-pr-merger` | `goal-pr-review` |",
         "| Open a ready PR | `gh-pr-opener` | `artifact-provenance` |",

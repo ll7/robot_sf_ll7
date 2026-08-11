@@ -117,8 +117,8 @@ speculative ideas from being presented as measured defects or benchmark regressi
 `issue-audit-autonomous` is the deterministic cleanup phase, not a default `/goal` implementation
 loop. It inventories open issues and related execution evidence, applies only safe label/closure
 repairs, and emits a pending-decision queue without asking questions or writing Project #5.
-`issue-audit` consumes that queue as the user-in-the-loop refinement workflow: it asks at most one
-focused question at a time, applies the exact answer, and verifies issue state. Read
+`issue-audit` consumes that queue as the user-in-the-loop refinement workflow: it presents one
+`issue_decision_envelope.v1` at a time, applies the exact answer, and verifies issue state. Read
 `docs/context/issue_audit_contract.md` for the shared plan and authority boundary.
 
 `goal-issue-implementation` processes issues sequentially. It selects one eligible issue, creates

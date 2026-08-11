@@ -497,8 +497,8 @@ For issue management and delivery, use these local skills:
 - `.agents/skills/goal-issue-discovery/SKILL.md`
   - Autonomous goal loop for finding evidence-graded improvement opportunities and opening detailed issues.
 - `.agents/skills/issue-audit-autonomous/SKILL.md` for deterministic unattended cleanup, then
-  `.agents/skills/issue-audit/SKILL.md` for one-at-a-time maintainer decisions
-  - User-in-the-loop issue audit that asks one readiness-blocking question at a time and updates issues as decisions crystallize.
+  `.agents/skills/issue-audit/SKILL.md` for one-at-a-time decision envelopes and maintainer answers
+  - User-in-the-loop issue audit that presents one evidence-backed envelope at a time and updates issues as decisions crystallize.
 - `.agents/skills/goal-issue-implementation/SKILL.md`
   - Sequential goal loop for implementing eligible open issues through branch, validation, push, and PR creation.
 - `.agents/skills/goal-pr-review/SKILL.md`

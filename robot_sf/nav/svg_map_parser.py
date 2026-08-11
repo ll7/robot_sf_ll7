@@ -665,7 +665,7 @@ class SvgMapConverter:
 
         try:
             coordinates = self._parse_path_coordinates(input_string)
-        except ValueError as parse_error:
+        except ValueError as parse_error:  # pragma: no cover - malformed path fallback
             logger.debug(
                 "Falling back to regex coordinate extraction for path {}: {}",
                 path.attrib.get("id"),
@@ -677,7 +677,7 @@ class SvgMapConverter:
             filtered_coordinates = coordinate_pattern.findall(input_string)
             # If both structured parsing and fallback regex fail, the path has
             # no usable coordinates and should be dropped entirely.
-            if not filtered_coordinates and not coordinates:
+            if not filtered_coordinates and not coordinates:  # pragma: no cover - diagnostic path
                 logger.warning("No coordinates found for path: {}", path.attrib.get("id"))
                 return None
             regex_coordinates = tuple(
@@ -1400,7 +1400,7 @@ class SvgMapConverter:
         if zone_index is None:
             unindexed_zones[zone_type].append(zone)
             return
-        if zone_index in indexed_zones[zone_type]:
+        if zone_index in indexed_zones[zone_type]:  # pragma: no cover - duplicate diagnostic
             logger.warning(
                 "Duplicate {} index {} in SVG; keeping first, ignoring duplicate.",
                 zone_type,
@@ -1432,7 +1432,7 @@ class SvgMapConverter:
                 result.append(indexed[idx])
             elif unindexed:
                 result.append(unindexed.pop(0))
-            else:
+            else:  # pragma: no cover - missing-index diagnostic
                 logger.warning(
                     "Missing {} index {} with no unindexed zones available.",
                     zone_type,

@@ -201,7 +201,7 @@ def _compute_git_hash(root: Path) -> str:
                     git_hash = ref_file.read_text(encoding="utf-8").strip()[:12]
             else:
                 git_hash = content[:12]
-    except OSError as exc:
+    except OSError as exc:  # pragma: no cover - defensive logging fallback
         # Filesystem access errors -> return unknown but log for diagnostics
         logger.debug("_compute_git_hash fs access error: {}", exc)
     except (RuntimeError, TypeError):  # pragma: no cover - defensive

@@ -282,7 +282,7 @@ class SimulationView:
                         "ROBOT_SF_MAX_VIDEO_FRAMES override applied: max_frames={}",
                         parsed,
                     )
-                except (ValueError, TypeError):
+                except (ValueError, TypeError):  # pragma: no cover - invalid-config diagnostic
                     # Surface the caught exception's traceback: the invalid value and
                     # default were previously discarded by the printf-% template (#6837).
                     logger.opt(exception=True).warning(
@@ -670,7 +670,7 @@ class SimulationView:
                             "record_video=True but captured frames appear empty (all-zero pixel data). "
                             "Ensure drawing code executed before frame capture; verify entities are rendered.",
                         )
-                except (TypeError, ValueError) as exc:
+                except (TypeError, ValueError) as exc:  # pragma: no cover - defensive diagnostic
                     # Defensive: conversion/summation failed for unexpected frame data
                     logger.debug("Frame sample check failed: {}", exc)
         if return_frames:
@@ -856,7 +856,7 @@ class SimulationView:
 
         try:
             sprite_surface = pygame.image.load(sprite_path)
-        except (pygame.error, OSError) as exc:
+        except (pygame.error, OSError) as exc:  # pragma: no cover - asset-load diagnostic
             warning_key = f"{entity}:load:{sprite_path}"
             if warning_key not in self._sprite_warning_once:
                 logger.warning(

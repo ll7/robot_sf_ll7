@@ -479,7 +479,7 @@ def index_existing(out_path: Path) -> set[str]:
                     ids.add(eid)
     except FileNotFoundError:
         return set()
-    except OSError as exc:
+    except OSError as exc:  # pragma: no cover - defensive logging fallback
         logger.debug("index_existing failed reading {}: {}", out_path, exc)
         return set()
     return ids

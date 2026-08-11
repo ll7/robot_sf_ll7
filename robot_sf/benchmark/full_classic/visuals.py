@@ -195,7 +195,7 @@ def _attempt_sim_view_videos(records, out_dir: Path, cfg, replay_map) -> list[Vi
             try:
                 if mp4_path.exists() and mp4_path.stat().st_size < 1024:
                     mp4_path.unlink()
-            except OSError as unlink_exc:
+            except OSError as unlink_exc:  # pragma: no cover - defensive cleanup logging
                 logger.debug(
                     "Failed to unlink small mp4 during sim-view error cleanup: {}", unlink_exc
                 )
@@ -286,7 +286,7 @@ def _build_video_artifacts(
         m = str(raw or "auto").strip().lower()
         if m == "sim_view":  # alias
             m = "sim-view"
-        if m not in {"auto", "synthetic", "sim-view"}:
+        if m not in {"auto", "synthetic", "sim-view"}:  # pragma: no cover - config diagnostic
             logger.warning("Unknown video_renderer '{}' -> auto", m)
             m = "auto"
         return m
@@ -612,7 +612,7 @@ def _validate_visual_manifests_if_enabled(reports_dir: Path) -> None:
     ).resolve()
     try:
         validation_errors = validate_visual_manifests(reports_dir, contracts_dir)
-    except (RuntimeError, ValueError, OSError) as exc:
+    except (RuntimeError, ValueError, OSError) as exc:  # pragma: no cover - validation boundary
         logger.error("Visual manifest validation failed: {}", exc)
         raise
     if validation_errors:

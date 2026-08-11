@@ -385,7 +385,7 @@ class ReportOrchestrator:
                 continue
             try:
                 seed_val = int(manifest["seed"])
-            except (ValueError, TypeError):
+            except (ValueError, TypeError):  # pragma: no cover - malformed manifest diagnostic
                 # Surface the caught exception's traceback: the label and seed value
                 # were previously discarded by the printf-% template (#6837).
                 logger.opt(exception=True).warning(

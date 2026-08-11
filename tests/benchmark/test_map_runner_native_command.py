@@ -645,3 +645,66 @@ def test_5416_analyzer_probe_returns_eligible_rows(tmp_path: Path) -> None:
     )
     assert report["matrix"]["eligible_rows"] >= 1
     assert report["matrix"]["excluded_rows"] == 0
+
+
+def test_5416_empty_paired_comparisons_writes_csv(tmp_path: Path) -> None:
+    """Regression: single-planner runs preserve fallback header-only paired_comparison.csv.
+
+    Before the shared-writer migration the analyzer wrote a header-only CSV with
+    fallback field name ``scenario_id`` when paired_comparisons was empty.
+    """
+    from scripts.analysis.analyze_issue_5416_sipp_four_geometry import build_analysis
+
+    episode = tmp_path / "single_planner_episode.jsonl"
+    row = {
+        "version": "v1",
+        "scenario_id": "classic_head_on_corridor_low",
+        "seed": 111,
+        "horizon": 500,
+        "planner_id": "sipp_lattice",
+        "algo": "native_command",
+        "metrics": {
+            "deadlock": False,
+            "ped_collision_count": 0,
+            "obstacle_collision_count": 0,
+            "time_to_goal_norm": 0.4,
+            "path_efficiency": 0.92,
+        },
+        "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+        "algorithm_metadata": {
+            "status": "ok",
+            "fallback_or_degraded": False,
+            "planner_kinematics": {"execution_mode": "native"},
+            "planner_diagnostics": {
+                "expansion_limit_hits": 3,
+                "runtime_bound_exits": 0,
+                "fallback_count": 0,
+                "commitment_invalidations": 1,
+                "planner_step_runtime_seconds": [0.01, 0.02, 0.015],
+            },
+        },
+        "integrity": {"contradictions": []},
+        "result_provenance": {
+            "schema_version": "benchmark_row_provenance.v1",
+            "scenario_id": "classic_head_on_corridor_low",
+            "seed": 111,
+            "config_hash": "abc123",
+            "repo_commit": "deadbeef",
+            "simulator_settings": {"horizon": 500, "dt": 0.1},
+        },
+    }
+    episode.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    analysis_dir = tmp_path / "analysis"
+    report = build_analysis(
+        episode_paths=[str(episode)],
+        output_dir=str(analysis_dir),
+        packet_path="configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml",
+    )
+    assert report["matrix"]["eligible_rows"] >= 1
+    assert report["paired_comparisons"] == []
+    csv_path = analysis_dir / "paired_comparison.csv"
+    assert csv_path.exists()
+    content = csv_path.read_bytes()
+    assert content == b"scenario_id\r\n"
+    assert not content.startswith(b"# AI-GENERATED NEEDS-REVIEW")

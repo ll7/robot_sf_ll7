@@ -754,7 +754,12 @@ def _write_artifacts(report: Mapping[str, Any], output_dir: Path) -> None:
             )
             writer.writeheader()
     comparisons = report["paired_comparisons"]
-    write_csv(output_dir / "paired_comparison.csv", comparisons)
+    write_csv(
+        output_dir / "paired_comparison.csv",
+        comparisons,
+        allow_empty=True,
+        empty_fieldnames=("scenario_id",),
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

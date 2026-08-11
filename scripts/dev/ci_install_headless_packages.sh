@@ -82,7 +82,7 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
     if [[ "$line" == Err:* ]]; then
       record_pending_apt_error
       if [[ "$line" =~ https?://([^/[:space:]]+) ]]; then
-        pending_host="${BASH_REMATCH[1]}"
+        pending_host="${BASH_REMATCH[1]%%:*}"
         pending_status="$line"
         if is_apt_403_text "$line"; then
           record_pending_apt_error
@@ -96,7 +96,7 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
     if [[ "$line" == "W: Failed to fetch"* ]]; then
       record_pending_apt_error
       if [[ "$line" =~ https?://([^/[:space:]]+) ]]; then
-        pending_host="${BASH_REMATCH[1]}"
+        pending_host="${BASH_REMATCH[1]%%:*}"
         pending_status="$line"
         if is_apt_403_text "$line"; then
           record_pending_apt_error

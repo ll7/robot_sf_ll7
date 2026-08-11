@@ -1,0 +1,50 @@
+# Issue #5303 powered (six-seed) promotion study search space (contract schema v2).
+#
+# The variable bounds are byte-identical in intent to the historical three-seed diagnostic
+# space (configs/adversarial/issue_5303_search_promotion_space.yaml): the same canonical
+# crossing/TTC projection with the wider scenario-seed interval that contains the two frozen
+# fit-family warm starts (scenario seeds 14821 and 14890). The approved candidate space is
+# unchanged.
+#
+# What is new is the merged PR #6586 runtime-effectiveness binding: the space declares a
+# concrete pedestrian identity so the frozen timing dimensions spawn_time_s and
+# pedestrian_delay_s bind to a materialized pedestrian entry and its route, changing the
+# effective runtime scenario and its canonical hash (provenance-only metadata excluded).
+# The side-effect-free preflight
+# (robot_sf/benchmark/issue_5303_search_promotion_preflight.py) must classify this space as
+# promotion_timing_ready against the v2 scenario template before any scheduled attempt, and
+# rejects the historical inert/no-pedestrian mode fail-closed.
+schema_version: adversarial-search-space.v1
+description: >
+  Frozen issue #5303 powered TPE-vs-random promotion space. Identical bounds to the
+  historical diagnostic space, plus the PR #6586 pedestrian identity binding that makes the
+  frozen timing dimensions runtime-effective.
+variables:
+  start_x:
+    min: 1.0
+    max: 3.0
+  start_y:
+    min: 2.0
+    max: 4.0
+  goal_x:
+    min: 7.0
+    max: 9.0
+  goal_y:
+    min: 2.0
+    max: 4.0
+  spawn_time_s:
+    min: 0.0
+    max: 2.0
+  pedestrian_speed_mps:
+    min: 0.8
+    max: 1.4
+  pedestrian_delay_s:
+    min: 0.0
+    max: 2.0
+  scenario_seed:
+    min: 100
+    max: 25000
+constraints:
+  min_start_goal_distance_m: 2.0
+pedestrian:
+  id: issue_5303_powered_promotion_candidate

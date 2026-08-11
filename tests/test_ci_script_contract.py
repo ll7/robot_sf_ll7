@@ -1874,7 +1874,8 @@ def test_ci_install_headless_fails_closed_on_mixed_update_errors(tmp_path: Path)
     assert result.returncode == 100
     assert not install_marker.exists()
     assert "error=apt_update_failed rc=100" in result.stderr
-    assert "archive.ubuntu.com" in result.stderr
+    assert "sources=" in result.stderr
+    assert "unknown" not in result.stderr
 
 
 # Help-behaviour contract tests.

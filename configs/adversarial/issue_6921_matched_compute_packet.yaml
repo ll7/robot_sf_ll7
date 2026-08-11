@@ -1,0 +1,148 @@
+schema_version: matched_compute_packet.v1
+issue: 6921
+parent_issue: 4360
+status: diagnostic_only_packet
+claim_boundary: >
+  Diagnostic-only comparison packet for reactive residual-search versus
+  open-loop Social Force comparator.  No benchmark, metric, planner-ranking,
+  safety, or paper-facing claim.  No campaign execution, SLURM submission,
+  or benchmark result.  Frozen seeds, budget, and bounds; domain-approval
+  gate required before any future campaign execution.
+packet:
+  name: matched_budget_reactive_vs_open_loop
+  purpose: >
+    Versioned, machine-checkable comparison packet defining the nominal Social
+    Force / open-loop candidate evaluation arm and the reactive residual-search
+    arm under an identical compute budget, seed set, and scenario family.
+arms:
+  open_loop:
+    label: social_force_open_loop
+    description: >
+      Nominal Social Force baseline with open-loop candidate evaluation.
+      Candidate residual proposals are evaluated once through the bounded
+      controller without iterative feedback from the applied residual state.
+    comparator: social_force
+    residual_search:
+      algorithm_name: finite_grid_search_v1
+      objective_proxy: maximize_residual_magnitude
+      grid_points_per_dim: 3
+      max_candidates: 9
+    residual_adversary:
+      is_active: true
+      macro_action_dt_s: 0.5
+      max_residual_accel_mps2: 1.5
+      max_jerk_mps3: 7.5
+      max_speed_delta_mps: 0.5
+      max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
+      max_route_deviation_m: 1.5
+      min_separation_m: 0.6
+      target_ped_idx: [0]
+      obstacle_projection_margin_m: 0.1
+  reactive:
+    label: residual_search_reactive
+    description: >
+      Reactive residual-search arm.  Candidate proposals are evaluated through
+      the full bounded controller with iterative jerk rate-limiting, geometry
+      projection, and separation enforcement carried across macro-action steps.
+    residual_search:
+      algorithm_name: finite_grid_search_v1
+      objective_proxy: maximize_residual_magnitude
+      grid_points_per_dim: 3
+      max_candidates: 9
+    residual_adversary:
+      is_active: true
+      macro_action_dt_s: 0.5
+      max_residual_accel_mps2: 1.5
+      max_jerk_mps3: 7.5
+      max_speed_delta_mps: 0.5
+      max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
+      max_route_deviation_m: 1.5
+      min_separation_m: 0.6
+      target_ped_idx: [0]
+      obstacle_projection_margin_m: 0.1
+scenario:
+  template: configs/scenarios/templates/crossing_ttc.yaml
+  search_space: configs/adversarial/crossing_ttc_space.yaml
+  scenario_ids:
+    - crossing_ttc_low
+    - crossing_ttc_medium
+  description: >
+    Frozen crossing/TTC scenario family inherited from the parent #4360
+    dispatchable inventory.  Scenario IDs are frozen for this packet.
+simulation:
+  dt_s: 0.1
+  physics_steps_per_macro_action: 5
+  total_sim_steps: 50
+  description: >
+    Fixed timestep and episode length.  0.1 s physics step, 5 steps per
+    0.5 s macro-action, 50 total steps (5.0 s episode).
+budget:
+  total_candidate_evaluations: 9
+  per_arm_candidate_evaluations: 9
+  description: >
+    Matched compute budget: each arm evaluates exactly 9 candidate residual
+    proposals per macro-action boundary.  The budget is not vacuous — it
+    equals grid_points_per_dim ** 2 for the 2-D residual action space.
+seeds:
+  frozen_scenario_seeds:
+    - 1101
+    - 2202
+    - 3303
+  search_seed: 42
+  residual_adversary_seed: 42
+  description: >
+    Frozen seed set for reproducibility.  Scenario seeds control pedestrian
+    initialisation; search and adversary seeds control the deterministic
+    grid-search enumeration and residual policy state.
+bounds_identity:
+  residual_bounds:
+    max_residual_accel_mps2: 1.5
+    max_jerk_mps3: 7.5
+    max_speed_delta_mps: 0.5
+    max_heading_change_per_macro_rad: 0.7853981633974483
+    max_route_deviation_m: 1.5
+    min_separation_m: 0.6
+  objective_proxy: maximize_residual_magnitude
+  description: >
+    Hard residual bounds are identical across both arms.  The objective proxy
+    is the same diagnostic magnitude proxy.  Bounds and objective are frozen
+    and must not be relaxed without a new packet version.
+provenance:
+  parent_issue: 4360
+  residual_search_config: configs/adversarial/issue_6911_residual_search.yaml
+  residual_adversary_config: configs/adversarial/issue_4360_residual_adversary.yaml
+  dispatchable_inventory: configs/adversarial/issue_4360_dispatchable_repro_seeds.yaml
+  description: >
+    This packet reuses the residual-search config (issue #6911) and the
+    residual-adversary config (issue #4360) without introducing new runtime
+    modules or optimizer integrations.
+explicit_exclusions:
+  benchmark_execution: forbidden_until_domain_approval
+  slurm_campaign: forbidden_until_domain_approval
+  paper_facing_claims: forbidden
+  metric_or_ranking_claims: forbidden
+  new_optimizer: not_added
+  new_planner_integration: not_added
+  new_slurm_execution: not_added
+  fallback_degraded_evidence: not_treated_as_success
+  cmaes_mcts_ppo: deferred
+  stress_case_metrics: deferred
+  description: >
+    All exclusions are hard-frozen.  Benchmark execution, SLURM campaigns,
+    paper-facing claims, and metric/ranking claims require explicit
+    domain-approval gate before any future slice may proceed.  Fallback or
+    degraded execution is never treated as success evidence.
+gate:
+  domain_approval_required: true
+  description: >
+    Any future campaign execution, benchmark run, or stronger claim from
+    this packet requires maintainer domain-aware approval.  The packet is
+    frozen as a diagnostic-only specification; no execution path is enabled
+    by this config alone.
+output_artifacts:
+  output_dir: output/adversarial/issue_6921_matched_compute_packet
+  description: >
+    Local output directory for any future diagnostic runs.  Artifacts under
+    output/ are disposable local cache unless promoted by a later PR.
+validation_command: >
+  uv run pytest tests/adversarial/test_matched_compute_packet.py -v

@@ -46,6 +46,7 @@ REQUIRED_AXES = frozenset(
 _REPOSITORY_LOCAL_PATH_RE = re.compile(
     r"^(?:(?:configs|maps|benchmarks|robot_sf|scripts|tests|docs)/\S+)$"
 )
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _load_matrix() -> dict:
@@ -333,7 +334,10 @@ class TestContextNote:
 
 
 def _is_repository_local_path(ref: str) -> bool:
-    return bool(_REPOSITORY_LOCAL_PATH_RE.match(ref))
+    if not _REPOSITORY_LOCAL_PATH_RE.match(ref):
+        return False
+    resolved = (REPOSITORY_ROOT / ref).resolve()
+    return str(resolved).startswith(str(REPOSITORY_ROOT) + "/") or resolved == REPOSITORY_ROOT
 
 
 def _collect_cell_provenance_paths() -> list[str]:
@@ -410,6 +414,19 @@ class TestProvenancePathsExist:
         urls = [r for r in all_refs if r.startswith("http://") or r.startswith("https://")]
         assert not urls, f"URLs found in local-path references: {urls}"
 
+    def test_traversal_references_are_rejected(self) -> None:
+        """Path traversal attempts must not be classified as repository-local."""
+        traversal_refs = [
+            "configs/../../../etc/passwd",
+            "configs/../../etc/shadow",
+            "docs/../../../etc/passwd",
+            "maps/../../../etc/passwd",
+        ]
+        for ref in traversal_refs:
+            assert not _is_repository_local_path(ref), (
+                f"Traversal reference was accepted as local: {ref}"
+            )
+
 
 class TestEverySiteTopologyInMatrix:
     """Every defined site_topology value should appear in at least one cell."""
@@ -427,3 +444,50 @@ class TestEverySiteTopologyInMatrix:
         }
         missing = topo_values - covered
         assert not missing, f"site_topology values without any matrix cell: {missing}"
+
+
+class TestCellAxisMembership:
+    """Every cell axis value must belong to the corresponding declared axis value set."""
+
+    def test_all_cell_axis_values_are_declared(self) -> None:
+        matrix = _load_matrix()
+        axis_value_sets: dict[str, set[str]] = {}
+        for axis_key, axis_def in matrix.get("axes", {}).items():
+            axis_value_sets[axis_key] = {v["key"] for v in axis_def.get("values", [])}
+        cells = matrix.get("protocol_portability_matrix", {}).get("cells", [])
+        violations: list[str] = []
+        for i, cell in enumerate(cells):
+            for axis_key, cell_val in cell.get("axes", {}).items():
+                allowed = axis_value_sets.get(axis_key)
+                if allowed is None:
+                    violations.append(f"Cell {i}: axis {axis_key!r} is not a declared axis")
+                elif cell_val not in allowed:
+                    violations.append(
+                        f"Cell {i}: axis {axis_key} value {cell_val!r} "
+                        f"not in declared values {sorted(allowed)}"
+                    )
+        assert not violations, "Cell axis membership violations:\n" + "\n".join(violations)
+
+
+class TestCellProvenanceReferences:
+    """Every cell provenance block must contain a non-empty references list."""
+
+    def test_all_cells_have_nonempty_references(self) -> None:
+        cells = _load_matrix().get("protocol_portability_matrix", {}).get("cells", [])
+        violations: list[str] = []
+        for i, cell in enumerate(cells):
+            prov = cell.get("provenance", {})
+            refs = prov.get("references")
+            axes = cell.get("axes", {})
+            cell_label = (
+                f"Cell {i} ({axes.get('site_topology', '?')}/{axes.get('social_cultural', '?')})"
+            )
+            if not isinstance(refs, list) or len(refs) == 0:
+                violations.append(f"{cell_label}: references is empty or missing")
+            else:
+                for j, ref in enumerate(refs):
+                    if not isinstance(ref, str) or not ref.strip():
+                        violations.append(
+                            f"{cell_label}: references[{j}] is not a non-empty string"
+                        )
+        assert not violations, "Provenance reference violations:\n" + "\n".join(violations)

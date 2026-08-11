@@ -429,7 +429,8 @@ protocol_portability_matrix:
       result_portability: not_portable
       provenance:
         source_type: not_applicable
-        references: []
+        references:
+          - configs/scenarios/classic_interactions.yaml
         note: >
           No direct evidence for station_platform topology; scenario archetypes
           exist in config but no benchmark protocol run has been executed.
@@ -448,7 +449,8 @@ protocol_portability_matrix:
       result_portability: not_portable
       provenance:
         source_type: not_applicable
-        references: []
+        references:
+          - configs/scenarios/classic_interactions.yaml
         note: >
           No direct evidence for merging topology; scenario archetypes exist in
           config but no benchmark protocol run has been executed.
@@ -468,7 +470,8 @@ protocol_portability_matrix:
       result_portability: not_portable
       provenance:
         source_type: not_applicable
-        references: []
+        references:
+          - configs/scenarios/classic_interactions.yaml
         note: >
           No direct evidence for overtaking topology; scenario archetypes exist
           in config but no benchmark protocol run has been executed.
@@ -648,7 +651,8 @@ protocol_portability_matrix:
       result_portability: not_portable
       provenance:
         source_type: not_applicable
-        references: []
+        references:
+          - https://github.com/ll7/robot_sf_ll7/issues/6872
         note: cross-axis combination not yet tested
       revalidation_action: >
         Revalidate if cross-site cross-social interaction claims are needed.
@@ -663,7 +667,8 @@ protocol_portability_matrix:
       result_portability: not_portable
       provenance:
         source_type: not_applicable
-        references: []
+        references:
+          - https://github.com/ll7/robot_sf_ll7/issues/6872
         note: cross-axis combination not yet tested
       revalidation_action: >
         Revalidate if bottleneck-specific speed-heterogeneity claims needed.

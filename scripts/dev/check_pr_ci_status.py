@@ -194,6 +194,16 @@ def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
         return None
 
 
+def _stale_job_status(job: dict[str, Any]) -> str | None:
+    """Return the eligible stale job lifecycle, or ``None`` for ordinary job state."""
+    job_status = str(job.get("status", "") or "").lower()
+    if job_status == "in_progress":
+        return job_status
+    if job_status == "completed" and str(job.get("conclusion", "") or "").lower() == "success":
+        return job_status
+    return None
+
+
 def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
     """Return evidence for a completed-success workflow whose job record is still pending.
 
@@ -216,7 +226,8 @@ def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
         return None
     if str(run.get("conclusion", "") or "").lower() != "success":
         return None
-    if str(job.get("status", "") or "").lower() != "in_progress":
+    job_status = _stale_job_status(job)
+    if job_status is None:
         return None
 
     steps = job.get("steps")
@@ -237,15 +248,16 @@ def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
     ):
         return None
 
-    return {
+    evidence = {
         "run_id": int(run_id),
         "job_id": int(job_id),
         "parent_run_status": "completed",
         "parent_run_conclusion": "success",
-        "job_status": "in_progress",
+        "job_status": job_status,
         "final_step": "Complete job",
         "final_step_conclusion": "success",
     }
+    return evidence
 
 
 def _status_propagation_lag_details(rollup: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -270,6 +282,7 @@ def _annotate_status_propagation_lag(
         return checks
     pending_count = sum(_rollup_status(check) in PENDING_STATUSES for check in rollup)
     checks["status_propagation_lag"] = lag_details
+    checks["diagnostic"] = "check_run_stale_job_success"
     if len(lag_details) == pending_count:
         checks["pending_reason"] = "status_propagation_lag"
     return checks
@@ -508,6 +521,9 @@ def _add_monitor_metadata(
     pending_reason = data.get("checks", {}).get("pending_reason")
     if pending_reason:
         data["monitor"]["pending_reason"] = pending_reason
+    diagnostic = data.get("checks", {}).get("diagnostic")
+    if diagnostic:
+        data["monitor"]["diagnostic"] = diagnostic
 
 
 def _format_human(data: dict[str, Any]) -> str:
@@ -544,6 +560,9 @@ def _format_human(data: dict[str, Any]) -> str:
                 f"run {lag.get('run_id')} job {lag.get('job_id')}  |  "
                 f"{lag.get('final_step', 'unknown')}/{lag.get('final_step_conclusion', 'unknown')}"
             )
+    diagnostic = checks.get("diagnostic")
+    if diagnostic:
+        lines.append(f"  diagnostic: {diagnostic}  |  fail-closed: true")
     superseded = checks.get("superseded", 0)
     if superseded:
         lines.append(f"  ignored {superseded} superseded GitHub Actions check run(s)")

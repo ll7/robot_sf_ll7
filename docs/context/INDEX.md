@@ -1,5 +1,18 @@
 # Context Retrieval Index
 
+Issue #5303 step 2b powered six-seed search-promotion preregistration (contract schema
+`issue_5303_search_promotion_contract.v2`, proposal/preflight only): the outcome-free
+successor to the historical three-seed diagnostic, freezing six search seeds per method,
+64 candidates per seed per method (384 per method, 768 total with complete
+intention-to-search accounting), the merged PR #6586 runtime-effective candidate space,
+exact cluster-level inference over C(12,6)=924 arm-label assignments, the unweakened
+positive gate, the `issue_5303_search_promotion_result.v2` terminal result schema
+(downstream activation only on `promote` plus at least five admitted candidates plus
+verified hashes), and the deterministic 768-identity check-only manifest. It does not
+authorize the #6145 campaign and rejects the historical v1 contract for promotion-capable
+execution:
+[README.md](evidence/issue_5303_search_promotion_powered_preregistration/README.md).
+
 Issue #6155 release environment packet: separates tag-side dependency and lock evidence from historical campaign runtime records, with the exact-head capture command and publication hold boundary:
 [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md).
 

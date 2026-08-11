@@ -13,19 +13,19 @@
   ],
   "exclusion_reason_counts": {
     "missing_committed_fixture": 10,
-    "non_deterministic_contract": 8,
+    "non_deterministic_contract": 10,
     "unsafe_command": 4
   },
-  "generated_at": "2026-08-08T12:40:49+00:00",
-  "ineligible_count": 22,
+  "generated_at": "2026-08-11T17:41:14+00:00",
+  "ineligible_count": 24,
   "issue": 6769,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "route_evidence_only": true,
   "schema": "issue_6769_figure_render_registry_audit.v1",
   "source_class_counts": {
     "build_command_txt": 2,
-    "readme_reproduction": 29
+    "readme_reproduction": 31
   },
-  "source_commit": "250e8563e6127ebcd4a695b284e535ef3075854a",
-  "total_entries": 31
+  "source_commit": "954e58fbe8e817e5abdc2a3fa1f755f1dc2cb2dd",
+  "total_entries": 33
 }

@@ -535,8 +535,15 @@ def _format_human(data: dict[str, Any]) -> str:
     )
     pending_reason = checks.get("pending_reason")
     if pending_reason:
-        lag_count = len(checks.get("status_propagation_lag", []))
+        lag_details = checks.get("status_propagation_lag", [])
+        lag_count = len(lag_details)
         lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {lag_count}")
+        for lag in lag_details:
+            lines.append(
+                f"    - {lag.get('name', 'unknown')}: "
+                f"run {lag.get('run_id')} job {lag.get('job_id')}  |  "
+                f"{lag.get('final_step', 'unknown')}/{lag.get('final_step_conclusion', 'unknown')}"
+            )
     superseded = checks.get("superseded", 0)
     if superseded:
         lines.append(f"  ignored {superseded} superseded GitHub Actions check run(s)")

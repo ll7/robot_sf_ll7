@@ -16,6 +16,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_conclusion,
     _rollup_name,
     _rollup_status,
+    _summarize_check_runs,
     main,
 )
 
@@ -1086,7 +1087,12 @@ def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
     }
     check_runs = {
         "check_runs": [
-            {"name": "ci", "status": "completed", "conclusion": "success", "details_url": "u"},
+            {
+                "name": "ci",
+                "status": "in_progress",
+                "conclusion": None,
+                "details_url": "https://github.com/example/repo/actions/runs/123/job/456",
+            },
         ]
     }
     reviews = [{"state": "APPROVED"}]
@@ -1096,13 +1102,30 @@ def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
     )
     monkeypatch.setattr(
         "scripts.dev.check_pr_ci_status._rest_api_get",
-        MagicMock(side_effect=[pull, check_runs, reviews]),
+        MagicMock(
+            side_effect=[
+                pull,
+                check_runs,
+                {"status": "completed", "conclusion": "success"},
+                {
+                    "status": "in_progress",
+                    "conclusion": None,
+                    "steps": [
+                        {"name": "Unit tests", "status": "completed", "conclusion": "success"},
+                        {"name": "Complete job", "status": "completed", "conclusion": "success"},
+                    ],
+                },
+                reviews,
+            ]
+        ),
     )
     data = _fetch_ci_status("42")
     assert data["status"] == "ok"
     assert data["data_source"] == "rest_fallback_graphql_quota"
     assert data["head_sha"] == "abc"
-    assert data["checks"]["overall"] == "success"
+    assert data["checks"]["overall"] == "pending"
+    assert data["checks"]["pending_reason"] == "status_propagation_lag"
+    assert data["checks"]["status_propagation_lag"][0]["run_id"] == 123
     assert data["reviews"] == {"APPROVED": 1}
     assert data["route_evidence_only"] is True
 
@@ -1132,6 +1155,42 @@ def test_fetch_ci_status_rest_failure_is_labeled(monkeypatch: pytest.MonkeyPatch
     data = _fetch_ci_status("5")
     assert data["status"] == "error"
     assert data["error_kind"] == "graphql_quota_exhausted"
+
+
+def test_summarize_check_runs_excludes_genuine_in_progress_job_from_lag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A workflow and job that are still running remain ordinary pending work."""
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {"status": "in_progress", "conclusion": None}
+            if path == "actions/runs/123"
+            else {
+                "status": "in_progress",
+                "conclusion": None,
+                "steps": [{"name": "Unit tests", "status": "in_progress", "conclusion": None}],
+            }
+            if path == "actions/jobs/456"
+            else None
+        ),
+    )
+
+    checks, superseded = _summarize_check_runs(
+        [
+            {
+                "name": "ci",
+                "status": "in_progress",
+                "conclusion": None,
+                "details_url": "https://github.com/example/repo/actions/runs/123/job/456",
+            }
+        ]
+    )
+
+    assert superseded == 0
+    assert checks["overall"] == "pending"
+    assert "status_propagation_lag" not in checks
+    assert "pending_reason" not in checks
 
 
 def test_fetch_ci_status_marks_completed_run_with_stale_job_status_as_lag(

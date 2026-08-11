@@ -541,6 +541,28 @@ def _strip_volatile(node: Any, volatile_keys: set[str]) -> Any:
     return node
 
 
+def _normalize_entry_for_drift(entry: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one registry entry while retaining eligible-input provenance checks.
+
+    Recurrence-ineligible entries are never executed by the recurrence guard, so a code-only
+    change to one of their committed inputs does not invalidate an executable recurrence
+    contract. Keep their input paths as structural identity but omit only the input hashes
+    from the drift comparison. Eligible entries retain their exact input SHA-256 values and
+    therefore continue to fail closed when executable provenance is stale.
+    """
+    normalized = _strip_volatile(entry, _VOLATILE_ENTRY_KEYS)
+    if normalized.get("recurrence_eligible") is False:
+        inputs = normalized.get("inputs")
+        if isinstance(inputs, list):
+            normalized["inputs"] = [
+                {key: value for key, value in item.items() if key != "sha256"}
+                if isinstance(item, dict)
+                else item
+                for item in inputs
+            ]
+    return normalized
+
+
 def _normalize_registry_for_drift(registry: dict[str, Any]) -> dict[str, Any]:
     """Drop volatile timestamp/commit/provenance fields so --check is stable across commits."""
     stripped = _strip_volatile(registry, _VOLATILE_REGISTRY_KEYS)
@@ -549,7 +571,7 @@ def _normalize_registry_for_drift(registry: dict[str, Any]) -> dict[str, Any]:
         stripped["provenance"] = {k: v for k, v in provenance.items() if k != "source_commit"}
     entries = stripped.get("entries")
     if isinstance(entries, list):
-        stripped["entries"] = [_strip_volatile(e, _VOLATILE_ENTRY_KEYS) for e in entries]
+        stripped["entries"] = [_normalize_entry_for_drift(e) for e in entries]
     return stripped
 
 

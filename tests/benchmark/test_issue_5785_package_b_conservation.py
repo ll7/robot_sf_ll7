@@ -5,6 +5,9 @@ It does not contain the raw candidate/replay tree or execution logs, so these te
 avoid claiming raw-artifact conservation or independent replay verification.
 """
 
+# evidence-writer-exempt: tests write synthetic raw-artifact archives and malformed manifests
+# only under pytest tmp_path; they never write repository evidence artifacts.
+
 from __future__ import annotations
 
 import hashlib

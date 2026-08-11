@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#6474) - NEEDS-REVIEW -->
+
 # Issue #6474 social-compliance campaign interpretation
 
 **Status:** interpretation handoff; not paper-facing.  **Evidence status:** nominal benchmark

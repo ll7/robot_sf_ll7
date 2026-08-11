@@ -1,0 +1,25 @@
+baseline_policy_identifier: ppo_ammv_baseline_v3
+claim_boundary: Campaign integration fixture for continual-adaptation nominal/shift/forgetting
+  evidence wiring. Metadata-only; no training, checkpoint write, safety-wrapper mutation,
+  evaluation execution, or policy promotion. Not benchmark or paper evidence.
+derived_adapted_policy_identifier: ppo_ammv_baseline_v3#continual-adaptation@sha256:7e1d8e6036fa246c
+evidence_boundary: protocol_contract_only_no_training_no_checkpoint_write_no_safety_wrapper_mutation_no_policy_promotion_no_benchmark_or_paper_evidence
+execution_mode: native
+forgetting_result:
+  checksum:
+    algorithm: sha256
+    digest: e86afc9d700b96aa9cd487eeedf942b8c586cdfe3ab0a215823ec2c4896c28de
+  uri: docs/context/evidence/issue_6657_continual_adaptation_campaign/forgetting_result.json
+issue: 6657
+nominal_result:
+  checksum:
+    algorithm: sha256
+    digest: be75bf0d30953b10c537204940bd53e33f20fe9b8ba93772f653d639a18acdc4
+  uri: docs/context/evidence/issue_6657_continual_adaptation_campaign/nominal_result.json
+run_id: continual_adaptation_campaign_issue_6657
+schema_version: continual_adaptation_evidence.v1
+shift_result:
+  checksum:
+    algorithm: sha256
+    digest: c55efe5f7b8157f2bd3447d9592338211e47b145ec6ebfc638c3633442f48fea
+  uri: docs/context/evidence/issue_6657_continual_adaptation_campaign/shift_result.json

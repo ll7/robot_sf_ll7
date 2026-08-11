@@ -4916,3 +4916,47 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/evidence_bundle.yaml
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/evidence_bundle.yaml.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/forgetting_result.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/forgetting_result.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/nominal_result.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/nominal_result.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/shift_result.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6657_continual_adaptation_campaign/shift_result.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
